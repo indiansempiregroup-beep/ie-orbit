@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ie-platform-backend"
+version = "0.1.0"
+description = "Django backend for the IE Platform"
+requires-python = ">=3.13"
+dependencies = [
+  "black>=24.10,<25",
+  "celery>=5.4,<6",
+  "dj-database-url>=2.2,<3",
+  "django>=5.2,<6",
+  "django-redis>=5.4,<6",
+  "djangorestframework>=3.15,<4",
+  "djangorestframework-simplejwt>=5.3,<6",
+  "drf-spectacular>=0.28,<1",
+  "gunicorn>=23,<24",
+  "pillow>=11,<12",
+  "psycopg[binary]>=3.2,<4",
+  "python-dotenv>=1.0,<2",
+  "redis>=5,<6",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-django>=4.9,<5",
+  "ruff>=0.8,<1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "config*"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.development"
+python_files = ["test_*.py", "*_test.py"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]

@@ -1,0 +1,33 @@
+{
+  "name": "@ie-platform/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "lint": "eslint . --ext .ts,.tsx",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
+  },
+  "dependencies": {
+    "@ie-platform/sdk": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "@tanstack/react-query": "^5.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@rollup/rollup-linux-x64-gnu": "^4.62.2",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.10",
+    "@storybook/react-vite": "^8.6.18",
+    "@storybook/addon-essentials": "^8.6.18",
+    "storybook": "^8.6.18"
+  }
+ 
+}
