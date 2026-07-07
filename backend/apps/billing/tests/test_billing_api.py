@@ -4,7 +4,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.audit.models import DomainEvent
+from apps.audit.models import AuditLogEntry, DomainEvent
 from apps.authentication.models import User, UserStatus
 from apps.authentication.services.roles import RoleService
 from apps.billing.models import BillingWebhookEvent, WebhookEventStatus
@@ -64,6 +64,27 @@ def test_billing_status_mock_mode(api_client: APIClient, user: User) -> None:
     assert payload["provider"] == "razorpay"
     assert payload["configured"] is False
     assert payload["mock_mode"] is True
+
+
+@pytest.mark.django_db
+def test_billing_plan_catalog_endpoint(api_client: APIClient, user: User) -> None:
+    authenticate(api_client, user)
+    response = api_client.get(reverse("billing-plan-catalog"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert isinstance(payload, list)
+    assert any(plan["plan_code"] == "appointie-starter" for plan in payload)
+
+
+@pytest.mark.django_db
+def test_billing_plan_catalog_honors_price_override(api_client: APIClient, user: User, settings) -> None:
+    settings.BILLING_PLAN_PRICE_OVERRIDES = {"appointie-starter": 123400}
+    authenticate(api_client, user)
+    response = api_client.get(reverse("billing-plan-catalog"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    starter = next(plan for plan in payload if plan["plan_code"] == "appointie-starter")
+    assert starter["amount_paise"] == 123400
 
 
 @pytest.mark.django_db
@@ -383,6 +404,74 @@ def test_billing_release_gate_fails_when_razorpay_missing(
     assert "razorpay_configured" in payload["blockers"]
     failing_ids = {check["id"] for check in payload["failing_checks"]}
     assert "razorpay_configured" in failing_ids
+
+
+@pytest.mark.django_db
+def test_billing_observability_endpoint(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+
+    DomainEvent.objects.create(
+        tenant_id=tenant_id,
+        event_type="billing.webhook.failed",
+        aggregate_type="billing_webhook_event",
+        aggregate_id="evt-1",
+        payload={},
+        status="published",
+    )
+    DomainEvent.objects.create(
+        tenant_id=tenant_id,
+        event_type="onboarding.workspace.provisioned",
+        aggregate_type="tenant",
+        aggregate_id=tenant_id,
+        payload={},
+        status="published",
+    )
+    AuditLogEntry.objects.create(
+        tenant_id=tenant_id,
+        action="billing.reconciliation.run",
+        resource_type="billing_checkout_session",
+        metadata={},
+    )
+    response = api_client.get(reverse("billing-observability"), {"window_hours": 24})
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["events"]["billing_webhook_failed"] == 1
+    assert payload["events"]["onboarding_workspace_provisioned"] == 1
+    assert payload["audits"]["reconciliation_runs"] == 1
+
+
+@pytest.mark.django_db
+def test_billing_ops_snapshot_endpoint_json_and_csv(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+
+    BillingWebhookEvent.objects.create(
+        tenant_id=tenant_id,
+        external_event_id="evt_snapshot_1",
+        event_type="payment.failed",
+        status=WebhookEventStatus.FAILED,
+        payload={},
+    )
+
+    json_response = api_client.get(reverse("billing-ops-snapshot"), {"window_hours": 24})
+    assert json_response.status_code == 200
+    json_payload = json_response.json()["data"]
+    assert "webhooks" in json_payload
+    assert "events" in json_payload
+    assert "audits" in json_payload
+    assert "health_score" in json_payload
+    assert "recommendations" in json_payload
+    assert "trend" in json_payload
+
+    csv_response = api_client.get(reverse("billing-ops-snapshot"), {"window_hours": 24, "format": "csv"})
+    assert csv_response.status_code == 200
+    assert csv_response["Content-Type"].startswith("text/csv")
+    assert "metric,value" in csv_response.content.decode("utf-8")
+    assert "health_score" in csv_response.content.decode("utf-8")
+    assert "trend.failure_rate_delta" in csv_response.content.decode("utf-8")
 
 
 @pytest.mark.django_db

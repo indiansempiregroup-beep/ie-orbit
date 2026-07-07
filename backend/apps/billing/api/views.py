@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
+import io
 from datetime import timedelta
 
 from django.core.cache import cache
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -17,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.services.audit import record_audit
+from apps.audit.models import AuditLogEntry, DomainEvent
 from apps.billing.api.serializers import (
     BillingCheckoutSerializer,
     BillingWebhookBulkReprocessSerializer,
@@ -41,6 +45,17 @@ class BillingStatusView(APIView):
     def get(self, request: Request) -> Response:
         return success_response(
             CheckoutService().get_status(),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingPlanCatalogView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Billing"], description="List billable plans with effective pricing.")
+    def get(self, request: Request) -> Response:
+        return success_response(
+            CheckoutService().list_plan_catalog(),
             request_id=getattr(request, "request_id", None),
         )
 
@@ -419,6 +434,256 @@ class BillingReleaseGateView(APIView):
             },
             request_id=getattr(request, "request_id", None),
         )
+
+
+class BillingObservabilityView(APIView):
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "business:manage"
+
+    @extend_schema(tags=["Billing"], description="Operational observability signals for billing and onboarding.")
+    def get(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        window_hours = int(request.query_params.get("window_hours", "24"))
+        window_hours = max(1, min(window_hours, 24 * 30))
+        since = timezone.now() - timedelta(hours=window_hours)
+
+        event_counts = {
+            "billing_webhook_failed": DomainEvent.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                event_type="billing.webhook.failed",
+            ).count(),
+            "billing_webhook_dead_letter": DomainEvent.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                event_type="billing.webhook.dead_letter",
+            ).count(),
+            "onboarding_workspace_provisioned": DomainEvent.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                event_type="onboarding.workspace.provisioned",
+            ).count(),
+        }
+        audit_counts = {
+            "bulk_reprocess_actions": AuditLogEntry.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                action="billing.webhook.bulk_reprocess",
+            ).count(),
+            "reconciliation_runs": AuditLogEntry.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                action="billing.reconciliation.run",
+            ).count(),
+            "workspace_provisioned_audits": AuditLogEntry.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                action="onboarding.workspace.provisioned",
+            ).count(),
+        }
+        return success_response(
+            {
+                "window_hours": window_hours,
+                "since": since.isoformat(),
+                "events": event_counts,
+                "audits": audit_counts,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingOpsSnapshotView(APIView):
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "business:manage"
+
+    @extend_schema(tags=["Billing"], description="Export operational snapshot for billing launch readiness.")
+    def get(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        window_hours = int(request.query_params.get("window_hours", "24"))
+        window_hours = max(1, min(window_hours, 24 * 30))
+        generated_at = timezone.now()
+        since = generated_at - timedelta(hours=window_hours)
+        previous_since = since - timedelta(hours=window_hours)
+        output_format = str(request.query_params.get("format", "json")).strip().lower()
+
+        webhook_queryset = BillingWebhookEvent.objects.filter(tenant=tenant, created_at__gte=since)
+        total = webhook_queryset.count()
+        processed = webhook_queryset.filter(status=WebhookEventStatus.PROCESSED).count()
+        failed = webhook_queryset.filter(status=WebhookEventStatus.FAILED).count()
+        dead_letter = webhook_queryset.filter(status=WebhookEventStatus.DEAD_LETTER).count()
+        stuck_retries = webhook_queryset.filter(
+            status=WebhookEventStatus.FAILED,
+            next_retry_at__isnull=False,
+            next_retry_at__lt=timezone.now(),
+        ).count()
+        failure_rate = round((failed + dead_letter) / total, 4) if total else 0.0
+        previous_webhook_queryset = BillingWebhookEvent.objects.filter(
+            tenant=tenant,
+            created_at__gte=previous_since,
+            created_at__lt=since,
+        )
+        previous_total = previous_webhook_queryset.count()
+        previous_failed = previous_webhook_queryset.filter(status=WebhookEventStatus.FAILED).count()
+        previous_dead_letter = previous_webhook_queryset.filter(status=WebhookEventStatus.DEAD_LETTER).count()
+        previous_stuck_retries = previous_webhook_queryset.filter(
+            status=WebhookEventStatus.FAILED,
+            next_retry_at__isnull=False,
+            next_retry_at__lt=generated_at,
+        ).count()
+        previous_failure_rate = (
+            round((previous_failed + previous_dead_letter) / previous_total, 4) if previous_total else 0.0
+        )
+
+        checkout_status = CheckoutService().get_status()
+        blockers = []
+        if not checkout_status["configured"]:
+            blockers.append("razorpay_configured")
+        if not checkout_status["webhook_configured"]:
+            blockers.append("webhook_secret_configured")
+        if dead_letter > 0:
+            blockers.append("dead_letter_backlog")
+
+        events = {
+            "billing_webhook_failed": DomainEvent.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                event_type="billing.webhook.failed",
+            ).count(),
+            "billing_webhook_dead_letter": DomainEvent.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                event_type="billing.webhook.dead_letter",
+            ).count(),
+            "onboarding_workspace_provisioned": DomainEvent.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                event_type="onboarding.workspace.provisioned",
+            ).count(),
+        }
+        audits = {
+            "bulk_reprocess_actions": AuditLogEntry.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                action="billing.webhook.bulk_reprocess",
+            ).count(),
+            "reconciliation_runs": AuditLogEntry.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                action="billing.reconciliation.run",
+            ).count(),
+            "workspace_provisioned_audits": AuditLogEntry.objects.filter(
+                tenant=tenant,
+                created_at__gte=since,
+                action="onboarding.workspace.provisioned",
+            ).count(),
+        }
+        recommendations: list[dict[str, str]] = []
+        if "razorpay_configured" in blockers:
+            recommendations.append(
+                {
+                    "severity": "blocker",
+                    "action": "Configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET before launch.",
+                }
+            )
+        if "webhook_secret_configured" in blockers:
+            recommendations.append(
+                {
+                    "severity": "blocker",
+                    "action": "Set RAZORPAY_WEBHOOK_SECRET and validate signature checks.",
+                }
+            )
+        if dead_letter > 0:
+            recommendations.append(
+                {
+                    "severity": "blocker",
+                    "action": "Drain dead-letter backlog via reprocess and resolve failing payload causes.",
+                }
+            )
+        if stuck_retries > 0:
+            recommendations.append(
+                {
+                    "severity": "warning",
+                    "action": "Verify Celery workers/beat health and clear overdue retries.",
+                }
+            )
+        if failure_rate >= 0.05:
+            recommendations.append(
+                {
+                    "severity": "warning",
+                    "action": "Investigate webhook failure spike before enabling production traffic.",
+                }
+            )
+        health_score = 100
+        health_score -= min(60, len(blockers) * 20)
+        health_score -= min(25, dead_letter * 5)
+        health_score -= min(15, stuck_retries * 3)
+        health_score = max(0, health_score)
+        trend = {
+            "comparison_window_hours": window_hours,
+            "previous_since": previous_since.isoformat(),
+            "previous_until": since.isoformat(),
+            "failure_rate_delta": round(failure_rate - previous_failure_rate, 4),
+            "dead_letter_delta": dead_letter - previous_dead_letter,
+            "stuck_retries_delta": stuck_retries - previous_stuck_retries,
+            "direction": "improving" if failure_rate <= previous_failure_rate else "degrading",
+        }
+        snapshot = {
+            "tenant_id": str(tenant.id),
+            "window_hours": window_hours,
+            "since": since.isoformat(),
+            "generated_at": generated_at.isoformat(),
+            "ready": len(blockers) == 0,
+            "health_score": health_score,
+            "blockers": blockers,
+            "recommendations": recommendations,
+            "trend": trend,
+            "webhooks": {
+                "total": total,
+                "processed": processed,
+                "failed": failed,
+                "dead_letter": dead_letter,
+                "stuck_retries": stuck_retries,
+                "failure_rate": failure_rate,
+            },
+            "events": events,
+            "audits": audits,
+        }
+        if output_format == "csv":
+            rows = [
+                ("tenant_id", snapshot["tenant_id"]),
+                ("window_hours", str(window_hours)),
+                ("generated_at", snapshot["generated_at"]),
+                ("ready", str(snapshot["ready"]).lower()),
+                ("health_score", str(health_score)),
+                ("blockers", ",".join(blockers)),
+                ("trend.direction", trend["direction"]),
+                ("trend.failure_rate_delta", str(trend["failure_rate_delta"])),
+                ("trend.dead_letter_delta", str(trend["dead_letter_delta"])),
+                ("trend.stuck_retries_delta", str(trend["stuck_retries_delta"])),
+                ("webhooks.total", str(total)),
+                ("webhooks.processed", str(processed)),
+                ("webhooks.failed", str(failed)),
+                ("webhooks.dead_letter", str(dead_letter)),
+                ("webhooks.stuck_retries", str(stuck_retries)),
+                ("webhooks.failure_rate", str(failure_rate)),
+            ]
+            rows.extend((f"events.{key}", str(value)) for key, value in events.items())
+            rows.extend((f"audits.{key}", str(value)) for key, value in audits.items())
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            writer.writerow(["metric", "value"])
+            writer.writerows(rows)
+            response = HttpResponse(buffer.getvalue(), content_type="text/csv")
+            response["Content-Disposition"] = 'attachment; filename="billing-ops-snapshot.csv"'
+            return response
+
+        return success_response(snapshot, request_id=getattr(request, "request_id", None))
 
 
 @method_decorator(csrf_exempt, name="dispatch")

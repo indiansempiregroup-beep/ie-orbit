@@ -27,6 +27,8 @@ from apps.authentication.services.authentication import AuthenticationService
 from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.verification import EmailVerificationService
 from apps.authentication.services.workspace_provisioning import WorkspaceProvisioningService
+from apps.audit.services.audit import record_audit
+from apps.audit.services.events import publish_domain_event
 from apps.common.api.responses import success_response
 from apps.tenancy.models import Tenant
 
@@ -96,6 +98,26 @@ class RegisterBusinessView(APIView):
             data=dict(serializer.validated_data),
             ip_address=client_ip(request),
             user_agent=user_agent(request),
+        )
+        record_audit(
+            tenant=result.tenant,
+            action="onboarding.workspace.provisioned",
+            resource_type="tenant",
+            resource_id=str(result.tenant.id),
+            actor_id=str(result.user.id),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+            metadata={"business_id": str(result.business.id)},
+        )
+        publish_domain_event(
+            event_type="onboarding.workspace.provisioned",
+            tenant_id=str(result.tenant.id),
+            aggregate_type="tenant",
+            aggregate_id=str(result.tenant.id),
+            payload={
+                "business_id": str(result.business.id),
+                "user_id": str(result.user.id),
+            },
         )
         return success_response(
             service.as_response_payload(result),

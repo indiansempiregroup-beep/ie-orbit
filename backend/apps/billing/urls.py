@@ -3,6 +3,9 @@ from django.urls import path
 from apps.billing.api.views import (
     BillingCheckoutView,
     BillingGoLiveCheckView,
+    BillingObservabilityView,
+    BillingOpsSnapshotView,
+    BillingPlanCatalogView,
     BillingReleaseGateView,
     BillingStatusView,
     BillingReconciliationRunView,
@@ -15,7 +18,10 @@ from apps.billing.api.views import (
 
 urlpatterns = [
     path("billing/status", BillingStatusView.as_view(), name="billing-status"),
+    path("billing/plans", BillingPlanCatalogView.as_view(), name="billing-plan-catalog"),
     path("billing/go-live-check", BillingGoLiveCheckView.as_view(), name="billing-go-live-check"),
+    path("billing/observability", BillingObservabilityView.as_view(), name="billing-observability"),
+    path("billing/ops-snapshot", BillingOpsSnapshotView.as_view(), name="billing-ops-snapshot"),
     path("billing/release-gate", BillingReleaseGateView.as_view(), name="billing-release-gate"),
     path(
         "billing/reconciliation/run",

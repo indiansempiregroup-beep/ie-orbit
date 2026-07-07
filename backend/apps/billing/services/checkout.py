@@ -16,7 +16,7 @@ from apps.billing.constants import (
 )
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.razorpay_client import RazorpayClient, get_razorpay_config
-from apps.businesses.constants import VALID_PRODUCT_CODES, get_plan_definition
+from apps.businesses.constants import PRODUCT_PLAN_CATALOG, VALID_PRODUCT_CODES, get_plan_definition
 from apps.businesses.models import Business
 from apps.tenancy.models import Tenant
 
@@ -112,6 +112,27 @@ class CheckoutService:
             "mock_mode": not config.is_configured,
             "expires_at": expires_at.isoformat(),
         }
+
+    def list_plan_catalog(self) -> list[dict[str, Any]]:
+        plans: list[dict[str, Any]] = []
+        for product_code, product_plans in PRODUCT_PLAN_CATALOG.items():
+            for plan in product_plans:
+                plan_code = str(plan["code"])
+                amount_paise = self._resolve_plan_price_paise(plan_code)
+                plans.append(
+                    {
+                        "product_code": product_code,
+                        "plan_code": plan_code,
+                        "name": str(plan.get("name", plan_code)),
+                        "description": str(plan.get("description", "")),
+                        "billing_interval": str(plan.get("billing_interval", "monthly")),
+                        "trial_days": int(plan.get("trial_days", 0) or 0),
+                        "is_default": bool(plan.get("is_default", False)),
+                        "amount_paise": amount_paise,
+                        "currency": DEFAULT_CHECKOUT_CURRENCY,
+                    }
+                )
+        return plans
 
     def _resolve_plan_price_paise(self, plan_code: str) -> int | None:
         overrides = getattr(settings, "BILLING_PLAN_PRICE_OVERRIDES", {}) or {}
