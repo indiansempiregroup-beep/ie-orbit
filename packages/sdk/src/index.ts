@@ -3,6 +3,11 @@ export type ApiEnvelope<T> = {
   meta: {
     request_id?: string | null;
     timestamp?: string;
+    pagination?: {
+      next_cursor?: string | null;
+      previous_cursor?: string | null;
+      page_size?: number;
+    };
     [key: string]: unknown;
   };
 };
@@ -66,6 +71,16 @@ export type ChangePasswordRequest = {
 
 export type VerifyEmailRequest = {
   token: string;
+};
+
+export type PatchAuthMeRequest = {
+  first_name?: string | null;
+  last_name?: string | null;
+  phone_number?: string | null;
+  profile_photo?: string | null;
+  language?: string | null;
+  timezone?: string | null;
+  notification_preferences?: Record<string, unknown> | null;
 };
 
 export type UserProfile = {
@@ -162,18 +177,225 @@ export type AvailabilitySlot = {
   capacity: number;
 };
 
+export type BusinessProductSubscription = {
+  id: string;
+  product_code: string;
+  status: 'trialing' | 'active' | 'canceled';
+  plan_code?: string | null;
+  plan_name?: string | null;
+  billing_interval?: 'monthly' | 'yearly' | null;
+  subscribed_at?: string;
+  trial_ends_at?: string | null;
+  canceled_at?: string | null;
+  current_period_starts_at?: string | null;
+  current_period_ends_at?: string | null;
+  external_billing_reference?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ProductPlan = {
+  product_code?: string;
+  code: string;
+  name: string;
+  description?: string;
+  billing_interval: 'monthly' | 'yearly';
+  trial_days: number;
+  is_default?: boolean;
+};
+
+export type BusinessProductSubscribeInput = {
+  product_code: string;
+  plan_code?: string;
+  set_active?: boolean;
+};
+
+export type BusinessProductPlanChangeInput = {
+  plan_code: string;
+};
+
+export type BillingStatus = {
+  provider: string;
+  configured: boolean;
+  key_id?: string | null;
+  webhook_configured: boolean;
+  currency: string;
+  mock_mode: boolean;
+};
+
+export type BillingCheckoutInput = {
+  product_code: string;
+  plan_code: string;
+  business_id?: string;
+};
+
+export type BillingCheckoutSession = {
+  session_id: string;
+  order_id: string;
+  amount: number;
+  currency: string;
+  product_code: string;
+  plan_code: string;
+  configured: boolean;
+  key_id?: string | null;
+  mock_mode: boolean;
+  expires_at: string;
+};
+
+export type IamRole = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  is_system?: boolean;
+};
+
+export type IamPermission = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  resource: string;
+  action: string;
+  is_system?: boolean;
+};
+
+export type TenantMember = {
+  id: string;
+  email: string;
+  full_name: string;
+  roles: Array<{ code: string; name: string }>;
+};
+
+export type StaffInvitation = {
+  id: string;
+  email: string;
+  platform_role_code: string;
+  status: string;
+  expires_at: string;
+  accepted_at?: string | null;
+  invited_by_email?: string | null;
+  created_at?: string;
+};
+
+export type StaffInvitationCreateInput = {
+  email: string;
+  platform_role_code: 'manager' | 'staff';
+};
+
+export type AcceptInvitationInput = {
+  token: string;
+  password?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
 export type Business = {
   id: string;
   business_name?: string;
   display_name?: string;
+  business_code?: string;
   business_type?: string;
   email?: string | null;
   status?: string;
   currency?: string | null;
   timezone?: string | null;
+  selected_product?: string | null;
+  product_subscriptions?: BusinessProductSubscription[];
+  settings?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
   is_active?: boolean;
+};
+
+export type BusinessCreateInput = {
+  business_code: string;
+  business_name: string;
+  display_name: string;
+  business_type?: string;
+  industry_category?: string;
+  email?: string;
+  currency?: string;
+  timezone?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  postal_code?: string;
+  address_line1?: string;
+  primary_contact?: string;
+  website?: string;
+  selected_product?: string;
+};
+
+export type BusinessUpdateInput = Partial<
+  Pick<
+    Business,
+    | 'business_name'
+    | 'display_name'
+    | 'business_type'
+    | 'email'
+    | 'currency'
+    | 'timezone'
+    | 'status'
+    | 'selected_product'
+  >
+> & {
+  industry_category?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  postal_code?: string;
+  address_line1?: string;
+  primary_contact?: string;
+  website?: string;
+  settings?: Record<string, unknown>;
+};
+
+export type Branch = {
+  id: string;
+  business: string;
+  branch_code: string;
+  branch_name: string;
+  display_name?: string;
+  is_primary?: boolean;
+  email?: string;
+  phone_number?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal_code?: string;
+  timezone?: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+  is_active?: boolean;
+};
+
+export type BranchCreateInput = {
+  branch_name: string;
+  branch_code?: string;
+  display_name?: string;
+  is_primary?: boolean;
+  email?: string;
+  phone_number?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal_code?: string;
+  timezone?: string;
+  status?: string;
+};
+
+export type BranchUpdateInput = Partial<BranchCreateInput>;
+
+export type OperationsSearchResult = {
+  customers: Customer[];
+  services: Service[];
+  staff: StaffMember[];
 };
 
 export type Customer = {
@@ -293,6 +515,118 @@ export type TenantSummary = {
   status: 'active' | 'suspended' | 'archived';
 };
 
+/**
+ * Workspace = Current Product + Current Business (user-facing session scope).
+ * Tenant is internal and must not be exposed in UI. See ADR-002.
+ */
+export type WorkspaceSnapshot = {
+  productCode: string | null;
+  productName: string;
+  businessId: string | null;
+  businessName: string;
+  businessStatus?: string | null;
+  currency?: string | null;
+  timezone?: string | null;
+  /** Internal only — never display in end-user UI */
+  tenantId?: string | null;
+};
+
+export type TenantSettingsPayload = {
+  business_name?: string;
+  display_name?: string;
+  selected_product?: string;
+  product_code?: string;
+  product_name?: string;
+  subscription?: {
+    plan?: string | null;
+    status?: string;
+    feature_flags?: Record<string, unknown>;
+    limits?: Record<string, unknown>;
+  };
+};
+
+export type TenantSettingsResponse = {
+  id?: string;
+  business_name?: string | null;
+  display_name?: string | null;
+  selected_product?: string | null;
+  product_code?: string | null;
+  product_name?: string | null;
+  subscription?: {
+    plan?: string | null;
+    plan_code?: string | null;
+    plan_name?: string | null;
+    status?: string;
+    feature_flags?: Record<string, unknown>;
+    limits?: Record<string, unknown>;
+  };
+};
+
+export type TenantCreateInput = {
+  slug: string;
+  display_name: string;
+  legal_name?: string;
+  timezone?: string;
+  currency?: string;
+  language?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  logo?: string;
+  favicon?: string;
+  primary_color?: string;
+  secondary_color?: string;
+  brand_settings?: Record<string, unknown>;
+  subscription_reference?: string;
+};
+
+export type RegisterRequest = {
+  email: string;
+  password: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+export type RegisterBusinessInput = RegisterRequest & {
+  slug: string;
+  business_name: string;
+  display_name?: string;
+  business_code?: string;
+  business_type?: string;
+  industry_category?: string;
+  business_email?: string;
+  primary_contact?: string;
+  website?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  postal_code?: string;
+  address_line1?: string;
+  timezone?: string;
+  currency?: string;
+  language?: string;
+  selected_product?: string;
+  primary_color?: string;
+  secondary_color?: string;
+  phone_number?: string;
+  settings?: Record<string, unknown>;
+};
+
+export type WorkspaceProvisionResponse = {
+  access: string;
+  refresh: string;
+  token_type: string;
+  expires_in: number;
+  user: UserProfile;
+  tenant: TenantSummary;
+  business: Business;
+};
+
+export type TenantSlugAvailability = {
+  slug: string;
+  available: boolean;
+};
+
 class ApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -301,7 +635,8 @@ class ApiClient {
 
   constructor(config: ApiClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
-    this.fetchImpl = config.fetchImpl ?? fetch;
+    const rawFetch = config.fetchImpl ?? fetch;
+    this.fetchImpl = rawFetch.bind(globalThis as unknown as typeof fetch);
     this.defaultHeaders = config.headers ?? {};
     this.token = config.token ?? null;
   }
@@ -321,8 +656,13 @@ class ApiClient {
     forgotPassword: (body: ForgotPasswordRequest) => this.request<{ accepted: boolean }>('/auth/forgot-password', { method: 'POST', body }),
     resetPassword: (body: ResetPasswordRequest) => this.request<{ reset: boolean }>('/auth/reset-password', { method: 'POST', body }),
     changePassword: (body: ChangePasswordRequest) => this.request<{ changed: boolean }>('/auth/change-password', { method: 'POST', body }),
+    register: (body: RegisterRequest) => this.request<UserProfile>('/auth/register', { method: 'POST', body }),
+    registerBusiness: (body: RegisterBusinessInput) =>
+      this.request<WorkspaceProvisionResponse>('/auth/register-business', { method: 'POST', body }),
     verifyEmail: (body: VerifyEmailRequest) => this.request<{ verified: boolean; email: string }>('/auth/verify-email', { method: 'POST', body }),
+    resendVerification: () => this.request<{ accepted: boolean }>('/auth/resend-verification', { method: 'POST' }),
     me: () => this.request<UserProfile>('/auth/me', { method: 'GET' }),
+    patchMe: (body: PatchAuthMeRequest) => this.request<UserProfile>('/auth/me', { method: 'PATCH', body }),
   };
 
   bookings = {
@@ -340,8 +680,44 @@ class ApiClient {
 
   businesses = {
     list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<Business[]>('/businesses', { method: 'GET', query }),
+    create: (body: BusinessCreateInput) => this.request<Business>('/businesses', { method: 'POST', body }),
     me: () => this.request<Business>('/businesses/me', { method: 'GET' }),
     get: (businessId: string) => this.request<Business>(`/businesses/${businessId}`, { method: 'GET' }),
+    patch: (businessId: string, body: BusinessUpdateInput) => this.request<Business>(`/businesses/${businessId}`, { method: 'PATCH', body }),
+    patchMe: (body: BusinessUpdateInput) => this.request<Business>('/businesses/me', { method: 'PATCH', body }),
+    subscribeProduct: (businessId: string, body: BusinessProductSubscribeInput) =>
+      this.request<Business>(`/businesses/${businessId}/product-subscriptions`, { method: 'POST', body }),
+    unsubscribeProduct: (businessId: string, productCode: string) =>
+      this.request<Business>(`/businesses/${businessId}/product-subscriptions/${productCode}`, { method: 'DELETE' }),
+    changeProductPlan: (businessId: string, productCode: string, body: BusinessProductPlanChangeInput) =>
+      this.request<Business>(`/businesses/${businessId}/product-subscriptions/${productCode}/plan`, { method: 'PATCH', body }),
+    listProductPlans: (query?: { product_code?: string }) =>
+      this.request<ProductPlan[]>('/product-plans', { method: 'GET', query }),
+    branches: {
+      list: (businessId: string) => this.request<Branch[]>(`/businesses/${businessId}/branches`, { method: 'GET' }),
+      create: (businessId: string, body: BranchCreateInput) =>
+        this.request<Branch>(`/businesses/${businessId}/branches`, { method: 'POST', body }),
+      get: (businessId: string, branchId: string) =>
+        this.request<Branch>(`/businesses/${businessId}/branches/${branchId}`, { method: 'GET' }),
+      patch: (businessId: string, branchId: string, body: BranchUpdateInput) =>
+        this.request<Branch>(`/businesses/${businessId}/branches/${branchId}`, { method: 'PATCH', body }),
+    },
+  };
+
+  operations = {
+    search: (query?: Record<string, string | number | boolean | undefined | null>) =>
+      this.request<OperationsSearchResult>('/search', { method: 'GET', query }),
+  };
+
+  tenants = {
+    checkSlug: (slug: string) =>
+      this.request<TenantSlugAvailability>('/tenants/check-slug', { method: 'GET', query: { slug } }),
+    list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<TenantSummary[]>('/tenants', { method: 'GET', query }),
+    create: (body: TenantCreateInput) => this.request<TenantSummary>('/tenants', { method: 'POST', body }),
+    get: (tenantId: string) => this.request<TenantSummary>(`/tenants/${tenantId}`, { method: 'GET' }),
+    patch: (tenantId: string, body: Partial<TenantCreateInput>) => this.request<TenantSummary>(`/tenants/${tenantId}`, { method: 'PATCH', body }),
+    getSettings: () => this.request<TenantSettingsResponse>('/tenant/settings', { method: 'GET' }),
+    settings: (body: TenantSettingsPayload) => this.request<unknown>('/tenant/settings', { method: 'PATCH', body }),
   };
 
   customers = {
@@ -370,8 +746,8 @@ class ApiClient {
 
   notifications = {
     list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<Notification[]>('/notifications', { method: 'GET', query }),
-    markRead: (notificationId: string) => this.request<Notification>(`/notifications/${notificationId}/read`, { method: 'POST' }),
-    readAll: () => this.request<{ read: boolean }>('/notifications/read-all', { method: 'POST' }),
+    markRead: (notificationId: string) => this.request<Notification>(`/notifications/${notificationId}/read`, { method: 'PATCH' }),
+    readAll: () => this.request<{ read: boolean }>('/notifications/read-all', { method: 'PATCH' }),
     delete: (notificationId: string) => this.request<null>(`/notifications/${notificationId}`, { method: 'DELETE' }),
   };
 
@@ -381,6 +757,37 @@ class ApiClient {
     dashboard: {
       summary: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<unknown>('/dashboard/summary', { method: 'GET', query }),
     },
+  };
+
+  billing = {
+    status: () => this.request<BillingStatus>('/billing/status', { method: 'GET' }),
+    checkout: (body: BillingCheckoutInput) => this.request<BillingCheckoutSession>('/billing/checkout', { method: 'POST', body }),
+  };
+
+  iam = {
+    roles: () => this.request<IamRole[]>('/auth/iam/roles', { method: 'GET' }),
+    permissions: () => this.request<IamPermission[]>('/auth/iam/permissions', { method: 'GET' }),
+    members: () => this.request<TenantMember[]>('/auth/iam/members', { method: 'GET' }),
+    assignRole: (userId: string, body: { role_code: string }) =>
+      this.request<{ user_id: string; role_code: string }>(`/auth/iam/members/${userId}/roles`, { method: 'POST', body }),
+    removeRole: (userId: string, roleCode: string) =>
+      this.request<{ user_id: string; role_code: string; removed: boolean }>(
+        `/auth/iam/members/${userId}/roles/${roleCode}`,
+        { method: 'DELETE' },
+      ),
+  };
+
+  invitations = {
+    list: (businessId: string) => this.request<StaffInvitation[]>(`/businesses/${businessId}/invitations`, { method: 'GET' }),
+    create: (businessId: string, body: StaffInvitationCreateInput) =>
+      this.request<StaffInvitation>(`/businesses/${businessId}/invitations`, { method: 'POST', body }),
+    revoke: (businessId: string, invitationId: string) =>
+      this.request<StaffInvitation>(`/businesses/${businessId}/invitations/${invitationId}`, { method: 'DELETE' }),
+    accept: (body: AcceptInvitationInput) =>
+      this.request<{ invitation_id: string; user_id: string; staff_id: string; email: string; created_user: boolean }>(
+        '/auth/accept-invitation',
+        { method: 'POST', body, auth: false },
+      ),
   };
 
   health = {
@@ -439,7 +846,17 @@ class ApiClient {
 
   private buildUrl(path: string, query?: Record<string, string | number | boolean | null | undefined>): string {
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    const url = new URL(`${this.baseUrl}${cleanPath}`);
+    const cleanBaseUrl = this.baseUrl.replace(/\/$/, '');
+
+    let url: URL;
+    if (/^https?:\/\//i.test(cleanBaseUrl)) {
+      url = new URL(`${cleanBaseUrl}${cleanPath}`);
+    } else if (typeof window !== 'undefined' && window.location?.origin) {
+      url = new URL(`${cleanBaseUrl}${cleanPath}`, window.location.origin);
+    } else {
+      url = new URL(`${cleanBaseUrl}${cleanPath}`, 'http://localhost');
+    }
+
     Object.entries(query ?? {}).forEach(([key, value]) => {
       if (value === undefined || value === null) {
         return;

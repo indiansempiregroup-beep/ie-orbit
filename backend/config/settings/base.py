@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -25,6 +26,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
+    "corsheaders",
     "apps.common",
     "apps.core",
     "apps.authentication",
@@ -38,11 +40,14 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.calendar",
     "apps.analytics",
+    "apps.billing",
+    "apps.audit",
     "apps.api",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -51,6 +56,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.tenancy.middleware.TenantResolutionMiddleware",
+    "apps.tenancy.middleware.BusinessResolutionMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -167,6 +173,10 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": False,
 }
 
+CORS_ALLOWED_ORIGINS = ENV.cors_allowed_origins
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = ENV.csrf_trusted_origins
+
 IAM_SETTINGS = {
     "FAILED_LOGIN_LIMIT": 5,
     "ACCOUNT_LOCKOUT_MINUTES": 15,
@@ -186,9 +196,14 @@ CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60
 CELERY_TASK_ALWAYS_EAGER = ENV.celery_task_always_eager
 CELERY_BEAT_SCHEDULER = "celery.beat:PersistentScheduler"
 
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+BILLING_CURRENCY_DEFAULT = os.getenv("BILLING_CURRENCY_DEFAULT", "INR")
+
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
-CSRF_TRUSTED_ORIGINS = ENV.csrf_trusted_origins
 
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)

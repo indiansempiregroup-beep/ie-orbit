@@ -20,9 +20,12 @@ export class ErrorBoundary extends React.Component<Props, { error: Error | null 
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 24 }}>
+        <div style={{ minHeight: '100vh', padding: 24, background: '#fef2f2', color: '#991b1b' }}>
           <h2>Something went wrong</h2>
           <pre style={{ whiteSpace: 'pre-wrap' }}>{String(this.state.error?.message)}</pre>
+          <button type="button" onClick={() => window.location.reload()} style={{ marginTop: 16, padding: '10px 14px' }}>
+            Reload app
+          </button>
         </div>
       );
     }

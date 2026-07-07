@@ -345,3 +345,67 @@ class StaffNote(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.staff.display_name} note"
+
+
+class InvitationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    EXPIRED = "expired", "Expired"
+    REVOKED = "revoked", "Revoked"
+
+
+INVITABLE_PLATFORM_ROLES = frozenset({"manager", "staff"})
+
+
+class StaffInvitation(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="staff_invitations",
+    )
+    email = models.EmailField(db_index=True)
+    platform_role_code = models.SlugField(max_length=80)
+    token = models.UUIDField(unique=True, db_index=True)
+    status = models.CharField(
+        max_length=32,
+        choices=InvitationStatus.choices,
+        default=InvitationStatus.PENDING,
+        db_index=True,
+    )
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="sent_staff_invitations",
+        null=True,
+        blank=True,
+    )
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    staff = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        related_name="invitations",
+        null=True,
+        blank=True,
+    )
+
+    class Meta(TenantModel.Meta):
+        db_table = "staff_invitations"
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "status"]),
+            models.Index(fields=["tenant", "email", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "email"],
+                condition=models.Q(status="pending"),
+                name="uq_staff_invitation_pending_email",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.email} ({self.status})"

@@ -1,0 +1,82 @@
+export type ProductDefinition = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+export type ProductSubscriptionLike = {
+  product_code: string;
+  status?: string | null;
+};
+
+export const PRODUCT_CATALOG: ProductDefinition[] = [
+  {
+    id: 'appointie',
+    name: 'AppointIE',
+    description: 'Booking, scheduling, and customer operations for service businesses.',
+  },
+  {
+    id: 'invoiceie',
+    name: 'InvoiceIE',
+    description: 'Invoicing and payment workflows for growing teams.',
+  },
+  {
+    id: 'crmie',
+    name: 'CRMIE',
+    description: 'Customer relationship management for multi-location operations.',
+  },
+];
+
+export function getProductById(productId: string | null | undefined): ProductDefinition | undefined {
+  if (!productId) return undefined;
+  return PRODUCT_CATALOG.find((product) => product.id === productId);
+}
+
+export function getProductName(productId: string | null | undefined): string {
+  return getProductById(productId)?.name ?? productId?.replace(/-/g, ' ') ?? 'AppointIE';
+}
+
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['trialing', 'active']);
+
+export function getSubscribedProducts(
+  subscriptions?: ProductSubscriptionLike[] | null,
+): ProductDefinition[] {
+  if (!subscriptions?.length) return [];
+
+  return subscriptions
+    .filter((subscription) => ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status ?? 'trialing'))
+    .map((subscription) => getProductById(subscription.product_code))
+    .filter((product): product is ProductDefinition => Boolean(product));
+}
+
+export function getAvailableProducts(
+  subscriptions?: ProductSubscriptionLike[] | null,
+): ProductDefinition[] {
+  const subscribedIds = new Set(
+    getSubscribedProducts(subscriptions).map((product) => product.id),
+  );
+  return PRODUCT_CATALOG.filter((product) => !subscribedIds.has(product.id));
+}
+
+export function resolveEnabledProducts(
+  selectedProduct?: string | null,
+  productCode?: string | null,
+  featureFlags?: Record<string, unknown> | null,
+  subscriptions?: ProductSubscriptionLike[] | null,
+): ProductDefinition[] {
+  const subscribedProducts = getSubscribedProducts(subscriptions);
+  if (subscribedProducts.length > 0) {
+    return subscribedProducts;
+  }
+
+  const enabledIds = featureFlags?.enabled_products;
+  if (Array.isArray(enabledIds) && enabledIds.length > 0) {
+    return enabledIds
+      .map((id) => (typeof id === 'string' ? getProductById(id) : undefined))
+      .filter((product): product is ProductDefinition => Boolean(product));
+  }
+
+  const activeId = selectedProduct ?? productCode ?? (typeof featureFlags?.selected_product === 'string' ? featureFlags.selected_product : null);
+  const activeProduct = getProductById(activeId);
+  return activeProduct ? [activeProduct] : [];
+}

@@ -2,11 +2,50 @@ from __future__ import annotations
 
 from django.db import migrations
 
-from apps.authentication.constants import (
-    DEFAULT_PERMISSION_DEFINITIONS,
-    DEFAULT_ROLE_DEFINITIONS,
-    DEFAULT_ROLE_PERMISSION_CODES,
+IAM_PERMISSION_DEFINITIONS = (
+    {
+        "code": "iam:user:read",
+        "name": "Read users",
+        "resource": "iam.user",
+        "action": "read",
+    },
+    {
+        "code": "iam:user:update_self",
+        "name": "Update own profile",
+        "resource": "iam.user",
+        "action": "update_self",
+    },
+    {
+        "code": "iam:role:assign",
+        "name": "Assign roles",
+        "resource": "iam.role",
+        "action": "assign",
+    },
+    {
+        "code": "iam:permission:assign",
+        "name": "Assign permissions",
+        "resource": "iam.permission",
+        "action": "assign",
+    },
 )
+
+DEFAULT_ROLE_DEFINITIONS = (
+    {"code": "super_admin", "name": "Super Admin"},
+    {"code": "platform_admin", "name": "Platform Admin"},
+    {"code": "business_owner", "name": "Business Owner"},
+    {"code": "manager", "name": "Manager"},
+    {"code": "staff", "name": "Staff"},
+    {"code": "customer", "name": "Customer"},
+)
+
+IAM_ROLE_PERMISSION_CODES = {
+    "super_admin": tuple(permission["code"] for permission in IAM_PERMISSION_DEFINITIONS),
+    "platform_admin": tuple(permission["code"] for permission in IAM_PERMISSION_DEFINITIONS),
+    "business_owner": ("iam:user:read", "iam:user:update_self"),
+    "manager": ("iam:user:update_self",),
+    "staff": ("iam:user:update_self",),
+    "customer": ("iam:user:update_self",),
+}
 
 
 def seed_default_roles(apps, schema_editor) -> None:
@@ -15,7 +54,7 @@ def seed_default_roles(apps, schema_editor) -> None:
     role_permission_model = apps.get_model("authentication", "RolePermission")
 
     permissions_by_code = {}
-    for definition in DEFAULT_PERMISSION_DEFINITIONS:
+    for definition in IAM_PERMISSION_DEFINITIONS:
         permission, _ = permission_model.objects.get_or_create(
             code=definition["code"],
             defaults={
@@ -39,7 +78,7 @@ def seed_default_roles(apps, schema_editor) -> None:
         )
         roles_by_code[role.code] = role
 
-    for role_code, permission_codes in DEFAULT_ROLE_PERMISSION_CODES.items():
+    for role_code, permission_codes in IAM_ROLE_PERMISSION_CODES.items():
         role = roles_by_code[role_code]
         for permission_code in permission_codes:
             role_permission_model.objects.get_or_create(

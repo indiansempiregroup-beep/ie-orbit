@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { type TenantSettingsResponse } from '@ie-platform/sdk';
 import {
   AvailabilitySlot,
   Booking,
@@ -9,18 +10,22 @@ import {
   Service,
   StaffMember,
   getAvailability,
+  getBusinessById,
   getBusinessMe,
   listBookings,
+  listBusinesses,
   listCustomers,
   listNotifications,
   listServices,
   listStaff,
   searchBookings,
-  searchCustomers,
-  searchServices,
-  searchStaff,
 } from './dashboardApi';
 import { useAuth } from '../../hooks/useAuth';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { createAuthenticatedClient } from '../../lib/apiClient';
+import { useApiClient } from '../../hooks/useApiClient';
+import { useActiveBusiness } from '../../hooks/useActiveBusiness';
+import { useBusinessProfileUpdate } from '../settings/businessSettingsHooks';
 
 const KPI_REFRESH_INTERVALS = [0, 30000, 60000, 300000] as const;
 const STORAGE_KEY = 'ie:dashboard:settings';
@@ -57,19 +62,53 @@ function loadPreferences(): DashboardPreferences {
   }
 }
 
+function parseServerPreferences(settings?: Record<string, unknown> | null): DashboardPreferences | null {
+  const raw = settings?.dashboard_preferences;
+  if (!raw || typeof raw !== 'object') return null;
+  const parsed = raw as Partial<DashboardPreferences>;
+  return {
+    ...defaultPreferences,
+    ...parsed,
+  };
+}
+
 export function useDashboardSettings() {
+  const business = useActiveBusiness();
+  const updateBusiness = useBusinessProfileUpdate();
   const [preferences, setPreferences] = useState<DashboardPreferences>(() => loadPreferences());
+
+  useEffect(() => {
+    const settings = business.data?.settings as Record<string, unknown> | undefined;
+    const serverPreferences = parseServerPreferences(settings);
+    if (serverPreferences) {
+      setPreferences(serverPreferences);
+      persistPreferences(serverPreferences);
+    }
+  }, [business.data?.settings]);
+
+  const persistToServer = useCallback(
+    (next: DashboardPreferences) => {
+      updateBusiness.mutate({
+        settings: {
+          dashboard_preferences: next,
+        },
+      });
+    },
+    [updateBusiness],
+  );
 
   const setRefreshInterval = (refreshInterval: number) => {
     const next = { ...preferences, refreshInterval };
     setPreferences(next);
     persistPreferences(next);
+    persistToServer(next);
   };
 
   const setLayout = (layout: DashboardPreferences['layout']) => {
     const next = { ...preferences, layout };
     setPreferences(next);
     persistPreferences(next);
+    persistToServer(next);
   };
 
   return {
@@ -80,11 +119,36 @@ export function useDashboardSettings() {
   };
 }
 
-export function useBusinessProfile() {
+export { useActiveBusiness as useBusinessProfile } from '../../hooks/useActiveBusiness';
+
+export function useBusinessOptions() {
   const auth = useAuth();
-  return useQuery<Business, Error>({
-    queryKey: ['dashboard', 'business'],
-    queryFn: () => getBusinessMe(auth.token),
+  const workspace = useWorkspace();
+  return useQuery<Business[], Error>({
+    queryKey: ['dashboard', 'businesses', auth.user?.id ?? 'anonymous', workspace.tenantId ?? 'default'],
+    queryFn: async () => {
+      const businesses = await listBusinesses(auth.token, workspace.tenantId);
+      if (Array.isArray(businesses) && businesses.length > 0) {
+        return businesses;
+      }
+      const fallbackBusiness = await getBusinessMe(auth.token, workspace.tenantId);
+      return fallbackBusiness ? [fallbackBusiness] : [];
+    },
+    enabled: Boolean(auth.token),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useTenantSettings() {
+  const auth = useAuth();
+  const workspace = useWorkspace();
+  return useQuery<TenantSettingsResponse, Error>({
+    queryKey: ['dashboard', 'tenant-settings', workspace.tenantId ?? 'default'],
+    queryFn: async () => {
+      const client = createAuthenticatedClient(auth.token, workspace.tenantId);
+      const response = await client.tenants.getSettings();
+      return response.data;
+    },
     enabled: Boolean(auth.token),
     staleTime: 1000 * 60 * 5,
   });
@@ -92,28 +156,31 @@ export function useBusinessProfile() {
 
 export function useBookingLists(date: string, range?: { from: string; to: string }) {
   const auth = useAuth();
+  const workspace = useWorkspace();
   const queryClient = useQueryClient();
+  const businessId = workspace.businessId;
+  const tenantId = workspace.tenantId;
 
   const todayQuery = useQuery<Booking[], Error>({
-    queryKey: ['dashboard', 'bookings', 'today', date],
-    queryFn: () => listBookings(auth.token, { date }),
-    enabled: Boolean(auth.token),
+    queryKey: ['dashboard', 'bookings', 'today', tenantId, businessId, date],
+    queryFn: () => listBookings(auth.token, tenantId, businessId, { date }),
+    enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60,
     refetchOnWindowFocus: true,
   });
 
   const rangeQuery = useQuery<Booking[], Error>({
-    queryKey: ['dashboard', 'bookings', 'range', range?.from, range?.to],
-    queryFn: () => listBookings(auth.token, { date_from: range?.from, date_to: range?.to }),
-    enabled: Boolean(auth.token) && Boolean(range),
+    queryKey: ['dashboard', 'bookings', 'range', tenantId, businessId, range?.from, range?.to],
+    queryFn: () => listBookings(auth.token, tenantId, businessId, { date_from: range?.from, date_to: range?.to }),
+    enabled: Boolean(auth.token) && Boolean(businessId) && Boolean(range),
     staleTime: 1000 * 60,
     refetchOnWindowFocus: true,
   });
 
   const upcomingQuery = useQuery<Booking[], Error>({
-    queryKey: ['dashboard', 'bookings', 'upcoming', range?.from, range?.to],
-    queryFn: () => listBookings(auth.token, { date_from: range?.from, date_to: range?.to }),
-    enabled: Boolean(auth.token) && Boolean(range),
+    queryKey: ['dashboard', 'bookings', 'upcoming', tenantId, businessId, range?.from, range?.to],
+    queryFn: () => listBookings(auth.token, tenantId, businessId, { date_from: range?.from, date_to: range?.to }),
+    enabled: Boolean(auth.token) && Boolean(businessId) && Boolean(range),
     staleTime: 1000 * 60,
     refetchOnWindowFocus: true,
   });
@@ -132,40 +199,43 @@ export function useBookingLists(date: string, range?: { from: string; to: string
 
 export function useBusinessLists() {
   const auth = useAuth();
+  const workspace = useWorkspace();
+  const businessId = workspace.businessId;
+  const tenantId = workspace.tenantId;
 
   const customers = useQuery<Customer[], Error>({
-    queryKey: ['dashboard', 'customers'],
-    queryFn: () => listCustomers(auth.token),
-    enabled: Boolean(auth.token),
+    queryKey: ['dashboard', 'customers', tenantId, businessId],
+    queryFn: () => listCustomers(auth.token, tenantId, businessId),
+    enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });
 
   const staff = useQuery<StaffMember[], Error>({
-    queryKey: ['dashboard', 'staff'],
-    queryFn: () => listStaff(auth.token),
-    enabled: Boolean(auth.token),
+    queryKey: ['dashboard', 'staff', tenantId, businessId],
+    queryFn: () => listStaff(auth.token, tenantId, businessId),
+    enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });
 
   const services = useQuery<Service[], Error>({
-    queryKey: ['dashboard', 'services'],
-    queryFn: () => listServices(auth.token),
-    enabled: Boolean(auth.token),
+    queryKey: ['dashboard', 'services', tenantId, businessId],
+    queryFn: () => listServices(auth.token, tenantId, businessId),
+    enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });
 
   const notifications = useQuery<Notification[], Error>({
-    queryKey: ['dashboard', 'notifications'],
-    queryFn: () => listNotifications(auth.token),
-    enabled: Boolean(auth.token),
+    queryKey: ['dashboard', 'notifications', tenantId, businessId],
+    queryFn: () => listNotifications(auth.token, tenantId, businessId),
+    enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 15,
     refetchOnWindowFocus: true,
   });
 
   const availability = useQuery<AvailabilitySlot[], Error>({
-    queryKey: ['dashboard', 'availability', new Date().toISOString().slice(0, 10)],
-    queryFn: () => getAvailability(auth.token, new Date().toISOString().slice(0, 10)),
-    enabled: Boolean(auth.token),
+    queryKey: ['dashboard', 'availability', tenantId, businessId, new Date().toISOString().slice(0, 10)],
+    queryFn: () => getAvailability(auth.token, tenantId, businessId, new Date().toISOString().slice(0, 10)),
+    enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });
 
@@ -180,7 +250,11 @@ export function useBusinessLists() {
 
 export function useSearchResults(term: string) {
   const auth = useAuth();
-  const queryClient = useQueryClient();
+  const workspace = useWorkspace();
+  const client = useApiClient();
+  const businessId = workspace.businessId;
+  const tenantId = workspace.tenantId;
+  const normalized = term.trim();
 
   return useQuery<{
     bookings: Booking[];
@@ -188,9 +262,9 @@ export function useSearchResults(term: string) {
     staff: StaffMember[];
     services: Service[];
   }, Error>({
-    queryKey: ['dashboard', 'search', term],
+    queryKey: ['dashboard', 'search', tenantId, businessId, normalized],
     queryFn: async () => {
-      if (!term.trim()) {
+      if (!normalized) {
         return {
           bookings: [] as Booking[],
           customers: [] as Customer[],
@@ -198,15 +272,18 @@ export function useSearchResults(term: string) {
           services: [] as Service[],
         };
       }
-      const [bookings, customers, staff, services] = await Promise.all([
-        searchBookings(auth.token, term),
-        searchCustomers(auth.token, term),
-        searchStaff(auth.token, term),
-        searchServices(auth.token, term),
+      const [bookings, operations] = await Promise.all([
+        searchBookings(auth.token, tenantId, businessId, normalized),
+        client.operations.search({ q: normalized }),
       ]);
-      return { bookings, customers, staff, services };
+      return {
+        bookings,
+        customers: operations.data.customers,
+        staff: operations.data.staff,
+        services: operations.data.services,
+      };
     },
-    enabled: Boolean(auth.token),
+    enabled: Boolean(auth.token) && Boolean(businessId) && normalized.length > 0,
     staleTime: 1000 * 10,
   });
 }

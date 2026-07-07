@@ -8,6 +8,7 @@ from apps.tenancy.models import (
     Organization,
     OrganizationSettings,
     Subscription,
+    SubscriptionPlan,
     Tenant,
     TenantSettings,
 )
@@ -58,6 +59,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 class TenantSettingsSerializer(serializers.ModelSerializer):
     branding = BrandingSerializer(required=False)
     subscription = SubscriptionSerializer(required=False)
+    selected_product = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    product_code = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    product_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = TenantSettings
@@ -71,6 +75,9 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "language",
             "notification_defaults",
             "security_preferences",
+            "selected_product",
+            "product_code",
+            "product_name",
             "branding",
             "subscription",
         ]
@@ -79,26 +86,97 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
     def to_representation(self, instance: TenantSettings) -> dict[str, object]:
         data = super().to_representation(instance)
         branding = Branding.objects.for_tenant(instance.tenant).first()
-        data["branding"] = BrandingSerializer(branding).data
-        data["subscription"] = SubscriptionSerializer(
-            Subscription.objects.for_tenant(instance.tenant).first()
-        ).data
+        subscription = Subscription.objects.for_tenant(instance.tenant).first()
+        data["branding"] = BrandingSerializer(branding).data if branding else None
+        data["subscription"] = SubscriptionSerializer(subscription).data if subscription else None
+        selected_product = None
+        product_code = None
+        product_name = None
+        if subscription and subscription.plan:
+            selected_product = subscription.plan.code
+            product_code = subscription.plan.code
+            product_name = subscription.plan.name
+        elif subscription and isinstance(subscription.feature_flags, dict):
+            selected_product = subscription.feature_flags.get("selected_product")
+            product_code = subscription.feature_flags.get("product_code")
+            product_name = subscription.feature_flags.get("product_name")
+        data["selected_product"] = selected_product
+        data["product_code"] = product_code
+        data["product_name"] = product_name
         return data
 
     def update(self, instance: TenantSettings, validated_data: dict[str, object]) -> TenantSettings:
         branding_data = validated_data.pop("branding", None)
         subscription_data = validated_data.pop("subscription", None)
+        selected_product = validated_data.pop("selected_product", None)
+        product_code = validated_data.pop("product_code", None)
+        product_name = validated_data.pop("product_name", None)
         instance = super().update(instance, validated_data)
         if isinstance(branding_data, dict):
-            branding = Branding.objects.for_tenant(instance.tenant).get()
+            branding, _ = Branding.objects.get_or_create(
+                tenant=instance.tenant,
+                defaults={"app_name": instance.tenant.display_name},
+            )
             for field, value in branding_data.items():
                 setattr(branding, field, value)
             branding.save()
+
+        subscription = Subscription.objects.for_tenant(instance.tenant).first()
+        if subscription is None:
+            subscription = Subscription.objects.create(tenant=instance.tenant)
+
+        plan_code = None
         if isinstance(subscription_data, dict):
-            subscription = Subscription.objects.for_tenant(instance.tenant).get()
+            plan_value = subscription_data.get("plan")
+            if isinstance(plan_value, str) and plan_value:
+                plan_code = plan_value
+        if not plan_code and isinstance(selected_product, str) and selected_product:
+            plan_code = selected_product
+        if not plan_code and isinstance(product_code, str) and product_code:
+            plan_code = product_code
+
+        if plan_code:
+            plan_name = None
+            if isinstance(product_name, str) and product_name:
+                plan_name = product_name
+            elif isinstance(subscription_data, dict):
+                plan_name_value = subscription_data.get("plan_name")
+                if isinstance(plan_name_value, str) and plan_name_value:
+                    plan_name = plan_name_value
+            if not plan_name:
+                plan_name = plan_code.replace("-", " ").title()
+            plan, _ = SubscriptionPlan.objects.get_or_create(
+                code=plan_code,
+                defaults={"name": plan_name, "is_public": True},
+            )
+            if plan.name != plan_name:
+                plan.name = plan_name
+                plan.save(update_fields=["name"])
+            subscription.plan = plan
+
+        if isinstance(subscription_data, dict):
             for field, value in subscription_data.items():
+                if field == "plan":
+                    continue
                 setattr(subscription, field, value)
-            subscription.save()
+
+        if isinstance(selected_product, str) and selected_product:
+            subscription.feature_flags = {
+                **subscription.feature_flags,
+                "selected_product": selected_product,
+            }
+        if isinstance(product_code, str) and product_code:
+            subscription.feature_flags = {
+                **subscription.feature_flags,
+                "product_code": product_code,
+            }
+        if isinstance(product_name, str) and product_name:
+            subscription.feature_flags = {
+                **subscription.feature_flags,
+                "product_name": product_name,
+            }
+
+        subscription.save()
         return instance
 
 

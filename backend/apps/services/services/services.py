@@ -120,17 +120,20 @@ class ServiceCatalogService:
             raise ValidationError("Category does not belong to the current tenant.")
 
 
+from apps.common.utils.business_context import resolve_business_id
+
+
 class ServiceSearchService:
     def __init__(self, repository: ServiceRepository | None = None) -> None:
         self.repository = repository or ServiceRepository()
 
-    def search(self, *, tenant: Any, user: Any, params: Any):
+    def search(self, *, tenant: Any, user: Any, params: Any, request: Any | None = None):
         tags = [tag.strip().lower() for tag in params.get("tags", "").split(",") if tag.strip()]
         return self.repository.search(
             tenant=tenant,
             user=user,
             query=params.get("q", ""),
-            business_id=params.get("business", ""),
+            business_id=resolve_business_id(request, params) if request is not None else params.get("business", ""),
             category_id=params.get("category", ""),
             status_value=params.get("status", ""),
             visibility=params.get("visibility", ""),

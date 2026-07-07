@@ -14,6 +14,8 @@ from apps.authentication.api.serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
     LogoutSerializer,
+    RegisterBusinessSerializer,
+    RegisterSerializer,
     RefreshSerializer,
     ResendVerificationSerializer,
     ResetPasswordSerializer,
@@ -24,7 +26,9 @@ from apps.authentication.api.utils import client_ip, user_agent
 from apps.authentication.services.authentication import AuthenticationService
 from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.verification import EmailVerificationService
+from apps.authentication.services.workspace_provisioning import WorkspaceProvisioningService
 from apps.common.api.responses import success_response
+from apps.tenancy.models import Tenant
 
 
 class LoginView(APIView):
@@ -52,6 +56,63 @@ class LoginView(APIView):
                 "user": UserProfileSerializer(result.user).data,
             },
             status_code=status.HTTP_200_OK,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class RegisterView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    serializer_class = RegisterSerializer
+
+    def post(self, request: Request) -> Response:
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = AuthenticationService().register(
+            email=serializer.validated_data["email"],
+            password=serializer.validated_data["password"],
+            first_name=serializer.validated_data.get("first_name", ""),
+            last_name=serializer.validated_data.get("last_name", ""),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(
+            UserProfileSerializer(user).data,
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class RegisterBusinessView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    serializer_class = RegisterBusinessSerializer
+
+    def post(self, request: Request) -> Response:
+        serializer = RegisterBusinessSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        service = WorkspaceProvisioningService()
+        result = service.provision(
+            data=dict(serializer.validated_data),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(
+            service.as_response_payload(result),
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class TenantSlugCheckView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request: Request) -> Response:
+        slug = str(request.query_params.get("slug", "")).strip().lower()
+        available = bool(slug) and not Tenant.objects.filter(slug=slug).exists()
+        return success_response(
+            {"slug": slug, "available": available},
             request_id=getattr(request, "request_id", None),
         )
 

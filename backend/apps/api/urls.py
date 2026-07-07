@@ -14,6 +14,7 @@ urlpatterns = [
     path("", include("apps.notifications.urls")),
     path("", include("apps.calendar.urls")),
     path("", include("apps.analytics.urls")),
+    path("", include("apps.billing.urls")),
     path("search", OperationsSearchView.as_view(), name="operations-search"),
     path("health/", HealthView.as_view(), name="health"),
     path("liveness/", HealthView.as_view(), name="liveness"),

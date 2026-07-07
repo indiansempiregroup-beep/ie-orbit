@@ -3,19 +3,20 @@ import { createApiClient, type LoginResponse } from '@ie-platform/sdk';
 
 const STORAGE_KEY = 'ie:auth:access';
 const STORAGE_REFRESH = 'ie:auth:refresh';
+const STORAGE_STARTED = 'ie:auth:session_started';
 
 type AuthState = {
   token: string | null;
   user: LoginResponse['user'] | null;
   loading: boolean;
-  login: (email: string, password: string, remember?: boolean) => Promise<void>;
-  logout: () => Promise<void>;
+  login: (email: string, password: string, remember?: boolean) => Promise<string>;
+  logout: (allSessions?: boolean) => Promise<void>;
   restore: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-const client = createApiClient({ baseUrl: '/api' });
+const client = createApiClient({ baseUrl: '/api/v1' });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
@@ -26,7 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [user, setUser] = useState<LoginResponse['user'] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem(STORAGE_KEY));
+    } catch {
+      return false;
+    }
+  });
   const refreshRef = React.useRef<number | null>(null);
   const retryRef = React.useRef<{ attempts: number; timer: number | null }>({ attempts: 0, timer: null });
 
@@ -55,18 +62,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         localStorage.setItem(STORAGE_KEY, payload.access);
         localStorage.setItem(STORAGE_REFRESH, payload.refresh);
+        localStorage.setItem(STORAGE_STARTED, new Date().toISOString());
       } catch {}
       scheduleRefresh(payload.expires_in, payload.refresh);
+      return payload.access;
     } finally {
       setLoading(false);
     }
   }
 
-  async function logout() {
+  async function logout(allSessions = false) {
     setLoading(true);
     try {
       const refresh = localStorage.getItem(STORAGE_REFRESH) ?? '';
-      await client.auth.logout({ refresh });
+      await client.auth.logout({ refresh, all_sessions: allSessions });
     } catch {
       // ignore
     } finally {
@@ -75,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_REFRESH);
+        localStorage.removeItem(STORAGE_STARTED);
       } catch {}
       if (refreshRef.current) {
         clearTimeout(refreshRef.current);

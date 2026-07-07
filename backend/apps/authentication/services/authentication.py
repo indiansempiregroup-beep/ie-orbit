@@ -13,6 +13,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.authentication.models import RefreshTokenRecord, User, UserSession, UserStatus
 from apps.authentication.repositories.users import UserRepository
 from apps.authentication.services.audit import SecurityAuditService
+from apps.authentication.constants import DEFAULT_OWNER_ROLE_CODE
+from apps.authentication.services.roles import RoleService
+from apps.authentication.services.verification import EmailVerificationService
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,39 @@ class AuthenticationService:
                 expires_in=int(access["exp"] - timezone.now().timestamp()),
             ),
         )
+
+    def register(
+        self,
+        *,
+        email: str,
+        password: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> User:
+        existing_user = self.user_repository.get_by_email(email)
+        if existing_user:
+            raise exceptions.ValidationError({"email": "A user with this email already exists."})
+
+        user = User.objects.create_user(
+            email=email,
+            password=password,
+            first_name=first_name or "",
+            last_name=last_name or "",
+            status=UserStatus.PENDING_VERIFICATION,
+        )
+
+        RoleService().assign_role(user=user, role_code=DEFAULT_OWNER_ROLE_CODE)
+
+        EmailVerificationService().send_verification(user=user)
+        self.audit_service.record(
+            event_type="user_registered",
+            user=user,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return user
 
     def logout(
         self,

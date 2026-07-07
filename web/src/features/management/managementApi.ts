@@ -1,5 +1,5 @@
+import type { IEPlatformClient } from '@ie-platform/sdk';
 import {
-  createApiClient,
   type Customer,
   type CustomerCreateInput,
   type CustomerUpdateInput,
@@ -10,14 +10,9 @@ import {
   type StaffCreateInput,
   type StaffUpdateInput,
 } from '@ie-platform/sdk';
+import { businessQueryParam } from '../../lib/workspace';
 
 type QueryParams = Record<string, string | number | boolean | undefined | null>;
-
-function buildClient(token?: string | null) {
-  const client = createApiClient({ baseUrl: '/api' });
-  if (token) client.setToken(token);
-  return client;
-}
 
 function normalizeQuery(query?: QueryParams): QueryParams | undefined {
   if (!query) return undefined;
@@ -28,28 +23,32 @@ function normalizeQuery(query?: QueryParams): QueryParams | undefined {
   }, {} as QueryParams);
 }
 
-export async function listCustomers(token: string | null, query?: QueryParams) {
-  const response = await buildClient(token).customers.list(normalizeQuery(query));
+function scopedQuery(businessId: string | null | undefined, query?: QueryParams) {
+  return normalizeQuery({ ...businessQueryParam(businessId), ...query });
+}
+
+export async function listCustomers(client: IEPlatformClient, businessId?: string | null, query?: QueryParams) {
+  const response = await client.customers.list(scopedQuery(businessId, query));
   return response.data;
 }
 
-export async function getCustomer(token: string | null, customerId: string) {
-  const response = await buildClient(token).customers.get(customerId);
+export async function getCustomer(client: IEPlatformClient, customerId: string) {
+  const response = await client.customers.get(customerId);
   return response.data;
 }
 
-export async function createCustomer(token: string | null, customer: CustomerCreateInput) {
-  const response = await buildClient(token).customers.create(customer);
+export async function createCustomer(client: IEPlatformClient, customer: CustomerCreateInput) {
+  const response = await client.customers.create(customer);
   return response.data;
 }
 
-export async function updateCustomer(token: string | null, customerId: string, customer: CustomerUpdateInput) {
-  const response = await buildClient(token).customers.patch(customerId, customer);
+export async function updateCustomer(client: IEPlatformClient, customerId: string, customer: CustomerUpdateInput) {
+  const response = await client.customers.patch(customerId, customer);
   return response.data;
 }
 
-export async function searchCustomers(token: string | null, term: string) {
-  const customers = await listCustomers(token);
+export async function searchCustomers(client: IEPlatformClient, businessId: string | null | undefined, term: string) {
+  const customers = await listCustomers(client, businessId);
   const lower = term.trim().toLowerCase();
   if (!lower) return customers;
   return customers.filter((customer) => {
@@ -59,28 +58,28 @@ export async function searchCustomers(token: string | null, term: string) {
   });
 }
 
-export async function listServices(token: string | null, query?: QueryParams) {
-  const response = await buildClient(token).services.list(normalizeQuery(query));
+export async function listServices(client: IEPlatformClient, businessId?: string | null, query?: QueryParams) {
+  const response = await client.services.list(scopedQuery(businessId, query));
   return response.data;
 }
 
-export async function getService(token: string | null, serviceId: string) {
-  const response = await buildClient(token).services.get(serviceId);
+export async function getService(client: IEPlatformClient, serviceId: string) {
+  const response = await client.services.get(serviceId);
   return response.data;
 }
 
-export async function createService(token: string | null, service: ServiceCreateInput) {
-  const response = await buildClient(token).services.create(service);
+export async function createService(client: IEPlatformClient, service: ServiceCreateInput) {
+  const response = await client.services.create(service);
   return response.data;
 }
 
-export async function updateService(token: string | null, serviceId: string, service: ServiceUpdateInput) {
-  const response = await buildClient(token).services.patch(serviceId, service);
+export async function updateService(client: IEPlatformClient, serviceId: string, service: ServiceUpdateInput) {
+  const response = await client.services.patch(serviceId, service);
   return response.data;
 }
 
-export async function searchServices(token: string | null, term: string) {
-  const services = await listServices(token);
+export async function searchServices(client: IEPlatformClient, businessId: string | null | undefined, term: string) {
+  const services = await listServices(client, businessId);
   const lower = term.trim().toLowerCase();
   if (!lower) return services;
   return services.filter((service) => {
@@ -90,28 +89,28 @@ export async function searchServices(token: string | null, term: string) {
   });
 }
 
-export async function listStaff(token: string | null, query?: QueryParams) {
-  const response = await buildClient(token).staff.list(normalizeQuery(query));
+export async function listStaff(client: IEPlatformClient, businessId?: string | null, query?: QueryParams) {
+  const response = await client.staff.list(scopedQuery(businessId, query));
   return response.data;
 }
 
-export async function getStaff(token: string | null, staffId: string) {
-  const response = await buildClient(token).staff.get(staffId);
+export async function getStaff(client: IEPlatformClient, staffId: string) {
+  const response = await client.staff.get(staffId);
   return response.data;
 }
 
-export async function createStaff(token: string | null, staff: StaffCreateInput) {
-  const response = await buildClient(token).staff.create(staff);
+export async function createStaff(client: IEPlatformClient, staff: StaffCreateInput) {
+  const response = await client.staff.create(staff);
   return response.data;
 }
 
-export async function updateStaff(token: string | null, staffId: string, staff: StaffUpdateInput) {
-  const response = await buildClient(token).staff.patch(staffId, staff);
+export async function updateStaff(client: IEPlatformClient, staffId: string, staff: StaffUpdateInput) {
+  const response = await client.staff.patch(staffId, staff);
   return response.data;
 }
 
-export async function searchStaff(token: string | null, term: string) {
-  const staff = await listStaff(token);
+export async function searchStaff(client: IEPlatformClient, businessId: string | null | undefined, term: string) {
+  const staff = await listStaff(client, businessId);
   const lower = term.trim().toLowerCase();
   if (!lower) return staff;
   return staff.filter((member) => {

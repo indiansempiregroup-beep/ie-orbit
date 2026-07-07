@@ -16,6 +16,7 @@ from apps.customers.models import (
     CustomerProfile,
     CustomerStatus,
 )
+from apps.common.utils.business_context import resolve_business_id
 from apps.customers.repositories import CustomerRepository
 
 logger = logging.getLogger("ie_platform.customers")
@@ -186,13 +187,13 @@ class CustomerSearchService:
     def __init__(self, repository: CustomerRepository | None = None) -> None:
         self.repository = repository or CustomerRepository()
 
-    def search(self, *, tenant: Any, user: Any, params: Any):
+    def search(self, *, tenant: Any, user: Any, params: Any, request: Any | None = None):
         tags = [tag.strip().lower() for tag in params.get("tags", "").split(",") if tag.strip()]
         return self.repository.search(
             tenant=tenant,
             user=user,
             query=params.get("q", ""),
-            business_id=params.get("business", ""),
+            business_id=resolve_business_id(request, params) if request is not None else params.get("business", ""),
             status_value=params.get("status", ""),
             tags=tags,
         )

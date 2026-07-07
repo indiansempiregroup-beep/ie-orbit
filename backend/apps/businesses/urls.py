@@ -1,15 +1,51 @@
 from django.urls import path
 
+from apps.businesses.api.branch_views import BranchViewSet
+from apps.businesses.api.product_plan_views import ProductPlanListView
 from apps.businesses.api.views import BusinessViewSet
+from apps.staff.api.invitation_views import BusinessInvitationListCreateView, BusinessInvitationRevokeView
 
 business_list = BusinessViewSet.as_view({"get": "list", "post": "create"})
 business_detail = BusinessViewSet.as_view(
     {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
 )
+business_subscribe_product = BusinessViewSet.as_view({"post": "subscribe_product"})
+business_unsubscribe_product = BusinessViewSet.as_view({"delete": "unsubscribe_product"})
+business_change_product_plan = BusinessViewSet.as_view({"patch": "change_product_plan"})
 business_me = BusinessViewSet.as_view({"get": "me", "patch": "partial_update_me"})
+branch_list = BranchViewSet.as_view({"get": "list", "post": "create"})
+branch_detail = BranchViewSet.as_view({"get": "retrieve", "patch": "partial_update"})
 
 urlpatterns = [
+    path("product-plans", ProductPlanListView.as_view(), name="product-plan-list"),
     path("businesses", business_list, name="business-list-create"),
     path("businesses/me", business_me, name="business-me"),
     path("businesses/<uuid:pk>", business_detail, name="business-detail"),
+    path(
+        "businesses/<uuid:pk>/product-subscriptions",
+        business_subscribe_product,
+        name="business-subscribe-product",
+    ),
+    path(
+        "businesses/<uuid:pk>/product-subscriptions/<slug:product_code>",
+        business_unsubscribe_product,
+        name="business-unsubscribe-product",
+    ),
+    path(
+        "businesses/<uuid:pk>/product-subscriptions/<slug:product_code>/plan",
+        business_change_product_plan,
+        name="business-change-product-plan",
+    ),
+    path("businesses/<uuid:business_pk>/branches", branch_list, name="branch-list-create"),
+    path("businesses/<uuid:business_pk>/branches/<uuid:pk>", branch_detail, name="branch-detail"),
+    path(
+        "businesses/<uuid:pk>/invitations",
+        BusinessInvitationListCreateView.as_view(),
+        name="business-invitation-list-create",
+    ),
+    path(
+        "businesses/<uuid:pk>/invitations/<uuid:invitation_id>",
+        BusinessInvitationRevokeView.as_view(),
+        name="business-invitation-revoke",
+    ),
 ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
+from django.utils.text import slugify
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.exceptions import NotFound
@@ -8,11 +9,16 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.businesses.api.permissions import BusinessAccessPermission
-from apps.businesses.api.serializers import BusinessSerializer
+from apps.businesses.api.serializers import (
+    BusinessProductPlanChangeSerializer,
+    BusinessProductSubscribeSerializer,
+    BusinessSerializer,
+)
 from apps.businesses.models import Business
 from apps.businesses.repositories import BusinessRepository
 from apps.businesses.services import BusinessSearchService, BusinessService
 from apps.common.api.responses import success_response
+from apps.common.pagination.helpers import paginated_list_response
 
 
 class BusinessViewSet(viewsets.ViewSet):
@@ -41,8 +47,10 @@ class BusinessViewSet(viewsets.ViewSet):
             user=request.user,
             params=request.query_params,
         )
-        return success_response(
-            BusinessSerializer(queryset, many=True).data,
+        return paginated_list_response(
+            request,
+            queryset,
+            BusinessSerializer,
             request_id=getattr(request, "request_id", None),
         )
 
@@ -104,6 +112,92 @@ class BusinessViewSet(viewsets.ViewSet):
 
     @extend_schema(
         tags=["Businesses"],
+        request=BusinessProductSubscribeSerializer,
+        responses={200: BusinessSerializer},
+        description="Subscribe the business to a product. Optionally set it as the active product.",
+    )
+    def subscribe_product(self, request: Request, pk: str | None = None) -> Response:
+        business = self.get_object(request=request, business_id=pk)
+        serializer = BusinessProductSubscribeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.service.subscribe_to_product(
+            business=business,
+            product_code=serializer.validated_data["product_code"],
+            actor=request.user,
+            set_active=serializer.validated_data.get("set_active", True),
+            plan_code=serializer.validated_data.get("plan_code") or None,
+        )
+        business.refresh_from_db()
+        business = self.repository.get_for_request(
+            business_id=str(business.id),
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return success_response(
+            BusinessSerializer(business).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Businesses"],
+        responses={200: BusinessSerializer},
+        description="Cancel a business product subscription.",
+    )
+    def unsubscribe_product(
+        self,
+        request: Request,
+        pk: str | None = None,
+        product_code: str | None = None,
+    ) -> Response:
+        business = self.get_object(request=request, business_id=pk)
+        business = self.service.unsubscribe_from_product(
+            business=business,
+            product_code=product_code or "",
+            actor=request.user,
+        )
+        business = self.repository.get_for_request(
+            business_id=str(business.id),
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return success_response(
+            BusinessSerializer(business).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Businesses"],
+        request=BusinessProductPlanChangeSerializer,
+        responses={200: BusinessSerializer},
+        description="Change the billing plan for an active business product subscription.",
+    )
+    def change_product_plan(
+        self,
+        request: Request,
+        pk: str | None = None,
+        product_code: str | None = None,
+    ) -> Response:
+        business = self.get_object(request=request, business_id=pk)
+        serializer = BusinessProductPlanChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.service.change_product_plan(
+            business=business,
+            product_code=product_code or "",
+            plan_code=serializer.validated_data["plan_code"],
+            actor=request.user,
+        )
+        business = self.repository.get_for_request(
+            business_id=str(business.id),
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return success_response(
+            BusinessSerializer(business).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Businesses"],
         responses={204: OpenApiResponse(description="Business soft deleted.")},
         description="Soft delete a business by UUID within the current tenant.",
     )
@@ -123,7 +217,7 @@ class BusinessViewSet(viewsets.ViewSet):
             user=request.user,
         )
         if not business:
-            raise NotFound("No business exists for the current tenant.")
+            business = self._create_default_business(request=request)
         self.check_object_permissions(request, business)
         self.service.ensure_foundation_records(business)
         return success_response(
@@ -143,7 +237,7 @@ class BusinessViewSet(viewsets.ViewSet):
             user=request.user,
         )
         if not business:
-            raise NotFound("No business exists for the current tenant.")
+            business = self._create_default_business(request=request)
         self.check_object_permissions(request, business)
         serializer = BusinessSerializer(business, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -156,6 +250,43 @@ class BusinessViewSet(viewsets.ViewSet):
             BusinessSerializer(business).data,
             request_id=getattr(request, "request_id", None),
         )
+
+    def _create_default_business(self, *, request: Request) -> Business:
+        organization = getattr(request, "current_organization", None)
+        if not organization:
+            raise NotFound("Current organization was not found for this tenant.")
+
+        payload = dict(request.data.items()) if hasattr(request.data, "items") else {}
+        business_name = payload.get("business_name") or payload.get("display_name") or request.current_tenant.display_name
+        display_name = payload.get("display_name") or business_name
+        business_code = payload.get("business_code") or self._build_business_code(
+            tenant=request.current_tenant,
+            business_name=business_name,
+        )
+
+        created = self.service.create_business(
+            data={
+                "business_code": business_code,
+                "business_name": business_name,
+                "display_name": display_name,
+                "business_type": payload.get("business_type", "service-business"),
+                "organization": organization,
+            },
+            tenant=request.current_tenant,
+            organization=organization,
+            actor=request.user,
+        )
+        return created
+
+    def _build_business_code(self, *, tenant: object, business_name: object) -> str:
+        base = slugify(str(business_name or tenant.display_name or "business")) or "business"
+        code = base[:60]
+        suffix = 1
+        while Business.objects.require_tenant(tenant).filter(business_code=code).exists():
+            candidate = f"{base[:56]}-{suffix}"
+            code = candidate[:60]
+            suffix += 1
+        return code
 
     def get_object(self, *, request: Request, business_id: str | None) -> Business:
         queryset = self.repository.list_for_request(

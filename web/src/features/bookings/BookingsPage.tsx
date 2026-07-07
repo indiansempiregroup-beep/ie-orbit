@@ -101,11 +101,11 @@ export function BookingsPage() {
                     key={booking.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate('/bookings')}
+                    onClick={() => navigate(`/bookings/${booking.id}`)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        navigate('/bookings');
+                        navigate(`/bookings/${booking.id}`);
                       }
                     }}
                     style={{

@@ -117,17 +117,20 @@ class StaffManagementService:
             raise ValidationError("Staff and service must belong to the same tenant and business.")
 
 
+from apps.common.utils.business_context import resolve_business_id
+
+
 class StaffSearchService:
     def __init__(self, repository: StaffRepository | None = None) -> None:
         self.repository = repository or StaffRepository()
 
-    def search(self, *, tenant: Any, user: Any, params: Any):
+    def search(self, *, tenant: Any, user: Any, params: Any, request: Any | None = None):
         tags = [tag.strip().lower() for tag in params.get("tags", "").split(",") if tag.strip()]
         return self.repository.search(
             tenant=tenant,
             user=user,
             query=params.get("q", ""),
-            business_id=params.get("business", ""),
+            business_id=resolve_business_id(request, params) if request is not None else params.get("business", ""),
             status_value=params.get("status", ""),
             department=params.get("department", ""),
             tags=tags,

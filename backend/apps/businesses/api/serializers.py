@@ -5,6 +5,7 @@ from rest_framework import serializers
 from apps.businesses.models import (
     Business,
     BusinessMedia,
+    BusinessProductSubscription,
     BusinessProfile,
     BusinessSettings,
 )
@@ -31,6 +32,31 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
         ]
 
 
+class BusinessProductSubscriptionSerializer(serializers.ModelSerializer):
+    plan_code = serializers.CharField(source="plan.code", read_only=True)
+    plan_name = serializers.CharField(source="plan.name", read_only=True)
+
+    class Meta:
+        model = BusinessProductSubscription
+        fields = [
+            "id",
+            "product_code",
+            "status",
+            "plan_code",
+            "plan_name",
+            "billing_interval",
+            "subscribed_at",
+            "trial_ends_at",
+            "canceled_at",
+            "current_period_starts_at",
+            "current_period_ends_at",
+            "external_billing_reference",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
 class BusinessSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = BusinessSettings
@@ -45,6 +71,7 @@ class BusinessSettingsSerializer(serializers.ModelSerializer):
             "invoice_preferences",
             "localization",
             "theme_overrides",
+            "dashboard_preferences",
         ]
 
 
@@ -71,6 +98,7 @@ class BusinessSerializer(serializers.ModelSerializer):
     profile = BusinessProfileSerializer(required=False)
     settings = BusinessSettingsSerializer(required=False)
     media = BusinessMediaSerializer(many=True, read_only=True)
+    product_subscriptions = BusinessProductSubscriptionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Business
@@ -106,6 +134,8 @@ class BusinessSerializer(serializers.ModelSerializer):
             "status",
             "verification_status",
             "tags",
+            "selected_product",
+            "product_subscriptions",
             "profile",
             "settings",
             "media",
@@ -155,3 +185,23 @@ class BusinessSerializer(serializers.ModelSerializer):
             setattr(settings, field, value)
         settings.full_clean()
         settings.save()
+
+
+class BusinessProductSubscribeSerializer(serializers.Serializer):
+    product_code = serializers.CharField(max_length=80)
+    plan_code = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    set_active = serializers.BooleanField(default=True, required=False)
+
+
+class BusinessProductPlanChangeSerializer(serializers.Serializer):
+    plan_code = serializers.CharField(max_length=80)
+
+
+class ProductPlanSerializer(serializers.Serializer):
+    product_code = serializers.CharField(required=False)
+    code = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField(required=False, allow_blank=True)
+    billing_interval = serializers.CharField()
+    trial_days = serializers.IntegerField()
+    is_default = serializers.BooleanField(required=False)

@@ -7,6 +7,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { useTheme } from '../../hooks/useTheme';
+import { Customer360Tabs } from './Customer360Tabs';
 
 export function CustomerDetailPage() {
   const theme = useTheme();
@@ -15,6 +16,7 @@ export function CustomerDetailPage() {
   const customerQuery = useCustomerDetail(customerId);
   const updateCustomer = useCustomerUpdate();
   const editDialog = useDialog();
+  const [activeTab, setActiveTab] = useState('overview');
   const [formState, setFormState] = useState<CustomerUpdateInput>({
     display_name: '',
     email: '',
@@ -56,6 +58,11 @@ export function CustomerDetailPage() {
           </div>
         </div>
 
+        {customerId ? (
+          <Customer360Tabs customerId={customerId} activeTab={activeTab} onTabChange={setActiveTab} />
+        ) : null}
+
+        {activeTab === 'overview' ? (
         <Card style={{ display: 'grid', gap: 24 }}>
           {customerQuery.isLoading ? (
             <div style={{ padding: 28, textAlign: 'center' }}>Loading customer...</div>
@@ -100,6 +107,7 @@ export function CustomerDetailPage() {
             <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>Customer not found.</div>
           )}
         </Card>
+        ) : null}
       </div>
 
       <Dialog open={editDialog.open} onClose={editDialog.hide} title="Edit customer" labelledBy="edit-customer-dialog">

@@ -22,8 +22,18 @@ What's included:
 
 Notes:
 - Use the Shared SDK only for API access; do not call APIs directly.
-- This is a foundation layer only — no business pages or widgets implemented here.
 - Follow the design tokens and component mapping in the `ie-platform-design` repository.
+
+## M11.7 — Self-Service Onboarding
+
+Public marketing routes (`/`, `/features`, `/pricing`, etc.) and the registration wizard (`/auth/register/start`) are implemented under:
+
+- `src/features/public/` — marketing pages and `PublicLayout`
+- `src/features/onboarding/` — wizard, provisioning, getting-started checklist
+- `src/features/auth/` — sign in, forgot/reset password, email verification
+
+See `../docs/M11.7-Self-Service-Onboarding.md` for architecture notes and backend integration TODOs.
+
 Storybook (local only)
 - Storybook files and stories are included under `web/.storybook` and `web/src/**/*.stories.*`.
 - I attempted to install Storybook and build it in CI, but the build encountered package-version compatibility issues during automated build. The Storybook sources and CI workflow are present, but the build was not fully validated here.

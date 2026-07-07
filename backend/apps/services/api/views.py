@@ -7,6 +7,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.api.responses import success_response
+from apps.common.pagination.helpers import paginated_list_response
 from apps.services.api.permissions import ServiceCatalogPermission
 from apps.services.api.serializers import (
     ServiceCategorySerializer,
@@ -118,9 +119,12 @@ class ServiceViewSet(viewsets.ViewSet):
             tenant=request.current_tenant,
             user=request.user,
             params=request.query_params,
+            request=request,
         )
-        return success_response(
-            ServiceSerializer(queryset, many=True).data,
+        return paginated_list_response(
+            request,
+            queryset,
+            ServiceSerializer,
             request_id=getattr(request, "request_id", None),
         )
 

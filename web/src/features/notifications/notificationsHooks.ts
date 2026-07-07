@@ -1,45 +1,49 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '../../hooks/useAuth';
+import { useApiClient } from '../../hooks/useApiClient';
+import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
+import { invalidateWorkspaceData } from '../../lib/workspace';
 import {
   listNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   type Notification,
 } from '../dashboard/dashboardApi';
+import { useAuth } from '../../hooks/useAuth';
 
 export function useNotificationList() {
   const auth = useAuth();
+  const { tenantId, businessId, scopeKey, workspaceReady } = useWorkspaceScope();
   return useQuery<Notification[], Error>({
-    queryKey: ['notifications', 'list'],
-    queryFn: () => listNotifications(auth.token),
-    enabled: Boolean(auth.token),
+    queryKey: ['notifications', 'list', ...scopeKey],
+    queryFn: () => listNotifications(auth.token, tenantId, businessId),
+    enabled: Boolean(auth.token) && workspaceReady,
     staleTime: 1000 * 15,
     refetchOnWindowFocus: true,
   });
 }
 
 export function useMarkNotificationAsRead() {
-  const auth = useAuth();
+  const client = useApiClient();
   const queryClient = useQueryClient();
 
   return useMutation<Notification, Error, string>({
-    mutationFn: (notificationId) => markNotificationAsRead(auth.token, notificationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'notifications'] });
+    mutationFn: async (notificationId) => {
+      const response = await client.notifications.markRead(notificationId);
+      return response.data;
     },
+    onSuccess: () => invalidateWorkspaceData(queryClient),
   });
 }
 
 export function useMarkAllNotificationsAsRead() {
-  const auth = useAuth();
+  const client = useApiClient();
   const queryClient = useQueryClient();
 
   return useMutation<{ read: boolean }, Error, void>({
-    mutationFn: () => markAllNotificationsAsRead(auth.token),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'notifications'] });
+    mutationFn: async () => {
+      const response = await client.notifications.readAll();
+      return response.data;
     },
+    onSuccess: () => invalidateWorkspaceData(queryClient),
   });
 }

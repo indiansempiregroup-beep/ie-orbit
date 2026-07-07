@@ -24,6 +24,7 @@ from apps.bookings.repositories import BookingRepository
 from apps.bookings.services import AvailabilityService, BookingService
 from apps.businesses.models import Business
 from apps.common.api.responses import success_response
+from apps.common.pagination.helpers import paginated_list_response
 
 
 class BookingListCreateView(APIView):
@@ -53,8 +54,10 @@ class BookingListCreateView(APIView):
             user=request.user,
             params=request.query_params,
         )
-        return success_response(
-            BookingSerializer(bookings, many=True).data,
+        return paginated_list_response(
+            request,
+            bookings,
+            BookingSerializer,
             request_id=getattr(request, "request_id", None),
         )
 

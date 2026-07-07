@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../contexts/AuthContext';
+import { WorkspaceProvider } from '../contexts/WorkspaceContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ConfirmProvider } from '../contexts/ConfirmContext';
@@ -13,6 +14,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <WorkspaceProvider>
           <ThemeProvider>
             <ConfirmProvider>
               <SnackbarProvider>
@@ -20,6 +22,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               </SnackbarProvider>
             </ConfirmProvider>
           </ThemeProvider>
+          </WorkspaceProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

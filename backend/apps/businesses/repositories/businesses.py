@@ -12,7 +12,12 @@ class BusinessRepository:
     manager_permissions = {"business:write", "business:update", "business:manage", "business:read"}
 
     def list_for_request(self, *, tenant: Any, user: Any) -> QuerySet[Business]:
-        queryset = Business.objects.require_tenant(tenant).select_related("organization")
+        queryset = Business.objects.require_tenant(tenant).select_related("organization").prefetch_related(
+            "product_subscriptions",
+            "product_subscriptions__plan",
+        )
+        if not user or not getattr(user, "is_authenticated", False):
+            return queryset.none()
         if getattr(user, "is_superuser", False):
             return queryset
         if self._has_business_permission(user):

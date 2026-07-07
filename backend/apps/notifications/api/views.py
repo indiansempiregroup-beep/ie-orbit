@@ -7,6 +7,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.api.responses import success_response
+from apps.common.pagination.helpers import paginated_list_response
 from apps.notifications.api.serializers import NotificationSerializer
 from apps.notifications.models import Notification
 from apps.notifications.repositories.notifications import NotificationRepository
@@ -20,8 +21,10 @@ class NotificationViewSet(viewsets.ViewSet):
     @extend_schema(tags=["Notifications"], responses={200: NotificationSerializer(many=True)})
     def list(self, request: Request) -> Response:
         queryset = self.repository.list_for_request(tenant=request.current_tenant, user=request.user)
-        return success_response(
-            NotificationSerializer(queryset, many=True).data,
+        return paginated_list_response(
+            request,
+            queryset,
+            NotificationSerializer,
             request_id=getattr(request, "request_id", None),
         )
 

@@ -13,6 +13,7 @@ dependencies = [
   "dj-database-url>=2.2,<3",
   "django>=5.2,<6",
   "django-redis>=5.4,<6",
+  "django-cors-headers>=4.6,<5",
   "djangorestframework>=3.15,<4",
   "djangorestframework-simplejwt>=5.3,<6",
   "drf-spectacular>=0.28,<1",
@@ -37,7 +38,7 @@ include = ["apps*", "config*"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.development"
 python_files = ["test_*.py", "*_test.py"]
-testpaths = ["tests"]
+testpaths = ["tests", "apps"]
 
 [tool.ruff]
 line-length = 100

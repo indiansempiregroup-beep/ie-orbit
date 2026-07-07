@@ -1,9 +1,22 @@
+import { Link } from 'react-router-dom';
+import { Button } from '../../components/Button';
+
 export function NotFoundPage() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#f5f7fb' }}>
-      <div style={{ maxWidth: 560, textAlign: 'center', background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 10px 40px rgba(15, 23, 42, 0.08)' }}>
+    <div className="public-page" style={{ minHeight: '70vh', display: 'grid', placeItems: 'center' }}>
+      <div style={{ maxWidth: 560, textAlign: 'center' }}>
         <h1 style={{ margin: 0, fontSize: 48 }}>404</h1>
-        <p style={{ margin: '16px 0 0', color: '#374151', fontSize: 18 }}>The page you are looking for could not be found.</p>
+        <p style={{ margin: '16px 0 0', color: 'var(--muted-foreground)', fontSize: 18 }}>
+          The page you are looking for could not be found.
+        </p>
+        <div style={{ marginTop: 24, display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Link to="/">
+            <Button variant="primary">Go home</Button>
+          </Link>
+          <Link to="/auth">
+            <Button variant="neutral">Sign in</Button>
+          </Link>
+        </div>
       </div>
     </div>
   );

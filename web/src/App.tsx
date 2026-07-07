@@ -1,52 +1,126 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { DashboardPage } from './features/dashboard/DashboardPage';
-import { AuthPage } from './features/auth/AuthPage';
-import { BusinessPage } from './features/business/BusinessPage';
-import { CustomersPage } from './features/customers/CustomersPage';
-import { CustomerDetailPage } from './features/customers/CustomerDetailPage';
-import { ServicesPage } from './features/services/ServicesPage';
-import { ServiceDetailPage } from './features/services/ServiceDetailPage';
-import { StaffPage } from './features/staff/StaffPage';
-import { StaffDetailPage } from './features/staff/StaffDetailPage';
-import { CalendarPage } from './features/calendar/CalendarPage';
-import { BookingsPage } from './features/bookings/BookingsPage';
-import { NotificationsPage } from './features/notifications/NotificationsPage';
-import { ReportsPage } from './features/reports/ReportsPage';
-import { SettingsPage } from './features/settings/SettingsPage';
-import { ProfilePage } from './features/profile/ProfilePage';
 import { ProtectedRoute } from './routes/ProtectedRoute';
-import { ForbiddenPage } from './features/errors/ForbiddenPage';
-import { NotFoundPage } from './features/errors/NotFoundPage';
+import { ProductGuard } from './guards/ProductGuard';
+import { PermissionGuard } from './guards/PermissionGuard';
+import { PublicLayout } from './features/public/PublicLayout';
+import { AuthLayout } from './features/auth/AuthLayout';
+
+const HomePage = lazy(() => import('./features/public/HomePage').then((m) => ({ default: m.HomePage })));
+const FeaturesPage = lazy(() => import('./features/public/FeaturesPage').then((m) => ({ default: m.FeaturesPage })));
+const PricingPage = lazy(() => import('./features/public/PricingPage').then((m) => ({ default: m.PricingPage })));
+const AboutPage = lazy(() => import('./features/public/AboutPage').then((m) => ({ default: m.AboutPage })));
+const ContactPage = lazy(() => import('./features/public/ContactPage').then((m) => ({ default: m.ContactPage })));
+const PrivacyPage = lazy(() => import('./features/public/PrivacyPage').then((m) => ({ default: m.PrivacyPage })));
+const TermsPage = lazy(() => import('./features/public/TermsPage').then((m) => ({ default: m.TermsPage })));
+const FaqPage = lazy(() => import('./features/public/FaqPage').then((m) => ({ default: m.FaqPage })));
+const AuthPage = lazy(() => import('./features/auth/AuthPage').then((m) => ({ default: m.AuthPage })));
+const ForgotPasswordPage = lazy(() => import('./features/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
+const VerifyEmailRoute = lazy(() => import('./features/auth/VerifyEmailRoute').then((m) => ({ default: m.VerifyEmailRoute })));
+const AcceptInvitationPage = lazy(() => import('./features/auth/AcceptInvitationPage').then((m) => ({ default: m.AcceptInvitationPage })));
+const OnboardingLanding = lazy(() => import('./features/onboarding/LandingPage').then((m) => ({ default: m.LandingPage })));
+const RegisterWizard = lazy(() => import('./features/onboarding/RegisterWizard'));
+const OnboardingSuccess = lazy(() => import('./features/onboarding/OnboardingSuccess'));
+const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const CustomersPage = lazy(() => import('./features/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })));
+const CustomerDetailPage = lazy(() => import('./features/customers/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage })));
+const ServicesPage = lazy(() => import('./features/services/ServicesPage').then((m) => ({ default: m.ServicesPage })));
+const ServiceDetailPage = lazy(() => import('./features/services/ServiceDetailPage').then((m) => ({ default: m.ServiceDetailPage })));
+const StaffPage = lazy(() => import('./features/staff/StaffPage').then((m) => ({ default: m.StaffPage })));
+const StaffDetailPage = lazy(() => import('./features/staff/StaffDetailPage').then((m) => ({ default: m.StaffDetailPage })));
+const CalendarPage = lazy(() => import('./features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })));
+const BookingsPage = lazy(() => import('./features/bookings/BookingsPage').then((m) => ({ default: m.BookingsPage })));
+const BookingDetailPage = lazy(() => import('./features/bookings/BookingDetailPage').then((m) => ({ default: m.BookingDetailPage })));
+const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
+const ReportsPage = lazy(() => import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const BusinessManagementPage = lazy(() => import('./features/settings/BusinessManagementPage').then((m) => ({ default: m.BusinessManagementPage })));
+const ProductSettingsPage = lazy(() => import('./features/settings/ProductSettingsPage').then((m) => ({ default: m.ProductSettingsPage })));
+const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout').then((m) => ({ default: m.SettingsLayout })));
+const TeamSettingsPage = lazy(() => import('./features/settings/TeamSettingsPage').then((m) => ({ default: m.TeamSettingsPage })));
+const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const ProfileEditPage = lazy(() => import('./features/profile/ProfileEditPage').then((m) => ({ default: m.ProfileEditPage })));
+const ProfileSecurityPage = lazy(() => import('./features/profile/ProfileSecurityPage').then((m) => ({ default: m.ProfileSecurityPage })));
+const ProfileSessionsPage = lazy(() => import('./features/profile/ProfileSessionsPage').then((m) => ({ default: m.ProfileSessionsPage })));
+const ForbiddenPage = lazy(() => import('./features/errors/ForbiddenPage').then((m) => ({ default: m.ForbiddenPage })));
+const NotFoundPage = lazy(() => import('./features/errors/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
+
+function PageFallback() {
+  return (
+    <div style={{ minHeight: '40vh', display: 'grid', placeItems: 'center' }}>
+      <p role="status">Loading…</p>
+    </div>
+  );
+}
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/auth" element={<AuthPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route element={<Layout />}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/business" element={<BusinessPage />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
-            <Route path="/services" element={<ServicesPage />} />
-            <Route path="/services/:serviceId" element={<ServiceDetailPage />} />
-            <Route path="/staff" element={<StaffPage />} />
-            <Route path="/staff/:staffId" element={<StaffDetailPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/bookings" element={<BookingsPage />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route element={<PublicLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/features" element={<FeaturesPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/faq" element={<FaqPage />} />
           </Route>
-        </Route>
-        <Route path="/403" element={<ForbiddenPage />} />
-        <Route path="/404" element={<NotFoundPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+
+          <Route element={<AuthLayout />}>
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/auth/verify-email" element={<VerifyEmailRoute />} />
+            <Route path="/auth/accept-invitation" element={<AcceptInvitationPage />} />
+          </Route>
+
+          <Route path="/auth/register" element={<OnboardingLanding />} />
+          <Route path="/auth/register/start" element={<RegisterWizard />} />
+          <Route path="/onboarding/success" element={<OnboardingSuccess />} />
+
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/business" element={<Navigate to="/settings/business" replace />} />
+              <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+              <Route path="/services" element={<ServicesPage />} />
+              <Route path="/services/:serviceId" element={<ServiceDetailPage />} />
+              <Route path="/staff" element={<StaffPage />} />
+              <Route path="/staff/:staffId" element={<StaffDetailPage />} />
+              <Route element={<ProductGuard products={['appointie']} />}>
+                <Route path="/calendar" element={<CalendarPage />} />
+                <Route path="/bookings" element={<BookingsPage />} />
+                <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
+              </Route>
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/settings" element={<SettingsLayout />}>
+                <Route index element={<SettingsPage />} />
+                <Route path="business" element={<BusinessManagementPage />} />
+                <Route path="products" element={<ProductSettingsPage />} />
+                <Route element={<PermissionGuard permission="iam:role:assign" />}>
+                  <Route path="team" element={<TeamSettingsPage />} />
+                </Route>
+                <Route path="business-profile" element={<Navigate to="/settings/business" replace />} />
+              </Route>
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/edit" element={<ProfileEditPage />} />
+              <Route path="/profile/security" element={<ProfileSecurityPage />} />
+              <Route path="/profile/sessions" element={<ProfileSessionsPage />} />
+            </Route>
+          </Route>
+
+          <Route path="/403" element={<ForbiddenPage />} />
+          <Route path="/404" element={<NotFoundPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

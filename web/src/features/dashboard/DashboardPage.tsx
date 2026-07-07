@@ -5,87 +5,32 @@ import { useDashboardSettings, useBusinessLists, useBookingLists, useBusinessPro
 import { DashboardWidget } from './DashboardWidget';
 import { Button, IconButton } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { quickActionItems, filterNavigationByProduct } from '../../config/navigation';
 import { useTheme } from '../../hooks/useTheme';
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
-}
-
-const quickActions = [
-  {
-    label: 'New Booking',
-    to: '/bookings',
-    icon: (
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-        <path d="M12 5v14m7-7H5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Add Customer',
-    to: '/customers',
-    icon: (
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-        <path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Add Service',
-    to: '/services',
-    icon: (
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-        <path d="M6 7h12M6 12h12M6 17h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Add Staff',
-    to: '/staff',
-    icon: (
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-        <path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z" />
-        <path d="M19 7h2m-1-1v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    label: 'View Calendar',
-    to: '/calendar',
-    icon: (
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-        <rect x="4" y="5" width="16" height="15" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
-        <path d="M16 3v4M8 3v4M4 10h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Reports',
-    to: '/reports',
-    icon: (
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-        <path d="M4 19h16M9 4h6v16H9V4z" stroke="currentColor" strokeWidth="2" fill="none" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Business Settings',
-    to: '/settings',
-    icon: (
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-        <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" />
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2" fill="none" />
-      </svg>
-    ),
-  },
-];
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { formatMoney } from '../../lib/currency';
+import { GettingStartedChecklist } from '../onboarding/GettingStartedChecklist';
+import { getProductName } from '../../config/products';
 
 export function DashboardPage() {
   const theme = useTheme();
   const navigate = useNavigate();
+  const workspace = useWorkspace();
   const queryClient = useQueryClient();
+  const activeProduct = workspace.activeProduct ?? workspace.activeBusiness?.selected_product ?? 'appointie';
+  const quickActions = useMemo(
+    () => filterNavigationByProduct(quickActionItems, activeProduct),
+    [activeProduct],
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [searchActive, setSearchActive] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try {
+      return localStorage.getItem('ie:onboarding:show-welcome') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const settings = useDashboardSettings();
   const business = useBusinessProfile();
   const { customers, staff, services, notifications, availability } = useBusinessLists();
@@ -116,6 +61,8 @@ export function DashboardPage() {
   }, [todayBookings.data, rangeBookings.data, customers.data, staff.data, services.data, availability.data]);
 
   const businessName = business.data?.business_name ?? business.data?.display_name ?? 'Your business';
+  const businessCurrency = business.data?.currency ?? workspace.activeBusiness?.currency;
+  const formatAmount = (amount: number) => formatMoney(amount, businessCurrency);
   const staffOnDuty = staff.data?.filter((member) => member.status === 'active').length ?? 0;
   const unreadNotifications = notifications.data?.filter((notification) => !notification.is_read).length ?? 0;
 
@@ -127,7 +74,7 @@ export function DashboardPage() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ padding: 0, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
       <div className="dashboard-shell" style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
         <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -139,7 +86,14 @@ export function DashboardPage() {
           </div>
           <div className="dashboard-actions">
             {quickActions.map((action) => (
-              <IconButton key={action.label} icon={action.icon} label={action.label} variant="ghost" style={{ minWidth: 56, minHeight: 56 }} onClick={() => navigate(action.to)} />
+              <IconButton
+                key={action.label}
+                icon={<action.icon size={20} strokeWidth={2} />}
+                label={action.label}
+                variant="ghost"
+                style={{ minWidth: 56, minHeight: 56 }}
+                onClick={() => navigate(action.to)}
+              />
             ))}
           </div>
           <div className="dashboard-input-row">
@@ -175,8 +129,8 @@ export function DashboardPage() {
                 { label: 'Upcoming Bookings', value: upcomingBookings.data?.length ?? 0 },
                 { label: 'Completed Today', value: kpis.todayCompleted },
                 { label: 'Cancelled Today', value: kpis.todayCancelled },
-                { label: 'Revenue Today', value: formatCurrency(kpis.revenueToday) },
-                { label: 'Revenue This Month', value: formatCurrency(kpis.revenueMonth) },
+                { label: 'Revenue Today', value: formatAmount(kpis.revenueToday) },
+                { label: 'Revenue This Month', value: formatAmount(kpis.revenueMonth) },
                 { label: 'Active Customers', value: kpis.activeCustomers },
                 { label: 'New Customers', value: kpis.newCustomers },
                 { label: 'Staff On Duty', value: kpis.staffOnDuty },
@@ -271,6 +225,29 @@ export function DashboardPage() {
           </div>
 
           <aside className="dashboard-sidebar">
+            {showWelcome ? (
+              <GettingStartedChecklist
+                onDismiss={() => {
+                  setShowWelcome(false);
+                  try {
+                    localStorage.removeItem('ie:onboarding:show-welcome');
+                  } catch {
+                    // ignore
+                  }
+                }}
+              />
+            ) : null}
+
+            <Card>
+              <p style={{ margin: 0, fontWeight: 700 }}>Workspace</p>
+              <div style={{ marginTop: 12, display: 'grid', gap: 8, color: theme.resolved === 'dark' ? '#d1d5db' : '#6b7280', fontSize: 14 }}>
+                <p style={{ margin: 0 }}><strong>Business:</strong> {businessName}</p>
+                <p style={{ margin: 0 }}><strong>Status:</strong> {business.data?.status ?? workspace.activeBusiness?.status ?? 'Active'}</p>
+                <p style={{ margin: 0 }}><strong>Product:</strong> {getProductName(workspace.activeProduct ?? business.data?.selected_product)}</p>
+                <p style={{ margin: 0 }}><strong>Plan:</strong> Free Trial</p>
+                <p style={{ margin: 0 }}><strong>Currency:</strong> {businessCurrency ?? '—'}</p>
+              </div>
+            </Card>
             <DashboardWidget title="Search results" subtitle={searchActive ? 'Type to search' : 'Preview results by term'} loading={searchResults.isLoading} error={searchResults.error as Error | null} empty={!searchResults.data?.bookings.length && !searchResults.data?.customers.length && !searchResults.data?.staff.length && !searchResults.data?.services.length && !searchResults.isLoading}>
               <div style={{ display: 'grid', gap: 12 }}>
                 <div>

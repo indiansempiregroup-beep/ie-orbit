@@ -102,16 +102,19 @@ class OperationsSearchView(APIView):
             tenant=request.current_tenant,
             user=request.user,
             params=request.query_params,
+            request=request,
         )[:20]
         services = self.service_search.search(
             tenant=request.current_tenant,
             user=request.user,
             params=request.query_params,
+            request=request,
         )[:20]
         staff = self.staff_search.search(
             tenant=request.current_tenant,
             user=request.user,
             params=request.query_params,
+            request=request,
         )[:20]
         return success_response(
             {

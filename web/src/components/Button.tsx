@@ -6,16 +6,17 @@ type IconButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { icon: R
 export function Button({ variant = 'primary', style, children, className, ...rest }: ButtonProps) {
   const base: React.CSSProperties = {
     border: 'none',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: '10px 14px',
     fontWeight: 700,
     cursor: 'pointer',
-    transition: 'background-color 180ms ease, color 180ms ease, transform 180ms ease',
+    transition: 'background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease',
+    boxShadow: '0 1px 2px rgba(15, 22, 35, 0.04)',
   };
   const variants: Record<string, React.CSSProperties> = {
-    primary: { background: '#4338ca', color: '#fff' },
-    neutral: { background: '#fff', color: '#111827', border: '1px solid #e5e7eb' },
-    ghost: { background: 'transparent', color: '#374151' },
+    primary: { background: 'var(--primary)', color: 'var(--primary-foreground)', boxShadow: '0 8px 16px rgba(26, 86, 219, 0.18)' },
+    neutral: { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)' },
+    ghost: { background: 'transparent', color: 'var(--muted-foreground)', boxShadow: 'none' },
   };
   return (
     <button className={`button ${className ?? ''}`} style={{ ...base, ...variants[variant], ...style }} {...rest}>
@@ -34,14 +35,15 @@ export function IconButton({ icon, label, variant = 'ghost', style, className, .
     placeItems: 'center',
     cursor: 'pointer',
     background: 'transparent',
-    color: '#374151',
+    color: 'var(--muted-foreground)',
     transition: 'background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease',
+    boxShadow: '0 1px 2px rgba(15, 22, 35, 0.04)',
   };
 
   const variants: Record<string, React.CSSProperties> = {
-    primary: { background: '#4338ca', color: '#fff' },
-    neutral: { background: '#fff', color: '#111827', border: '1px solid #e5e7eb' },
-    ghost: { background: 'transparent', color: '#374151' },
+    primary: { background: 'var(--primary)', color: 'var(--primary-foreground)', boxShadow: '0 8px 16px rgba(26, 86, 219, 0.18)' },
+    neutral: { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)' },
+    ghost: { background: 'transparent', color: 'var(--muted-foreground)', boxShadow: 'none' },
   };
 
   return (

@@ -1,13 +1,11 @@
-import { createApiClient, type AvailabilitySlot, type Booking, type Customer, type Notification, type Service, type StaffMember, type Business } from '@ie-platform/sdk';
+import { type AvailabilitySlot, type Booking, type Customer, type Notification, type Service, type StaffMember, type Business, type BusinessCreateInput } from '@ie-platform/sdk';
+import { createAuthenticatedClient } from '../../lib/apiClient';
+import { businessQueryParam } from '../../lib/workspace';
 
 type QueryParams = Record<string, string | number | boolean | undefined | null>;
 
-function buildClient(token?: string | null) {
-  const client = createApiClient({ baseUrl: '/api' });
-  if (token) {
-    client.setToken(token);
-  }
-  return client;
+function buildClient(token?: string | null, tenantId?: string | null) {
+  return createAuthenticatedClient(token, tenantId);
 }
 
 function normalizeQuery(query?: QueryParams): QueryParams | undefined {
@@ -23,45 +21,60 @@ function normalizeQuery(query?: QueryParams): QueryParams | undefined {
   }, {} as QueryParams);
 }
 
-export async function getBusinessMe(token?: string | null) {
-  const client = buildClient(token);
+export async function getBusinessMe(token?: string | null, tenantId?: string | null) {
+  const client = buildClient(token, tenantId);
   const response = await client.businesses.me();
   return response.data;
 }
 
-export async function listBookings(token: string | null, query?: QueryParams) {
-  const client = buildClient(token);
-  const response = await client.bookings.list(normalizeQuery(query));
+export async function listBusinesses(token?: string | null, tenantId?: string | null, query?: QueryParams) {
+  const client = buildClient(token, tenantId);
+  const response = await client.businesses.list(normalizeQuery(query));
   return response.data;
 }
 
-export async function listCustomers(token: string | null, query?: QueryParams) {
-  const client = buildClient(token);
-  const response = await client.customers.list(normalizeQuery(query));
+export async function getBusinessById(token?: string | null, businessId?: string | null, tenantId?: string | null) {
+  if (!businessId) {
+    return getBusinessMe(token, tenantId);
+  }
+  const client = buildClient(token, tenantId);
+  const response = await client.businesses.get(businessId);
   return response.data;
 }
 
-export async function listStaff(token: string | null, query?: QueryParams) {
-  const client = buildClient(token);
-  const response = await client.staff.list(normalizeQuery(query));
+export async function listBookings(token: string | null, tenantId?: string | null, businessId?: string | null, query?: QueryParams) {
+  const client = buildClient(token, tenantId);
+  const response = await client.bookings.list(normalizeQuery({ ...businessQueryParam(businessId), ...query }));
   return response.data;
 }
 
-export async function listServices(token: string | null, query?: QueryParams) {
-  const client = buildClient(token);
-  const response = await client.services.list(normalizeQuery(query));
+export async function listCustomers(token: string | null, tenantId?: string | null, businessId?: string | null, query?: QueryParams) {
+  const client = buildClient(token, tenantId);
+  const response = await client.customers.list(normalizeQuery({ ...businessQueryParam(businessId), ...query }));
   return response.data;
 }
 
-export async function listNotifications(token: string | null, query?: QueryParams) {
-  const client = buildClient(token);
-  const response = await client.notifications.list(normalizeQuery(query));
+export async function listStaff(token: string | null, tenantId?: string | null, businessId?: string | null, query?: QueryParams) {
+  const client = buildClient(token, tenantId);
+  const response = await client.staff.list(normalizeQuery({ ...businessQueryParam(businessId), ...query }));
   return response.data;
 }
 
-export async function getAvailability(token: string | null, date: string) {
-  const client = buildClient(token);
-  const response = await client.bookings.availability({ date });
+export async function listServices(token: string | null, tenantId?: string | null, businessId?: string | null, query?: QueryParams) {
+  const client = buildClient(token, tenantId);
+  const response = await client.services.list(normalizeQuery({ ...businessQueryParam(businessId), ...query }));
+  return response.data;
+}
+
+export async function listNotifications(token: string | null, tenantId?: string | null, businessId?: string | null, query?: QueryParams) {
+  const client = buildClient(token, tenantId);
+  const response = await client.notifications.list(normalizeQuery({ ...businessQueryParam(businessId), ...query }));
+  return response.data;
+}
+
+export async function getAvailability(token: string | null, tenantId: string | null | undefined, businessId: string | null | undefined, date: string) {
+  const client = buildClient(token, tenantId);
+  const response = await client.bookings.availability({ date, ...businessQueryParam(businessId) });
   return response.data;
 }
 
@@ -77,8 +90,8 @@ export async function markAllNotificationsAsRead(token: string | null) {
   return response.data;
 }
 
-export async function searchCustomers(token: string | null, term: string) {
-  const customers = await listCustomers(token);
+export async function searchCustomers(token: string | null, tenantId: string | null | undefined, businessId: string | null | undefined, term: string) {
+  const customers = await listCustomers(token, tenantId, businessId);
   const lower = term.trim().toLowerCase();
   return customers.filter((customer) => {
     return [customer.full_name, customer.email, customer.phone_number, customer.status]
@@ -87,8 +100,8 @@ export async function searchCustomers(token: string | null, term: string) {
   });
 }
 
-export async function searchStaff(token: string | null, term: string) {
-  const staff = await listStaff(token);
+export async function searchStaff(token: string | null, tenantId: string | null | undefined, businessId: string | null | undefined, term: string) {
+  const staff = await listStaff(token, tenantId, businessId);
   const lower = term.trim().toLowerCase();
   return staff.filter((item) => {
     return [item.full_name, item.email, item.status]
@@ -97,8 +110,8 @@ export async function searchStaff(token: string | null, term: string) {
   });
 }
 
-export async function searchServices(token: string | null, term: string) {
-  const services = await listServices(token);
+export async function searchServices(token: string | null, tenantId: string | null | undefined, businessId: string | null | undefined, term: string) {
+  const services = await listServices(token, tenantId, businessId);
   const lower = term.trim().toLowerCase();
   return services.filter((item) => {
     return [item.name, item.description, item.status]
@@ -107,16 +120,16 @@ export async function searchServices(token: string | null, term: string) {
   });
 }
 
-export async function searchBookings(token: string | null, term: string) {
+export async function searchBookings(token: string | null, tenantId: string | null | undefined, businessId: string | null | undefined, term: string) {
   const normalized = term.trim();
   if (!normalized) {
     return [] as Booking[];
   }
-  const bookings = await listBookings(token, { booking_id: normalized });
+  const bookings = await listBookings(token, tenantId, businessId, { booking_id: normalized });
   if (bookings.length > 0) {
     return bookings;
   }
-  const allBookings = await listBookings(token);
+  const allBookings = await listBookings(token, tenantId, businessId);
   const lower = normalized.toLowerCase();
   return allBookings.filter((booking) => {
     return [booking.booking_number, booking.customer_id, booking.staff_id, booking.service_id, booking.status]

@@ -30,6 +30,23 @@ class BusinessMediaType(models.TextChoices):
     CERTIFICATE = "certificate", "Certificate"
 
 
+class BusinessProductSubscriptionStatus(models.TextChoices):
+    TRIALING = "trialing", "Trialing"
+    ACTIVE = "active", "Active"
+    CANCELED = "canceled", "Canceled"
+
+
+class BillingInterval(models.TextChoices):
+    MONTHLY = "monthly", "Monthly"
+    YEARLY = "yearly", "Yearly"
+
+
+class BranchStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    ARCHIVED = "archived", "Archived"
+
+
 class Business(TenantModel):
     objects = TenantAwareManager()
     active_objects = TenantAwareManager()
@@ -89,6 +106,7 @@ class Business(TenantModel):
         db_index=True,
     )
     tags = models.JSONField(default=list, blank=True, validators=[validate_tags])
+    selected_product = models.CharField(max_length=80, blank=True, db_index=True)
 
     class Meta(TenantModel.Meta):
         db_table = "businesses"
@@ -109,6 +127,60 @@ class Business(TenantModel):
 
     def __str__(self) -> str:
         return self.display_name
+
+
+class BusinessProductSubscription(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.CASCADE,
+        related_name="product_subscriptions",
+    )
+    product_code = models.CharField(max_length=80, db_index=True)
+    status = models.CharField(
+        max_length=32,
+        choices=BusinessProductSubscriptionStatus.choices,
+        default=BusinessProductSubscriptionStatus.TRIALING,
+        db_index=True,
+    )
+    subscribed_at = models.DateTimeField(auto_now_add=True)
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
+    canceled_at = models.DateTimeField(null=True, blank=True)
+    plan = models.ForeignKey(
+        "tenancy.SubscriptionPlan",
+        on_delete=models.SET_NULL,
+        related_name="business_product_subscriptions",
+        null=True,
+        blank=True,
+    )
+    billing_interval = models.CharField(
+        max_length=16,
+        choices=BillingInterval.choices,
+        default=BillingInterval.MONTHLY,
+    )
+    current_period_starts_at = models.DateTimeField(null=True, blank=True)
+    current_period_ends_at = models.DateTimeField(null=True, blank=True)
+    external_billing_reference = models.CharField(max_length=120, blank=True, db_index=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "business_product_subscriptions"
+        ordering = ["subscribed_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["business", "product_code"]),
+            models.Index(fields=["business", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "product_code"],
+                name="uq_business_product_subscription",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.business.display_name} · {self.product_code}"
 
 
 class BusinessProfile(TenantModel):
@@ -153,12 +225,57 @@ class BusinessSettings(TenantModel):
     invoice_preferences = models.JSONField(default=dict, blank=True)
     localization = models.JSONField(default=dict, blank=True)
     theme_overrides = models.JSONField(default=dict, blank=True)
+    dashboard_preferences = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):
         db_table = "business_settings"
 
     def __str__(self) -> str:
         return f"{self.business.display_name} settings"
+
+
+class Branch(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="branches")
+    branch_code = models.SlugField(max_length=80)
+    branch_name = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=255)
+    is_primary = models.BooleanField(default=False, db_index=True)
+    email = models.EmailField(blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=120, blank=True, db_index=True)
+    state = models.CharField(max_length=120, blank=True)
+    country = models.CharField(max_length=120, blank=True, db_index=True)
+    postal_code = models.CharField(max_length=32, blank=True)
+    timezone = models.CharField(max_length=64, blank=True)
+    status = models.CharField(
+        max_length=32,
+        choices=BranchStatus.choices,
+        default=BranchStatus.ACTIVE,
+        db_index=True,
+    )
+
+    class Meta(TenantModel.Meta):
+        db_table = "branches"
+        ordering = ["display_name"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "status"]),
+            models.Index(fields=["tenant", "business", "is_primary"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "branch_code"],
+                name="uq_branch_business_code",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.display_name
 
 
 class BusinessMedia(TenantModel):

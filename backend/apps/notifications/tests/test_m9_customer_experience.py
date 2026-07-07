@@ -10,7 +10,6 @@ from apps.bookings.models import Booking, BookingEvent, BookingStatus
 from apps.bookings.services.events import BookingEventPublisher
 from apps.businesses.models import Business
 from apps.notifications.models import Notification, NotificationTemplate
-from apps.notifications.services import NotificationService
 from apps.tenancy.models import Organization, Tenant
 
 
@@ -104,8 +103,6 @@ def test_booking_event_creates_notification_and_read_endpoint(
         event_type="BookingCreated",
         payload={"booking_id": str(booking.id)},
     )
-
-    NotificationService().process_booking_event(event)
 
     notification = Notification.objects.get(tenant=tenant, booking=booking)
     assert notification.status == "sent"
