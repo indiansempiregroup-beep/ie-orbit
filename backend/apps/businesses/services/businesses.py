@@ -16,7 +16,6 @@ from apps.businesses.models import (
     BusinessSettings,
 )
 from apps.businesses.repositories import BusinessRepository
-from apps.billing.services.webhooks import default_product_billing_service
 from apps.businesses.services.product_billing import ProductBillingService
 
 logger = logging.getLogger("ie_platform.businesses")
@@ -34,7 +33,13 @@ class BusinessService:
         billing_service: ProductBillingService | None = None,
     ) -> None:
         self.repository = repository or BusinessRepository()
-        self.billing_service = billing_service or default_product_billing_service()
+        if billing_service is not None:
+            self.billing_service = billing_service
+        else:
+            # Delayed import avoids circular import between businesses and billing hooks.
+            from apps.billing.services.webhooks import default_product_billing_service
+
+            self.billing_service = default_product_billing_service()
 
     @transaction.atomic
     def create_business(

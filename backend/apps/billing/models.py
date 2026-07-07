@@ -18,6 +18,7 @@ class WebhookEventStatus(models.TextChoices):
     PROCESSED = "processed", "Processed"
     FAILED = "failed", "Failed"
     IGNORED = "ignored", "Ignored"
+    DEAD_LETTER = "dead_letter", "Dead Letter"
 
 
 class BillingCheckoutSession(TenantModel):
@@ -74,6 +75,8 @@ class BillingWebhookEvent(BaseModel):
         default=WebhookEventStatus.RECEIVED,
         db_index=True,
     )
+    retry_count = models.PositiveSmallIntegerField(default=0)
+    next_retry_at = models.DateTimeField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True)
 

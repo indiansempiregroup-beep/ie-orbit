@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.billing.models import BillingWebhookEvent
+
 
 class BillingCheckoutSerializer(serializers.Serializer):
     product_code = serializers.SlugField()
@@ -19,3 +21,29 @@ class BillingCheckoutResponseSerializer(serializers.Serializer):
     key_id = serializers.CharField(allow_null=True)
     mock_mode = serializers.BooleanField()
     expires_at = serializers.DateTimeField()
+
+
+class BillingWebhookEventSerializer(serializers.ModelSerializer):
+    tenant_id = serializers.UUIDField(allow_null=True)
+
+    class Meta:
+        model = BillingWebhookEvent
+        fields = [
+            "id",
+            "tenant_id",
+            "provider",
+            "external_event_id",
+            "event_type",
+            "status",
+            "retry_count",
+            "next_retry_at",
+            "processed_at",
+            "error_message",
+            "created_at",
+        ]
+
+
+class BillingWebhookBulkReprocessSerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(choices=["failed", "dead_letter"])
+    limit = serializers.IntegerField(min_value=1, max_value=200, default=50)
+    confirm = serializers.BooleanField(default=False)

@@ -1,10 +1,30 @@
 from django.urls import path
 
-from apps.billing.api.views import BillingCheckoutView, BillingStatusView, RazorpayWebhookView
+from apps.billing.api.views import (
+    BillingCheckoutView,
+    BillingStatusView,
+    BillingWebhookBulkReprocessView,
+    BillingWebhookEventListView,
+    BillingWebhookEventReprocessView,
+    BillingWebhookSummaryView,
+    RazorpayWebhookView,
+)
 
 urlpatterns = [
     path("billing/status", BillingStatusView.as_view(), name="billing-status"),
     path("billing/checkout", BillingCheckoutView.as_view(), name="billing-checkout"),
+    path("billing/webhooks/summary", BillingWebhookSummaryView.as_view(), name="billing-webhook-summary"),
+    path(
+        "billing/webhooks/reprocess-bulk",
+        BillingWebhookBulkReprocessView.as_view(),
+        name="billing-webhook-bulk-reprocess",
+    ),
+    path("billing/webhooks/events", BillingWebhookEventListView.as_view(), name="billing-webhook-events"),
+    path(
+        "billing/webhooks/events/<uuid:event_id>/reprocess",
+        BillingWebhookEventReprocessView.as_view(),
+        name="billing-webhook-reprocess",
+    ),
     path(
         "billing/webhooks/razorpay",
         RazorpayWebhookView.as_view(),

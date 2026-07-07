@@ -106,3 +106,19 @@ def test_iam_member_list(api_client: APIClient, owner: User) -> None:
     assert response.status_code == 200
     members = response.json()["data"]
     assert any(member["email"] == owner.email for member in members)
+
+
+@pytest.mark.django_db
+def test_iam_role_assign_rejects_external_user(api_client: APIClient, owner: User) -> None:
+    bootstrap_workspace(api_client, owner)
+    outsider = User.objects.create_user(
+        email="outsider@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    response = api_client.post(
+        reverse("iam-member-role-assign", kwargs={"user_id": outsider.id}),
+        {"role_code": "staff"},
+        format="json",
+    )
+    assert response.status_code == 404

@@ -12,3 +12,9 @@ PLAN_PRICE_PAISE: dict[str, int] = {
 
 DEFAULT_CHECKOUT_CURRENCY = "INR"
 CHECKOUT_SESSION_TTL_HOURS = 24
+
+# Retry schedule in seconds: 1m, 5m, 30m.
+WEBHOOK_RETRY_DELAYS_SECONDS: tuple[int, ...] = (60, 300, 1800)
+
+# Cooldown for bulk reprocess operations per tenant+user.
+BULK_REPROCESS_COOLDOWN_SECONDS = 60

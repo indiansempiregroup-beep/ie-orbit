@@ -242,6 +242,54 @@ export type BillingCheckoutSession = {
   expires_at: string;
 };
 
+export type BillingWebhookEvent = {
+  id: string;
+  tenant_id?: string | null;
+  provider: string;
+  external_event_id: string;
+  event_type: string;
+  status: 'received' | 'processed' | 'failed' | 'ignored' | 'dead_letter';
+  retry_count?: number;
+  next_retry_at?: string | null;
+  processed_at?: string | null;
+  error_message?: string;
+  created_at?: string;
+};
+
+export type BillingWebhookReprocessResult = {
+  reprocessed: boolean;
+  event_id: string;
+  status: 'processed' | 'failed';
+  error?: string;
+};
+
+export type BillingWebhookBulkReprocessInput = {
+  scope: 'failed' | 'dead_letter';
+  limit?: number;
+  confirm?: boolean;
+};
+
+export type BillingWebhookBulkReprocessResult = {
+  selected: number;
+  processed: number;
+  failed: number;
+  dead_letter: number;
+  event_ids: string[];
+};
+
+export type BillingWebhookSummary = {
+  window_hours: number;
+  total: number;
+  processed: number;
+  failed: number;
+  dead_letter: number;
+  received: number;
+  ignored: number;
+  stuck_retries: number;
+  failure_rate: number;
+  success_rate: number;
+};
+
 export type IamRole = {
   id: string;
   code: string;
@@ -762,6 +810,24 @@ class ApiClient {
   billing = {
     status: () => this.request<BillingStatus>('/billing/status', { method: 'GET' }),
     checkout: (body: BillingCheckoutInput) => this.request<BillingCheckoutSession>('/billing/checkout', { method: 'POST', body }),
+    webhookSummary: (query?: { window_hours?: number }) =>
+      this.request<BillingWebhookSummary>('/billing/webhooks/summary', { method: 'GET', query }),
+    webhookEvents: (
+      query?: {
+        status?: 'received' | 'processed' | 'failed' | 'ignored' | 'dead_letter';
+        exhausted?: boolean;
+      },
+    ) =>
+      this.request<BillingWebhookEvent[]>('/billing/webhooks/events', { method: 'GET', query }),
+    reprocessWebhookEvent: (eventId: string) =>
+      this.request<BillingWebhookReprocessResult>(`/billing/webhooks/events/${eventId}/reprocess`, {
+        method: 'POST',
+      }),
+    reprocessWebhookEventsBulk: (body: BillingWebhookBulkReprocessInput) =>
+      this.request<BillingWebhookBulkReprocessResult>('/billing/webhooks/reprocess-bulk', {
+        method: 'POST',
+        body,
+      }),
   };
 
   iam = {

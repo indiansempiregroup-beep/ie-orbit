@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -19,6 +20,18 @@ from apps.authentication.permissions import HasPlatformPermission
 from apps.authentication.services.roles import RoleService
 from apps.common.api.responses import success_response
 from apps.staff.models import Staff
+
+
+def _tenant_member_user_ids(request: Request) -> set[str]:
+    tenant = request.current_tenant
+    user_ids: set[str] = {str(tenant.owner_id)}
+    user_ids.update(
+        str(user_id)
+        for user_id in Staff.objects.filter(tenant=tenant, user__isnull=False).values_list(
+            "user_id", flat=True
+        )
+    )
+    return user_ids
 
 
 class RoleListView(APIView):
@@ -54,10 +67,7 @@ class TenantMemberListView(APIView):
     @extend_schema(tags=["IAM"], responses={200: TenantMemberSerializer(many=True)})
     def get(self, request: Request) -> Response:
         tenant = request.current_tenant
-        user_ids: set = {tenant.owner_id}
-        user_ids.update(
-            Staff.objects.filter(tenant=tenant, user__isnull=False).values_list("user_id", flat=True)
-        )
+        user_ids = _tenant_member_user_ids(request)
 
         members = []
         for user in User.objects.filter(id__in=user_ids).order_by("email"):
@@ -91,11 +101,14 @@ class MemberRoleAssignView(APIView):
         role_code = serializer.validated_data["role_code"]
 
         if role_code in {"super_admin", "platform_admin"}:
-            from rest_framework.exceptions import ValidationError
-
             raise ValidationError({"role_code": "This role cannot be assigned from the workspace."})
 
-        user = User.objects.get(id=user_id)
+        if str(user_id) not in _tenant_member_user_ids(request):
+            raise NotFound("User is not part of the current tenant.")
+
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            raise NotFound("User was not found.")
         user_role = RoleService().assign_role(
             user=user,
             role_code=role_code,
@@ -123,9 +136,9 @@ class MemberRoleRemoveView(APIView):
     @extend_schema(tags=["IAM"])
     def delete(self, request: Request, user_id: str, role_code: str) -> Response:
         if role_code in {"super_admin", "platform_admin", "business_owner"}:
-            from rest_framework.exceptions import ValidationError
-
             raise ValidationError({"role_code": "This role cannot be removed from the workspace."})
+        if str(user_id) not in _tenant_member_user_ids(request):
+            raise NotFound("User is not part of the current tenant.")
 
         deleted, _ = UserRole.objects.filter(
             user_id=user_id,
