@@ -97,6 +97,32 @@ export const GETTING_STARTED_ITEMS = [
 export const ONBOARDING_DRAFT_KEY = 'ie:onboarding:register-draft';
 export const GETTING_STARTED_KEY = 'ie:onboarding:getting-started';
 
+export const currencySelectOptions = CURRENCIES.map((currency) => ({
+  value: currency.code,
+  label: currency.label,
+}));
+
+export const timezoneSelectOptions = TIMEZONES.map((timezone) => ({
+  value: timezone,
+  label: timezone,
+}));
+
+export const languageSelectOptions = LANGUAGES.map((language) => ({
+  value: language.code,
+  label: language.label,
+}));
+
+export function ensureSelectOption(
+  options: Array<{ value: string; label: string }>,
+  current?: string | null,
+) {
+  const value = current?.trim();
+  if (!value || options.some((option) => option.value === value)) {
+    return options;
+  }
+  return [{ value, label: value }, ...options];
+}
+
 export function detectDefaultCurrency(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale;

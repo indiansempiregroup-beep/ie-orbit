@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import { ProductGuard } from './guards/ProductGuard';
 import { PermissionGuard } from './guards/PermissionGuard';
+import { PlatformAdminGuard } from './guards/PlatformAdminGuard';
 import { PublicLayout } from './features/public/PublicLayout';
 import { AuthLayout } from './features/auth/AuthLayout';
 
@@ -35,8 +36,36 @@ const BookingsPage = lazy(() => import('./features/bookings/BookingsPage').then(
 const BookingDetailPage = lazy(() => import('./features/bookings/BookingDetailPage').then((m) => ({ default: m.BookingDetailPage })));
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const ReportsPage = lazy(() => import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
+const BIOverviewPage = lazy(() => import('./features/bi/BIOverviewPage').then((m) => ({ default: m.BIOverviewPage })));
+const BIRevenuePage = lazy(() => import('./features/bi/BIRevenuePage').then((m) => ({ default: m.BIRevenuePage })));
+const BIReportsPage = lazy(() => import('./features/bi/BIReportsPage').then((m) => ({ default: m.BIReportsPage })));
+const BIForecastPage = lazy(() => import('./features/bi/BIForecastPage').then((m) => ({ default: m.BIForecastPage })));
+const BILayout = lazy(() => import('./features/bi/BILayout').then((m) => ({ default: m.BILayout })));
+const AdminLayout = lazy(() => import('./features/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
+const PlatformDashboardPage = lazy(() =>
+  import('./features/admin/PlatformDashboardPage').then((m) => ({ default: m.PlatformDashboardPage })),
+);
+const PlatformTenantsPage = lazy(() =>
+  import('./features/admin/PlatformTenantsPage').then((m) => ({ default: m.PlatformTenantsPage })),
+);
+const PlatformTenantDetailPage = lazy(() =>
+  import('./features/admin/PlatformTenantDetailPage').then((m) => ({ default: m.PlatformTenantDetailPage })),
+);
+const PlatformSubscriptionsPage = lazy(() =>
+  import('./features/admin/PlatformSubscriptionsPage').then((m) => ({ default: m.PlatformSubscriptionsPage })),
+);
+const PlatformMonitoringPage = lazy(() =>
+  import('./features/admin/PlatformMonitoringPage').then((m) => ({ default: m.PlatformMonitoringPage })),
+);
+const PlatformAuditPage = lazy(() =>
+  import('./features/admin/PlatformAuditPage').then((m) => ({ default: m.PlatformAuditPage })),
+);
+const PlatformBrandingPage = lazy(() =>
+  import('./features/admin/PlatformBrandingPage').then((m) => ({ default: m.PlatformBrandingPage })),
+);
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const BusinessManagementPage = lazy(() => import('./features/settings/BusinessManagementPage').then((m) => ({ default: m.BusinessManagementPage })));
+const BusinessProfileEditPage = lazy(() => import('./features/settings/BusinessProfileEditPage').then((m) => ({ default: m.BusinessProfileEditPage })));
 const ProductSettingsPage = lazy(() => import('./features/settings/ProductSettingsPage').then((m) => ({ default: m.ProductSettingsPage })));
 const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout').then((m) => ({ default: m.SettingsLayout })));
 const TeamSettingsPage = lazy(() => import('./features/settings/TeamSettingsPage').then((m) => ({ default: m.TeamSettingsPage })));
@@ -100,9 +129,17 @@ function App() {
               </Route>
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/bi" element={<BILayout />}>
+                <Route index element={<Navigate to="/bi/overview" replace />} />
+                <Route path="overview" element={<BIOverviewPage />} />
+                <Route path="revenue" element={<BIRevenuePage />} />
+                <Route path="forecast" element={<BIForecastPage />} />
+                <Route path="reports" element={<BIReportsPage />} />
+              </Route>
               <Route path="/settings" element={<SettingsLayout />}>
                 <Route index element={<SettingsPage />} />
                 <Route path="business" element={<BusinessManagementPage />} />
+                <Route path="business/edit" element={<BusinessProfileEditPage />} />
                 <Route path="products" element={<ProductSettingsPage />} />
                 <Route element={<PermissionGuard permission="iam:role:assign" />}>
                   <Route path="team" element={<TeamSettingsPage />} />
@@ -113,6 +150,18 @@ function App() {
               <Route path="/profile/edit" element={<ProfileEditPage />} />
               <Route path="/profile/security" element={<ProfileSecurityPage />} />
               <Route path="/profile/sessions" element={<ProfileSessionsPage />} />
+              <Route element={<PlatformAdminGuard />}>
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<PlatformDashboardPage />} />
+                  <Route path="tenants" element={<PlatformTenantsPage />} />
+                  <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
+                  <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
+                  <Route path="branding" element={<PlatformBrandingPage />} />
+                  <Route path="monitoring" element={<PlatformMonitoringPage />} />
+                  <Route path="audit" element={<PlatformAuditPage />} />
+                </Route>
+              </Route>
+              <Route path="/admin/platform" element={<Navigate to="/admin" replace />} />
             </Route>
           </Route>
 

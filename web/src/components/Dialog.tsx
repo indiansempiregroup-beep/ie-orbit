@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { SubmitOverlay } from './SubmitOverlay';
 
 type DialogProps = {
   open: boolean;
@@ -7,6 +8,8 @@ type DialogProps = {
   title?: React.ReactNode;
   children?: React.ReactNode;
   labelledBy?: string;
+  busy?: boolean;
+  busyMessage?: string;
 };
 
 function getFocusable(container: HTMLElement) {
@@ -17,7 +20,7 @@ function getFocusable(container: HTMLElement) {
   ).filter((el) => !el.hasAttribute('disabled'));
 }
 
-export function Dialog({ open, onClose, title, children, labelledBy }: DialogProps) {
+export function Dialog({ open, onClose, title, children, labelledBy, busy = false, busyMessage }: DialogProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const lastActive = useRef<HTMLElement | null>(null);
@@ -57,6 +60,7 @@ export function Dialog({ open, onClose, title, children, labelledBy }: DialogPro
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (busy) return;
         e.stopPropagation();
         onClose();
         return;
@@ -84,7 +88,7 @@ export function Dialog({ open, onClose, title, children, labelledBy }: DialogPro
         }
       }
     },
-    [onClose],
+    [busy, onClose],
   );
 
   if (!open || !rootRef.current) return null;
@@ -93,6 +97,7 @@ export function Dialog({ open, onClose, title, children, labelledBy }: DialogPro
     <div
       role="presentation"
       onClick={(e) => {
+        if (busy) return;
         if (e.target === e.currentTarget) onClose();
       }}
       style={{
@@ -118,16 +123,20 @@ export function Dialog({ open, onClose, title, children, labelledBy }: DialogPro
           maxWidth: '90%',
           padding: 16,
           boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+          position: 'relative',
         }}
         onKeyDown={onKeyDown}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 id={labelledBy}>{title}</h3>
-          <button data-dialog-close onClick={onClose} aria-label="Close" style={{ marginLeft: 8 }}>
+          <button data-dialog-close onClick={busy ? undefined : onClose} disabled={busy} aria-label="Close" style={{ marginLeft: 8 }}>
             ×
           </button>
         </div>
-        <div>{children}</div>
+        <div style={{ position: 'relative' }}>
+          {children}
+          <SubmitOverlay show={busy} message={busyMessage} scope="local" />
+        </div>
       </div>
     </div>
   );

@@ -1,52 +1,65 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { GETTING_STARTED_ITEMS, GETTING_STARTED_KEY } from '../../config/onboarding';
-
-function loadCompleted(): Record<string, boolean> {
-  try {
-    const raw = localStorage.getItem(GETTING_STARTED_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveCompleted(state: Record<string, boolean>) {
-  try {
-    localStorage.setItem(GETTING_STARTED_KEY, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
-}
+import { GETTING_STARTED_ITEMS } from '../../config/onboarding';
+import { useBusinessProfileQuery } from '../settings/businessSettingsHooks';
+import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
+import { useBookingList } from '../bookings/bookingsHooks';
 
 type GettingStartedChecklistProps = {
   onDismiss?: () => void;
 };
 
 export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistProps) {
-  const [completed, setCompleted] = useState<Record<string, boolean>>(loadCompleted);
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return localStorage.getItem('ie:onboarding:welcome-dismissed') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const businessQuery = useBusinessProfileQuery();
+  const customersQuery = useCustomerList();
+  const servicesQuery = useServiceList();
+  const staffQuery = useStaffList();
+  const bookingsQuery = useBookingList();
+
+  const completed = useMemo(() => {
+    const business = businessQuery.data;
+    const settings = (business?.settings ?? {}) as Record<string, unknown>;
+    const hasProfile = Boolean(
+      business?.display_name &&
+        (settings.address_line1 || settings.city || settings.primary_contact || business.email),
+    );
+    const hasLogo = Boolean(business?.logo);
+    const services = servicesQuery.data ?? [];
+    const staff = staffQuery.data ?? [];
+    const customers = customersQuery.data ?? [];
+    const bookings = bookingsQuery.data ?? [];
+
+    return {
+      profile: hasProfile,
+      logo: hasLogo,
+      service: services.length > 0,
+      staff: staff.length > 0,
+      team: staff.length > 1,
+      customer: customers.length > 0,
+      booking: bookings.length > 0,
+      dashboard: true,
+    } as Record<string, boolean>;
+  }, [
+    businessQuery.data,
+    servicesQuery.data,
+    staffQuery.data,
+    customersQuery.data,
+    bookingsQuery.data,
+  ]);
 
   const progress = useMemo(() => {
     const done = GETTING_STARTED_ITEMS.filter((item) => completed[item.id]).length;
     return Math.round((done / GETTING_STARTED_ITEMS.length) * 100);
   }, [completed]);
 
-  function toggleItem(id: string) {
-    setCompleted((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      saveCompleted(next);
-      return next;
-    });
-  }
+  const loading =
+    businessQuery.isLoading ||
+    servicesQuery.isLoading ||
+    staffQuery.isLoading ||
+    customersQuery.isLoading ||
+    bookingsQuery.isLoading;
 
   function handleDismiss() {
     try {
@@ -55,19 +68,20 @@ export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistPr
     } catch {
       // ignore
     }
-    setDismissed(true);
     onDismiss?.();
   }
-
-  if (dismissed) return null;
 
   return (
     <Card aria-labelledby="getting-started-title">
       <div className="getting-started-header">
         <div>
           <p className="public-kicker">Welcome wizard</p>
-          <h2 id="getting-started-title" style={{ margin: '4px 0' }}>Getting started</h2>
-          <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>{progress}% complete</p>
+          <h2 id="getting-started-title" style={{ margin: '4px 0' }}>
+            Getting started
+          </h2>
+          <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+            {loading ? 'Checking your setup…' : `${progress}% complete`}
+          </p>
         </div>
         <Button variant="ghost" type="button" onClick={handleDismiss} aria-label="Dismiss getting started checklist">
           Dismiss
@@ -84,19 +98,18 @@ export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistPr
         <span style={{ width: `${progress}%` }} />
       </div>
       <ul className="getting-started-list">
-        {GETTING_STARTED_ITEMS.map((item) => (
-          <li key={item.id}>
-            <label>
-              <input
-                type="checkbox"
-                checked={Boolean(completed[item.id])}
-                onChange={() => toggleItem(item.id)}
-              />
-              <span>{item.label}</span>
-            </label>
-            <Link to={item.path}>Open</Link>
-          </li>
-        ))}
+        {GETTING_STARTED_ITEMS.map((item) => {
+          const done = Boolean(completed[item.id]);
+          return (
+            <li key={item.id}>
+              <label>
+                <input type="checkbox" checked={done} readOnly disabled />
+                <span style={{ opacity: done ? 1 : 0.85 }}>{item.label}</span>
+              </label>
+              <Link to={item.path}>{done ? 'View' : 'Open'}</Link>
+            </li>
+          );
+        })}
       </ul>
     </Card>
   );

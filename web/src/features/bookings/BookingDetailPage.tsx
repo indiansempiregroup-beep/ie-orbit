@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useBookingActions, useBookingDetail } from './bookingDetailHooks';
@@ -15,25 +16,36 @@ export function BookingDetailPage() {
   const actions = useBookingActions(bookingId);
   const [rescheduleAt, setRescheduleAt] = useState('');
   const [reason, setReason] = useState('');
+  const [activeAction, setActiveAction] = useState<string | null>(null);
 
   const booking = bookingQuery.data;
   const status = booking?.status ?? 'unknown';
+  const isSubmitting =
+    actions.confirm.isPending ||
+    actions.checkIn.isPending ||
+    actions.complete.isPending ||
+    actions.cancel.isPending ||
+    actions.reschedule.isPending;
 
   async function runAction(
     label: string,
     mutation: { mutateAsync: (value?: string) => Promise<unknown> },
     value?: string,
   ) {
+    setActiveAction(label);
     try {
       await mutation.mutateAsync(value);
       snackbar.push(`${label} successful.`, 'success');
     } catch (error) {
       snackbar.push(error instanceof Error ? error.message : `Unable to ${label.toLowerCase()}.`, 'error');
+    } finally {
+      setActiveAction(null);
     }
   }
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+      <SubmitOverlay show={isSubmitting} message={activeAction ? `${activeAction}…` : 'Processing…'} />
       <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
@@ -69,16 +81,40 @@ export function BookingDetailPage() {
                 />
               </label>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <Button variant="primary" disabled={actions.confirm.isPending} onClick={() => runAction('Confirm', actions.confirm, reason || undefined)}>
+                <Button
+                  variant="primary"
+                  loading={actions.confirm.isPending}
+                  loadingLabel="Confirming…"
+                  disabled={isSubmitting && !actions.confirm.isPending}
+                  onClick={() => runAction('Confirm', actions.confirm, reason || undefined)}
+                >
                   Confirm
                 </Button>
-                <Button variant="neutral" disabled={actions.checkIn.isPending} onClick={() => runAction('Check in', actions.checkIn, reason || undefined)}>
+                <Button
+                  variant="neutral"
+                  loading={actions.checkIn.isPending}
+                  loadingLabel="Checking in…"
+                  disabled={isSubmitting && !actions.checkIn.isPending}
+                  onClick={() => runAction('Check in', actions.checkIn, reason || undefined)}
+                >
                   Check in
                 </Button>
-                <Button variant="neutral" disabled={actions.complete.isPending} onClick={() => runAction('Complete', actions.complete, reason || undefined)}>
+                <Button
+                  variant="neutral"
+                  loading={actions.complete.isPending}
+                  loadingLabel="Completing…"
+                  disabled={isSubmitting && !actions.complete.isPending}
+                  onClick={() => runAction('Complete', actions.complete, reason || undefined)}
+                >
                   Complete
                 </Button>
-                <Button variant="ghost" disabled={actions.cancel.isPending} onClick={() => runAction('Cancel', actions.cancel, reason || undefined)}>
+                <Button
+                  variant="ghost"
+                  loading={actions.cancel.isPending}
+                  loadingLabel="Cancelling…"
+                  disabled={isSubmitting && !actions.cancel.isPending}
+                  onClick={() => runAction('Cancel', actions.cancel, reason || undefined)}
+                >
                   Cancel
                 </Button>
               </div>
@@ -94,8 +130,11 @@ export function BookingDetailPage() {
                 </label>
                 <Button
                   variant="primary"
-                  disabled={!rescheduleAt || actions.reschedule.isPending}
+                  loading={actions.reschedule.isPending}
+                  loadingLabel="Rescheduling…"
+                  disabled={!rescheduleAt || (isSubmitting && !actions.reschedule.isPending)}
                   onClick={async () => {
+                    setActiveAction('Reschedule');
                     try {
                       await actions.reschedule.mutateAsync({
                         start_at: new Date(rescheduleAt).toISOString(),
@@ -104,6 +143,8 @@ export function BookingDetailPage() {
                       snackbar.push('Booking rescheduled.', 'success');
                     } catch (error) {
                       snackbar.push(error instanceof Error ? error.message : 'Unable to reschedule.', 'error');
+                    } finally {
+                      setActiveAction(null);
                     }
                   }}
                 >

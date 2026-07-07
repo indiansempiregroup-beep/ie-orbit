@@ -1,16 +1,16 @@
 import { Bell, Moon, Search, Sun } from 'lucide-react';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useBusinessOptions } from '../features/dashboard/dashboardHooks';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useTheme } from '../hooks/useTheme';
 import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { getProductName, getSubscribedProducts } from '../config/products';
+import { useAppShellTitle } from '../hooks/useAppShellTitle';
 import { useSnackbar } from '../hooks/useSnackbar';
 import { buildWorkspaceSnapshot, formatWorkspaceLabel } from '../lib/workspaceModel';
 
 export function AppShellHeader() {
-  const location = useLocation();
   const navigate = useNavigate();
   const workspace = useWorkspace();
   const businessOptions = useBusinessOptions();
@@ -70,11 +70,7 @@ export function AppShellHeader() {
 
   const businessName = workspaceSnapshot.businessName;
 
-  const title = useMemo(() => {
-    const segment = location.pathname.split('/').filter(Boolean).pop() ?? 'dashboard';
-    if (segment === 'dashboard') return 'Dashboard';
-    return segment.replace(/-/g, ' ').replace(/\b\w/g, (token) => token.toUpperCase());
-  }, [location.pathname]);
+  const title = useAppShellTitle();
 
   const businessOptionsList = useMemo(() => businessOptions.data ?? [], [businessOptions.data]);
   const subscribedProducts = useMemo(

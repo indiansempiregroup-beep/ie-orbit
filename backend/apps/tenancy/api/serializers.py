@@ -3,6 +3,7 @@ from __future__ import annotations
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.common.utils.urls import normalize_stored_asset_url
 from apps.tenancy.models import (
     Branding,
     Organization,
@@ -30,6 +31,15 @@ class BrandingSerializer(serializers.ModelSerializer):
             "brand_metadata",
             "white_label_enabled",
         ]
+
+    def validate_logo(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
+
+    def validate_dark_logo(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
+
+    def validate_favicon(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
@@ -220,6 +230,12 @@ class TenantSerializer(serializers.ModelSerializer):
             "updated_at",
             "is_active",
         ]
+
+    def validate_logo(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
+
+    def validate_favicon(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
 
     @extend_schema_field(BrandingSerializer)
     def get_branding(self, tenant: Tenant) -> dict[str, object]:

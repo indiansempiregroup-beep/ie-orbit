@@ -6,35 +6,17 @@ import { PRODUCT_CATALOG } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { slugifyBusinessCode } from '../../lib/workspace';
-import {
-  useBusinessListQuery,
-  useBusinessProfileQuery,
-  useBusinessProfileUpdate,
-  useCreateBusiness,
-} from './businessSettingsHooks';
+import { useBusinessListQuery, useCreateBusiness } from './businessSettingsHooks';
 import { BranchesPanel } from './BranchesPanel';
-import type { BusinessUpdateInput } from '@ie-platform/sdk';
-
-const initialFormState: BusinessUpdateInput = {
-  business_name: '',
-  display_name: '',
-  business_type: '',
-  email: '',
-  currency: '',
-  timezone: '',
-};
+import { BusinessProfileView } from './BusinessProfileView';
 
 export function BusinessManagementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const workspace = useWorkspace();
-  const businessQuery = useBusinessProfileQuery();
   const businessListQuery = useBusinessListQuery();
-  const updateBusiness = useBusinessProfileUpdate();
   const createBusiness = useCreateBusiness();
   const snackbar = useSnackbar();
 
-  const [formState, setFormState] = useState<BusinessUpdateInput>(initialFormState);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(searchParams.get('action') === 'add');
   const [newBusinessName, setNewBusinessName] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
@@ -44,30 +26,7 @@ export function BusinessManagementPage() {
     setShowAddForm(searchParams.get('action') === 'add');
   }, [searchParams]);
 
-  useEffect(() => {
-    if (businessQuery.data) {
-      setFormState({
-        business_name: businessQuery.data.business_name ?? '',
-        display_name: businessQuery.data.display_name ?? '',
-        business_type: businessQuery.data.business_type ?? '',
-        email: businessQuery.data.email ?? '',
-        currency: businessQuery.data.currency ?? '',
-        timezone: businessQuery.data.timezone ?? '',
-      });
-    }
-  }, [businessQuery.data]);
-
   const businesses = useMemo(() => businessListQuery.data ?? [], [businessListQuery.data]);
-
-  const isDirty = Boolean(
-    businessQuery.data &&
-      (formState.business_name !== businessQuery.data.business_name ||
-        formState.display_name !== businessQuery.data.display_name ||
-        formState.business_type !== businessQuery.data.business_type ||
-        formState.email !== businessQuery.data.email ||
-        formState.currency !== businessQuery.data.currency ||
-        formState.timezone !== businessQuery.data.timezone),
-  );
 
   async function handleCreateBusiness() {
     if (!newBusinessName.trim() || !newDisplayName.trim()) {
@@ -197,62 +156,7 @@ export function BusinessManagementPage() {
       </Card>
 
       <Card style={{ padding: 24 }}>
-        <h2 style={{ marginTop: 0, fontSize: 20 }}>Active business profile</h2>
-        {!workspace.businessId ? (
-          <p style={{ color: '#6b7280' }}>Select or create a business to edit its profile.</p>
-        ) : businessQuery.isLoading ? (
-          <p>Loading business profile…</p>
-        ) : businessQuery.error && !businessQuery.data ? (
-          <p style={{ color: '#dc2626' }}>{businessQuery.error.message}</p>
-        ) : (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              setErrorMessage(null);
-              updateBusiness.mutate(formState, {
-                onSuccess: () => snackbar.push('Business profile updated successfully.', 'success'),
-                onError: (error) => {
-                  setErrorMessage(error.message ?? 'Unable to save business profile.');
-                  snackbar.push(error.message ?? 'Unable to save business profile.', 'error');
-                },
-              });
-            }}
-            style={{ display: 'grid', gap: 16 }}
-          >
-            <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Business name</span>
-                <input value={formState.business_name ?? ''} onChange={(event) => setFormState({ ...formState, business_name: event.target.value })} required style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
-              </label>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Display name</span>
-                <input value={formState.display_name ?? ''} onChange={(event) => setFormState({ ...formState, display_name: event.target.value })} style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
-              </label>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Business type</span>
-                <input value={formState.business_type ?? ''} onChange={(event) => setFormState({ ...formState, business_type: event.target.value })} style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
-              </label>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Business email</span>
-                <input value={formState.email ?? ''} onChange={(event) => setFormState({ ...formState, email: event.target.value })} type="email" style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
-              </label>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Currency</span>
-                <input value={formState.currency ?? ''} onChange={(event) => setFormState({ ...formState, currency: event.target.value })} style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
-              </label>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Timezone</span>
-                <input value={formState.timezone ?? ''} onChange={(event) => setFormState({ ...formState, timezone: event.target.value })} style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
-              </label>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button type="submit" variant="primary" disabled={!isDirty || updateBusiness.isPending}>
-                {updateBusiness.isPending ? 'Saving…' : 'Save changes'}
-              </Button>
-            </div>
-            {errorMessage ? <div style={{ color: '#dc2626' }}>{errorMessage}</div> : null}
-          </form>
-        )}
+        <BusinessProfileView />
       </Card>
 
       <BranchesPanel />

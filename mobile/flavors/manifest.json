@@ -1,0 +1,37 @@
+{
+  "flavors": [
+    {
+      "key": "demo-MAIN",
+      "appName": "Demo Salon",
+      "appSlug": "demo-salon",
+      "bundleIdIos": "com.ieplatform.demo.salon",
+      "bundleIdAndroid": "com.ieplatform.demo.salon",
+      "tenantSlug": "demo",
+      "businessCode": "MAIN",
+      "primaryColor": "#1A56DB",
+      "secondaryColor": "#111827"
+    },
+    {
+      "key": "empire-salon-main",
+      "appName": "Empire Salon",
+      "appSlug": "empire-salon",
+      "bundleIdIos": "com.ieplatform.empiresalon",
+      "bundleIdAndroid": "com.ieplatform.empiresalon",
+      "tenantSlug": "empire-salon",
+      "businessCode": "main",
+      "primaryColor": "#7C3AED",
+      "secondaryColor": "#1F2937"
+    },
+    {
+      "key": "rupali-s-business-rupali-s-business",
+      "appName": "Rupali Sirsat",
+      "appSlug": "rupali-sirsat",
+      "bundleIdIos": "com.rupalisirsat.app",
+      "bundleIdAndroid": "com.rupalisirsat.app",
+      "tenantSlug": "rupali-s-business",
+      "businessCode": "rupali-s-business",
+      "primaryColor": "#1A56DB",
+      "secondaryColor": "#111827"
+    }
+  ]
+}

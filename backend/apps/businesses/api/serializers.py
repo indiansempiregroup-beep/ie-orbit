@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.common.utils.urls import normalize_stored_asset_url
 from apps.businesses.models import (
     Business,
     BusinessMedia,
@@ -155,6 +156,12 @@ class BusinessSerializer(serializers.ModelSerializer):
 
     def validate_tags(self, value: list[str]) -> list[str]:
         return [tag.strip().lower() for tag in value if tag.strip()]
+
+    def validate_logo(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
+
+    def validate_banner_image(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
 
     def create(self, validated_data: dict[str, object]) -> Business:
         raise NotImplementedError("Business creation is handled by the service layer.")

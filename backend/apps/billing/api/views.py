@@ -18,6 +18,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Count
 
 from apps.audit.services.audit import record_audit
 from apps.audit.models import AuditLogEntry, DomainEvent
@@ -34,7 +35,7 @@ from apps.billing.services.reconciliation import BillingReconciliationService
 from apps.billing.services.webhooks import WebhookService
 from apps.authentication.permissions import HasPlatformPermission
 from apps.businesses.api.permissions import BusinessAccessPermission
-from apps.businesses.models import Business
+from apps.businesses.models import Business, BusinessProductSubscription
 from apps.common.api.responses import success_response
 from apps.tenancy.models import Tenant
 
@@ -733,6 +734,138 @@ class BillingPlatformOpsSummaryView(APIView):
                 "not_ready_count": len(rows) - ready_count,
                 "rows": rows,
             },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingPlatformSubscriptionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Billing"],
+        description="Platform-level subscription summary across tenants (platform admins only).",
+    )
+    def get(self, request: Request) -> Response:
+        user = request.user
+        is_platform_admin = bool(
+            getattr(user, "is_superuser", False)
+            or user.user_roles.filter(role__code__in={"platform_admin", "super_admin"}, role__is_active=True).exists()
+        )
+        if not is_platform_admin:
+            raise PermissionDenied("Platform admin role is required.")
+
+        by_status = list(
+            BusinessProductSubscription.objects.values("status")
+            .annotate(count=Count("id"))
+            .order_by("status")
+        )
+        by_product = list(
+            BusinessProductSubscription.objects.values("product_code")
+            .annotate(count=Count("id"))
+            .order_by("product_code")
+        )
+        return success_response(
+            {
+                "total_subscriptions": BusinessProductSubscription.objects.count(),
+                "by_status": by_status,
+                "by_product": by_product,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingPlatformMonitoringView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Billing"],
+        description="Platform-level monitoring summary across tenants (platform admins only).",
+    )
+    def get(self, request: Request) -> Response:
+        user = request.user
+        is_platform_admin = bool(
+            getattr(user, "is_superuser", False)
+            or user.user_roles.filter(role__code__in={"platform_admin", "super_admin"}, role__is_active=True).exists()
+        )
+        if not is_platform_admin:
+            raise PermissionDenied("Platform admin role is required.")
+
+        window_hours = int(request.query_params.get("window_hours", "24"))
+        window_hours = max(1, min(window_hours, 24 * 30))
+        since = timezone.now() - timedelta(hours=window_hours)
+        failed_events = DomainEvent.objects.filter(
+            created_at__gte=since,
+            event_type="billing.webhook.failed",
+        ).count()
+        dead_letter_events = DomainEvent.objects.filter(
+            created_at__gte=since,
+            event_type="billing.webhook.dead_letter",
+        ).count()
+        reprocess_actions = AuditLogEntry.objects.filter(
+            created_at__gte=since,
+            action="billing.webhook.bulk_reprocess",
+        ).count()
+        reconciliation_runs = AuditLogEntry.objects.filter(
+            created_at__gte=since,
+            action="billing.reconciliation.run",
+        ).count()
+        tenants_impacted = (
+            DomainEvent.objects.filter(
+                created_at__gte=since,
+                event_type__in=["billing.webhook.failed", "billing.webhook.dead_letter"],
+            )
+            .values("tenant_id")
+            .distinct()
+            .count()
+        )
+        return success_response(
+            {
+                "window_hours": window_hours,
+                "failed_events": failed_events,
+                "dead_letter_events": dead_letter_events,
+                "reprocess_actions": reprocess_actions,
+                "reconciliation_runs": reconciliation_runs,
+                "tenants_impacted": tenants_impacted,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingPlatformAuditFeedView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Billing"],
+        description="Platform-level billing audit feed (platform admins only).",
+    )
+    def get(self, request: Request) -> Response:
+        user = request.user
+        is_platform_admin = bool(
+            getattr(user, "is_superuser", False)
+            or user.user_roles.filter(role__code__in={"platform_admin", "super_admin"}, role__is_active=True).exists()
+        )
+        if not is_platform_admin:
+            raise PermissionDenied("Platform admin role is required.")
+
+        limit = int(request.query_params.get("limit", "100"))
+        limit = max(1, min(limit, 500))
+        rows = list(
+            AuditLogEntry.objects.filter(action__startswith="billing.")
+            .select_related("tenant")
+            .order_by("-created_at")[:limit]
+            .values(
+                "id",
+                "tenant_id",
+                "action",
+                "resource_type",
+                "resource_id",
+                "actor_id",
+                "metadata",
+                "created_at",
+            )
+        )
+        return success_response(
+            {"count": len(rows), "rows": rows},
             request_id=getattr(request, "request_id", None),
         )
 

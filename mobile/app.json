@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "IE Platform Mobile",
+    "slug": "ie-platform-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}

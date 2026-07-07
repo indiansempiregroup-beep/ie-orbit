@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
 from apps.notifications.api.serializers import NotificationSerializer
+from apps.notifications.constants import AUDIENCE_ADMIN
 from apps.notifications.models import Notification
 from apps.notifications.repositories.notifications import NotificationRepository
 from apps.notifications.services.notifications import NotificationService
@@ -18,9 +19,18 @@ class NotificationViewSet(viewsets.ViewSet):
     repository = NotificationRepository()
     service = NotificationService(repository=repository)
 
+    def _scoped_queryset(self, request: Request):
+        business = getattr(request, "current_business", None)
+        return self.repository.list_for_request(
+            tenant=request.current_tenant,
+            user=request.user,
+            audience=AUDIENCE_ADMIN,
+            business=business,
+        )
+
     @extend_schema(tags=["Notifications"], responses={200: NotificationSerializer(many=True)})
     def list(self, request: Request) -> Response:
-        queryset = self.repository.list_for_request(tenant=request.current_tenant, user=request.user)
+        queryset = self._scoped_queryset(request)
         return paginated_list_response(
             request,
             queryset,
@@ -30,10 +40,7 @@ class NotificationViewSet(viewsets.ViewSet):
 
     @extend_schema(tags=["Notifications"], responses={200: NotificationSerializer})
     def mark_read(self, request: Request, pk: str | None = None) -> Response:
-        notification = get_object_or_404(
-            self.repository.list_for_request(tenant=request.current_tenant, user=request.user),
-            id=pk,
-        )
+        notification = get_object_or_404(self._scoped_queryset(request), id=pk)
         notification = self.service.mark_read(notification=notification)
         return success_response(
             NotificationSerializer(notification).data,
@@ -42,7 +49,13 @@ class NotificationViewSet(viewsets.ViewSet):
 
     @extend_schema(tags=["Notifications"], responses={200: NotificationSerializer(many=True)})
     def read_all(self, request: Request) -> Response:
-        count = self.service.mark_all_read(tenant=request.current_tenant, user=request.user)
+        business = getattr(request, "current_business", None)
+        count = self.service.mark_all_read(
+            tenant=request.current_tenant,
+            user=request.user,
+            audience=AUDIENCE_ADMIN,
+            business=business,
+        )
         return success_response(
             {"updated": count},
             request_id=getattr(request, "request_id", None),
@@ -50,9 +63,6 @@ class NotificationViewSet(viewsets.ViewSet):
 
     @extend_schema(tags=["Notifications"], responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
-        notification = get_object_or_404(
-            self.repository.list_for_request(tenant=request.current_tenant, user=request.user),
-            id=pk,
-        )
+        notification = get_object_or_404(self._scoped_queryset(request), id=pk)
         notification.delete(deleted_by=getattr(request.user, "id", None))
         return Response(status=status.HTTP_204_NO_CONTENT)

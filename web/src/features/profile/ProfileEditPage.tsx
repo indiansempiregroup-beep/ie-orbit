@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createApiClient, type PatchAuthMeRequest, type UserProfile } from '@ie-platform/sdk';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { Select } from '../../components/Select';
 import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useTheme } from '../../hooks/useTheme';
+import { ensureSelectOption, languageSelectOptions, timezoneSelectOptions } from '../../config/onboarding';
 
 const preferenceOptions = [
   { key: 'email_updates', label: 'Email reminders' },
@@ -31,6 +33,13 @@ function preserveExtraPreferences(raw?: Record<string, unknown> | null): Record<
     }
   });
   return extra;
+}
+
+function notificationPreferencesDirty(
+  current: NotificationPreferenceState,
+  initial: NotificationPreferenceState,
+): boolean {
+  return preferenceOptions.some((option) => current[option.key] !== initial[option.key]);
 }
 
 export function ProfileEditPage() {
@@ -62,6 +71,15 @@ export function ProfileEditPage() {
     }
   }, [auth.user]);
 
+  const timezoneOptions = useMemo(
+    () => ensureSelectOption(timezoneSelectOptions, formState.timezone),
+    [formState.timezone],
+  );
+  const languageOptions = useMemo(
+    () => ensureSelectOption(languageSelectOptions, formState.language),
+    [formState.language],
+  );
+
   const client = createApiClient({ baseUrl: '/api/v1', token: auth.token ?? undefined });
   const isDirty = Boolean(
     auth.user &&
@@ -70,7 +88,7 @@ export function ProfileEditPage() {
         formState.phone_number !== auth.user.phone_number ||
         formState.language !== auth.user.language ||
         formState.timezone !== auth.user.timezone ||
-        notificationPreferences !== initialNotificationPreferences),
+        notificationPreferencesDirty(notificationPreferences, initialNotificationPreferences)),
   );
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -112,7 +130,7 @@ export function ProfileEditPage() {
         <div style={{ display: 'grid', gap: 8 }}>
           <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Personal profile</p>
           <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.2 }}>Edit your profile</h1>
-          <p style={{ margin: '8px 0 0', color: '#6b7280' }}>Keep your name, phone, language, and timezone up to date for a smoother workspace experience.</p>
+          <p style={{ margin: '8px 0 0', color: '#6b7280' }}>Update the personal details you entered while creating your workspace.</p>
         </div>
 
         <Card>
@@ -190,26 +208,22 @@ export function ProfileEditPage() {
               ) : null}
             </fieldset>
             <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280' }}>Language</span>
-                <input
-                  value={formState.language ?? ''}
-                  onChange={(event) => setFormState({ ...formState, language: event.target.value })}
-                  placeholder="English"
-                  disabled={saving}
-                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                />
-              </label>
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280' }}>Timezone</span>
-                <input
-                  value={formState.timezone ?? ''}
-                  onChange={(event) => setFormState({ ...formState, timezone: event.target.value })}
-                  placeholder="UTC"
-                  disabled={saving}
-                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                />
-              </label>
+              <Select
+                label="Language"
+                options={languageOptions}
+                value={formState.language ?? ''}
+                onChange={(event) => setFormState({ ...formState, language: event.target.value })}
+                disabled={saving}
+                style={{ marginBottom: 0 }}
+              />
+              <Select
+                label="Timezone"
+                options={timezoneOptions}
+                value={formState.timezone ?? ''}
+                onChange={(event) => setFormState({ ...formState, timezone: event.target.value })}
+                disabled={saving}
+                style={{ marginBottom: 0 }}
+              />
             </div>
 
             {errorMessage ? (

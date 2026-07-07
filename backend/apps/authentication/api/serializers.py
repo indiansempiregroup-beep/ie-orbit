@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
@@ -76,7 +78,7 @@ class RegisterBusinessSerializer(serializers.Serializer):
     industry_category = serializers.CharField(required=False, allow_blank=True)
     business_email = serializers.EmailField(required=False, allow_blank=True)
     primary_contact = serializers.CharField(required=False, allow_blank=True)
-    website = serializers.URLField(required=False, allow_blank=True)
+    website = serializers.CharField(required=False, allow_blank=True)
     country = serializers.CharField(required=False, allow_blank=True)
     state = serializers.CharField(required=False, allow_blank=True)
     city = serializers.CharField(required=False, allow_blank=True)
@@ -93,6 +95,15 @@ class RegisterBusinessSerializer(serializers.Serializer):
     def validate_password(self, value: str) -> str:
         validate_password(value)
         return value
+
+    def validate_website(self, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            return ""
+        if not re.match(r"^https?://", trimmed, re.IGNORECASE):
+            trimmed = f"https://{trimmed}"
+        serializer = serializers.URLField()
+        return serializer.run_validation(trimmed)
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

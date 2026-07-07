@@ -3,7 +3,7 @@ import os
 from config.settings.base import *  # noqa: F401,F403
 
 DEBUG = ENV.debug
-ALLOWED_HOSTS = ENV.allowed_hosts
+ALLOWED_HOSTS = ["*"] if DEBUG else ENV.allowed_hosts
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",

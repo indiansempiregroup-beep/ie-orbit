@@ -5,6 +5,7 @@ from django.db import models
 from apps.businesses.validators import validate_latitude, validate_longitude, validate_tags
 from apps.core.models import TenantModel
 from apps.tenancy.managers import TenantAwareManager
+from apps.tenancy.models import ThemeMode, hex_color_validator
 
 
 class BusinessStatus(models.TextChoices):
@@ -62,8 +63,8 @@ class Business(TenantModel):
     business_type = models.CharField(max_length=120, blank=True)
     industry_category = models.CharField(max_length=120, blank=True, db_index=True)
     description = models.TextField(blank=True)
-    logo = models.URLField(blank=True)
-    banner_image = models.URLField(blank=True)
+    logo = models.CharField(max_length=500, blank=True)
+    banner_image = models.CharField(max_length=500, blank=True)
     primary_contact = models.CharField(max_length=32, blank=True)
     secondary_contact = models.CharField(max_length=32, blank=True)
     email = models.EmailField(blank=True)
@@ -306,3 +307,58 @@ class BusinessMedia(TenantModel):
 
     def __str__(self) -> str:
         return self.title or f"{self.business.display_name} {self.media_type}"
+
+
+class WhiteLabelProfile(TenantModel):
+    """Business-level white-label mobile app configuration."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.OneToOneField(
+        Business,
+        on_delete=models.CASCADE,
+        related_name="white_label_profile",
+    )
+    flavor_key = models.SlugField(max_length=80, unique=True)
+    app_slug = models.SlugField(max_length=120, unique=True)
+    app_name = models.CharField(max_length=120)
+    bundle_id_ios = models.CharField(max_length=160, blank=True)
+    bundle_id_android = models.CharField(max_length=160, blank=True)
+    logo = models.CharField(max_length=500, blank=True)
+    dark_logo = models.CharField(max_length=500, blank=True)
+    splash_image = models.CharField(max_length=500, blank=True)
+    favicon = models.CharField(max_length=500, blank=True)
+    primary_color = models.CharField(
+        max_length=16,
+        default="#0F6CBD",
+        validators=[hex_color_validator],
+    )
+    secondary_color = models.CharField(
+        max_length=16,
+        default="#111827",
+        validators=[hex_color_validator],
+    )
+    accent_color = models.CharField(max_length=16, blank=True, validators=[hex_color_validator])
+    theme_mode = models.CharField(
+        max_length=16,
+        choices=ThemeMode.choices,
+        default=ThemeMode.SYSTEM,
+    )
+    white_label_enabled = models.BooleanField(default=True)
+    typography_settings = models.JSONField(default=dict, blank=True)
+    build_metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "white_label_profiles"
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "flavor_key"]),
+            models.Index(fields=["tenant", "app_slug"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["business"], name="uq_white_label_profile_business"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.app_name} ({self.flavor_key})"

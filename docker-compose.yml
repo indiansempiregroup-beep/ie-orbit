@@ -9,7 +9,7 @@ services:
         APP_ENV: development
     working_dir: /app/backend
     command: >-
-      sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+      sh -c "python manage.py migrate && python manage.py seed_white_label_profiles --create-pilot --all-businesses && python manage.py runserver 0.0.0.0:8000"
     environment:
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.development}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-docker-dev-secret}
@@ -60,7 +60,7 @@ services:
         APP_ENV: development
     working_dir: /app
     command: >-
-      sh -c "rm -rf /app/node_modules /app/web/node_modules /app/packages/sdk/node_modules && pnpm install --frozen-lockfile && pnpm --dir web dev --host 0.0.0.0 --port 3000"
+      sh -c "rm -rf /app/node_modules /app/web/node_modules /app/packages/sdk/node_modules && pnpm install --frozen-lockfile --filter @ie-platform/web... && pnpm --dir web dev --host 0.0.0.0 --port 3000"
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ONBOARDING_DRAFT_KEY } from '../../../config/onboarding';
 import type { RegisterWizardFormValues } from '../schemas/registerWizardSchema';
 import { getDefaultRegisterValues } from '../schemas/registerWizardSchema';
@@ -10,7 +10,7 @@ export function useOnboardingDraft() {
     setHydrated(true);
   }, []);
 
-  function loadDraft(): RegisterWizardFormValues {
+  const loadDraft = useCallback((): RegisterWizardFormValues => {
     try {
       const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
       if (!raw) return getDefaultRegisterValues();
@@ -18,24 +18,27 @@ export function useOnboardingDraft() {
     } catch {
       return getDefaultRegisterValues();
     }
-  }
+  }, []);
 
-  function saveDraft(values: Partial<RegisterWizardFormValues>) {
+  const saveDraft = useCallback((values: Partial<RegisterWizardFormValues>) => {
     try {
-      const current = loadDraft();
+      const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+      const current = raw
+        ? { ...getDefaultRegisterValues(), ...JSON.parse(raw) }
+        : getDefaultRegisterValues();
       localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify({ ...current, ...values }));
     } catch {
       // ignore
     }
-  }
+  }, []);
 
-  function clearDraft() {
+  const clearDraft = useCallback(() => {
     try {
       localStorage.removeItem(ONBOARDING_DRAFT_KEY);
     } catch {
       // ignore
     }
-  }
+  }, []);
 
   return { hydrated, loadDraft, saveDraft, clearDraft };
 }

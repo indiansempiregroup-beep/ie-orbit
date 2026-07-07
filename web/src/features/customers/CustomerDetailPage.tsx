@@ -1,16 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCustomerDetail, useCustomerUpdate } from '../management/managementHooks';
 import { useDialog } from '../../hooks/useDialog';
-import type { CustomerUpdateInput } from '@ie-platform/sdk';
+import { useEditFormInit } from '../../hooks/useEditFormInit';
+import type { Customer, CustomerUpdateInput } from '@ie-platform/sdk';
+import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
+import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useTheme } from '../../hooks/useTheme';
+import { useSnackbar } from '../../hooks/useSnackbar';
 import { Customer360Tabs } from './Customer360Tabs';
+
+type AddressFormState = {
+  full_address: string;
+  latitude: number | null;
+  longitude: number | null;
+};
 
 export function CustomerDetailPage() {
   const theme = useTheme();
+  const snackbar = useSnackbar();
   const { customerId } = useParams();
   const navigate = useNavigate();
   const customerQuery = useCustomerDetail(customerId);
@@ -23,26 +34,50 @@ export function CustomerDetailPage() {
     phone_number: '',
     status: 'active',
   });
+  const [addressForm, setAddressForm] = useState<AddressFormState>({
+    full_address: '',
+    latitude: null,
+    longitude: null,
+  });
   const [editError, setEditError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (editDialog.open && customerQuery.data) {
-      setFormState({
-        display_name: customerQuery.data.full_name ?? '',
-        email: customerQuery.data.email ?? '',
-        phone_number: customerQuery.data.phone_number ?? '',
-        status: customerQuery.data.status ?? 'active',
-      });
-    }
-  }, [editDialog.open, customerQuery.data]);
+  const initForm = useCallback((customer: Customer) => {
+    setFormState({
+      display_name: customer.full_name ?? '',
+      email: customer.email ?? '',
+      phone_number: customer.phone_number ?? '',
+      status: customer.status ?? 'active',
+    });
+    setAddressForm({
+      full_address: customer.full_address ?? customer.address?.full_address ?? customer.address?.line1 ?? '',
+      latitude: customer.latitude ?? customer.address?.latitude ?? null,
+      longitude: customer.longitude ?? customer.address?.longitude ?? null,
+    });
+  }, []);
+
+  useEditFormInit(editDialog.open, customerQuery.data, initForm);
+
+  const customerName = customerQuery.data?.full_name ?? 'Customer profile';
+
+  function useBrowserLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((position) => {
+      setAddressForm((current) => ({
+        ...current,
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      }));
+    });
+  }
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+      <SubmitOverlay show={updateCustomer.isPending} message="Saving customer…" />
       <div style={{ maxWidth: 920, margin: '0 auto', display: 'grid', gap: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Customer Detail</p>
-            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>Customer profile</h1>
+            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>{customerName}</h1>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Button variant="ghost" onClick={() => navigate('/customers')}>Back to customers</Button>
@@ -92,6 +127,12 @@ export function CustomerDetailPage() {
                 </div>
               </div>
 
+              <div style={{ display: 'grid', gap: 12 }}>
+                <p style={{ margin: 0, color: '#6b7280' }}>Address</p>
+                <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{customerQuery.data.full_address ?? '—'}</p>
+                <AddressMapPreview latitude={customerQuery.data.latitude} longitude={customerQuery.data.longitude} />
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Created</p>
@@ -110,16 +151,38 @@ export function CustomerDetailPage() {
         ) : null}
       </div>
 
-      <Dialog open={editDialog.open} onClose={editDialog.hide} title="Edit customer" labelledBy="edit-customer-dialog">
+      <Dialog
+        open={editDialog.open}
+        onClose={editDialog.hide}
+        title="Edit customer"
+        labelledBy="edit-customer-dialog"
+        busy={updateCustomer.isPending}
+        busyMessage="Saving customer…"
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             setEditError(null);
             if (!customerId) return;
             updateCustomer.mutate(
-              { customerId, customer: formState },
               {
-                onSuccess: () => editDialog.hide(),
+                customerId,
+                customer: {
+                  ...formState,
+                  default_address: {
+                    full_address: addressForm.full_address,
+                    latitude: addressForm.latitude,
+                    longitude: addressForm.longitude,
+                    is_default: true,
+                  },
+                },
+              },
+              {
+                onSuccess: () => {
+                  snackbar.push('Customer profile updated.', 'success');
+                  editDialog.hide();
+                  customerQuery.refetch();
+                },
                 onError: (err) => setEditError(err.message ?? 'Failed to update customer'),
               },
             );
@@ -134,29 +197,47 @@ export function CustomerDetailPage() {
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <input
-            value={formState.email}
+            value={formState.email ?? ''}
             onChange={(event) => setFormState({ ...formState, email: event.target.value })}
             placeholder="Email"
             type="email"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <input
-            value={formState.phone_number}
+            value={formState.phone_number ?? ''}
             onChange={(event) => setFormState({ ...formState, phone_number: event.target.value })}
             placeholder="Phone number"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
-          <input
-            value={formState.status ?? ''}
+          <select
+            value={formState.status ?? 'active'}
             onChange={(event) => setFormState({ ...formState, status: event.target.value })}
-            placeholder="Status"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-          />
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <label style={{ color: '#6b7280' }}>Full address</label>
+              <Button type="button" variant="ghost" onClick={useBrowserLocation}>Use my location</Button>
+            </div>
+            <textarea
+              value={addressForm.full_address}
+              onChange={(event) => setAddressForm({ ...addressForm, full_address: event.target.value })}
+              placeholder="House / street / area / city / pin code"
+              rows={4}
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+            <AddressMapPreview latitude={addressForm.latitude} longitude={addressForm.longitude} height={180} />
+          </div>
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" disabled={updateCustomer.isPending}>
-              {updateCustomer.isPending ? 'Saving…' : 'Save changes'}
+            <Button type="submit" variant="primary" loading={updateCustomer.isPending} loadingLabel="Saving…">
+              Save changes
             </Button>
-            <Button type="button" variant="neutral" onClick={editDialog.hide}>Cancel</Button>
+            <Button type="button" variant="neutral" onClick={editDialog.hide} disabled={updateCustomer.isPending}>
+              Cancel
+            </Button>
           </div>
           {editError ? <div style={{ color: '#dc2626' }}>{editError}</div> : null}
         </form>

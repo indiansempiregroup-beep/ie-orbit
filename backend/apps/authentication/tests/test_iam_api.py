@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 from django.core import mail
 from django.urls import reverse
@@ -99,7 +101,14 @@ def test_email_verification_flow(api_client: APIClient, user: User) -> None:
 
     assert resend_response.status_code == 200
     assert mail.outbox
-    token = mail.outbox[-1].body.rsplit(" ", maxsplit=1)[-1]
+    message = mail.outbox[-1].body
+    assert "verification code" in mail.outbox[-1].subject.lower()
+    assert "/auth/verify-email?token=" in message
+    token_match = re.search(r"Verification code: (\d{6})", message)
+    if token_match is None:
+        token_match = re.search(r"/auth/verify-email\?token=(\d{6})", message)
+    assert token_match is not None
+    token = token_match.group(1)
 
     verify_response = api_client.post(reverse("auth-verify-email"), {"token": token}, format="json")
 
@@ -128,6 +137,20 @@ def test_me_profile_patch(api_client: APIClient, user: User) -> None:
     assert patch_response.status_code == 200
     assert patch_response.json()["data"]["first_name"] == "Updated"
     assert patch_response.json()["data"]["language"] == "en-IN"
+
+
+@pytest.mark.django_db
+def test_resend_verification_by_email_without_auth(api_client: APIClient, user: User) -> None:
+    response = api_client.post(
+        reverse("auth-resend-verification"),
+        {"email": user.email},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["sent"] is True
+    assert mail.outbox
+    assert re.search(r"Verification code: \d{6}", mail.outbox[-1].body)
 
 
 @pytest.mark.django_db

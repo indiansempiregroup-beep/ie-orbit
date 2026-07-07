@@ -9,7 +9,9 @@ from apps.authentication.models import User, UserStatus
 from apps.bookings.models import Booking, BookingEvent, BookingStatus
 from apps.bookings.services.events import BookingEventPublisher
 from apps.businesses.models import Business
-from apps.notifications.models import Notification, NotificationTemplate
+from apps.notifications.constants import AUDIENCE_ADMIN, AUDIENCE_CUSTOMER
+from apps.notifications.models import Notification
+from apps.notifications.services.template_seed import ensure_notification_templates
 from apps.tenancy.models import Organization, Tenant
 
 
@@ -75,17 +77,7 @@ def test_booking_event_creates_notification_and_read_endpoint(
     business: Business,
 ) -> None:
     authenticate(api_client, owner, tenant)
-    template = NotificationTemplate.objects.create(
-        tenant=tenant,
-        business=business,
-        code="booking_created",
-        name="Booking created",
-        subject="Booking created",
-        body="Your booking is ready",
-        channel="email",
-        locale="en",
-        is_active=True,
-    )
+    ensure_notification_templates(tenant=tenant, business=business)
     booking = Booking.objects.create(
         tenant=tenant,
         business=business,
@@ -98,24 +90,27 @@ def test_booking_event_creates_notification_and_read_endpoint(
         duration_minutes=30,
         status=BookingStatus.PENDING,
     )
-    event = BookingEventPublisher().publish(
+    BookingEventPublisher().publish(
         booking=booking,
         event_type="BookingCreated",
         payload={"booking_id": str(booking.id)},
     )
 
-    notification = Notification.objects.get(tenant=tenant, booking=booking)
-    assert notification.status == "sent"
+    customer_notification = Notification.objects.get(
+        tenant=tenant,
+        booking=booking,
+        metadata__audience=AUDIENCE_CUSTOMER,
+    )
+    assert customer_notification.status == "sent"
 
     response = api_client.get(reverse("notification-list"))
     assert response.status_code == 200
-    assert response.json()["data"][0]["id"] == str(notification.id)
+    assert response.json()["data"] == []
 
     read_response = api_client.patch(
-        reverse("notification-mark-read", kwargs={"pk": notification.id})
+        reverse("notification-mark-read", kwargs={"pk": customer_notification.id})
     )
-    assert read_response.status_code == 200
-    assert read_response.json()["data"]["is_read"] is True
+    assert read_response.status_code == 404
 
 
 @pytest.mark.django_db

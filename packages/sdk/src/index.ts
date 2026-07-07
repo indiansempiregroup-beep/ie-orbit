@@ -31,14 +31,14 @@ export class ApiClientError extends Error {
 }
 
 export type ApiClientConfig = {
-  baseUrl: string;
+  baseUrl: string | (() => string);
   token?: string | null;
   fetchImpl?: typeof fetch;
   headers?: HeadersInit;
 };
 
 export type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   headers?: HeadersInit;
   query?: Record<string, string | number | boolean | null | undefined>;
@@ -434,6 +434,265 @@ export type BillingPlatformOpsSummary = {
   rows: BillingOpsDigest[];
 };
 
+export type BillingPlatformSubscriptions = {
+  total_subscriptions: number;
+  by_status: Array<{ status: string; count: number }>;
+  by_product: Array<{ product_code: string; count: number }>;
+};
+
+export type BillingPlatformMonitoring = {
+  window_hours: number;
+  failed_events: number;
+  dead_letter_events: number;
+  reprocess_actions: number;
+  reconciliation_runs: number;
+  tenants_impacted: number;
+};
+
+export type BillingPlatformAuditFeed = {
+  count: number;
+  rows: Array<{
+    id: string;
+    tenant_id: string;
+    action: string;
+    resource_type: string;
+    resource_id: string;
+    actor_id?: string | null;
+    metadata?: Record<string, unknown>;
+    created_at: string;
+  }>;
+};
+
+export type MobileDiscoverCategory = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+export type MobileDiscoverService = {
+  id: string;
+  service_code: string;
+  name: string;
+  description?: string;
+  duration_minutes: number;
+  currency: string;
+  price: number;
+  category_id?: string | null;
+  category_name?: string;
+  image_url?: string;
+};
+
+export type MobileDiscoverResponse = {
+  tenant_slug: string;
+  business_code: string;
+  categories: MobileDiscoverCategory[];
+  services: MobileDiscoverService[];
+};
+
+export type MobileStaffMember = {
+  id: string;
+  display_name: string;
+  designation: string;
+  department?: string;
+};
+
+export type MobileNotificationItem = {
+  id: string;
+  subject?: string;
+  body?: string;
+  channel?: string;
+  status?: string;
+  is_read?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  booking_id?: string | null;
+  notification_type?: string;
+};
+
+export type MobileCustomerProfile = {
+  id: string;
+  display_name: string;
+  email?: string;
+  phone_number?: string;
+  address?: CustomerAddress | null;
+};
+
+export type MobileAvailabilityResponse = {
+  slots: Array<{
+    start_at: string;
+    end_at: string;
+    staff_id?: string | null;
+    capacity: number;
+  }>;
+};
+
+export type MobileBookingRequestInput = {
+  tenant_slug: string;
+  business_code: string;
+  service_id: string;
+  staff_id?: string | null;
+  start_at: string;
+  duration_minutes: number;
+  customer_name?: string;
+  phone_number?: string;
+  email?: string;
+  notes?: string;
+};
+
+export type MobileBookingRequestResponse = {
+  booking_id: string;
+  booking_number: string;
+  status: string;
+};
+
+export type MobileBooking = {
+  id: string;
+  booking_number: string;
+  status: string;
+  service_id: string;
+  service_name: string;
+  staff_id?: string | null;
+  staff_name?: string;
+  appointment_date: string;
+  start_at: string;
+  end_at: string;
+  duration_minutes: number;
+  notes?: string;
+  created_at: string;
+};
+
+export type MobileBootstrapBranding = {
+  app_name: string;
+  logo?: string;
+  dark_logo?: string;
+  splash_image?: string;
+  favicon?: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color?: string;
+  theme_mode: string;
+  typography_settings?: Record<string, unknown>;
+};
+
+export type MobileBootstrapResponse = {
+  flavor_key: string;
+  app_slug: string;
+  app_name: string;
+  bundle_id_ios?: string;
+  bundle_id_android?: string;
+  white_label_enabled: boolean;
+  tenant_slug: string;
+  business_code: string;
+  business: {
+    id: string;
+    display_name: string;
+    logo?: string;
+    currency: string;
+    timezone: string;
+    phone?: string;
+    email?: string;
+    address_line1?: string;
+    address_line2?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    country?: string;
+    formatted_address?: string;
+    cancellation_policy?: string;
+    rescheduling_policy?: string;
+  };
+  branding: MobileBootstrapBranding;
+  enabled_products: string[];
+  features: Record<string, boolean>;
+  build_metadata?: Record<string, unknown>;
+};
+
+export type WhiteLabelProfile = {
+  id: string;
+  business_id: string;
+  business_display_name: string;
+  tenant_slug: string;
+  flavor_key: string;
+  app_slug: string;
+  app_name: string;
+  bundle_id_ios?: string;
+  bundle_id_android?: string;
+  logo?: string;
+  dark_logo?: string;
+  splash_image?: string;
+  favicon?: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color?: string;
+  theme_mode: string;
+  white_label_enabled: boolean;
+  typography_settings?: Record<string, unknown>;
+  build_metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type PlatformTenantSummary = {
+  id: string;
+  slug: string;
+  display_name: string;
+  status: string;
+  business_count: number;
+  primary_color: string;
+  created_at: string;
+};
+
+export type PlatformTenantDetail = {
+  id: string;
+  slug: string;
+  display_name: string;
+  status: string;
+  businesses: Array<{
+    id: string;
+    business_code: string;
+    display_name: string;
+    status: string;
+    selected_product?: string;
+    has_white_label_profile: boolean;
+    flavor_key?: string | null;
+  }>;
+};
+
+export type AnalyticsSummary = {
+  bookings: number;
+  completed: number;
+  cancelled: number;
+  pending?: number;
+  completion_rate?: number;
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIRevenueReport = {
+  estimated_revenue: number;
+  currency: string;
+  by_service: Array<{ service_id: string; service_name: string; revenue: number }>;
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BITrendsReport = {
+  rows: Array<{ day: string; total: number; completed: number; cancelled: number }>;
+  period: { start_date: string; end_date: string };
+};
+
+export type BIForecastReport = {
+  horizon_days: number;
+  projected_bookings: number;
+  projected_revenue: number;
+  currency: string;
+  based_on_days: number;
+};
+
+export type BIReportsBundle = {
+  summary: AnalyticsSummary;
+  revenue: BIRevenueReport;
+  trends: BITrendsReport;
+};
+
 export type IamRole = {
   id: string;
   code: string;
@@ -489,6 +748,7 @@ export type Business = {
   business_code?: string;
   business_type?: string;
   email?: string | null;
+  logo?: string | null;
   status?: string;
   currency?: string | null;
   timezone?: string | null;
@@ -530,6 +790,7 @@ export type BusinessUpdateInput = Partial<
     | 'timezone'
     | 'status'
     | 'selected_product'
+    | 'logo'
   >
 > & {
   industry_category?: string;
@@ -540,6 +801,7 @@ export type BusinessUpdateInput = Partial<
   address_line1?: string;
   primary_contact?: string;
   website?: string;
+  language?: string;
   settings?: Record<string, unknown>;
 };
 
@@ -590,12 +852,28 @@ export type OperationsSearchResult = {
   staff: StaffMember[];
 };
 
+export type CustomerAddress = {
+  id?: string;
+  line1?: string;
+  full_address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postal_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
 export type Customer = {
   id: string;
   full_name?: string | null;
   email?: string | null;
   phone_number?: string | null;
   status?: string;
+  full_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: CustomerAddress | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -617,6 +895,18 @@ export type CustomerCreateInput = {
   metadata?: Record<string, unknown>;
   profile?: Record<string, unknown>;
   preferences?: Record<string, unknown>;
+  send_registration_invite?: boolean;
+  default_address?: {
+    line1?: string;
+    full_address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postal_code?: string;
+    latitude?: number | string | null;
+    longitude?: number | string | null;
+    is_default?: boolean;
+  };
 };
 
 export type CustomerUpdateInput = Partial<CustomerCreateInput>;
@@ -629,6 +919,7 @@ export type Service = {
   duration_minutes?: number;
   price?: number;
   currency?: string | null;
+  image_url?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -653,6 +944,11 @@ export type ServiceCreateInput = {
   metadata?: Record<string, unknown>;
   default_duration?: Record<string, unknown>;
   default_price?: Record<string, unknown>;
+  primary_image?: {
+    media_id?: string;
+    alt_text?: string;
+    clear?: boolean;
+  };
 };
 
 export type ServiceUpdateInput = Partial<ServiceCreateInput>;
@@ -661,9 +957,37 @@ export type StaffMember = {
   id: string;
   full_name?: string | null;
   email?: string | null;
+  phone_number?: string | null;
   status?: string;
   created_at?: string;
   updated_at?: string;
+};
+
+export type StaffWeeklySchedule = {
+  id: string;
+  business: string;
+  staff_id: string;
+  weekday: number;
+  is_available: boolean;
+  shift_start: string;
+  shift_end: string;
+  break_periods?: unknown[];
+  capacity: number;
+  overtime_allowed?: boolean;
+};
+
+export type StaffWeeklyScheduleInput = {
+  weekday: number;
+  is_available?: boolean;
+  shift_start: string;
+  shift_end: string;
+  capacity?: number;
+};
+
+export type StaffWeeklyScheduleBulkInput = {
+  business?: string;
+  staff_id: string;
+  schedules: StaffWeeklyScheduleInput[];
 };
 
 export type StaffCreateInput = {
@@ -729,6 +1053,14 @@ export type TenantSettingsPayload = {
   selected_product?: string;
   product_code?: string;
   product_name?: string;
+  branding?: {
+    logo?: string;
+    dark_logo?: string;
+    favicon?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    theme_mode?: string;
+  };
   subscription?: {
     plan?: string | null;
     status?: string;
@@ -820,13 +1152,16 @@ export type TenantSlugAvailability = {
 };
 
 class ApiClient {
-  private readonly baseUrl: string;
+  private readonly resolveBaseUrl: () => string;
   private readonly fetchImpl: typeof fetch;
   private readonly defaultHeaders: HeadersInit;
   private token: string | null;
 
   constructor(config: ApiClientConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/$/, '');
+    this.resolveBaseUrl =
+      typeof config.baseUrl === 'function'
+        ? config.baseUrl
+        : () => config.baseUrl.replace(/\/$/, '');
     const rawFetch = config.fetchImpl ?? fetch;
     this.fetchImpl = rawFetch.bind(globalThis as unknown as typeof fetch);
     this.defaultHeaders = config.headers ?? {};
@@ -852,7 +1187,8 @@ class ApiClient {
     registerBusiness: (body: RegisterBusinessInput) =>
       this.request<WorkspaceProvisionResponse>('/auth/register-business', { method: 'POST', body }),
     verifyEmail: (body: VerifyEmailRequest) => this.request<{ verified: boolean; email: string }>('/auth/verify-email', { method: 'POST', body }),
-    resendVerification: () => this.request<{ accepted: boolean }>('/auth/resend-verification', { method: 'POST' }),
+    resendVerification: (body?: { email?: string }) =>
+      this.request<{ sent: boolean; debug_token?: string }>('/auth/resend-verification', { method: 'POST', body: body ?? {} }),
     me: () => this.request<UserProfile>('/auth/me', { method: 'GET' }),
     patchMe: (body: PatchAuthMeRequest) => this.request<UserProfile>('/auth/me', { method: 'PATCH', body }),
   };
@@ -868,6 +1204,14 @@ class ApiClient {
     complete: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/complete`, { method: 'POST', body }),
     reschedule: (bookingId: string, body: { start_at: string; reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/reschedule`, { method: 'POST', body }),
     availability: (query: { business?: string; staff_id?: string; date: string; duration_minutes?: number; interval_minutes?: number; buffer_minutes?: number }) => this.request<AvailabilitySlot[]>(`/availability`, { method: 'GET', query }),
+    staffWeeklySchedules: {
+      list: (query: { staff_id: string; business?: string }) =>
+        this.request<StaffWeeklySchedule[]>('/staff-weekly-schedules', { method: 'GET', query }),
+      upsert: (body: StaffWeeklySchedule & { business?: string }) =>
+        this.request<StaffWeeklySchedule>('/staff-weekly-schedules', { method: 'POST', body }),
+      bulkUpsert: (body: StaffWeeklyScheduleBulkInput) =>
+        this.request<StaffWeeklySchedule[]>('/staff-weekly-schedules/bulk', { method: 'PUT', body }),
+    },
   };
 
   businesses = {
@@ -917,6 +1261,8 @@ class ApiClient {
     create: (body: CustomerCreateInput) => this.request<Customer>('/customers', { method: 'POST', body }),
     get: (customerId: string) => this.request<Customer>(`/customers/${customerId}`, { method: 'GET' }),
     patch: (customerId: string, body: CustomerUpdateInput) => this.request<Customer>(`/customers/${customerId}`, { method: 'PATCH', body }),
+    delete: (customerId: string) => this.request<null>(`/customers/${customerId}`, { method: 'DELETE' }),
+    restore: (customerId: string) => this.request<Customer>(`/customers/${customerId}/restore`, { method: 'POST' }),
   };
 
   services = {
@@ -944,11 +1290,40 @@ class ApiClient {
   };
 
   analytics = {
-    summary: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<unknown>('/analytics/summary', { method: 'GET', query }),
-    list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<unknown[]>('/analytics', { method: 'GET', query }),
+    summary: (query?: Record<string, string | number | boolean | undefined | null>) =>
+      this.request<AnalyticsSummary>('/analytics/summary', { method: 'GET', query }),
+    list: (query?: Record<string, string | number | boolean | undefined | null>) =>
+      this.request<AnalyticsSummary[]>('/analytics', { method: 'GET', query }),
     dashboard: {
-      summary: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<unknown>('/dashboard/summary', { method: 'GET', query }),
+      summary: (query?: Record<string, string | number | boolean | undefined | null>) =>
+        this.request<{ today_count: number }>('/dashboard/summary', { method: 'GET', query }),
     },
+  };
+
+  bi = {
+    overview: (query?: { start_date?: string; end_date?: string }) =>
+      this.request<BIReportsBundle>('/bi/overview', { method: 'GET', query }),
+    revenue: (query?: { start_date?: string; end_date?: string }) =>
+      this.request<BIRevenueReport>('/bi/revenue', { method: 'GET', query }),
+    trends: (query?: { start_date?: string; end_date?: string }) =>
+      this.request<BITrendsReport>('/bi/trends', { method: 'GET', query }),
+    forecast: (query?: { horizon_days?: number }) =>
+      this.request<BIForecastReport>('/bi/forecast', { method: 'GET', query }),
+    reports: (query?: { start_date?: string; end_date?: string }) =>
+      this.request<BIReportsBundle>('/bi/reports', { method: 'GET', query }),
+  };
+
+  platform = {
+    tenants: () => this.request<{ tenants: PlatformTenantSummary[] }>('/platform/tenants', { method: 'GET' }),
+    tenant: (tenantId: string) =>
+      this.request<PlatformTenantDetail>(`/platform/tenants/${tenantId}`, { method: 'GET' }),
+    updateTenant: (tenantId: string, body: { status?: string }) =>
+      this.request<PlatformTenantDetail>(`/platform/tenants/${tenantId}`, { method: 'PATCH', body }),
+    whiteLabelProfiles: () => this.request<WhiteLabelProfile[]>('/platform/white-label', { method: 'GET' }),
+    whiteLabelProfile: (businessId: string) =>
+      this.request<MobileBootstrapResponse>(`/platform/white-label/${businessId}`, { method: 'GET' }),
+    updateWhiteLabelProfile: (businessId: string, body: Partial<WhiteLabelProfile>) =>
+      this.request<MobileBootstrapResponse>(`/platform/white-label/${businessId}`, { method: 'PATCH', body }),
   };
 
   billing = {
@@ -963,6 +1338,12 @@ class ApiClient {
       this.request<BillingOpsDigest>('/billing/ops-digest', { method: 'GET', query }),
     platformOpsSummary: (query?: { window_hours?: number; limit?: number }) =>
       this.request<BillingPlatformOpsSummary>('/billing/platform-ops-summary', { method: 'GET', query }),
+    platformSubscriptions: () =>
+      this.request<BillingPlatformSubscriptions>('/billing/platform-subscriptions', { method: 'GET' }),
+    platformMonitoring: (query?: { window_hours?: number }) =>
+      this.request<BillingPlatformMonitoring>('/billing/platform-monitoring', { method: 'GET', query }),
+    platformAuditFeed: (query?: { limit?: number }) =>
+      this.request<BillingPlatformAuditFeed>('/billing/platform-audit-feed', { method: 'GET', query }),
     releaseGate: () => this.request<BillingReleaseGateReport>('/billing/release-gate', { method: 'GET' }),
     runReconciliation: (body?: { lookback_hours?: number }) =>
       this.request<BillingReconciliationResult>('/billing/reconciliation/run', { method: 'POST', body }),
@@ -985,6 +1366,65 @@ class ApiClient {
         method: 'POST',
         body,
       }),
+  };
+
+  mobile = {
+    bootstrap: (query: {
+      flavor_key?: string;
+      app_slug?: string;
+      tenant_slug?: string;
+      business_code?: string;
+    }) => this.request<MobileBootstrapResponse>('/mobile/bootstrap', { method: 'GET', query, auth: false }),
+    discoverServices: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileDiscoverResponse>('/mobile/discover/services', { method: 'GET', query }),
+    listStaff: (query: { tenant_slug: string; business_code: string; service_id?: string }) =>
+      this.request<MobileStaffMember[]>('/mobile/staff', { method: 'GET', query }),
+    availability: (query: {
+      tenant_slug: string;
+      business_code: string;
+      date: string;
+      duration_minutes?: number;
+      interval_minutes?: number;
+      buffer_minutes?: number;
+      staff_id?: string | null;
+    }) => this.request<MobileAvailabilityResponse>('/mobile/availability', { method: 'GET', query }),
+    requestBooking: (body: MobileBookingRequestInput) =>
+      this.request<MobileBookingRequestResponse>('/mobile/bookings/request', { method: 'POST', body }),
+    listBookings: (query: {
+      tenant_slug: string;
+      business_code: string;
+      upcoming?: boolean;
+      status?: string;
+    }) => this.request<MobileBooking[]>('/mobile/bookings', { method: 'GET', query }),
+    getBooking: (bookingId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileBooking>(`/mobile/bookings/${bookingId}`, { method: 'GET', query }),
+    cancelBooking: (
+      bookingId: string,
+      body: { tenant_slug: string; business_code: string; reason?: string },
+    ) => this.request<MobileBooking>(`/mobile/bookings/${bookingId}/cancel`, { method: 'POST', body }),
+    rescheduleBooking: (
+      bookingId: string,
+      body: { tenant_slug: string; business_code: string; start_at: string; reason?: string },
+    ) => this.request<MobileBooking>(`/mobile/bookings/${bookingId}/reschedule`, { method: 'POST', body }),
+    registerCustomer: (body: {
+      email: string;
+      password: string;
+      first_name?: string;
+      last_name?: string;
+      phone_number?: string;
+    }) => this.request<UserProfile>('/mobile/auth/register', { method: 'POST', body, auth: false }),
+    getCustomerProfile: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileCustomerProfile>('/mobile/customer/profile', { method: 'GET', query }),
+    updateCustomerProfile: (
+      body: { full_address?: string; latitude?: number | null; longitude?: number | null },
+      query: { tenant_slug: string; business_code: string },
+    ) => this.request<MobileCustomerProfile>('/mobile/customer/profile', { method: 'PATCH', body, query }),
+    listNotifications: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileNotificationItem[]>('/mobile/notifications', { method: 'GET', query }),
+    markNotificationRead: (notificationId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileNotificationItem>(`/mobile/notifications/${notificationId}/read`, { method: 'PATCH', query }),
+    readAllNotifications: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<{ updated: number }>('/mobile/notifications/read-all', { method: 'PATCH', query }),
   };
 
   iam = {
@@ -1069,7 +1509,7 @@ class ApiClient {
 
   private buildUrl(path: string, query?: Record<string, string | number | boolean | null | undefined>): string {
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    const cleanBaseUrl = this.baseUrl.replace(/\/$/, '');
+    const cleanBaseUrl = this.resolveBaseUrl().replace(/\/$/, '');
 
     let url: URL;
     if (/^https?:\/\//i.test(cleanBaseUrl)) {
@@ -1114,3 +1554,11 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
 }
 
 export type IEPlatformClient = ReturnType<typeof createApiClient>;
+
+export {
+  consumeNotificationStream,
+  subscribeToNotificationStream,
+  type NotificationStreamConfig,
+  type NotificationStreamEvent,
+  type NotificationStreamSubscription,
+} from './notificationStream';

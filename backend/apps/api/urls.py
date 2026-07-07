@@ -3,6 +3,7 @@ from django.urls import include, path
 from apps.api.views import HealthView, OperationsSearchView
 
 urlpatterns = [
+    path("", include("apps.api.mobile_urls")),
     path("auth/", include("apps.authentication.urls")),
     path("", include("apps.tenancy.urls")),
     path("", include("apps.businesses.urls")),

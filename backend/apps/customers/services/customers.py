@@ -3,12 +3,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.customers.models import (
     Customer,
+    CustomerAddress,
     CustomerExportJob,
     CustomerImportJob,
     CustomerMergeRecord,
@@ -17,6 +20,7 @@ from apps.customers.models import (
     CustomerStatus,
 )
 from apps.common.utils.business_context import resolve_business_id
+from apps.customers.emails.registration_invite import build_customer_registration_invite
 from apps.customers.repositories import CustomerRepository
 
 logger = logging.getLogger("ie_platform.customers")
@@ -27,9 +31,17 @@ class CustomerService:
         self.repository = repository or CustomerRepository()
 
     @transaction.atomic
-    def create_customer(self, *, data: dict[str, Any], tenant: Any, actor: Any) -> Customer:
+    def create_customer(
+        self,
+        *,
+        data: dict[str, Any],
+        tenant: Any,
+        actor: Any,
+        send_registration_invite: bool = False,
+    ) -> Customer:
         profile_data = data.pop("profile", None)
         preferences_data = data.pop("preferences", None)
+        address_data = data.pop("default_address", None)
         customer = Customer(tenant=tenant, **data)
         if getattr(actor, "is_authenticated", False):
             customer.mark_created(actor_id=actor.id)
@@ -42,13 +54,32 @@ class CustomerService:
             self.update_profile(customer=customer, data=profile_data)
         if isinstance(preferences_data, dict):
             self.update_preferences(customer=customer, data=preferences_data)
+        if isinstance(address_data, dict):
+            self.upsert_default_address(customer=customer, data=address_data)
+        if send_registration_invite and customer.email:
+            self._send_registration_invite(customer=customer)
         logger.info("Customer created", extra={"customer_id": str(customer.id)})
         return customer
+
+    def _send_registration_invite(self, *, customer: Customer) -> None:
+        business_name = getattr(customer.business, "display_name", None) or getattr(
+            customer.business, "business_name", "AppointIE"
+        )
+        email_content = build_customer_registration_invite(customer=customer, business_name=business_name)
+        send_mail(
+            subject=email_content.subject,
+            message=email_content.plain_text,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[customer.email],
+            html_message=email_content.html,
+            fail_silently=True,
+        )
 
     @transaction.atomic
     def update_customer(self, *, customer: Customer, data: dict[str, Any], actor: Any) -> Customer:
         profile_data = data.pop("profile", None)
         preferences_data = data.pop("preferences", None)
+        address_data = data.pop("default_address", None)
         for field, value in data.items():
             setattr(customer, field, value)
         if getattr(actor, "is_authenticated", False):
@@ -60,6 +91,8 @@ class CustomerService:
             self.update_profile(customer=customer, data=profile_data)
         if isinstance(preferences_data, dict):
             self.update_preferences(customer=customer, data=preferences_data)
+        if isinstance(address_data, dict):
+            self.upsert_default_address(customer=customer, data=address_data)
         logger.info("Customer updated", extra={"customer_id": str(customer.id)})
         return customer
 
@@ -163,6 +196,33 @@ class CustomerService:
         preferences.full_clean()
         preferences.save()
         return preferences
+
+    def upsert_default_address(self, *, customer: Customer, data: dict[str, Any]) -> CustomerAddress | None:
+        payload = dict(data)
+        full_address = str(payload.pop("full_address", "") or "").strip()
+        line1 = str(payload.pop("line1", "") or "").strip()
+        if full_address and not line1:
+            line1 = full_address
+        if not line1 and payload.get("latitude") in (None, "") and payload.get("longitude") in (None, ""):
+            return None
+        if not line1:
+            raise ValidationError({"default_address": "Address text is required."})
+
+        address = (
+            customer.addresses.filter(is_default=True).first()
+            or customer.addresses.order_by("created_at").first()
+        )
+        if address is None:
+            address = CustomerAddress(tenant=customer.tenant, customer=customer, is_default=True)
+        for field, value in payload.items():
+            if hasattr(address, field):
+                setattr(address, field, value)
+        address.line1 = line1
+        address.is_default = True
+        address.full_clean()
+        address.save()
+        customer.addresses.exclude(id=address.id).update(is_default=False)
+        return address
 
     def _validate_business_tenant(self, obj: Any) -> None:
         if obj.business.tenant_id != obj.tenant_id:

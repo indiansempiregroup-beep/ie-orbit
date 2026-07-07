@@ -11,6 +11,7 @@ from apps.bookings.models import (
     BookingSource,
     BookingTimeline,
     RecurrenceFrequency,
+    StaffWeeklySchedule,
 )
 
 
@@ -154,3 +155,35 @@ class AvailabilitySlotSerializer(serializers.Serializer):
     end_at = serializers.DateTimeField()
     staff_id = serializers.CharField(allow_null=True)
     capacity = serializers.IntegerField()
+
+
+class StaffWeeklyScheduleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffWeeklySchedule
+        fields = [
+            "id",
+            "business",
+            "staff_id",
+            "weekday",
+            "is_available",
+            "shift_start",
+            "shift_end",
+            "break_periods",
+            "capacity",
+            "overtime_allowed",
+        ]
+        read_only_fields = ["id"]
+
+
+class StaffWeeklyScheduleInputSerializer(serializers.Serializer):
+    weekday = serializers.IntegerField(min_value=0, max_value=6)
+    is_available = serializers.BooleanField(default=True)
+    shift_start = serializers.TimeField()
+    shift_end = serializers.TimeField()
+    capacity = serializers.IntegerField(min_value=1, default=1)
+
+
+class StaffWeeklyScheduleBulkSerializer(serializers.Serializer):
+    business = serializers.UUIDField(required=False)
+    staff_id = serializers.UUIDField()
+    schedules = StaffWeeklyScheduleInputSerializer(many=True)

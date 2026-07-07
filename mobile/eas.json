@@ -1,0 +1,56 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MOBILE_DEV_MODE": "true",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1"
+      }
+    },
+    "demo-main-preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "demo-MAIN",
+        "EXPO_PUBLIC_APP_NAME": "Demo Salon",
+        "EXPO_PUBLIC_APP_SLUG": "demo-salon",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1"
+      }
+    },
+    "demo-main-production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "demo-MAIN",
+        "EXPO_PUBLIC_APP_NAME": "Demo Salon",
+        "EXPO_PUBLIC_APP_SLUG": "demo-salon",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1"
+      }
+    },
+    "empire-salon-preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "empire-salon-main",
+        "EXPO_PUBLIC_APP_NAME": "Empire Salon",
+        "EXPO_PUBLIC_APP_SLUG": "empire-salon",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1"
+      }
+    },
+    "empire-salon-production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "empire-salon-main",
+        "EXPO_PUBLIC_APP_NAME": "Empire Salon",
+        "EXPO_PUBLIC_APP_SLUG": "empire-salon",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1"
+      }
+    }
+  },
+  "submit": {
+    "demo-main-production": {},
+    "empire-salon-production": {}
+  }
+}

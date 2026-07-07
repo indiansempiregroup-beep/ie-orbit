@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  BarChart3,
   Bell,
   BookOpenText,
   CalendarDays,
@@ -8,6 +9,7 @@ import {
   NotebookPen,
   Settings,
   Scissors,
+  Shield,
   UserCog,
   Users,
 } from 'lucide-react';
@@ -30,8 +32,10 @@ export const navigationItems: AppNavItem[] = [
   { to: '/services', label: 'Services', icon: Scissors, group: 'operations' },
   { to: '/staff', label: 'Staff', icon: UserCog, group: 'operations' },
   { to: '/reports', label: 'Reports', icon: ChartColumnBig, group: 'operations' },
+  { to: '/bi/overview', label: 'BI', icon: BarChart3, group: 'operations' },
   { to: '/notifications', label: 'Notifications', icon: Bell, group: 'operations' },
   { to: '/settings', label: 'Settings', icon: Settings, group: 'settings' },
+  { to: '/admin', label: 'Platform Admin', icon: Shield, group: 'settings' },
   { to: '/profile', label: 'Profile', icon: BookOpenText, group: 'account' },
 ];
 

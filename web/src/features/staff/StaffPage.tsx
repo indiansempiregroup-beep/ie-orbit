@@ -1,17 +1,24 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useStaffCreate, useStaffList, useStaffSearch } from '../management/managementHooks';
+import { useStaffCreate, useStaffList, useStaffSearch, useStaffUpdate } from '../management/managementHooks';
+import { BusinessWorkspaceSelect } from '../../components/BusinessWorkspaceSelect';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
+import { ManagementListToolbar } from '../../components/ManagementListToolbar';
+import { SubmitOverlay } from '../../components/SubmitOverlay';
+import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
 import { useDialog } from '../../hooks/useDialog';
+import { useSnackbar } from '../../hooks/useSnackbar';
 import { useTheme } from '../../hooks/useTheme';
 
 export function StaffPage() {
   const theme = useTheme();
+  const snackbar = useSnackbar();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const createStaff = useStaffCreate();
+  const updateStaff = useStaffUpdate();
   const [formState, setFormState] = useState({
     business: '',
     staff_code: '',
@@ -28,6 +35,12 @@ export function StaffPage() {
   const { data: staff, isLoading, error, refetch } = useStaffList();
   const search = useStaffSearch(searchTerm);
   const dialog = useDialog();
+  const handleBusinessFormChange = useBusinessFormChange((business) => {
+    setFormState((current) => ({ ...current, business }));
+  });
+  useActiveBusinessFormField(dialog.open, formState.business, (business) => {
+    setFormState((current) => ({ ...current, business }));
+  });
 
   const selectedData = searchTerm.trim() ? search.data ?? [] : staff ?? [];
 
@@ -38,8 +51,27 @@ export function StaffPage() {
     return { total, active, inactive };
   }, [staff]);
 
+  function resetForm() {
+    setFormState({
+      business: '',
+      staff_code: '',
+      display_name: '',
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone_number: '',
+      designation: '',
+      department: '',
+      employment_status: 'active',
+    });
+  }
+
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+      <SubmitOverlay
+        show={createStaff.isPending || updateStaff.isPending}
+        message={createStaff.isPending ? 'Adding staff…' : 'Updating staff…'}
+      />
       <div style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gap: 24 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
@@ -69,23 +101,22 @@ export function StaffPage() {
         </div>
 
         <section style={{ display: 'grid', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search staff by name, email or status"
-              style={{ flex: 1, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: theme.resolved === 'dark' ? '#111827' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
-              aria-label="Search staff"
-            />
-            <Button variant="ghost" onClick={() => setSearchTerm('')}>Clear</Button>
-          </div>
+          <ManagementListToolbar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Search staff by name, email or status"
+            searchAriaLabel="Search staff"
+            onClear={() => setSearchTerm('')}
+          />
 
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 1fr 1fr 0.8fr 1.2fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
               <span>Name</span>
               <span>Email</span>
+              <span>Phone</span>
               <span>Joined</span>
               <span>Status</span>
+              <span>Actions</span>
             </div>
             <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
               {isLoading || search.isLoading ? (
@@ -95,72 +126,108 @@ export function StaffPage() {
               ) : selectedData.length === 0 ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No staff found.</div>
               ) : (
-                selectedData.map((member) => (
-                  <div
-                    key={member.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => member.id && navigate(`/staff/${member.id}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        member.id && navigate(`/staff/${member.id}`);
-                      }
-                    }}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1.5fr 1fr 1fr 1fr',
-                      padding: '16px 20px',
-                      background: theme.resolved === 'dark' ? '#111827' : '#fff',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span>{member.full_name ?? 'Team member'}</span>
-                    <span>{member.email ?? '—'}</span>
-                    <span>{member.created_at ? new Date(member.created_at).toLocaleDateString() : '—'}</span>
-                    <span style={{ color: member.status === 'active' ? '#10b981' : '#6b7280' }}>{member.status ?? 'Unknown'}</span>
-                  </div>
-                ))
+                selectedData.map((member) => {
+                  const isActive = member.status === 'active';
+                  return (
+                    <div
+                      key={member.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1.5fr 1.2fr 1fr 1fr 0.8fr 1.2fr',
+                        padding: '16px 20px',
+                        background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => member.id && navigate(`/staff/${member.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            member.id && navigate(`/staff/${member.id}`);
+                          }
+                        }}
+                        style={{ cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        {member.full_name ?? 'Team member'}
+                      </span>
+                      <span>{member.email ?? '—'}</span>
+                      <span>{member.phone_number ?? '—'}</span>
+                      <span>{member.created_at ? new Date(member.created_at).toLocaleDateString() : '—'}</span>
+                      <span style={{ color: isActive ? '#10b981' : '#6b7280' }}>{member.status ?? 'Unknown'}</span>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <Button
+                          type="button"
+                          variant={isActive ? 'neutral' : 'primary'}
+                          loading={updateStaff.isPending}
+                          loadingLabel={isActive ? 'Deactivating…' : 'Activating…'}
+                          onClick={() =>
+                            member.id &&
+                            updateStaff.mutate(
+                              {
+                                staffId: member.id,
+                                staff: { employment_status: isActive ? 'inactive' : 'active' },
+                              },
+                              {
+                                onSuccess: () =>
+                                  snackbar.push(isActive ? 'Staff deactivated.' : 'Staff activated.', 'success'),
+                                onError: (error) => snackbar.push(error.message, 'error'),
+                              },
+                            )
+                          }
+                        >
+                          {isActive ? 'Deactivate' : 'Activate'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </Card>
         </section>
       </div>
 
-      <Dialog open={dialog.open} onClose={dialog.hide} title="Add staff" labelledBy="add-staff-dialog">
+      <Dialog
+        open={dialog.open}
+        onClose={dialog.hide}
+        title="Add staff"
+        labelledBy="add-staff-dialog"
+        busy={createStaff.isPending}
+        busyMessage="Adding staff…"
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
-            createStaff.mutate(formState, {
-              onSuccess: () => {
-                dialog.hide();
-                setFormState({
-                  business: '',
-                  staff_code: '',
-                  display_name: '',
-                  first_name: '',
-                  last_name: '',
-                  email: '',
-                  phone_number: '',
-                  designation: '',
-                  department: '',
-                  employment_status: 'active',
-                });
+            const displayName = formState.display_name.trim();
+            createStaff.mutate(
+              {
+                ...formState,
+                first_name: formState.first_name.trim() || displayName,
+                display_name: displayName,
               },
-              onError: (err) => {
-                setCreationError(err.message ?? 'Failed to create staff');
+              {
+                onSuccess: () => {
+                  snackbar.push('Staff member added.', 'success');
+                  dialog.hide();
+                  resetForm();
+                },
+                onError: (err) => {
+                  setCreationError(err.message ?? 'Failed to create staff');
+                },
               },
-            });
+            );
           }}
           style={{ display: 'grid', gap: 16, marginTop: 12 }}
         >
-          <input
-            required
+          <BusinessWorkspaceSelect
             value={formState.business}
-            onChange={(event) => setFormState({ ...formState, business: event.target.value })}
-            placeholder="Business ID"
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            onChange={handleBusinessFormChange}
+            showManageLink={false}
           />
           <input
             required
@@ -191,11 +258,21 @@ export function StaffPage() {
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
           </div>
+          <select
+            value={formState.employment_status}
+            onChange={(event) => setFormState({ ...formState, employment_status: event.target.value })}
+            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" disabled={createStaff.isPending}>
-              {createStaff.isPending ? 'Creating…' : 'Create staff'}
+            <Button type="submit" variant="primary" loading={createStaff.isPending} loadingLabel="Creating…">
+              Create staff
             </Button>
-            <Button type="button" variant="neutral" onClick={dialog.hide}>Cancel</Button>
+            <Button type="button" variant="neutral" onClick={dialog.hide} disabled={createStaff.isPending}>
+              Cancel
+            </Button>
           </div>
           {creationError ? <div style={{ color: '#dc2626' }}>{creationError}</div> : null}
         </form>

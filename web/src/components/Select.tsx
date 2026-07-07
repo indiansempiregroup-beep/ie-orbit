@@ -3,16 +3,21 @@ import React from 'react';
 type Props = React.SelectHTMLAttributes<HTMLSelectElement> & {
   label?: string;
   error?: string;
+  compact?: boolean;
   options: Array<{ value: string; label: string }>;
 };
 
-export function Select({ label, error, options, style, id, ...rest }: Props) {
+export const Select = React.forwardRef<HTMLSelectElement, Props>(function Select(
+  { label, error, compact = false, options, style, id, ...rest },
+  ref,
+) {
   const selectId = id ?? rest.name;
   return (
-    <label style={{ display: 'block', marginBottom: 12 }} htmlFor={selectId}>
+    <label style={{ display: 'block', marginBottom: compact ? 0 : 12 }} htmlFor={selectId}>
       {label ? <div style={{ marginBottom: 6, fontSize: 13, color: '#374151' }}>{label}</div> : null}
       <select
         id={selectId}
+        ref={ref}
         {...rest}
         style={{
           width: '100%',
@@ -39,4 +44,6 @@ export function Select({ label, error, options, style, id, ...rest }: Props) {
       ) : null}
     </label>
   );
-}
+});
+
+export default Select;

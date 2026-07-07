@@ -5,6 +5,19 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 
 
+class IsPlatformAdmin(BasePermission):
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "is_superuser", False):
+            return True
+        return user.user_roles.filter(
+            role__code__in={"platform_admin", "super_admin"},
+            role__is_active=True,
+        ).exists()
+
+
 class HasPlatformPermission(BasePermission):
     required_permission: str | None = None
 

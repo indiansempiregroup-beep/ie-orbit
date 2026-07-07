@@ -60,10 +60,12 @@ class CustomerViewSet(viewsets.ViewSet):
     def create(self, request: Request) -> Response:
         serializer = CustomerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        send_registration_invite = bool(request.data.get("send_registration_invite", True))
         customer = self.service.create_customer(
             data=dict(serializer.validated_data),
             tenant=request.current_tenant,
             actor=request.user,
+            send_registration_invite=send_registration_invite,
         )
         return success_response(
             CustomerSerializer(customer).data,

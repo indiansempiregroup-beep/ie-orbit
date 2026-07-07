@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAvailability, useBookingCreation, useBookingList, type AvailabilitySlot, type BookingCreateInput } from '../bookings/bookingsHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
+import { buildNameMap } from '../../lib/managementEntities';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -12,8 +13,9 @@ import { useTheme } from '../../hooks/useTheme';
 export function CalendarPage() {
   const theme = useTheme();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [staffId, setStaffId] = useState('');
+  const [staffId, setStaffId] = useState(() => searchParams.get('staff') ?? '');
   const [durationMinutes, setDurationMinutes] = useState(30);
 
   const availabilityQuery = useAvailability(date, staffId || undefined, durationMinutes);
@@ -39,10 +41,7 @@ export function CalendarPage() {
   const confirmedCount = bookings.filter((booking) => booking.status === 'confirmed').length;
   const totalCapacity = availability.reduce((sum, slot) => sum + slot.capacity, 0);
 
-  const staffMap = useMemo(
-    () => new Map(staffQuery.data?.map((staff) => [staff.id, staff.full_name ?? staff.id]) ?? []),
-    [staffQuery.data],
-  );
+  const staffMap = useMemo(() => buildNameMap(staffQuery.data), [staffQuery.data]);
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>

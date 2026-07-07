@@ -11,5 +11,7 @@ def process_booking_event_task(event_id: str) -> str | None:
     event = BookingEvent.objects.select_related("booking", "tenant", "booking__business").get(
         id=event_id
     )
-    notification = NotificationService().process_booking_event(event)
-    return str(notification.id) if notification else None
+    notifications = NotificationService().process_booking_event(event)
+    if not notifications:
+        return None
+    return str(notifications[0].id)

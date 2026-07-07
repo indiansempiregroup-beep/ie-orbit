@@ -1,9 +1,9 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useTheme } from '../../hooks/useTheme';
-import { useSnackbar } from '../../hooks/useSnackbar';
+import { useEmailVerification } from '../../hooks/useEmailVerification';
 import { useProfileDetails } from './profileHooks';
 
 const notificationPreferenceLabels: Record<string, string> = {
@@ -21,7 +21,7 @@ export function ProfilePage() {
   const profile = useProfileDetails();
   const user = profile.user;
   const navigate = useNavigate();
-  const snackbar = useSnackbar();
+  const { isVerified, resendState, message, resendVerification } = useEmailVerification();
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
@@ -32,9 +32,14 @@ export function ProfilePage() {
             <h1 style={{ margin: '8px 0 0', fontSize: 32, lineHeight: 1.2 }}>Profile</h1>
             <p style={{ margin: '8px 0 0', color: '#6b7280', maxWidth: 720 }}>Manage your account details, role access, and notification preferences.</p>
           </div>
-          <Button variant="primary" onClick={() => profile.logout()} disabled={profile.loading}>
-            {profile.loading ? 'Signing out…' : 'Sign out'}
-          </Button>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Button variant="primary" onClick={() => navigate('/profile/edit')}>
+              Edit profile
+            </Button>
+            <Button variant="ghost" onClick={() => profile.logout()} disabled={profile.loading}>
+              {profile.loading ? 'Signing out…' : 'Sign out'}
+            </Button>
+          </div>
         </header>
 
         <Card style={{ padding: 24 }}>
@@ -79,7 +84,29 @@ export function ProfilePage() {
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
                 <span style={{ color: '#6b7280', fontSize: 13 }}>Email verified</span>
-                <strong>{user?.email_verified_at ? 'Yes' : 'No'}</strong>
+                <strong style={{ color: isVerified ? '#047857' : '#b45309' }}>
+                  {isVerified ? 'Yes' : 'No — verification required'}
+                </strong>
+                {!isVerified ? (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                    <Button
+                      variant="primary"
+                      type="button"
+                      onClick={() => void resendVerification()}
+                      disabled={resendState === 'loading' || resendState === 'sent'}
+                    >
+                      {resendState === 'loading' ? 'Sending…' : resendState === 'sent' ? 'Email sent' : 'Resend verification email'}
+                    </Button>
+                    <Link to="/auth/verify-email">
+                      <Button variant="ghost" type="button">
+                        Open verification page
+                      </Button>
+                    </Link>
+                  </div>
+                ) : null}
+                {message && !isVerified ? (
+                  <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>{message}</p>
+                ) : null}
               </div>
             </div>
 
@@ -137,9 +164,6 @@ export function ProfilePage() {
             <h2 style={{ margin: 0, fontSize: 18 }}>Security</h2>
             <p style={{ marginTop: 12, color: '#6b7280' }}>Secure your account with password controls and active session review tools.</p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
-              <Button variant="ghost" onClick={() => navigate('/profile/edit')}>
-                Edit profile
-              </Button>
               <Button variant="ghost" onClick={() => navigate('/profile/security')}>
                 Manage security
               </Button>

@@ -6,7 +6,8 @@ from typing import Any
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
-from apps.services.models import Service, ServiceCategory, ServiceDuration, ServicePricing
+from apps.platform_media.models import Media
+from apps.services.models import Service, ServiceCategory, ServiceDuration, ServiceImage, ServicePricing
 from apps.services.repositories import ServiceRepository
 
 logger = logging.getLogger("ie_platform.services")
@@ -47,6 +48,7 @@ class ServiceCatalogService:
     def create_service(self, *, data: dict[str, Any], tenant: Any, actor: Any) -> Service:
         duration_data = data.pop("default_duration", None)
         pricing_data = data.pop("default_price", None)
+        image_data = data.pop("primary_image", None)
         service = Service(tenant=tenant, **data)
         if getattr(actor, "is_authenticated", False):
             service.mark_created(actor_id=actor.id)
@@ -58,6 +60,8 @@ class ServiceCatalogService:
             self.update_duration(service=service, data=duration_data)
         if isinstance(pricing_data, dict):
             self.update_pricing(service=service, data=pricing_data)
+        if isinstance(image_data, dict):
+            self.upsert_primary_image(service=service, data=image_data)
         logger.info("Service created", extra={"service_id": str(service.id)})
         return service
 
@@ -65,6 +69,7 @@ class ServiceCatalogService:
     def update_service(self, *, service: Service, data: dict[str, Any], actor: Any) -> Service:
         duration_data = data.pop("default_duration", None)
         pricing_data = data.pop("default_price", None)
+        image_data = data.pop("primary_image", None)
         for field, value in data.items():
             setattr(service, field, value)
         if getattr(actor, "is_authenticated", False):
@@ -76,6 +81,8 @@ class ServiceCatalogService:
             self.update_duration(service=service, data=duration_data)
         if isinstance(pricing_data, dict):
             self.update_pricing(service=service, data=pricing_data)
+        if isinstance(image_data, dict):
+            self.upsert_primary_image(service=service, data=image_data)
         logger.info("Service updated", extra={"service_id": str(service.id)})
         return service
 
@@ -111,6 +118,36 @@ class ServiceCatalogService:
         price.full_clean()
         price.save()
         return price
+
+    def upsert_primary_image(self, *, service: Service, data: dict[str, Any]) -> ServiceImage | None:
+        if data.get("clear"):
+            service.images.filter(is_primary=True).delete()
+            return None
+
+        media_id = data.get("media_id") or data.get("media")
+        if not media_id:
+            return None
+
+        media = (
+            Media.objects.require_tenant(service.tenant)
+            .filter(id=media_id, business=service.business)
+            .first()
+        )
+        if media is None:
+            raise ValidationError({"primary_image": "Media asset not found for this business."})
+
+        image, _ = ServiceImage.objects.update_or_create(
+            tenant=service.tenant,
+            service=service,
+            is_primary=True,
+            defaults={
+                "media": media,
+                "alt_text": str(data.get("alt_text") or service.display_name or service.name),
+                "display_order": 0,
+            },
+        )
+        service.images.exclude(id=image.id).update(is_primary=False)
+        return image
 
     def _validate_business_tenant(self, obj: Any) -> None:
         if obj.business.tenant_id != obj.tenant_id:

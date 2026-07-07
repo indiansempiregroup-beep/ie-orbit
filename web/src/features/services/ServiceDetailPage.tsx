@@ -1,38 +1,93 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDialog } from '../../hooks/useDialog';
+import { useEditFormInit } from '../../hooks/useEditFormInit';
+import { useAuth } from '../../hooks/useAuth';
 import { useServiceDetail, useServiceUpdate } from '../management/managementHooks';
-import type { ServiceUpdateInput } from '@ie-platform/sdk';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import type { Service, ServiceUpdateInput } from '@ie-platform/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
+import { LogoUploadField } from '../../components/LogoUploadField';
+import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { useTheme } from '../../hooks/useTheme';
+import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServiceDetailPage() {
   const theme = useTheme();
+  const auth = useAuth();
+  const workspace = useWorkspace();
+  const currency = workspace.activeBusiness?.currency ?? 'USD';
   const { serviceId } = useParams();
   const navigate = useNavigate();
   const serviceQuery = useServiceDetail(serviceId);
   const updateService = useServiceUpdate();
   const editDialog = useDialog();
-  const [formState, setFormState] = useState<ServiceUpdateInput>({
+  const [formState, setFormState] = useState({
     name: '',
     display_name: '',
     description: '',
     status: 'active',
+    duration_minutes: 30,
+    price: '',
   });
   const [editError, setEditError] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (editDialog.open && serviceQuery.data) {
-      setFormState({
-        name: serviceQuery.data.name ?? '',
-        display_name: serviceQuery.data.name ?? '',
-        description: serviceQuery.data.description ?? '',
-        status: serviceQuery.data.status ?? 'active',
-      });
+  const initForm = useCallback((service: Service) => {
+    setFormState({
+      name: service.name ?? '',
+      display_name: service.name ?? '',
+      description: service.description ?? '',
+      status: service.status ?? 'active',
+      duration_minutes: service.duration_minutes ?? 30,
+      price: service.price != null ? String(service.price) : '',
+    });
+    setCurrentImageUrl(resolveMediaAssetUrl(service.image_url));
+    setImageFile(null);
+    setRemoveImage(false);
+  }, []);
+
+  useEditFormInit(editDialog.open, serviceQuery.data, initForm);
+
+  const serviceName = serviceQuery.data?.name ?? 'Service profile';
+
+  function formatPrice(amount?: number, code = currency) {
+    if (amount == null) return '—';
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(amount);
+    } catch {
+      return `${code} ${amount.toFixed(2)}`;
     }
-  }, [editDialog.open, serviceQuery.data]);
+  }
+
+  function buildUpdatePayload(primaryImage?: ServiceUpdateInput['primary_image']): ServiceUpdateInput {
+    const priceValue = formState.price.trim();
+    return {
+      name: formState.name,
+      display_name: formState.display_name || formState.name,
+      short_description: formState.description,
+      status: formState.status,
+      default_duration: {
+        duration_minutes: formState.duration_minutes,
+        is_default: true,
+      },
+      ...(priceValue
+        ? {
+            default_price: {
+              base_price: priceValue,
+              currency,
+              is_default: true,
+            },
+          }
+        : {}),
+      ...(primaryImage ? { primary_image: primaryImage } : {}),
+    };
+  }
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
@@ -40,7 +95,7 @@ export function ServiceDetailPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Service Detail</p>
-            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>Service profile</h1>
+            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>{serviceName}</h1>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Button variant="ghost" onClick={() => navigate('/services')}>Back to services</Button>
@@ -81,7 +136,7 @@ export function ServiceDetailPage() {
                 </div>
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Price</p>
-                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.price != null ? `$${serviceQuery.data.price.toFixed(2)}` : '—'}</p>
+                  <p style={{ margin: '8px 0 0' }}>{formatPrice(serviceQuery.data.price, serviceQuery.data.currency ?? currency)}</p>
                 </div>
               </div>
 
@@ -89,6 +144,17 @@ export function ServiceDetailPage() {
                 <p style={{ margin: 0, color: '#6b7280' }}>Description</p>
                 <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.description ?? 'No description available.'}</p>
               </div>
+
+              {serviceQuery.data.image_url ? (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <p style={{ margin: 0, color: '#6b7280' }}>Image</p>
+                  <img
+                    src={resolveMediaAssetUrl(serviceQuery.data.image_url) ?? ''}
+                    alt={serviceQuery.data.name ?? 'Service'}
+                    style={{ width: '100%', maxWidth: 320, height: 180, objectFit: 'cover', borderRadius: 12, border: '1px solid #e5e7eb' }}
+                  />
+                </div>
+              ) : null}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
@@ -113,13 +179,42 @@ export function ServiceDetailPage() {
             event.preventDefault();
             setEditError(null);
             if (!serviceId) return;
-            updateService.mutate(
-              { serviceId, service: formState },
-              {
-                onSuccess: () => editDialog.hide(),
-                onError: (err) => setEditError(err.message ?? 'Failed to update service'),
-              },
-            );
+
+            void (async () => {
+              setSaving(true);
+              try {
+                let primaryImage: ServiceUpdateInput['primary_image'];
+                const serviceName = formState.display_name || formState.name;
+                const businessId = workspace.businessId;
+
+                if (imageFile) {
+                  if (!auth.token || !workspace.tenantId || !businessId) {
+                    throw new Error('Sign in and select a business to upload a service image.');
+                  }
+                  const mediaId = await uploadServiceImage({
+                    accessToken: auth.token,
+                    tenantId: workspace.tenantId,
+                    businessId,
+                    imageFile,
+                    serviceName,
+                  });
+                  primaryImage = { media_id: mediaId };
+                } else if (removeImage) {
+                  primaryImage = { clear: true };
+                }
+
+                await updateService.mutateAsync({
+                  serviceId,
+                  service: buildUpdatePayload(primaryImage),
+                });
+                editDialog.hide();
+                await serviceQuery.refetch();
+              } catch (err) {
+                setEditError(err instanceof Error ? err.message : 'Failed to update service');
+              } finally {
+                setSaving(false);
+              }
+            })();
           }}
           style={{ display: 'grid', gap: 16, marginTop: 12 }}
         >
@@ -136,22 +231,64 @@ export function ServiceDetailPage() {
             placeholder="Display name"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Duration (minutes)
+              <input
+                required
+                type="number"
+                min={15}
+                step={15}
+                value={formState.duration_minutes}
+                onChange={(event) => setFormState({ ...formState, duration_minutes: Number(event.target.value) })}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Price ({currency})
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={formState.price}
+                onChange={(event) => setFormState({ ...formState, price: event.target.value })}
+                placeholder="0.00"
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+          </div>
+          <select
+            value={formState.status}
+            onChange={(event) => setFormState({ ...formState, status: event.target.value })}
+            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
           <textarea
-            value={formState.description ?? ''}
+            value={formState.description}
             onChange={(event) => setFormState({ ...formState, description: event.target.value })}
             placeholder="Description"
             rows={4}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
-          <input
-            value={formState.status ?? ''}
-            onChange={(event) => setFormState({ ...formState, status: event.target.value })}
-            placeholder="Status"
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+          <LogoUploadField
+            value={imageFile}
+            onChange={(file) => {
+              setImageFile(file);
+              if (file) setRemoveImage(false);
+              if (!file && currentImageUrl) setRemoveImage(true);
+            }}
+            currentLogoUrl={removeImage ? null : currentImageUrl}
+            label="Service image (optional)"
+            hint="PNG, JPG, or WebP. Shown in the mobile app when customers browse services."
+            dropzoneTitle="Upload a service image"
+            dropzoneSubtitle="Click to choose an image file"
+            previewAlt="Service image preview"
           />
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" disabled={updateService.isPending}>
-              {updateService.isPending ? 'Saving…' : 'Save changes'}
+            <Button type="submit" variant="primary" disabled={updateService.isPending || saving}>
+              {updateService.isPending || saving ? 'Saving…' : 'Save changes'}
             </Button>
             <Button type="button" variant="neutral" onClick={editDialog.hide}>Cancel</Button>
           </div>

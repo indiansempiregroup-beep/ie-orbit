@@ -11,6 +11,8 @@ from apps.bookings.api.views import (
     BookingRescheduleView,
     BusinessAvailabilityView,
     StaffAvailabilityView,
+    StaffWeeklyScheduleBulkView,
+    StaffWeeklyScheduleListCreateView,
 )
 
 urlpatterns = [
@@ -36,4 +38,14 @@ urlpatterns = [
     path("availability", AvailabilityView.as_view(), name="availability"),
     path("availability/staff", StaffAvailabilityView.as_view(), name="availability-staff"),
     path("availability/business", BusinessAvailabilityView.as_view(), name="availability-business"),
+    path(
+        "staff-weekly-schedules",
+        StaffWeeklyScheduleListCreateView.as_view(),
+        name="staff-weekly-schedule-list-create",
+    ),
+    path(
+        "staff-weekly-schedules/bulk",
+        StaffWeeklyScheduleBulkView.as_view(),
+        name="staff-weekly-schedule-bulk",
+    ),
 ]

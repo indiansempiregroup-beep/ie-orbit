@@ -56,8 +56,8 @@ class Tenant(BaseModel):
     country = models.CharField(max_length=120, blank=True)
     state = models.CharField(max_length=120, blank=True)
     city = models.CharField(max_length=120, blank=True)
-    logo = models.URLField(blank=True)
-    favicon = models.URLField(blank=True)
+    logo = models.CharField(max_length=500, blank=True)
+    favicon = models.CharField(max_length=500, blank=True)
     primary_color = models.CharField(
         max_length=16,
         default="#0F6CBD",
@@ -120,9 +120,9 @@ class Branding(TenantModel):
     active_objects = TenantAwareManager()
 
     app_name = models.CharField(max_length=120)
-    logo = models.URLField(blank=True)
-    dark_logo = models.URLField(blank=True)
-    favicon = models.URLField(blank=True)
+    logo = models.CharField(max_length=500, blank=True)
+    dark_logo = models.CharField(max_length=500, blank=True)
+    favicon = models.CharField(max_length=500, blank=True)
     primary_color = models.CharField(
         max_length=16,
         default="#0F6CBD",

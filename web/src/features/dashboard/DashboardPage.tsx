@@ -26,9 +26,10 @@ export function DashboardPage() {
   const [searchActive, setSearchActive] = useState(false);
   const [showWelcome, setShowWelcome] = useState(() => {
     try {
-      return localStorage.getItem('ie:onboarding:show-welcome') === 'true';
+      if (localStorage.getItem('ie:onboarding:welcome-dismissed') === 'true') return false;
+      return true;
     } catch {
-      return false;
+      return true;
     }
   });
   const settings = useDashboardSettings();
@@ -227,14 +228,7 @@ export function DashboardPage() {
           <aside className="dashboard-sidebar">
             {showWelcome ? (
               <GettingStartedChecklist
-                onDismiss={() => {
-                  setShowWelcome(false);
-                  try {
-                    localStorage.removeItem('ie:onboarding:show-welcome');
-                  } catch {
-                    // ignore
-                  }
-                }}
+                onDismiss={() => setShowWelcome(false)}
               />
             ) : null}
 

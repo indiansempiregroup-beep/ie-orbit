@@ -10,7 +10,9 @@ from apps.services.models import Service, ServiceCategory, ServiceTag
 
 class ServiceRepository:
     def list_for_request(self, *, tenant: Any, user: Any) -> QuerySet[Service]:
-        queryset = Service.objects.require_tenant(tenant).select_related("business", "category")
+        queryset = Service.objects.require_tenant(tenant).select_related("business", "category").prefetch_related(
+            "images__media"
+        )
         if getattr(user, "is_superuser", False) or self._has_access(user):
             return queryset
         return queryset.filter(tenant__owner=user)

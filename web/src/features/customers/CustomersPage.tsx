@@ -1,17 +1,34 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCustomerCreate, useCustomerList, useCustomerSearch } from '../management/managementHooks';
+import {
+  useCustomerArchive,
+  useCustomerCreate,
+  useCustomerList,
+  useCustomerRestore,
+  useCustomerSearch,
+  useCustomerUpdate,
+} from '../management/managementHooks';
+import { AddressMapPreview } from '../../components/AddressMapPreview';
+import { BusinessWorkspaceSelect } from '../../components/BusinessWorkspaceSelect';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
+import { ManagementListToolbar } from '../../components/ManagementListToolbar';
+import { SubmitOverlay } from '../../components/SubmitOverlay';
+import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
 import { useDialog } from '../../hooks/useDialog';
+import { useSnackbar } from '../../hooks/useSnackbar';
 import { useTheme } from '../../hooks/useTheme';
 
 export function CustomersPage() {
   const theme = useTheme();
+  const snackbar = useSnackbar();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const createCustomer = useCustomerCreate();
+  const updateCustomer = useCustomerUpdate();
+  const archiveCustomer = useCustomerArchive();
+  const restoreCustomer = useCustomerRestore();
   const [formState, setFormState] = useState({
     business: '',
     customer_code: '',
@@ -21,11 +38,21 @@ export function CustomersPage() {
     email: '',
     phone_number: '',
     status: 'active',
+    send_registration_invite: true,
+    full_address: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
   const { data: customers, isLoading, error, refetch } = useCustomerList();
   const search = useCustomerSearch(searchTerm);
   const dialog = useDialog();
+  const handleBusinessFormChange = useBusinessFormChange((business) => {
+    setFormState((current) => ({ ...current, business }));
+  });
+  useActiveBusinessFormField(dialog.open, formState.business, (business) => {
+    setFormState((current) => ({ ...current, business }));
+  });
 
   const selectedData = searchTerm.trim() ? search.data ?? [] : customers ?? [];
 
@@ -36,8 +63,48 @@ export function CustomersPage() {
     return { total, active, inactive };
   }, [customers]);
 
+  function resetForm() {
+    setFormState({
+      business: '',
+      customer_code: '',
+      display_name: '',
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone_number: '',
+      status: 'active',
+      send_registration_invite: true,
+      full_address: '',
+      latitude: null,
+      longitude: null,
+    });
+  }
+
+  function useBrowserLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((position) => {
+      setFormState((current) => ({
+        ...current,
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      }));
+    });
+  }
+
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+      <SubmitOverlay
+        show={createCustomer.isPending || updateCustomer.isPending || archiveCustomer.isPending || restoreCustomer.isPending}
+        message={
+          createCustomer.isPending
+            ? 'Adding customer…'
+            : archiveCustomer.isPending
+              ? 'Archiving customer…'
+              : restoreCustomer.isPending
+                ? 'Restoring customer…'
+                : 'Updating customer…'
+        }
+      />
       <div style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gap: 24 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
@@ -67,23 +134,21 @@ export function CustomersPage() {
         </div>
 
         <section style={{ display: 'grid', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search customers by name, email or phone"
-              style={{ flex: 1, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: theme.resolved === 'dark' ? '#111827' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
-              aria-label="Search customers"
-            />
-            <Button variant="ghost" onClick={() => setSearchTerm('')}>Clear</Button>
-          </div>
+          <ManagementListToolbar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Search customers by name, email or phone"
+            searchAriaLabel="Search customers"
+            onClear={() => setSearchTerm('')}
+          />
 
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 0.8fr 1.2fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
               <span>Name</span>
               <span>Email</span>
               <span>Phone</span>
               <span>Status</span>
+              <span>Actions</span>
             </div>
             <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
               {isLoading || search.isLoading ? (
@@ -93,56 +158,158 @@ export function CustomersPage() {
               ) : selectedData.length === 0 ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No customers found.</div>
               ) : (
-                selectedData.map((customer) => (
-                  <div
-                    key={customer.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => customer.id && navigate(`/customers/${customer.id}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        customer.id && navigate(`/customers/${customer.id}`);
-                      }
-                    }}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1.5fr 1fr 1fr 1fr',
-                      padding: '16px 20px',
-                      background: theme.resolved === 'dark' ? '#111827' : '#fff',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span>{customer.full_name ?? 'Unknown customer'}</span>
-                    <span>{customer.email ?? '—'}</span>
-                    <span>{customer.phone_number ?? '—'}</span>
-                    <span style={{ color: customer.status === 'active' ? '#10b981' : '#6b7280' }}>{customer.status ?? 'Unknown'}</span>
-                  </div>
-                ))
+                selectedData.map((customer) => {
+                  const isActive = customer.status === 'active';
+                  const isArchived = customer.status === 'archived';
+                  return (
+                    <div
+                      key={customer.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1.5fr 1fr 1fr 0.8fr 1.2fr',
+                        padding: '16px 20px',
+                        background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => customer.id && navigate(`/customers/${customer.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            customer.id && navigate(`/customers/${customer.id}`);
+                          }
+                        }}
+                        style={{ cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        {customer.full_name ?? 'Unknown customer'}
+                      </span>
+                      <span>{customer.email ?? '—'}</span>
+                      <span>{customer.phone_number ?? '—'}</span>
+                      <span style={{ color: isActive ? '#10b981' : '#6b7280' }}>{customer.status ?? 'Unknown'}</span>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {isArchived ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            loading={restoreCustomer.isPending}
+                            loadingLabel="Activating…"
+                            onClick={() =>
+                              customer.id &&
+                              restoreCustomer.mutate(customer.id, {
+                                onSuccess: () => snackbar.push('Customer activated.', 'success'),
+                                onError: (error) => snackbar.push(error.message, 'error'),
+                              })
+                            }
+                          >
+                            Activate
+                          </Button>
+                        ) : isActive ? (
+                          <Button
+                            type="button"
+                            variant="neutral"
+                            loading={updateCustomer.isPending}
+                            loadingLabel="Deactivating…"
+                            onClick={() =>
+                              customer.id &&
+                              updateCustomer.mutate(
+                                { customerId: customer.id, customer: { status: 'inactive' } },
+                                {
+                                  onSuccess: () => snackbar.push('Customer deactivated.', 'success'),
+                                  onError: (error) => snackbar.push(error.message, 'error'),
+                                },
+                              )
+                            }
+                          >
+                            Deactivate
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            loading={updateCustomer.isPending}
+                            loadingLabel="Activating…"
+                            onClick={() =>
+                              customer.id &&
+                              updateCustomer.mutate(
+                                { customerId: customer.id, customer: { status: 'active' } },
+                                {
+                                  onSuccess: () => snackbar.push('Customer activated.', 'success'),
+                                  onError: (error) => snackbar.push(error.message, 'error'),
+                                },
+                              )
+                            }
+                          >
+                            Activate
+                          </Button>
+                        )}
+                        {!isArchived && isActive ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            loading={archiveCustomer.isPending}
+                            loadingLabel="Archiving…"
+                            onClick={() =>
+                              customer.id &&
+                              archiveCustomer.mutate(customer.id, {
+                                onSuccess: () => snackbar.push('Customer archived.', 'success'),
+                                onError: (error) => snackbar.push(error.message, 'error'),
+                              })
+                            }
+                          >
+                            Archive
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </Card>
         </section>
       </div>
 
-      <Dialog open={dialog.open} onClose={dialog.hide} title="Add customer" labelledBy="add-customer-dialog">
+      <Dialog
+        open={dialog.open}
+        onClose={dialog.hide}
+        title="Add customer"
+        labelledBy="add-customer-dialog"
+        busy={createCustomer.isPending}
+        busyMessage="Adding customer…"
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
-            createCustomer.mutate(formState, {
+            createCustomer.mutate(
+              {
+                business: formState.business,
+                customer_code: formState.customer_code,
+                display_name: formState.display_name,
+                first_name: formState.first_name,
+                last_name: formState.last_name,
+                email: formState.email,
+                phone_number: formState.phone_number,
+                status: formState.status,
+                send_registration_invite: formState.send_registration_invite,
+                default_address: formState.full_address.trim()
+                  ? {
+                      full_address: formState.full_address,
+                      latitude: formState.latitude,
+                      longitude: formState.longitude,
+                      is_default: true,
+                    }
+                  : undefined,
+              },
+              {
               onSuccess: () => {
+                snackbar.push('Customer added.', 'success');
                 dialog.hide();
-                setFormState({
-                  business: '',
-                  customer_code: '',
-                  display_name: '',
-                  first_name: '',
-                  last_name: '',
-                  email: '',
-                  phone_number: '',
-                  status: 'active',
-                });
+                resetForm();
               },
               onError: (err) => {
                 setCreationError(err.message ?? 'Failed to create customer');
@@ -151,12 +318,10 @@ export function CustomersPage() {
           }}
           style={{ display: 'grid', gap: 16, marginTop: 12 }}
         >
-          <input
-            required
+          <BusinessWorkspaceSelect
             value={formState.business}
-            onChange={(event) => setFormState({ ...formState, business: event.target.value })}
-            placeholder="Business ID"
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            onChange={handleBusinessFormChange}
+            showManageLink={false}
           />
           <input
             required
@@ -185,11 +350,35 @@ export function CustomersPage() {
             placeholder="Phone number"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
+          <label style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={formState.send_registration_invite}
+              onChange={(event) => setFormState({ ...formState, send_registration_invite: event.target.checked })}
+            />
+            <span>Send registration invite email</span>
+          </label>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <label style={{ color: '#6b7280' }}>Full address</label>
+              <Button type="button" variant="ghost" onClick={useBrowserLocation}>Use my location</Button>
+            </div>
+            <textarea
+              value={formState.full_address}
+              onChange={(event) => setFormState({ ...formState, full_address: event.target.value })}
+              placeholder="House / street / area / city / pin code"
+              rows={4}
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+            <AddressMapPreview latitude={formState.latitude} longitude={formState.longitude} height={180} />
+          </div>
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" disabled={createCustomer.isPending}>
-              {createCustomer.isPending ? 'Creating…' : 'Create customer'}
+            <Button type="submit" variant="primary" loading={createCustomer.isPending} loadingLabel="Creating…">
+              Create customer
             </Button>
-            <Button type="button" variant="neutral" onClick={dialog.hide}>Cancel</Button>
+            <Button type="button" variant="neutral" onClick={dialog.hide} disabled={createCustomer.isPending}>
+              Cancel
+            </Button>
           </div>
           {creationError ? <div style={{ color: '#dc2626' }}>{creationError}</div> : null}
         </form>

@@ -102,33 +102,55 @@ class AvailabilityService:
         staff_id: Any | None,
         exclude_booking: Any | None = None,
     ) -> bool:
-        if self.repository.conflicts(
+        target_date = start_at.date()
+        if self._closed_for_business(tenant=tenant, business=business, target_date=target_date):
+            return False
+        if staff_id and self._staff_on_leave(
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            target_date=target_date,
+        ):
+            return False
+
+        windows = (
+            self._staff_windows(
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+                target_date=target_date,
+            )
+            if staff_id
+            else self._business_windows(tenant=tenant, business=business, target_date=target_date)
+        )
+        capacity = self._window_capacity(windows=windows, start_at=start_at, end_at=end_at)
+        if capacity is None:
+            return False
+
+        conflict_count = self.repository.conflicts(
             tenant=tenant,
             business=business,
             staff_id=staff_id,
             start_at=start_at,
             end_at=end_at,
             exclude_booking=exclude_booking,
-        ).exists():
-            return False
-        if staff_id:
-            slots = self.staff_slots(
-                tenant=tenant,
-                business=business,
-                staff_id=staff_id,
-                target_date=start_at.date(),
-                duration_minutes=int((end_at - start_at).total_seconds() / 60),
-                interval_minutes=1,
-            )
-        else:
-            slots = self.business_slots(
-                tenant=tenant,
-                business=business,
-                target_date=start_at.date(),
-                duration_minutes=int((end_at - start_at).total_seconds() / 60),
-                interval_minutes=1,
-            )
-        return any(slot.start_at <= start_at and slot.end_at >= end_at for slot in slots)
+        ).count()
+        return conflict_count < capacity
+
+    def _window_capacity(
+        self,
+        *,
+        windows: list[tuple[time, time, int]],
+        start_at: datetime,
+        end_at: datetime,
+    ) -> int | None:
+        target_date = start_at.date()
+        for window_start, window_end, capacity in windows:
+            window_open = timezone.make_aware(datetime.combine(target_date, window_start))
+            window_close = timezone.make_aware(datetime.combine(target_date, window_end))
+            if start_at >= window_open and end_at <= window_close:
+                return capacity
+        return None
 
     def _business_windows(
         self, *, tenant: Any, business: Any, target_date: date

@@ -1,17 +1,29 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useServiceCreate, useServiceList, useServiceSearch } from '../management/managementHooks';
+import { useServiceCreate, useServiceList, useServiceSearch, useServiceUpdate } from '../management/managementHooks';
+import { BusinessWorkspaceSelect } from '../../components/BusinessWorkspaceSelect';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
+import { LogoUploadField } from '../../components/LogoUploadField';
+import { ManagementListToolbar } from '../../components/ManagementListToolbar';
+import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
+import { useAuth } from '../../hooks/useAuth';
 import { useDialog } from '../../hooks/useDialog';
 import { useTheme } from '../../hooks/useTheme';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
+import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServicesPage() {
   const theme = useTheme();
+  const auth = useAuth();
+  const workspace = useWorkspace();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const createService = useServiceCreate();
+  const updateService = useServiceUpdate();
+  const currency = workspace.activeBusiness?.currency ?? 'USD';
   const [formState, setFormState] = useState({
     business: '',
     service_code: '',
@@ -19,11 +31,21 @@ export function ServicesPage() {
     display_name: '',
     status: 'active',
     short_description: '',
+    duration_minutes: 30,
+    price: '',
   });
   const [creationError, setCreationError] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const { data: services, isLoading, error, refetch } = useServiceList();
   const search = useServiceSearch(searchTerm);
   const dialog = useDialog();
+  const handleBusinessFormChange = useBusinessFormChange((business) => {
+    setFormState((current) => ({ ...current, business }));
+  });
+  useActiveBusinessFormField(dialog.open, formState.business, (business) => {
+    setFormState((current) => ({ ...current, business }));
+  });
 
   const selectedData = searchTerm.trim() ? search.data ?? [] : services ?? [];
 
@@ -33,6 +55,73 @@ export function ServicesPage() {
     const inactive = total - active;
     return { total, active, inactive };
   }, [services]);
+
+  function resetForm() {
+    setFormState({
+      business: '',
+      service_code: '',
+      name: '',
+      display_name: '',
+      status: 'active',
+      short_description: '',
+      duration_minutes: 30,
+      price: '',
+    });
+    setImageFile(null);
+  }
+
+  function formatPrice(service: { price?: number; currency?: string | null }) {
+    if (service.price == null) return '—';
+    const code = service.currency ?? currency;
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(service.price);
+    } catch {
+      return `${code} ${service.price.toFixed(2)}`;
+    }
+  }
+
+  const tableColumns = '56px 2fr 1fr 1fr 0.8fr 1.2fr';
+
+  function ServiceThumbnail({ name, imageUrl }: { name: string; imageUrl?: string | null }) {
+    const src = resolveMediaAssetUrl(imageUrl);
+    if (src) {
+      return (
+        <img
+          src={src}
+          alt={name}
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 10,
+            objectFit: 'cover',
+            border: '1px solid #e5e7eb',
+            background: theme.resolved === 'dark' ? '#1f2937' : '#f3f4f6',
+          }}
+        />
+      );
+    }
+
+    return (
+      <div
+        aria-hidden
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 10,
+          border: '1px solid #e5e7eb',
+          background: theme.resolved === 'dark' ? '#1f2937' : '#f3f4f6',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#9ca3af',
+          fontSize: 18,
+          fontWeight: 700,
+        }}
+      >
+        {(name.trim()[0] ?? '?').toUpperCase()}
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
@@ -65,23 +154,22 @@ export function ServicesPage() {
         </div>
 
         <section style={{ display: 'grid', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search services by name, description or status"
-              style={{ flex: 1, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: theme.resolved === 'dark' ? '#111827' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
-              aria-label="Search services"
-            />
-            <Button variant="ghost" onClick={() => setSearchTerm('')}>Clear</Button>
-          </div>
+          <ManagementListToolbar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Search services by name, description or status"
+            searchAriaLabel="Search services"
+            onClear={() => setSearchTerm('')}
+          />
 
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: tableColumns, padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
+              <span aria-hidden />
               <span>Service</span>
               <span>Duration</span>
               <span>Price</span>
               <span>Status</span>
+              <span>Actions</span>
             </div>
             <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
               {isLoading || search.isLoading ? (
@@ -91,32 +179,58 @@ export function ServicesPage() {
               ) : selectedData.length === 0 ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No services found.</div>
               ) : (
-                selectedData.map((service) => (
-                  <div
-                    key={service.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => service.id && navigate(`/services/${service.id}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        service.id && navigate(`/services/${service.id}`);
-                      }
-                    }}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 1fr 1fr 1fr',
-                      padding: '16px 20px',
-                      background: theme.resolved === 'dark' ? '#111827' : '#fff',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span>{service.name ?? 'Untitled service'}</span>
-                    <span>{service.duration_minutes ? `${service.duration_minutes} min` : '—'}</span>
-                    <span>{service.price != null ? `$${service.price.toFixed(2)}` : '—'}</span>
-                    <span style={{ color: service.status === 'active' ? '#10b981' : '#6b7280' }}>{service.status ?? 'Unknown'}</span>
-                  </div>
-                ))
+                selectedData.map((service) => {
+                  const isActive = service.status === 'active';
+                  const serviceName = service.name ?? 'Untitled service';
+                  return (
+                    <div
+                      key={service.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: tableColumns,
+                        padding: '16px 20px',
+                        background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <ServiceThumbnail name={serviceName} imageUrl={service.image_url} />
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => service.id && navigate(`/services/${service.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            service.id && navigate(`/services/${service.id}`);
+                          }
+                        }}
+                        style={{ cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        {serviceName}
+                      </span>
+                      <span>{service.duration_minutes ? `${service.duration_minutes} min` : '—'}</span>
+                      <span>{formatPrice(service)}</span>
+                      <span style={{ color: isActive ? '#10b981' : '#6b7280' }}>{service.status ?? 'Unknown'}</span>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <Button
+                          type="button"
+                          variant={isActive ? 'neutral' : 'primary'}
+                          disabled={updateService.isPending}
+                          onClick={() =>
+                            service.id &&
+                            updateService.mutate({
+                              serviceId: service.id,
+                              service: { status: isActive ? 'inactive' : 'active' },
+                            })
+                          }
+                        >
+                          {isActive ? 'Deactivate' : 'Activate'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </Card>
@@ -128,31 +242,66 @@ export function ServicesPage() {
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
-            createService.mutate(formState, {
-              onSuccess: () => {
-                dialog.hide();
-                setFormState({
-                  business: '',
-                  service_code: '',
-                  name: '',
-                  display_name: '',
-                  status: 'active',
-                  short_description: '',
+            const priceValue = formState.price.trim();
+            const serviceName = formState.display_name || formState.name;
+
+            void (async () => {
+              setSubmitting(true);
+              try {
+                let primaryImage: { media_id: string } | undefined;
+                const businessId = formState.business || workspace.businessId;
+                if (imageFile) {
+                  if (!auth.token || !workspace.tenantId || !businessId) {
+                    throw new Error('Sign in and select a business to upload a service image.');
+                  }
+                  const mediaId = await uploadServiceImage({
+                    accessToken: auth.token,
+                    tenantId: workspace.tenantId,
+                    businessId,
+                    imageFile,
+                    serviceName,
+                  });
+                  primaryImage = { media_id: mediaId };
+                }
+
+                await createService.mutateAsync({
+                  business: formState.business,
+                  service_code: formState.service_code,
+                  name: formState.name,
+                  display_name: serviceName,
+                  status: formState.status,
+                  short_description: formState.short_description,
+                  default_duration: {
+                    duration_minutes: formState.duration_minutes,
+                    is_default: true,
+                  },
+                  ...(priceValue
+                    ? {
+                        default_price: {
+                          base_price: priceValue,
+                          currency,
+                          is_default: true,
+                        },
+                      }
+                    : {}),
+                  ...(primaryImage ? { primary_image: primaryImage } : {}),
                 });
-              },
-              onError: (err) => {
-                setCreationError(err.message ?? 'Failed to create service');
-              },
-            });
+
+                dialog.hide();
+                resetForm();
+              } catch (err) {
+                setCreationError(err instanceof Error ? err.message : 'Failed to create service');
+              } finally {
+                setSubmitting(false);
+              }
+            })();
           }}
           style={{ display: 'grid', gap: 16, marginTop: 12 }}
         >
-          <input
-            required
+          <BusinessWorkspaceSelect
             value={formState.business}
-            onChange={(event) => setFormState({ ...formState, business: event.target.value })}
-            placeholder="Business ID"
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            onChange={handleBusinessFormChange}
+            showManageLink={false}
           />
           <input
             required
@@ -174,6 +323,40 @@ export function ServicesPage() {
             placeholder="Display name"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Duration (minutes)
+              <input
+                required
+                type="number"
+                min={15}
+                step={15}
+                value={formState.duration_minutes}
+                onChange={(event) => setFormState({ ...formState, duration_minutes: Number(event.target.value) })}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Price ({currency})
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={formState.price}
+                onChange={(event) => setFormState({ ...formState, price: event.target.value })}
+                placeholder="0.00"
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+          </div>
+          <select
+            value={formState.status}
+            onChange={(event) => setFormState({ ...formState, status: event.target.value })}
+            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
           <textarea
             value={formState.short_description}
             onChange={(event) => setFormState({ ...formState, short_description: event.target.value })}
@@ -181,9 +364,18 @@ export function ServicesPage() {
             rows={4}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
+          <LogoUploadField
+            value={imageFile}
+            onChange={setImageFile}
+            label="Service image (optional)"
+            hint="PNG, JPG, or WebP. Shown in the mobile app when customers browse services."
+            dropzoneTitle="Upload a service image"
+            dropzoneSubtitle="Click to choose an image file"
+            previewAlt="Service image preview"
+          />
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" disabled={createService.isPending}>
-              {createService.isPending ? 'Creating…' : 'Create service'}
+            <Button type="submit" variant="primary" disabled={createService.isPending || submitting}>
+              {createService.isPending || submitting ? 'Creating…' : 'Create service'}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide}>Cancel</Button>
           </div>

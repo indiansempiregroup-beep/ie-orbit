@@ -46,6 +46,8 @@ class CustomerPreferencesSerializer(serializers.ModelSerializer):
 
 
 class CustomerAddressSerializer(serializers.ModelSerializer):
+    full_address = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
     class Meta:
         model = CustomerAddress
         fields = [
@@ -60,6 +62,7 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "is_default",
+            "full_address",
         ]
         read_only_fields = ["id"]
 
@@ -81,6 +84,7 @@ class CustomerNoteSerializer(serializers.ModelSerializer):
 class CustomerSerializer(serializers.ModelSerializer):
     profile = CustomerProfileSerializer(required=False)
     preferences = CustomerPreferencesSerializer(required=False)
+    default_address = CustomerAddressSerializer(required=False, write_only=True)
     addresses = CustomerAddressSerializer(many=True, read_only=True)
     communication_channels = CustomerCommunicationPreferenceSerializer(many=True, read_only=True)
     notes = CustomerNoteSerializer(many=True, read_only=True)
@@ -108,6 +112,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "metadata",
             "profile",
             "preferences",
+            "default_address",
             "addresses",
             "communication_channels",
             "notes",

@@ -1,10 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { Select } from '../../components/Select';
+import { ColorInput } from '../../components/ColorInput';
+import { LogoUploadField } from '../../components/LogoUploadField';
 import { WizardShell } from './components/WizardShell';
 import { PasswordStrengthIndicator } from '../auth/components/PasswordStrengthIndicator';
 import { useOnboardingDraft } from './hooks/useOnboardingDraft';
@@ -50,6 +52,8 @@ export function RegisterWizard() {
   const [provisionError, setProvisionError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
   const [brandingLogoFile, setBrandingLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const draftLoadedRef = useRef(false);
 
   const currentStep = REGISTER_WIZARD_STEPS[stepIndex]?.id ?? 'business';
 
@@ -63,7 +67,18 @@ export function RegisterWizard() {
   const values = watch();
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!brandingLogoFile) {
+      setLogoPreviewUrl(null);
+      return undefined;
+    }
+    const objectUrl = URL.createObjectURL(brandingLogoFile);
+    setLogoPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [brandingLogoFile]);
+
+  useEffect(() => {
+    if (!hydrated || draftLoadedRef.current) return;
+    draftLoadedRef.current = true;
     const draft = loadDraft();
     const detectedTz = detectDefaultTimezone();
     const timezone = TIMEZONES.includes(detectedTz as (typeof TIMEZONES)[number])
@@ -159,9 +174,11 @@ export function RegisterWizard() {
         <Input label="Display name" {...register('displayName')} />
         <Input label="Email" type="email" {...register('email')} autoComplete="email" />
         <Input label="Mobile" {...register('mobile')} autoComplete="tel" />
-        <Input label="Password" type="password" {...register('password')} autoComplete="new-password" />
-        <PasswordStrengthIndicator password={values.password} />
-        {errors.password ? <span className="field-error">{errors.password.message}</span> : null}
+        <div className="wizard-password-field">
+          <Input label="Password" type="password" {...register('password')} autoComplete="new-password" />
+          <PasswordStrengthIndicator password={values.password} />
+          {errors.password ? <span className="field-error">{errors.password.message}</span> : null}
+        </div>
         <Input label="Confirm password" type="password" {...register('confirmPassword')} autoComplete="new-password" />
         {errors.confirmPassword ? <span className="field-error">{errors.confirmPassword.message}</span> : null}
         <label className="auth-checkbox">
@@ -266,8 +283,16 @@ export function RegisterWizard() {
         </label>
         {!values.skipBranding ? (
           <>
-            <Input label="Primary color" type="color" {...register('primaryColor')} />
-            <Input label="Secondary color" type="color" {...register('secondaryColor')} />
+            <ColorInput
+              label="Primary color"
+              value={values.primaryColor}
+              onChange={(color) => setValue('primaryColor', color, { shouldValidate: true, shouldDirty: true })}
+            />
+            <ColorInput
+              label="Secondary color"
+              value={values.secondaryColor}
+              onChange={(color) => setValue('secondaryColor', color, { shouldValidate: true, shouldDirty: true })}
+            />
             <Select
               label="Theme"
               options={[
@@ -277,22 +302,11 @@ export function RegisterWizard() {
               ]}
               {...register('theme')}
             />
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span className="wizard-section-label">Logo (optional)</span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  setBrandingLogoFile(file);
-                }}
-              />
-            </label>
-            {brandingLogoFile ? (
-              <p className="wizard-hint">Selected logo: {brandingLogoFile.name}</p>
-            ) : (
-              <p className="wizard-hint">Upload logo now to apply branding during provisioning.</p>
-            )}
+            <LogoUploadField
+              value={brandingLogoFile}
+              onChange={setBrandingLogoFile}
+              accentColor={values.primaryColor}
+            />
           </>
         ) : null}
       </div>
@@ -334,7 +348,12 @@ export function RegisterWizard() {
             <Button type="button" variant="ghost" onClick={() => jumpToStep('branding')}>Edit</Button>
           </div>
           <p>{values.skipBranding ? 'Skipped' : `${values.primaryColor} / ${values.secondaryColor} (${values.theme})`}</p>
-          {!values.skipBranding && brandingLogoFile ? <p>Logo: {brandingLogoFile.name}</p> : null}
+          {!values.skipBranding && brandingLogoFile && logoPreviewUrl ? (
+            <div className="wizard-review-logo">
+              <img src={logoPreviewUrl} alt={`${brandingLogoFile.name} preview`} />
+              <span>{brandingLogoFile.name}</span>
+            </div>
+          ) : null}
         </section>
       </div>
     );

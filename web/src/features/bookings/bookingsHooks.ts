@@ -7,6 +7,8 @@ import {
   createBooking,
   getAvailability,
   listBookings,
+  confirmBooking,
+  cancelBooking,
   type AvailabilitySlot,
   type Booking,
   type BookingCreateInput,
@@ -28,6 +30,24 @@ export function useBookingCreation() {
   const queryClient = useQueryClient();
   return useMutation<Booking, Error, BookingCreateInput>({
     mutationFn: (booking) => createBooking(client, booking),
+    onSuccess: () => invalidateWorkspaceData(queryClient),
+  });
+}
+
+export function useConfirmBooking() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation<Booking, Error, string>({
+    mutationFn: (bookingId) => confirmBooking(client, bookingId),
+    onSuccess: () => invalidateWorkspaceData(queryClient),
+  });
+}
+
+export function useCancelBooking() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation<Booking, Error, string>({
+    mutationFn: (bookingId) => cancelBooking(client, bookingId),
     onSuccess: () => invalidateWorkspaceData(queryClient),
   });
 }

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { Button } from '../../components/Button';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useEmailVerification } from '../../hooks/useEmailVerification';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
 type VerifyEmailPageProps = {
@@ -13,9 +14,10 @@ type VerifyEmailPageProps = {
 export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
   usePageMeta({ title: 'Verify email — AppointIE' });
   const auth = useAuthContext();
+  const navigate = useNavigate();
+  const { resendState, message: resendMessage, resendVerification } = useEmailVerification();
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [resendState, setResendState] = useState<'idle' | 'loading' | 'sent'>('idle');
 
   useEffect(() => {
     if (!token) return;
@@ -29,6 +31,7 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
         if (!cancelled) {
           setStatus('success');
           setMessage(`Email verified for ${response.data.email}.`);
+          await auth.restore();
         }
       } catch (err) {
         if (!cancelled) {
@@ -41,34 +44,34 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [token, auth.token]);
-
-  async function handleResend() {
-    if (!auth.token) {
-      setMessage('Sign in to resend verification email.');
-      return;
-    }
-    setResendState('loading');
-    try {
-      const client = createAuthenticatedClient(auth.token);
-      await client.auth.resendVerification();
-      setResendState('sent');
-      setMessage('Verification email sent.');
-    } catch (err) {
-      setResendState('idle');
-      setMessage(getApiErrorMessage(err, 'Unable to resend verification email.'));
-    }
-  }
+  }, [token, auth]);
 
   return (
     <>
       <h1>Email verification</h1>
       {!token ? (
         <>
-          <p className="auth-lead">Check your inbox for a verification link, or resend the email.</p>
-          <Button variant="primary" onClick={handleResend} disabled={resendState === 'loading'}>
-            {resendState === 'loading' ? 'Sending…' : resendState === 'sent' ? 'Email sent' : 'Resend verification'}
-          </Button>
+          <p className="auth-lead">
+            {auth.user?.email
+              ? `We sent a verification link to ${auth.user.email}. Open the link in your email, or resend it below.`
+              : 'Check your inbox for a verification link, or resend the email after signing in.'}
+          </p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
+            <Button
+              variant="primary"
+              type="button"
+              onClick={() => void resendVerification()}
+              disabled={resendState === 'loading' || resendState === 'sent'}
+            >
+              {resendState === 'loading' ? 'Sending…' : resendState === 'sent' ? 'Email sent' : 'Resend verification email'}
+            </Button>
+            {auth.token ? (
+              <Button variant="ghost" type="button" onClick={() => navigate('/profile')}>
+                Back to profile
+              </Button>
+            ) : null}
+          </div>
+          {resendMessage ? <p role="status" style={{ marginTop: 16 }}>{resendMessage}</p> : null}
           {!auth.token ? (
             <p className="auth-links">
               <Link to="/auth">Sign in to resend</Link>
@@ -77,12 +80,31 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
         </>
       ) : status === 'loading' ? (
         <p role="status">Verifying your email…</p>
+      ) : status === 'success' ? (
+        <div style={{ display: 'grid', gap: 16 }}>
+          <p role="status">{message}</p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Button variant="primary" type="button" onClick={() => navigate('/profile')}>
+              View profile
+            </Button>
+            <Button variant="ghost" type="button" onClick={() => navigate('/dashboard')}>
+              Go to dashboard
+            </Button>
+          </div>
+        </div>
       ) : (
-        <p role={status === 'error' ? 'alert' : 'status'}>{message}</p>
+        <div style={{ display: 'grid', gap: 16 }}>
+          <p role="alert">{message}</p>
+          <Button variant="primary" type="button" onClick={() => void resendVerification()}>
+            Resend verification email
+          </Button>
+        </div>
       )}
-      <p className="auth-links">
-        <Link to="/dashboard">Go to dashboard</Link>
-      </p>
+      {!token || status === 'idle' ? (
+        <p className="auth-links">
+          <Link to="/dashboard">Go to dashboard</Link>
+        </p>
+      ) : null}
     </>
   );
 }

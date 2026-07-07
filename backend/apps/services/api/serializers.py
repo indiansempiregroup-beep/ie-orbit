@@ -60,10 +60,36 @@ class TaxConfigurationSerializer(serializers.ModelSerializer):
 
 
 class ServiceImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ServiceImage
-        fields = ["id", "media", "alt_text", "display_order", "is_primary"]
-        read_only_fields = ["id"]
+        fields = ["id", "media", "alt_text", "display_order", "is_primary", "image_url", "thumbnail_url"]
+        read_only_fields = ["id", "image_url", "thumbnail_url"]
+
+    def get_image_url(self, obj: ServiceImage) -> str:
+        media = getattr(obj, "media", None)
+        if media is None:
+            return ""
+        return str(media.metadata.get("public_url") or media.metadata.get("private_url") or "")
+
+    def get_thumbnail_url(self, obj: ServiceImage) -> str:
+        media = getattr(obj, "media", None)
+        if media is None:
+            return ""
+        return str(
+            media.metadata.get("thumbnail_url")
+            or media.metadata.get("public_url")
+            or media.metadata.get("private_url")
+            or ""
+        )
+
+
+class ServicePrimaryImageSerializer(serializers.Serializer):
+    media_id = serializers.UUIDField(required=False)
+    alt_text = serializers.CharField(required=False, allow_blank=True, max_length=160)
+    clear = serializers.BooleanField(required=False, default=False)
 
 
 class ServiceCategorySerializer(serializers.ModelSerializer):
@@ -90,6 +116,7 @@ class ServiceCategorySerializer(serializers.ModelSerializer):
 class ServiceSerializer(serializers.ModelSerializer):
     default_duration = ServiceDurationSerializer(required=False, write_only=True)
     default_price = ServicePricingSerializer(required=False, write_only=True)
+    primary_image = ServicePrimaryImageSerializer(required=False, write_only=True)
     durations = ServiceDurationSerializer(many=True, read_only=True)
     prices = ServicePricingSerializer(many=True, read_only=True)
     variants = ServiceVariantSerializer(many=True, read_only=True)
@@ -121,6 +148,7 @@ class ServiceSerializer(serializers.ModelSerializer):
             "metadata",
             "default_duration",
             "default_price",
+            "primary_image",
             "durations",
             "prices",
             "variants",

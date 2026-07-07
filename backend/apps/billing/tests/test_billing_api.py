@@ -521,6 +521,63 @@ def test_billing_platform_ops_summary_for_platform_admin(api_client: APIClient) 
 
 
 @pytest.mark.django_db
+def test_billing_platform_subscriptions_requires_platform_role(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-platform-subscriptions"))
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_billing_platform_subscriptions_for_platform_admin(api_client: APIClient) -> None:
+    user = User.objects.create_user(
+        email="platform-admin-subs@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-platform-subscriptions"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "total_subscriptions" in payload
+    assert "by_status" in payload
+    assert "by_product" in payload
+
+
+@pytest.mark.django_db
+def test_billing_platform_monitoring_and_audit_feed_for_platform_admin(api_client: APIClient) -> None:
+    user = User.objects.create_user(
+        email="platform-admin-monitor@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    AuditLogEntry.objects.create(
+        tenant_id=tenant_id,
+        action="billing.reconciliation.run",
+        resource_type="billing_checkout_session",
+        metadata={},
+    )
+    monitor_response = api_client.get(reverse("billing-platform-monitoring"), {"window_hours": 24})
+    assert monitor_response.status_code == 200
+    monitor_payload = monitor_response.json()["data"]
+    assert "failed_events" in monitor_payload
+    assert "tenants_impacted" in monitor_payload
+
+    feed_response = api_client.get(reverse("billing-platform-audit-feed"), {"limit": 20})
+    assert feed_response.status_code == 200
+    feed_payload = feed_response.json()["data"]
+    assert "rows" in feed_payload
+
+
+@pytest.mark.django_db
 def test_send_billing_ops_digest_task(monkeypatch: pytest.MonkeyPatch, settings) -> None:
     user = User.objects.create_user(
         email="ops-digest-owner@example.com",

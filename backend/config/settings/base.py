@@ -191,6 +191,13 @@ IAM_SETTINGS = {
 REDIS_URL = ENV.redis_url
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "socket_connect_timeout": 5,
+    "socket_timeout": 5,
+    "retry_on_timeout": True,
+    "health_check_interval": 30,
+}
+CELERY_REDIS_BACKEND_HEALTH_CHECK_INTERVAL = 30
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60

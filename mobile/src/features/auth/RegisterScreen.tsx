@@ -1,0 +1,143 @@
+import React, { useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useAuth } from '../../contexts/AuthContext';
+import { useBootstrap } from '../../contexts/BootstrapContext';
+import { BrandMark } from '../../components/BrandMark';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
+import type { AuthStackParamList } from '../../navigation/types';
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
+
+const perks = [
+  'Book appointments in seconds',
+  'Manage your visit history',
+  'Get reminders before each visit',
+];
+
+export function RegisterScreen({ navigation }: Props) {
+  const { register } = useAuth();
+  const { branding } = useBootstrap();
+  const primary = branding?.primaryColor ?? colors.primary;
+
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function onSubmit() {
+    setError('');
+    if (!email.trim() || !password) {
+      setError('Email and password are required.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await register({
+        email: email.trim(),
+        password,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        phone_number: phone.trim() || undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create account.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <BrandMark />
+        <Text style={styles.title}>Create your account</Text>
+        <Text style={styles.subtitle}>Join {branding?.appName ?? 'us'} to book and manage appointments.</Text>
+
+        <View style={styles.form}>
+          <View style={styles.nameRow}>
+            <View style={styles.nameField}>
+              <Input label="First name" placeholder="Sarah" value={firstName} onChangeText={setFirstName} />
+            </View>
+            <View style={styles.nameField}>
+              <Input label="Last name" placeholder="Mitchell" value={lastName} onChangeText={setLastName} />
+            </View>
+          </View>
+          <Input
+            label="Email"
+            leftIcon="mail"
+            placeholder="you@example.com"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
+          <Input
+            label="Phone (optional)"
+            leftIcon="phone"
+            placeholder="+1 555 000 0000"
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+          />
+          <Input
+            label="Password"
+            leftIcon="lock"
+            placeholder="Min. 8 characters"
+            secureTextEntry
+            hint="Use a mix of letters, numbers, and symbols"
+            value={password}
+            onChangeText={setPassword}
+          />
+
+          <View style={styles.perks}>
+            {perks.map((perk) => (
+              <View key={perk} style={styles.perkRow}>
+                <Feather name="check-circle" size={14} color={primary} />
+                <Text style={styles.perkText}>{perk}</Text>
+              </View>
+            ))}
+          </View>
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <Button label="Create account" size="lg" fullWidth loading={submitting} primaryColor={primary} onPress={onSubmit} />
+        </View>
+
+        <Text style={styles.footer}>
+          Already have an account?{' '}
+          <Text style={[styles.link, { color: primary }]} onPress={() => navigation.navigate('Login')}>
+            Sign in
+          </Text>
+        </Text>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.xxl, paddingTop: 56, gap: spacing.lg },
+  title: { ...typography.heading, color: colors.foreground },
+  subtitle: { ...typography.body, color: colors.mutedForeground },
+  form: { gap: spacing.lg },
+  nameRow: { flexDirection: 'row', gap: spacing.md },
+  nameField: { flex: 1 },
+  perks: {
+    backgroundColor: colors.secondary,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  perkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  perkText: { ...typography.caption, color: colors.secondaryForeground, flex: 1 },
+  error: { ...typography.caption, color: colors.destructive },
+  footer: { ...typography.body, color: colors.mutedForeground, textAlign: 'center' },
+  link: { fontWeight: '600' },
+});

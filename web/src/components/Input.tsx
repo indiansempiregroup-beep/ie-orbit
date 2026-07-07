@@ -2,11 +2,17 @@ import React from 'react';
 
 type Props = React.InputHTMLAttributes<HTMLInputElement> & { label?: string };
 
-export function Input({ label, style, ...rest }: Props) {
+export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
+  { label, style, id, ...rest },
+  ref,
+) {
+  const inputId = id ?? rest.name;
   return (
-    <label style={{ display: 'block', marginBottom: 12 }}>
+    <label style={{ display: 'block', marginBottom: 12 }} htmlFor={inputId}>
       {label && <div style={{ marginBottom: 6, fontSize: 13, color: '#374151' }}>{label}</div>}
       <input
+        id={inputId}
+        ref={ref}
         {...rest}
         style={{
           width: '100%',
@@ -21,6 +27,6 @@ export function Input({ label, style, ...rest }: Props) {
       />
     </label>
   );
-}
+});
 
 export default Input;

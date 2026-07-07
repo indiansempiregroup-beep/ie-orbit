@@ -77,6 +77,36 @@ export function useBillingPlatformOpsSummaryQuery(windowHours = 24, limit = 50, 
   });
 }
 
+export function useBillingPlatformSubscriptionsQuery(enabled = false) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'platform-subscriptions'],
+    queryFn: async () => (await client.billing.platformSubscriptions()).data,
+    enabled,
+    retry: false,
+  });
+}
+
+export function useBillingPlatformMonitoringQuery(windowHours = 24, enabled = false) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'platform-monitoring', windowHours],
+    queryFn: async () => (await client.billing.platformMonitoring({ window_hours: windowHours })).data,
+    enabled,
+    retry: false,
+  });
+}
+
+export function useBillingPlatformAuditFeedQuery(limit = 50, enabled = false) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'platform-audit-feed', limit],
+    queryFn: async () => (await client.billing.platformAuditFeed({ limit })).data,
+    enabled,
+    retry: false,
+  });
+}
+
 export function useBillingCheckout() {
   const client = useApiClient();
   const workspace = useWorkspace();

@@ -8,8 +8,9 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import exceptions
 
+from apps.authentication.emails.verification_email import build_verification_email
 from apps.authentication.models import EmailVerificationToken, User
-from apps.authentication.security.tokens import generate_plain_token, hash_token
+from apps.authentication.security.tokens import generate_otp_code, hash_token
 from apps.authentication.services.audit import SecurityAuditService
 
 
@@ -24,18 +25,20 @@ class EmailVerificationService:
         self.audit_service = audit_service or SecurityAuditService()
 
     def send_verification(self, *, user: User) -> VerificationRequest:
-        token = generate_plain_token()
+        token = generate_otp_code(6)
         EmailVerificationToken.objects.create(
             user=user,
             token_hash=hash_token(token),
             expires_at=timezone.now()
             + timedelta(minutes=settings.IAM_SETTINGS["EMAIL_VERIFICATION_TOKEN_MINUTES"]),
         )
+        email_content = build_verification_email(user=user, token=token)
         send_mail(
-            subject="Verify your IE Platform email",
-            message=f"Use this token to verify your email: {token}",
+            subject=email_content.subject,
+            message=email_content.plain_text,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
+            html_message=email_content.html,
             fail_silently=True,
         )
         return VerificationRequest(token=token, user=user)

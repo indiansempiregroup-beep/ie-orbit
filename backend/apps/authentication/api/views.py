@@ -23,6 +23,7 @@ from apps.authentication.api.serializers import (
     VerifyEmailSerializer,
 )
 from apps.authentication.api.utils import client_ip, user_agent
+from apps.authentication.models import User
 from apps.authentication.services.authentication import AuthenticationService
 from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.verification import EmailVerificationService
@@ -245,16 +246,34 @@ class VerifyEmailView(APIView):
 
 
 class ResendVerificationView(APIView):
-    permission_classes = [IsAuthenticated]
+    authentication_classes: list = []
     serializer_class = ResendVerificationSerializer
+
+    def get_permissions(self):
+        email = self.request.data.get("email") if hasattr(self.request, "data") else None
+        if email:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def post(self, request: Request) -> Response:
         serializer = ResendVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        verification = EmailVerificationService().send_verification(user=request.user)
+        email = (serializer.validated_data.get("email") or "").strip().lower()
+        if request.user.is_authenticated:
+            user = request.user
+        elif email:
+            user = User.objects.filter(email__iexact=email).first()
+        else:
+            return Response(
+                {"error": {"message": "Email is required when not signed in."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         data: dict[str, str | bool] = {"sent": True}
-        if settings.DEBUG:
-            data["debug_token"] = verification.token
+        if user and not user.email_verified_at:
+            verification = EmailVerificationService().send_verification(user=user)
+            if settings.DEBUG:
+                data["debug_token"] = verification.token
         return success_response(data, request_id=getattr(request, "request_id", None))
 
 

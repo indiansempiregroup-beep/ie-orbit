@@ -18,8 +18,10 @@ from apps.bookings.api.serializers import (
     BookingPatchSerializer,
     BookingRescheduleSerializer,
     BookingSerializer,
+    StaffWeeklyScheduleBulkSerializer,
+    StaffWeeklyScheduleSerializer,
 )
-from apps.bookings.models import Booking, BookingStatus
+from apps.bookings.models import Booking, BookingStatus, StaffWeeklySchedule
 from apps.bookings.repositories import BookingRepository
 from apps.bookings.services import AvailabilityService, BookingService
 from apps.businesses.models import Business
@@ -286,3 +288,102 @@ class StaffAvailabilityView(AvailabilityView):
 
 class BusinessAvailabilityView(AvailabilityView):
     pass
+
+
+class StaffWeeklyScheduleListCreateView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    @extend_schema(
+        tags=["Bookings"],
+        parameters=[
+            OpenApiParameter("staff_id", str, required=True, description="Staff UUID."),
+            OpenApiParameter("business", str, description="Business UUID."),
+        ],
+        responses={200: StaffWeeklyScheduleSerializer(many=True)},
+        description="List weekly availability schedules for a staff member.",
+    )
+    def get(self, request: Request) -> Response:
+        staff_id = request.query_params.get("staff_id")
+        if not staff_id:
+            raise ValidationError({"staff_id": "This query parameter is required."})
+        business = AvailabilityView()._business(request, request.query_params.get("business"))
+        rows = (
+            StaffWeeklySchedule.objects.for_tenant(request.current_tenant)
+            .filter(business=business, staff_id=staff_id)
+            .order_by("weekday")
+        )
+        return success_response(
+            StaffWeeklyScheduleSerializer(rows, many=True).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Bookings"],
+        request=StaffWeeklyScheduleSerializer,
+        responses={201: StaffWeeklyScheduleSerializer},
+        description="Create or update a weekly availability row for a staff member.",
+    )
+    def post(self, request: Request) -> Response:
+        serializer = StaffWeeklyScheduleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
+        defaults = {
+            key: serializer.validated_data[key]
+            for key in (
+                "is_available",
+                "shift_start",
+                "shift_end",
+                "break_periods",
+                "capacity",
+                "overtime_allowed",
+            )
+            if key in serializer.validated_data
+        }
+        row, _ = StaffWeeklySchedule.objects.update_or_create(
+            tenant=request.current_tenant,
+            business=business,
+            staff_id=serializer.validated_data["staff_id"],
+            weekday=serializer.validated_data["weekday"],
+            defaults=defaults,
+        )
+        return success_response(
+            StaffWeeklyScheduleSerializer(row).data,
+            status=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class StaffWeeklyScheduleBulkView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    @extend_schema(
+        tags=["Bookings"],
+        request=StaffWeeklyScheduleBulkSerializer,
+        responses={200: StaffWeeklyScheduleSerializer(many=True)},
+        description="Bulk upsert weekly availability schedules for a staff member.",
+    )
+    def put(self, request: Request) -> Response:
+        serializer = StaffWeeklyScheduleBulkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
+        staff_id = serializer.validated_data["staff_id"]
+        saved: list[StaffWeeklySchedule] = []
+        for entry in serializer.validated_data["schedules"]:
+            row, _ = StaffWeeklySchedule.objects.update_or_create(
+                tenant=request.current_tenant,
+                business=business,
+                staff_id=staff_id,
+                weekday=entry["weekday"],
+                defaults={
+                    "is_available": entry.get("is_available", True),
+                    "shift_start": entry["shift_start"],
+                    "shift_end": entry["shift_end"],
+                    "capacity": entry.get("capacity", 1),
+                },
+            )
+            saved.append(row)
+        saved.sort(key=lambda row: row.weekday)
+        return success_response(
+            StaffWeeklyScheduleSerializer(saved, many=True).data,
+            request_id=getattr(request, "request_id", None),
+        )

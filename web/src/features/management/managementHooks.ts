@@ -3,6 +3,7 @@ import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
 import { invalidateWorkspaceData } from '../../lib/workspace';
 import {
+  archiveCustomer,
   createCustomer,
   createService,
   createStaff,
@@ -12,6 +13,7 @@ import {
   listCustomers,
   listServices,
   listStaff,
+  restoreCustomer,
   searchCustomers,
   searchServices,
   searchStaff,
@@ -125,6 +127,24 @@ export function useCustomerUpdate() {
       invalidateWorkspaceData(queryClient);
       queryClient.invalidateQueries({ queryKey: ['management', 'customer', variables.customerId] });
     },
+  });
+}
+
+export function useCustomerArchive() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (customerId) => archiveCustomer(client, customerId),
+    onSuccess: () => invalidateWorkspaceData(queryClient),
+  });
+}
+
+export function useCustomerRestore() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation<Customer, Error, string>({
+    mutationFn: (customerId) => restoreCustomer(client, customerId),
+    onSuccess: () => invalidateWorkspaceData(queryClient),
   });
 }
 

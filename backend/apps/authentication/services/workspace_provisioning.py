@@ -69,8 +69,8 @@ class WorkspaceProvisioningService:
             "country": data.get("country", ""),
             "state": data.get("state", ""),
             "city": data.get("city", ""),
-            "primary_color": data.get("primary_color", ""),
-            "secondary_color": data.get("secondary_color", ""),
+            "primary_color": data.get("primary_color") or "#0F6CBD",
+            "secondary_color": data.get("secondary_color") or "#111827",
         }
         tenant = self.tenant_service.create_tenant(data=tenant_data, actor=user)
         organization = self.tenant_repository.default_organization(tenant)

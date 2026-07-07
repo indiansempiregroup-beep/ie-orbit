@@ -22,6 +22,7 @@ from apps.platform_media.storage import get_storage_provider
 from apps.platform_media.utils.files import calculate_checksum, normalize_filename, storage_filename
 from apps.platform_media.utils.images import extract_image_metadata
 from apps.platform_media.validators import validate_file_upload
+from apps.common.utils.urls import normalize_stored_asset_url
 
 logger = logging.getLogger("ie_platform.media")
 
@@ -96,8 +97,8 @@ class MediaService:
         image_metadata = self._image_metadata(uploaded_file, media_type)
         payload_metadata = {
             **(metadata or {}),
-            "public_url": stored.public_url,
-            "private_url": stored.private_url,
+            "public_url": normalize_stored_asset_url(stored.public_url),
+            "private_url": normalize_stored_asset_url(stored.private_url),
             "virus_scan": {
                 "provider": scan_result.provider,
                 "details": scan_result.details,
@@ -131,6 +132,11 @@ class MediaService:
             media.mark_created(actor_id=uploaded_by.id)
         media.full_clean()
         media.save()
+        if business and "logo" in media.tags:
+            logo_url = str(media.metadata.get("public_url", ""))
+            if logo_url and getattr(business, "logo", "") != logo_url:
+                business.logo = logo_url
+                business.save(update_fields=["logo", "updated_at"])
         logger.info(
             "Media uploaded",
             extra={"media_id": str(media.id), "tenant_id": str(tenant.id)},

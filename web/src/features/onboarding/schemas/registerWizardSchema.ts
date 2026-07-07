@@ -1,12 +1,29 @@
 import { z } from 'zod';
 import { TIMEZONES } from '../../../config/onboarding';
 
+function normalizeWebsiteInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+const optionalWebsiteSchema = z
+  .string()
+  .transform(normalizeWebsiteInput)
+  .refine((value) => value === '' || z.string().url().safeParse(value).success, {
+    message: 'Enter a valid website URL (for example, https://yoursalon.com)',
+  });
+
 const passwordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters')
   .regex(/[A-Z]/, 'Include at least one uppercase letter')
   .regex(/[a-z]/, 'Include at least one lowercase letter')
-  .regex(/[0-9]/, 'Include at least one number');
+  .regex(/[0-9]/, 'Include at least one number')
+  .refine((value) => !/^(password|qwerty|12345678)/i.test(value), {
+    message: 'Choose a less common password',
+  });
 
 export const registerWizardSchema = z
   .object({
@@ -15,7 +32,7 @@ export const registerWizardSchema = z
     industry: z.string().min(1, 'Select an industry'),
     businessEmail: z.string().email('Enter a valid business email'),
     businessPhone: z.string().min(6, 'Enter a valid phone number'),
-    website: z.string().url('Enter a valid URL').optional().or(z.literal('')),
+    website: optionalWebsiteSchema,
     country: z.string().min(1, 'Country is required'),
     state: z.string().min(1, 'State is required'),
     city: z.string().min(1, 'City is required'),

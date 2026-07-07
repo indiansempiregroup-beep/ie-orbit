@@ -1,68 +1,31 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useTheme } from '../../hooks/useTheme';
-import { useSnackbar } from '../../hooks/useSnackbar';
-import { useBusinessProfileQuery, useBusinessProfileUpdate } from './businessSettingsHooks';
-import type { BusinessUpdateInput } from '@ie-platform/sdk';
+import { useBusinessProfileQuery } from './businessSettingsHooks';
 import { useProfileDetails } from '../profile/profileHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
 import { BusinessSetupPanel } from './BusinessSetupPanel';
 import { useBusinessListQuery } from './businessSettingsHooks';
 import { BillingPlanFoundation } from './BillingPlanFoundation';
 
-const initialFormState: BusinessUpdateInput = {
-  business_name: '',
-  display_name: '',
-  business_type: '',
-  email: '',
-  currency: '',
-  timezone: '',
-};
-
 export function SettingsPage() {
   const theme = useTheme();
   const profile = useProfileDetails();
   const businessQuery = useBusinessProfileQuery();
   const businessListQuery = useBusinessListQuery();
-  const updateBusiness = useBusinessProfileUpdate();
-  const snackbar = useSnackbar();
   const customersQuery = useCustomerList();
   const servicesQuery = useServiceList();
   const staffQuery = useStaffList();
-  const [formState, setFormState] = useState<BusinessUpdateInput>(initialFormState);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-
-  useEffect(() => {
-    if (businessQuery.data) {
-      setFormState({
-        business_name: businessQuery.data.business_name ?? '',
-        display_name: businessQuery.data.display_name ?? '',
-        business_type: businessQuery.data.business_type ?? '',
-        email: businessQuery.data.email ?? '',
-        currency: businessQuery.data.currency ?? '',
-        timezone: businessQuery.data.timezone ?? '',
-      });
-    }
-  }, [businessQuery.data]);
 
   const businessData = businessQuery.data;
   const user = profile.user;
 
-  const isDirty = Boolean(
-    businessData &&
-      (formState.business_name !== businessData.business_name ||
-        formState.display_name !== businessData.display_name ||
-        formState.business_type !== businessData.business_type ||
-        formState.email !== businessData.email ||
-        formState.currency !== businessData.currency ||
-        formState.timezone !== businessData.timezone),
-  );
-
   const settingsSummary = useMemo(
     () => [
-      { label: 'Business Status', value: businessData?.status ?? 'Unavailable' },
+      { label: 'Business', value: businessData?.display_name ?? businessData?.business_name ?? 'Unavailable' },
+      { label: 'Business status', value: businessData?.status ?? 'Unavailable' },
       { label: 'Currency', value: businessData?.currency ?? 'USD' },
       { label: 'Timezone', value: businessData?.timezone ?? 'UTC' },
       { label: 'Notification preferences', value: user?.notification_preferences ? 'Configured' : 'Not configured' },
@@ -120,130 +83,48 @@ export function SettingsPage() {
           <Card style={{ padding: 22 }}>
             <div style={{ display: 'grid', gap: 16 }}>
               <div>
-                <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Business settings</p>
-                <h2 style={{ margin: '8px 0 0', fontSize: 24, lineHeight: 1.2 }}>Update your business profile</h2>
-                <p style={{ margin: '8px 0 0', color: '#6b7280' }}>Keep your workspace identity, billing details, and regional settings current for staff and customers.</p>
+                <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Workspace settings</p>
+                <h2 style={{ margin: '8px 0 0', fontSize: 24, lineHeight: 1.2 }}>Manage your workspace</h2>
+                <p style={{ margin: '8px 0 0', color: '#6b7280' }}>Business details live under Business Profile. Personal account details live under Profile.</p>
               </div>
 
-              {!businessQuery.data && businessQuery.isLoading ? (
-                <div style={{ padding: 24, textAlign: 'center' }}>Loading business profile…</div>
-              ) : businessQuery.error && !businessQuery.data ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#dc2626' }}>{businessQuery.error.message}</div>
-              ) : (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    setErrorMessage(null);
-                    setSaveState('saving');
-                    updateBusiness.mutate(formState, {
-                      onSuccess: () => {
-                        setSaveState('success');
-                        snackbar.push('Business profile updated successfully.', 'success');
-                      },
-                      onError: (error) => {
-                        setSaveState('error');
-                        setErrorMessage(error.message ?? 'Unable to save business profile.');
-                        snackbar.push(error.message ?? 'Unable to save business profile.', 'error');
-                      },
-                    });
-                  }}
-                  style={{ display: 'grid', gap: 16 }}
-                >
-                  <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-                    <label style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Business name</span>
-                      <input
-                        value={formState.business_name ?? ''}
-                        onChange={(event) => setFormState({ ...formState, business_name: event.target.value })}
-                        placeholder="Business name"
-                        required
-                        disabled={updateBusiness.isPending}
-                        style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                      />
-                    </label>
-                    <label style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Display name</span>
-                      <input
-                        value={formState.display_name ?? ''}
-                        onChange={(event) => setFormState({ ...formState, display_name: event.target.value })}
-                        placeholder="Display name"
-                        disabled={updateBusiness.isPending}
-                        style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                      />
-                    </label>
-                    <label style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Business type</span>
-                      <input
-                        value={formState.business_type ?? ''}
-                        onChange={(event) => setFormState({ ...formState, business_type: event.target.value })}
-                        placeholder="Salon, Clinic, Studio..."
-                        disabled={updateBusiness.isPending}
-                        style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                      />
-                    </label>
-                    <label style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Business email</span>
-                      <input
-                        value={formState.email ?? ''}
-                        onChange={(event) => setFormState({ ...formState, email: event.target.value })}
-                        placeholder="contact@example.com"
-                        type="email"
-                        disabled={updateBusiness.isPending}
-                        style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                      />
-                    </label>
-                    <label style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Currency</span>
-                      <input
-                        value={formState.currency ?? ''}
-                        onChange={(event) => setFormState({ ...formState, currency: event.target.value })}
-                        placeholder="USD"
-                        disabled={updateBusiness.isPending}
-                        style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                      />
-                    </label>
-                    <label style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Timezone</span>
-                      <input
-                        value={formState.timezone ?? ''}
-                        onChange={(event) => setFormState({ ...formState, timezone: event.target.value })}
-                        placeholder="UTC"
-                        disabled={updateBusiness.isPending}
-                        style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
-                      />
-                    </label>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {settingsSummary.map((item) => (
+                  <div key={item.label} style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 12 }}>
+                    <strong>{item.label}</strong>
+                    <p style={{ margin: '6px 0 0', color: '#6b7280' }}>{item.value}</p>
                   </div>
+                ))}
+              </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-                    <Button type="submit" variant="primary" disabled={!isDirty || updateBusiness.isPending}>
-                      {updateBusiness.isPending ? 'Saving…' : 'Save changes'}
-                    </Button>
-                  </div>
-
-                  {saveState === 'saving' ? (
-                    <div style={{ color: '#0f172a', background: '#dbeafe', padding: 12, borderRadius: 12, border: '1px solid #93c5fd' }}>
-                      Saving business profile…
-                    </div>
-                  ) : saveState === 'success' ? (
-                    <div style={{ color: '#047857', background: '#ecfdf5', padding: 12, borderRadius: 12, border: '1px solid #86efac' }}>
-                      Business profile saved successfully.
-                    </div>
-                  ) : saveState === 'error' && errorMessage ? (
-                    <div style={{ color: '#dc2626', background: '#fef2f2', padding: 12, borderRadius: 12, border: '1px solid #fecaca' }}>
-                      {errorMessage}
-                    </div>
-                  ) : null}
-                </form>
-              )}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Link to="/settings/business">
+                  <Button variant="primary">Open business profile</Button>
+                </Link>
+                <Link to="/settings/business/edit">
+                  <Button variant="ghost">Edit business profile</Button>
+                </Link>
+                <Link to="/profile/edit">
+                  <Button variant="ghost">Edit personal profile</Button>
+                </Link>
+              </div>
             </div>
           </Card>
 
           <Card style={{ padding: 22 }}>
             <div style={{ display: 'grid', gap: 16 }}>
               <div>
-                <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Account access</p>
+                <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Personal profile</p>
                 <h2 style={{ margin: '8px 0 0', fontSize: 20, lineHeight: 1.2 }}>{user?.full_name ?? 'Your account'}</h2>
                 <p style={{ margin: '8px 0 0', color: '#6b7280' }}>{user?.email ?? 'No email available'}</p>
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Link to="/profile">
+                  <Button variant="ghost">View profile</Button>
+                </Link>
+                <Link to="/profile/edit">
+                  <Button variant="primary">Edit profile</Button>
+                </Link>
               </div>
               <div style={{ display: 'grid', gap: 10 }}>
                 <div style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 12 }}>

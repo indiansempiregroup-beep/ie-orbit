@@ -127,6 +127,7 @@ class AuthenticationService:
         password: str,
         first_name: str | None = None,
         last_name: str | None = None,
+        role_code: str = DEFAULT_OWNER_ROLE_CODE,
         ip_address: str | None = None,
         user_agent: str = "",
     ) -> User:
@@ -142,7 +143,7 @@ class AuthenticationService:
             status=UserStatus.PENDING_VERIFICATION,
         )
 
-        RoleService().assign_role(user=user, role_code=DEFAULT_OWNER_ROLE_CODE)
+        RoleService().assign_role(user=user, role_code=role_code)
 
         EmailVerificationService().send_verification(user=user)
         self.audit_service.record(

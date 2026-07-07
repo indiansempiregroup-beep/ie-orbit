@@ -1,6 +1,12 @@
 from django.urls import path
 
 from apps.businesses.api.branch_views import BranchViewSet
+from apps.businesses.api.platform_views import (
+    PlatformTenantAdminDetailView,
+    PlatformTenantAdminListView,
+    PlatformWhiteLabelDetailView,
+    PlatformWhiteLabelListView,
+)
 from apps.businesses.api.product_plan_views import ProductPlanListView
 from apps.businesses.api.views import BusinessViewSet
 from apps.staff.api.invitation_views import BusinessInvitationListCreateView, BusinessInvitationRevokeView
@@ -47,5 +53,17 @@ urlpatterns = [
         "businesses/<uuid:pk>/invitations/<uuid:invitation_id>",
         BusinessInvitationRevokeView.as_view(),
         name="business-invitation-revoke",
+    ),
+    path("platform/white-label", PlatformWhiteLabelListView.as_view(), name="platform-white-label-list"),
+    path(
+        "platform/white-label/<uuid:business_id>",
+        PlatformWhiteLabelDetailView.as_view(),
+        name="platform-white-label-detail",
+    ),
+    path("platform/tenants", PlatformTenantAdminListView.as_view(), name="platform-tenant-admin-list"),
+    path(
+        "platform/tenants/<uuid:tenant_id>",
+        PlatformTenantAdminDetailView.as_view(),
+        name="platform-tenant-admin-detail",
     ),
 ]
