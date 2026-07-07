@@ -49,6 +49,7 @@ export function RegisterWizard() {
   const [stepIndex, setStepIndex] = useState(0);
   const [provisionError, setProvisionError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
+  const [brandingLogoFile, setBrandingLogoFile] = useState<File | null>(null);
 
   const currentStep = REGISTER_WIZARD_STEPS[stepIndex]?.id ?? 'business';
 
@@ -109,7 +110,7 @@ export function RegisterWizard() {
     setStepIndex(REGISTER_WIZARD_STEPS.findIndex((step) => step.id === 'provision'));
     try {
       const parsed = registerWizardSchema.parse(values);
-      await provisionWorkspace({ values: parsed, login: auth.login });
+      await provisionWorkspace({ values: parsed, login: auth.login, logoFile: brandingLogoFile });
       clearDraft();
       navigate('/onboarding/success');
     } catch (err) {
@@ -276,7 +277,22 @@ export function RegisterWizard() {
               ]}
               {...register('theme')}
             />
-            <p className="wizard-hint">Logo upload will be available in business settings after provisioning.</p>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span className="wizard-section-label">Logo (optional)</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setBrandingLogoFile(file);
+                }}
+              />
+            </label>
+            {brandingLogoFile ? (
+              <p className="wizard-hint">Selected logo: {brandingLogoFile.name}</p>
+            ) : (
+              <p className="wizard-hint">Upload logo now to apply branding during provisioning.</p>
+            )}
           </>
         ) : null}
       </div>
@@ -318,6 +334,7 @@ export function RegisterWizard() {
             <Button type="button" variant="ghost" onClick={() => jumpToStep('branding')}>Edit</Button>
           </div>
           <p>{values.skipBranding ? 'Skipped' : `${values.primaryColor} / ${values.secondaryColor} (${values.theme})`}</p>
+          {!values.skipBranding && brandingLogoFile ? <p>Logo: {brandingLogoFile.name}</p> : null}
         </section>
       </div>
     );

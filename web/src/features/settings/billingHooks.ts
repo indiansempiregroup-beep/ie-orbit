@@ -11,6 +11,14 @@ export function useBillingStatusQuery() {
   });
 }
 
+export function useBillingPlansQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'plans'],
+    queryFn: async () => (await client.billing.plans()).data,
+  });
+}
+
 export function useBillingWebhookSummaryQuery(windowHours = 24) {
   const client = useApiClient();
   return useQuery({
@@ -32,6 +40,22 @@ export function useBillingReleaseGateQuery() {
   return useQuery({
     queryKey: ['billing', 'release-gate'],
     queryFn: async () => (await client.billing.releaseGate()).data,
+  });
+}
+
+export function useBillingObservabilityQuery(windowHours = 24) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'observability', windowHours],
+    queryFn: async () => (await client.billing.observability({ window_hours: windowHours })).data,
+  });
+}
+
+export function useBillingOpsSnapshotQuery(windowHours = 24) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'ops-snapshot', windowHours],
+    queryFn: async () => (await client.billing.opsSnapshot({ window_hours: windowHours })).data,
   });
 }
 

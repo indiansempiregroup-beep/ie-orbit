@@ -16,9 +16,10 @@ function slugify(value: string) {
 type ProvisionArgs = {
   values: RegisterWizardFormValues;
   login: (email: string, password: string, remember?: boolean) => Promise<string>;
+  logoFile?: File | null;
 };
 
-export async function provisionWorkspace({ values }: ProvisionArgs) {
+export async function provisionWorkspace({ values, logoFile }: ProvisionArgs) {
   const slug = slugify(values.businessName);
   if (!slug) {
     throw new Error('Business name must contain valid characters for a workspace code.');
@@ -93,6 +94,38 @@ export async function provisionWorkspace({ values }: ProvisionArgs) {
   localStorage.setItem(ACTIVE_TENANT_STORAGE_KEY, tenantId);
   localStorage.setItem(ACTIVE_BUSINESS_STORAGE_KEY, businessId);
   localStorage.setItem('ie:onboarding:show-welcome', 'true');
+
+  if (!values.skipBranding && logoFile) {
+    const uploadData = new FormData();
+    uploadData.set("file", logoFile);
+    uploadData.set("business", businessId);
+    uploadData.set("folder_type", "business");
+    uploadData.set("visibility", "public");
+    uploadData.append("tags", "branding");
+    uploadData.append("tags", "logo");
+    uploadData.set("display_name", `${values.displayName || values.businessName} logo`);
+
+    const uploadResponse = await fetch("/api/v1/media/upload", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${payload.access}`,
+        "X-Tenant-ID": tenantId,
+        "X-Business-ID": businessId,
+      },
+      body: uploadData,
+    });
+    if (!uploadResponse.ok) {
+      throw new Error("Workspace was created, but logo upload failed.");
+    }
+    const uploadPayload = (await uploadResponse.json()) as {
+      data?: { public_url?: string; private_url?: string };
+    };
+    const logoUrl = uploadPayload.data?.public_url || uploadPayload.data?.private_url;
+    if (logoUrl) {
+      const tenantClient = createAuthenticatedClient(payload.access, tenantId, businessId);
+      await tenantClient.businesses.patch(businessId, { logo: logoUrl });
+    }
+  }
 
   return { tenantId, businessId, slug };
 }

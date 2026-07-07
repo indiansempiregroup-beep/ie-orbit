@@ -242,6 +242,18 @@ export type BillingCheckoutSession = {
   expires_at: string;
 };
 
+export type BillingPlanCatalogItem = {
+  product_code: string;
+  plan_code: string;
+  name: string;
+  description: string;
+  billing_interval: string;
+  trial_days: number;
+  is_default: boolean;
+  amount_paise?: number | null;
+  currency: string;
+};
+
 export type BillingWebhookEvent = {
   id: string;
   tenant_id?: string | null;
@@ -337,6 +349,62 @@ export type BillingReleaseGateReport = {
     failure_rate: number;
     dead_letter: number;
     stuck_retries: number;
+  };
+};
+
+export type BillingObservabilitySignals = {
+  window_hours: number;
+  since: string;
+  events: {
+    billing_webhook_failed: number;
+    billing_webhook_dead_letter: number;
+    onboarding_workspace_provisioned: number;
+  };
+  audits: {
+    bulk_reprocess_actions: number;
+    reconciliation_runs: number;
+    workspace_provisioned_audits: number;
+  };
+};
+
+export type BillingOpsSnapshot = {
+  tenant_id: string;
+  window_hours: number;
+  since: string;
+  generated_at: string;
+  ready: boolean;
+  health_score: number;
+  blockers: string[];
+  recommendations: Array<{
+    severity: 'blocker' | 'warning';
+    action: string;
+  }>;
+  trend: {
+    comparison_window_hours: number;
+    previous_since: string;
+    previous_until: string;
+    failure_rate_delta: number;
+    dead_letter_delta: number;
+    stuck_retries_delta: number;
+    direction: 'improving' | 'degrading';
+  };
+  webhooks: {
+    total: number;
+    processed: number;
+    failed: number;
+    dead_letter: number;
+    stuck_retries: number;
+    failure_rate: number;
+  };
+  events: {
+    billing_webhook_failed: number;
+    billing_webhook_dead_letter: number;
+    onboarding_workspace_provisioned: number;
+  };
+  audits: {
+    bulk_reprocess_actions: number;
+    reconciliation_runs: number;
+    workspace_provisioned_audits: number;
   };
 };
 
@@ -859,7 +927,12 @@ class ApiClient {
 
   billing = {
     status: () => this.request<BillingStatus>('/billing/status', { method: 'GET' }),
+    plans: () => this.request<BillingPlanCatalogItem[]>('/billing/plans', { method: 'GET' }),
     goLiveCheck: () => this.request<BillingGoLiveReport>('/billing/go-live-check', { method: 'GET' }),
+    observability: (query?: { window_hours?: number }) =>
+      this.request<BillingObservabilitySignals>('/billing/observability', { method: 'GET', query }),
+    opsSnapshot: (query?: { window_hours?: number }) =>
+      this.request<BillingOpsSnapshot>('/billing/ops-snapshot', { method: 'GET', query }),
     releaseGate: () => this.request<BillingReleaseGateReport>('/billing/release-gate', { method: 'GET' }),
     runReconciliation: (body?: { lookback_hours?: number }) =>
       this.request<BillingReconciliationResult>('/billing/reconciliation/run', { method: 'POST', body }),
