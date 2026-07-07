@@ -102,6 +102,68 @@ def test_billing_checkout_creates_mock_order(api_client: APIClient, user: User) 
 
 
 @pytest.mark.django_db
+def test_billing_checkout_honors_price_override(api_client: APIClient, user: User, settings) -> None:
+    settings.BILLING_PLAN_PRICE_OVERRIDES = {"appointie-starter": 123400}
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_response = api_client.post(
+        reverse("business-list-create"),
+        {
+            "business_code": "billing-price-biz",
+            "business_name": "Billing Price Biz",
+            "display_name": "Billing Price Biz",
+        },
+        format="json",
+    )
+    business_id = business_response.json()["data"]["id"]
+    api_client.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+        HTTP_X_TENANT_ID=tenant_id,
+        HTTP_X_BUSINESS_ID=business_id,
+    )
+    response = api_client.post(
+        reverse("billing-checkout"),
+        {"product_code": "appointie", "plan_code": "appointie-starter", "business_id": business_id},
+        format="json",
+    )
+    assert response.status_code == 201
+    assert response.json()["data"]["amount"] == 123400
+
+
+@pytest.mark.django_db
+def test_billing_checkout_live_enforcement(api_client: APIClient, user: User, settings) -> None:
+    settings.BILLING_ENFORCE_LIVE_CHECKOUT = True
+    settings.RAZORPAY_KEY_ID = ""
+    settings.RAZORPAY_KEY_SECRET = ""
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_response = api_client.post(
+        reverse("business-list-create"),
+        {
+            "business_code": "billing-live-biz",
+            "business_name": "Billing Live Biz",
+            "display_name": "Billing Live Biz",
+        },
+        format="json",
+    )
+    business_id = business_response.json()["data"]["id"]
+    api_client.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+        HTTP_X_TENANT_ID=tenant_id,
+        HTTP_X_BUSINESS_ID=business_id,
+    )
+    response = api_client.post(
+        reverse("billing-checkout"),
+        {"product_code": "appointie", "plan_code": "appointie-starter", "business_id": business_id},
+        format="json",
+    )
+    assert response.status_code == 422
+    assert "Live checkout is enforced" in str(response.json())
+
+
+@pytest.mark.django_db
 def test_razorpay_mock_order_client() -> None:
     client = RazorpayClient()
     order = client.create_order(amount_paise=100, currency="INR", receipt="test-receipt")
@@ -257,6 +319,70 @@ def test_billing_webhook_summary_endpoint(api_client: APIClient, user: User) -> 
     assert data["failed"] == 1
     assert data["dead_letter"] == 1
     assert data["failure_rate"] > 0
+
+
+@pytest.mark.django_db
+def test_billing_reconciliation_run_endpoint(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.post(
+        reverse("billing-reconciliation-run"),
+        {"lookback_hours": 24},
+        format="json",
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["tenant_id"] == tenant_id
+    assert "scanned_sessions" in payload
+
+
+@pytest.mark.django_db
+def test_billing_go_live_check_endpoint(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-go-live-check"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "ready" in payload
+    assert "checks" in payload
+    assert isinstance(payload["checks"], list)
+
+
+@pytest.mark.django_db
+def test_billing_release_gate_endpoint(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-release-gate"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "passed" in payload
+    assert "failing_checks" in payload
+    assert isinstance(payload["failing_checks"], list)
+    if payload["failing_checks"]:
+        assert "remediation" in payload["failing_checks"][0]
+
+
+@pytest.mark.django_db
+def test_billing_release_gate_fails_when_razorpay_missing(
+    api_client: APIClient,
+    user: User,
+    settings,
+) -> None:
+    settings.RAZORPAY_KEY_ID = ""
+    settings.RAZORPAY_KEY_SECRET = ""
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-release-gate"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["passed"] is False
+    assert "razorpay_configured" in payload["blockers"]
+    failing_ids = {check["id"] for check in payload["failing_checks"]}
+    assert "razorpay_configured" in failing_ids
 
 
 @pytest.mark.django_db

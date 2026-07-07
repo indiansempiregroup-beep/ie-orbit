@@ -5,6 +5,7 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
+from django.conf import settings
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -54,9 +55,18 @@ class CheckoutService:
         if get_plan_definition(normalized_product, normalized_plan) is None:
             raise ValidationError({"plan_code": "Unknown plan for this product."})
 
-        amount_paise = PLAN_PRICE_PAISE.get(normalized_plan)
+        amount_paise = self._resolve_plan_price_paise(normalized_plan)
         if amount_paise is None:
             raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
+        if settings.BILLING_ENFORCE_LIVE_CHECKOUT and not self.razorpay.is_configured:
+            raise ValidationError(
+                {
+                    "billing": (
+                        "Live checkout is enforced. Configure Razorpay credentials "
+                        "before creating checkout sessions."
+                    )
+                }
+            )
 
         receipt = f"biz-{business.id}-{normalized_plan}-{uuid.uuid4().hex[:8]}"
         order = self.razorpay.create_order(
@@ -102,6 +112,16 @@ class CheckoutService:
             "mock_mode": not config.is_configured,
             "expires_at": expires_at.isoformat(),
         }
+
+    def _resolve_plan_price_paise(self, plan_code: str) -> int | None:
+        overrides = getattr(settings, "BILLING_PLAN_PRICE_OVERRIDES", {}) or {}
+        override = overrides.get(plan_code)
+        if override is not None:
+            try:
+                return int(override)
+            except (TypeError, ValueError):
+                pass
+        return PLAN_PRICE_PAISE.get(plan_code)
 
     def mark_session_paid(
         self,

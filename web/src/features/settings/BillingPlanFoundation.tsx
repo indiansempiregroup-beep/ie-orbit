@@ -5,6 +5,8 @@ import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import {
   useBillingCheckout,
+  useBillingGoLiveCheckQuery,
+  useBillingReleaseGateQuery,
   useBillingStatusQuery,
   useBillingWebhookBulkReprocess,
   useBillingWebhookEventsQuery,
@@ -15,6 +17,8 @@ import {
 export function BillingPlanFoundation() {
   const [eventFilter, setEventFilter] = useState<'all' | 'failed' | 'dead_letter'>('all');
   const statusQuery = useBillingStatusQuery();
+  const goLiveQuery = useBillingGoLiveCheckQuery();
+  const releaseGateQuery = useBillingReleaseGateQuery();
   const summaryQuery = useBillingWebhookSummaryQuery(24);
   const webhookEventsQuery = useBillingWebhookEventsQuery(
     eventFilter === 'all' ? undefined : eventFilter,
@@ -26,9 +30,12 @@ export function BillingPlanFoundation() {
   const snackbar = useSnackbar();
 
   const status = statusQuery.data;
+  const goLive = goLiveQuery.data;
+  const releaseGate = releaseGateQuery.data;
   const summary = summaryQuery.data;
   const isConfigured = status?.configured ?? false;
   const mockMode = status?.mock_mode ?? true;
+  const launchReady = Boolean(goLive?.ready && releaseGate?.passed);
 
   return (
     <Card>
@@ -42,6 +49,14 @@ export function BillingPlanFoundation() {
 
       <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
         <p style={{ margin: 0 }}>
+          <strong>Launch Ready:</strong>{' '}
+          {launchReady ? (
+            <span style={{ color: '#166534' }}>Yes</span>
+          ) : (
+            <span style={{ color: '#991b1b' }}>No</span>
+          )}
+        </p>
+        <p style={{ margin: 0 }}>
           <strong>Provider:</strong> {status?.provider ?? 'razorpay'}
         </p>
         <p style={{ margin: 0 }}>
@@ -50,6 +65,45 @@ export function BillingPlanFoundation() {
         <p style={{ margin: 0 }}>
           <strong>Mode:</strong> {mockMode ? 'Mock (no live charges)' : 'Live'}
         </p>
+      </div>
+
+      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
+        <strong>Go-live readiness:</strong>{' '}
+        {goLive?.ready ? (
+          <span style={{ color: '#166534' }}>Ready</span>
+        ) : (
+          <span style={{ color: '#991b1b' }}>Not ready</span>
+        )}
+        {!goLiveQuery.isLoading && goLive ? (
+          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>
+            Blockers: {goLive.blockers.length} · Warnings: {goLive.warnings.length}
+          </p>
+        ) : null}
+      </div>
+
+      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
+        <strong>Release gate preflight:</strong>{' '}
+        {releaseGate?.passed ? (
+          <span style={{ color: '#166534' }}>Pass</span>
+        ) : (
+          <span style={{ color: '#991b1b' }}>Fail</span>
+        )}
+        {!releaseGateQuery.isLoading && releaseGate ? (
+          <div style={{ marginTop: 8 }}>
+            <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+              Blockers: {releaseGate.blockers.length} · Warnings: {releaseGate.warnings.length}
+            </p>
+            {releaseGate.failing_checks.length > 0 ? (
+              <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                {releaseGate.failing_checks.slice(0, 3).map((check) => (
+                  <li key={check.id} style={{ marginBottom: 6, color: 'var(--muted-foreground)' }}>
+                    <strong>{check.label}:</strong> {check.remediation}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {summary?.stuck_retries ? (

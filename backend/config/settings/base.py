@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import timedelta
 from pathlib import Path
 
@@ -202,6 +203,17 @@ RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 BILLING_CURRENCY_DEFAULT = os.getenv("BILLING_CURRENCY_DEFAULT", "INR")
 BILLING_WEBHOOK_ALERT_RECIPIENTS = os.getenv("BILLING_WEBHOOK_ALERT_RECIPIENTS", "")
+BILLING_ENFORCE_LIVE_CHECKOUT = os.getenv("BILLING_ENFORCE_LIVE_CHECKOUT", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+BILLING_RECONCILIATION_LOOKBACK_HOURS = int(os.getenv("BILLING_RECONCILIATION_LOOKBACK_HOURS", "72"))
+try:
+    BILLING_PLAN_PRICE_OVERRIDES = json.loads(os.getenv("BILLING_PLAN_PRICE_OVERRIDES", "{}"))
+except json.JSONDecodeError:
+    BILLING_PLAN_PRICE_OVERRIDES = {}
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

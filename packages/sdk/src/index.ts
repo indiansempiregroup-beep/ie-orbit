@@ -290,6 +290,56 @@ export type BillingWebhookSummary = {
   success_rate: number;
 };
 
+export type BillingReconciliationResult = {
+  tenant_id: string;
+  scanned_sessions: number;
+  mismatched_sessions: number;
+  missing_subscription: number;
+  missing_external_reference: number;
+  checked_since: string;
+  sample_order_ids: string[];
+};
+
+export type BillingGoLiveCheck = {
+  id: string;
+  label: string;
+  ok: boolean;
+  severity: 'blocker' | 'warning';
+  value?: number;
+};
+
+export type BillingGoLiveReport = {
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+  checks: BillingGoLiveCheck[];
+};
+
+export type BillingReleaseGateCheck = {
+  id: string;
+  label: string;
+  ok: boolean;
+  severity: 'blocker' | 'warning';
+  remediation: string;
+  value?: number;
+};
+
+export type BillingReleaseGateReport = {
+  passed: boolean;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+  checks: BillingReleaseGateCheck[];
+  failing_checks: BillingReleaseGateCheck[];
+  summary: {
+    window_hours: number;
+    total_events: number;
+    failure_rate: number;
+    dead_letter: number;
+    stuck_retries: number;
+  };
+};
+
 export type IamRole = {
   id: string;
   code: string;
@@ -809,6 +859,10 @@ class ApiClient {
 
   billing = {
     status: () => this.request<BillingStatus>('/billing/status', { method: 'GET' }),
+    goLiveCheck: () => this.request<BillingGoLiveReport>('/billing/go-live-check', { method: 'GET' }),
+    releaseGate: () => this.request<BillingReleaseGateReport>('/billing/release-gate', { method: 'GET' }),
+    runReconciliation: (body?: { lookback_hours?: number }) =>
+      this.request<BillingReconciliationResult>('/billing/reconciliation/run', { method: 'POST', body }),
     checkout: (body: BillingCheckoutInput) => this.request<BillingCheckoutSession>('/billing/checkout', { method: 'POST', body }),
     webhookSummary: (query?: { window_hours?: number }) =>
       this.request<BillingWebhookSummary>('/billing/webhooks/summary', { method: 'GET', query }),

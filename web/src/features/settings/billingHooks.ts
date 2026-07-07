@@ -19,6 +19,22 @@ export function useBillingWebhookSummaryQuery(windowHours = 24) {
   });
 }
 
+export function useBillingGoLiveCheckQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'go-live-check'],
+    queryFn: async () => (await client.billing.goLiveCheck()).data,
+  });
+}
+
+export function useBillingReleaseGateQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'release-gate'],
+    queryFn: async () => (await client.billing.releaseGate()).data,
+  });
+}
+
 export function useBillingCheckout() {
   const client = useApiClient();
   const workspace = useWorkspace();

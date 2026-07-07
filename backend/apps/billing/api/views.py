@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -24,6 +25,7 @@ from apps.billing.api.serializers import (
 from apps.billing.constants import BULK_REPROCESS_COOLDOWN_SECONDS
 from apps.billing.models import BillingWebhookEvent, WebhookEventStatus
 from apps.billing.services.checkout import CheckoutService
+from apps.billing.services.reconciliation import BillingReconciliationService
 from apps.billing.services.webhooks import WebhookService
 from apps.authentication.permissions import HasPlatformPermission
 from apps.businesses.api.permissions import BusinessAccessPermission
@@ -168,7 +170,8 @@ class BillingWebhookBulkReprocessView(APIView):
 
 
 class BillingWebhookSummaryView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "business:manage"
 
     @extend_schema(tags=["Billing"], description="Webhook operational summary for current tenant.")
     def get(self, request: Request) -> Response:
@@ -208,6 +211,211 @@ class BillingWebhookSummaryView(APIView):
                 "stuck_retries": stuck_retries,
                 "failure_rate": failure_rate,
                 "success_rate": success_rate,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingReconciliationRunView(APIView):
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "business:manage"
+
+    @extend_schema(tags=["Billing"], description="Run tenant billing reconciliation.")
+    def post(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        lookback_hours = int(
+            request.data.get(
+                "lookback_hours",
+                settings.BILLING_RECONCILIATION_LOOKBACK_HOURS,
+            )
+        )
+        result = BillingReconciliationService().reconcile(
+            tenant=tenant,
+            lookback_hours=lookback_hours,
+        )
+        record_audit(
+            tenant=tenant,
+            action="billing.reconciliation.run",
+            resource_type="billing_checkout_session",
+            actor_id=str(request.user.id),
+            metadata=result.as_dict(),
+        )
+        return success_response(result.as_dict(), request_id=getattr(request, "request_id", None))
+
+
+class BillingGoLiveCheckView(APIView):
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "business:manage"
+
+    @extend_schema(tags=["Billing"], description="Evaluate billing go-live readiness for current tenant.")
+    def get(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        checkout_status = CheckoutService().get_status()
+        since = timezone.now() - timedelta(hours=24)
+        queryset = BillingWebhookEvent.objects.filter(tenant=tenant, created_at__gte=since)
+        dead_letter = queryset.filter(status=WebhookEventStatus.DEAD_LETTER).count()
+        stuck_retries = queryset.filter(
+            status=WebhookEventStatus.FAILED,
+            next_retry_at__isnull=False,
+            next_retry_at__lt=timezone.now(),
+        ).count()
+
+        checks = [
+            {
+                "id": "razorpay_configured",
+                "label": "Razorpay API credentials configured",
+                "ok": bool(checkout_status["configured"]),
+                "severity": "blocker",
+            },
+            {
+                "id": "webhook_secret_configured",
+                "label": "Webhook secret configured",
+                "ok": bool(checkout_status["webhook_configured"]),
+                "severity": "blocker",
+            },
+            {
+                "id": "live_checkout_enforced",
+                "label": "Live checkout enforcement enabled",
+                "ok": bool(settings.BILLING_ENFORCE_LIVE_CHECKOUT),
+                "severity": "warning",
+            },
+            {
+                "id": "dead_letter_backlog",
+                "label": "No dead-letter backlog in last 24h",
+                "ok": dead_letter == 0,
+                "severity": "blocker",
+                "value": dead_letter,
+            },
+            {
+                "id": "stuck_retries",
+                "label": "No stuck retries in last 24h",
+                "ok": stuck_retries == 0,
+                "severity": "warning",
+                "value": stuck_retries,
+            },
+            {
+                "id": "alert_recipients",
+                "label": "Alert recipients configured",
+                "ok": bool(settings.BILLING_WEBHOOK_ALERT_RECIPIENTS.strip()),
+                "severity": "warning",
+            },
+        ]
+        blockers = [check["id"] for check in checks if not check["ok"] and check["severity"] == "blocker"]
+        warnings = [check["id"] for check in checks if not check["ok"] and check["severity"] == "warning"]
+        return success_response(
+            {
+                "ready": len(blockers) == 0,
+                "blockers": blockers,
+                "warnings": warnings,
+                "checks": checks,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingReleaseGateView(APIView):
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "business:manage"
+
+    @extend_schema(
+        tags=["Billing"],
+        description="Run billing release gate preflight checks with remediation guidance.",
+    )
+    def get(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        checkout_status = CheckoutService().get_status()
+        since = timezone.now() - timedelta(hours=24)
+        queryset = BillingWebhookEvent.objects.filter(tenant=tenant, created_at__gte=since)
+        total = queryset.count()
+        dead_letter = queryset.filter(status=WebhookEventStatus.DEAD_LETTER).count()
+        stuck_retries = queryset.filter(
+            status=WebhookEventStatus.FAILED,
+            next_retry_at__isnull=False,
+            next_retry_at__lt=timezone.now(),
+        ).count()
+        failed = queryset.filter(status=WebhookEventStatus.FAILED).count()
+        failure_rate = round((failed + dead_letter) / total, 4) if total else 0.0
+
+        checks = [
+            {
+                "id": "razorpay_configured",
+                "label": "Razorpay API credentials configured",
+                "ok": bool(checkout_status["configured"]),
+                "severity": "blocker",
+                "remediation": "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in backend environment.",
+            },
+            {
+                "id": "webhook_secret_configured",
+                "label": "Webhook secret configured",
+                "ok": bool(checkout_status["webhook_configured"]),
+                "severity": "blocker",
+                "remediation": "Set RAZORPAY_WEBHOOK_SECRET and rotate it in Razorpay dashboard if needed.",
+            },
+            {
+                "id": "live_checkout_enforced",
+                "label": "Live checkout enforcement enabled",
+                "ok": bool(settings.BILLING_ENFORCE_LIVE_CHECKOUT),
+                "severity": "warning",
+                "remediation": "Enable BILLING_ENFORCE_LIVE_CHECKOUT=true before production cutover.",
+            },
+            {
+                "id": "dead_letter_backlog",
+                "label": "No dead-letter backlog in last 24h",
+                "ok": dead_letter == 0,
+                "severity": "blocker",
+                "value": dead_letter,
+                "remediation": "Run dead-letter bulk reprocess and verify root-cause from error_message logs.",
+            },
+            {
+                "id": "stuck_retries",
+                "label": "No stuck retries in last 24h",
+                "ok": stuck_retries == 0,
+                "severity": "warning",
+                "value": stuck_retries,
+                "remediation": "Check Celery worker/beat health and retry queue latency; replay stale failed events.",
+            },
+            {
+                "id": "alert_recipients",
+                "label": "Alert recipients configured",
+                "ok": bool(settings.BILLING_WEBHOOK_ALERT_RECIPIENTS.strip()),
+                "severity": "warning",
+                "remediation": "Set BILLING_WEBHOOK_ALERT_RECIPIENTS to an on-call email group.",
+            },
+            {
+                "id": "failure_rate_threshold",
+                "label": "Webhook failure rate below 5% (24h)",
+                "ok": failure_rate < 0.05,
+                "severity": "warning",
+                "value": failure_rate,
+                "remediation": "Investigate spikes via webhook summary/events and stabilize before launch.",
+            },
+        ]
+        blockers = [check["id"] for check in checks if not check["ok"] and check["severity"] == "blocker"]
+        warnings = [check["id"] for check in checks if not check["ok"] and check["severity"] == "warning"]
+        failing_checks = [check for check in checks if not check["ok"]]
+        return success_response(
+            {
+                "passed": len(blockers) == 0,
+                "ready": len(blockers) == 0,
+                "blockers": blockers,
+                "warnings": warnings,
+                "checks": checks,
+                "failing_checks": failing_checks,
+                "summary": {
+                    "window_hours": 24,
+                    "total_events": total,
+                    "failure_rate": failure_rate,
+                    "dead_letter": dead_letter,
+                    "stuck_retries": stuck_retries,
+                },
             },
             request_id=getattr(request, "request_id", None),
         )
