@@ -59,6 +59,24 @@ export function useBillingOpsSnapshotQuery(windowHours = 24) {
   });
 }
 
+export function useBillingOpsDigestQuery(windowHours = 24) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'ops-digest', windowHours],
+    queryFn: async () => (await client.billing.opsDigest({ window_hours: windowHours })).data,
+  });
+}
+
+export function useBillingPlatformOpsSummaryQuery(windowHours = 24, limit = 50, enabled = false) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'platform-ops-summary', windowHours, limit],
+    queryFn: async () => (await client.billing.platformOpsSummary({ window_hours: windowHours, limit })).data,
+    enabled,
+    retry: false,
+  });
+}
+
 export function useBillingCheckout() {
   const client = useApiClient();
   const workspace = useWorkspace();

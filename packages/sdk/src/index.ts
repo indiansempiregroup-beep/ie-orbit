@@ -408,6 +408,32 @@ export type BillingOpsSnapshot = {
   };
 };
 
+export type BillingOpsDigest = {
+  tenant_id?: string;
+  tenant_slug?: string;
+  tenant_name?: string;
+  window_hours: number;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+  metrics?: {
+    total: number;
+    failed: number;
+    dead_letter: number;
+    stuck_retries: number;
+    failure_rate: number;
+  };
+  digest_text: string;
+};
+
+export type BillingPlatformOpsSummary = {
+  window_hours: number;
+  tenant_count: number;
+  ready_count: number;
+  not_ready_count: number;
+  rows: BillingOpsDigest[];
+};
+
 export type IamRole = {
   id: string;
   code: string;
@@ -933,6 +959,10 @@ class ApiClient {
       this.request<BillingObservabilitySignals>('/billing/observability', { method: 'GET', query }),
     opsSnapshot: (query?: { window_hours?: number }) =>
       this.request<BillingOpsSnapshot>('/billing/ops-snapshot', { method: 'GET', query }),
+    opsDigest: (query?: { window_hours?: number }) =>
+      this.request<BillingOpsDigest>('/billing/ops-digest', { method: 'GET', query }),
+    platformOpsSummary: (query?: { window_hours?: number; limit?: number }) =>
+      this.request<BillingPlatformOpsSummary>('/billing/platform-ops-summary', { method: 'GET', query }),
     releaseGate: () => this.request<BillingReleaseGateReport>('/billing/release-gate', { method: 'GET' }),
     runReconciliation: (body?: { lookback_hours?: number }) =>
       this.request<BillingReconciliationResult>('/billing/reconciliation/run', { method: 'POST', body }),

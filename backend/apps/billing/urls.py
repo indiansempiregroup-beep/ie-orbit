@@ -4,7 +4,9 @@ from apps.billing.api.views import (
     BillingCheckoutView,
     BillingGoLiveCheckView,
     BillingObservabilityView,
+    BillingOpsDigestView,
     BillingOpsSnapshotView,
+    BillingPlatformOpsSummaryView,
     BillingPlanCatalogView,
     BillingReleaseGateView,
     BillingStatusView,
@@ -22,6 +24,8 @@ urlpatterns = [
     path("billing/go-live-check", BillingGoLiveCheckView.as_view(), name="billing-go-live-check"),
     path("billing/observability", BillingObservabilityView.as_view(), name="billing-observability"),
     path("billing/ops-snapshot", BillingOpsSnapshotView.as_view(), name="billing-ops-snapshot"),
+    path("billing/ops-digest", BillingOpsDigestView.as_view(), name="billing-ops-digest"),
+    path("billing/platform-ops-summary", BillingPlatformOpsSummaryView.as_view(), name="billing-platform-ops-summary"),
     path("billing/release-gate", BillingReleaseGateView.as_view(), name="billing-release-gate"),
     path(
         "billing/reconciliation/run",

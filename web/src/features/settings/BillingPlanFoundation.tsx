@@ -10,6 +10,8 @@ import {
 import {
   useBillingCheckout,
   useBillingGoLiveCheckQuery,
+  useBillingOpsDigestQuery,
+  useBillingPlatformOpsSummaryQuery,
   useBillingOpsSnapshotQuery,
   useBillingPlansQuery,
   useBillingObservabilityQuery,
@@ -24,11 +26,14 @@ import {
 export function BillingPlanFoundation() {
   const [eventFilter, setEventFilter] = useState<'all' | 'failed' | 'dead_letter'>('all');
   const [selectedPlanCode, setSelectedPlanCode] = useState('appointie-starter');
+  const [showPlatformSummary, setShowPlatformSummary] = useState(false);
   const statusQuery = useBillingStatusQuery();
   const plansQuery = useBillingPlansQuery();
   const goLiveQuery = useBillingGoLiveCheckQuery();
   const observabilityQuery = useBillingObservabilityQuery(24);
+  const opsDigestQuery = useBillingOpsDigestQuery(24);
   const opsSnapshotQuery = useBillingOpsSnapshotQuery(24);
+  const platformSummaryQuery = useBillingPlatformOpsSummaryQuery(24, 50, showPlatformSummary);
   const releaseGateQuery = useBillingReleaseGateQuery();
   const summaryQuery = useBillingWebhookSummaryQuery(24);
   const webhookEventsQuery = useBillingWebhookEventsQuery(
@@ -45,6 +50,7 @@ export function BillingPlanFoundation() {
   const goLive = goLiveQuery.data;
   const observability = observabilityQuery.data;
   const releaseGate = releaseGateQuery.data;
+  const opsDigest = opsDigestQuery.data;
   const summary = summaryQuery.data;
   const opsSnapshot = opsSnapshotQuery.data;
   const isConfigured = status?.configured ?? false;
@@ -286,6 +292,56 @@ export function BillingPlanFoundation() {
             Download CSV snapshot
           </Button>
         </div>
+      </div>
+
+      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
+        <strong>Ops handoff digest:</strong>
+        {opsDigestQuery.isLoading || !opsDigest ? (
+          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>Generating digest...</p>
+        ) : (
+          <>
+            <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>{opsDigest.digest_text}</p>
+            <div style={{ marginTop: 8 }}>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(opsDigest.digest_text);
+                    snackbar.push('Ops digest copied to clipboard.', 'success');
+                  } catch {
+                    snackbar.push('Could not copy digest to clipboard.', 'warning');
+                  }
+                }}
+              >
+                Copy digest text
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
+        <strong>Platform ops summary (admin):</strong>
+        <div style={{ marginTop: 8 }}>
+          <Button
+            variant="ghost"
+            onClick={() => setShowPlatformSummary(true)}
+            disabled={platformSummaryQuery.isLoading}
+          >
+            {platformSummaryQuery.isLoading ? 'Loading summary...' : 'Load platform summary'}
+          </Button>
+        </div>
+        {showPlatformSummary && platformSummaryQuery.error ? (
+          <p style={{ margin: '8px 0 0', color: '#991b1b' }}>
+            {platformSummaryQuery.error.message || 'Platform summary is only available to platform admins.'}
+          </p>
+        ) : null}
+        {showPlatformSummary && platformSummaryQuery.data ? (
+          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>
+            Tenants: {platformSummaryQuery.data.tenant_count} · Ready: {platformSummaryQuery.data.ready_count} ·
+            Not ready: {platformSummaryQuery.data.not_ready_count}
+          </p>
+        ) : null}
       </div>
 
       {summary?.stuck_retries ? (

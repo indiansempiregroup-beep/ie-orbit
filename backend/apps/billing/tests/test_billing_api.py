@@ -475,6 +475,79 @@ def test_billing_ops_snapshot_endpoint_json_and_csv(api_client: APIClient, user:
 
 
 @pytest.mark.django_db
+def test_billing_ops_digest_endpoint(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    BillingWebhookEvent.objects.create(
+        tenant_id=tenant_id,
+        external_event_id="evt_digest_1",
+        event_type="payment.failed",
+        status=WebhookEventStatus.FAILED,
+        payload={},
+    )
+    response = api_client.get(reverse("billing-ops-digest"), {"window_hours": 24})
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "digest_text" in payload
+    assert "Launch posture" in payload["digest_text"]
+
+
+@pytest.mark.django_db
+def test_billing_platform_ops_summary_requires_platform_role(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-platform-ops-summary"), {"window_hours": 24})
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_billing_platform_ops_summary_for_platform_admin(api_client: APIClient) -> None:
+    user = User.objects.create_user(
+        email="platform-admin@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-platform-ops-summary"), {"window_hours": 24, "limit": 20})
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "tenant_count" in payload
+    assert "rows" in payload
+
+
+@pytest.mark.django_db
+def test_send_billing_ops_digest_task(monkeypatch: pytest.MonkeyPatch, settings) -> None:
+    user = User.objects.create_user(
+        email="ops-digest-owner@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    from apps.tenancy.models import Tenant
+
+    Tenant.objects.create(owner=user, slug="ops-digest-tenant", display_name="Ops Digest Tenant")
+    settings.BILLING_OPS_DIGEST_RECIPIENTS = "ops@example.com"
+    captured: dict[str, object] = {}
+
+    def _fake_send_mail(*, subject: str, message: str, from_email: str, recipient_list: list[str], fail_silently: bool):
+        captured["subject"] = subject
+        captured["message"] = message
+        captured["recipients"] = recipient_list
+        return 1
+
+    monkeypatch.setattr("apps.billing.tasks.send_mail", _fake_send_mail)
+    from apps.billing.tasks import send_billing_ops_digest_task
+
+    result = send_billing_ops_digest_task(window_hours=24)
+    assert result["sent"] is True
+    assert captured["recipients"] == ["ops@example.com"]
+
+
+@pytest.mark.django_db
 def test_billing_webhook_event_reprocess_endpoint(api_client: APIClient, user: User) -> None:
     access = authenticate(api_client, user)
     tenant_id = create_tenant(api_client)

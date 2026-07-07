@@ -13,7 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -29,6 +29,7 @@ from apps.billing.api.serializers import (
 from apps.billing.constants import BULK_REPROCESS_COOLDOWN_SECONDS
 from apps.billing.models import BillingWebhookEvent, WebhookEventStatus
 from apps.billing.services.checkout import CheckoutService
+from apps.billing.services.ops_digest import build_ops_digest
 from apps.billing.services.reconciliation import BillingReconciliationService
 from apps.billing.services.webhooks import WebhookService
 from apps.authentication.permissions import HasPlatformPermission
@@ -684,6 +685,56 @@ class BillingOpsSnapshotView(APIView):
             return response
 
         return success_response(snapshot, request_id=getattr(request, "request_id", None))
+
+
+class BillingOpsDigestView(APIView):
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "business:manage"
+
+    @extend_schema(tags=["Billing"], description="Generate plain-language billing operations digest.")
+    def get(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        window_hours = int(request.query_params.get("window_hours", "24"))
+        digest = build_ops_digest(tenant=tenant, window_hours=window_hours)
+        return success_response(digest, request_id=getattr(request, "request_id", None))
+
+
+class BillingPlatformOpsSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Billing"],
+        description="Platform-level operations summary across tenants (platform admins only).",
+    )
+    def get(self, request: Request) -> Response:
+        user = request.user
+        is_platform_admin = bool(
+            getattr(user, "is_superuser", False)
+            or user.user_roles.filter(role__code__in={"platform_admin", "super_admin"}, role__is_active=True).exists()
+        )
+        if not is_platform_admin:
+            raise PermissionDenied("Platform admin role is required.")
+
+        window_hours = int(request.query_params.get("window_hours", "24"))
+        window_hours = max(1, min(window_hours, 24 * 30))
+        limit = int(request.query_params.get("limit", "50"))
+        limit = max(1, min(limit, 200))
+        tenants = Tenant.objects.filter(status="active").order_by("display_name")[:limit]
+        rows = [build_ops_digest(tenant=tenant, window_hours=window_hours) for tenant in tenants]
+        ready_count = sum(1 for row in rows if row["ready"])
+        return success_response(
+            {
+                "window_hours": window_hours,
+                "tenant_count": len(rows),
+                "ready_count": ready_count,
+                "not_ready_count": len(rows) - ready_count,
+                "rows": rows,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
 
 
 @method_decorator(csrf_exempt, name="dispatch")

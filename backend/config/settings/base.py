@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+from celery.schedules import crontab
 
 from config.env import load_environment
 
@@ -196,6 +197,24 @@ CELERY_TASK_TIME_LIMIT = 30 * 60
 CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60
 CELERY_TASK_ALWAYS_EAGER = ENV.celery_task_always_eager
 CELERY_BEAT_SCHEDULER = "celery.beat:PersistentScheduler"
+BILLING_OPS_DIGEST_RECIPIENTS = os.getenv("BILLING_OPS_DIGEST_RECIPIENTS", "")
+BILLING_OPS_DIGEST_ENABLED = os.getenv("BILLING_OPS_DIGEST_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+BILLING_OPS_DIGEST_HOUR_UTC = int(os.getenv("BILLING_OPS_DIGEST_HOUR_UTC", "2"))
+CELERY_BEAT_SCHEDULE = {
+    "billing-send-ops-digest-daily": {
+        "task": "billing.send_ops_digest",
+        "schedule": crontab(minute=0, hour=BILLING_OPS_DIGEST_HOUR_UTC),
+        "kwargs": {"window_hours": 24},
+    }
+    if BILLING_OPS_DIGEST_ENABLED
+    else None,
+}
+CELERY_BEAT_SCHEDULE = {key: value for key, value in CELERY_BEAT_SCHEDULE.items() if value is not None}
 
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
