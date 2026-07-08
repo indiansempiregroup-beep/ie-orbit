@@ -4,8 +4,9 @@ from typing import Any
 from uuid import UUID
 
 from django.db import connection
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 
+from apps.staff.models import Staff
 from apps.tenancy.models import (
     Branding,
     Organization,
@@ -20,7 +21,14 @@ class TenantRepository:
     def list_for_user(self, user: Any) -> QuerySet[Tenant]:
         if getattr(user, "is_superuser", False):
             return Tenant.objects.all()
-        return Tenant.objects.filter(owner=user)
+
+        staff_tenant_ids = Staff.objects.filter(
+            user=user,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).values_list("tenant_id", flat=True)
+
+        return Tenant.objects.filter(Q(owner=user) | Q(id__in=staff_tenant_ids)).distinct()
 
     def get_for_user(self, *, tenant_id: UUID | str, user: Any) -> Tenant:
         return self.list_for_user(user).get(id=tenant_id)

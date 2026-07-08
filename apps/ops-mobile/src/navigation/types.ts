@@ -1,0 +1,50 @@
+export type AuthStackParamList = {
+  Login: undefined;
+  RegisterWizard: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { token?: string };
+  VerifyEmail: undefined;
+  AcceptInvitation: { token?: string };
+};
+
+export type MainTabParamList = {
+  Dashboard: undefined;
+  Bookings: undefined;
+  Calendar: undefined;
+  Alerts: undefined;
+  More: undefined;
+};
+
+export type RootStackParamList = {
+  Auth: undefined;
+  NoAccess: undefined;
+  WorkspacePicker: undefined;
+  Main: undefined;
+  Search: undefined;
+  VerifyEmail: undefined;
+  CreateBooking: { startAt?: string; staffId?: string; serviceId?: string; durationMinutes?: number };
+  BookingDetail: { bookingId: string };
+  Customers: undefined;
+  CustomerForm: { customerId?: string };
+  CustomerDetail: { customerId: string };
+  Services: undefined;
+  ServiceForm: { serviceId?: string };
+  ServiceDetail: { serviceId: string };
+  StaffList: undefined;
+  StaffForm: { staffId?: string };
+  StaffDetail: { staffId: string };
+  StaffSchedule: { staffId: string };
+  Settings: undefined;
+  BusinessProfile: undefined;
+  BusinessEdit: undefined;
+  ProductSettings: undefined;
+  Branches: undefined;
+  BI: { tab?: 'overview' | 'revenue' | 'forecast' | 'reports' };
+  Reports: undefined;
+  Admin: undefined;
+  Team: undefined;
+  Profile: undefined;
+  ProfileEdit: undefined;
+  Security: undefined;
+  Sessions: undefined;
+};

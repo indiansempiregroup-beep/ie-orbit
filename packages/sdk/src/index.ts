@@ -1158,10 +1158,11 @@ class ApiClient {
   private token: string | null;
 
   constructor(config: ApiClientConfig) {
+    const configuredBaseUrl = config.baseUrl;
     this.resolveBaseUrl =
-      typeof config.baseUrl === 'function'
-        ? config.baseUrl
-        : () => config.baseUrl.replace(/\/$/, '');
+      typeof configuredBaseUrl === 'function'
+        ? configuredBaseUrl
+        : () => configuredBaseUrl.replace(/\/$/, '');
     const rawFetch = config.fetchImpl ?? fetch;
     this.fetchImpl = rawFetch.bind(globalThis as unknown as typeof fetch);
     this.defaultHeaders = config.headers ?? {};

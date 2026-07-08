@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "IE Platform",
+    "slug": "ie-platform-ops",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"]
+  }
+}
