@@ -14,4 +14,4 @@ The Docker platform is designed to provide a complete local environment without 
 
 ## Database strategy
 
-Neon PostgreSQL is the default development database target. The environment variables are intentionally configured to point at a remote Neon URL, while remaining compatible with a future local PostgreSQL override through configuration only.
+Local PostgreSQL (`postgres:18-alpine` in Docker Compose) is the default development database. Set `DATABASE_URL` to a Neon pooler URL only when you intentionally want a remote shared database.

@@ -52,15 +52,21 @@ export function useCancelBooking() {
   });
 }
 
-export function useAvailability(date: string, staffId?: string, durationMinutes?: number) {
+export function useAvailability(
+  date: string,
+  staffId?: string,
+  durationMinutes?: number,
+  serviceId?: string,
+) {
   const client = useApiClient();
   const { businessId, scopeKey, workspaceReady } = useWorkspaceScope();
   return useQuery<AvailabilitySlot[], Error>({
-    queryKey: ['bookings', 'availability', date, staffId, durationMinutes, ...scopeKey],
+    queryKey: ['bookings', 'availability', date, staffId, durationMinutes, serviceId, ...scopeKey],
     queryFn: () =>
       getAvailability(client, businessId, {
         date,
         staff_id: staffId,
+        service_id: serviceId,
         duration_minutes: durationMinutes,
         interval_minutes: 30,
         buffer_minutes: 0,

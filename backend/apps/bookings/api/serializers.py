@@ -144,6 +144,7 @@ class BookingRescheduleSerializer(serializers.Serializer):
 class AvailabilityQuerySerializer(serializers.Serializer):
     business = serializers.UUIDField(required=False)
     staff_id = serializers.UUIDField(required=False)
+    service_id = serializers.UUIDField(required=False)
     date = serializers.DateField()
     duration_minutes = serializers.IntegerField(min_value=1, default=30)
     interval_minutes = serializers.IntegerField(min_value=1, default=15)

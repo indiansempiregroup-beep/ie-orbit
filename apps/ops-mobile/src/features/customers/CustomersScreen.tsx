@@ -33,7 +33,7 @@ export function CustomersScreen() {
     <View style={styles.screen}>
       <OpsHeader title="Customers" subtitle={`${customers.length} total`} />
       <View style={styles.toolbar}>
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search customers" />
+        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search customers" />
         <Button label="Add" onPress={() => navigation.navigate('CustomerForm', {})} />
       </View>
       <RefreshableScrollView
@@ -47,7 +47,11 @@ export function CustomersScreen() {
           emptyMessage="No customers found."
         />
         {filtered.map((customer) => {
-          const name = customer.full_name?.trim() || customer.email || 'Customer';
+          const name =
+            customer.display_name?.trim() ||
+            customer.full_name?.trim() ||
+            customer.email ||
+            'Customer';
           return (
             <ListRow
               key={customer.id}
@@ -74,5 +78,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     alignItems: 'center',
   },
+  search: { flex: 1 },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 });

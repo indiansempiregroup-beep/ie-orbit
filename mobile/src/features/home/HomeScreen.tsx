@@ -17,7 +17,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Badge } from '../../components/ui/Badge';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { isUpcomingBooking, mapBookingStatus } from '../../utils/format';
+import { formatTime, isUpcomingBooking, mapBookingStatus } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
@@ -130,7 +130,7 @@ export function HomeScreen() {
                 <View style={styles.nextMetaItem}>
                   <Feather name="clock" size={12} color="rgba(255,255,255,0.6)" />
                   <Text style={styles.nextMetaText}>
-                    {new Date(nextBooking.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {formatTime(nextBooking.start_at)}
                   </Text>
                 </View>
               </View>

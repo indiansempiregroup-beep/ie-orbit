@@ -9,7 +9,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { canManageTeam, formatUserRole } from '../../utils/roles';
+import { canAccessSettings, canManageTeam, formatUserRole } from '../../utils/roles';
 import { colors, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -20,6 +20,8 @@ export function MoreScreen() {
   const { activeBusiness } = useWorkspace();
   const isPlatformAdmin = user?.roles?.includes('platform_admin') || user?.roles?.includes('super_admin');
   const displayName = user?.full_name || user?.email || 'Account';
+  const showSettings = canAccessSettings(user);
+  const showTeam = canManageTeam(user);
 
   function onSignOut() {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -34,7 +36,7 @@ export function MoreScreen() {
         colors={[`${colors.primary}22`, colors.background]}
         style={[styles.hero, { paddingTop: insets.top + spacing.xxl }]}
       >
-        <Avatar name={displayName} size="xl" />
+        <Avatar name={displayName} size="xl" src={user?.profile_photo} />
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         <Text style={styles.meta}>
@@ -53,8 +55,10 @@ export function MoreScreen() {
           onPress={() => navigation.navigate('BI', { tab: 'overview' })}
         />
         <MenuRow icon="file-text" label="Reports" onPress={() => navigation.navigate('Reports')} />
-        <MenuRow icon="settings" label="Settings" onPress={() => navigation.navigate('Settings')} />
-        {canManageTeam(user) ? (
+        {showSettings ? (
+          <MenuRow icon="settings" label="Settings" onPress={() => navigation.navigate('Settings')} />
+        ) : null}
+        {showTeam ? (
           <MenuRow icon="mail" label="Team & invitations" onPress={() => navigation.navigate('Team')} />
         ) : null}
         {isPlatformAdmin ? (

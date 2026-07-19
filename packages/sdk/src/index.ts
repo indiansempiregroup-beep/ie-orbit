@@ -524,6 +524,7 @@ export type MobileAvailabilityResponse = {
     staff_id?: string | null;
     capacity: number;
   }>;
+  message?: string | null;
 };
 
 export type MobileBookingRequestInput = {
@@ -752,6 +753,13 @@ export type Business = {
   status?: string;
   currency?: string | null;
   timezone?: string | null;
+  primary_contact?: string | null;
+  website?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
   selected_product?: string | null;
   product_subscriptions?: BusinessProductSubscription[];
   settings?: Record<string, unknown>;
@@ -866,6 +874,10 @@ export type CustomerAddress = {
 
 export type Customer = {
   id: string;
+  customer_code?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  display_name?: string | null;
   full_name?: string | null;
   email?: string | null;
   phone_number?: string | null;
@@ -874,6 +886,7 @@ export type Customer = {
   latitude?: number | null;
   longitude?: number | null;
   address?: CustomerAddress | null;
+  addresses?: Array<CustomerAddress & { is_default?: boolean; full_address?: string | null }>;
   created_at?: string;
   updated_at?: string;
 };
@@ -917,9 +930,26 @@ export type Service = {
   description?: string | null;
   status?: string;
   duration_minutes?: number;
+  durations?: Array<{ duration_minutes: number; is_default?: boolean }>;
   price?: number;
   currency?: string | null;
+  prices?: Array<{
+    id?: string;
+    currency?: string;
+    base_price?: string | number;
+    sale_price?: string | number | null;
+    is_default?: boolean;
+  }>;
   image_url?: string | null;
+  images?: Array<{
+    id?: string;
+    media?: string;
+    alt_text?: string;
+    display_order?: number;
+    is_primary?: boolean;
+    image_url?: string | null;
+    thumbnail_url?: string | null;
+  }>;
   created_at?: string;
   updated_at?: string;
 };
@@ -955,10 +985,21 @@ export type ServiceUpdateInput = Partial<ServiceCreateInput>;
 
 export type StaffMember = {
   id: string;
+  user?: string | null;
+  photo?: string | null;
+  photo_url?: string | null;
+  staff_code?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  display_name?: string | null;
   full_name?: string | null;
   email?: string | null;
   phone_number?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  employment_status?: string;
   status?: string;
+  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -998,6 +1039,7 @@ export type StaffCreateInput = {
   display_name: string;
   email?: string;
   phone_number?: string;
+  photo?: string | null;
   designation?: string;
   department?: string;
   working_location?: string;
@@ -1204,7 +1246,7 @@ class ApiClient {
     checkIn: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/check-in`, { method: 'POST', body }),
     complete: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/complete`, { method: 'POST', body }),
     reschedule: (bookingId: string, body: { start_at: string; reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/reschedule`, { method: 'POST', body }),
-    availability: (query: { business?: string; staff_id?: string; date: string; duration_minutes?: number; interval_minutes?: number; buffer_minutes?: number }) => this.request<AvailabilitySlot[]>(`/availability`, { method: 'GET', query }),
+    availability: (query: { business?: string; staff_id?: string; service_id?: string; date: string; duration_minutes?: number; interval_minutes?: number; buffer_minutes?: number }) => this.request<AvailabilitySlot[]>(`/availability`, { method: 'GET', query }),
     staffWeeklySchedules: {
       list: (query: { staff_id: string; business?: string }) =>
         this.request<StaffWeeklySchedule[]>('/staff-weekly-schedules', { method: 'GET', query }),
@@ -1281,6 +1323,7 @@ class ApiClient {
     create: (body: StaffCreateInput) => this.request<StaffMember>('/staff', { method: 'POST', body }),
     get: (staffId: string) => this.request<StaffMember>(`/staff/${staffId}`, { method: 'GET' }),
     patch: (staffId: string, body: StaffUpdateInput) => this.request<StaffMember>(`/staff/${staffId}`, { method: 'PATCH', body }),
+    delete: (staffId: string) => this.request<null>(`/staff/${staffId}`, { method: 'DELETE' }),
   };
 
   notifications = {
@@ -1388,6 +1431,7 @@ class ApiClient {
       interval_minutes?: number;
       buffer_minutes?: number;
       staff_id?: string | null;
+      service_id?: string | null;
     }) => this.request<MobileAvailabilityResponse>('/mobile/availability', { method: 'GET', query }),
     requestBooking: (body: MobileBookingRequestInput) =>
       this.request<MobileBookingRequestResponse>('/mobile/bookings/request', { method: 'POST', body }),

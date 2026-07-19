@@ -12,7 +12,7 @@ type UploadMediaArgs = {
   tenantId: string;
   businessId: string;
   asset: ImagePickerAsset;
-  folderType: 'business' | 'services';
+  folderType: 'business' | 'services' | 'staff';
   tags: string[];
   displayName: string;
 };
@@ -86,5 +86,23 @@ export async function uploadServiceImage(args: Omit<UploadMediaArgs, 'folderType
     folderType: 'services',
     tags: ['service', 'image'],
     displayName: `${args.serviceName} image`,
+  });
+}
+
+export async function uploadStaffPhoto(args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { staffName: string }) {
+  return uploadMedia({
+    ...args,
+    folderType: 'staff',
+    tags: ['staff', 'photo'],
+    displayName: `${args.staffName} photo`,
+  });
+}
+
+export async function uploadProfilePhoto(args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { userName: string }) {
+  return uploadMedia({
+    ...args,
+    folderType: 'business',
+    tags: ['profile', 'photo'],
+    displayName: `${args.userName} profile photo`,
   });
 }

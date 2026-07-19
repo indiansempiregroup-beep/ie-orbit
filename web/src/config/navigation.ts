@@ -13,6 +13,14 @@ import {
   UserCog,
   Users,
 } from 'lucide-react';
+import type { UserProfile } from '@ie-platform/sdk';
+import {
+  canAccessReports,
+  canManageBusinessSettings,
+  hasAnyPermission,
+  hasPermission,
+  isPlatformAdmin,
+} from '../utils/roles';
 
 export type AppNavItem = {
   to: string;
@@ -21,37 +29,153 @@ export type AppNavItem = {
   group?: 'operations' | 'settings' | 'account';
   /** When set, nav item is visible only for these product codes. Omit = platform core (always visible). */
   products?: string[];
+  /** Any one of these permissions allows the item. */
+  anyPermissions?: string[];
+  /** Custom visibility check (after product filter). */
+  isVisible?: (user: UserProfile | null | undefined) => boolean;
 };
 
 /** Platform core surfaces — visible regardless of active product. */
 export const navigationItems: AppNavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'operations' },
-  { to: '/calendar', label: 'Calendar', icon: CalendarDays, group: 'operations', products: ['appointie'] },
-  { to: '/bookings', label: 'Bookings', icon: NotebookPen, group: 'operations', products: ['appointie'] },
-  { to: '/customers', label: 'Customers', icon: Users, group: 'operations' },
-  { to: '/services', label: 'Services', icon: Scissors, group: 'operations' },
-  { to: '/staff', label: 'Staff', icon: UserCog, group: 'operations' },
-  { to: '/reports', label: 'Reports', icon: ChartColumnBig, group: 'operations' },
-  { to: '/bi/overview', label: 'BI', icon: BarChart3, group: 'operations' },
-  { to: '/notifications', label: 'Notifications', icon: Bell, group: 'operations' },
-  { to: '/settings', label: 'Settings', icon: Settings, group: 'settings' },
-  { to: '/admin', label: 'Platform Admin', icon: Shield, group: 'settings' },
-  { to: '/profile', label: 'Profile', icon: BookOpenText, group: 'account' },
+  {
+    to: '/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    group: 'operations',
+    anyPermissions: ['business:read'],
+  },
+  {
+    to: '/calendar',
+    label: 'Calendar',
+    icon: CalendarDays,
+    group: 'operations',
+    products: ['appointie'],
+    anyPermissions: ['booking:read'],
+  },
+  {
+    to: '/bookings',
+    label: 'Bookings',
+    icon: NotebookPen,
+    group: 'operations',
+    products: ['appointie'],
+    anyPermissions: ['booking:read'],
+  },
+  {
+    to: '/customers',
+    label: 'Customers',
+    icon: Users,
+    group: 'operations',
+    anyPermissions: ['customer:read'],
+  },
+  {
+    to: '/services',
+    label: 'Services',
+    icon: Scissors,
+    group: 'operations',
+    anyPermissions: ['service:read'],
+  },
+  {
+    to: '/staff',
+    label: 'Staff',
+    icon: UserCog,
+    group: 'operations',
+    anyPermissions: ['staff:read'],
+  },
+  {
+    to: '/reports',
+    label: 'Reports',
+    icon: ChartColumnBig,
+    group: 'operations',
+    isVisible: canAccessReports,
+  },
+  {
+    to: '/bi/overview',
+    label: 'BI',
+    icon: BarChart3,
+    group: 'operations',
+    isVisible: canAccessReports,
+  },
+  {
+    to: '/notifications',
+    label: 'Notifications',
+    icon: Bell,
+    group: 'operations',
+  },
+  {
+    to: '/settings',
+    label: 'Settings',
+    icon: Settings,
+    group: 'settings',
+    isVisible: canManageBusinessSettings,
+  },
+  {
+    to: '/admin',
+    label: 'Platform Admin',
+    icon: Shield,
+    group: 'settings',
+    isVisible: isPlatformAdmin,
+  },
+  {
+    to: '/profile',
+    label: 'Profile',
+    icon: BookOpenText,
+    group: 'account',
+  },
 ];
 
 export const quickActionItems: AppNavItem[] = [
-  { to: '/bookings', label: 'New Booking', icon: NotebookPen, group: 'operations', products: ['appointie'] },
-  { to: '/customers', label: 'Add Customer', icon: Users, group: 'operations' },
-  { to: '/services', label: 'Add Service', icon: Scissors, group: 'operations' },
-  { to: '/staff', label: 'Add Staff', icon: UserCog, group: 'operations' },
-  { to: '/calendar', label: 'View Calendar', icon: CalendarDays, group: 'operations', products: ['appointie'] },
-  { to: '/reports', label: 'Reports', icon: ChartColumnBig, group: 'operations' },
-  { to: '/settings', label: 'Business Profile', icon: Settings, group: 'settings' },
+  {
+    to: '/bookings',
+    label: 'New Booking',
+    icon: NotebookPen,
+    group: 'operations',
+    products: ['appointie'],
+    anyPermissions: ['booking:write', 'booking:manage'],
+  },
+  {
+    to: '/customers',
+    label: 'Add Customer',
+    icon: Users,
+    group: 'operations',
+    anyPermissions: ['customer:write', 'customer:manage'],
+  },
+  {
+    to: '/services',
+    label: 'Add Service',
+    icon: Scissors,
+    group: 'operations',
+    anyPermissions: ['service:write', 'service:manage'],
+  },
+  {
+    to: '/staff',
+    label: 'Add Staff',
+    icon: UserCog,
+    group: 'operations',
+    anyPermissions: ['staff:write', 'staff:manage'],
+  },
+  {
+    to: '/calendar',
+    label: 'View Calendar',
+    icon: CalendarDays,
+    group: 'operations',
+    products: ['appointie'],
+    anyPermissions: ['booking:read'],
+  },
+  {
+    to: '/reports',
+    label: 'Reports',
+    icon: ChartColumnBig,
+    group: 'operations',
+    isVisible: canAccessReports,
+  },
+  {
+    to: '/settings',
+    label: 'Business Profile',
+    icon: Settings,
+    group: 'settings',
+    isVisible: canManageBusinessSettings,
+  },
 ];
-
-export function isNavItemVisible(item: AppNavItem, activeProduct: string | null | undefined): boolean {
-  return isProductAllowed(item.products, activeProduct);
-}
 
 export function isProductAllowed(
   products: string[] | undefined,
@@ -62,9 +186,33 @@ export function isProductAllowed(
   return products.includes(product);
 }
 
+export function isNavItemVisibleForUser(
+  item: AppNavItem,
+  user: UserProfile | null | undefined,
+): boolean {
+  if (item.isVisible) return item.isVisible(user);
+  if (item.anyPermissions?.length) return hasAnyPermission(user, item.anyPermissions);
+  return true;
+}
+
+export function isNavItemVisible(
+  item: AppNavItem,
+  activeProduct: string | null | undefined,
+  user?: UserProfile | null,
+): boolean {
+  if (!isProductAllowed(item.products, activeProduct)) return false;
+  return isNavItemVisibleForUser(item, user);
+}
+
 export function filterNavigationByProduct(
   items: AppNavItem[],
   activeProduct: string | null | undefined,
+  user?: UserProfile | null,
 ): AppNavItem[] {
-  return items.filter((item) => isNavItemVisible(item, activeProduct));
+  return items.filter((item) => isNavItemVisible(item, activeProduct, user));
+}
+
+/** @deprecated Prefer hasPermission from utils/roles */
+export function checkPermission(user: UserProfile | null | undefined, code: string): boolean {
+  return hasPermission(user, code);
 }

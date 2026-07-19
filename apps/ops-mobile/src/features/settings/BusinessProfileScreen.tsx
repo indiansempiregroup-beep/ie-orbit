@@ -22,6 +22,8 @@ export function BusinessProfileScreen() {
   if (loading && !settings) return <ScreenState loading />;
 
   const name = activeBusiness?.display_name ?? activeBusiness?.business_name ?? 'Business';
+  const location =
+    [activeBusiness?.city, activeBusiness?.state, activeBusiness?.country].filter(Boolean).join(', ') || '—';
 
   return (
     <FormScreen>
@@ -33,6 +35,12 @@ export function BusinessProfileScreen() {
             <Text style={styles.meta}>{activeBusiness?.business_code ?? '—'}</Text>
           </View>
         </View>
+        <DetailRow label="Legal name" value={activeBusiness?.business_name ?? '—'} />
+        <DetailRow label="Email" value={activeBusiness?.email ?? '—'} />
+        <DetailRow label="Primary contact" value={activeBusiness?.primary_contact ?? '—'} />
+        <DetailRow label="Website" value={activeBusiness?.website ?? '—'} />
+        <DetailRow label="Address" value={activeBusiness?.address_line1 ?? '—'} />
+        <DetailRow label="Location" value={location} />
         <DetailRow label="Product" value={activeBusiness?.selected_product ?? settings?.product_name ?? '—'} />
         <DetailRow label="Timezone" value={activeBusiness?.timezone ?? '—'} />
         <DetailRow label="Currency" value={activeBusiness?.currency ?? '—'} />
@@ -40,7 +48,7 @@ export function BusinessProfileScreen() {
         <DetailRow label="Billing provider" value={billing?.provider ?? '—'} />
         <DetailRow label="Billing configured" value={billing?.configured ? 'Yes' : 'No'} />
       </Card>
-      <Button label="Edit profile" fullWidth size="lg" onPress={() => navigation.navigate('BusinessEdit')} />
+      <Button label="Edit business profile" fullWidth size="lg" onPress={() => navigation.navigate('BusinessEdit')} />
     </FormScreen>
   );
 }

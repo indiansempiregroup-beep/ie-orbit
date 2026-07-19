@@ -1,24 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { StaffInvitation } from '@ie-platform/sdk';
 import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { ListRow } from '../../components/ui/ListRow';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useStaffMembers } from '../../hooks/useOpsData';
 import { useIamMutations, useIamRoles, useTeamMembers } from '../../hooks/useOpsExtended';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import type { RootStackParamList } from '../../navigation/types';
 
 const ASSIGNABLE_ROLES = ['manager', 'staff'];
 
 export function TeamScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const { businessId } = useWorkspace();
   const { members, loading: membersLoading, reload: reloadMembers } = useTeamMembers();
+  const { staff, loading: staffLoading, reload: reloadStaff } = useStaffMembers();
   const { roles } = useIamRoles();
   const iam = useIamMutations();
   const [invitations, setInvitations] = useState<StaffInvitation[]>([]);
@@ -30,6 +37,12 @@ export function TeamScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const assignableRoles = roles.filter((item) => ASSIGNABLE_ROLES.includes(item.code));
+  const memberEmails = new Set(members.map((member) => member.email?.toLowerCase()).filter(Boolean));
+  const pendingInviteEmails = new Set(
+    invitations
+      .filter((invitation) => invitation.status === 'pending')
+      .map((invitation) => invitation.email.toLowerCase()),
+  );
 
   async function reloadInvites() {
     if (!client || !businessId) return;
@@ -50,16 +63,24 @@ export function TeamScreen() {
     <RefreshableScrollView
       contentContainerStyle={styles.wrap}
       onRefresh={async () => {
-        await Promise.all([reloadMembers(), reloadInvites()]);
+        await Promise.all([reloadMembers(), reloadInvites(), reloadStaff()]);
       }}
     >
       <Card>
         <Text style={styles.title}>Invite team member</Text>
+        <Text style={styles.helper}>
+          Inviting creates login access. Accepting the invite also creates/links a Staff profile.
+        </Text>
         <Input label="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
         <View style={styles.roleRow}>
           <Button label="Staff" variant={role === 'staff' ? 'primary' : 'outline'} onPress={() => setRole('staff')} />
           <Button label="Manager" variant={role === 'manager' ? 'primary' : 'outline'} onPress={() => setRole('manager')} />
         </View>
+        <Text style={styles.helper}>
+          {role === 'manager'
+            ? 'Managers: full OPS-Mobile access including Settings and Team.'
+            : 'Staff: bookings, calendar, and customers only.'}
+        </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button
           label="Send invitation"
@@ -72,7 +93,7 @@ export function TeamScreen() {
             try {
               await client.invitations.create(businessId, { email: email.trim(), platform_role_code: role });
               setEmail('');
-              await reloadInvites();
+              await Promise.all([reloadInvites(), reloadStaff()]);
             } catch (err) {
               setError(getApiErrorMessage(err, 'Unable to send invitation.'));
             } finally {
@@ -82,7 +103,38 @@ export function TeamScreen() {
         />
       </Card>
 
-      <Text style={styles.section}>Members</Text>
+      <Text style={styles.section}>Staff directory</Text>
+      <Text style={styles.helper}>Operational staff profiles used for scheduling and bookings.</Text>
+      <ScreenState
+        loading={staffLoading && !staff.length}
+        empty={!staffLoading && staff.length === 0}
+        emptyMessage="No staff profiles yet. Add staff or invite a teammate."
+      />
+      {staff.map((member) => {
+        const name = member.display_name || member.full_name || member.email || 'Staff member';
+        const emailKey = member.email?.toLowerCase() ?? '';
+        const loginStatus = member.user
+          ? 'Login linked'
+          : emailKey && pendingInviteEmails.has(emailKey)
+            ? 'Invite pending'
+            : emailKey && memberEmails.has(emailKey)
+              ? 'Team member'
+              : 'No login yet';
+        return (
+          <ListRow
+            key={member.id}
+            title={name}
+            subtitle={`${member.email ?? 'No email'} · ${loginStatus}`}
+            meta={member.employment_status || member.status || undefined}
+            avatarName={name}
+            avatarSrc={member.photo_url}
+            onPress={() => navigation.navigate('StaffDetail', { staffId: member.id })}
+          />
+        );
+      })}
+      <Button label="Add staff profile" variant="outline" fullWidth onPress={() => navigation.navigate('StaffForm', {})} />
+
+      <Text style={styles.section}>Members with app access</Text>
       <ScreenState loading={membersLoading && !members.length} empty={!membersLoading && members.length === 0} emptyMessage="No members yet." />
       {members.map((member) => {
         const name = member.full_name || member.email || 'Member';
@@ -176,7 +228,8 @@ export function TeamScreen() {
 
 const styles = StyleSheet.create({
   wrap: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
-  title: { ...typography.title, color: colors.foreground, marginBottom: spacing.md },
+  title: { ...typography.title, color: colors.foreground, marginBottom: spacing.sm },
+  helper: { ...typography.caption, color: colors.mutedForeground, marginBottom: spacing.sm },
   roleRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   error: { ...typography.caption, color: colors.destructive, marginBottom: spacing.sm },
   section: { ...typography.label, color: colors.foreground, marginTop: spacing.md },

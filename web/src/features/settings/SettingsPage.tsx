@@ -9,6 +9,7 @@ import { useCustomerList, useServiceList, useStaffList } from '../management/man
 import { BusinessSetupPanel } from './BusinessSetupPanel';
 import { useBusinessListQuery } from './businessSettingsHooks';
 import { BillingPlanFoundation } from './BillingPlanFoundation';
+import { formatUserRole } from '../../utils/roles';
 
 export function SettingsPage() {
   const theme = useTheme();
@@ -36,8 +37,8 @@ export function SettingsPage() {
   const roleSummary = useMemo(() => {
     const roles = user?.roles ?? [];
     return {
-      primaryRole: roles[0] ?? 'Owner',
-      roleCount: roles.length || 1,
+      primaryRole: formatUserRole(roles),
+      roleCount: roles.length || 0,
       staffCount: staffQuery.data?.filter((member) => member.status === 'active').length ?? 0,
     };
   }, [staffQuery.data, user?.roles]);

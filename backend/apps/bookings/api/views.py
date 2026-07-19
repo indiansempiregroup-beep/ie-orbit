@@ -234,6 +234,11 @@ class AvailabilityView(APIView):
         parameters=[
             OpenApiParameter("business", str, description="Business UUID."),
             OpenApiParameter("staff_id", str, description="Optional staff UUID."),
+            OpenApiParameter(
+                "service_id",
+                str,
+                description="Optional service UUID. When staff is not selected, only staff assigned to this service are considered.",
+            ),
             OpenApiParameter("date", str, required=True, description="Target date."),
             OpenApiParameter("duration_minutes", int, description="Service duration."),
             OpenApiParameter("interval_minutes", int, description="Slot interval."),
@@ -245,25 +250,16 @@ class AvailabilityView(APIView):
         serializer = AvailabilityQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
         business = self._business(request, serializer.validated_data.get("business"))
-        if serializer.validated_data.get("staff_id"):
-            slots = self.service.staff_slots(
-                tenant=request.current_tenant,
-                business=business,
-                staff_id=serializer.validated_data["staff_id"],
-                target_date=serializer.validated_data["date"],
-                duration_minutes=serializer.validated_data["duration_minutes"],
-                interval_minutes=serializer.validated_data["interval_minutes"],
-                buffer_minutes=serializer.validated_data["buffer_minutes"],
-            )
-        else:
-            slots = self.service.business_slots(
-                tenant=request.current_tenant,
-                business=business,
-                target_date=serializer.validated_data["date"],
-                duration_minutes=serializer.validated_data["duration_minutes"],
-                interval_minutes=serializer.validated_data["interval_minutes"],
-                buffer_minutes=serializer.validated_data["buffer_minutes"],
-            )
+        slots = self.service.available_slots(
+            tenant=request.current_tenant,
+            business=business,
+            staff_id=serializer.validated_data.get("staff_id"),
+            service_id=serializer.validated_data.get("service_id"),
+            target_date=serializer.validated_data["date"],
+            duration_minutes=serializer.validated_data["duration_minutes"],
+            interval_minutes=serializer.validated_data["interval_minutes"],
+            buffer_minutes=serializer.validated_data["buffer_minutes"],
+        )
         return success_response(
             [slot.as_dict() for slot in slots],
             request_id=getattr(request, "request_id", None),

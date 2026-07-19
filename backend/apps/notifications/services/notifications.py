@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.db import transaction
@@ -26,6 +28,22 @@ logger = logging.getLogger("ie_platform.notifications")
 
 CUSTOMER_TEMPLATE_SUFFIX = ""
 ADMIN_TEMPLATE_SUFFIX = "_admin"
+
+
+def _resolve_zone(name: str | None) -> ZoneInfo:
+    try:
+        return ZoneInfo((name or "").strip() or "UTC")
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
+def format_booking_start_label(*, start_at: datetime, user: Any | None, business: Any | None) -> str:
+    """Format booking time for notifications: user timezone → business → UTC."""
+    user_tz = getattr(user, "timezone", None) if user is not None else None
+    business_tz = getattr(business, "timezone", None) if business is not None else None
+    zone = _resolve_zone(user_tz or business_tz or "UTC")
+    local_start = timezone.localtime(start_at, timezone=zone)
+    return local_start.strftime("%d %b %Y, %I:%M %p")
 
 
 class NotificationService:
@@ -245,7 +263,11 @@ class NotificationService:
             if customer is not None:
                 customer_name = customer.display_name or customer_name
 
-        start_label = timezone.localtime(booking.start_at).strftime("%d %b %Y, %I:%M %p")
+        start_label = format_booking_start_label(
+            start_at=booking.start_at,
+            user=user,
+            business=booking.business,
+        )
         replacements = {
             "{{booking_number}}": booking.booking_number,
             "{{service_name}}": service_name,

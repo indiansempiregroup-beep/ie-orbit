@@ -9,6 +9,7 @@ import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useTheme } from '../../hooks/useTheme';
+import { formatDateTime } from '../../lib/datetime';
 
 export function BookingsPage() {
   const theme = useTheme();
@@ -141,7 +142,7 @@ export function BookingsPage() {
                       <span>{customerMap.get(String(booking.customer_id)) ?? '—'}</span>
                       <span>{serviceMap.get(String(booking.service_id)) ?? '—'}</span>
                       <span>{booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : 'Unassigned'}</span>
-                      <span>{booking.start_at ? new Date(booking.start_at).toLocaleString() : '—'}</span>
+                      <span>{booking.start_at ? formatDateTime(booking.start_at) : '—'}</span>
                       <span style={{ color: status === 'confirmed' ? '#10b981' : status === 'cancelled' ? '#dc2626' : '#6b7280' }}>{status}</span>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {canConfirm ? (

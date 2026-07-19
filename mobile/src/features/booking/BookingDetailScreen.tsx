@@ -11,7 +11,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, spacing, typography } from '../../theme/tokens';
-import { mapBookingStatus } from '../../utils/format';
+import { formatTime, mapBookingStatus } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 
@@ -60,9 +60,16 @@ export function BookingDetailScreen() {
       date,
       duration_minutes: booking.duration_minutes,
       staff_id: booking.staff_id || undefined,
+      service_id: booking.service_id,
     });
     setSlots(response.data.slots);
     setSelectedSlot('');
+    if (!response.data.slots.length) {
+      Alert.alert(
+        'No timeslot available',
+        response.data.message || 'No timeslot available for this date. Try another day.',
+      );
+    }
   }
 
   async function onReschedule() {
@@ -138,7 +145,7 @@ export function BookingDetailScreen() {
         <DetailRow label="Date" value={new Date(booking.start_at).toLocaleDateString()} />
         <DetailRow
           label="Time"
-          value={new Date(booking.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          value={formatTime(booking.start_at)}
         />
         <DetailRow label="Duration" value={`${booking.duration_minutes} minutes`} />
         {booking.staff_name ? <DetailRow label="Stylist" value={booking.staff_name} /> : null}
@@ -153,7 +160,7 @@ export function BookingDetailScreen() {
           {slots.map((slot) => (
             <Button
               key={slot.start_at}
-              label={new Date(slot.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              label={formatTime(slot.start_at)}
               variant={selectedSlot === slot.start_at ? 'primary' : 'outline'}
               fullWidth
               primaryColor={primary}

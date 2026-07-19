@@ -122,7 +122,7 @@ RUPALI_STAFF: tuple[DemoStaffSpec, ...] = (
         "Sirsat",
         "Senior Stylist & Owner",
         "Hair & Beauty",
-        ("hair-cut", "hair-color-cut", "blowout", "bridal-trial"),
+        ("hair-cut", "hair-color-cut", "blowout", "bridal-trial", "facial-glow"),
     ),
     DemoStaffSpec(
         "priya",
@@ -130,7 +130,7 @@ RUPALI_STAFF: tuple[DemoStaffSpec, ...] = (
         "Sharma",
         "Color Specialist",
         "Color",
-        ("hair-color-cut", "highlights", "hair-cut"),
+        ("hair-color-cut", "highlights", "hair-cut", "facial-glow"),
     ),
     DemoStaffSpec(
         "keiko",
@@ -364,7 +364,7 @@ def _ensure_staff(
         for weekday, opening, closing, is_open in BUSINESS_HOURS:
             if not is_open:
                 continue
-            StaffWeeklySchedule.objects.update_or_create(
+            StaffWeeklySchedule.objects.get_or_create(
                 tenant=business.tenant,
                 business=business,
                 staff_id=staff.id,

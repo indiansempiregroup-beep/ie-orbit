@@ -3,12 +3,14 @@
 ## Docker compose fails to start
 
 - Ensure Docker Desktop is running and the repository is mounted into the Docker engine.
-- Confirm you have a valid DATABASE_URL for Neon PostgreSQL.
+- Confirm `DATABASE_URL` is set (local default: `postgresql://ie:ie@postgres:5432/ie_platform`).
 - Rebuild from scratch with `docker compose down -v && docker compose up --build`.
 
 ## Backend cannot connect to database
 
-- Verify DATABASE_URL uses the `postgresql://` scheme and includes `sslmode=require` for Neon.
+- Local Docker: use host `postgres` (not `localhost`) in `DATABASE_URL`.
+- Neon: use the `postgresql://` scheme and include `sslmode=require`.
+- Confirm the `postgres` service is healthy: `docker compose ps postgres`.
 - Check the backend logs with `docker compose logs backend`.
 
 ## Web app is blank or not hot reloading

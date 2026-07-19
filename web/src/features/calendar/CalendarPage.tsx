@@ -9,6 +9,7 @@ import { Dialog } from '../../components/Dialog';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useTheme } from '../../hooks/useTheme';
+import { formatTime } from '../../lib/datetime';
 
 export function CalendarPage() {
   const theme = useTheme();
@@ -16,9 +17,15 @@ export function CalendarPage() {
   const [searchParams] = useSearchParams();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [staffId, setStaffId] = useState(() => searchParams.get('staff') ?? '');
+  const [serviceId, setServiceId] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(30);
 
-  const availabilityQuery = useAvailability(date, staffId || undefined, durationMinutes);
+  const availabilityQuery = useAvailability(
+    date,
+    staffId || undefined,
+    durationMinutes,
+    serviceId || undefined,
+  );
   const bookingsQuery = useBookingList(date);
   const staffQuery = useStaffList();
   const customersQuery = useCustomerList();
@@ -92,9 +99,23 @@ export function CalendarPage() {
                 onChange={(event) => setStaffId(event.target.value)}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: theme.resolved === 'dark' ? '#0f172a' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
               >
-                <option value="">All staff</option>
+                <option value="">Any available</option>
                 {staffQuery.data?.map((staff) => (
                   <option key={staff.id} value={staff.id}>{staff.full_name ?? staff.id}</option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: 'grid', gap: 8 }}>
+              Service
+              <select
+                value={serviceId}
+                onChange={(event) => setServiceId(event.target.value)}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: theme.resolved === 'dark' ? '#0f172a' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
+              >
+                <option value="">All services</option>
+                {servicesQuery.data?.map((service) => (
+                  <option key={service.id} value={service.id}>{service.name ?? service.id}</option>
                 ))}
               </select>
             </label>
@@ -131,14 +152,16 @@ export function CalendarPage() {
               ) : availabilityQuery.error ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{availabilityQuery.error.message}</div>
               ) : availability.length === 0 ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No slots available for this day.</div>
+                <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>
+                  No timeslot available for this day{staffId ? ' with the selected staff' : ''}.
+                </div>
               ) : (
                 availability.map((slot) => (
                   <div
                     key={`${slot.start_at}-${slot.staff_id ?? 'any'}`}
                     style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#fff', gap: 12, alignItems: 'center' }}
                   >
-                    <span>{new Date(slot.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(slot.end_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>{formatTime(slot.start_at)} – {formatTime(slot.end_at)}</span>
                     <span>{slot.staff_id ? staffMap.get(slot.staff_id) ?? slot.staff_id : 'Any'} </span>
                     <span>{slot.capacity}</span>
                     <Button
@@ -148,8 +171,8 @@ export function CalendarPage() {
                         setSelectedSlot(slot);
                         setFormState({
                           customer_id: '',
-                          service_id: '',
-                          staff_id: slot.staff_id ?? null,
+                          service_id: serviceId || '',
+                          staff_id: slot.staff_id ?? (staffId || null),
                           start_at: slot.start_at,
                           duration_minutes: durationMinutes,
                         });
@@ -273,7 +296,7 @@ export function CalendarPage() {
                     style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#fff' }}
                   >
                     <span>{booking.booking_number ?? booking.id}</span>
-                    <span>{booking.start_at ? new Date(booking.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                    <span>{booking.start_at ? formatTime(booking.start_at) : '—'}</span>
                     <span style={{ color: booking.status === 'confirmed' ? '#10b981' : booking.status === 'cancelled' ? '#dc2626' : '#6b7280' }}>{booking.status ?? 'unknown'}</span>
                   </div>
                 ))

@@ -11,6 +11,12 @@ import { ScreenState } from '../../components/ScreenState';
 import { useService } from '../../hooks/useOpsExtended';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import {
+  formatServiceMeta,
+  formatServicePrice,
+  serviceDurationMinutes,
+  serviceImageUrl,
+} from '../../utils/services';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function ServiceDetailScreen() {
@@ -20,7 +26,9 @@ export function ServiceDetailScreen() {
 
   if (loading || !service) return <ScreenState loading={loading} empty={!loading && !service} />;
 
-  const imageUri = resolveMediaUrl(service.image_url);
+  const imageUri = resolveMediaUrl(serviceImageUrl(service));
+  const duration = serviceDurationMinutes(service);
+  const priceLabel = formatServicePrice(service);
 
   return (
     <FormScreen>
@@ -35,17 +43,12 @@ export function ServiceDetailScreen() {
           )}
           <View style={styles.heroCopy}>
             <Text style={styles.title}>{service.name ?? 'Service'}</Text>
-            <Text style={styles.meta}>
-              {[
-                service.duration_minutes ? `${service.duration_minutes} min` : null,
-                service.price != null ? String(service.price) : null,
-              ]
-                .filter(Boolean)
-                .join(' · ') || '—'}
-            </Text>
+            <Text style={styles.meta}>{formatServiceMeta(service)}</Text>
           </View>
         </View>
         <DetailRow label="Description" value={service.description ?? '—'} />
+        <DetailRow label="Duration" value={`${duration} min`} />
+        <DetailRow label="Price" value={priceLabel ?? '—'} />
         <DetailRow label="Status" value={service.status ?? '—'} />
       </Card>
       <Button label="Edit service" fullWidth onPress={() => navigation.navigate('ServiceForm', { serviceId: service.id })} />
@@ -56,7 +59,7 @@ export function ServiceDetailScreen() {
         onPress={() =>
           navigation.navigate('CreateBooking', {
             serviceId: service.id,
-            durationMinutes: service.duration_minutes ?? 30,
+            durationMinutes: duration,
           })
         }
       />

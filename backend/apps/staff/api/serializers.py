@@ -135,6 +135,7 @@ class StaffSerializer(serializers.ModelSerializer):
     certifications = StaffCertificationSerializer(many=True, read_only=True)
     documents = StaffDocumentSerializer(many=True, read_only=True)
     notes = StaffNoteSerializer(many=True, read_only=True)
+    photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Staff
@@ -144,6 +145,7 @@ class StaffSerializer(serializers.ModelSerializer):
             "business",
             "user",
             "photo",
+            "photo_url",
             "staff_code",
             "first_name",
             "last_name",
@@ -174,6 +176,7 @@ class StaffSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "tenant",
+            "photo_url",
             "skills",
             "service_assignments",
             "role_assignments",
@@ -184,6 +187,14 @@ class StaffSerializer(serializers.ModelSerializer):
             "updated_at",
             "is_active",
         ]
+
+    def get_photo_url(self, staff: Staff) -> str | None:
+        photo = getattr(staff, "photo", None)
+        if photo is None:
+            return None
+        metadata = getattr(photo, "metadata", None) or {}
+        url = metadata.get("public_url") or metadata.get("private_url") or metadata.get("thumbnail_url") or ""
+        return str(url) if url else None
 
     def validate_tags(self, value: list[str]) -> list[str]:
         return [tag.strip().lower() for tag in value if tag.strip()]

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../contexts/AuthContext';
 import { WorkspaceProvider } from '../contexts/WorkspaceContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
+import { DateTimeZoneSync } from '../components/DateTimeZoneSync';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ConfirmProvider } from '../contexts/ConfirmContext';
 import { SnackbarProvider } from '../contexts/SnackbarContext';
@@ -15,13 +16,15 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <WorkspaceProvider>
-          <ThemeProvider>
-            <ConfirmProvider>
-              <SnackbarProvider>
-                <Suspense fallback={<div>Loading…</div>}>{children}</Suspense>
-              </SnackbarProvider>
-            </ConfirmProvider>
-          </ThemeProvider>
+            <DateTimeZoneSync>
+              <ThemeProvider>
+                <ConfirmProvider>
+                  <SnackbarProvider>
+                    <Suspense fallback={<div>Loading…</div>}>{children}</Suspense>
+                  </SnackbarProvider>
+                </ConfirmProvider>
+              </ThemeProvider>
+            </DateTimeZoneSync>
           </WorkspaceProvider>
         </AuthProvider>
       </QueryClientProvider>

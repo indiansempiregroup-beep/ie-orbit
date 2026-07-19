@@ -16,6 +16,7 @@ from apps.bookings.models import (
     StaffWeeklySchedule,
 )
 from apps.businesses.models import Business
+from apps.staff.models import EmploymentStatus, Staff
 
 
 @pytest.fixture
@@ -65,6 +66,43 @@ def create_business(api_client: APIClient) -> str:
     return response.json()["data"]["id"]
 
 
+def create_active_staff(*, tenant_id: str, business: Business, code: str = "stylist-1") -> Staff:
+    return Staff.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        staff_code=code,
+        first_name="Alex",
+        last_name="Stylist",
+        display_name=f"Alex {code}",
+        employment_status=EmploymentStatus.ACTIVE,
+    )
+
+
+def seed_schedules(*, tenant_id: str, business: Business, staff_id, weekday: int) -> None:
+    schedule = BusinessSchedule.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        name="Default",
+        is_default=True,
+    )
+    BusinessWeeklySchedule.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        schedule=schedule,
+        weekday=weekday,
+        opening_time=time(9, 0),
+        closing_time=time(17, 0),
+    )
+    StaffWeeklySchedule.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        staff_id=staff_id,
+        weekday=weekday,
+        shift_start=time(9, 0),
+        shift_end=time(17, 0),
+    )
+
+
 @pytest.mark.django_db
 def test_booking_create_availability_conflict_and_workflow(
     api_client: APIClient,
@@ -78,39 +116,32 @@ def test_booking_create_availability_conflict_and_workflow(
     start_at = timezone.now().replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(
         days=1
     )
-    schedule = BusinessSchedule.objects.create(
+    staff = create_active_staff(tenant_id=tenant_id, business=business)
+    seed_schedules(
         tenant_id=tenant_id,
         business=business,
-        name="Default",
-        is_default=True,
-    )
-    BusinessWeeklySchedule.objects.create(
-        tenant_id=tenant_id,
-        business=business,
-        schedule=schedule,
+        staff_id=staff.id,
         weekday=start_at.date().weekday(),
-        opening_time=time(9, 0),
-        closing_time=time(17, 0),
-    )
-    staff_id = uuid4()
-    StaffWeeklySchedule.objects.create(
-        tenant_id=tenant_id,
-        business=business,
-        staff_id=staff_id,
-        weekday=start_at.date().weekday(),
-        shift_start=time(9, 0),
-        shift_end=time(17, 0),
     )
     payload = {
         "business": business_id,
         "customer_id": str(uuid4()),
-        "staff_id": str(staff_id),
+        "staff_id": str(staff.id),
         "service_id": str(uuid4()),
         "start_at": start_at.isoformat(),
         "duration_minutes": 30,
     }
 
     availability_response = api_client.get(
+        reverse("availability"),
+        {
+            "business": business_id,
+            "staff_id": str(staff.id),
+            "date": start_at.date().isoformat(),
+            "duration_minutes": 30,
+        },
+    )
+    any_staff_availability = api_client.get(
         reverse("availability"),
         {
             "business": business_id,
@@ -130,6 +161,8 @@ def test_booking_create_availability_conflict_and_workflow(
 
     assert availability_response.status_code == 200
     assert availability_response.json()["data"]
+    assert any_staff_availability.status_code == 200
+    assert any_staff_availability.json()["data"]
     assert create_response.status_code == 201
     assert conflict_response.status_code == 422
     assert confirm_response.status_code == 200
@@ -139,6 +172,96 @@ def test_booking_create_availability_conflict_and_workflow(
     assert BookingEvent.objects.filter(
         booking_id=booking_id, event_type="BookingCompleted"
     ).exists()
+
+
+@pytest.mark.django_db
+def test_booking_auto_assigns_least_booked_staff(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_id = create_business(api_client)
+    business = Business.objects.get(id=business_id)
+    start_at = timezone.now().replace(hour=11, minute=0, second=0, microsecond=0) + timedelta(
+        days=1
+    )
+    staff_a = create_active_staff(tenant_id=tenant_id, business=business, code="stylist-a")
+    staff_b = create_active_staff(tenant_id=tenant_id, business=business, code="stylist-b")
+    seed_schedules(
+        tenant_id=tenant_id,
+        business=business,
+        staff_id=staff_a.id,
+        weekday=start_at.date().weekday(),
+    )
+    StaffWeeklySchedule.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        staff_id=staff_b.id,
+        weekday=start_at.date().weekday(),
+        shift_start=time(9, 0),
+        shift_end=time(17, 0),
+    )
+
+    first = api_client.post(
+        reverse("booking-list-create"),
+        {
+            "business": business_id,
+            "customer_id": str(uuid4()),
+            "service_id": str(uuid4()),
+            "start_at": start_at.isoformat(),
+            "duration_minutes": 30,
+        },
+        format="json",
+    )
+    second = api_client.post(
+        reverse("booking-list-create"),
+        {
+            "business": business_id,
+            "customer_id": str(uuid4()),
+            "service_id": str(uuid4()),
+            "start_at": (start_at + timedelta(hours=1)).isoformat(),
+            "duration_minutes": 30,
+        },
+        format="json",
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assigned = {first.json()["data"]["staff_id"], second.json()["data"]["staff_id"]}
+    assert assigned == {str(staff_a.id), str(staff_b.id)}
+
+
+@pytest.mark.django_db
+def test_availability_hides_past_slots_for_today(api_client: APIClient, user: User, monkeypatch) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_id = create_business(api_client)
+    business = Business.objects.get(id=business_id)
+    fixed_now = timezone.now().replace(hour=10, minute=5, second=0, microsecond=0)
+    monkeypatch.setattr(timezone, "now", lambda: fixed_now)
+    staff = create_active_staff(tenant_id=tenant_id, business=business)
+    seed_schedules(
+        tenant_id=tenant_id,
+        business=business,
+        staff_id=staff.id,
+        weekday=fixed_now.date().weekday(),
+    )
+
+    response = api_client.get(
+        reverse("availability"),
+        {
+            "business": business_id,
+            "staff_id": str(staff.id),
+            "date": fixed_now.date().isoformat(),
+            "duration_minutes": 30,
+            "interval_minutes": 30,
+        },
+    )
+    assert response.status_code == 200
+    slots = response.json()["data"]
+    assert slots
+    assert all(slot["start_at"] > fixed_now.isoformat() for slot in slots)
+    assert not any("10:00" in slot["start_at"] for slot in slots)
 
 
 @pytest.mark.django_db
@@ -152,25 +275,19 @@ def test_booking_reschedule_and_search(api_client: APIClient, user: User) -> Non
         days=1
     )
     new_start_at = start_at + timedelta(hours=1)
-    schedule = BusinessSchedule.objects.create(
+    staff = create_active_staff(tenant_id=tenant_id, business=business)
+    seed_schedules(
         tenant_id=tenant_id,
         business=business,
-        name="Default",
-        is_default=True,
-    )
-    BusinessWeeklySchedule.objects.create(
-        tenant_id=tenant_id,
-        business=business,
-        schedule=schedule,
+        staff_id=staff.id,
         weekday=start_at.date().weekday(),
-        opening_time=time(9, 0),
-        closing_time=time(17, 0),
     )
     create_response = api_client.post(
         reverse("booking-list-create"),
         {
             "business": business_id,
             "customer_id": str(uuid4()),
+            "staff_id": str(staff.id),
             "service_id": str(uuid4()),
             "start_at": start_at.isoformat(),
             "duration_minutes": 30,
@@ -186,6 +303,7 @@ def test_booking_reschedule_and_search(api_client: APIClient, user: User) -> Non
     )
     search_response = api_client.get(reverse("booking-list-create"), {"status": "rescheduled"})
 
+    assert create_response.status_code == 201
     assert reschedule_response.status_code == 200
     assert reschedule_response.json()["data"]["status"] == "rescheduled"
     assert search_response.status_code == 200

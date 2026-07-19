@@ -5,6 +5,7 @@ import { Card } from '../../components/Card';
 import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useTheme } from '../../hooks/useTheme';
+import { formatTimestamp } from '../../lib/datetime';
 
 export function ProfileSessionsPage() {
   const auth = useAuth();
@@ -68,7 +69,7 @@ export function ProfileSessionsPage() {
                 </div>
                 <div style={{ display: 'grid', gap: 4 }}>
                   <span style={{ color: '#6b7280', fontSize: 13 }}>Started</span>
-                  <strong>{sessionStarted ? new Date(sessionStarted).toLocaleString() : 'Unknown'}</strong>
+                  <strong>{sessionStarted ? formatTimestamp(sessionStarted) : 'Unknown'}</strong>
                 </div>
               </div>
             </div>

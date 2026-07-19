@@ -37,6 +37,7 @@ class MobileAvailabilityQuerySerializer(serializers.Serializer):
     interval_minutes = serializers.IntegerField(min_value=1, default=15)
     buffer_minutes = serializers.IntegerField(min_value=0, default=0)
     staff_id = serializers.UUIDField(required=False, allow_null=True)
+    service_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class MobileStaffQuerySerializer(MobileScopedQuerySerializer):

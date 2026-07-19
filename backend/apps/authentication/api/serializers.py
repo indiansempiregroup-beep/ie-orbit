@@ -6,6 +6,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from apps.authentication.models import User
+from apps.common.utils.urls import normalize_stored_asset_url
 
 
 class LoginSerializer(serializers.Serializer):
@@ -137,6 +138,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "roles",
             "permissions",
         ]
+
+    def validate_profile_photo(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
 
     def get_roles(self, user: User) -> list[str]:
         return list(user.user_roles.values_list("role__code", flat=True))

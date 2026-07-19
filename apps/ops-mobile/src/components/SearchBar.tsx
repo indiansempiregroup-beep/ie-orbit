@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 
@@ -7,11 +7,12 @@ type Props = {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  style?: StyleProp<ViewStyle>;
 };
 
-export function SearchBar({ value, onChangeText, placeholder = 'Search…' }: Props) {
+export function SearchBar({ value, onChangeText, placeholder = 'Search…', style }: Props) {
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, style]}>
       <Feather name="search" size={16} color={colors.mutedForeground} />
       <TextInput
         value={value}
@@ -29,7 +30,6 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search…' }: Pr
 
 const styles = StyleSheet.create({
   wrap: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -38,7 +38,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    minHeight: 44,
+    height: 40,
   },
-  input: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
+  input: {
+    flex: 1,
+    ...typography.body,
+    fontSize: 14,
+    color: colors.foreground,
+    paddingVertical: 0,
+    height: 40,
+  },
 });

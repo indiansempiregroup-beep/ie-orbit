@@ -20,7 +20,6 @@ export function SettingsScreen() {
       <OpsHeader title="Settings" subtitle="Workspace configuration" />
       <RefreshableScrollView contentContainerStyle={styles.content}>
         <MenuRow icon="briefcase" label="Business profile" onPress={() => navigation.navigate('BusinessProfile')} />
-        <MenuRow icon="edit-3" label="Edit business profile" onPress={() => navigation.navigate('BusinessEdit')} />
         <MenuRow icon="package" label="Products & plans" onPress={() => navigation.navigate('ProductSettings')} />
         <MenuRow icon="map-pin" label="Branches" onPress={() => navigation.navigate('Branches')} />
         {canManageTeam(user) ? (

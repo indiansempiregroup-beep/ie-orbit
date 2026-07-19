@@ -11,6 +11,7 @@ import { ScreenState } from '../../components/ScreenState';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useServices } from '../../hooks/useOpsData';
 import { colors, spacing } from '../../theme/tokens';
+import { formatServiceMeta, serviceImageUrl } from '../../utils/services';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function ServicesScreen() {
@@ -31,7 +32,7 @@ export function ServicesScreen() {
     <View style={styles.screen}>
       <OpsHeader title="Services" subtitle={`${services.length} total`} />
       <View style={styles.toolbar}>
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search services" />
+        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search services" />
         <Button label="Add" onPress={() => navigation.navigate('ServiceForm', {})} />
       </View>
       <RefreshableScrollView
@@ -48,15 +49,10 @@ export function ServicesScreen() {
           <ListRow
             key={service.id}
             title={service.name ?? 'Service'}
-            subtitle={[
-              service.duration_minutes ? `${service.duration_minutes} min` : null,
-              service.price != null ? String(service.price) : null,
-            ]
-              .filter(Boolean)
-              .join(' · ') || '—'}
+            subtitle={formatServiceMeta(service)}
             meta={service.status ?? undefined}
             icon="scissors"
-            avatarSrc={service.image_url}
+            avatarSrc={serviceImageUrl(service) ?? undefined}
             avatarName={service.name ?? 'Service'}
             onPress={() => navigation.navigate('ServiceDetail', { serviceId: service.id })}
           />
@@ -76,5 +72,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     alignItems: 'center',
   },
+  search: { flex: 1 },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 });

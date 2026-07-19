@@ -1,5 +1,6 @@
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { formatTimestamp } from '../../lib/datetime';
 import {
   useBillingPlatformAuditFeedQuery,
   useBillingPlatformMonitoringQuery,
@@ -51,7 +52,7 @@ export function PlatformDashboardPage() {
               <div key={row.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
                 <strong>{row.action}</strong>
                 <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                  Tenant {row.tenant_id} · {new Date(row.created_at).toLocaleString()}
+                  Tenant {row.tenant_id} · {formatTimestamp(row.created_at)}
                 </p>
               </div>
             ))}

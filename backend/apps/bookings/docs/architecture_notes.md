@@ -14,16 +14,18 @@ create invoices, or calculate analytics.
 
 Availability is calculated from:
 
-- business weekly schedules
-- special working days
-- business holidays
-- emergency closures
 - staff weekly schedules
 - staff special availability
 - staff leave
-- existing bookings
+- existing bookings (per staff)
+- business holidays and emergency closures
 - service duration input
 - buffer time input
+- current time (only future start times are returned)
+
+When no staff is selected, slots are the union of free times across eligible active staff
+(optionally limited to staff assigned to the selected service). Booking create without
+`staff_id` auto-assigns the least-booked available staff for that window.
 
 ## Booking Rules
 

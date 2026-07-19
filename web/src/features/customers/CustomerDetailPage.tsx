@@ -8,6 +8,7 @@ import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
+import { formatTimestamp } from '../../lib/datetime';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../hooks/useSnackbar';
@@ -136,11 +137,11 @@ export function CustomerDetailPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Created</p>
-                  <p style={{ margin: '8px 0 0' }}>{customerQuery.data.created_at ? new Date(customerQuery.data.created_at).toLocaleString() : '—'}</p>
+                  <p style={{ margin: '8px 0 0' }}>{customerQuery.data.created_at ? formatTimestamp(customerQuery.data.created_at) : '—'}</p>
                 </div>
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Updated</p>
-                  <p style={{ margin: '8px 0 0' }}>{customerQuery.data.updated_at ? new Date(customerQuery.data.updated_at).toLocaleString() : '—'}</p>
+                  <p style={{ margin: '8px 0 0' }}>{customerQuery.data.updated_at ? formatTimestamp(customerQuery.data.updated_at) : '—'}</p>
                 </div>
               </div>
             </div>

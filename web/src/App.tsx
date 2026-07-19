@@ -116,35 +116,47 @@ function App() {
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/business" element={<Navigate to="/settings/business" replace />} />
-              <Route path="/customers" element={<CustomersPage />} />
-              <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
-              <Route path="/services" element={<ServicesPage />} />
-              <Route path="/services/:serviceId" element={<ServiceDetailPage />} />
-              <Route path="/staff" element={<StaffPage />} />
-              <Route path="/staff/:staffId" element={<StaffDetailPage />} />
+              <Route element={<PermissionGuard anyPermissions={['customer:read']} />}>
+                <Route path="/customers" element={<CustomersPage />} />
+                <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+              </Route>
+              <Route element={<PermissionGuard anyPermissions={['service:read']} />}>
+                <Route path="/services" element={<ServicesPage />} />
+                <Route path="/services/:serviceId" element={<ServiceDetailPage />} />
+              </Route>
+              <Route element={<PermissionGuard anyPermissions={['staff:read']} />}>
+                <Route path="/staff" element={<StaffPage />} />
+                <Route path="/staff/:staffId" element={<StaffDetailPage />} />
+              </Route>
               <Route element={<ProductGuard products={['appointie']} />}>
-                <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="/bookings" element={<BookingsPage />} />
-                <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
+                <Route element={<PermissionGuard anyPermissions={['booking:read']} />}>
+                  <Route path="/calendar" element={<CalendarPage />} />
+                  <Route path="/bookings" element={<BookingsPage />} />
+                  <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
+                </Route>
               </Route>
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/bi" element={<BILayout />}>
-                <Route index element={<Navigate to="/bi/overview" replace />} />
-                <Route path="overview" element={<BIOverviewPage />} />
-                <Route path="revenue" element={<BIRevenuePage />} />
-                <Route path="forecast" element={<BIForecastPage />} />
-                <Route path="reports" element={<BIReportsPage />} />
-              </Route>
-              <Route path="/settings" element={<SettingsLayout />}>
-                <Route index element={<SettingsPage />} />
-                <Route path="business" element={<BusinessManagementPage />} />
-                <Route path="business/edit" element={<BusinessProfileEditPage />} />
-                <Route path="products" element={<ProductSettingsPage />} />
-                <Route element={<PermissionGuard permission="iam:role:assign" />}>
-                  <Route path="team" element={<TeamSettingsPage />} />
+              <Route element={<PermissionGuard anyPermissions={['booking:manage', 'business:manage', 'business:update']} />}>
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/bi" element={<BILayout />}>
+                  <Route index element={<Navigate to="/bi/overview" replace />} />
+                  <Route path="overview" element={<BIOverviewPage />} />
+                  <Route path="revenue" element={<BIRevenuePage />} />
+                  <Route path="forecast" element={<BIForecastPage />} />
+                  <Route path="reports" element={<BIReportsPage />} />
                 </Route>
-                <Route path="business-profile" element={<Navigate to="/settings/business" replace />} />
+              </Route>
+              <Route element={<PermissionGuard anyPermissions={['business:update', 'business:write', 'business:manage']} />}>
+                <Route path="/settings" element={<SettingsLayout />}>
+                  <Route index element={<SettingsPage />} />
+                  <Route path="business" element={<BusinessManagementPage />} />
+                  <Route path="business/edit" element={<BusinessProfileEditPage />} />
+                  <Route path="products" element={<ProductSettingsPage />} />
+                  <Route element={<PermissionGuard permission="iam:role:assign" />}>
+                    <Route path="team" element={<TeamSettingsPage />} />
+                  </Route>
+                  <Route path="business-profile" element={<Navigate to="/settings/business" replace />} />
+                </Route>
               </Route>
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/edit" element={<ProfileEditPage />} />

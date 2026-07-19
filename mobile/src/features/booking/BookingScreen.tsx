@@ -16,6 +16,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { formatTime } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { MainTabParamList } from '../../navigation/types';
 
@@ -34,6 +35,7 @@ export function BookingScreen() {
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [slots, setSlots] = useState<Array<{ start_at: string; end_at: string }>>([]);
+  const [availabilityMessage, setAvailabilityMessage] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,7 +47,8 @@ export function BookingScreen() {
     [services, selectedServiceId],
   );
   const { staff } = useMobileStaff(selectedServiceId);
-  const selectedStaff = staff.find((member) => member.id === selectedStaffId) ?? null;
+  const selectedStaff = selectedStaffId ? staff.find((member) => member.id === selectedStaffId) ?? null : null;
+  const stylistLabel = selectedStaff?.display_name ?? (selectedStaffId === '' ? 'Any available' : '');
 
   const groupedServices = useMemo(() => {
     const groups = new Map<string, MobileDiscoverService[]>();
@@ -73,8 +76,8 @@ export function BookingScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await loadServices();
-    if (step === 2 && selectedServiceId && selectedStaffId) {
-      await loadSlots(selectedStaffId, date, selectedService);
+    if (step === 2 && selectedServiceId && selectedStaffId !== null) {
+      await loadSlots(selectedStaffId, date, selectedService!);
     }
   });
 
@@ -89,26 +92,35 @@ export function BookingScreen() {
   async function loadSlots(staffId: string, slotDate: string, service: MobileDiscoverService) {
     setLoading(true);
     setError('');
+    setAvailabilityMessage('');
     try {
       const response = await mobileClient.mobile.availability({
         tenant_slug: tenantSlug,
         business_code: businessCode,
         date: slotDate,
         duration_minutes: service.duration_minutes,
-        staff_id: staffId,
+        staff_id: staffId || undefined,
+        service_id: service.id,
       });
       setSlots(response.data.slots);
+      setAvailabilityMessage(
+        response.data.message ||
+          (response.data.slots.length
+            ? ''
+            : 'No timeslot available for this date. Try another day or stylist.'),
+      );
       setSelectedSlot('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load availability.');
       setSlots([]);
+      setAvailabilityMessage('');
     } finally {
       setLoading(false);
     }
   }
 
   async function confirmBooking() {
-    if (!selectedService || !selectedSlot) return;
+    if (!selectedService || !selectedSlot || selectedStaffId === null) return;
     if (!customerName.trim() || !customerPhone.trim()) {
       setError('Add your phone number in Profile before booking.');
       return;
@@ -120,7 +132,7 @@ export function BookingScreen() {
         tenant_slug: tenantSlug,
         business_code: businessCode,
         service_id: selectedService.id,
-        staff_id: selectedStaffId!,
+        staff_id: selectedStaffId || null,
         customer_name: customerName.trim(),
         phone_number: customerPhone.trim(),
         email: customerEmail.trim() || undefined,
@@ -146,8 +158,8 @@ export function BookingScreen() {
       setError('Select a service to continue.');
       return;
     }
-    if (step === 1 && !selectedStaffId) {
-      setError('Select a stylist to continue.');
+    if (step === 1 && selectedStaffId === null) {
+      setError('Select a stylist or Any available to continue.');
       return;
     }
     if (step === 2 && !selectedSlot) {
@@ -157,7 +169,7 @@ export function BookingScreen() {
     setError('');
     if (step === 0) setStep(1);
     else if (step === 1) {
-      if (selectedService && selectedStaffId) {
+      if (selectedService && selectedStaffId !== null) {
         void loadSlots(selectedStaffId, date, selectedService);
       }
       setStep(2);
@@ -166,7 +178,7 @@ export function BookingScreen() {
   }
 
   useEffect(() => {
-    if (step !== 2 || !selectedService || !selectedStaffId) return;
+    if (step !== 2 || !selectedService || selectedStaffId === null) return;
     void loadSlots(selectedStaffId, date, selectedService);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, step, selectedServiceId, selectedStaffId]);
@@ -181,9 +193,9 @@ export function BookingScreen() {
         <Text style={styles.confirmSubtitle}>Confirmation sent to {customerEmail || 'your email'}.</Text>
         <Card style={styles.summaryCard}>
           <SummaryRow label="Service" value={selectedService?.name ?? ''} />
-          <SummaryRow label="Stylist" value={selectedStaff?.display_name ?? ''} />
+          <SummaryRow label="Stylist" value={stylistLabel} />
           <SummaryRow label="Date" value={new Date(selectedSlot).toLocaleDateString()} />
-          <SummaryRow label="Time" value={new Date(selectedSlot).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
+          <SummaryRow label="Time" value={formatTime(selectedSlot)} />
           <SummaryRow label="Reference" value={bookingRef} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
@@ -243,7 +255,12 @@ export function BookingScreen() {
                   <Pressable
                     key={service.id}
                     style={[styles.option, selected && { borderColor: primary, backgroundColor: `${primary}08` }]}
-                    onPress={() => setSelectedServiceId(service.id)}
+                    onPress={() => {
+                      setSelectedServiceId(service.id);
+                      setSelectedStaffId(null);
+                      setSelectedSlot('');
+                      setSlots([]);
+                    }}
                   >
                     {service.image_url ? (
                       <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.thumb} />
@@ -272,6 +289,22 @@ export function BookingScreen() {
 
         {step === 1 && (
           <>
+            <Pressable
+              style={[
+                styles.staffOption,
+                selectedStaffId === '' && { borderColor: primary, backgroundColor: `${primary}08` },
+              ]}
+              onPress={() => setSelectedStaffId('')}
+            >
+              <Avatar name="Any" size="md" />
+              <View style={styles.optionBody}>
+                <Text style={styles.optionTitle}>Any available</Text>
+                <Text style={styles.optionMeta}>We’ll assign the next free stylist</Text>
+              </View>
+              <View style={[styles.radio, selectedStaffId === '' && { borderColor: primary, backgroundColor: primary }]}>
+                {selectedStaffId === '' ? <Feather name="check" size={12} color="#fff" /> : null}
+              </View>
+            </Pressable>
             {staff.map((member) => {
               const selected = selectedStaffId === member.id;
               return (
@@ -298,7 +331,7 @@ export function BookingScreen() {
           <>
             <CalendarPicker value={date} onChange={setDate} primaryColor={primary} />
             <Text style={styles.sectionLabel}>
-              Available times {selectedStaff ? `with ${selectedStaff.display_name}` : ''}
+              Available times {stylistLabel ? `with ${stylistLabel}` : ''}
             </Text>
             <View style={styles.slotGrid}>
               {slots.map((slot) => {
@@ -310,13 +343,15 @@ export function BookingScreen() {
                     onPress={() => setSelectedSlot(slot.start_at)}
                   >
                     <Text style={[styles.slotText, selected && styles.slotTextSelected]}>
-                      {new Date(slot.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatTime(slot.start_at)}
                     </Text>
                   </Pressable>
                 );
               })}
               {!loading && !slots.length ? (
-                <Text style={styles.optionMeta}>No slots for this stylist on this date. Try another day.</Text>
+                <Text style={styles.optionMeta}>
+                  {availabilityMessage || 'No timeslot available for this date. Try another day or stylist.'}
+                </Text>
               ) : null}
               {loading ? <Text style={styles.optionMeta}>Loading available times...</Text> : null}
             </View>
@@ -328,9 +363,9 @@ export function BookingScreen() {
             <Card>
               <Text style={styles.sectionLabel}>Booking Summary</Text>
               <SummaryRow label="Service" value={selectedService.name} />
-              <SummaryRow label="Stylist" value={selectedStaff?.display_name ?? ''} />
+              <SummaryRow label="Stylist" value={stylistLabel} />
               <SummaryRow label="Date" value={new Date(selectedSlot).toLocaleDateString()} />
-              <SummaryRow label="Time" value={new Date(selectedSlot).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
+              <SummaryRow label="Time" value={formatTime(selectedSlot)} />
               <SummaryRow label="Duration" value={`${selectedService.duration_minutes} minutes`} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total</Text>

@@ -23,6 +23,18 @@ function dateFromIso(value?: string) {
   return formatDateKey(date);
 }
 
+function serviceDurationMinutes(service?: { duration_minutes?: number; durations?: Array<{ duration_minutes: number; is_default?: boolean }> } | null, fallback = 30) {
+  if (!service) return fallback;
+  if (typeof service.duration_minutes === 'number' && service.duration_minutes > 0) {
+    return service.duration_minutes;
+  }
+  const defaultDuration = service.durations?.find((row) => row.is_default) ?? service.durations?.[0];
+  if (defaultDuration?.duration_minutes && defaultDuration.duration_minutes > 0) {
+    return defaultDuration.duration_minutes;
+  }
+  return fallback;
+}
+
 export function CreateBookingScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CreateBooking'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -40,9 +52,15 @@ export function CreateBookingScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const selectedService = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
-  const durationMinutes = selectedService?.duration_minutes ?? route.params?.durationMinutes ?? 30;
+  const durationMinutes =
+    serviceDurationMinutes(selectedService, route.params?.durationMinutes ?? 30);
 
-  const { slots, loading: slotsLoading } = useAvailability(date, staffId || undefined, durationMinutes);
+  const { slots, loading: slotsLoading } = useAvailability(
+    date,
+    staffId || undefined,
+    durationMinutes,
+    serviceId || undefined,
+  );
 
   useEffect(() => {
     if (route.params?.startAt) {
@@ -65,12 +83,51 @@ export function CreateBookingScreen() {
     [services, serviceMap],
   );
   const staffOptions = useMemo(
-    () => [{ value: '', label: 'Any available / unassigned' }, ...staff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id }))],
+    () => [{ value: '', label: 'Any available' }, ...staff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id }))],
     [staff, staffMap],
   );
 
   return (
-    <FormScreen>
+    <FormScreen
+      footer={
+        <Button
+          label="Create booking"
+          loading={loading}
+          fullWidth
+          size="lg"
+          onPress={async () => {
+            if (!customerId || !serviceId) {
+              setError('Customer and service are required.');
+              return;
+            }
+            if (!selectedSlot) {
+              setError('Select an available time slot.');
+              return;
+            }
+            setLoading(true);
+            setError(null);
+            try {
+              const booking = await mutations.create({
+                business: businessId ?? undefined,
+                customer_id: customerId,
+                service_id: serviceId,
+                staff_id: staffId || null,
+                start_at: selectedSlot,
+                duration_minutes: durationMinutes,
+                notes: notes || undefined,
+                source: 'operations_dashboard',
+                channel: 'mobile',
+              });
+              navigation.replace('BookingDetail', { bookingId: booking.id });
+            } catch (err) {
+              setError(getApiErrorMessage(err, 'Unable to create booking.'));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      }
+    >
       <Text style={styles.title}>New booking</Text>
       <Text style={styles.subtitle}>Pick the customer, service, and an available time slot.</Text>
 
@@ -117,6 +174,13 @@ export function CreateBookingScreen() {
         selected={selectedSlot}
         onSelect={setSelectedSlot}
         loading={slotsLoading}
+        emptyMessage={
+          !serviceId
+            ? 'Select a service to load available times.'
+            : staffId
+              ? 'No timeslot available for this staff on this date. Check their weekly schedule or try another day.'
+              : 'No timeslot available. No staff is free for this service on this date. Try another day or assign staff to the service.'
+        }
       />
 
       <Input label="Notes (optional)" value={notes} onChangeText={setNotes} multiline placeholder="Add booking notes" />
@@ -129,43 +193,6 @@ export function CreateBookingScreen() {
       ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Button
-        label="Create booking"
-        loading={loading}
-        fullWidth
-        size="lg"
-        onPress={async () => {
-          if (!customerId || !serviceId) {
-            setError('Customer and service are required.');
-            return;
-          }
-          if (!selectedSlot) {
-            setError('Select an available time slot.');
-            return;
-          }
-          setLoading(true);
-          setError(null);
-          try {
-            const booking = await mutations.create({
-              business: businessId ?? undefined,
-              customer_id: customerId,
-              service_id: serviceId,
-              staff_id: staffId || null,
-              start_at: selectedSlot,
-              duration_minutes: durationMinutes,
-              notes: notes || undefined,
-              source: 'ops_mobile',
-              channel: 'mobile',
-            });
-            navigation.replace('BookingDetail', { bookingId: booking.id });
-          } catch (err) {
-            setError(getApiErrorMessage(err, 'Unable to create booking.'));
-          } finally {
-            setLoading(false);
-          }
-        }}
-      />
     </FormScreen>
   );
 }

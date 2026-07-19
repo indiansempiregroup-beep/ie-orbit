@@ -4,11 +4,14 @@ import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useOpsClient } from '../../hooks/useOpsClient';
+import { useAuth } from '../../contexts/AuthContext';
 import { colors, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 
 export function SecurityScreen() {
   const client = useOpsClient();
+  const { disableBiometrics, biometricEnabled } = useAuth();
+  // biometric disable on password change is handled below
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,34 +19,42 @@ export function SecurityScreen() {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <FormScreen>
+    <FormScreen
+      footer={
+        <Button
+          label="Update password"
+          loading={loading}
+          fullWidth
+          size="lg"
+          onPress={async () => {
+            if (!client) return;
+            setLoading(true);
+            setError(null);
+            try {
+              await client.auth.changePassword({ current_password: current, new_password: next });
+              if (biometricEnabled) {
+                await disableBiometrics();
+                setMessage('Password updated. Biometric login was disabled — re-enable it in Profile.');
+              } else {
+                setMessage('Password updated.');
+              }
+              setCurrent('');
+              setNext('');
+            } catch (err) {
+              setError(getApiErrorMessage(err, 'Unable to change password.'));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      }
+    >
       <Text style={styles.title}>Change password</Text>
       <Text style={styles.subtitle}>Use a strong password you don&apos;t reuse elsewhere.</Text>
       <Input label="Current password" secureTextEntry leftIcon="lock" value={current} onChangeText={setCurrent} />
       <Input label="New password" secureTextEntry leftIcon="lock" value={next} onChangeText={setNext} />
       {message ? <Text style={styles.success}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button
-        label="Update password"
-        loading={loading}
-        fullWidth
-        size="lg"
-        onPress={async () => {
-          if (!client) return;
-          setLoading(true);
-          setError(null);
-          try {
-            await client.auth.changePassword({ current_password: current, new_password: next });
-            setMessage('Password updated.');
-            setCurrent('');
-            setNext('');
-          } catch (err) {
-            setError(getApiErrorMessage(err, 'Unable to change password.'));
-          } finally {
-            setLoading(false);
-          }
-        }}
-      />
     </FormScreen>
   );
 }

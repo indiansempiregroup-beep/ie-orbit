@@ -1,4 +1,5 @@
 import { Card } from '../../components/Card';
+import { formatTimestamp } from '../../lib/datetime';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useBillingPlatformAuditFeedQuery } from '../settings/billingHooks';
 
@@ -21,7 +22,7 @@ export function PlatformAuditPage() {
               <div key={row.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
                 <strong>{row.action}</strong>
                 <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                  {row.resource_type} · Tenant {row.tenant_id} · {new Date(row.created_at).toLocaleString()}
+                  {row.resource_type} · Tenant {row.tenant_id} · {formatTimestamp(row.created_at)}
                 </p>
               </div>
             ))}

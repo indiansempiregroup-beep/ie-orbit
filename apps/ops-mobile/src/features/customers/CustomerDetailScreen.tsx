@@ -11,6 +11,7 @@ import { ScreenState } from '../../components/ScreenState';
 import { useCustomer } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
 import { colors, spacing, typography } from '../../theme/tokens';
+import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function CustomerDetailScreen() {
@@ -24,7 +25,12 @@ export function CustomerDetailScreen() {
   }
 
   const isArchived = customer.status === 'archived' || customer.status === 'inactive';
-  const name = customer.full_name?.trim() || customer.email || 'Customer';
+  const name =
+    customer.display_name?.trim() ||
+    customer.full_name?.trim() ||
+    `${customer.first_name ?? ''} ${customer.last_name ?? ''}`.trim() ||
+    customer.email ||
+    'Customer';
 
   return (
     <FormScreen>
@@ -38,7 +44,7 @@ export function CustomerDetailScreen() {
         </View>
         <DetailRow label="Email" value={customer.email ?? '—'} />
         <DetailRow label="Phone" value={customer.phone_number ?? '—'} />
-        <DetailRow label="Address" value={customer.full_address ?? '—'} />
+        <DetailRow label="Address" value={formatCustomerAddressLabel(customer)} />
       </Card>
       <Button
         label="Edit customer"
@@ -52,7 +58,7 @@ export function CustomerDetailScreen() {
         onPress={() => navigation.navigate('CreateBooking', { customerId: customer.id })}
       />
       <Button
-        label={isArchived ? 'Restore customer' : 'Archive customer'}
+        label={isArchived ? 'Reactivate customer' : 'Deactivate customer'}
         variant={isArchived ? 'outline' : 'destructive'}
         fullWidth
         onPress={async () => {

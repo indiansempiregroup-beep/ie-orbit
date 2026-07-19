@@ -42,6 +42,7 @@ export function BookingDetailScreen() {
     rescheduleDate,
     booking?.staff_id ?? undefined,
     durationMinutes,
+    booking?.service_id ?? undefined,
   );
 
   const serviceName = useMemo(
@@ -149,7 +150,13 @@ export function BookingDetailScreen() {
               setRescheduleSlot('');
             }}
           />
-          <TimeSlotGrid slots={slots} selected={rescheduleSlot} onSelect={setRescheduleSlot} loading={slotsLoading} />
+          <TimeSlotGrid
+            slots={slots}
+            selected={rescheduleSlot}
+            onSelect={setRescheduleSlot}
+            loading={slotsLoading}
+            emptyMessage="No timeslot available for this staff on this date. Try another day."
+          />
           {rescheduleSlot ? (
             <Card>
               <Text style={styles.summaryLabel}>New time</Text>

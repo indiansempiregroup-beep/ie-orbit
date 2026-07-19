@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { createApiClient, type LoginResponse } from '@ie-platform/sdk';
+import { createApiClient, type LoginResponse, type UserProfile } from '@ie-platform/sdk';
 
 const STORAGE_KEY = 'ie:auth:access';
 const STORAGE_REFRESH = 'ie:auth:refresh';
 const STORAGE_STARTED = 'ie:auth:session_started';
+const DEFAULT_ACCESS_TTL_SECONDS = 3600;
 
 type AuthState = {
   token: string | null;
-  user: LoginResponse['user'] | null;
+  user: UserProfile | null;
   loading: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<string>;
   logout: (allSessions?: boolean) => Promise<void>;
@@ -26,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   });
-  const [user, setUser] = useState<LoginResponse['user'] | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(() => {
     try {
       return Boolean(localStorage.getItem(STORAGE_KEY));
@@ -42,15 +43,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   useEffect(() => {
-    // attempt restore on mount
     void restore();
-    // clear on unmount
     return () => {
       if (refreshRef.current) {
         clearTimeout(refreshRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once on mount
   }, []);
+
+  async function hydrateUser(): Promise<UserProfile> {
+    const me = await client.auth.me();
+    setUser(me.data);
+    return me.data;
+  }
 
   async function login(email: string, password: string, remember = false) {
     setLoading(true);
@@ -63,8 +69,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(STORAGE_KEY, payload.access);
         localStorage.setItem(STORAGE_REFRESH, payload.refresh);
         localStorage.setItem(STORAGE_STARTED, new Date().toISOString());
-      } catch {}
-      scheduleRefresh(payload.expires_in, payload.refresh);
+      } catch {
+        // ignore storage failures
+      }
+      scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
       return payload.access;
     } finally {
       setLoading(false);
@@ -85,7 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_REFRESH);
         localStorage.removeItem(STORAGE_STARTED);
-      } catch {}
+      } catch {
+        // ignore
+      }
       if (refreshRef.current) {
         clearTimeout(refreshRef.current);
       }
@@ -103,22 +113,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!token) return;
       try {
-        const me = await client.auth.me();
-        setUser(me.data);
-      } catch (err) {
-        // try refresh
+        await hydrateUser();
+        const refresh = localStorage.getItem(STORAGE_REFRESH) ?? undefined;
+        scheduleRefresh(DEFAULT_ACCESS_TTL_SECONDS, refresh);
+      } catch {
         const refresh = localStorage.getItem(STORAGE_REFRESH);
         if (refresh) {
           const ok = await attemptRefreshWithBackoff(refresh);
           if (!ok) {
             setToken(null);
+            setUser(null);
             try {
               localStorage.removeItem(STORAGE_KEY);
               localStorage.removeItem(STORAGE_REFRESH);
-            } catch {}
+            } catch {
+              // ignore
+            }
           }
         } else {
           setToken(null);
+          setUser(null);
         }
       }
     } finally {
@@ -129,15 +143,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   function scheduleRefresh(expires_in: number, refreshToken?: string) {
     try {
       if (refreshRef.current) clearTimeout(refreshRef.current);
-    } catch {}
-    const when = Math.max(5, expires_in - 60) * 1000; // ms
-    // Schedule a refresh using backoff if needed
+    } catch {
+      // ignore
+    }
+    const ttl = Number.isFinite(expires_in) && expires_in > 0 ? expires_in : DEFAULT_ACCESS_TTL_SECONDS;
+    const when = Math.max(5, ttl - 60) * 1000;
     refreshRef.current = window.setTimeout(async () => {
-      if (!refreshToken) refreshToken = localStorage.getItem(STORAGE_REFRESH) ?? undefined;
-      if (!refreshToken) return;
-      const ok = await attemptRefreshWithBackoff(refreshToken);
+      const nextRefresh = refreshToken || localStorage.getItem(STORAGE_REFRESH) || undefined;
+      if (!nextRefresh) return;
+      const ok = await attemptRefreshWithBackoff(nextRefresh);
       if (!ok) {
-        // failed after retries - perform logout cleanup
         setToken(null);
         setUser(null);
       }
@@ -146,9 +161,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function attemptRefreshWithBackoff(refreshToken: string) {
     const maxAttempts = 3;
-    const baseDelay = 1000; // 1s
+    const baseDelay = 1000;
 
-    // reset attempts for a fresh sequence
     retryRef.current.attempts = 0;
 
     return new Promise<boolean>((resolve) => {
@@ -156,35 +170,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         retryRef.current.attempts += 1;
         try {
           const refreshed = await client.auth.refresh({ refresh: refreshToken });
-          const payload = refreshed.data;
+          const payload = refreshed.data as LoginResponse & { user?: UserProfile };
+          const nextRefresh = payload.refresh || refreshToken;
+
           setToken(payload.access);
-          setUser(payload.user);
+          client.setToken(payload.access);
           try {
             localStorage.setItem(STORAGE_KEY, payload.access);
-            localStorage.setItem(STORAGE_REFRESH, payload.refresh);
-          } catch {}
-          // reset retry state
+            localStorage.setItem(STORAGE_REFRESH, nextRefresh);
+          } catch {
+            // ignore
+          }
+
+          // /auth/refresh returns tokens only — never clear roles by assigning undefined user.
+          if (payload.user?.id) {
+            setUser(payload.user);
+          } else {
+            await hydrateUser();
+          }
+
           retryRef.current.attempts = 0;
           if (retryRef.current.timer) {
             clearTimeout(retryRef.current.timer);
             retryRef.current.timer = null;
           }
-          // schedule next refresh normally
-          scheduleRefresh(payload.expires_in, payload.refresh);
+          scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, nextRefresh);
           resolve(true);
-        } catch (e) {
+        } catch {
           if (retryRef.current.attempts >= maxAttempts) {
-            // give up
             resolve(false);
             return;
           }
-          // exponential backoff
           const delay = baseDelay * 2 ** (retryRef.current.attempts - 1);
           retryRef.current.timer = window.setTimeout(tryOnce, delay);
         }
       };
 
-      tryOnce();
+      void tryOnce();
     });
   }
 

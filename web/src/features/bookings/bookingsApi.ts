@@ -7,6 +7,7 @@ type AvailabilityQuery = {
   date: string;
   business?: string;
   staff_id?: string;
+  service_id?: string;
   duration_minutes?: number;
   interval_minutes?: number;
   buffer_minutes?: number;

@@ -162,7 +162,9 @@ export function RegisterWizardScreen() {
             <Input label="Secondary color" value={values.secondaryColor} onChangeText={(v) => patch({ secondaryColor: v })} autoCapitalize="none" />
             <ImagePickerButton
               label="Logo"
+              variant="card"
               onPicked={(asset: ImagePickerAsset) => patch({ logoAsset: asset, skipBranding: false })}
+              helperText="Optional. You can update this later in Settings."
             />
           </>
         ) : null}

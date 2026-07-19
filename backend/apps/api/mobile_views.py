@@ -290,23 +290,23 @@ class MobileAvailabilityView(APIView):
             )
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
-        staff_id = serializer.validated_data.get("staff_id")
-        if not staff_id:
-            return Response(
-                {"error": {"message": "Select a stylist to view available times."}},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        slots = self.service.staff_slots(
+        slots = self.service.available_slots(
             tenant=tenant,
             business=business,
-            staff_id=staff_id,
+            staff_id=serializer.validated_data.get("staff_id"),
+            service_id=serializer.validated_data.get("service_id"),
             target_date=serializer.validated_data["date"],
             duration_minutes=serializer.validated_data["duration_minutes"],
             interval_minutes=serializer.validated_data["interval_minutes"],
             buffer_minutes=serializer.validated_data["buffer_minutes"],
         )
         return success_response(
-            {"slots": [slot.as_dict() for slot in slots]},
+            {
+                "slots": [slot.as_dict() for slot in slots],
+                "message": None
+                if slots
+                else "No timeslot available for this date. Try another day or stylist.",
+            },
             request_id=getattr(request, "request_id", None),
         )
 
@@ -333,22 +333,35 @@ class MobileBookingRequestView(APIView):
             return Response({"error": {"message": "Service not found."}}, status=status.HTTP_404_NOT_FOUND)
 
         staff_id = serializer.validated_data.get("staff_id")
-        if not staff_id:
-            return Response({"error": {"message": "Select a stylist to continue."}}, status=status.HTTP_400_BAD_REQUEST)
-        staff = Staff.objects.require_tenant(tenant).filter(
-            id=staff_id,
-            business=business,
-            employment_status=EmploymentStatus.ACTIVE,
-        ).first()
-        if staff is None:
-            return Response({"error": {"message": "Stylist not found."}}, status=status.HTTP_404_NOT_FOUND)
-        if not StaffServiceAssignment.objects.require_tenant(tenant).filter(
-            staff=staff,
+        if staff_id:
+            staff = Staff.objects.require_tenant(tenant).filter(
+                id=staff_id,
+                business=business,
+                employment_status=EmploymentStatus.ACTIVE,
+            ).first()
+            if staff is None:
+                return Response({"error": {"message": "Stylist not found."}}, status=status.HTTP_404_NOT_FOUND)
+            if not StaffServiceAssignment.objects.require_tenant(tenant).filter(
+                staff=staff,
+                service=service,
+                is_active_assignment=True,
+            ).exists():
+                return Response(
+                    {"error": {"message": "Selected stylist does not offer this service."}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif not StaffServiceAssignment.objects.require_tenant(tenant).filter(
             service=service,
             is_active_assignment=True,
+            staff__business=business,
+            staff__employment_status=EmploymentStatus.ACTIVE,
         ).exists():
             return Response(
-                {"error": {"message": "Selected stylist does not offer this service."}},
+                {
+                    "error": {
+                        "message": "No timeslot available. No stylist is assigned to this service.",
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

@@ -33,14 +33,36 @@ Use `AvailabilityService` to generate slots:
 ```python
 from apps.bookings.services import AvailabilityService
 
+# Specific staff — only that person's free slots (after current time)
 slots = AvailabilityService().staff_slots(
-    tenant=request.current_tenant,
+    tenant=tenant,
     business=business,
-    staff_id=staff_id,
-    target_date=date,
+    staff_id=staff.id,
+    target_date=date.today(),
     duration_minutes=30,
 )
+
+# No staff selected — union of free slots for eligible staff (optionally filtered by service)
+slots = AvailabilityService().available_slots(
+    tenant=tenant,
+    business=business,
+    target_date=date.today(),
+    duration_minutes=30,
+    service_id=service.id,
+)
+
+# Auto-assign least-booked available staff for a chosen time
+staff_id = AvailabilityService().assign_available_staff(
+    tenant=tenant,
+    business=business,
+    start_at=start_at,
+    end_at=end_at,
+    service_id=service.id,
+)
 ```
+
+Past start times are never returned. When creating a booking without `staff_id`,
+`BookingService` assigns the least-booked eligible staff (or raises if none are free).
 
 ## Workflow
 

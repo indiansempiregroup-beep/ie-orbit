@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { formatTimestamp } from '../../lib/datetime';
 import {
   ACTIVE_BUSINESS_STORAGE_KEY,
   ACTIVE_TENANT_STORAGE_KEY,
@@ -179,7 +180,7 @@ export function BillingPlanFoundation() {
         <strong>Ops snapshot export:</strong>
         {!opsSnapshotQuery.isLoading && opsSnapshot ? (
           <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>
-            Generated {new Date(opsSnapshot.generated_at).toLocaleString()} · Ready:{' '}
+            Generated {formatTimestamp(opsSnapshot.generated_at)} · Ready:{' '}
             {opsSnapshot.ready ? 'yes' : 'no'} · Health score: {opsSnapshot.health_score}/100
           </p>
         ) : (
@@ -497,7 +498,7 @@ export function BillingPlanFoundation() {
                   {typeof event.retry_count === 'number' ? (
                     <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
                       Retries: {event.retry_count}
-                      {event.next_retry_at ? ` · next ${new Date(event.next_retry_at).toLocaleString()}` : ''}
+                      {event.next_retry_at ? ` · next ${formatTimestamp(event.next_retry_at)}` : ''}
                     </p>
                   ) : null}
                 </div>

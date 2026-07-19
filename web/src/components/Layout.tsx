@@ -5,6 +5,7 @@ import { AppShellHeader } from './AppShellHeader';
 import { EmailVerificationBanner } from './EmailVerificationBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useProductNavigation } from '../hooks/useProductNavigation';
+import { formatUserRole } from '../utils/roles';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useWorkspaceLogo } from '../hooks/useWorkspaceLogo';
 import { useNotificationStream } from '../hooks/useNotificationStream';
@@ -27,6 +28,8 @@ export function Layout() {
       }),
     [workspace.tenantId, workspace.activeBusiness, workspace.activeProduct],
   );
+
+  const roleLabel = formatUserRole(auth.user?.roles);
 
   return (
     <div className="app-shell">
@@ -89,7 +92,7 @@ export function Layout() {
             <div>
               <strong>{auth.user?.full_name ?? 'User'}</strong>
               <p>
-                {auth.user?.roles?.[0] ?? 'Owner'}
+                {roleLabel}
                 {!auth.user?.email_verified_at ? ' · Email not verified' : ''}
               </p>
             </div>

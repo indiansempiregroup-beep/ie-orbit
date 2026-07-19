@@ -1,3 +1,31 @@
+type DateTimeZoneConfig = {
+  userTimezone?: string | null;
+  businessTimezone?: string | null;
+};
+
+let userTimezone: string | undefined;
+let businessTimezone: string | undefined;
+
+function normalizeTimezone(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** Configure display zones: user profile → business → device local. */
+export function configureDateTimeZones(config: DateTimeZoneConfig) {
+  userTimezone = normalizeTimezone(config.userTimezone);
+  businessTimezone = normalizeTimezone(config.businessTimezone);
+}
+
+export function resolveDisplayTimeZone(): string | undefined {
+  return userTimezone || businessTimezone || undefined;
+}
+
+function withZone(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions {
+  const timeZone = resolveDisplayTimeZone();
+  return timeZone ? { ...options, timeZone } : options;
+}
+
 export function formatRelativeTime(isoDate?: string | null) {
   if (!isoDate) return '';
   const date = new Date(isoDate);
@@ -10,24 +38,35 @@ export function formatRelativeTime(isoDate?: string | null) {
   const days = Math.floor(hours / 24);
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  return date.toLocaleDateString();
+  return date.toLocaleDateString(undefined, withZone({}));
 }
 
 export function formatDateTime(isoDate?: string | null) {
   if (!isoDate) return '—';
   const date = new Date(isoDate);
-  return date.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return date.toLocaleString(
+    undefined,
+    withZone({
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }),
+  );
 }
 
 export function formatTime(isoDate?: string | null) {
   if (!isoDate) return '—';
-  return new Date(isoDate).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return new Date(isoDate).toLocaleTimeString(
+    undefined,
+    withZone({
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }),
+  );
 }
 
 export function formatDateKey(date: Date) {
@@ -56,10 +95,48 @@ export function mapBookingStatus(status: string): 'confirmed' | 'pending' | 'can
 }
 
 import { ApiClientError } from '@ie-platform/sdk';
+import { getApiBaseUrl } from '../config/apiBaseUrl';
+
+function formatErrorDetails(details: unknown): string {
+  if (!details) return '';
+  if (typeof details === 'string') return details;
+  if (Array.isArray(details)) {
+    return details.map((item) => formatErrorDetails(item)).filter(Boolean).join(' ');
+  }
+  if (typeof details === 'object') {
+    return Object.entries(details as Record<string, unknown>)
+      .map(([key, value]) => {
+        const text = formatErrorDetails(value);
+        return text ? `${key}: ${text}` : '';
+      })
+      .filter(Boolean)
+      .join(' ');
+  }
+  return String(details);
+}
+
+function isNetworkFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('network request failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('network error') ||
+    message.includes('timeout')
+  );
+}
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (isNetworkFailure(error)) {
+    return `Cannot reach API at ${getApiBaseUrl()}. Check Wi‑Fi / hotspot and that Windows Firewall allows TCP 8000.`;
+  }
   if (error instanceof ApiClientError) {
-    return error.payload.error.message || error.message || fallback;
+    const details = formatErrorDetails(error.payload.error.details);
+    const message = error.payload.error.message || error.message || fallback;
+    if (details && message === 'One or more request fields are invalid.') {
+      return details;
+    }
+    return details ? `${message} (${details})` : message;
   }
   if (error instanceof Error && error.message) return error.message;
   return fallback;

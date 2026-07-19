@@ -54,7 +54,7 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     phone_number = models.CharField(max_length=32, blank=True)
-    profile_photo = models.URLField(blank=True)
+    profile_photo = models.CharField(max_length=500, blank=True)
     language = models.CharField(max_length=16, default="en")
     timezone = models.CharField(max_length=64, default="UTC")
     notification_preferences = models.JSONField(default=dict, blank=True)

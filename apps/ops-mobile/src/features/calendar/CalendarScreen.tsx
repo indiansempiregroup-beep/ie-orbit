@@ -72,7 +72,9 @@ export function CalendarScreen() {
         />
 
         <SectionHeader title="Available slots" />
-        {slots.length === 0 ? <Text style={styles.meta}>No open slots or still loading.</Text> : null}
+        {slots.length === 0 ? (
+          <Text style={styles.meta}>No timeslot available for this day.</Text>
+        ) : null}
         <View style={styles.slotRow}>
           {slots.slice(0, 12).map((slot) => (
             <Pressable

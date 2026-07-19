@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import type { MobileBooking } from '@ie-platform/sdk';
 import { Badge } from './ui/Badge';
 import { colors, radius, spacing, typography } from '../theme/tokens';
-import { mapBookingStatus } from '../utils/format';
+import { formatTime, mapBookingStatus } from '../utils/format';
 
 type Props = {
   booking: MobileBooking;
@@ -21,8 +21,7 @@ export function BookingCard({ booking, onPress, primaryColor = colors.primary }:
       <View style={styles.body}>
         <Text style={styles.title}>{booking.service_name}</Text>
         <Text style={styles.meta}>
-          {new Date(booking.start_at).toLocaleDateString()} ·{' '}
-          {new Date(booking.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {new Date(booking.start_at).toLocaleDateString()} · {formatTime(booking.start_at)}
         </Text>
         {booking.staff_name ? <Text style={styles.staff}>with {booking.staff_name}</Text> : null}
         <Text style={styles.ref}>#{booking.booking_number}</Text>

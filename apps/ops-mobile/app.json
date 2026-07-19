@@ -5,6 +5,28 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"]
+    "assetBundlePatterns": ["**/*"],
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow IE Platform to use Face ID for quick sign-in."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow IE Platform to access your photos for profile and business images.",
+          "cameraPermission": "Allow IE Platform to use the camera for profile and business photos."
+        }
+      ]
+    ],
+    "ios": {
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Allow IE Platform to use Face ID for quick sign-in.",
+        "NSCameraUsageDescription": "Allow IE Platform to use the camera for profile and business photos.",
+        "NSPhotoLibraryUsageDescription": "Allow IE Platform to access your photos for profile and business images."
+      }
+    }
   }
 }

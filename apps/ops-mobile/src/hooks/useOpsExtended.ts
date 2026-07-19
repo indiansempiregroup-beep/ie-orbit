@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AvailabilitySlot,
   BIReportsBundle,
@@ -47,28 +47,40 @@ export function useEntityMaps() {
   return { customers, services, staff, customerMap, serviceMap, staffMap, reloadAll };
 }
 
-export function useAvailability(date: string, staffId?: string, durationMinutes = 30) {
+export function useAvailability(
+  date: string,
+  staffId?: string,
+  durationMinutes = 30,
+  serviceId?: string,
+) {
   const client = useOpsClient();
   const { businessId, ready } = useWorkspace();
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(false);
+  const requestSeq = useRef(0);
 
   const reload = useCallback(async () => {
     if (!client || !ready || !date) return;
+    const seq = ++requestSeq.current;
     setLoading(true);
+    setSlots([]);
     try {
       const response = await client.bookings.availability({
         business: businessId ?? undefined,
         date,
         staff_id: staffId,
+        service_id: serviceId,
         duration_minutes: durationMinutes,
         interval_minutes: 30,
       });
+      if (seq !== requestSeq.current) return;
       setSlots(response.data ?? []);
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) {
+        setLoading(false);
+      }
     }
-  }, [client, ready, date, staffId, durationMinutes, businessId]);
+  }, [client, ready, date, staffId, durationMinutes, serviceId, businessId]);
 
   useEffect(() => {
     void reload();
@@ -531,6 +543,18 @@ export function useStaffMutations() {
     update: async (id: string, body: StaffUpdateInput) => {
       if (!client) throw new Error('Not ready');
       return (await client.staff.patch(id, body)).data;
+    },
+    deactivate: async (id: string) => {
+      if (!client) throw new Error('Not ready');
+      return (await client.staff.patch(id, { employment_status: 'inactive' })).data;
+    },
+    reactivate: async (id: string) => {
+      if (!client) throw new Error('Not ready');
+      return (await client.staff.patch(id, { employment_status: 'active' })).data;
+    },
+    remove: async (id: string) => {
+      if (!client) throw new Error('Not ready');
+      return client.staff.delete(id);
     },
   };
 }

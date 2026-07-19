@@ -5,6 +5,7 @@ import { Card } from '../../components/Card';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { formatDateTime } from '../../lib/datetime';
 import { useBookingActions, useBookingDetail } from './bookingDetailHooks';
 
 export function BookingDetailPage() {
@@ -65,7 +66,7 @@ export function BookingDetailPage() {
               <div><strong>Customer:</strong> {booking.customer_id ?? '—'}</div>
               <div><strong>Service:</strong> {booking.service_id ?? '—'}</div>
               <div><strong>Staff:</strong> {booking.staff_id ?? 'Unassigned'}</div>
-              <div><strong>Start:</strong> {booking.start_at ? new Date(booking.start_at).toLocaleString() : '—'}</div>
+              <div><strong>Start:</strong> {booking.start_at ? formatDateTime(booking.start_at) : '—'}</div>
               <div><strong>Duration:</strong> {booking.duration_minutes ?? '—'} min</div>
             </Card>
 

@@ -18,7 +18,33 @@ export function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
 
   return (
-    <FormScreen contentContainerStyle={styles.content}>
+    <FormScreen
+      contentContainerStyle={styles.content}
+      footer={
+        <>
+          <Button
+            label="Send reset link"
+            loading={loading}
+            fullWidth
+            size="lg"
+            onPress={async () => {
+              setLoading(true);
+              setError(null);
+              setMessage(null);
+              try {
+                await opsClient.auth.forgotPassword({ email: email.trim() });
+                setMessage('If an account exists, a reset link has been sent.');
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to send reset link.'));
+              } finally {
+                setLoading(false);
+              }
+            }}
+          />
+          <Button label="Back to sign in" variant="ghost" onPress={() => navigation.navigate('Login')} />
+        </>
+      }
+    >
       <Text style={styles.title}>Forgot password</Text>
       <Text style={styles.copy}>We&apos;ll email you a reset link if the account exists.</Text>
       <Input
@@ -31,26 +57,6 @@ export function ForgotPasswordScreen() {
       />
       {message ? <Text style={styles.success}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button
-        label="Send reset link"
-        loading={loading}
-        fullWidth
-        size="lg"
-        onPress={async () => {
-          setLoading(true);
-          setError(null);
-          setMessage(null);
-          try {
-            await opsClient.auth.forgotPassword({ email: email.trim() });
-            setMessage('If an account exists, a reset link has been sent.');
-          } catch (err) {
-            setError(getApiErrorMessage(err, 'Unable to send reset link.'));
-          } finally {
-            setLoading(false);
-          }
-        }}
-      />
-      <Button label="Back to sign in" variant="ghost" onPress={() => navigation.navigate('Login')} />
     </FormScreen>
   );
 }

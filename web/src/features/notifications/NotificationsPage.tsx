@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useTheme } from '../../hooks/useTheme';
+import { formatTimestamp } from '../../lib/datetime';
 import { useMarkAllNotificationsAsRead, useMarkNotificationAsRead, useNotificationList } from './notificationsHooks';
 
 export function NotificationsPage() {
@@ -56,7 +57,7 @@ export function NotificationsPage() {
                   </div>
                   <p style={{ margin: 0, color: '#374151' }}>{note.body ?? 'No details available.'}</p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ color: '#6b7280', fontSize: 13 }}>{note.created_at ? new Date(note.created_at).toLocaleString() : 'Unknown time'}</span>
+                    <span style={{ color: '#6b7280', fontSize: 13 }}>{note.created_at ? formatTimestamp(note.created_at) : 'Unknown time'}</span>
                     {!note.is_read ? (
                       <Button
                         variant="neutral"

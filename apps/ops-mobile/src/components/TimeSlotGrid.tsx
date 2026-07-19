@@ -18,7 +18,7 @@ export function TimeSlotGrid({
   selected,
   onSelect,
   loading,
-  emptyMessage = 'No slots for this date. Try another day or staff member.',
+  emptyMessage = 'No timeslot available for this date. Try another day or staff member.',
 }: Props) {
   return (
     <View style={styles.wrap}>

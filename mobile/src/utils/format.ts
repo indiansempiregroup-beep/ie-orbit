@@ -1,3 +1,31 @@
+type DateTimeZoneConfig = {
+  userTimezone?: string | null;
+  businessTimezone?: string | null;
+};
+
+let userTimezone: string | undefined;
+let businessTimezone: string | undefined;
+
+function normalizeTimezone(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** Configure display zones: user profile → business → device local. */
+export function configureDateTimeZones(config: DateTimeZoneConfig) {
+  userTimezone = normalizeTimezone(config.userTimezone);
+  businessTimezone = normalizeTimezone(config.businessTimezone);
+}
+
+export function resolveDisplayTimeZone(): string | undefined {
+  return userTimezone || businessTimezone || undefined;
+}
+
+function withZone(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions {
+  const timeZone = resolveDisplayTimeZone();
+  return timeZone ? { ...options, timeZone } : options;
+}
+
 export function formatRelativeTime(isoDate?: string | null) {
   if (!isoDate) return '';
   const date = new Date(isoDate);
@@ -10,7 +38,34 @@ export function formatRelativeTime(isoDate?: string | null) {
   const days = Math.floor(hours / 24);
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  return date.toLocaleDateString();
+  return date.toLocaleDateString(undefined, withZone({}));
+}
+
+export function formatTime(isoDate?: string | null) {
+  if (!isoDate) return '—';
+  return new Date(isoDate).toLocaleTimeString(
+    undefined,
+    withZone({
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }),
+  );
+}
+
+export function formatDateTime(isoDate?: string | null) {
+  if (!isoDate) return '—';
+  return new Date(isoDate).toLocaleString(
+    undefined,
+    withZone({
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }),
+  );
 }
 
 export function isUpcomingBooking(status: string, startAt: string) {

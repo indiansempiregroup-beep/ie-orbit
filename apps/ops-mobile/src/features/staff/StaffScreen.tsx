@@ -23,7 +23,7 @@ export function StaffScreen() {
     const q = search.trim().toLowerCase();
     if (!q) return staff;
     return staff.filter((s) =>
-      [s.full_name, s.email, s.phone_number, s.status]
+      [s.display_name, s.full_name, s.email, s.phone_number, s.employment_status, s.status]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q)),
     );
@@ -33,7 +33,7 @@ export function StaffScreen() {
     <View style={styles.screen}>
       <OpsHeader title="Staff" subtitle={`${staff.length} members`} />
       <View style={styles.toolbar}>
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search staff" />
+        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search staff" />
         <Button label="Add" onPress={() => navigation.navigate('StaffForm', {})} />
       </View>
       <RefreshableScrollView
@@ -47,14 +47,19 @@ export function StaffScreen() {
           emptyMessage="No staff found."
         />
         {filtered.map((member) => {
-          const name = member.full_name?.trim() || member.email || 'Staff member';
+          const name =
+            member.display_name?.trim() ||
+            member.full_name?.trim() ||
+            member.email ||
+            'Staff member';
           return (
             <ListRow
               key={member.id}
               title={name}
               subtitle={member.email ?? member.phone_number ?? '—'}
-              meta={member.status ?? undefined}
+              meta={member.employment_status || member.status || undefined}
               avatarName={name}
+              avatarSrc={member.photo_url}
               onPress={() => navigation.navigate('StaffDetail', { staffId: member.id })}
             />
           );
@@ -74,5 +79,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     alignItems: 'center',
   },
+  search: { flex: 1 },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 });

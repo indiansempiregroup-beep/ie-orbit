@@ -44,10 +44,25 @@ class BookingService:
         duration_minutes = data["duration_minutes"]
         end_at = start_at + timedelta(minutes=duration_minutes)
         validate_time_range(start_at, end_at)
+        staff_id = data.get("staff_id")
+        service_id = data.get("service_id")
+        if not staff_id:
+            staff_id = self.availability_service.assign_available_staff(
+                tenant=tenant,
+                business=business,
+                start_at=start_at,
+                end_at=end_at,
+                service_id=service_id,
+            )
+            if not staff_id:
+                raise ValidationError(
+                    "No timeslot available. No staff is available at the selected time."
+                )
         self._validate_availability(
             tenant=tenant,
             business=business,
-            staff_id=data.get("staff_id"),
+            staff_id=staff_id,
+            service_id=service_id,
             start_at=start_at,
             end_at=end_at,
         )
@@ -56,8 +71,8 @@ class BookingService:
             business=business,
             booking_number=self._booking_number(),
             customer_id=data["customer_id"],
-            staff_id=data.get("staff_id"),
-            service_id=data["service_id"],
+            staff_id=staff_id,
+            service_id=service_id,
             appointment_date=start_at.date(),
             start_at=start_at,
             end_at=end_at,
@@ -98,10 +113,27 @@ class BookingService:
         end_at = data.get("end_at", start_at + timedelta(minutes=duration_minutes))
         validate_time_range(start_at, end_at)
         if "start_at" in data or "duration_minutes" in data or "staff_id" in data:
+            staff_id = data.get("staff_id", booking.staff_id)
+            service_id = data.get("service_id", booking.service_id)
+            if not staff_id:
+                staff_id = self.availability_service.assign_available_staff(
+                    tenant=booking.tenant,
+                    business=booking.business,
+                    start_at=start_at,
+                    end_at=end_at,
+                    service_id=service_id,
+                    exclude_booking=booking,
+                )
+                if not staff_id:
+                    raise ValidationError(
+                        "No timeslot available. No staff is available at the selected time."
+                    )
+                data = {**data, "staff_id": staff_id}
             self._validate_availability(
                 tenant=booking.tenant,
                 business=booking.business,
-                staff_id=data.get("staff_id", booking.staff_id),
+                staff_id=staff_id,
+                service_id=service_id,
                 start_at=start_at,
                 end_at=end_at,
                 exclude_booking=booking,
@@ -193,6 +225,7 @@ class BookingService:
         staff_id: Any | None,
         start_at: Any,
         end_at: Any,
+        service_id: Any | None = None,
         exclude_booking: Booking | None = None,
     ) -> None:
         self._validate_booking_rules(
@@ -201,15 +234,20 @@ class BookingService:
             start_at=start_at,
             exclude_booking=exclude_booking,
         )
+        if start_at <= timezone.now():
+            raise ValidationError("Selected time is in the past. Choose a later timeslot.")
         if not self.availability_service.is_available(
             tenant=tenant,
             business=business,
             start_at=start_at,
             end_at=end_at,
             staff_id=staff_id,
+            service_id=service_id,
             exclude_booking=exclude_booking,
         ):
-            raise ValidationError("Requested booking slot is not available.")
+            raise ValidationError(
+                "No timeslot available for the selected time. Please choose another slot."
+            )
 
     def _validate_booking_rules(
         self,

@@ -10,6 +10,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { LogoUploadField } from '../../components/LogoUploadField';
+import { formatTimestamp } from '../../lib/datetime';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { useTheme } from '../../hooks/useTheme';
 import { uploadServiceImage } from './uploadServiceImage';
@@ -159,11 +160,11 @@ export function ServiceDetailPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Created</p>
-                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.created_at ? new Date(serviceQuery.data.created_at).toLocaleString() : '—'}</p>
+                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.created_at ? formatTimestamp(serviceQuery.data.created_at) : '—'}</p>
                 </div>
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Updated</p>
-                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.updated_at ? new Date(serviceQuery.data.updated_at).toLocaleString() : '—'}</p>
+                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.updated_at ? formatTimestamp(serviceQuery.data.updated_at) : '—'}</p>
                 </div>
               </div>
             </div>

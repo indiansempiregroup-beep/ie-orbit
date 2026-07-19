@@ -12,7 +12,19 @@ export function hasPermission(user: UserProfile | null | undefined, code: string
 }
 
 export function canManageTeam(user: UserProfile | null | undefined): boolean {
-  return hasPermission(user, 'iam:role:assign') || Boolean(user?.roles?.includes('business_owner'));
+  return (
+    hasPermission(user, 'iam:role:assign') ||
+    Boolean(user?.roles?.some((role) => ['business_owner', 'manager', 'platform_admin', 'super_admin'].includes(role)))
+  );
+}
+
+/** Settings / workspace config — managers and owners, not staff-only accounts. */
+export function canAccessSettings(user: UserProfile | null | undefined): boolean {
+  if (!user?.roles?.length) return false;
+  if (user.roles.some((role) => ['business_owner', 'manager', 'platform_admin', 'super_admin'].includes(role))) {
+    return true;
+  }
+  return hasPermission(user, 'business:write') || hasPermission(user, 'business:manage');
 }
 
 export function canWriteBookings(user: UserProfile | null | undefined): boolean {

@@ -7,6 +7,7 @@ import { Button, IconButton } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { quickActionItems, filterNavigationByProduct } from '../../config/navigation';
 import { useTheme } from '../../hooks/useTheme';
+import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatMoney } from '../../lib/currency';
 import { GettingStartedChecklist } from '../onboarding/GettingStartedChecklist';
@@ -15,12 +16,13 @@ import { getProductName } from '../../config/products';
 export function DashboardPage() {
   const theme = useTheme();
   const navigate = useNavigate();
+  const auth = useAuth();
   const workspace = useWorkspace();
   const queryClient = useQueryClient();
   const activeProduct = workspace.activeProduct ?? workspace.activeBusiness?.selected_product ?? 'appointie';
   const quickActions = useMemo(
-    () => filterNavigationByProduct(quickActionItems, activeProduct),
-    [activeProduct],
+    () => filterNavigationByProduct(quickActionItems, activeProduct, auth.user),
+    [activeProduct, auth.user],
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [searchActive, setSearchActive] = useState(false);
