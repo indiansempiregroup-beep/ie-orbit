@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
+import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 
 export function ProfileEditScreen() {
@@ -16,6 +17,7 @@ export function ProfileEditScreen() {
   const [timezone, setTimezone] = useState(user?.timezone ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setFirstName(user?.first_name ?? '');
@@ -25,16 +27,19 @@ export function ProfileEditScreen() {
   }, [user]);
 
   return (
-    <View style={styles.wrap}>
+    <FormScreen>
+      <Text style={styles.title}>Edit profile</Text>
       <Input label="First name" value={firstName} onChangeText={setFirstName} />
       <Input label="Last name" value={lastName} onChangeText={setLastName} />
-      <Input label="Phone" value={phone} onChangeText={setPhone} />
-      <Input label="Timezone" value={timezone} onChangeText={setTimezone} />
+      <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      <Input label="Timezone" value={timezone} onChangeText={setTimezone} placeholder="Asia/Kolkata" />
+      {message ? <Text style={styles.success}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Button
         label="Save profile"
         loading={loading}
         fullWidth
+        size="lg"
         onPress={async () => {
           if (!client) return;
           setLoading(true);
@@ -42,6 +47,7 @@ export function ProfileEditScreen() {
           try {
             await client.auth.patchMe({ first_name: firstName, last_name: lastName, phone_number: phone, timezone });
             await refreshProfile();
+            setMessage('Profile updated.');
           } catch (err) {
             setError(getApiErrorMessage(err, 'Unable to update profile.'));
           } finally {
@@ -49,11 +55,12 @@ export function ProfileEditScreen() {
           }
         }}
       />
-    </View>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md },
+  title: { ...typography.heading, color: colors.foreground },
+  success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },
 });

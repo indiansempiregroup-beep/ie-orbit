@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ScreenState } from '../../components/ScreenState';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomer } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -36,12 +38,10 @@ export function CustomerFormScreen() {
     setAddress(customer.full_address ?? '');
   }, [customer]);
 
-  if (isEdit && loading) {
-    return <View style={styles.wrap}><Text>Loading…</Text></View>;
-  }
+  if (isEdit && loading) return <ScreenState loading />;
 
   return (
-    <View style={styles.wrap}>
+    <FormScreen>
       <Text style={styles.title}>{isEdit ? 'Edit customer' : 'Add customer'}</Text>
       <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
       <Input label="First name" value={firstName} onChangeText={setFirstName} />
@@ -54,6 +54,7 @@ export function CustomerFormScreen() {
         label={isEdit ? 'Save changes' : 'Create customer'}
         loading={submitting}
         fullWidth
+        size="lg"
         onPress={async () => {
           setSubmitting(true);
           setError(null);
@@ -89,12 +90,11 @@ export function CustomerFormScreen() {
           }
         }}
       />
-    </View>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md },
-  title: { ...typography.title, color: colors.foreground },
+  title: { ...typography.heading, color: colors.foreground },
   error: { ...typography.caption, color: colors.destructive },
 });

@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
-import { colors, spacing } from '../theme/tokens';
+import { colors } from '../theme/tokens';
 import type { MainTabParamList } from './types';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { BookingsScreen } from '../features/bookings/BookingsScreen';
@@ -14,7 +14,7 @@ import { useNotifications } from '../hooks/useOpsData';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Feather.glyphMap> = {
-  Dashboard: 'grid',
+  Dashboard: 'home',
   Bookings: 'book-open',
   Calendar: 'calendar',
   Alerts: 'bell',
@@ -32,10 +32,17 @@ export function MainTabs() {
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarIcon: ({ color, size }) => <Feather name={TAB_ICONS[route.name]} size={size} color={color} />,
+        tabBarIcon: ({ color, size, focused }) => (
+          <Feather
+            name={TAB_ICONS[route.name]}
+            size={size}
+            color={color}
+            style={focused ? styles.activeIcon : undefined}
+          />
+        ),
       })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Home' }} />
       <Tab.Screen name="Bookings" component={BookingsScreen} />
       <Tab.Screen name="Calendar" component={CalendarScreen} />
       <Tab.Screen
@@ -52,9 +59,10 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.card,
     borderTopColor: colors.border,
-    height: 60,
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    paddingTop: 4,
+    height: 64,
   },
-  tabLabel: { fontSize: 11, fontWeight: '600' },
+  tabLabel: { fontSize: 10, fontWeight: '500', marginBottom: 4 },
+  activeIcon: { transform: [{ scale: 1.05 }] },
 });

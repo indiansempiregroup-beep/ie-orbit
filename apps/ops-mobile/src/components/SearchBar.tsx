@@ -29,10 +29,11 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search…' }: Pr
 
 const styles = StyleSheet.create({
   wrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,

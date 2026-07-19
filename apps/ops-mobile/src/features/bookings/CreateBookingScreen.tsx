@@ -1,15 +1,27 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
+import { CalendarPicker } from '../../components/CalendarPicker';
+import { FormScreen } from '../../components/FormScreen';
 import { SelectField } from '../../components/SelectField';
+import { TimeSlotGrid } from '../../components/TimeSlotGrid';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useEntityMaps, useBookingMutations } from '../../hooks/useOpsExtended';
+import { useAvailability, useBookingMutations, useEntityMaps } from '../../hooks/useOpsExtended';
 import { colors, spacing, typography } from '../../theme/tokens';
-import { getApiErrorMessage } from '../../utils/format';
+import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
+
+function dateFromIso(value?: string) {
+  if (!value) return formatDateKey(new Date());
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return formatDateKey(new Date());
+  return formatDateKey(date);
+}
 
 export function CreateBookingScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CreateBooking'>>();
@@ -18,39 +30,118 @@ export function CreateBookingScreen() {
   const { customers, services, staff, customerMap, serviceMap, staffMap } = useEntityMaps();
   const mutations = useBookingMutations();
 
-  const [customerId, setCustomerId] = useState('');
+  const [customerId, setCustomerId] = useState(route.params?.customerId ?? '');
   const [serviceId, setServiceId] = useState(route.params?.serviceId ?? '');
   const [staffId, setStaffId] = useState(route.params?.staffId ?? '');
-  const [startAt, setStartAt] = useState(route.params?.startAt ?? new Date().toISOString());
-  const [durationMinutes, setDurationMinutes] = useState(String(route.params?.durationMinutes ?? 30));
+  const [date, setDate] = useState(() => dateFromIso(route.params?.startAt));
+  const [selectedSlot, setSelectedSlot] = useState(route.params?.startAt ?? '');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const customerOptions = useMemo(() => customers.map((c) => ({ value: c.id, label: customerMap.get(c.id) ?? c.id })), [customers, customerMap]);
-  const serviceOptions = useMemo(() => services.map((s) => ({ value: s.id, label: serviceMap.get(s.id) ?? s.name ?? s.id })), [services, serviceMap]);
+  const selectedService = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
+  const durationMinutes = selectedService?.duration_minutes ?? route.params?.durationMinutes ?? 30;
+
+  const { slots, loading: slotsLoading } = useAvailability(date, staffId || undefined, durationMinutes);
+
+  useEffect(() => {
+    if (route.params?.startAt) {
+      setSelectedSlot(route.params.startAt);
+      setDate(dateFromIso(route.params.startAt));
+    }
+  }, [route.params?.startAt]);
+
+  useEffect(() => {
+    if (!selectedSlot) return;
+    if (dateFromIso(selectedSlot) !== date) setSelectedSlot('');
+  }, [date, selectedSlot]);
+
+  const customerOptions = useMemo(
+    () => customers.map((c) => ({ value: c.id, label: customerMap.get(c.id) ?? c.id })),
+    [customers, customerMap],
+  );
+  const serviceOptions = useMemo(
+    () => services.map((s) => ({ value: s.id, label: serviceMap.get(s.id) ?? s.name ?? s.id })),
+    [services, serviceMap],
+  );
   const staffOptions = useMemo(
-    () => [{ value: '', label: 'Unassigned' }, ...staff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id }))],
+    () => [{ value: '', label: 'Any available / unassigned' }, ...staff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id }))],
     [staff, staffMap],
   );
 
   return (
-    <View style={styles.wrap}>
+    <FormScreen>
       <Text style={styles.title}>New booking</Text>
-      <SelectField label="Customer" value={customerId} options={customerOptions} onChange={setCustomerId} />
-      <SelectField label="Service" value={serviceId} options={serviceOptions} onChange={setServiceId} />
-      <SelectField label="Staff" value={staffId} options={staffOptions} onChange={setStaffId} />
-      <Input label="Start (ISO datetime)" value={startAt} onChangeText={setStartAt} autoCapitalize="none" />
-      <Input label="Duration (minutes)" value={durationMinutes} onChangeText={setDurationMinutes} keyboardType="number-pad" />
-      <Input label="Notes" value={notes} onChangeText={setNotes} multiline />
+      <Text style={styles.subtitle}>Pick the customer, service, and an available time slot.</Text>
+
+      <Card>
+        <SelectField label="Customer" value={customerId} options={customerOptions} onChange={setCustomerId} />
+        <View style={styles.spacer} />
+        <SelectField
+          label="Service"
+          value={serviceId}
+          options={serviceOptions}
+          onChange={(value) => {
+            setServiceId(value);
+            setSelectedSlot('');
+          }}
+        />
+        <View style={styles.spacer} />
+        <SelectField
+          label="Staff"
+          value={staffId}
+          options={staffOptions}
+          onChange={(value) => {
+            setStaffId(value);
+            setSelectedSlot('');
+          }}
+        />
+        {selectedService ? (
+          <Text style={styles.hint}>
+            Duration · {durationMinutes} min
+            {selectedService.price != null ? ` · ${selectedService.price}` : ''}
+          </Text>
+        ) : null}
+      </Card>
+
+      <SectionHeader title="Date & time" />
+      <CalendarPicker
+        value={date}
+        onChange={(next) => {
+          setDate(next);
+          setSelectedSlot('');
+        }}
+      />
+      <TimeSlotGrid
+        slots={slots}
+        selected={selectedSlot}
+        onSelect={setSelectedSlot}
+        loading={slotsLoading}
+      />
+
+      <Input label="Notes (optional)" value={notes} onChangeText={setNotes} multiline placeholder="Add booking notes" />
+
+      {selectedSlot ? (
+        <Card>
+          <Text style={styles.summaryLabel}>Selected</Text>
+          <Text style={styles.summaryValue}>{formatDateTime(selectedSlot)}</Text>
+        </Card>
+      ) : null}
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
       <Button
         label="Create booking"
         loading={loading}
         fullWidth
+        size="lg"
         onPress={async () => {
           if (!customerId || !serviceId) {
             setError('Customer and service are required.');
+            return;
+          }
+          if (!selectedSlot) {
+            setError('Select an available time slot.');
             return;
           }
           setLoading(true);
@@ -61,8 +152,8 @@ export function CreateBookingScreen() {
               customer_id: customerId,
               service_id: serviceId,
               staff_id: staffId || null,
-              start_at: startAt,
-              duration_minutes: Number(durationMinutes) || 30,
+              start_at: selectedSlot,
+              duration_minutes: durationMinutes,
               notes: notes || undefined,
               source: 'ops_mobile',
               channel: 'mobile',
@@ -75,12 +166,16 @@ export function CreateBookingScreen() {
           }
         }}
       />
-    </View>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md },
-  title: { ...typography.title, color: colors.foreground },
+  title: { ...typography.heading, color: colors.foreground },
+  subtitle: { ...typography.body, color: colors.mutedForeground, marginTop: -spacing.sm },
+  spacer: { height: spacing.md },
+  hint: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.md },
+  summaryLabel: { ...typography.caption, color: colors.mutedForeground },
+  summaryValue: { ...typography.title, fontSize: 16, color: colors.foreground, marginTop: 4 },
   error: { ...typography.caption, color: colors.destructive },
 });

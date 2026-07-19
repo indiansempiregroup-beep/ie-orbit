@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { OpsHeader } from '../../components/OpsHeader';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ListRow } from '../../components/ui/ListRow';
 import { ScreenState } from '../../components/ScreenState';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useServices } from '../../hooks/useOpsData';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function ServicesScreen() {
@@ -22,7 +22,9 @@ export function ServicesScreen() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return services;
-    return services.filter((s) => [s.name, s.description, s.status].filter(Boolean).some((v) => String(v).toLowerCase().includes(q)));
+    return services.filter((s) =>
+      [s.name, s.description, s.status].filter(Boolean).some((v) => String(v).toLowerCase().includes(q)),
+    );
   }, [services, search]);
 
   return (
@@ -32,18 +34,32 @@ export function ServicesScreen() {
         <SearchBar value={search} onChangeText={setSearch} placeholder="Search services" />
         <Button label="Add" onPress={() => navigation.navigate('ServiceForm', {})} />
       </View>
-      <RefreshableScrollView refreshing={refreshing || loading} onRefresh={onRefresh} contentContainerStyle={styles.content}>
-        <ScreenState loading={loading && !services.length} empty={!loading && filtered.length === 0} emptyMessage="No services found." />
+      <RefreshableScrollView
+        refreshing={refreshing || loading}
+        onRefresh={onRefresh}
+        contentContainerStyle={styles.content}
+      >
+        <ScreenState
+          loading={loading && !services.length}
+          empty={!loading && filtered.length === 0}
+          emptyMessage="No services found."
+        />
         {filtered.map((service) => (
-          <Pressable key={service.id} onPress={() => navigation.navigate('ServiceDetail', { serviceId: service.id })}>
-            <Card>
-              <Text style={styles.title}>{service.name ?? 'Service'}</Text>
-              <Text style={styles.meta}>
-                {service.duration_minutes ? `${service.duration_minutes} min` : '—'}
-                {service.price != null ? ` · ${service.price}` : ''}
-              </Text>
-            </Card>
-          </Pressable>
+          <ListRow
+            key={service.id}
+            title={service.name ?? 'Service'}
+            subtitle={[
+              service.duration_minutes ? `${service.duration_minutes} min` : null,
+              service.price != null ? String(service.price) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || '—'}
+            meta={service.status ?? undefined}
+            icon="scissors"
+            avatarSrc={service.image_url}
+            avatarName={service.name ?? 'Service'}
+            onPress={() => navigation.navigate('ServiceDetail', { serviceId: service.id })}
+          />
         ))}
       </RefreshableScrollView>
     </View>
@@ -52,8 +68,13 @@ export function ServicesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  toolbar: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, alignItems: 'center' },
+  toolbar: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+    alignItems: 'center',
+  },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
-  title: { ...typography.title, fontSize: 16, color: colors.foreground },
-  meta: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
 });

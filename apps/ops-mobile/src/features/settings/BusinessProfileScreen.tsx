@@ -2,8 +2,11 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { FormScreen } from '../../components/FormScreen';
+import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { DetailRow } from '../../components/ui/DetailRow';
 import { ScreenState } from '../../components/ScreenState';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBillingStatus, useTenantSettings } from '../../hooks/useOpsExtended';
@@ -18,36 +21,33 @@ export function BusinessProfileScreen() {
 
   if (loading && !settings) return <ScreenState loading />;
 
-  return (
-    <View style={styles.wrap}>
-      <Card>
-        <Text style={styles.title}>{activeBusiness?.display_name ?? activeBusiness?.business_name ?? 'Business'}</Text>
-        <Detail label="Code" value={activeBusiness?.business_code ?? '—'} />
-        <Detail label="Product" value={activeBusiness?.selected_product ?? settings?.product_name ?? '—'} />
-        <Detail label="Timezone" value={activeBusiness?.timezone ?? '—'} />
-        <Detail label="Currency" value={activeBusiness?.currency ?? '—'} />
-        <Detail label="Status" value={activeBusiness?.status ?? '—'} />
-        <Detail label="Billing provider" value={billing?.provider ?? '—'} />
-        <Detail label="Billing configured" value={billing?.configured ? 'Yes' : 'No'} />
-      </Card>
-      <Button label="Edit profile" fullWidth onPress={() => navigation.navigate('BusinessEdit')} />
-    </View>
-  );
-}
+  const name = activeBusiness?.display_name ?? activeBusiness?.business_name ?? 'Business';
 
-function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.detail}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
+    <FormScreen>
+      <Card>
+        <View style={styles.hero}>
+          <Avatar name={name} size="xl" src={activeBusiness?.logo} />
+          <View style={styles.heroCopy}>
+            <Text style={styles.title}>{name}</Text>
+            <Text style={styles.meta}>{activeBusiness?.business_code ?? '—'}</Text>
+          </View>
+        </View>
+        <DetailRow label="Product" value={activeBusiness?.selected_product ?? settings?.product_name ?? '—'} />
+        <DetailRow label="Timezone" value={activeBusiness?.timezone ?? '—'} />
+        <DetailRow label="Currency" value={activeBusiness?.currency ?? '—'} />
+        <DetailRow label="Status" value={activeBusiness?.status ?? '—'} />
+        <DetailRow label="Billing provider" value={billing?.provider ?? '—'} />
+        <DetailRow label="Billing configured" value={billing?.configured ? 'Yes' : 'No'} />
+      </Card>
+      <Button label="Edit profile" fullWidth size="lg" onPress={() => navigation.navigate('BusinessEdit')} />
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md },
-  title: { ...typography.title, color: colors.foreground, marginBottom: spacing.md },
-  detail: { marginTop: spacing.md, gap: 4 },
-  detailLabel: { ...typography.caption, color: colors.mutedForeground },
-  detailValue: { ...typography.body, color: colors.foreground },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginBottom: spacing.sm },
+  heroCopy: { flex: 1 },
+  title: { ...typography.title, color: colors.foreground },
+  meta: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
 });

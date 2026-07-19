@@ -55,7 +55,7 @@ export function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  toolbar: { paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
+  toolbar: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
   unread: { borderColor: colors.primary, backgroundColor: colors.secondary },
   subject: { ...typography.title, fontSize: 15, color: colors.foreground },

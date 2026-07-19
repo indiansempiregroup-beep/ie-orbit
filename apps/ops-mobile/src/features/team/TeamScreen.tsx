@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StaffInvitation } from '@ie-platform/sdk';
+import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -83,10 +84,17 @@ export function TeamScreen() {
 
       <Text style={styles.section}>Members</Text>
       <ScreenState loading={membersLoading && !members.length} empty={!membersLoading && members.length === 0} emptyMessage="No members yet." />
-      {members.map((member) => (
+      {members.map((member) => {
+        const name = member.full_name || member.email || 'Member';
+        return (
         <Card key={member.id}>
-          <Text style={styles.itemTitle}>{member.full_name || member.email}</Text>
-          <Text style={styles.itemMeta}>{member.email}</Text>
+          <View style={styles.memberHeader}>
+            <Avatar name={name} size="md" />
+            <View style={styles.memberCopy}>
+              <Text style={styles.itemTitle}>{name}</Text>
+              <Text style={styles.itemMeta}>{member.email}</Text>
+            </View>
+          </View>
           <View style={styles.rolesWrap}>
             {member.roles.map((memberRole) => (
               <View key={memberRole.code} style={styles.roleChip}>
@@ -135,7 +143,8 @@ export function TeamScreen() {
               ))}
           </View>
         </Card>
-      ))}
+        );
+      })}
 
       <Text style={styles.section}>Invitations</Text>
       <ScreenState loading={loading && !invitations.length} empty={!loading && invitations.length === 0} emptyMessage="No invitations yet." />
@@ -171,6 +180,8 @@ const styles = StyleSheet.create({
   roleRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   error: { ...typography.caption, color: colors.destructive, marginBottom: spacing.sm },
   section: { ...typography.label, color: colors.foreground, marginTop: spacing.md },
+  memberHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  memberCopy: { flex: 1 },
   itemTitle: { ...typography.body, color: colors.foreground, fontWeight: '600' },
   itemMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
   rolesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },

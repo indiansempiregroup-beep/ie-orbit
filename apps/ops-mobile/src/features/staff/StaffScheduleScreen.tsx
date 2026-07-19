@@ -4,7 +4,7 @@ import { RouteProp, useRoute } from '@react-navigation/native';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { FormScreen } from '../../components/FormScreen';
 import { ScreenState } from '../../components/ScreenState';
 import { useStaffMember, useStaffSchedule, useStaffScheduleMutations } from '../../hooks/useOpsExtended';
 import { colors, spacing, typography } from '../../theme/tokens';
@@ -80,7 +80,7 @@ export function StaffScheduleScreen() {
   if (memberLoading || scheduleLoading) return <ScreenState loading />;
 
   return (
-    <RefreshableScrollView contentContainerStyle={styles.wrap}>
+    <FormScreen>
       <Text style={styles.title}>{member?.full_name ?? 'Weekly schedule'}</Text>
       <Text style={styles.subtitle}>Configure which days and hours this staff member is available.</Text>
 
@@ -90,6 +90,7 @@ export function StaffScheduleScreen() {
             <Text style={styles.dayLabel}>{row.label}</Text>
             <Switch
               value={row.is_available}
+              trackColor={{ true: colors.primary }}
               onValueChange={(is_available) => {
                 setRows((current) => current.map((item, i) => (i === index ? { ...item, is_available } : item)));
               }}
@@ -124,6 +125,7 @@ export function StaffScheduleScreen() {
         label="Save schedule"
         loading={saving}
         fullWidth
+        size="lg"
         onPress={async () => {
           setSaving(true);
           setError(null);
@@ -138,14 +140,13 @@ export function StaffScheduleScreen() {
           }
         }}
       />
-    </RefreshableScrollView>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
-  title: { ...typography.title, color: colors.foreground },
-  subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.sm },
+  title: { ...typography.heading, color: colors.foreground },
+  subtitle: { ...typography.body, color: colors.mutedForeground, marginTop: -4 },
   rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   dayLabel: { ...typography.body, color: colors.foreground, fontWeight: '600' },
   times: { gap: spacing.sm },

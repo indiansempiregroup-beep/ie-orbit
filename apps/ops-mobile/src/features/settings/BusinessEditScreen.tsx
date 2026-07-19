@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
+import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
@@ -8,8 +9,9 @@ import { uploadBrandingLogo } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, radius, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 export function BusinessEditScreen() {
   const client = useOpsClient();
@@ -32,13 +34,15 @@ export function BusinessEditScreen() {
     setCurrency(activeBusiness.currency ?? '');
   }, [activeBusiness]);
 
+  const logoUri = resolveMediaUrl(activeBusiness?.logo);
+
   return (
-    <View style={styles.wrap}>
+    <FormScreen>
       <Text style={styles.title}>Edit business</Text>
-      {activeBusiness?.logo ? <Image source={{ uri: activeBusiness.logo }} style={styles.logo} /> : null}
+      {logoUri ? <Image source={{ uri: logoUri }} style={styles.logo} /> : null}
       <ImagePickerButton label="Logo" valueUri={activeBusiness?.logo} onPicked={setLogoAsset} />
       <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
-      <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
+      <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
       <Input label="Timezone" value={timezone} onChangeText={setTimezone} />
       <Input label="Currency" value={currency} onChangeText={setCurrency} />
       {message ? <Text style={styles.success}>{message}</Text> : null}
@@ -47,6 +51,7 @@ export function BusinessEditScreen() {
         label="Save changes"
         loading={loading}
         fullWidth
+        size="lg"
         onPress={async () => {
           if (!client || !businessId || !token || !tenantId) return;
           setLoading(true);
@@ -79,14 +84,13 @@ export function BusinessEditScreen() {
           }
         }}
       />
-    </View>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md },
-  title: { ...typography.title, color: colors.foreground },
-  logo: { width: 96, height: 96, borderRadius: 12, alignSelf: 'flex-start' },
+  title: { ...typography.heading, color: colors.foreground },
+  logo: { width: 96, height: 96, borderRadius: radius.lg, alignSelf: 'flex-start' },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },
 });

@@ -2,8 +2,11 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { FormScreen } from '../../components/FormScreen';
+import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { DetailRow } from '../../components/ui/DetailRow';
 import { ScreenState } from '../../components/ScreenState';
 import { useCustomer } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
@@ -21,22 +24,32 @@ export function CustomerDetailScreen() {
   }
 
   const isArchived = customer.status === 'archived' || customer.status === 'inactive';
+  const name = customer.full_name?.trim() || customer.email || 'Customer';
 
   return (
-    <View style={styles.wrap}>
+    <FormScreen>
       <Card>
-        <Text style={styles.title}>{customer.full_name ?? 'Customer'}</Text>
-        <Detail label="Email" value={customer.email ?? '—'} />
-        <Detail label="Phone" value={customer.phone_number ?? '—'} />
-        <Detail label="Status" value={customer.status ?? '—'} />
-        <Detail label="Address" value={customer.full_address ?? '—'} />
+        <View style={styles.hero}>
+          <Avatar name={name} size="xl" />
+          <View style={styles.heroCopy}>
+            <Text style={styles.title}>{name}</Text>
+            <Text style={styles.meta}>{customer.status ?? 'Active'}</Text>
+          </View>
+        </View>
+        <DetailRow label="Email" value={customer.email ?? '—'} />
+        <DetailRow label="Phone" value={customer.phone_number ?? '—'} />
+        <DetailRow label="Address" value={customer.full_address ?? '—'} />
       </Card>
-      <Button label="Edit customer" fullWidth onPress={() => navigation.navigate('CustomerForm', { customerId: customer.id })} />
+      <Button
+        label="Edit customer"
+        fullWidth
+        onPress={() => navigation.navigate('CustomerForm', { customerId: customer.id })}
+      />
       <Button
         label="New booking"
         variant="secondary"
         fullWidth
-        onPress={() => navigation.navigate('CreateBooking', { })}
+        onPress={() => navigation.navigate('CreateBooking', { customerId: customer.id })}
       />
       <Button
         label={isArchived ? 'Restore customer' : 'Archive customer'}
@@ -48,23 +61,13 @@ export function CustomerDetailScreen() {
           await reload();
         }}
       />
-    </View>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detail}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md },
-  title: { ...typography.title, color: colors.foreground, marginBottom: spacing.md },
-  detail: { marginTop: spacing.md, gap: 4 },
-  detailLabel: { ...typography.caption, color: colors.mutedForeground },
-  detailValue: { ...typography.body, color: colors.foreground },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginBottom: spacing.sm },
+  heroCopy: { flex: 1 },
+  title: { ...typography.title, color: colors.foreground },
+  meta: { ...typography.caption, color: colors.mutedForeground, marginTop: 4, textTransform: 'capitalize' },
 });

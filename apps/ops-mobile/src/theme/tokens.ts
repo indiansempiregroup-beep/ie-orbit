@@ -51,3 +51,5 @@ export const typography = {
   caption: { fontSize: 12, fontWeight: '400' as const },
   tiny: { fontSize: 10, fontWeight: '500' as const },
 };
+
+export const avatarColors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#F43F5E', '#06B6D4'];

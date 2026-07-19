@@ -22,7 +22,13 @@ export type RootStackParamList = {
   Main: undefined;
   Search: undefined;
   VerifyEmail: undefined;
-  CreateBooking: { startAt?: string; staffId?: string; serviceId?: string; durationMinutes?: number };
+  CreateBooking: {
+    startAt?: string;
+    staffId?: string;
+    serviceId?: string;
+    customerId?: string;
+    durationMinutes?: number;
+  };
   BookingDetail: { bookingId: string };
   Customers: undefined;
   CustomerForm: { customerId?: string };
