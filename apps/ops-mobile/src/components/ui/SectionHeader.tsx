@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, spacing } from '../../theme/tokens';
 
 export function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
@@ -16,7 +16,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
   },
-  title: { ...typography.title, color: colors.foreground },
+  title: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 18,
+    color: colors.foreground,
+    letterSpacing: -0.2,
+  },
 });

@@ -1,5 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import type { BIForecastReport, BIReportsBundle, BIRevenueReport, BITrendsReport } from '@ie-platform/sdk';
+import type {
+  BIForecastReport,
+  BIGrowthReport,
+  BIOperationsReport,
+  BIReportsBundle,
+  BIRevenueReport,
+  BITrendsReport,
+} from '@ie-platform/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 
 function defaultRange() {
@@ -46,6 +53,29 @@ export function useBIForecastQuery(horizonDays = 30) {
   return useQuery({
     queryKey: ['bi', 'forecast', horizonDays],
     queryFn: async () => (await client.bi.forecast({ horizon_days: horizonDays })).data as BIForecastReport,
+  });
+}
+
+export function useBIGrowthQuery(startDate?: string, endDate?: string) {
+  const client = useApiClient();
+  const range = defaultRange();
+  const start = startDate ?? range.startDate;
+  const end = endDate ?? range.endDate;
+  return useQuery({
+    queryKey: ['bi', 'growth', start, end],
+    queryFn: async () => (await client.bi.growth({ start_date: start, end_date: end })).data as BIGrowthReport,
+  });
+}
+
+export function useBIOperationsQuery(startDate?: string, endDate?: string) {
+  const client = useApiClient();
+  const range = defaultRange();
+  const start = startDate ?? range.startDate;
+  const end = endDate ?? range.endDate;
+  return useQuery({
+    queryKey: ['bi', 'operations', start, end],
+    queryFn: async () =>
+      (await client.bi.operations({ start_date: start, end_date: end })).data as BIOperationsReport,
   });
 }
 

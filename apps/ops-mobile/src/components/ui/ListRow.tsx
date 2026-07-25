@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Avatar } from './Avatar';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { colors, radius, shadows, spacing, typography } from '../../theme/tokens';
 
 type Props = {
   title: string;
@@ -44,7 +44,13 @@ export function ListRow({ title, subtitle, meta, avatarName, avatarSrc, icon, ri
     </View>
   );
 
-  if (onPress) return <Pressable onPress={onPress}>{content}</Pressable>;
+  if (onPress) {
+    return (
+      <Pressable style={({ pressed }) => [pressed && styles.pressed]} onPress={onPress}>
+        {content}
+      </Pressable>
+    );
+  }
   return content;
 }
 
@@ -55,20 +61,20 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+    padding: spacing.lg,
+    ...shadows.soft,
   },
+  pressed: { opacity: 0.92 },
   icon: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: radius.md,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   body: { flex: 1 },
-  title: { ...typography.label, color: colors.foreground, fontWeight: '700' },
-  subtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
+  title: { ...typography.label, color: colors.foreground, fontSize: 15 },
+  subtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 3 },
   meta: { ...typography.tiny, color: colors.mutedForeground, marginTop: 4 },
 });

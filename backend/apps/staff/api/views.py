@@ -146,6 +146,12 @@ class StaffServiceAssignmentViewSet(viewsets.ViewSet):
     repository = StaffRepository()
     management_service = StaffManagementService(repository=repository)
 
+    def get_object(self, *, request: Request, assignment_id: str | None):
+        return get_object_or_404(
+            self.repository.list_assignments(tenant=request.current_tenant, user=request.user),
+            id=assignment_id,
+        )
+
     @extend_schema(
         tags=["Staff Assignments"], responses={200: StaffServiceAssignmentSerializer(many=True)}
     )
@@ -181,3 +187,37 @@ class StaffServiceAssignmentViewSet(viewsets.ViewSet):
             status_code=status.HTTP_201_CREATED,
             request_id=getattr(request, "request_id", None),
         )
+
+    @extend_schema(tags=["Staff Assignments"], responses={200: StaffServiceAssignmentSerializer})
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        assignment = self.get_object(request=request, assignment_id=pk)
+        return success_response(
+            StaffServiceAssignmentSerializer(assignment).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Assignments"],
+        request=StaffServiceAssignmentSerializer,
+        responses={200: StaffServiceAssignmentSerializer},
+    )
+    def partial_update(self, request: Request, pk: str | None = None) -> Response:
+        assignment = self.get_object(request=request, assignment_id=pk)
+        serializer = StaffServiceAssignmentSerializer(assignment, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated = self.management_service.update_assignment(
+            assignment=assignment, data=dict(serializer.validated_data)
+        )
+        return success_response(
+            StaffServiceAssignmentSerializer(updated).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Assignments"],
+        responses={204: OpenApiResponse(description="Assignment deleted")},
+    )
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        assignment = self.get_object(request=request, assignment_id=pk)
+        self.management_service.delete_assignment(assignment=assignment)
+        return Response(status=status.HTTP_204_NO_CONTENT)

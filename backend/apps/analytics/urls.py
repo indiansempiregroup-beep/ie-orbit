@@ -9,6 +9,8 @@ bi_overview = BIViewSet.as_view({"get": "overview"})
 bi_revenue = BIViewSet.as_view({"get": "revenue"})
 bi_trends = BIViewSet.as_view({"get": "trends"})
 bi_forecast = BIViewSet.as_view({"get": "forecast"})
+bi_growth = BIViewSet.as_view({"get": "growth"})
+bi_operations = BIViewSet.as_view({"get": "operations"})
 bi_reports = BIViewSet.as_view({"get": "reports"})
 
 urlpatterns = [
@@ -19,5 +21,7 @@ urlpatterns = [
     path("bi/revenue", bi_revenue, name="bi-revenue"),
     path("bi/trends", bi_trends, name="bi-trends"),
     path("bi/forecast", bi_forecast, name="bi-forecast"),
+    path("bi/growth", bi_growth, name="bi-growth"),
+    path("bi/operations", bi_operations, name="bi-operations"),
     path("bi/reports", bi_reports, name="bi-reports"),
 ]

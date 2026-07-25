@@ -7,6 +7,7 @@ import { useWorkspace } from '../contexts/WorkspaceContext';
 import { hasOpsAccess } from '../utils/roles';
 import { colors } from '../theme/tokens';
 import type { RootStackParamList } from './types';
+import { opsStackScreenOptions } from './OpsStackHeader';
 import { AuthStack } from './AuthStack';
 import { MainTabs } from './MainTabs';
 import { WorkspacePickerScreen } from '../features/workspace/WorkspacePickerScreen';
@@ -24,6 +25,7 @@ import { StaffScreen } from '../features/staff/StaffScreen';
 import { StaffFormScreen } from '../features/staff/StaffFormScreen';
 import { StaffDetailScreen } from '../features/staff/StaffDetailScreen';
 import { StaffScheduleScreen } from '../features/staff/StaffScheduleScreen';
+import { StaffAvailabilityScreen } from '../features/staff/StaffAvailabilityScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { BusinessProfileScreen } from '../features/settings/BusinessProfileScreen';
 import { BusinessEditScreen } from '../features/settings/BusinessEditScreen';
@@ -41,8 +43,22 @@ import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const stackScreen = (name: keyof RootStackParamList, component: React.ComponentType, title: string) => (
-  <Stack.Screen key={name} name={name} component={component} options={{ headerShown: true, title }} />
+const stackScreen = (
+  name: keyof RootStackParamList,
+  component: React.ComponentType,
+  title: string,
+  subtitle?: string,
+) => (
+  <Stack.Screen
+    key={name}
+    name={name}
+    component={component}
+    options={{
+      ...opsStackScreenOptions,
+      title,
+      ...(subtitle ? ({ subtitle } as object) : null),
+    }}
+  />
 );
 
 export function RootNavigator() {
@@ -91,12 +107,13 @@ export function RootNavigator() {
             {stackScreen('StaffForm', StaffFormScreen, 'Staff')}
             {stackScreen('StaffDetail', StaffDetailScreen, 'Staff')}
             {stackScreen('StaffSchedule', StaffScheduleScreen, 'Weekly schedule')}
+            {stackScreen('StaffAvailability', StaffAvailabilityScreen, 'Staff availability')}
             {stackScreen('Settings', SettingsScreen, 'Settings')}
             {stackScreen('BusinessProfile', BusinessProfileScreen, 'Business profile')}
             {stackScreen('BusinessEdit', BusinessEditScreen, 'Edit business')}
             {stackScreen('ProductSettings', ProductSettingsScreen, 'Products & billing')}
             {stackScreen('Branches', BranchesScreen, 'Branches')}
-            {stackScreen('BI', BIScreen, 'Business intelligence')}
+            {stackScreen('BI', BIScreen, 'Business intelligence', 'Last 30 days')}
             {stackScreen('Reports', ReportsScreen, 'Reports')}
             {stackScreen('Admin', AdminScreen, 'Platform admin')}
             {stackScreen('Team', TeamScreen, 'Team')}

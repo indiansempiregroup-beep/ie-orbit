@@ -31,6 +31,9 @@ export function ServiceDetailPage() {
     description: '',
     status: 'active',
     duration_minutes: 30,
+    buffer_before_minutes: 0,
+    buffer_after_minutes: 0,
+    cleanup_minutes: 0,
     price: '',
   });
   const [editError, setEditError] = useState<string | null>(null);
@@ -46,6 +49,9 @@ export function ServiceDetailPage() {
       description: service.description ?? '',
       status: service.status ?? 'active',
       duration_minutes: service.duration_minutes ?? 30,
+      buffer_before_minutes: service.buffer_before_minutes ?? 0,
+      buffer_after_minutes: service.buffer_after_minutes ?? 0,
+      cleanup_minutes: service.cleanup_minutes ?? 0,
       price: service.price != null ? String(service.price) : '',
     });
     setCurrentImageUrl(resolveMediaAssetUrl(service.image_url));
@@ -75,6 +81,9 @@ export function ServiceDetailPage() {
       status: formState.status,
       default_duration: {
         duration_minutes: formState.duration_minutes,
+        buffer_before_minutes: formState.buffer_before_minutes,
+        buffer_after_minutes: formState.buffer_after_minutes,
+        cleanup_minutes: formState.cleanup_minutes,
         is_default: true,
       },
       ...(priceValue
@@ -138,6 +147,21 @@ export function ServiceDetailPage() {
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Price</p>
                   <p style={{ margin: '8px 0 0' }}>{formatPrice(serviceQuery.data.price, serviceQuery.data.currency ?? currency)}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                <div>
+                  <p style={{ margin: 0, color: '#6b7280' }}>Buffer before</p>
+                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.buffer_before_minutes ?? 0} min</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: '#6b7280' }}>Buffer after</p>
+                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.buffer_after_minutes ?? 0} min</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: '#6b7280' }}>Cleanup</p>
+                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.cleanup_minutes ?? 0} min</p>
                 </div>
               </div>
 
@@ -254,6 +278,41 @@ export function ServiceDetailPage() {
                 value={formState.price}
                 onChange={(event) => setFormState({ ...formState, price: event.target.value })}
                 placeholder="0.00"
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Buffer before (min)
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={formState.buffer_before_minutes}
+                onChange={(event) => setFormState({ ...formState, buffer_before_minutes: Number(event.target.value) })}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Buffer after (min)
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={formState.buffer_after_minutes}
+                onChange={(event) => setFormState({ ...formState, buffer_after_minutes: Number(event.target.value) })}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Cleanup (min)
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={formState.cleanup_minutes}
+                onChange={(event) => setFormState({ ...formState, cleanup_minutes: Number(event.target.value) })}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               />
             </label>

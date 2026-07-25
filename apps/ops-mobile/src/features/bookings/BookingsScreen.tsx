@@ -111,7 +111,11 @@ export function BookingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <OpsHeader title="Bookings" subtitle={range === 'today' ? "Today's schedule" : 'All bookings'} />
+      <OpsHeader
+        compact
+        title="Bookings"
+        subtitle={range === 'today' ? "Today's schedule" : 'All bookings'}
+      />
       <View style={styles.toolbar}>
         <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search bookings" />
         <Button label="New" onPress={() => navigation.navigate('CreateBooking', {})} />
@@ -175,7 +179,10 @@ export function BookingsScreen() {
           loading={loading && !bookings.length}
           error={error}
           empty={!loading && sorted.length === 0}
-          emptyMessage="No bookings found."
+          emptyTitle="No bookings"
+          emptyMessage={range === 'today' ? 'Nothing scheduled for today yet.' : 'No bookings match these filters.'}
+          actionLabel="New booking"
+          onAction={() => navigation.navigate('CreateBooking', {})}
         />
         {sorted.map((booking) => (
           <BookingRow
@@ -245,5 +252,5 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { ...typography.title, color: colors.foreground },
   sheetContent: { paddingHorizontal: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xl },
-  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl, backgroundColor: colors.background },
 });

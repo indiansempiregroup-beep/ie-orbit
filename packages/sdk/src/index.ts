@@ -659,24 +659,58 @@ export type PlatformTenantDetail = {
   }>;
 };
 
+export type AnalyticsPeriodComparison = {
+  bookings_change_pct?: number | null;
+  completed_change_pct?: number | null;
+  revenue_change_pct?: number | null;
+  previous_period?: {
+    start_date: string;
+    end_date: string;
+    bookings: number;
+    completed: number;
+    estimated_revenue: number;
+  };
+};
+
 export type AnalyticsSummary = {
   bookings: number;
   completed: number;
   cancelled: number;
   pending?: number;
+  confirmed?: number;
+  no_shows?: number;
   completion_rate?: number;
+  cancellation_rate?: number;
+  no_show_rate?: number;
+  avg_bookings_per_day?: number;
   period?: { start_date?: string | null; end_date?: string | null };
+  comparison?: AnalyticsPeriodComparison | null;
 };
 
 export type BIRevenueReport = {
   estimated_revenue: number;
+  completed_revenue?: number;
+  avg_booking_value?: number;
   currency: string;
-  by_service: Array<{ service_id: string; service_name: string; revenue: number }>;
+  by_service: Array<{
+    service_id: string;
+    service_name: string;
+    revenue: number;
+    completed_revenue?: number;
+    bookings?: number;
+    completed?: number;
+  }>;
   period?: { start_date?: string | null; end_date?: string | null };
 };
 
 export type BITrendsReport = {
-  rows: Array<{ day: string; total: number; completed: number; cancelled: number }>;
+  rows: Array<{
+    day: string;
+    total: number;
+    completed: number;
+    cancelled: number;
+    no_shows?: number;
+  }>;
   period: { start_date: string; end_date: string };
 };
 
@@ -684,14 +718,59 @@ export type BIForecastReport = {
   horizon_days: number;
   projected_bookings: number;
   projected_revenue: number;
+  avg_daily_bookings?: number;
+  avg_daily_revenue?: number;
   currency: string;
   based_on_days: number;
+  based_on_bookings?: number;
+};
+
+export type BIGrowthReport = {
+  new_customers: number;
+  returning_customers: number;
+  customers_with_bookings: number;
+  repeat_rate: number;
+  avg_visits_per_customer: number;
+  top_customers: Array<{
+    customer_id: string;
+    customer_name: string;
+    bookings: number;
+    revenue: number;
+    is_returning?: boolean;
+  }>;
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIOperationsReport = {
+  by_staff: Array<{
+    staff_id: string;
+    staff_name: string;
+    bookings: number;
+    completed: number;
+    cancelled: number;
+    no_shows: number;
+    revenue: number;
+  }>;
+  by_weekday: Array<{ weekday: number; weekday_name: string; total: number }>;
+  by_hour: Array<{ hour: number; label: string; total: number }>;
+  busiest_day?: string | null;
+  busiest_hour?: string | null;
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIInsight = {
+  type: string;
+  title: string;
+  detail: string;
 };
 
 export type BIReportsBundle = {
   summary: AnalyticsSummary;
   revenue: BIRevenueReport;
   trends: BITrendsReport;
+  growth?: BIGrowthReport;
+  operations?: BIOperationsReport;
+  insights?: BIInsight[];
 };
 
 export type IamRole = {
@@ -924,13 +1003,25 @@ export type CustomerCreateInput = {
 
 export type CustomerUpdateInput = Partial<CustomerCreateInput>;
 
+export type ServiceDuration = {
+  id?: string;
+  duration_minutes: number;
+  buffer_before_minutes?: number;
+  buffer_after_minutes?: number;
+  cleanup_minutes?: number;
+  is_default?: boolean;
+};
+
 export type Service = {
   id: string;
   name?: string;
   description?: string | null;
   status?: string;
   duration_minutes?: number;
-  durations?: Array<{ duration_minutes: number; is_default?: boolean }>;
+  buffer_before_minutes?: number;
+  buffer_after_minutes?: number;
+  cleanup_minutes?: number;
+  durations?: ServiceDuration[];
   price?: number;
   currency?: string | null;
   prices?: Array<{
@@ -1023,12 +1114,82 @@ export type StaffWeeklyScheduleInput = {
   shift_start: string;
   shift_end: string;
   capacity?: number;
+  break_periods?: Array<{ start: string; end: string }>;
+  overtime_allowed?: boolean;
 };
 
 export type StaffWeeklyScheduleBulkInput = {
   business?: string;
   staff_id: string;
   schedules: StaffWeeklyScheduleInput[];
+};
+
+export type StaffLeave = {
+  id: string;
+  business?: string;
+  staff_id: string;
+  starts_at: string;
+  ends_at: string;
+  leave_type?: string;
+  reason?: string;
+  approved?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type StaffLeaveInput = {
+  business?: string;
+  staff_id: string;
+  starts_at: string;
+  ends_at: string;
+  leave_type?: string;
+  reason?: string;
+  approved?: boolean;
+};
+
+export type StaffSpecialAvailability = {
+  id: string;
+  business?: string;
+  staff_id: string;
+  starts_at: string;
+  ends_at: string;
+  capacity?: number;
+  reason?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type StaffSpecialAvailabilityInput = {
+  business?: string;
+  staff_id: string;
+  starts_at: string;
+  ends_at: string;
+  capacity?: number;
+  reason?: string;
+};
+
+export type StaffServiceAssignment = {
+  id: string;
+  tenant?: string;
+  staff: string;
+  service: string;
+  default_duration_override?: number | null;
+  default_price_override?: string | number | null;
+  priority?: number;
+  is_active_assignment?: boolean;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type StaffServiceAssignmentInput = {
+  staff: string;
+  service: string;
+  default_duration_override?: number | null;
+  default_price_override?: string | number | null;
+  priority?: number;
+  is_active_assignment?: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 export type StaffCreateInput = {
@@ -1246,7 +1407,15 @@ class ApiClient {
     checkIn: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/check-in`, { method: 'POST', body }),
     complete: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/complete`, { method: 'POST', body }),
     reschedule: (bookingId: string, body: { start_at: string; reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/reschedule`, { method: 'POST', body }),
-    availability: (query: { business?: string; staff_id?: string; service_id?: string; date: string; duration_minutes?: number; interval_minutes?: number; buffer_minutes?: number }) => this.request<AvailabilitySlot[]>(`/availability`, { method: 'GET', query }),
+    availability: (query: {
+      business?: string;
+      staff_id?: string;
+      service_id?: string;
+      date: string;
+      duration_minutes?: number;
+      interval_minutes?: number;
+      buffer_minutes?: number | null;
+    }) => this.request<AvailabilitySlot[]>(`/availability`, { method: 'GET', query }),
     staffWeeklySchedules: {
       list: (query: { staff_id: string; business?: string }) =>
         this.request<StaffWeeklySchedule[]>('/staff-weekly-schedules', { method: 'GET', query }),
@@ -1254,6 +1423,30 @@ class ApiClient {
         this.request<StaffWeeklySchedule>('/staff-weekly-schedules', { method: 'POST', body }),
       bulkUpsert: (body: StaffWeeklyScheduleBulkInput) =>
         this.request<StaffWeeklySchedule[]>('/staff-weekly-schedules/bulk', { method: 'PUT', body }),
+    },
+    staffLeaves: {
+      list: (query: { staff_id: string; business?: string; date_from?: string; date_to?: string }) =>
+        this.request<StaffLeave[]>('/staff-leaves', { method: 'GET', query }),
+      create: (body: StaffLeaveInput) => this.request<StaffLeave>('/staff-leaves', { method: 'POST', body }),
+      get: (leaveId: string) => this.request<StaffLeave>(`/staff-leaves/${leaveId}`, { method: 'GET' }),
+      patch: (leaveId: string, body: Partial<StaffLeaveInput>) =>
+        this.request<StaffLeave>(`/staff-leaves/${leaveId}`, { method: 'PATCH', body }),
+      delete: (leaveId: string) => this.request<null>(`/staff-leaves/${leaveId}`, { method: 'DELETE' }),
+    },
+    staffSpecialAvailability: {
+      list: (query: { staff_id: string; business?: string; date_from?: string; date_to?: string }) =>
+        this.request<StaffSpecialAvailability[]>('/staff-special-availability', { method: 'GET', query }),
+      create: (body: StaffSpecialAvailabilityInput) =>
+        this.request<StaffSpecialAvailability>('/staff-special-availability', { method: 'POST', body }),
+      get: (specialId: string) =>
+        this.request<StaffSpecialAvailability>(`/staff-special-availability/${specialId}`, { method: 'GET' }),
+      patch: (specialId: string, body: Partial<StaffSpecialAvailabilityInput>) =>
+        this.request<StaffSpecialAvailability>(`/staff-special-availability/${specialId}`, {
+          method: 'PATCH',
+          body,
+        }),
+      delete: (specialId: string) =>
+        this.request<null>(`/staff-special-availability/${specialId}`, { method: 'DELETE' }),
     },
   };
 
@@ -1324,6 +1517,21 @@ class ApiClient {
     get: (staffId: string) => this.request<StaffMember>(`/staff/${staffId}`, { method: 'GET' }),
     patch: (staffId: string, body: StaffUpdateInput) => this.request<StaffMember>(`/staff/${staffId}`, { method: 'PATCH', body }),
     delete: (staffId: string) => this.request<null>(`/staff/${staffId}`, { method: 'DELETE' }),
+    assignments: {
+      list: (query?: { staff?: string; service?: string }) =>
+        this.request<StaffServiceAssignment[]>('/staff/assignments', { method: 'GET', query }),
+      create: (body: StaffServiceAssignmentInput) =>
+        this.request<StaffServiceAssignment>('/staff/assignments', { method: 'POST', body }),
+      get: (assignmentId: string) =>
+        this.request<StaffServiceAssignment>(`/staff/assignments/${assignmentId}`, { method: 'GET' }),
+      patch: (assignmentId: string, body: Partial<StaffServiceAssignmentInput>) =>
+        this.request<StaffServiceAssignment>(`/staff/assignments/${assignmentId}`, {
+          method: 'PATCH',
+          body,
+        }),
+      delete: (assignmentId: string) =>
+        this.request<null>(`/staff/assignments/${assignmentId}`, { method: 'DELETE' }),
+    },
   };
 
   notifications = {
@@ -1353,6 +1561,10 @@ class ApiClient {
       this.request<BITrendsReport>('/bi/trends', { method: 'GET', query }),
     forecast: (query?: { horizon_days?: number }) =>
       this.request<BIForecastReport>('/bi/forecast', { method: 'GET', query }),
+    growth: (query?: { start_date?: string; end_date?: string }) =>
+      this.request<BIGrowthReport>('/bi/growth', { method: 'GET', query }),
+    operations: (query?: { start_date?: string; end_date?: string }) =>
+      this.request<BIOperationsReport>('/bi/operations', { method: 'GET', query }),
     reports: (query?: { start_date?: string; end_date?: string }) =>
       this.request<BIReportsBundle>('/bi/reports', { method: 'GET', query }),
   };

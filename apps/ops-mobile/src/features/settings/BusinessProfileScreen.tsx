@@ -10,7 +10,7 @@ import { DetailRow } from '../../components/ui/DetailRow';
 import { ScreenState } from '../../components/ScreenState';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBillingStatus, useTenantSettings } from '../../hooks/useOpsExtended';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function BusinessProfileScreen() {
@@ -27,7 +27,7 @@ export function BusinessProfileScreen() {
 
   return (
     <FormScreen>
-      <Card>
+      <Card elevated>
         <View style={styles.hero}>
           <Avatar name={name} size="xl" src={activeBusiness?.logo} />
           <View style={styles.heroCopy}>
@@ -56,6 +56,6 @@ export function BusinessProfileScreen() {
 const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginBottom: spacing.sm },
   heroCopy: { flex: 1 },
-  title: { ...typography.title, color: colors.foreground },
+  title: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.foreground, letterSpacing: -0.3 },
   meta: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
 });

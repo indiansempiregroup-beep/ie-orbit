@@ -46,6 +46,13 @@ class BookingService:
         validate_time_range(start_at, end_at)
         staff_id = data.get("staff_id")
         service_id = data.get("service_id")
+        service_buffers = self.availability_service.service_buffer_defaults(service_id=service_id)
+        buffer_before = data.get("buffer_before_minutes")
+        buffer_after = data.get("buffer_after_minutes")
+        if buffer_before is None:
+            buffer_before = service_buffers.before_minutes
+        if buffer_after is None:
+            buffer_after = service_buffers.after_minutes
         if not staff_id:
             staff_id = self.availability_service.assign_available_staff(
                 tenant=tenant,
@@ -53,11 +60,20 @@ class BookingService:
                 start_at=start_at,
                 end_at=end_at,
                 service_id=service_id,
+                buffer_before_minutes=buffer_before,
+                buffer_after_minutes=buffer_after,
             )
             if not staff_id:
                 raise ValidationError(
                     "No timeslot available. No staff is available at the selected time."
                 )
+        if service_id and not self.availability_service.staff_can_perform_service(
+            tenant=tenant, staff_id=staff_id, service_id=service_id
+        ):
+            raise ValidationError(
+                "This staff member is not assigned to the selected service. "
+                "Assign the service on the staff availability page, or choose another staff member."
+            )
         self._validate_availability(
             tenant=tenant,
             business=business,
@@ -65,6 +81,8 @@ class BookingService:
             service_id=service_id,
             start_at=start_at,
             end_at=end_at,
+            buffer_before_minutes=buffer_before,
+            buffer_after_minutes=buffer_after,
         )
         booking = Booking(
             tenant=tenant,
@@ -77,8 +95,8 @@ class BookingService:
             start_at=start_at,
             end_at=end_at,
             duration_minutes=duration_minutes,
-            buffer_before_minutes=data.get("buffer_before_minutes", 0),
-            buffer_after_minutes=data.get("buffer_after_minutes", 0),
+            buffer_before_minutes=buffer_before,
+            buffer_after_minutes=buffer_after,
             status=data.get("status", BookingStatus.PENDING),
             source=data.get("source", "customer_app"),
             channel=data.get("channel", "web"),
@@ -129,6 +147,13 @@ class BookingService:
                         "No timeslot available. No staff is available at the selected time."
                     )
                 data = {**data, "staff_id": staff_id}
+            if service_id and not self.availability_service.staff_can_perform_service(
+                tenant=booking.tenant, staff_id=staff_id, service_id=service_id
+            ):
+                raise ValidationError(
+                    "This staff member is not assigned to the selected service. "
+                    "Assign the service on the staff availability page, or choose another staff member."
+                )
             self._validate_availability(
                 tenant=booking.tenant,
                 business=booking.business,
@@ -227,6 +252,8 @@ class BookingService:
         end_at: Any,
         service_id: Any | None = None,
         exclude_booking: Booking | None = None,
+        buffer_before_minutes: int | None = None,
+        buffer_after_minutes: int | None = None,
     ) -> None:
         self._validate_booking_rules(
             tenant=tenant,
@@ -244,6 +271,8 @@ class BookingService:
             staff_id=staff_id,
             service_id=service_id,
             exclude_booking=exclude_booking,
+            buffer_before_minutes=buffer_before_minutes,
+            buffer_after_minutes=buffer_after_minutes,
         ):
             raise ValidationError(
                 "No timeslot available for the selected time. Please choose another slot."

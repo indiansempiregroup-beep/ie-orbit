@@ -8,10 +8,18 @@ staff_detail = StaffViewSet.as_view(
 )
 skill_list = StaffSkillViewSet.as_view({"get": "list", "post": "create"})
 assignment_list = StaffServiceAssignmentViewSet.as_view({"get": "list", "post": "create"})
+assignment_detail = StaffServiceAssignmentViewSet.as_view(
+    {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+)
 
 urlpatterns = [
     path("staff", staff_list, name="staff-list-create"),
     path("staff/skills", skill_list, name="staff-skill-list-create"),
     path("staff/assignments", assignment_list, name="staff-assignment-list-create"),
+    path(
+        "staff/assignments/<uuid:pk>",
+        assignment_detail,
+        name="staff-assignment-detail",
+    ),
     path("staff/<uuid:pk>", staff_detail, name="staff-detail"),
 ]

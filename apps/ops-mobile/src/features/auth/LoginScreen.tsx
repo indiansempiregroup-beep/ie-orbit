@@ -18,7 +18,7 @@ import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
-import { brand, colors, radius, spacing, typography } from '../../theme/tokens';
+import { brand, colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
 import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -64,7 +64,6 @@ export function LoginScreen() {
         {
           text: 'Enable',
           onPress: () => {
-            // Face ID cannot present while the Alert is still dismissing.
             setTimeout(() => {
               void (async () => {
                 try {
@@ -87,7 +86,7 @@ export function LoginScreen() {
       return;
     }
     try {
-      await login(email.trim(), password);
+      await login(email.trim(), password, remember);
       await offerBiometricEnrollment();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Unable to sign in.'));
@@ -109,21 +108,26 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <LinearGradient
-        colors={[brand.primary, '#2563EB', brand.accent]}
+        colors={[brand.primary, brand.primaryDark]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={[styles.hero, { paddingTop: insets.top + spacing.xxxl }]}
       >
         <BrandMark light />
         <Text style={styles.heroQuote}>{brand.tagline}</Text>
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={styles.formWrap} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[styles.formWrap, { paddingBottom: insets.bottom + spacing.xxxl }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>Sign in to manage your business</Text>
 
         <View style={styles.form}>
           {biometricEnabled && biometricAvailable ? (
             <Pressable
-              style={styles.biometricCard}
+              style={({ pressed }) => [styles.biometricCard, pressed && styles.pressed]}
               onPress={() => void onBiometricLogin()}
               disabled={loading || biometricBusy}
             >
@@ -191,47 +195,60 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hero: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.xxxl, gap: spacing.lg },
-  heroQuote: { ...typography.body, color: 'rgba(255,255,255,0.85)', lineHeight: 22 },
+  heroQuote: {
+    fontFamily: fonts.displayMedium,
+    fontSize: 22,
+    color: 'rgba(255,255,255,0.92)',
+    lineHeight: 30,
+    letterSpacing: -0.3,
+  },
   formWrap: { flexGrow: 1, padding: spacing.xxl, paddingTop: spacing.xxxl },
-  title: { ...typography.heading, color: colors.foreground, marginBottom: 4 },
+  title: {
+    fontFamily: fonts.display,
+    fontSize: 30,
+    color: colors.foreground,
+    marginBottom: 4,
+    letterSpacing: -0.4,
+  },
   subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.xxl },
   form: { gap: spacing.lg },
   biometricCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    padding: spacing.md,
+    padding: spacing.lg,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.card,
+    ...shadows.soft,
   },
+  pressed: { opacity: 0.92 },
   biometricIcon: {
     width: 44,
     height: 44,
     borderRadius: radius.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   biometricCopy: { flex: 1, gap: 2 },
-  biometricTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  biometricTitle: { ...typography.label, color: colors.foreground },
   biometricHint: { ...typography.caption, color: colors.mutedForeground },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   remember: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.card,
   },
   checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  checkMark: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  checkMark: { color: '#fff', fontSize: 12, fontFamily: fonts.bodyBold },
   rememberLabel: { ...typography.caption, color: colors.mutedForeground },
-  link: { ...typography.label, color: colors.primary, fontWeight: '600' },
+  link: { ...typography.label, color: colors.primary },
   error: { ...typography.caption, color: colors.destructive },
   footerLinks: { gap: spacing.sm, marginTop: spacing.xxl },
   footer: { ...typography.body, color: colors.mutedForeground, textAlign: 'center' },

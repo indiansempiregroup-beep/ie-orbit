@@ -35,10 +35,20 @@ export function canWriteBookings(user: UserProfile | null | undefined): boolean 
   );
 }
 
-export function formatUserRole(roles: string[] | undefined): string {
-  if (!roles?.length) return 'Member';
+function roleCode(role: unknown): string {
+  if (typeof role === 'string') return role;
+  if (role && typeof role === 'object' && 'code' in role) {
+    const code = (role as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return '';
+}
+
+export function formatUserRole(roles: Array<string | { code?: string }> | undefined): string {
+  const codes = (roles ?? []).map(roleCode).filter(Boolean);
+  if (!codes.length) return 'Member';
   const priority = ['business_owner', 'manager', 'staff', 'platform_admin'];
-  const match = priority.find((role) => roles.includes(role));
-  if (!match) return roles[0].replace(/_/g, ' ');
-  return match.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const match = priority.find((role) => codes.includes(role));
+  const label = match ?? codes[0];
+  return label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

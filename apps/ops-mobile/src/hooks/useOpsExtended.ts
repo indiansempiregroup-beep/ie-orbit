@@ -3,6 +3,7 @@ import type {
   AvailabilitySlot,
   BIReportsBundle,
   BIForecastReport,
+  BIGrowthReport,
   BIRevenueReport,
   BillingStatus,
   Booking,
@@ -177,6 +178,32 @@ export function useBIForecast() {
     setLoading(true);
     try {
       const response = await client.bi.forecast({ horizon_days: 30 });
+      setData(response.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, ready]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { data, loading, reload };
+}
+
+export function useBIGrowth() {
+  const client = useOpsClient();
+  const { ready } = useWorkspace();
+  const [data, setData] = useState<BIGrowthReport | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const reload = useCallback(async () => {
+    if (!client || !ready) return;
+    setLoading(true);
+    try {
+      const end = new Date().toISOString().slice(0, 10);
+      const start = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+      const response = await client.bi.growth({ start_date: start, end_date: end });
       setData(response.data);
     } finally {
       setLoading(false);

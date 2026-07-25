@@ -1,6 +1,6 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { InteractionManager, Platform } from 'react-native';
+import { InteractionManager, NativeModules, Platform } from 'react-native';
 
 const ENABLED_KEY = 'ie.ops.biometric.enabled';
 const EMAIL_KEY = 'ie.ops.biometric.email';
@@ -10,6 +10,14 @@ const PROMPTED_KEY = 'ie.ops.biometric.prompted';
 const STORE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
+
+/** True when running inside Expo Go (Face ID is limited on iOS there). */
+export function isExpoGo(): boolean {
+  const constants = NativeModules.ExponentConstants as
+    | { appOwnership?: string | null }
+    | undefined;
+  return constants?.appOwnership === 'expo';
+}
 
 async function read(key: string) {
   try {

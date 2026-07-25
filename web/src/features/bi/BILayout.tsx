@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const biNav = [
   { to: '/bi/overview', label: 'Overview' },
+  { to: '/bi/growth', label: 'Growth' },
   { to: '/bi/revenue', label: 'Revenue' },
   { to: '/bi/forecast', label: 'Forecast' },
   { to: '/bi/reports', label: 'Reports' },

@@ -49,6 +49,66 @@ class BookingRepository:
             queryset = queryset.exclude(id=exclude_booking.id)
         return queryset
 
+    def conflict_count(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        staff_id: Any | None,
+        start_at: datetime,
+        end_at: datetime,
+        exclude_booking: Booking | None = None,
+        respect_booking_buffers: bool = False,
+    ) -> int:
+        """Count active bookings overlapping [start_at, end_at].
+
+        When respect_booking_buffers is True, each booking is expanded by its own
+        buffer_before_minutes / buffer_after_minutes before overlap is tested.
+        """
+        if not respect_booking_buffers:
+            return self.conflicts(
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+                start_at=start_at,
+                end_at=end_at,
+                exclude_booking=exclude_booking,
+            ).count()
+
+        from datetime import timedelta
+
+        # Widen the DB filter so buffered bookings just outside the window are included.
+        pad = timedelta(hours=12)
+        queryset = Booking.objects.require_tenant(tenant).filter(
+            business=business,
+            start_at__lt=end_at + pad,
+            end_at__gt=start_at - pad,
+            status__in=[
+                BookingStatus.PENDING,
+                BookingStatus.CONFIRMED,
+                BookingStatus.CHECKED_IN,
+                BookingStatus.IN_PROGRESS,
+            ],
+        )
+        if staff_id:
+            queryset = queryset.filter(staff_id=staff_id)
+        if exclude_booking:
+            queryset = queryset.exclude(id=exclude_booking.id)
+
+        count = 0
+        for booking in queryset.only(
+            "id", "start_at", "end_at", "buffer_before_minutes", "buffer_after_minutes"
+        ):
+            effective_start = booking.start_at - timedelta(
+                minutes=int(booking.buffer_before_minutes or 0)
+            )
+            effective_end = booking.end_at + timedelta(
+                minutes=int(booking.buffer_after_minutes or 0)
+            )
+            if effective_start < end_at and effective_end > start_at:
+                count += 1
+        return count
+
     def search(
         self,
         *,

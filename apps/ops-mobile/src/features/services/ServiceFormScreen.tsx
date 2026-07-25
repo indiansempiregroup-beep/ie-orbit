@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { FormSection } from '../../components/ui/FormSection';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
@@ -14,7 +15,7 @@ import { DURATION_OPTIONS } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useService, useServiceMutations } from '../../hooks/useOpsExtended';
-import { colors, typography } from '../../theme/tokens';
+import { colors, fonts, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import {
   serviceCurrency,
@@ -118,24 +119,41 @@ export function ServiceFormScreen() {
         />
       }
     >
-      <Text style={styles.title}>{isEdit ? 'Edit service' : 'Add service'}</Text>
-      <ImagePickerButton
-        label="Service image"
-        variant="card"
-        valueUri={serviceImageUrl(service)}
-        onPicked={setImageAsset}
-        helperText="Shown on service lists and booking screens."
-      />
-      <Input label="Name" value={name} onChangeText={setName} />
-      <Input label="Description" value={description} onChangeText={setDescription} multiline />
-      <SelectField label="Duration" value={duration} options={DURATION_OPTIONS} onChange={setDuration} />
-      <Input label={`Price (${currency})`} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
+      <View style={styles.intro}>
+        <Text style={styles.title}>{isEdit ? 'Edit service' : 'Add service'}</Text>
+        <Text style={styles.subtitle}>What customers book and what staff can be assigned to.</Text>
+      </View>
+
+      <FormSection title="Basics">
+        <ImagePickerButton
+          label="Service image"
+          variant="card"
+          valueUri={serviceImageUrl(service)}
+          onPicked={setImageAsset}
+          helperText="Shown on service lists and booking screens."
+        />
+        <Input label="Name" value={name} onChangeText={setName} />
+        <Input label="Description" value={description} onChangeText={setDescription} multiline />
+      </FormSection>
+
+      <FormSection title="Duration & price">
+        <SelectField label="Duration" value={duration} options={DURATION_OPTIONS} onChange={setDuration} />
+        <Input
+          label={`Price (${currency})`}
+          value={price}
+          onChangeText={setPrice}
+          keyboardType="decimal-pad"
+        />
+      </FormSection>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.foreground },
+  intro: { gap: 4, marginBottom: 4 },
+  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
+  subtitle: { ...typography.body, color: colors.mutedForeground },
   error: { ...typography.caption, color: colors.destructive },
 });

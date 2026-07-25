@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../theme/tokens';
+import { colors, fonts } from '../theme/tokens';
 import type { MainTabParamList } from './types';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { BookingsScreen } from '../features/bookings/BookingsScreen';
@@ -32,13 +32,9 @@ export function MainTabs() {
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarIcon: ({ color, size, focused }) => (
-          <Feather
-            name={TAB_ICONS[route.name]}
-            size={size}
-            color={color}
-            style={focused ? styles.activeIcon : undefined}
-          />
+        tabBarItemStyle: styles.tabItem,
+        tabBarIcon: ({ color, size }) => (
+          <Feather name={TAB_ICONS[route.name]} size={size - 1} color={color} />
         ),
       })}
     >
@@ -59,10 +55,16 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.card,
     borderTopColor: colors.border,
-    borderTopWidth: 1,
-    paddingTop: 4,
-    height: 64,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    height: 68,
+    paddingTop: 6,
+    paddingBottom: 8,
   },
-  tabLabel: { fontSize: 10, fontWeight: '500', marginBottom: 4 },
-  activeIcon: { transform: [{ scale: 1.05 }] },
+  tabItem: { paddingTop: 2 },
+  tabLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
 });

@@ -6,7 +6,7 @@ import { opsClient } from '../../api/client';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { colors, typography } from '../../theme/tokens';
+import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
 
@@ -45,7 +45,6 @@ export function ForgotPasswordScreen() {
         </>
       }
     >
-      <Text style={styles.title}>Forgot password</Text>
       <Text style={styles.copy}>We&apos;ll email you a reset link if the account exists.</Text>
       <Input
         label="Email"
@@ -62,8 +61,7 @@ export function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 56 },
-  title: { ...typography.heading, color: colors.foreground },
+  content: { gap: spacing.lg },
   copy: { ...typography.body, color: colors.mutedForeground },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },

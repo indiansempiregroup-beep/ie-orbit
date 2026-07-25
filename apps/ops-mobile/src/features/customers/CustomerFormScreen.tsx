@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AddressPlacesField } from '../../components/AddressPlacesField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
 import { ScreenState } from '../../components/ScreenState';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomer } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
-import { colors, typography } from '../../theme/tokens';
+import { colors, fonts, typography } from '../../theme/tokens';
 import { parseCustomerAddress, type ParsedCustomerAddress } from '../../utils/customerAddress';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -102,33 +103,54 @@ export function CustomerFormScreen() {
         />
       }
     >
-      <Text style={styles.title}>{isEdit ? 'Edit customer' : 'Add customer'}</Text>
-      <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
-      <Input label="First name" value={firstName} onChangeText={setFirstName} />
-      <Input label="Last name" value={lastName} onChangeText={setLastName} />
-      <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-      <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-      <AddressPlacesField
-        value={address.line1}
-        onChangeText={(line1) => setAddress((current) => ({ ...current, line1 }))}
-        onPlaceSelected={(place) =>
-          setAddress({
-            line1: place.line1 || place.formattedAddress,
-            city: place.city,
-            state: place.state,
-            country: place.country,
-            postalCode: place.postalCode,
-            latitude: place.latitude ?? null,
-            longitude: place.longitude ?? null,
-          })
-        }
-      />
+      <View style={styles.intro}>
+        <Text style={styles.title}>{isEdit ? 'Edit customer' : 'Add customer'}</Text>
+        <Text style={styles.subtitle}>Contact details used across bookings and search.</Text>
+      </View>
+
+      <FormSection title="Identity">
+        <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
+        <Input label="First name" value={firstName} onChangeText={setFirstName} />
+        <Input label="Last name" value={lastName} onChangeText={setLastName} />
+      </FormSection>
+
+      <FormSection title="Contact">
+        <Input
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      </FormSection>
+
+      <FormSection title="Address" subtitle="Optional — helps with location-aware booking.">
+        <AddressPlacesField
+          value={address.line1}
+          onChangeText={(line1) => setAddress((current) => ({ ...current, line1 }))}
+          onPlaceSelected={(place) =>
+            setAddress({
+              line1: place.line1 || place.formattedAddress,
+              city: place.city,
+              state: place.state,
+              country: place.country,
+              postalCode: place.postalCode,
+              latitude: place.latitude ?? null,
+              longitude: place.longitude ?? null,
+            })
+          }
+        />
+      </FormSection>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.foreground },
+  intro: { gap: 4, marginBottom: 4 },
+  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
+  subtitle: { ...typography.body, color: colors.mutedForeground },
   error: { ...typography.caption, color: colors.destructive },
 });

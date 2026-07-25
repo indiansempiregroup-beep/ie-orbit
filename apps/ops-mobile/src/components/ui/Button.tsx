@@ -8,7 +8,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import { colors, radius, typography } from '../../theme/tokens';
+import { colors, fonts, radius, typography } from '../../theme/tokens';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'destructive';
 type Size = 'sm' | 'md' | 'lg';
@@ -61,34 +61,59 @@ export function Button({
 function getVariantStyle(variant: Variant) {
   switch (variant) {
     case 'secondary':
-      return { container: { backgroundColor: colors.secondary }, label: { color: colors.secondaryForeground }, spinner: colors.secondaryForeground };
+      return {
+        container: { backgroundColor: colors.secondary },
+        label: { color: colors.secondaryForeground },
+        spinner: colors.secondaryForeground,
+      };
     case 'ghost':
-      return { container: { backgroundColor: 'transparent' }, label: { color: colors.foreground }, spinner: colors.foreground };
+      return {
+        container: { backgroundColor: 'transparent' },
+        label: { color: colors.foreground },
+        spinner: colors.foreground,
+      };
     case 'outline':
-      return { container: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }, label: { color: colors.foreground }, spinner: colors.foreground };
+      return {
+        container: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+        label: { color: colors.foreground },
+        spinner: colors.foreground,
+      };
     case 'destructive':
-      return { container: { backgroundColor: colors.destructive }, label: { color: colors.primaryForeground }, spinner: colors.primaryForeground };
+      return {
+        container: { backgroundColor: colors.destructive },
+        label: { color: colors.primaryForeground },
+        spinner: colors.primaryForeground,
+      };
     default:
-      return { container: { backgroundColor: colors.primary }, label: { color: colors.primaryForeground }, spinner: colors.primaryForeground };
+      return {
+        container: { backgroundColor: colors.accent },
+        label: { color: colors.accentForeground },
+        spinner: colors.accentForeground,
+      };
   }
 }
 
 const sizes: Record<Size, ViewStyle> = {
-  sm: { minHeight: 32, paddingHorizontal: 12 },
-  md: { minHeight: 40, paddingHorizontal: 16 },
-  lg: { minHeight: 48, paddingHorizontal: 20 },
+  sm: { minHeight: 36, paddingHorizontal: 14 },
+  md: { minHeight: 46, paddingHorizontal: 18 },
+  lg: { minHeight: 52, paddingHorizontal: 22 },
 };
 
 const sizeStyles: Record<Size, TextStyle> = {
-  sm: { fontSize: 12 },
-  md: { fontSize: 14 },
+  sm: { fontSize: 13 },
+  md: { fontSize: 15 },
   lg: { fontSize: 16 },
 };
 
 const styles = StyleSheet.create({
-  base: { borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+  base: {
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
   fullWidth: { width: '100%' },
-  label: { ...typography.label, fontWeight: '600' },
-  pressed: { opacity: 0.9 },
+  label: { ...typography.label, fontFamily: fonts.bodySemi },
+  pressed: { opacity: 0.88, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.45 },
 });

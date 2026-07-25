@@ -14,6 +14,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
+  icon: './assets/icon.png',
+  splash: {
+    image: './assets/splash.png',
+    resizeMode: 'cover',
+    backgroundColor: '#0B1F3A',
+  },
+  plugins: [
+    ...(Array.isArray(config.plugins) ? config.plugins : []),
+    'expo-font',
+    [
+      'expo-splash-screen',
+      {
+        backgroundColor: '#0B1F3A',
+        image: './assets/splash.png',
+        resizeMode: 'cover',
+      },
+    ],
+  ],
   ios: {
     ...config.ios,
     bundleIdentifier: 'com.ieplatform.ops',
@@ -28,6 +46,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...config.android,
     package: 'com.ieplatform.ops',
     softwareKeyboardLayoutMode: 'resize',
+    adaptiveIcon: {
+      foregroundImage: './assets/icon.png',
+      backgroundColor: '#0B1F3A',
+    },
   },
   extra: {
     ...config.extra,

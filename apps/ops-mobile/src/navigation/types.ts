@@ -40,12 +40,13 @@ export type RootStackParamList = {
   StaffForm: { staffId?: string };
   StaffDetail: { staffId: string };
   StaffSchedule: { staffId: string };
+  StaffAvailability: { staffId: string };
   Settings: undefined;
   BusinessProfile: undefined;
   BusinessEdit: undefined;
   ProductSettings: undefined;
   Branches: undefined;
-  BI: { tab?: 'overview' | 'revenue' | 'forecast' | 'reports' };
+  BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };
   Reports: undefined;
   Admin: undefined;
   Team: undefined;

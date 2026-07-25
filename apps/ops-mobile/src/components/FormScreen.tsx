@@ -11,6 +11,7 @@ import {
   KeyboardStickyView,
   KeyboardToolbar,
 } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme/tokens';
 
 type Props = {
@@ -31,6 +32,8 @@ export function FormScreen({
   refreshing = false,
   onRefresh,
 }: Props) {
+  const insets = useSafeAreaInsets();
+
   return (
     <View style={styles.root}>
       <KeyboardAwareScrollView
@@ -57,7 +60,9 @@ export function FormScreen({
 
       {footer ? (
         <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
-          <View style={styles.footer}>{footer}</View>
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+            {footer}
+          </View>
         </KeyboardStickyView>
       ) : null}
 
@@ -72,7 +77,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: spacing.xl,
-    gap: spacing.md,
+    gap: spacing.lg,
     paddingBottom: spacing.xxxl,
   },
   footer: {
@@ -81,7 +86,6 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
     gap: spacing.sm,
   },
 });

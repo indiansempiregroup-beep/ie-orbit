@@ -87,6 +87,15 @@ export function StaffDetailScreen() {
         fullWidth
         onPress={() => navigation.navigate('StaffSchedule', { staffId: member.id })}
       />
+      <Button
+        label="Leave, special hours & services"
+        variant="outline"
+        fullWidth
+        onPress={() => navigation.navigate('StaffAvailability', { staffId: member.id })}
+      />
+      <Text style={styles.help}>
+        Employment status gates booking. Use leave records for dated time-off that only blocks overlapping slots.
+      </Text>
       {!hasLogin && member.email ? (
         <Button
           label="Send login invitation"
@@ -175,6 +184,7 @@ const styles = StyleSheet.create({
   },
   day: { ...typography.label, color: colors.foreground },
   hours: { ...typography.caption, color: colors.mutedForeground },
+  help: { ...typography.caption, color: colors.mutedForeground },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },
 });

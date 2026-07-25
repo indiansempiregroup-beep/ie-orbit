@@ -1,16 +1,16 @@
 import React from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
+import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { canAccessSettings, canManageTeam, formatUserRole } from '../../utils/roles';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function MoreScreen() {
@@ -31,11 +31,11 @@ export function MoreScreen() {
   }
 
   return (
-    <RefreshableScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <LinearGradient
-        colors={[`${colors.primary}22`, colors.background]}
-        style={[styles.hero, { paddingTop: insets.top + spacing.xxl }]}
-      >
+    <RefreshableScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl }]}
+    >
+      <View style={styles.hero}>
         <Avatar name={displayName} size="xl" src={user?.profile_photo} />
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email}</Text>
@@ -43,29 +43,54 @@ export function MoreScreen() {
           {activeBusiness?.display_name ?? activeBusiness?.business_name ?? 'Workspace'}
           {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
         </Text>
-      </LinearGradient>
+      </View>
 
       <View style={styles.menu}>
-        <MenuRow icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
-        <MenuRow icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
-        <MenuRow icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
-        <MenuRow
-          icon="bar-chart-2"
-          label="Business intelligence"
-          onPress={() => navigation.navigate('BI', { tab: 'overview' })}
-        />
-        <MenuRow icon="file-text" label="Reports" onPress={() => navigation.navigate('Reports')} />
-        {showSettings ? (
-          <MenuRow icon="settings" label="Settings" onPress={() => navigation.navigate('Settings')} />
-        ) : null}
-        {showTeam ? (
-          <MenuRow icon="mail" label="Team & invitations" onPress={() => navigation.navigate('Team')} />
-        ) : null}
-        {isPlatformAdmin ? (
-          <MenuRow icon="shield" label="Platform admin" onPress={() => navigation.navigate('Admin')} />
-        ) : null}
-        <MenuRow icon="user" label="Profile" onPress={() => navigation.navigate('Profile')} />
-        <MenuRow icon="log-out" label="Sign out" destructive onPress={onSignOut} />
+        <MenuSection title="Business">
+          <MenuRow icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
+          <MenuRow icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
+          <MenuRow icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
+          <MenuRow
+            icon="bar-chart-2"
+            label="Business intelligence"
+            onPress={() => navigation.navigate('BI', { tab: 'overview' })}
+          />
+          <MenuRow
+            icon="file-text"
+            label="Reports"
+            last={!showSettings && !showTeam && !isPlatformAdmin}
+            onPress={() => navigation.navigate('Reports')}
+          />
+          {showSettings ? (
+            <MenuRow
+              icon="settings"
+              label="Settings"
+              last={!showTeam && !isPlatformAdmin}
+              onPress={() => navigation.navigate('Settings')}
+            />
+          ) : null}
+          {showTeam ? (
+            <MenuRow
+              icon="mail"
+              label="Team & invitations"
+              last={!isPlatformAdmin}
+              onPress={() => navigation.navigate('Team')}
+            />
+          ) : null}
+          {isPlatformAdmin ? (
+            <MenuRow
+              icon="shield"
+              label="Platform admin"
+              last
+              onPress={() => navigation.navigate('Admin')}
+            />
+          ) : null}
+        </MenuSection>
+
+        <MenuSection title="Account">
+          <MenuRow icon="user" label="Profile" onPress={() => navigation.navigate('Profile')} />
+          <MenuRow icon="log-out" label="Sign out" destructive last onPress={onSignOut} />
+        </MenuSection>
       </View>
     </RefreshableScrollView>
   );
@@ -73,10 +98,21 @@ export function MoreScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.xxxl },
-  hero: { alignItems: 'center', paddingBottom: spacing.xxl, paddingHorizontal: spacing.xl },
-  name: { ...typography.heading, color: colors.foreground, marginTop: spacing.md },
+  content: { paddingBottom: spacing.xxxl, paddingHorizontal: spacing.xl },
+  hero: { alignItems: 'center', paddingBottom: spacing.xxl },
+  name: {
+    fontFamily: fonts.display,
+    fontSize: 28,
+    color: colors.foreground,
+    marginTop: spacing.md,
+    letterSpacing: -0.4,
+  },
   email: { ...typography.body, color: colors.mutedForeground, marginTop: 4 },
-  meta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm, textAlign: 'center' },
-  menu: { paddingHorizontal: spacing.xl, gap: spacing.md },
+  meta: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  menu: { gap: spacing.xl },
 });

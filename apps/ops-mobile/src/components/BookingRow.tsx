@@ -1,9 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { Badge } from './ui/Badge';
-import { colors, radius, spacing, typography } from '../theme/tokens';
-import { formatDateTime, mapBookingStatus } from '../utils/format';
+import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
+import { formatDateTime, formatTime, mapBookingStatus } from '../utils/format';
 
 type Props = {
   serviceName: string;
@@ -24,25 +23,40 @@ export function BookingRow({
   status,
   onPress,
 }: Props) {
+  const timeLabel = startAt ? formatTime(startAt) : '—';
+  const dateLabel = startAt ? formatDateTime(startAt) : '';
+
   const content = (
     <View style={styles.card}>
-      <View style={styles.icon}>
-        <Feather name="calendar" size={16} color={colors.primary} />
+      <View style={styles.timeBlock}>
+        <Text style={styles.time}>{timeLabel}</Text>
       </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>
           {serviceName}
         </Text>
-        <Text style={styles.meta}>{formatDateTime(startAt)}</Text>
-        {customerName ? <Text style={styles.meta}>Customer · {customerName}</Text> : null}
-        {staffName ? <Text style={styles.staff}>with {staffName}</Text> : null}
-        {bookingNumber ? <Text style={styles.ref}>#{bookingNumber}</Text> : null}
+        {customerName ? (
+          <Text style={styles.meta} numberOfLines={1}>
+            {customerName}
+          </Text>
+        ) : null}
+        <Text style={styles.subMeta} numberOfLines={1}>
+          {[staffName ? `with ${staffName}` : null, bookingNumber ? `#${bookingNumber}` : null]
+            .filter(Boolean)
+            .join(' · ') || dateLabel}
+        </Text>
       </View>
       <Badge status={mapBookingStatus(status ?? 'pending')} />
     </View>
   );
 
-  if (onPress) return <Pressable onPress={onPress}>{content}</Pressable>;
+  if (onPress) {
+    return (
+      <Pressable style={({ pressed }) => [pressed && styles.pressed]} onPress={onPress}>
+        {content}
+      </Pressable>
+    );
+  }
   return content;
 }
 
@@ -53,21 +67,25 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+    padding: spacing.lg,
+    ...shadows.soft,
   },
-  icon: {
-    width: 40,
-    height: 40,
+  pressed: { opacity: 0.92 },
+  timeBlock: {
+    minWidth: 58,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.secondary,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  body: { flex: 1 },
-  title: { ...typography.label, color: colors.foreground, fontWeight: '700' },
-  meta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
-  staff: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
-  ref: { ...typography.tiny, color: colors.mutedForeground, marginTop: 4 },
+  time: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    color: colors.primary,
+  },
+  body: { flex: 1, gap: 2 },
+  title: { ...typography.label, fontSize: 15, color: colors.foreground },
+  meta: { ...typography.caption, color: colors.foreground },
+  subMeta: { ...typography.tiny, color: colors.mutedForeground },
 });

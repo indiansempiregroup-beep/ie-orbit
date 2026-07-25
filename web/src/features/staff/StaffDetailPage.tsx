@@ -4,6 +4,9 @@ import { useDialog } from '../../hooks/useDialog';
 import { useEditFormInit } from '../../hooks/useEditFormInit';
 import { useStaffDetail, useStaffUpdate } from '../management/managementHooks';
 import { StaffWeeklyScheduleSection } from './StaffWeeklyScheduleSection';
+import { StaffLeaveSection } from './StaffLeaveSection';
+import { StaffSpecialAvailabilitySection } from './StaffSpecialAvailabilitySection';
+import { StaffServiceAssignmentsSection } from './StaffServiceAssignmentsSection';
 import type { StaffMember, StaffUpdateInput } from '@ie-platform/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -115,7 +118,14 @@ export function StaffDetailPage() {
           )}
         </Card>
 
-        {staffQuery.data?.id ? <StaffWeeklyScheduleSection staffId={staffQuery.data.id} /> : null}
+        {staffQuery.data?.id ? (
+          <>
+            <StaffWeeklyScheduleSection staffId={staffQuery.data.id} />
+            <StaffLeaveSection staffId={staffQuery.data.id} />
+            <StaffSpecialAvailabilitySection staffId={staffQuery.data.id} />
+            <StaffServiceAssignmentsSection staffId={staffQuery.data.id} />
+          </>
+        ) : null}
       </div>
 
       <Dialog
@@ -175,14 +185,22 @@ export function StaffDetailPage() {
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
           </div>
-          <select
-            value={formState.employment_status ?? 'active'}
-            onChange={(event) => setFormState({ ...formState, employment_status: event.target.value })}
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+          <label style={{ display: 'grid', gap: 8 }}>
+            Employment status
+            <select
+              value={formState.employment_status ?? 'active'}
+              onChange={(event) => setFormState({ ...formState, employment_status: event.target.value })}
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="on_leave">On leave (non-bookable)</option>
+              <option value="terminated">Terminated</option>
+            </select>
+            <span style={{ color: '#6b7280', fontSize: 13 }}>
+              Status gates booking eligibility. Use the Leave section below for dated time-off that only blocks overlapping slots.
+            </span>
+          </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" loading={updateStaff.isPending} loadingLabel="Saving…">
               Save changes

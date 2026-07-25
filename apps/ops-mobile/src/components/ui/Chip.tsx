@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors, radius, typography } from '../../theme/tokens';
+import { colors, fonts, radius, typography } from '../../theme/tokens';
 
 type Props = {
   label: string;
@@ -12,22 +12,35 @@ export function Chip({ label, active, onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.chip, active ? { backgroundColor: colors.primary, borderColor: colors.primary } : null]}
+      style={({ pressed }) => [
+        styles.chip,
+        active && styles.chipActive,
+        pressed && styles.pressed,
+      ]}
     >
-      <Text style={[styles.label, active ? styles.labelActive : null]}>{label}</Text>
+      <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
   },
-  label: { ...typography.caption, color: colors.mutedForeground, fontWeight: '500' },
-  labelActive: { color: colors.primaryForeground },
+  chipActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  pressed: { opacity: 0.9 },
+  label: {
+    ...typography.caption,
+    fontFamily: fonts.bodyMedium,
+    color: colors.mutedForeground,
+  },
+  labelActive: { color: colors.accentForeground, fontFamily: fonts.bodySemi },
 });

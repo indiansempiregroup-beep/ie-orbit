@@ -37,6 +37,7 @@ const BookingDetailPage = lazy(() => import('./features/bookings/BookingDetailPa
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const ReportsPage = lazy(() => import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const BIOverviewPage = lazy(() => import('./features/bi/BIOverviewPage').then((m) => ({ default: m.BIOverviewPage })));
+const BIGrowthPage = lazy(() => import('./features/bi/BIGrowthPage').then((m) => ({ default: m.BIGrowthPage })));
 const BIRevenuePage = lazy(() => import('./features/bi/BIRevenuePage').then((m) => ({ default: m.BIRevenuePage })));
 const BIReportsPage = lazy(() => import('./features/bi/BIReportsPage').then((m) => ({ default: m.BIReportsPage })));
 const BIForecastPage = lazy(() => import('./features/bi/BIForecastPage').then((m) => ({ default: m.BIForecastPage })));
@@ -141,6 +142,7 @@ function App() {
                 <Route path="/bi" element={<BILayout />}>
                   <Route index element={<Navigate to="/bi/overview" replace />} />
                   <Route path="overview" element={<BIOverviewPage />} />
+                  <Route path="growth" element={<BIGrowthPage />} />
                   <Route path="revenue" element={<BIRevenuePage />} />
                   <Route path="forecast" element={<BIForecastPage />} />
                   <Route path="reports" element={<BIReportsPage />} />

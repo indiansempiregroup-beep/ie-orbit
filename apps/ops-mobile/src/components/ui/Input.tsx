@@ -41,11 +41,11 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.card,
     paddingHorizontal: spacing.md,
   },
   fieldError: { borderColor: colors.destructive },

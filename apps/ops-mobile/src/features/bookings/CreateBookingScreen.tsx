@@ -7,12 +7,11 @@ import { FormScreen } from '../../components/FormScreen';
 import { SelectField } from '../../components/SelectField';
 import { TimeSlotGrid } from '../../components/TimeSlotGrid';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
-import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useAvailability, useBookingMutations, useEntityMaps } from '../../hooks/useOpsExtended';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -23,7 +22,13 @@ function dateFromIso(value?: string) {
   return formatDateKey(date);
 }
 
-function serviceDurationMinutes(service?: { duration_minutes?: number; durations?: Array<{ duration_minutes: number; is_default?: boolean }> } | null, fallback = 30) {
+function serviceDurationMinutes(
+  service?: {
+    duration_minutes?: number;
+    durations?: Array<{ duration_minutes: number; is_default?: boolean }>;
+  } | null,
+  fallback = 30,
+) {
   if (!service) return fallback;
   if (typeof service.duration_minutes === 'number' && service.duration_minutes > 0) {
     return service.duration_minutes;
@@ -52,8 +57,7 @@ export function CreateBookingScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const selectedService = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
-  const durationMinutes =
-    serviceDurationMinutes(selectedService, route.params?.durationMinutes ?? 30);
+  const durationMinutes = serviceDurationMinutes(selectedService, route.params?.durationMinutes ?? 30);
 
   const { slots, loading: slotsLoading } = useAvailability(
     date,
@@ -83,7 +87,10 @@ export function CreateBookingScreen() {
     [services, serviceMap],
   );
   const staffOptions = useMemo(
-    () => [{ value: '', label: 'Any available' }, ...staff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id }))],
+    () => [
+      { value: '', label: 'Any available' },
+      ...staff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id })),
+    ],
     [staff, staffMap],
   );
 
@@ -91,7 +98,7 @@ export function CreateBookingScreen() {
     <FormScreen
       footer={
         <Button
-          label="Create booking"
+          label={selectedSlot ? `Book · ${formatDateTime(selectedSlot)}` : 'Create booking'}
           loading={loading}
           fullWidth
           size="lg"
@@ -128,12 +135,13 @@ export function CreateBookingScreen() {
         />
       }
     >
-      <Text style={styles.title}>New booking</Text>
-      <Text style={styles.subtitle}>Pick the customer, service, and an available time slot.</Text>
+      <View style={styles.intro}>
+        <Text style={styles.title}>New booking</Text>
+        <Text style={styles.subtitle}>Who, what, then when — three quick steps.</Text>
+      </View>
 
-      <Card>
+      <FormSection step={1} title="Who & what" subtitle="Customer, service, and preferred staff">
         <SelectField label="Customer" value={customerId} options={customerOptions} onChange={setCustomerId} />
-        <View style={styles.spacer} />
         <SelectField
           label="Service"
           value={serviceId}
@@ -143,7 +151,6 @@ export function CreateBookingScreen() {
             setSelectedSlot('');
           }}
         />
-        <View style={styles.spacer} />
         <SelectField
           label="Staff"
           value={staffId}
@@ -159,38 +166,41 @@ export function CreateBookingScreen() {
             {selectedService.price != null ? ` · ${selectedService.price}` : ''}
           </Text>
         ) : null}
-      </Card>
+      </FormSection>
 
-      <SectionHeader title="Date & time" />
-      <CalendarPicker
-        value={date}
-        onChange={(next) => {
-          setDate(next);
-          setSelectedSlot('');
-        }}
-      />
-      <TimeSlotGrid
-        slots={slots}
-        selected={selectedSlot}
-        onSelect={setSelectedSlot}
-        loading={slotsLoading}
-        emptyMessage={
-          !serviceId
-            ? 'Select a service to load available times.'
-            : staffId
-              ? 'No timeslot available for this staff on this date. Check their weekly schedule or try another day.'
-              : 'No timeslot available. No staff is free for this service on this date. Try another day or assign staff to the service.'
-        }
-      />
+      <FormSection step={2} title="Date & time" subtitle="Only open slots for the selected service are shown">
+        <CalendarPicker
+          value={date}
+          onChange={(next) => {
+            setDate(next);
+            setSelectedSlot('');
+          }}
+        />
+        <TimeSlotGrid
+          slots={slots}
+          selected={selectedSlot}
+          onSelect={setSelectedSlot}
+          loading={slotsLoading}
+          emptyMessage={
+            !serviceId
+              ? 'Select a service to load available times.'
+              : staffId
+                ? 'No timeslot available for this staff on this date. Check their weekly schedule or try another day.'
+                : 'No timeslot available. No staff is free for this service on this date. Try another day or assign staff to the service.'
+          }
+        />
+        {selectedSlot ? <Text style={styles.selected}>Selected · {formatDateTime(selectedSlot)}</Text> : null}
+      </FormSection>
 
-      <Input label="Notes (optional)" value={notes} onChangeText={setNotes} multiline placeholder="Add booking notes" />
-
-      {selectedSlot ? (
-        <Card>
-          <Text style={styles.summaryLabel}>Selected</Text>
-          <Text style={styles.summaryValue}>{formatDateTime(selectedSlot)}</Text>
-        </Card>
-      ) : null}
+      <FormSection step={3} title="Notes" subtitle="Optional details for the team">
+        <Input
+          label="Notes"
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          placeholder="Add booking notes"
+        />
+      </FormSection>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
@@ -198,11 +208,10 @@ export function CreateBookingScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.foreground },
-  subtitle: { ...typography.body, color: colors.mutedForeground, marginTop: -spacing.sm },
-  spacer: { height: spacing.md },
-  hint: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.md },
-  summaryLabel: { ...typography.caption, color: colors.mutedForeground },
-  summaryValue: { ...typography.title, fontSize: 16, color: colors.foreground, marginTop: 4 },
+  intro: { gap: 4, marginBottom: spacing.sm },
+  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
+  subtitle: { ...typography.body, color: colors.mutedForeground },
+  hint: { ...typography.caption, color: colors.mutedForeground },
+  selected: { ...typography.label, color: colors.primary },
   error: { ...typography.caption, color: colors.destructive },
 });

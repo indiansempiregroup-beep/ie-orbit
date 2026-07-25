@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, Switch, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FormScreen } from '../../components/FormScreen';
 import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
+import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatUserRole } from '../../utils/roles';
 import { isExpoGo } from '../../utils/biometrics';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -34,7 +34,7 @@ export function ProfileScreen() {
   const faceIdBlockedInExpoGo = isExpoGo() && Platform.OS === 'ios';
 
   useEffect(() => {
-    void refreshBiometricState();
+    void refreshBiometricState().catch(() => undefined);
   }, [refreshBiometricState]);
 
   function onSignOut() {
@@ -94,7 +94,6 @@ export function ProfileScreen() {
     void (async () => {
       try {
         setBusy(true);
-        // Let the switch animation finish before presenting Face ID.
         await new Promise((resolve) => setTimeout(resolve, 400));
         await enableBiometrics();
         Alert.alert(
@@ -110,11 +109,8 @@ export function ProfileScreen() {
   }
 
   return (
-    <FormScreen contentContainerStyle={styles.content}>
-      <LinearGradient
-        colors={[`${colors.primary}22`, colors.background]}
-        style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}
-      >
+    <FormScreen contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl }]}>
+      <View style={styles.hero}>
         <Avatar name={displayName} size="xl" src={user?.profile_photo} />
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email}</Text>
@@ -122,61 +118,82 @@ export function ProfileScreen() {
           {activeBusiness?.display_name ?? activeBusiness?.business_name ?? 'Workspace'}
           {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
         </Text>
-      </LinearGradient>
+      </View>
 
       <View style={styles.menu}>
-        <MenuRow icon="edit-3" label="Edit profile" onPress={() => navigation.navigate('ProfileEdit')} />
-        <MenuRow icon="lock" label="Change password" onPress={() => navigation.navigate('Security')} />
-        <View style={styles.biometricRow}>
-          <View style={styles.biometricCopy}>
-            <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
-            <Text style={styles.biometricHint}>
-              {faceIdBlockedInExpoGo
-                ? `Unavailable in Expo Go · needs a development build`
-                : busy
-                  ? 'Updating…'
-                  : biometricAvailable
-                    ? biometricEnabled
-                      ? `On · use after signing out`
-                      : `Off · tap to enable with ${biometricLabel} only`
-                    : `Not available on this device`}
-            </Text>
-          </View>
-          <Switch
-            value={biometricEnabled && !faceIdBlockedInExpoGo}
-            onValueChange={onToggleBiometric}
-            disabled={busy || faceIdBlockedInExpoGo || (!biometricAvailable && !biometricEnabled)}
-            trackColor={{ true: colors.primary }}
+        <MenuSection title="Account">
+          <MenuRow icon="edit-3" label="Edit profile" onPress={() => navigation.navigate('ProfileEdit')} />
+          <MenuRow icon="lock" label="Change password" onPress={() => navigation.navigate('Security')} />
+          <MenuRow
+            icon="smartphone"
+            label="Sessions"
+            last={Boolean(user?.email_verified_at)}
+            onPress={() => navigation.navigate('Sessions')}
           />
-        </View>
-        <MenuRow icon="smartphone" label="Sessions" onPress={() => navigation.navigate('Sessions')} />
-        {!user?.email_verified_at ? (
-          <MenuRow icon="mail" label="Verify email" onPress={() => navigation.navigate('VerifyEmail')} />
-        ) : null}
-        <MenuRow icon="log-out" label="Sign out" destructive onPress={onSignOut} />
+          {!user?.email_verified_at ? (
+            <MenuRow icon="mail" label="Verify email" last onPress={() => navigation.navigate('VerifyEmail')} />
+          ) : null}
+        </MenuSection>
+
+        <MenuSection title="Security">
+          <View style={styles.biometricRow}>
+            <View style={styles.biometricCopy}>
+              <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
+              <Text style={styles.biometricHint}>
+                {faceIdBlockedInExpoGo
+                  ? `Unavailable in Expo Go · needs a development build`
+                  : busy
+                    ? 'Updating…'
+                    : biometricAvailable
+                      ? biometricEnabled
+                        ? `On · use after signing out`
+                        : `Off · tap to enable with ${biometricLabel} only`
+                      : `Not available on this device`}
+              </Text>
+            </View>
+            <Switch
+              value={biometricEnabled && !faceIdBlockedInExpoGo}
+              onValueChange={onToggleBiometric}
+              disabled={busy || faceIdBlockedInExpoGo || (!biometricAvailable && !biometricEnabled)}
+              trackColor={{ true: colors.primary }}
+            />
+          </View>
+        </MenuSection>
+
+        <MenuSection title="Session">
+          <MenuRow icon="log-out" label="Sign out" destructive last onPress={onSignOut} />
+        </MenuSection>
       </View>
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 0, paddingBottom: spacing.xxxl },
-  hero: { alignItems: 'center', paddingBottom: spacing.xxl, paddingHorizontal: spacing.xl },
-  name: { ...typography.heading, color: colors.foreground, marginTop: spacing.md },
+  content: { paddingBottom: spacing.xxxl, paddingHorizontal: spacing.xl, gap: spacing.xl },
+  hero: { alignItems: 'center', paddingBottom: spacing.md },
+  name: {
+    fontFamily: fonts.display,
+    fontSize: 28,
+    color: colors.foreground,
+    marginTop: spacing.md,
+    letterSpacing: -0.4,
+  },
   email: { ...typography.body, color: colors.mutedForeground, marginTop: 4 },
-  meta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm, textAlign: 'center' },
-  menu: { paddingHorizontal: spacing.xl, gap: spacing.md },
+  meta: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  menu: { gap: spacing.xl },
   biometricRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   biometricCopy: { flex: 1, gap: 2 },
-  biometricTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  biometricTitle: { ...typography.label, color: colors.foreground },
   biometricHint: { ...typography.caption, color: colors.mutedForeground },
 });

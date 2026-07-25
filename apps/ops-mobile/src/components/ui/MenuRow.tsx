@@ -9,13 +9,17 @@ type Props = {
   onPress: () => void;
   destructive?: boolean;
   subtitle?: string;
+  last?: boolean;
 };
 
-export function MenuRow({ icon, label, onPress, destructive, subtitle }: Props) {
+export function MenuRow({ icon, label, onPress, destructive, subtitle, last }: Props) {
   return (
-    <Pressable style={styles.row} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [styles.row, last && styles.rowLast, pressed && styles.pressed]}
+      onPress={onPress}
+    >
       <View style={[styles.icon, destructive && styles.iconDestructive]}>
-        <Feather name={icon} size={16} color={destructive ? colors.destructive : colors.mutedForeground} />
+        <Feather name={icon} size={16} color={destructive ? colors.destructive : colors.primary} />
       </View>
       <View style={styles.copy}>
         <Text style={[styles.label, destructive && styles.destructive]}>{label}</Text>
@@ -32,22 +36,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
+  rowLast: { borderBottomWidth: 0 },
+  pressed: { backgroundColor: colors.inputBackground },
   icon: {
     width: 36,
     height: 36,
     borderRadius: radius.md,
-    backgroundColor: colors.muted,
+    backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconDestructive: { backgroundColor: '#FEE2E2' },
+  iconDestructive: { backgroundColor: '#FDE8E8' },
   copy: { flex: 1 },
-  label: { ...typography.body, color: colors.foreground, fontWeight: '600' },
+  label: { ...typography.body, color: colors.foreground, fontFamily: typography.label.fontFamily, fontWeight: '600' },
   subtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   destructive: { color: colors.destructive },
 });

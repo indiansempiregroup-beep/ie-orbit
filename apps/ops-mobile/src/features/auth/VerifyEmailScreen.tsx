@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { opsClient } from '../../api/client';
+import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,51 +16,56 @@ export function VerifyEmailScreen() {
   const [loading, setLoading] = useState(false);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>Verify email</Text>
+    <FormScreen
+      contentContainerStyle={styles.content}
+      footer={
+        <>
+          <Button
+            label="Verify"
+            loading={loading}
+            fullWidth
+            size="lg"
+            onPress={async () => {
+              setLoading(true);
+              setError(null);
+              try {
+                await opsClient.auth.verifyEmail({ token: token.trim() });
+                await refreshProfile();
+                setMessage('Email verified.');
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Verification failed.'));
+              } finally {
+                setLoading(false);
+              }
+            }}
+          />
+          <Button
+            label="Resend verification"
+            variant="outline"
+            fullWidth
+            onPress={async () => {
+              setError(null);
+              try {
+                await opsClient.auth.resendVerification();
+                setMessage('Verification email sent.');
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to resend.'));
+              }
+            }}
+          />
+        </>
+      }
+    >
       <Text style={styles.copy}>{user?.email ?? 'Your account'}</Text>
       <Input label="Verification token" value={token} onChangeText={setToken} />
       {message ? <Text style={styles.success}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button
-        label="Verify"
-        loading={loading}
-        fullWidth
-        onPress={async () => {
-          setLoading(true);
-          setError(null);
-          try {
-            await opsClient.auth.verifyEmail({ token: token.trim() });
-            await refreshProfile();
-            setMessage('Email verified.');
-          } catch (err) {
-            setError(getApiErrorMessage(err, 'Verification failed.'));
-          } finally {
-            setLoading(false);
-          }
-        }}
-      />
-      <Button
-        label="Resend verification"
-        variant="outline"
-        fullWidth
-        onPress={async () => {
-          setError(null);
-          try {
-            await opsClient.auth.resendVerification();
-            setMessage('Verification email sent.');
-          } catch (err) {
-            setError(getApiErrorMessage(err, 'Unable to resend.'));
-          }
-        }}
-      />
-    </View>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background, padding: spacing.xxl, gap: spacing.lg },
-  title: { ...typography.heading, color: colors.foreground },
+  content: { gap: spacing.lg },
   copy: { ...typography.body, color: colors.mutedForeground },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },

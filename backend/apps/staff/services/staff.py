@@ -94,6 +94,20 @@ class StaffManagementService:
         assignment.save()
         return assignment
 
+    def update_assignment(
+        self, *, assignment: StaffServiceAssignment, data: dict[str, Any]
+    ) -> StaffServiceAssignment:
+        for field, value in data.items():
+            setattr(assignment, field, value)
+        if assignment.staff_id and assignment.service_id:
+            self._validate_staff_service(assignment.staff, assignment.service)
+        assignment.full_clean()
+        assignment.save()
+        return assignment
+
+    def delete_assignment(self, *, assignment: StaffServiceAssignment) -> None:
+        assignment.delete()
+
     def seed_business_roles(self) -> None:
         for role_type, label in BusinessRoleType.choices:
             code = f"business-{role_type}"

@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { FormSection } from '../../components/ui/FormSection';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { ScreenState } from '../../components/ScreenState';
@@ -13,7 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useIamMutations, useStaffMember, useStaffMutations, useTeamMembers } from '../../hooks/useOpsExtended';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -183,53 +184,69 @@ export function StaffFormScreen() {
         />
       }
     >
-      <Text style={styles.title}>{isEdit ? 'Edit staff' : 'Add staff'}</Text>
-      <ImagePickerButton
-        label="Profile photo"
-        variant="avatar"
-        valueUri={member?.photo_url}
-        onPicked={setPhotoAsset}
-      />
-      <Input label="First name" value={firstName} onChangeText={setFirstName} />
-      <Input label="Last name" value={lastName} onChangeText={setLastName} />
-      <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
-      <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-      <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-
-      <Text style={styles.section}>App access role</Text>
-      <Text style={styles.helper}>
-        Staff can manage bookings, calendar, and customers. Managers also get Settings and Team.
-      </Text>
-      <View style={styles.roleRow}>
-        {ROLE_OPTIONS.map((option) => (
-          <Pressable
-            key={option.value}
-            style={[styles.roleCard, role === option.value && styles.roleCardActive]}
-            onPress={() => setRole(option.value)}
-          >
-            <Text style={styles.roleLabel}>{option.label}</Text>
-            <Text style={styles.roleHelper}>{option.helper}</Text>
-          </Pressable>
-        ))}
+      <View style={styles.intro}>
+        <Text style={styles.title}>{isEdit ? 'Edit staff' : 'Add staff'}</Text>
+        <Text style={styles.subtitle}>Profile, contact, and OPS-Mobile access.</Text>
       </View>
 
-      {isEdit && (member?.user || linkedMember) ? (
-        <Text style={styles.helper}>Changing role updates their OPS-Mobile access immediately.</Text>
-      ) : (
-        <Pressable style={styles.inviteToggle} onPress={() => setSendInvite((value) => !value)}>
-          <View style={[styles.checkbox, sendInvite && styles.checkboxOn]}>
-            {sendInvite ? <Text style={styles.checkMark}>✓</Text> : null}
-          </View>
-          <View style={styles.inviteCopy}>
-            <Text style={styles.inviteTitle}>
-              {isEdit ? 'Send login invitation with this role' : 'Send login invitation'}
-            </Text>
-            <Text style={styles.helper}>
-              Emails a link so they can set a password and sign in to OPS-Mobile.
-            </Text>
-          </View>
-        </Pressable>
-      )}
+      <FormSection title="Profile">
+        <ImagePickerButton
+          label="Profile photo"
+          variant="avatar"
+          valueUri={member?.photo_url}
+          onPicked={setPhotoAsset}
+        />
+        <Input label="First name" value={firstName} onChangeText={setFirstName} />
+        <Input label="Last name" value={lastName} onChangeText={setLastName} />
+        <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
+      </FormSection>
+
+      <FormSection title="Contact">
+        <Input
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      </FormSection>
+
+      <FormSection
+        title="App access"
+        subtitle="Staff manage bookings and customers. Managers also get Settings and Team."
+      >
+        <View style={styles.roleRow}>
+          {ROLE_OPTIONS.map((option) => (
+            <Pressable
+              key={option.value}
+              style={[styles.roleCard, role === option.value && styles.roleCardActive]}
+              onPress={() => setRole(option.value)}
+            >
+              <Text style={styles.roleLabel}>{option.label}</Text>
+              <Text style={styles.roleHelper}>{option.helper}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {isEdit && (member?.user || linkedMember) ? (
+          <Text style={styles.helper}>Changing role updates their OPS-Mobile access immediately.</Text>
+        ) : (
+          <Pressable style={styles.inviteToggle} onPress={() => setSendInvite((value) => !value)}>
+            <View style={[styles.checkbox, sendInvite && styles.checkboxOn]}>
+              {sendInvite ? <Text style={styles.checkMark}>✓</Text> : null}
+            </View>
+            <View style={styles.inviteCopy}>
+              <Text style={styles.inviteTitle}>
+                {isEdit ? 'Send login invitation with this role' : 'Send login invitation'}
+              </Text>
+              <Text style={styles.helper}>
+                Emails a link so they can set a password and sign in to OPS-Mobile.
+              </Text>
+            </View>
+          </Pressable>
+        )}
+      </FormSection>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
@@ -237,35 +254,36 @@ export function StaffFormScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.foreground },
-  section: { ...typography.title, fontSize: 16, color: colors.foreground, marginTop: spacing.sm },
+  intro: { gap: 4, marginBottom: 4 },
+  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
+  subtitle: { ...typography.body, color: colors.mutedForeground },
   helper: { ...typography.caption, color: colors.mutedForeground },
   roleRow: { gap: spacing.sm },
   roleCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: spacing.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
     gap: 4,
+    ...shadows.soft,
   },
-  roleCardActive: { borderColor: colors.primary, backgroundColor: colors.secondary },
-  roleLabel: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  roleCardActive: { backgroundColor: colors.secondary },
+  roleLabel: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodyBold },
   roleHelper: { ...typography.caption, color: colors.mutedForeground },
   inviteToggle: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 4,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
+    backgroundColor: colors.card,
   },
   checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  checkMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  checkMark: { color: '#fff', fontSize: 12, fontFamily: fonts.bodyBold },
   inviteCopy: { flex: 1, gap: 2 },
-  inviteTitle: { ...typography.label, color: colors.foreground, fontWeight: '600' },
+  inviteTitle: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodySemi },
   error: { ...typography.caption, color: colors.destructive },
 });

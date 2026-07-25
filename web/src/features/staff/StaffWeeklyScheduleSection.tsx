@@ -17,7 +17,11 @@ const WEEKDAYS = [
   { value: 6, label: 'Sunday' },
 ] as const;
 
-type DayRow = StaffWeeklyScheduleInput & { label: string };
+type DayRow = StaffWeeklyScheduleInput & {
+  label: string;
+  break_start: string;
+  break_end: string;
+};
 
 function defaultRows(): DayRow[] {
   return WEEKDAYS.map((day) => ({
@@ -27,11 +31,23 @@ function defaultRows(): DayRow[] {
     shift_start: '09:00',
     shift_end: day.value === 6 ? '17:00' : '19:00',
     capacity: 1,
+    break_start: '',
+    break_end: '',
   }));
 }
 
 function toTimeInput(value: string) {
   return value.slice(0, 5);
+}
+
+function firstBreak(breakPeriods: unknown[] | undefined): { start: string; end: string } {
+  const period = Array.isArray(breakPeriods) ? breakPeriods[0] : null;
+  if (!period || typeof period !== 'object') return { start: '', end: '' };
+  const row = period as { start?: string; end?: string; start_time?: string; end_time?: string };
+  return {
+    start: toTimeInput(String(row.start || row.start_time || '')),
+    end: toTimeInput(String(row.end || row.end_time || '')),
+  };
 }
 
 type StaffWeeklyScheduleSectionProps = {
@@ -61,8 +77,11 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
             shift_start: '09:00',
             shift_end: '17:00',
             capacity: 1,
+            break_start: '',
+            break_end: '',
           };
         }
+        const breakWindow = firstBreak(existing.break_periods as unknown[] | undefined);
         return {
           label: day.label,
           weekday: day.value,
@@ -70,6 +89,8 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
           shift_start: toTimeInput(existing.shift_start),
           shift_end: toTimeInput(existing.shift_end),
           capacity: existing.capacity,
+          break_start: breakWindow.start,
+          break_end: breakWindow.end,
         };
       }),
     );
@@ -83,7 +104,7 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
         <div>
           <p style={{ margin: 0, fontWeight: 700, fontSize: 18 }}>Weekly slot availability</p>
           <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
-            Configure which days and hours this staff member is available for bookings.
+            Configure which days and hours this staff member is available for bookings. Optional break removes mid-shift slots.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={() => navigate(`/calendar?staff=${staffId}`)}>
@@ -95,7 +116,7 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '1.2fr 0.7fr 1fr 1fr 0.7fr',
+            gridTemplateColumns: '1.1fr 0.6fr 0.9fr 0.9fr 0.9fr 0.9fr 0.6fr',
             padding: '12px 16px',
             background: theme.resolved === 'dark' ? '#111827' : '#f9fafb',
             fontWeight: 700,
@@ -107,6 +128,8 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
           <span>Available</span>
           <span>Start</span>
           <span>End</span>
+          <span>Break start</span>
+          <span>Break end</span>
           <span>Capacity</span>
         </div>
         {schedulesQuery.isLoading ? (
@@ -117,7 +140,7 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
               key={row.weekday}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1.2fr 0.7fr 1fr 1fr 0.7fr',
+                gridTemplateColumns: '1.1fr 0.6fr 0.9fr 0.9fr 0.9fr 0.9fr 0.6fr',
                 padding: '12px 16px',
                 background: theme.resolved === 'dark' ? '#111827' : '#fff',
                 gap: 8,
@@ -164,6 +187,32 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
                 style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
               />
               <input
+                type="time"
+                value={row.break_start}
+                disabled={!row.is_available}
+                onChange={(event) =>
+                  setRows((current) =>
+                    current.map((item) =>
+                      item.weekday === row.weekday ? { ...item, break_start: event.target.value } : item,
+                    ),
+                  )
+                }
+                style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+              />
+              <input
+                type="time"
+                value={row.break_end}
+                disabled={!row.is_available}
+                onChange={(event) =>
+                  setRows((current) =>
+                    current.map((item) =>
+                      item.weekday === row.weekday ? { ...item, break_end: event.target.value } : item,
+                    ),
+                  )
+                }
+                style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+              />
+              <input
                 type="number"
                 min={1}
                 value={row.capacity}
@@ -200,6 +249,10 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
                   shift_start: `${row.shift_start}:00`,
                   shift_end: `${row.shift_end}:00`,
                   capacity: row.capacity,
+                  break_periods:
+                    row.break_start && row.break_end
+                      ? [{ start: row.break_start, end: row.break_end }]
+                      : [],
                 })),
               },
               {

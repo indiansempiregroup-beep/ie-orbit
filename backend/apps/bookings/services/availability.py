@@ -45,6 +45,12 @@ class AvailabilitySlot:
         }
 
 
+@dataclass(frozen=True)
+class BufferPair:
+    before_minutes: int = 0
+    after_minutes: int = 0
+
+
 class AvailabilityService:
     def __init__(self, repository: BookingRepository | None = None) -> None:
         self.repository = repository or BookingRepository()
@@ -57,11 +63,14 @@ class AvailabilityService:
         target_date: date,
         duration_minutes: int,
         interval_minutes: int = 15,
-        buffer_minutes: int = 0,
+        buffer_minutes: int | None = None,
         staff_id: Any | None = None,
         service_id: Any | None = None,
     ) -> list[AvailabilitySlot]:
         """Return bookable slots for a staff member, or any eligible staff when unset."""
+        buffers = self.resolve_buffers(
+            business=business, service_id=service_id, buffer_minutes=buffer_minutes
+        )
         if staff_id:
             return self.staff_slots(
                 tenant=tenant,
@@ -70,7 +79,8 @@ class AvailabilityService:
                 target_date=target_date,
                 duration_minutes=duration_minutes,
                 interval_minutes=interval_minutes,
-                buffer_minutes=buffer_minutes,
+                buffers=buffers,
+                service_id=service_id,
             )
         return self.any_staff_slots(
             tenant=tenant,
@@ -78,7 +88,7 @@ class AvailabilityService:
             target_date=target_date,
             duration_minutes=duration_minutes,
             interval_minutes=interval_minutes,
-            buffer_minutes=buffer_minutes,
+            buffers=buffers,
             service_id=service_id,
         )
 
@@ -90,7 +100,7 @@ class AvailabilityService:
         target_date: date,
         duration_minutes: int,
         interval_minutes: int = 15,
-        buffer_minutes: int = 0,
+        buffer_minutes: int | None = None,
         service_id: Any | None = None,
     ) -> list[AvailabilitySlot]:
         """Slots where at least one eligible staff member is free (legacy entrypoint)."""
@@ -100,7 +110,9 @@ class AvailabilityService:
             target_date=target_date,
             duration_minutes=duration_minutes,
             interval_minutes=interval_minutes,
-            buffer_minutes=buffer_minutes,
+            buffers=self.resolve_buffers(
+                business=business, service_id=service_id, buffer_minutes=buffer_minutes
+            ),
             service_id=service_id,
         )
 
@@ -112,9 +124,13 @@ class AvailabilityService:
         target_date: date,
         duration_minutes: int,
         interval_minutes: int = 15,
-        buffer_minutes: int = 0,
+        buffers: BufferPair | None = None,
+        buffer_minutes: int | None = None,
         service_id: Any | None = None,
     ) -> list[AvailabilitySlot]:
+        resolved = buffers or self.resolve_buffers(
+            business=business, service_id=service_id, buffer_minutes=buffer_minutes
+        )
         staff_ids = self._eligible_staff_ids(
             tenant=tenant, business=business, service_id=service_id
         )
@@ -130,7 +146,8 @@ class AvailabilityService:
                 target_date=target_date,
                 duration_minutes=duration_minutes,
                 interval_minutes=interval_minutes,
-                buffer_minutes=buffer_minutes,
+                buffers=resolved,
+                service_id=service_id,
             ):
                 existing = merged.get(slot.start_at)
                 if existing is None:
@@ -158,19 +175,35 @@ class AvailabilityService:
         target_date: date,
         duration_minutes: int,
         interval_minutes: int = 15,
-        buffer_minutes: int = 0,
+        buffers: BufferPair | None = None,
+        buffer_minutes: int | None = None,
+        service_id: Any | None = None,
     ) -> list[AvailabilitySlot]:
-        if self._closed_for_business(tenant=tenant, business=business, target_date=target_date):
+        if not self._staff_is_active(tenant=tenant, staff_id=staff_id):
             return []
-        if self._staff_on_leave(
-            tenant=tenant, business=business, staff_id=staff_id, target_date=target_date
+        if service_id and not self.staff_can_perform_service(
+            tenant=tenant, staff_id=staff_id, service_id=service_id
         ):
             return []
+        if self._closed_for_business(tenant=tenant, business=business, target_date=target_date):
+            return []
+        resolved = buffers or self.resolve_buffers(
+            business=business, service_id=service_id, buffer_minutes=buffer_minutes
+        )
         windows = self._staff_windows(
             tenant=tenant,
             business=business,
             staff_id=staff_id,
             target_date=target_date,
+        )
+        leave_intervals = self._staff_leave_intervals(
+            tenant=tenant, business=business, staff_id=staff_id, target_date=target_date
+        )
+        windows = self._subtract_intervals_from_windows(
+            business=business,
+            target_date=target_date,
+            windows=windows,
+            blocked=leave_intervals,
         )
         return self._slots_from_windows(
             tenant=tenant,
@@ -179,7 +212,7 @@ class AvailabilityService:
             windows=windows,
             duration_minutes=duration_minutes,
             interval_minutes=interval_minutes,
-            buffer_minutes=buffer_minutes,
+            buffers=resolved,
             staff_id=str(staff_id),
         )
 
@@ -193,6 +226,8 @@ class AvailabilityService:
         staff_id: Any | None,
         service_id: Any | None = None,
         exclude_booking: Any | None = None,
+        buffer_before_minutes: int | None = None,
+        buffer_after_minutes: int | None = None,
     ) -> bool:
         if start_at <= timezone.now():
             return False
@@ -201,7 +236,17 @@ class AvailabilityService:
         if self._closed_for_business(tenant=tenant, business=business, target_date=target_date):
             return False
 
+        buffers = self.resolve_buffers(business=business, service_id=service_id)
+        if buffer_before_minutes is not None:
+            buffers = BufferPair(buffer_before_minutes, buffers.after_minutes)
+        if buffer_after_minutes is not None:
+            buffers = BufferPair(buffers.before_minutes, buffer_after_minutes)
+
         if staff_id:
+            if service_id and not self.staff_can_perform_service(
+                tenant=tenant, staff_id=staff_id, service_id=service_id
+            ):
+                return False
             return self._staff_is_available(
                 tenant=tenant,
                 business=business,
@@ -209,6 +254,7 @@ class AvailabilityService:
                 start_at=start_at,
                 end_at=end_at,
                 exclude_booking=exclude_booking,
+                buffers=buffers,
             )
 
         for candidate_id in self._eligible_staff_ids(
@@ -221,6 +267,7 @@ class AvailabilityService:
                 start_at=start_at,
                 end_at=end_at,
                 exclude_booking=exclude_booking,
+                buffers=buffers,
             ):
                 return True
         return False
@@ -234,8 +281,16 @@ class AvailabilityService:
         end_at: datetime,
         service_id: Any | None = None,
         exclude_booking: Any | None = None,
+        buffer_before_minutes: int | None = None,
+        buffer_after_minutes: int | None = None,
     ) -> UUID | None:
         """Pick the least-booked eligible staff free for the requested window (round-robin)."""
+        buffers = self.resolve_buffers(business=business, service_id=service_id)
+        if buffer_before_minutes is not None:
+            buffers = BufferPair(buffer_before_minutes, buffers.after_minutes)
+        if buffer_after_minutes is not None:
+            buffers = BufferPair(buffers.before_minutes, buffer_after_minutes)
+
         candidates = [
             sid
             for sid in self._eligible_staff_ids(
@@ -248,6 +303,7 @@ class AvailabilityService:
                 start_at=start_at,
                 end_at=end_at,
                 exclude_booking=exclude_booking,
+                buffers=buffers,
             )
         ]
         if not candidates:
@@ -269,6 +325,59 @@ class AvailabilityService:
         candidates.sort(key=lambda sid: (counts.get(str(sid), 0), str(sid)))
         return candidates[0]
 
+    def resolve_buffers(
+        self,
+        *,
+        business: Any,
+        service_id: Any | None = None,
+        buffer_minutes: int | None = None,
+    ) -> BufferPair:
+        if buffer_minutes is not None:
+            return BufferPair(before_minutes=buffer_minutes, after_minutes=buffer_minutes)
+
+        if service_id:
+            from apps.services.models import ServiceDuration
+
+            duration = (
+                ServiceDuration.objects.filter(service_id=service_id, is_default=True)
+                .order_by("id")
+                .first()
+            )
+            if duration is None:
+                duration = ServiceDuration.objects.filter(service_id=service_id).order_by("id").first()
+            if duration is not None:
+                after = int(duration.buffer_after_minutes or 0) + int(
+                    duration.cleanup_minutes or 0
+                )
+                return BufferPair(
+                    before_minutes=int(duration.buffer_before_minutes or 0),
+                    after_minutes=after,
+                )
+
+        settings = getattr(business, "settings", None)
+        business_buffer = int(getattr(settings, "buffer_time", 0) or 0)
+        return BufferPair(before_minutes=business_buffer, after_minutes=business_buffer)
+
+    def service_buffer_defaults(self, *, service_id: Any | None) -> BufferPair:
+        if not service_id:
+            return BufferPair()
+        from apps.services.models import ServiceDuration
+
+        duration = (
+            ServiceDuration.objects.filter(service_id=service_id, is_default=True)
+            .order_by("id")
+            .first()
+        )
+        if duration is None:
+            duration = ServiceDuration.objects.filter(service_id=service_id).order_by("id").first()
+        if duration is None:
+            return BufferPair()
+        after = int(duration.buffer_after_minutes or 0) + int(duration.cleanup_minutes or 0)
+        return BufferPair(
+            before_minutes=int(duration.buffer_before_minutes or 0),
+            after_minutes=after,
+        )
+
     def _staff_is_available(
         self,
         *,
@@ -278,14 +387,16 @@ class AvailabilityService:
         start_at: datetime,
         end_at: datetime,
         exclude_booking: Any | None = None,
+        buffers: BufferPair | None = None,
     ) -> bool:
+        if not self._staff_is_active(tenant=tenant, staff_id=staff_id):
+            return False
+
         target_date = self._local_date(business=business, moment=start_at)
-        if self._staff_on_leave(
-            tenant=tenant,
-            business=business,
-            staff_id=staff_id,
-            target_date=target_date,
-        ):
+        leave_intervals = self._staff_leave_intervals(
+            tenant=tenant, business=business, staff_id=staff_id, target_date=target_date
+        )
+        if self._interval_blocked(start_at=start_at, end_at=end_at, blocked=leave_intervals):
             return False
 
         windows = self._staff_windows(
@@ -294,21 +405,62 @@ class AvailabilityService:
             staff_id=staff_id,
             target_date=target_date,
         )
+        windows = self._subtract_intervals_from_windows(
+            business=business,
+            target_date=target_date,
+            windows=windows,
+            blocked=leave_intervals,
+        )
         capacity = self._window_capacity(
             business=business, windows=windows, start_at=start_at, end_at=end_at
         )
         if capacity is None:
             return False
 
-        conflict_count = self.repository.conflicts(
+        resolved = buffers or BufferPair()
+        conflict_start = start_at - timedelta(minutes=resolved.before_minutes)
+        conflict_end = end_at + timedelta(minutes=resolved.after_minutes)
+        conflict_count = self.repository.conflict_count(
             tenant=tenant,
             business=business,
             staff_id=staff_id,
-            start_at=start_at,
-            end_at=end_at,
+            start_at=conflict_start,
+            end_at=conflict_end,
             exclude_booking=exclude_booking,
-        ).count()
+            respect_booking_buffers=True,
+        )
         return conflict_count < capacity
+
+    def _staff_is_active(self, *, tenant: Any, staff_id: Any) -> bool:
+        from apps.staff.models import EmploymentStatus, Staff
+
+        return (
+            Staff.objects.require_tenant(tenant)
+            .filter(id=staff_id, employment_status=EmploymentStatus.ACTIVE)
+            .exists()
+        )
+
+    def staff_can_perform_service(
+        self, *, tenant: Any, staff_id: Any, service_id: Any | None
+    ) -> bool:
+        """Return whether staff may be booked for the service.
+
+        Once a staff member has any active service assignment, they may only be
+        booked for those assigned services. Staff with no assignments remain
+        unrestricted (legacy / not yet configured).
+        """
+        if not service_id or not staff_id:
+            return True
+
+        from apps.staff.models import StaffServiceAssignment
+
+        assignments = StaffServiceAssignment.objects.require_tenant(tenant).filter(
+            staff_id=staff_id,
+            is_active_assignment=True,
+        )
+        if not assignments.exists():
+            return True
+        return assignments.filter(service_id=service_id).exists()
 
     def _eligible_staff_ids(
         self,
@@ -324,7 +476,7 @@ class AvailabilityService:
             employment_status=EmploymentStatus.ACTIVE,
         )
         if service_id:
-            assigned_ids = list(
+            assigned_ids = set(
                 StaffServiceAssignment.objects.require_tenant(tenant)
                 .filter(
                     service_id=service_id,
@@ -334,10 +486,25 @@ class AvailabilityService:
                 )
                 .values_list("staff_id", flat=True)
             )
-            # Prefer assigned staff; if none are linked to the service yet, fall back
-            # so ops can still book against weekly schedules.
-            if assigned_ids:
-                queryset = queryset.filter(id__in=assigned_ids)
+            # Staff who already have assignments for other services must not be
+            # auto-picked for this one. Staff with zero assignments stay eligible
+            # until ops configures their service list.
+            restricted_staff_ids = set(
+                StaffServiceAssignment.objects.require_tenant(tenant)
+                .filter(
+                    is_active_assignment=True,
+                    staff__business=business,
+                    staff__employment_status=EmploymentStatus.ACTIVE,
+                )
+                .values_list("staff_id", flat=True)
+                .distinct()
+            )
+            if assigned_ids or restricted_staff_ids:
+                unrestricted_ids = set(
+                    queryset.exclude(id__in=restricted_staff_ids).values_list("id", flat=True)
+                )
+                allowed_ids = assigned_ids | unrestricted_ids
+                queryset = queryset.filter(id__in=allowed_ids)
         return list(queryset.order_by("id").values_list("id", flat=True))
 
     def _business_tz(self, business: Any) -> ZoneInfo:
@@ -355,8 +522,7 @@ class AvailabilityService:
         return moment.astimezone(self._business_tz(business)).date()
 
     def _combine_local(self, *, business: Any, target_date: date, clock: time) -> datetime:
-        local = datetime.combine(target_date, clock, tzinfo=self._business_tz(business))
-        return local
+        return datetime.combine(target_date, clock, tzinfo=self._business_tz(business))
 
     def _window_capacity(
         self,
@@ -386,20 +552,144 @@ class AvailabilityService:
         staff_id: Any,
         target_date: date,
     ) -> list[tuple[time, time, int]]:
-        special = StaffSpecialAvailability.objects.for_tenant(tenant).filter(
-            business=business,
-            staff_id=staff_id,
-            starts_at__date=target_date,
+        special = list(
+            StaffSpecialAvailability.objects.for_tenant(tenant).filter(
+                business=business,
+                staff_id=staff_id,
+                starts_at__date=target_date,
+            )
         )
-        if special.exists():
+        if special:
             return [(row.starts_at.time(), row.ends_at.time(), row.capacity) for row in special]
-        rows = StaffWeeklySchedule.objects.for_tenant(tenant).filter(
+
+        rows = list(
+            StaffWeeklySchedule.objects.for_tenant(tenant).filter(
+                business=business,
+                staff_id=staff_id,
+                weekday=target_date.weekday(),
+                is_available=True,
+            )
+        )
+        windows: list[tuple[time, time, int]] = []
+        for row in rows:
+            base = [(row.shift_start, row.shift_end, row.capacity)]
+            breaks = self._parse_break_periods(row.break_periods)
+            if breaks:
+                windows.extend(
+                    self._subtract_intervals_from_windows(
+                        business=business,
+                        target_date=target_date,
+                        windows=base,
+                        blocked=[
+                            (
+                                self._combine_local(
+                                    business=business, target_date=target_date, clock=start
+                                ),
+                                self._combine_local(
+                                    business=business, target_date=target_date, clock=end
+                                ),
+                            )
+                            for start, end in breaks
+                        ],
+                    )
+                )
+            else:
+                windows.append((row.shift_start, row.shift_end, row.capacity))
+        return windows
+
+    def _parse_break_periods(self, break_periods: Any) -> list[tuple[time, time]]:
+        parsed: list[tuple[time, time]] = []
+        for period in break_periods or []:
+            if not isinstance(period, dict):
+                continue
+            start_raw = period.get("start") or period.get("start_time")
+            end_raw = period.get("end") or period.get("end_time")
+            if not start_raw or not end_raw:
+                continue
+            start = self._parse_clock(start_raw)
+            end = self._parse_clock(end_raw)
+            if start is None or end is None or start >= end:
+                continue
+            parsed.append((start, end))
+        return parsed
+
+    def _parse_clock(self, value: Any) -> time | None:
+        if isinstance(value, time):
+            return value
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        for fmt in ("%H:%M:%S", "%H:%M"):
+            try:
+                return datetime.strptime(text, fmt).time()
+            except ValueError:
+                continue
+        return None
+
+    def _staff_leave_intervals(
+        self, *, tenant: Any, business: Any, staff_id: Any, target_date: date
+    ) -> list[tuple[datetime, datetime]]:
+        day_start = self._combine_local(business=business, target_date=target_date, clock=time.min)
+        day_end = self._combine_local(business=business, target_date=target_date, clock=time.max)
+        rows = StaffLeave.objects.for_tenant(tenant).filter(
             business=business,
             staff_id=staff_id,
-            weekday=target_date.weekday(),
-            is_available=True,
+            starts_at__lt=day_end,
+            ends_at__gt=day_start,
+            approved=True,
         )
-        return [(row.shift_start, row.shift_end, row.capacity) for row in rows]
+        return [(row.starts_at, row.ends_at) for row in rows]
+
+    def _interval_blocked(
+        self,
+        *,
+        start_at: datetime,
+        end_at: datetime,
+        blocked: list[tuple[datetime, datetime]],
+    ) -> bool:
+        for block_start, block_end in blocked:
+            if block_start < end_at and block_end > start_at:
+                return True
+        return False
+
+    def _subtract_intervals_from_windows(
+        self,
+        *,
+        business: Any,
+        target_date: date,
+        windows: list[tuple[time, time, int]],
+        blocked: list[tuple[datetime, datetime]],
+    ) -> list[tuple[time, time, int]]:
+        if not blocked:
+            return windows
+
+        result: list[tuple[time, time, int]] = []
+        for window_start, window_end, capacity in windows:
+            segments: list[tuple[datetime, datetime]] = [
+                (
+                    self._combine_local(
+                        business=business, target_date=target_date, clock=window_start
+                    ),
+                    self._combine_local(
+                        business=business, target_date=target_date, clock=window_end
+                    ),
+                )
+            ]
+            for block_start, block_end in blocked:
+                next_segments: list[tuple[datetime, datetime]] = []
+                for seg_start, seg_end in segments:
+                    if block_end <= seg_start or block_start >= seg_end:
+                        next_segments.append((seg_start, seg_end))
+                        continue
+                    if block_start > seg_start:
+                        next_segments.append((seg_start, block_start))
+                    if block_end < seg_end:
+                        next_segments.append((block_end, seg_end))
+                segments = next_segments
+            for seg_start, seg_end in segments:
+                if seg_start < seg_end:
+                    result.append((seg_start.time(), seg_end.time(), capacity))
+        return result
 
     def _slots_from_windows(
         self,
@@ -410,13 +700,12 @@ class AvailabilityService:
         windows: list[tuple[time, time, int]],
         duration_minutes: int,
         interval_minutes: int,
-        buffer_minutes: int,
+        buffers: BufferPair,
         staff_id: str | None,
     ) -> list[AvailabilitySlot]:
         slots: list[AvailabilitySlot] = []
         duration = timedelta(minutes=duration_minutes)
         interval = timedelta(minutes=interval_minutes)
-        buffer = timedelta(minutes=buffer_minutes)
         now = timezone.now()
         for start_time, end_time, capacity in windows:
             cursor = self._combine_local(
@@ -428,15 +717,16 @@ class AvailabilityService:
             while cursor + duration <= window_end:
                 if cursor > now:
                     slot_end = cursor + duration
-                    conflict_start = cursor - buffer
-                    conflict_end = slot_end + buffer
-                    conflict_count = self.repository.conflicts(
+                    conflict_start = cursor - timedelta(minutes=buffers.before_minutes)
+                    conflict_end = slot_end + timedelta(minutes=buffers.after_minutes)
+                    conflict_count = self.repository.conflict_count(
                         tenant=tenant,
                         business=business,
                         staff_id=staff_id,
                         start_at=conflict_start,
                         end_at=conflict_end,
-                    ).count()
+                        respect_booking_buffers=True,
+                    )
                     if conflict_count < capacity:
                         slots.append(AvailabilitySlot(cursor, slot_end, staff_id, capacity))
                 cursor += interval
@@ -461,23 +751,6 @@ class AvailabilityService:
                 business=business,
                 starts_at__lt=day_end,
                 ends_at__gt=day_start,
-            )
-            .exists()
-        )
-
-    def _staff_on_leave(
-        self, *, tenant: Any, business: Any, staff_id: Any, target_date: date
-    ) -> bool:
-        day_start = self._combine_local(business=business, target_date=target_date, clock=time.min)
-        day_end = self._combine_local(business=business, target_date=target_date, clock=time.max)
-        return (
-            StaffLeave.objects.for_tenant(tenant)
-            .filter(
-                business=business,
-                staff_id=staff_id,
-                starts_at__lt=day_end,
-                ends_at__gt=day_start,
-                approved=True,
             )
             .exists()
         )

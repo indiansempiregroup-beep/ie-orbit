@@ -13,15 +13,32 @@ export function BIForecastPage() {
       <Card>
         <h1 style={{ marginTop: 0 }}>BI Forecast</h1>
         <p style={{ color: 'var(--muted-foreground)' }}>
-          Simple projection based on recent booking and revenue patterns.
+          Projection for the next {forecast?.horizon_days ?? 30} days based on the last{' '}
+          {forecast?.based_on_days ?? 30} days ({forecast?.based_on_bookings ?? 0} bookings).
         </p>
       </Card>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <StatCard label="Horizon" value={`${forecast?.horizon_days ?? 30} days`} />
-        <StatCard label="Projected bookings" value={forecast?.projected_bookings ?? 0} />
+        <StatCard label="Projected bookings" value={forecastQuery.isLoading ? '...' : forecast?.projected_bookings ?? 0} />
         <StatCard
           label="Projected revenue"
-          value={`${forecast?.currency ?? ''} ${(forecast?.projected_revenue ?? 0).toFixed(2)}`}
+          value={
+            forecastQuery.isLoading
+              ? '...'
+              : `${forecast?.currency ?? ''} ${(forecast?.projected_revenue ?? 0).toFixed(2)}`
+          }
+        />
+        <StatCard
+          label="Avg daily bookings"
+          value={forecastQuery.isLoading ? '...' : forecast?.avg_daily_bookings ?? 0}
+        />
+        <StatCard
+          label="Avg daily revenue"
+          value={
+            forecastQuery.isLoading
+              ? '...'
+              : `${forecast?.currency ?? ''} ${(forecast?.avg_daily_revenue ?? 0).toFixed(2)}`
+          }
         />
       </div>
     </div>

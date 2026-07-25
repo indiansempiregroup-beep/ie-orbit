@@ -18,10 +18,18 @@ from apps.bookings.api.serializers import (
     BookingPatchSerializer,
     BookingRescheduleSerializer,
     BookingSerializer,
+    StaffLeaveSerializer,
+    StaffSpecialAvailabilitySerializer,
     StaffWeeklyScheduleBulkSerializer,
     StaffWeeklyScheduleSerializer,
 )
-from apps.bookings.models import Booking, BookingStatus, StaffWeeklySchedule
+from apps.bookings.models import (
+    Booking,
+    BookingStatus,
+    StaffLeave,
+    StaffSpecialAvailability,
+    StaffWeeklySchedule,
+)
 from apps.bookings.repositories import BookingRepository
 from apps.bookings.services import AvailabilityService, BookingService
 from apps.businesses.models import Business
@@ -258,7 +266,7 @@ class AvailabilityView(APIView):
             target_date=serializer.validated_data["date"],
             duration_minutes=serializer.validated_data["duration_minutes"],
             interval_minutes=serializer.validated_data["interval_minutes"],
-            buffer_minutes=serializer.validated_data["buffer_minutes"],
+            buffer_minutes=serializer.validated_data.get("buffer_minutes"),
         )
         return success_response(
             [slot.as_dict() for slot in slots],
@@ -344,7 +352,7 @@ class StaffWeeklyScheduleListCreateView(APIView):
         )
         return success_response(
             StaffWeeklyScheduleSerializer(row).data,
-            status=status.HTTP_201_CREATED,
+            status_code=status.HTTP_201_CREATED,
             request_id=getattr(request, "request_id", None),
         )
 
@@ -375,6 +383,8 @@ class StaffWeeklyScheduleBulkView(APIView):
                     "shift_start": entry["shift_start"],
                     "shift_end": entry["shift_end"],
                     "capacity": entry.get("capacity", 1),
+                    "break_periods": entry.get("break_periods", []),
+                    "overtime_allowed": entry.get("overtime_allowed", False),
                 },
             )
             saved.append(row)
@@ -383,3 +393,205 @@ class StaffWeeklyScheduleBulkView(APIView):
             StaffWeeklyScheduleSerializer(saved, many=True).data,
             request_id=getattr(request, "request_id", None),
         )
+
+
+class StaffLeaveListCreateView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    @extend_schema(
+        tags=["Staff Leave"],
+        parameters=[
+            OpenApiParameter("staff_id", str, required=True, description="Staff UUID."),
+            OpenApiParameter("business", str, description="Business UUID."),
+            OpenApiParameter("date_from", str, description="Filter leaves ending on/after this date."),
+            OpenApiParameter("date_to", str, description="Filter leaves starting on/before this date."),
+        ],
+        responses={200: StaffLeaveSerializer(many=True)},
+    )
+    def get(self, request: Request) -> Response:
+        staff_id = request.query_params.get("staff_id")
+        if not staff_id:
+            raise ValidationError({"staff_id": "This query parameter is required."})
+        business = AvailabilityView()._business(request, request.query_params.get("business"))
+        rows = StaffLeave.objects.for_tenant(request.current_tenant).filter(
+            business=business, staff_id=staff_id
+        )
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        if date_from:
+            rows = rows.filter(ends_at__date__gte=date_from)
+        if date_to:
+            rows = rows.filter(starts_at__date__lte=date_to)
+        return success_response(
+            StaffLeaveSerializer(rows.order_by("-starts_at"), many=True).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Leave"],
+        request=StaffLeaveSerializer,
+        responses={201: StaffLeaveSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        serializer = StaffLeaveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
+        row = StaffLeave.objects.create(
+            tenant=request.current_tenant,
+            business=business,
+            staff_id=serializer.validated_data["staff_id"],
+            starts_at=serializer.validated_data["starts_at"],
+            ends_at=serializer.validated_data["ends_at"],
+            leave_type=serializer.validated_data.get("leave_type", "leave"),
+            reason=serializer.validated_data.get("reason", ""),
+            approved=serializer.validated_data.get("approved", True),
+        )
+        return success_response(
+            StaffLeaveSerializer(row).data,
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class StaffLeaveDetailView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    def _get(self, request: Request, leave_id: str) -> StaffLeave:
+        return get_object_or_404(
+            StaffLeave.objects.for_tenant(request.current_tenant), id=leave_id
+        )
+
+    @extend_schema(tags=["Staff Leave"], responses={200: StaffLeaveSerializer})
+    def get(self, request: Request, leave_id: str) -> Response:
+        row = self._get(request, leave_id)
+        return success_response(
+            StaffLeaveSerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Leave"], request=StaffLeaveSerializer, responses={200: StaffLeaveSerializer}
+    )
+    def patch(self, request: Request, leave_id: str) -> Response:
+        row = self._get(request, leave_id)
+        serializer = StaffLeaveSerializer(row, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            if field == "business":
+                continue
+            setattr(row, field, value)
+        row.save()
+        return success_response(
+            StaffLeaveSerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Staff Leave"], responses={204: OpenApiResponse(description="Deleted")})
+    def delete(self, request: Request, leave_id: str) -> Response:
+        row = self._get(request, leave_id)
+        row.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StaffSpecialAvailabilityListCreateView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    @extend_schema(
+        tags=["Staff Special Availability"],
+        parameters=[
+            OpenApiParameter("staff_id", str, required=True, description="Staff UUID."),
+            OpenApiParameter("business", str, description="Business UUID."),
+            OpenApiParameter("date_from", str, description="Filter windows ending on/after date."),
+            OpenApiParameter("date_to", str, description="Filter windows starting on/before date."),
+        ],
+        responses={200: StaffSpecialAvailabilitySerializer(many=True)},
+    )
+    def get(self, request: Request) -> Response:
+        staff_id = request.query_params.get("staff_id")
+        if not staff_id:
+            raise ValidationError({"staff_id": "This query parameter is required."})
+        business = AvailabilityView()._business(request, request.query_params.get("business"))
+        rows = StaffSpecialAvailability.objects.for_tenant(request.current_tenant).filter(
+            business=business, staff_id=staff_id
+        )
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        if date_from:
+            rows = rows.filter(ends_at__date__gte=date_from)
+        if date_to:
+            rows = rows.filter(starts_at__date__lte=date_to)
+        return success_response(
+            StaffSpecialAvailabilitySerializer(rows.order_by("-starts_at"), many=True).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Special Availability"],
+        request=StaffSpecialAvailabilitySerializer,
+        responses={201: StaffSpecialAvailabilitySerializer},
+    )
+    def post(self, request: Request) -> Response:
+        serializer = StaffSpecialAvailabilitySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
+        row = StaffSpecialAvailability.objects.create(
+            tenant=request.current_tenant,
+            business=business,
+            staff_id=serializer.validated_data["staff_id"],
+            starts_at=serializer.validated_data["starts_at"],
+            ends_at=serializer.validated_data["ends_at"],
+            capacity=serializer.validated_data.get("capacity", 1),
+            reason=serializer.validated_data.get("reason", ""),
+        )
+        return success_response(
+            StaffSpecialAvailabilitySerializer(row).data,
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class StaffSpecialAvailabilityDetailView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    def _get(self, request: Request, special_id: str) -> StaffSpecialAvailability:
+        return get_object_or_404(
+            StaffSpecialAvailability.objects.for_tenant(request.current_tenant), id=special_id
+        )
+
+    @extend_schema(
+        tags=["Staff Special Availability"], responses={200: StaffSpecialAvailabilitySerializer}
+    )
+    def get(self, request: Request, special_id: str) -> Response:
+        row = self._get(request, special_id)
+        return success_response(
+            StaffSpecialAvailabilitySerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Special Availability"],
+        request=StaffSpecialAvailabilitySerializer,
+        responses={200: StaffSpecialAvailabilitySerializer},
+    )
+    def patch(self, request: Request, special_id: str) -> Response:
+        row = self._get(request, special_id)
+        serializer = StaffSpecialAvailabilitySerializer(row, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            if field == "business":
+                continue
+            setattr(row, field, value)
+        row.save()
+        return success_response(
+            StaffSpecialAvailabilitySerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Special Availability"],
+        responses={204: OpenApiResponse(description="Deleted")},
+    )
+    def delete(self, request: Request, special_id: str) -> Response:
+        row = self._get(request, special_id)
+        row.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

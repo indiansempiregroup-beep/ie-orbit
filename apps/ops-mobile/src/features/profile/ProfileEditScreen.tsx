@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { FormSection } from '../../components/ui/FormSection';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
@@ -11,7 +12,7 @@ import { TIMEZONES } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { colors, typography } from '../../theme/tokens';
+import { colors, fonts, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 
 export function ProfileEditScreen() {
@@ -94,21 +95,31 @@ export function ProfileEditScreen() {
         />
       }
     >
-      <Text style={styles.title}>Edit profile</Text>
-      <ImagePickerButton
-        label="Profile photo"
-        variant="avatar"
-        valueUri={photoPreview}
-        onPicked={(asset) => {
-          setPhotoAsset(asset);
-          setPhotoPreview(asset.uri);
-        }}
-        helperText="Tap to take a photo or choose from your gallery."
-      />
-      <Input label="First name" value={firstName} onChangeText={setFirstName} />
-      <Input label="Last name" value={lastName} onChangeText={setLastName} />
-      <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-      <SelectField label="Timezone" value={timezone} options={timezoneOptions} onChange={setTimezone} />
+      <View style={styles.intro}>
+        <Text style={styles.title}>Edit profile</Text>
+        <Text style={styles.subtitle}>Your name, photo, and regional defaults.</Text>
+      </View>
+
+      <FormSection title="Identity">
+        <ImagePickerButton
+          label="Profile photo"
+          variant="avatar"
+          valueUri={photoPreview}
+          onPicked={(asset) => {
+            setPhotoAsset(asset);
+            setPhotoPreview(asset.uri);
+          }}
+          helperText="Tap to take a photo or choose from your gallery."
+        />
+        <Input label="First name" value={firstName} onChangeText={setFirstName} />
+        <Input label="Last name" value={lastName} onChangeText={setLastName} />
+      </FormSection>
+
+      <FormSection title="Contact & region">
+        <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+        <SelectField label="Timezone" value={timezone} options={timezoneOptions} onChange={setTimezone} />
+      </FormSection>
+
       {message ? <Text style={styles.success}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
@@ -116,7 +127,9 @@ export function ProfileEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.foreground },
+  intro: { gap: 4, marginBottom: 4 },
+  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
+  subtitle: { ...typography.body, color: colors.mutedForeground },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },
 });

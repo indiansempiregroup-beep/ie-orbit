@@ -52,7 +52,14 @@ export function normalizeCustomer(raw: RawRecord): Customer {
 }
 
 export function normalizeService(raw: RawRecord): Service {
-  const durations = (raw.durations as Array<{ duration_minutes?: number; is_default?: boolean }> | undefined) ?? [];
+  const durations =
+    (raw.durations as Array<{
+      duration_minutes?: number;
+      buffer_before_minutes?: number;
+      buffer_after_minutes?: number;
+      cleanup_minutes?: number;
+      is_default?: boolean;
+    }> | undefined) ?? [];
   const prices = (raw.prices as Array<{ base_price?: number | string; currency?: string; is_default?: boolean }> | undefined) ?? [];
   const images = (raw.images as Array<{ is_primary?: boolean; image_url?: string; thumbnail_url?: string }> | undefined) ?? [];
   const defaultDuration = durations.find((row) => row.is_default) ?? durations[0];
@@ -67,6 +74,10 @@ export function normalizeService(raw: RawRecord): Service {
     description: (raw.short_description as string | undefined) || (raw.description as string | undefined) || null,
     status: (raw.status as string | undefined) ?? 'draft',
     duration_minutes: defaultDuration?.duration_minutes,
+    buffer_before_minutes: defaultDuration?.buffer_before_minutes ?? 0,
+    buffer_after_minutes: defaultDuration?.buffer_after_minutes ?? 0,
+    cleanup_minutes: defaultDuration?.cleanup_minutes ?? 0,
+    durations,
     price: basePrice != null ? Number(basePrice) : undefined,
     currency: (defaultPrice?.currency as string | undefined) ?? null,
     image_url: imageUrl,

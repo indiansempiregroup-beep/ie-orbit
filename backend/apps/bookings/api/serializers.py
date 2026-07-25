@@ -11,6 +11,8 @@ from apps.bookings.models import (
     BookingSource,
     BookingTimeline,
     RecurrenceFrequency,
+    StaffLeave,
+    StaffSpecialAvailability,
     StaffWeeklySchedule,
 )
 
@@ -109,8 +111,8 @@ class BookingCreateSerializer(serializers.Serializer):
     service_id = serializers.UUIDField()
     start_at = serializers.DateTimeField()
     duration_minutes = serializers.IntegerField(min_value=1)
-    buffer_before_minutes = serializers.IntegerField(min_value=0, required=False, default=0)
-    buffer_after_minutes = serializers.IntegerField(min_value=0, required=False, default=0)
+    buffer_before_minutes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
+    buffer_after_minutes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
     source = serializers.ChoiceField(choices=BookingSource.choices, required=False)
     channel = serializers.ChoiceField(choices=BookingChannel.choices, required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
@@ -148,7 +150,7 @@ class AvailabilityQuerySerializer(serializers.Serializer):
     date = serializers.DateField()
     duration_minutes = serializers.IntegerField(min_value=1, default=30)
     interval_minutes = serializers.IntegerField(min_value=1, default=15)
-    buffer_minutes = serializers.IntegerField(min_value=0, default=0)
+    buffer_minutes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
 
 
 class AvailabilitySlotSerializer(serializers.Serializer):
@@ -182,9 +184,48 @@ class StaffWeeklyScheduleInputSerializer(serializers.Serializer):
     shift_start = serializers.TimeField()
     shift_end = serializers.TimeField()
     capacity = serializers.IntegerField(min_value=1, default=1)
+    break_periods = serializers.JSONField(required=False, default=list)
+    overtime_allowed = serializers.BooleanField(required=False, default=False)
 
 
 class StaffWeeklyScheduleBulkSerializer(serializers.Serializer):
     business = serializers.UUIDField(required=False)
     staff_id = serializers.UUIDField()
     schedules = StaffWeeklyScheduleInputSerializer(many=True)
+
+
+class StaffLeaveSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffLeave
+        fields = [
+            "id",
+            "business",
+            "staff_id",
+            "starts_at",
+            "ends_at",
+            "leave_type",
+            "reason",
+            "approved",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {"business": {"required": False}}
+
+
+class StaffSpecialAvailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffSpecialAvailability
+        fields = [
+            "id",
+            "business",
+            "staff_id",
+            "starts_at",
+            "ends_at",
+            "capacity",
+            "reason",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {"business": {"required": False}}

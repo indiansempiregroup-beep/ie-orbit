@@ -298,7 +298,7 @@ class MobileAvailabilityView(APIView):
             target_date=serializer.validated_data["date"],
             duration_minutes=serializer.validated_data["duration_minutes"],
             interval_minutes=serializer.validated_data["interval_minutes"],
-            buffer_minutes=serializer.validated_data["buffer_minutes"],
+            buffer_minutes=serializer.validated_data.get("buffer_minutes"),
         )
         return success_response(
             {

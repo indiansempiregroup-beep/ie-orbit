@@ -106,6 +106,36 @@ class BIViewSet(viewsets.ViewSet):
         return success_response(result, request_id=getattr(request, "request_id", None))
 
     @extend_schema(tags=["BI"], responses={200: dict})
+    def growth(self, request: Request) -> Response:
+        parsed_start, parsed_end = _parse_dates(request)
+        business = _resolve_business(request)
+        if parsed_start is None or parsed_end is None:
+            parsed_end = timezone.now().date()
+            parsed_start = parsed_end - timedelta(days=29)
+        result = self.service.growth(
+            tenant=request.current_tenant,
+            business=business,
+            start_date=parsed_start,
+            end_date=parsed_end,
+        )
+        return success_response(result, request_id=getattr(request, "request_id", None))
+
+    @extend_schema(tags=["BI"], responses={200: dict})
+    def operations(self, request: Request) -> Response:
+        parsed_start, parsed_end = _parse_dates(request)
+        business = _resolve_business(request)
+        if parsed_start is None or parsed_end is None:
+            parsed_end = timezone.now().date()
+            parsed_start = parsed_end - timedelta(days=29)
+        result = self.service.operations(
+            tenant=request.current_tenant,
+            business=business,
+            start_date=parsed_start,
+            end_date=parsed_end,
+        )
+        return success_response(result, request_id=getattr(request, "request_id", None))
+
+    @extend_schema(tags=["BI"], responses={200: dict})
     def reports(self, request: Request) -> Response:
         parsed_start, parsed_end = _parse_dates(request)
         business = _resolve_business(request)

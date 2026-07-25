@@ -3,11 +3,25 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 
-type Props = {
+type SingleProps = {
+  mode?: 'single';
   value: string;
   onChange: (isoDate: string) => void;
+  values?: never;
+  onChangeValues?: never;
   allowPast?: boolean;
 };
+
+type MultiProps = {
+  mode: 'multiple';
+  values: string[];
+  onChangeValues: (isoDates: string[]) => void;
+  value?: never;
+  onChange?: never;
+  allowPast?: boolean;
+};
+
+type Props = SingleProps | MultiProps;
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
@@ -23,15 +37,25 @@ function parseIso(value: string) {
   return new Date(year, month - 1, day);
 }
 
-export function CalendarPicker({ value, onChange, allowPast = true }: Props) {
-  const selectedDate = value ? parseIso(value) : new Date();
+export function CalendarPicker(props: Props) {
+  const allowPast = props.allowPast ?? true;
+  const isMulti = props.mode === 'multiple';
+  const selectedKey = isMulti ? props.values.join(',') : props.value || '';
+  const selectedSet = useMemo(
+    () => new Set(selectedKey ? selectedKey.split(',') : []),
+    [selectedKey],
+  );
+  const anchor = isMulti
+    ? props.values[props.values.length - 1] || toIso(new Date())
+    : props.value || toIso(new Date());
+  const selectedDate = parseIso(anchor);
   const [month, setMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
 
   useEffect(() => {
-    if (!value) return;
-    const next = parseIso(value);
+    if (!anchor) return;
+    const next = parseIso(anchor);
     setMonth(new Date(next.getFullYear(), next.getMonth(), 1));
-  }, [value]);
+  }, [anchor]);
 
   const weeks = useMemo(() => {
     const year = month.getFullYear();
@@ -52,6 +76,17 @@ export function CalendarPicker({ value, onChange, allowPast = true }: Props) {
   }, [month]);
 
   const todayIso = toIso(new Date());
+
+  function toggleDay(iso: string) {
+    if (isMulti) {
+      const next = new Set(props.values);
+      if (next.has(iso)) next.delete(iso);
+      else next.add(iso);
+      props.onChangeValues([...next].sort());
+      return;
+    }
+    props.onChange(iso);
+  }
 
   return (
     <View style={styles.card}>
@@ -85,7 +120,7 @@ export function CalendarPicker({ value, onChange, allowPast = true }: Props) {
             if (!cell.day || !cell.iso) {
               return <View key={`empty-${weekIndex}-${cellIndex}`} style={styles.cell} />;
             }
-            const isSelected = cell.iso === value;
+            const isSelected = selectedSet.has(cell.iso);
             const isToday = cell.iso === todayIso;
             const isPast = cell.iso < todayIso;
             const disabled = !allowPast && isPast;
@@ -98,7 +133,7 @@ export function CalendarPicker({ value, onChange, allowPast = true }: Props) {
                   isSelected && { backgroundColor: colors.primary },
                   isToday && !isSelected && styles.todayCell,
                 ]}
-                onPress={() => onChange(cell.iso!)}
+                onPress={() => toggleDay(cell.iso!)}
               >
                 <Text
                   style={[
@@ -123,20 +158,23 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.lg,
+    shadowColor: '#142033',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   navBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
     backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  monthLabel: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  monthLabel: { ...typography.label, color: colors.foreground, fontFamily: typography.label.fontFamily },
   weekdays: { flexDirection: 'row', marginBottom: spacing.sm },
   weekday: { flex: 1, textAlign: 'center', ...typography.caption, color: colors.mutedForeground, fontWeight: '600' },
   weekRow: { flexDirection: 'row' },

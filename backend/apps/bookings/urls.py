@@ -11,6 +11,10 @@ from apps.bookings.api.views import (
     BookingRescheduleView,
     BusinessAvailabilityView,
     StaffAvailabilityView,
+    StaffLeaveDetailView,
+    StaffLeaveListCreateView,
+    StaffSpecialAvailabilityDetailView,
+    StaffSpecialAvailabilityListCreateView,
     StaffWeeklyScheduleBulkView,
     StaffWeeklyScheduleListCreateView,
 )
@@ -47,5 +51,21 @@ urlpatterns = [
         "staff-weekly-schedules/bulk",
         StaffWeeklyScheduleBulkView.as_view(),
         name="staff-weekly-schedule-bulk",
+    ),
+    path("staff-leaves", StaffLeaveListCreateView.as_view(), name="staff-leave-list-create"),
+    path(
+        "staff-leaves/<uuid:leave_id>",
+        StaffLeaveDetailView.as_view(),
+        name="staff-leave-detail",
+    ),
+    path(
+        "staff-special-availability",
+        StaffSpecialAvailabilityListCreateView.as_view(),
+        name="staff-special-availability-list-create",
+    ),
+    path(
+        "staff-special-availability/<uuid:special_id>",
+        StaffSpecialAvailabilityDetailView.as_view(),
+        name="staff-special-availability-detail",
     ),
 ]

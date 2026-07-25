@@ -29,7 +29,7 @@ type AuthState = {
   biometricEnabled: boolean;
   biometricAvailable: boolean;
   biometricLabel: string;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   loginWithBiometrics: () => Promise<void>;
   /** Enable Face ID / fingerprint using the current session (Face ID only — no password). */
   enableBiometrics: () => Promise<void>;
@@ -170,10 +170,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, rememberMe = true) => {
     setLoading(true);
     try {
-      const response = await opsClient.auth.login({ email, password, remember_me: true });
+      const response = await opsClient.auth.login({
+        email,
+        password,
+        remember_me: rememberMe,
+      });
       await applySession(response.data);
       await refreshBiometricState();
     } finally {

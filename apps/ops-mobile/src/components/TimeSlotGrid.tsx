@@ -1,6 +1,6 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, typography } from '../theme/tokens';
+import React, { useState } from 'react';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
 import { formatTime } from '../utils/format';
 
 type Slot = { start_at: string };
@@ -13,6 +13,9 @@ type Props = {
   emptyMessage?: string;
 };
 
+const COLUMNS = 4;
+const GAP = spacing.sm;
+
 export function TimeSlotGrid({
   slots,
   selected,
@@ -20,18 +23,33 @@ export function TimeSlotGrid({
   loading,
   emptyMessage = 'No timeslot available for this date. Try another day or staff member.',
 }: Props) {
+  const [gridWidth, setGridWidth] = useState(0);
+  const slotWidth = gridWidth > 0 ? (gridWidth - GAP * (COLUMNS - 1)) / COLUMNS : undefined;
+
+  function onGridLayout(event: LayoutChangeEvent) {
+    const next = Math.round(event.nativeEvent.layout.width);
+    if (next !== gridWidth) setGridWidth(next);
+  }
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.grid}>
+      <View style={styles.grid} onLayout={onGridLayout}>
         {slots.map((slot) => {
           const active = selected === slot.start_at;
           return (
             <Pressable
               key={slot.start_at}
-              style={[styles.slot, active && styles.slotActive]}
+              style={({ pressed }) => [
+                styles.slot,
+                slotWidth != null ? { width: slotWidth } : styles.slotFallback,
+                active && styles.slotActive,
+                pressed && styles.pressed,
+              ]}
               onPress={() => onSelect(slot.start_at)}
             >
-              <Text style={[styles.slotText, active && styles.slotTextActive]}>{formatTime(slot.start_at)}</Text>
+              <Text style={[styles.slotText, active && styles.slotTextActive]} numberOfLines={1}>
+                {formatTime(slot.start_at)}
+              </Text>
             </Pressable>
           );
         })}
@@ -44,19 +62,18 @@ export function TimeSlotGrid({
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   slot: {
-    minWidth: 76,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.inputBackground,
     alignItems: 'center',
   },
-  slotActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  slotText: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
-  slotTextActive: { color: colors.primaryForeground },
-  meta: { ...typography.caption, color: colors.mutedForeground },
+  slotFallback: { width: `${100 / COLUMNS}%` },
+  slotActive: { backgroundColor: colors.accent, ...shadows.soft },
+  pressed: { opacity: 0.9 },
+  slotText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground },
+  slotTextActive: { color: colors.accentForeground },
+  meta: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
 });

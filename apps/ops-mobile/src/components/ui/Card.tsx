@@ -1,18 +1,38 @@
 import React from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
-import { colors, radius, spacing } from '../../theme/tokens';
+import { colors, radius, shadows, spacing } from '../../theme/tokens';
 
-type Props = ViewProps & { padded?: boolean };
+type Props = ViewProps & {
+  padded?: boolean;
+  elevated?: boolean;
+  bordered?: boolean;
+};
 
-export function Card({ children, style, padded = true, ...rest }: Props) {
+export function Card({ children, style, padded = true, elevated = false, bordered = false, ...rest }: Props) {
   return (
-    <View style={[styles.card, padded && styles.padded, style]} {...rest}>
+    <View
+      style={[
+        styles.card,
+        bordered && styles.bordered,
+        elevated && shadows.soft,
+        padded && styles.padded,
+        style,
+      ]}
+      {...rest}
+    >
       {children}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+  },
+  bordered: {
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   padded: { padding: spacing.xl },
 });

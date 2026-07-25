@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { brand, colors, radius, spacing, typography } from '../theme/tokens';
+import { brand, colors, fonts, radius, spacing } from '../theme/tokens';
 
 export function BrandMark({ size = 'md', light }: { size?: 'sm' | 'md'; light?: boolean }) {
-  const dimension = size === 'sm' ? 32 : 36;
+  const dimension = size === 'sm' ? 34 : 40;
 
   return (
     <View style={styles.row}>
@@ -21,12 +21,12 @@ export function BrandMark({ size = 'md', light }: { size?: 'sm' | 'md'; light?: 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   icon: {
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  name: { ...typography.title, color: colors.foreground },
-  nameSm: { fontSize: 16 },
+  name: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground, letterSpacing: -0.3 },
+  nameSm: { fontSize: 18 },
   nameLight: { color: '#fff' },
 });
