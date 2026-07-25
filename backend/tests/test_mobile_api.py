@@ -314,3 +314,37 @@ def test_mobile_cancel_booking(api_client: APIClient, mobile_context: dict[str, 
     assert response.status_code == 200
     booking.refresh_from_db()
     assert booking.status == "cancelled"
+
+
+@pytest.mark.django_db
+def test_mobile_customer_profile_accepts_high_precision_map_coords(
+    api_client: APIClient,
+    mobile_context: dict[str, str],
+) -> None:
+    customer_user = User.objects.create_user(
+        email="map-customer@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+        first_name="Map",
+        last_name="Customer",
+        phone_number="+912222222222",
+    )
+    api_client.force_authenticate(user=customer_user)
+    response = api_client.patch(
+        reverse("mobile-customer-profile"),
+        {
+            "full_address": "Kalyani Nagar, Pune",
+            "latitude": 19.0760123456789,
+            "longitude": 72.8777123456789,
+        },
+        format="json",
+        QUERY_STRING=(
+            f"tenant_slug={mobile_context['tenant_slug']}"
+            f"&business_code={mobile_context['business_code']}"
+        ),
+    )
+    assert response.status_code == 200, response.content
+    address = response.json()["data"]["address"]
+    assert address["full_address"] == "Kalyani Nagar, Pune"
+    assert address["latitude"] == pytest.approx(19.076012)
+    assert address["longitude"] == pytest.approx(72.877712)

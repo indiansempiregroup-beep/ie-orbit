@@ -365,3 +365,64 @@ class CustomerMergeRecord(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.source_customer_id} into {self.target_customer_id}"
+
+
+class CustomerLoyaltyAccount(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="loyalty_accounts",
+    )
+    customer = models.OneToOneField(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="loyalty_account",
+    )
+    points_balance = models.PositiveIntegerField(default=0)
+
+    class Meta(TenantModel.Meta):
+        db_table = "customer_loyalty_accounts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "customer"],
+                name="uq_loyalty_account_tenant_business_customer",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.customer_id}: {self.points_balance} pts"
+
+
+class CustomerLoyaltyLedger(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    account = models.ForeignKey(
+        CustomerLoyaltyAccount,
+        on_delete=models.CASCADE,
+        related_name="ledger_entries",
+    )
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="loyalty_ledger_entries",
+    )
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="loyalty_ledger_entries",
+    )
+    points_delta = models.IntegerField()
+    reason = models.CharField(max_length=160)
+    booking_id = models.UUIDField(null=True, blank=True, db_index=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "customer_loyalty_ledger"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.points_delta} ({self.reason})"

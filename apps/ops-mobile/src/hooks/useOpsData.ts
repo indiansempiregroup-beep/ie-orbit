@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Booking, Customer, Notification, Service, StaffMember } from '@ie-platform/sdk';
+import type { Booking, BookingReview, Customer, Notification, Service, StaffMember } from '@ie-platform/sdk';
 import { subscribeToNotificationStream } from '@ie-platform/sdk';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
@@ -46,7 +46,27 @@ export function useBooking(bookingId: string) {
     setError(null);
     try {
       const response = await client.bookings.get(bookingId);
-      setBooking(response.data);
+      let next: Booking = { ...response.data };
+      if (!next.review) {
+        try {
+          const reviews = await client.bookings.listReviews({ booking: bookingId });
+          const existing = reviews.data?.[0];
+          if (existing) {
+            next = {
+              ...next,
+              review: {
+                id: existing.id,
+                rating: existing.rating,
+                comment: existing.comment,
+                created_at: existing.created_at,
+              },
+            };
+          }
+        } catch {
+          // Review lookup is best-effort; booking detail should still render.
+        }
+      }
+      setBooking(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load booking');
     } finally {
@@ -158,6 +178,38 @@ export function useStaffMembers() {
   }, [reload]);
 
   return { staff, loading, reload };
+}
+
+export function useReviews(customerId?: string) {
+  const client = useOpsClient();
+  const { ready, businessId } = useWorkspace();
+  const [reviews, setReviews] = useState<BookingReview[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!client || !ready) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await client.bookings.listReviews({
+        business: businessId ?? undefined,
+        customer: customerId,
+      });
+      setReviews(response.data ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load reviews');
+      setReviews([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, ready, businessId, customerId]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { reviews, loading, error, reload };
 }
 
 export function useNotifications() {

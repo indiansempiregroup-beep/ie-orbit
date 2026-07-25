@@ -12,35 +12,27 @@ export function Chip({ label, active, onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.chip,
-        active && styles.chipActive,
-        pressed && styles.pressed,
-      ]}
+      style={[styles.chip, active ? { backgroundColor: colors.primary, borderColor: colors.primary } : null]}
     >
-      <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
+      <Text style={[styles.label, active ? styles.labelActive : null]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
   },
-  chipActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  pressed: { opacity: 0.9 },
   label: {
     ...typography.caption,
     fontFamily: fonts.bodyMedium,
     color: colors.mutedForeground,
+    fontWeight: '500',
   },
-  labelActive: { color: colors.accentForeground, fontFamily: fonts.bodySemi },
+  labelActive: { color: colors.primaryForeground, fontFamily: fonts.bodySemi },
 });

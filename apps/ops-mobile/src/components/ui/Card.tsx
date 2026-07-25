@@ -8,7 +8,7 @@ type Props = ViewProps & {
   bordered?: boolean;
 };
 
-export function Card({ children, style, padded = true, elevated = false, bordered = false, ...rest }: Props) {
+export function Card({ children, style, padded = true, elevated = false, bordered = true, ...rest }: Props) {
   return (
     <View
       style={[

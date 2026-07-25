@@ -6,10 +6,11 @@ import { colors, radius, spacing, typography } from '../../theme/tokens';
 type Props = TextInputProps & {
   label?: string;
   error?: string;
+  hint?: string;
   leftIcon?: keyof typeof Feather.glyphMap;
 };
 
-export function Input({ label, error, leftIcon, secureTextEntry, style, ...rest }: Props) {
+export function Input({ label, error, hint, leftIcon, secureTextEntry, style, ...rest }: Props) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
   const isPassword = Boolean(secureTextEntry);
 
@@ -31,6 +32,7 @@ export function Input({ label, error, leftIcon, secureTextEntry, style, ...rest 
         ) : null}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {hint && !error ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -41,17 +43,23 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
+    minHeight: 44,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
     paddingHorizontal: spacing.md,
   },
   fieldError: { borderColor: colors.destructive },
   leftIcon: { marginRight: spacing.sm },
-  input: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
+  input: {
+    flex: 1,
+    ...typography.body,
+    color: colors.foreground,
+    paddingVertical: spacing.sm,
+  },
   inputWithIcon: { paddingLeft: 0 },
   eye: { marginLeft: spacing.sm },
   error: { ...typography.caption, color: colors.destructive },
+  hint: { ...typography.caption, color: colors.mutedForeground },
 });

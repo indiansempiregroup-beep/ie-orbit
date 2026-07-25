@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
-import { formatTime } from '../utils/format';
+import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { filterFutureSlots, formatTime } from '../utils/format';
 
 type Slot = { start_at: string };
 
@@ -25,6 +25,7 @@ export function TimeSlotGrid({
 }: Props) {
   const [gridWidth, setGridWidth] = useState(0);
   const slotWidth = gridWidth > 0 ? (gridWidth - GAP * (COLUMNS - 1)) / COLUMNS : undefined;
+  const openSlots = useMemo(() => filterFutureSlots(slots), [slots]);
 
   function onGridLayout(event: LayoutChangeEvent) {
     const next = Math.round(event.nativeEvent.layout.width);
@@ -34,7 +35,7 @@ export function TimeSlotGrid({
   return (
     <View style={styles.wrap}>
       <View style={styles.grid} onLayout={onGridLayout}>
-        {slots.map((slot) => {
+        {openSlots.map((slot) => {
           const active = selected === slot.start_at;
           return (
             <Pressable
@@ -55,7 +56,7 @@ export function TimeSlotGrid({
         })}
       </View>
       {loading ? <Text style={styles.meta}>Loading available times…</Text> : null}
-      {!loading && !slots.length ? <Text style={styles.meta}>{emptyMessage}</Text> : null}
+      {!loading && !openSlots.length ? <Text style={styles.meta}>{emptyMessage}</Text> : null}
     </View>
   );
 }
@@ -71,7 +72,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   slotFallback: { width: `${100 / COLUMNS}%` },
-  slotActive: { backgroundColor: colors.accent, ...shadows.soft },
+  slotActive: { backgroundColor: colors.primary },
   pressed: { opacity: 0.9 },
   slotText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground },
   slotTextActive: { color: colors.accentForeground },

@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { configureDateTimeZones } from '../lib/datetime';
 
-/** Keeps display formatters in sync with user profile → business timezone. */
+/** Keeps display formatters in sync with business (venue) → user timezone. */
 export function DateTimeZoneSync({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   const { activeBusiness } = useWorkspace();

@@ -32,9 +32,13 @@ export function MainTabs() {
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarItemStyle: styles.tabItem,
-        tabBarIcon: ({ color, size }) => (
-          <Feather name={TAB_ICONS[route.name]} size={size - 1} color={color} />
+        tabBarIcon: ({ color, size, focused }) => (
+          <Feather
+            name={TAB_ICONS[route.name]}
+            size={size}
+            color={color}
+            style={focused ? styles.activeIcon : undefined}
+          />
         ),
       })}
     >
@@ -55,16 +59,15 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.card,
     borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    height: 68,
-    paddingTop: 6,
-    paddingBottom: 8,
+    borderTopWidth: 1,
+    paddingTop: 4,
+    height: 64,
   },
-  tabItem: { paddingTop: 2 },
   tabLabel: {
     fontFamily: fonts.bodyMedium,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: 4,
   },
+  activeIcon: { transform: [{ scale: 1.05 }] },
 });

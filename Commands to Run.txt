@@ -1,37 +1,98 @@
-To run the docker:
-
-docker compose up -d
-
-# If phone/API can't connect, restart backend then retest:
-# docker compose restart backend
-# curl http://172.20.10.14:8000/api/v1/health/
-
-
-To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not localhost)
-
-# Show current Wi-Fi IP (use this value below — NOT a public IP like 106.x.x.x):
-# Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -eq 'Wi-Fi' } | Select-Object -ExpandProperty IPAddress
-
-cd "D:\Indians Empire\IE Platform\ie-platform\apps\ops-mobile"
-$env:REACT_NATIVE_PACKAGER_HOSTNAME="172.20.10.14"
-$env:EXPO_PUBLIC_API_BASE_URL="http://172.20.10.14:8000/api/v1"
-pnpm.cmd exec expo start --port 8082 --clear --lan
-
-# QR should show exp://172.20.10.14:8082 (NOT 127.0.0.1)
-
-# If login shows "Network request failed":
-# 1) On your iPhone Safari open: http://172.20.10.14:8000/api/v1/health/
-#    - If Safari also fails, Windows Firewall is blocking the phone (most common).
-# 2) Open PowerShell AS ADMINISTRATOR and run BOTH rules:
-#    New-NetFirewallRule -DisplayName "IE Platform Backend 8000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Any
-#    New-NetFirewallRule -DisplayName "IE Platform Expo 8082" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8082 -Profile Any
-# 3) Restart Expo with the env vars above, then reload the app.
-
-# If LAN still fails, use tunnel instead:
-# pnpm.cmd exec expo start --port 8082 --clear --tunnel
-
-
-GIT Commands
-git add .
-git commit -m "Your descriptive commit message"
-git push origin main
+To run the docker:
+
+
+
+docker compose up -d
+
+
+
+# If phone/API can't connect, restart backend then retest:
+
+# docker compose restart backend
+
+# curl http://172.20.10.14:8000/api/v1/health/
+
+
+
+
+
+To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not localhost)
+
+
+
+# Show current Wi-Fi IP (use this value below — NOT a public IP like 106.x.x.x):
+
+# Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -eq 'Wi-Fi' } | Select-Object -ExpandProperty IPAddress
+
+
+
+cd "D:\Indians Empire\IE Platform\ie-platform\apps\ops-mobile"
+
+$env:REACT_NATIVE_PACKAGER_HOSTNAME="172.20.10.14"
+
+$env:EXPO_PUBLIC_API_BASE_URL="http://172.20.10.14:8000/api/v1"
+
+pnpm.cmd exec expo start --port 8082 --clear --lan
+
+
+
+# QR should show exp://172.20.10.14:8082 (NOT 127.0.0.1)
+
+
+
+To run the Customer-Mobile (phone on same Wi-Fi / hotspot)
+
+
+
+cd "D:\Indians Empire\IE Platform\ie-platform\mobile"
+
+$env:REACT_NATIVE_PACKAGER_HOSTNAME="172.20.10.14"
+
+$env:EXPO_PUBLIC_API_BASE_URL="http://172.20.10.14:8000/api/v1"
+
+$env:EXPO_PUBLIC_FLAVOR_KEY="rupali-s-business-rupali-s-business"
+
+$env:EXPO_PUBLIC_APP_NAME="Rupali Sirsat"
+
+pnpm.cmd exec expo start --port 8083 --clear --lan
+
+
+
+# QR should show exp://172.20.10.14:8083 (NOT 127.0.0.1)
+
+
+
+# If Expo says "Unable to load app" / "Network request failed", or login fails:
+
+# 1) On your iPhone Safari open: http://172.20.10.14:8000/api/v1/health/
+
+#    - If Safari also fails, Windows Firewall is blocking the phone (most common).
+
+# 2) Open PowerShell AS ADMINISTRATOR and run ALL rules:
+
+#    New-NetFirewallRule -DisplayName "IE Platform Backend 8000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Any
+
+#    New-NetFirewallRule -DisplayName "IE Platform Expo Ops 8082" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8082 -Profile Any
+
+#    New-NetFirewallRule -DisplayName "IE Platform Expo Customer 8083" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8083 -Profile Any
+
+# 3) Restart Expo with the env vars above, then reload the app in Expo Go.
+
+
+
+# If LAN still fails, use tunnel instead:
+
+# pnpm.cmd exec expo start --port 8083 --clear --tunnel
+
+
+
+
+
+GIT Commands
+
+git add .
+
+git commit -m "Your descriptive commit message"
+
+git push origin main
+

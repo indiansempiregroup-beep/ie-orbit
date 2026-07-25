@@ -32,6 +32,11 @@ CUSTOMER_TEMPLATES: tuple[tuple[str, str, str], ...] = (
         "Visit completed",
         "Thanks for visiting us. Your booking {{booking_number}} for {{service_name}} is complete.",
     ),
+    (
+        "booking_reminder",
+        "Appointment in 15 minutes",
+        "Reminder: your booking {{booking_number}} for {{service_name}} starts at {{start_at}} (in about 15 minutes).",
+    ),
 )
 
 ADMIN_TEMPLATES: tuple[tuple[str, str, str], ...] = (
@@ -59,6 +64,16 @@ ADMIN_TEMPLATES: tuple[tuple[str, str, str], ...] = (
         "booking_completed_admin",
         "Booking completed",
         "Booking {{booking_number}} for {{customer_name}} has been marked complete.",
+    ),
+    (
+        "booking_reminder_admin",
+        "Appointment in 15 minutes",
+        "Reminder: {{customer_name}} has {{service_name}} at {{start_at}} ({{booking_number}}).",
+    ),
+    (
+        "booking_reviewed_admin",
+        "New customer review",
+        "{{customer_name}} left a {{rating}}★ review for {{service_name}} ({{booking_number}}).",
     ),
 )
 

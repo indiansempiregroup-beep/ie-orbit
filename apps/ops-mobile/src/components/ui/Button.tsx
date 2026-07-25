@@ -86,22 +86,22 @@ function getVariantStyle(variant: Variant) {
       };
     default:
       return {
-        container: { backgroundColor: colors.accent },
-        label: { color: colors.accentForeground },
-        spinner: colors.accentForeground,
+        container: { backgroundColor: colors.primary },
+        label: { color: colors.primaryForeground },
+        spinner: colors.primaryForeground,
       };
   }
 }
 
 const sizes: Record<Size, ViewStyle> = {
-  sm: { minHeight: 36, paddingHorizontal: 14 },
-  md: { minHeight: 46, paddingHorizontal: 18 },
-  lg: { minHeight: 52, paddingHorizontal: 22 },
+  sm: { minHeight: 32, paddingHorizontal: 12 },
+  md: { minHeight: 40, paddingHorizontal: 16 },
+  lg: { minHeight: 48, paddingHorizontal: 20 },
 };
 
 const sizeStyles: Record<Size, TextStyle> = {
-  sm: { fontSize: 13 },
-  md: { fontSize: 15 },
+  sm: { fontSize: 12 },
+  md: { fontSize: 14 },
   lg: { fontSize: 16 },
 };
 
@@ -114,6 +114,6 @@ const styles = StyleSheet.create({
   },
   fullWidth: { width: '100%' },
   label: { ...typography.label, fontFamily: fonts.bodySemi },
-  pressed: { opacity: 0.88, transform: [{ scale: 0.985 }] },
+  pressed: { opacity: 0.9 },
   disabled: { opacity: 0.45 },
 });

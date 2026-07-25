@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import type { MobileBooking } from '@ie-platform/sdk';
+import type { BookingReviewSummary, MobileBooking } from '@ie-platform/sdk';
 import { mobileClient } from '../../api/client';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
+import { Input } from '../../components/ui/Input';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, spacing, typography } from '../../theme/tokens';
-import { formatTime, mapBookingStatus } from '../../utils/format';
+import { filterFutureSlots, formatDateKey, formatDateTime, formatTime, mapBookingStatus } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 
@@ -26,9 +27,12 @@ export function BookingDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [rescheduleMode, setRescheduleMode] = useState(false);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => formatDateKey(new Date()));
   const [slots, setSlots] = useState<Array<{ start_at: string }>>([]);
   const [selectedSlot, setSelectedSlot] = useState('');
+  const [rating, setRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [review, setReview] = useState<BookingReviewSummary | null>(null);
 
   async function loadBooking() {
     if (!tenantSlug || !businessCode) return;
@@ -39,10 +43,67 @@ export function BookingDetailScreen() {
         business_code: businessCode,
       });
       setBooking(response.data);
+      if (response.data.review) {
+        setReview(response.data.review);
+      } else {
+        const reviews = await mobileClient.mobile.listMyReviews({
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+        });
+        const existing = reviews.data.find((item) => item.booking_id === route.params.bookingId);
+        setReview(
+          existing
+            ? {
+                id: existing.id,
+                rating: existing.rating,
+                comment: existing.comment,
+                created_at: existing.created_at,
+              }
+            : null,
+        );
+      }
     } catch {
       setBooking(null);
+      setReview(null);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onSubmitReview() {
+    if (!booking || !tenantSlug || !businessCode) return;
+    setActionLoading(true);
+    try {
+      const created = await mobileClient.mobile.createReview(booking.id, {
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+        rating,
+        comment: reviewComment.trim() || undefined,
+      });
+      setReview({
+        id: created.data.id,
+        rating: created.data.rating,
+        comment: created.data.comment,
+        created_at: created.data.created_at,
+      });
+      setBooking((current) =>
+        current
+          ? {
+              ...current,
+              review: {
+                id: created.data.id,
+                rating: created.data.rating,
+                comment: created.data.comment,
+                created_at: created.data.created_at,
+              },
+            }
+          : current,
+      );
+      Alert.alert('Thanks!', 'Your review has been submitted.');
+    } catch (err) {
+      Alert.alert('Unable to submit review', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -62,9 +123,10 @@ export function BookingDetailScreen() {
       staff_id: booking.staff_id || undefined,
       service_id: booking.service_id,
     });
-    setSlots(response.data.slots);
+    const openSlots = filterFutureSlots(response.data.slots);
+    setSlots(openSlots);
     setSelectedSlot('');
-    if (!response.data.slots.length) {
+    if (!openSlots.length) {
       Alert.alert(
         'No timeslot available',
         response.data.message || 'No timeslot available for this date. Try another day.',
@@ -149,8 +211,52 @@ export function BookingDetailScreen() {
         />
         <DetailRow label="Duration" value={`${booking.duration_minutes} minutes`} />
         {booking.staff_name ? <DetailRow label="Stylist" value={booking.staff_name} /> : null}
+        <DetailRow
+          label="Payment"
+          value={booking.payment_mode === 'pay_at_venue' || !booking.payment_mode ? 'Pay at venue' : booking.payment_mode}
+        />
         {booking.notes ? <DetailRow label="Notes" value={booking.notes} /> : null}
       </Card>
+
+      {review ? (
+        <Card>
+          <Text style={styles.section}>Your review</Text>
+          <Text style={[styles.ratingStars, { color: primary }]}>
+            {'★'.repeat(review.rating)}
+            {'☆'.repeat(5 - review.rating)}
+          </Text>
+          <Text style={styles.reviewComment}>{review.comment?.trim() || 'No written comment.'}</Text>
+          {review.created_at ? <Text style={styles.reviewMeta}>{formatDateTime(review.created_at)}</Text> : null}
+        </Card>
+      ) : null}
+
+      {booking.status === 'completed' && !review ? (
+        <Card>
+          <Text style={styles.section}>Leave a review</Text>
+          <View style={styles.stars}>
+            {[1, 2, 3, 4, 5].map((value) => (
+              <Pressable key={value} onPress={() => setRating(value)} hitSlop={6}>
+                <Text style={[styles.star, { color: value <= rating ? primary : colors.mutedForeground }]}>
+                  {value <= rating ? '★' : '☆'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Input
+            label="Comment (optional)"
+            value={reviewComment}
+            onChangeText={setReviewComment}
+            placeholder="How was your visit?"
+          />
+          <Button
+            label="Submit review"
+            fullWidth
+            loading={actionLoading}
+            primaryColor={primary}
+            onPress={() => void onSubmitReview()}
+          />
+        </Card>
+      ) : null}
 
       {rescheduleMode ? (
         <Card>
@@ -205,4 +311,9 @@ const styles = StyleSheet.create({
   detailValue: { ...typography.body, color: colors.foreground, fontWeight: '600' },
   empty: { ...typography.body, color: colors.mutedForeground },
   section: { ...typography.label, color: colors.foreground, fontWeight: '700', marginBottom: spacing.md },
+  stars: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  star: { fontSize: 28 },
+  ratingStars: { ...typography.title, fontSize: 22, letterSpacing: 1, marginBottom: spacing.sm },
+  reviewComment: { ...typography.body, color: colors.mutedForeground, lineHeight: 20 },
+  reviewMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
 });

@@ -13,6 +13,7 @@ import type { RootStackParamList } from './types';
 import { ProfileEditScreen } from '../features/profile/ProfileEditScreen';
 import { BookingHistoryScreen } from '../features/booking/BookingHistoryScreen';
 import { BookingDetailScreen } from '../features/booking/BookingDetailScreen';
+import { ServiceDetailScreen } from '../features/discover/ServiceDetailScreen';
 import {
   ChangePasswordScreen,
   HelpSupportScreen,
@@ -21,6 +22,7 @@ import {
   PrivacySecurityScreen,
   ReviewsScreen,
 } from '../features/profile/ProfileSubScreens';
+import { usePushRegistration } from '../hooks/usePushRegistration';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -50,6 +52,7 @@ function BootstrapGate({ children }: { children: React.ReactNode }) {
 export function RootNavigator() {
   const { user, loading } = useAuth();
   const needsVerification = Boolean(user && !user.email_verified_at);
+  usePushRegistration(Boolean(user && !needsVerification));
 
   if (loading) {
     return (
@@ -67,6 +70,7 @@ export function RootNavigator() {
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="BookingHistory" component={BookingHistoryScreen} />
             <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
+            <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
             <Stack.Screen
               name="ProfileEdit"
               component={ProfileEditScreen}

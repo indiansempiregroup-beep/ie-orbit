@@ -1,3 +1,6 @@
+import { ApiClientError } from '@ie-platform/sdk';
+import { getApiBaseUrl } from '../config/apiBaseUrl';
+
 type DateTimeZoneConfig = {
   userTimezone?: string | null;
   businessTimezone?: string | null;
@@ -6,19 +9,30 @@ type DateTimeZoneConfig = {
 let userTimezone: string | undefined;
 let businessTimezone: string | undefined;
 
+/** Common non-IANA labels → IANA zones (Intl rejects bare "IST"). */
+const TIMEZONE_ALIASES: Record<string, string> = {
+  IST: 'Asia/Kolkata',
+};
+
 function normalizeTimezone(value?: string | null): string | undefined {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
+  if (!trimmed) return undefined;
+  return TIMEZONE_ALIASES[trimmed.toUpperCase()] ?? trimmed;
 }
 
-/** Configure display zones: user profile → business → device local. */
+/** Configure display zones: business (venue) → user profile → device local. */
 export function configureDateTimeZones(config: DateTimeZoneConfig) {
   userTimezone = normalizeTimezone(config.userTimezone);
   businessTimezone = normalizeTimezone(config.businessTimezone);
 }
 
+/**
+ * Prefer business timezone so booking slots show venue wall-clock time.
+ * Auth users default to "UTC", which previously overrode Asia/Kolkata and
+ * made 3:30 PM IST slots render as 10:00 AM.
+ */
 export function resolveDisplayTimeZone(): string | undefined {
-  return userTimezone || businessTimezone || undefined;
+  return businessTimezone || userTimezone || undefined;
 }
 
 function withZone(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions {
@@ -51,6 +65,24 @@ export function formatTime(isoDate?: string | null) {
       hour12: true,
     }),
   );
+}
+
+export function formatDateKey(date: Date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Keep only slots that start strictly after now (hides past times for today). */
+export function filterFutureSlots<T extends { start_at: string }>(
+  slots: T[],
+  nowMs: number = Date.now(),
+): T[] {
+  return slots.filter((slot) => {
+    const ts = new Date(slot.start_at).getTime();
+    return Number.isFinite(ts) && ts > nowMs;
+  });
 }
 
 export function formatDateTime(isoDate?: string | null) {
@@ -89,4 +121,49 @@ export function mapBookingStatus(status: string): 'confirmed' | 'pending' | 'can
     default:
       return 'pending';
   }
+}
+
+function formatErrorDetails(details: unknown): string {
+  if (!details) return '';
+  if (typeof details === 'string') return details;
+  if (Array.isArray(details)) {
+    return details.map((item) => formatErrorDetails(item)).filter(Boolean).join(' ');
+  }
+  if (typeof details === 'object') {
+    return Object.entries(details as Record<string, unknown>)
+      .map(([key, value]) => {
+        const text = formatErrorDetails(value);
+        return text ? `${key}: ${text}` : '';
+      })
+      .filter(Boolean)
+      .join(' ');
+  }
+  return String(details);
+}
+
+function isNetworkFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('network request failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('network error') ||
+    message.includes('timeout')
+  );
+}
+
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (isNetworkFailure(error)) {
+    return `Cannot reach API at ${getApiBaseUrl()}. Check Wi‑Fi / hotspot and that Windows Firewall allows TCP 8000.`;
+  }
+  if (error instanceof ApiClientError) {
+    const details = formatErrorDetails(error.payload.error.details);
+    const message = error.payload.error.message || error.message || fallback;
+    if (details && message === 'One or more request fields are invalid.') {
+      return details;
+    }
+    return details ? `${message} (${details})` : message;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
 }

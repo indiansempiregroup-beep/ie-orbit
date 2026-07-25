@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, spacing } from '../../theme/tokens';
+import { colors, fonts, spacing, typography } from '../../theme/tokens';
 
 export function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
@@ -20,9 +20,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   title: {
+    ...typography.title,
     fontFamily: fonts.displayMedium,
-    fontSize: 18,
     color: colors.foreground,
-    letterSpacing: -0.2,
   },
 });

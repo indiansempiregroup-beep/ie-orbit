@@ -176,3 +176,30 @@ class NotificationHistory(TenantModel):
 
     class Meta(TenantModel.Meta):
         db_table = "notification_history"
+
+
+class MobileDevice(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mobile_devices",
+    )
+    expo_push_token = models.CharField(max_length=255, db_index=True)
+    platform = models.CharField(max_length=32, blank=True)
+    app_flavor = models.CharField(max_length=120, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "mobile_devices"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "user", "expo_push_token"],
+                name="uq_mobile_device_tenant_user_token",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.expo_push_token[:24]}"

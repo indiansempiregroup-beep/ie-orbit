@@ -8,6 +8,7 @@ from apps.bookings.models import (
     BookingChannel,
     BookingHistory,
     BookingNote,
+    BookingReview,
     BookingSource,
     BookingTimeline,
     RecurrenceFrequency,
@@ -45,11 +46,60 @@ class BookingAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
 
+class BookingReviewSerializer(serializers.ModelSerializer):
+    booking_id = serializers.UUIDField(source="booking.id", read_only=True)
+    booking_number = serializers.CharField(source="booking.booking_number", read_only=True)
+    business = serializers.UUIDField(source="business_id", read_only=True)
+    service_id = serializers.UUIDField(source="booking.service_id", read_only=True)
+    service_name = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BookingReview
+        fields = [
+            "id",
+            "business",
+            "booking_id",
+            "booking_number",
+            "customer_id",
+            "customer_name",
+            "service_id",
+            "service_name",
+            "rating",
+            "comment",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_service_name(self, obj: BookingReview) -> str:
+        service_map = self.context.get("service_map") or {}
+        service = service_map.get(str(obj.booking.service_id)) if obj.booking.service_id else None
+        if service is not None:
+            return service.display_name or service.name
+        return ""
+
+    def get_customer_name(self, obj: BookingReview) -> str:
+        customer_map = self.context.get("customer_map") or {}
+        customer = customer_map.get(str(obj.customer_id))
+        if customer is not None:
+            return customer.display_name or "Customer"
+        return "Customer"
+
+
+class BookingReviewSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingReview
+        fields = ["id", "rating", "comment", "created_at"]
+        read_only_fields = fields
+
+
 class BookingSerializer(serializers.ModelSerializer):
     timeline = BookingTimelineSerializer(many=True, read_only=True)
     history = BookingHistorySerializer(many=True, read_only=True)
     booking_notes = BookingNoteSerializer(many=True, read_only=True)
     attachments = BookingAttachmentSerializer(many=True, read_only=True)
+    review = BookingReviewSummarySerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = Booking
@@ -80,6 +130,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "history",
             "booking_notes",
             "attachments",
+            "review",
             "created_at",
             "updated_at",
             "is_active",
@@ -98,6 +149,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "history",
             "booking_notes",
             "attachments",
+            "review",
             "created_at",
             "updated_at",
             "is_active",

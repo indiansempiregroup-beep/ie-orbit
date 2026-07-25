@@ -33,6 +33,7 @@ export type RootStackParamList = {
   Customers: undefined;
   CustomerForm: { customerId?: string };
   CustomerDetail: { customerId: string };
+  Reviews: undefined;
   Services: undefined;
   ServiceForm: { serviceId?: string };
   ServiceDetail: { serviceId: string };

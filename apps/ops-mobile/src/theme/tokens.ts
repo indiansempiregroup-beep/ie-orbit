@@ -1,4 +1,4 @@
-/** IE Platform ops app branding — fixed, not white-label. Deep Navy (accent = primary). */
+/** IE Platform ops app branding — fixed, not white-label. Deep Navy. */
 export const brand = {
   appName: 'IE Platform',
   tagline: 'Manage your business on the go',
@@ -16,25 +16,24 @@ export const fonts = {
   bodyBold: 'DMSans_700Bold',
 };
 
+/** Cool neutrals aligned with customer-mobile chrome; brand stays IE navy. */
 export const colors = {
-  background: '#F7F4EE',
-  foreground: '#142033',
+  background: '#F7F8FA',
+  foreground: '#0F1623',
   card: '#FFFFFF',
-  /** Structure: headers, tabs, links */
   primary: brand.primary,
   primaryForeground: '#FFFFFF',
-  secondary: '#E6EDF6',
+  secondary: '#E8EEF6',
   secondaryForeground: brand.primary,
-  muted: '#EBE6DC',
-  mutedForeground: '#5E6B82',
-  /** Action: primary CTAs, selected chips/slots */
+  muted: '#E8ECF4',
+  mutedForeground: '#6B7A99',
   accent: brand.accent,
   accentForeground: '#FFFFFF',
-  destructive: '#C93B3B',
-  success: '#0F8A5F',
-  warning: '#C47A12',
-  border: 'rgba(20, 32, 51, 0.08)',
-  inputBackground: '#F8F5EF',
+  destructive: '#DC2626',
+  success: '#059669',
+  warning: '#D97706',
+  border: 'rgba(15, 22, 35, 0.08)',
+  inputBackground: '#F0F2F7',
   sheet: '#FFFFFF',
   overlay: 'rgba(11, 31, 58, 0.45)',
 };
@@ -50,29 +49,29 @@ export const spacing = {
 };
 
 export const radius = {
-  sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 24,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
   full: 999,
 };
 
 export const typography = {
   heading: {
     fontFamily: fonts.display,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700' as const,
-    letterSpacing: -0.4,
+    letterSpacing: -0.2,
   },
   title: {
     fontFamily: fonts.displayMedium,
-    fontSize: 20,
-    fontWeight: '600' as const,
-    letterSpacing: -0.2,
+    fontSize: 18,
+    fontWeight: '700' as const,
+    letterSpacing: -0.1,
   },
   body: {
     fontFamily: fonts.body,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '400' as const,
   },
   label: {
@@ -87,19 +86,20 @@ export const typography = {
   },
   tiny: {
     fontFamily: fonts.bodyMedium,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500' as const,
   },
 };
 
-export const avatarColors = ['#123A6B', '#0B8FBF', '#0F8A5F', '#C47A12', '#2A9D8F', '#8B5A2B'];
+export const avatarColors = ['#123A6B', '#0B8FBF', '#059669', '#D97706', '#2A9D8F', '#8B5A2B'];
 
+/** Opt-in only — customer-style UI prefers borders over elevation. */
 export const shadows = {
   soft: {
     shadowColor: '#0B1F3A',
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
 };

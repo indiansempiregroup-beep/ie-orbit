@@ -101,10 +101,8 @@ const styles = StyleSheet.create({
   backSpacer: { width: 40 },
   copy: { flex: 1, gap: 2, justifyContent: 'center' },
   title: {
-    fontFamily: fonts.displayMedium,
-    fontSize: 20,
+    ...typography.title,
     color: colors.primaryForeground,
-    letterSpacing: -0.3,
   },
   subtitle: {
     ...typography.caption,

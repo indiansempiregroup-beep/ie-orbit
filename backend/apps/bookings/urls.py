@@ -9,6 +9,7 @@ from apps.bookings.api.views import (
     BookingDetailView,
     BookingListCreateView,
     BookingRescheduleView,
+    BookingReviewListView,
     BusinessAvailabilityView,
     StaffAvailabilityView,
     StaffLeaveDetailView,
@@ -21,6 +22,7 @@ from apps.bookings.api.views import (
 
 urlpatterns = [
     path("bookings", BookingListCreateView.as_view(), name="booking-list-create"),
+    path("booking-reviews", BookingReviewListView.as_view(), name="booking-review-list"),
     path("bookings/<uuid:booking_id>", BookingDetailView.as_view(), name="booking-detail"),
     path(
         "bookings/<uuid:booking_id>/confirm", BookingConfirmView.as_view(), name="booking-confirm"

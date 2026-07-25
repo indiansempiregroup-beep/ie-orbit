@@ -16,7 +16,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useAvailability, useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
-import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -262,7 +262,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
-    ...shadows.soft,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   slotPressed: { opacity: 0.9 },
   slotText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },

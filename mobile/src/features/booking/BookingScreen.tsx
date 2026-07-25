@@ -16,7 +16,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { formatTime } from '../../utils/format';
+import { filterFutureSlots, formatDateKey, formatTime } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { MainTabParamList } from '../../navigation/types';
 
@@ -33,7 +33,7 @@ export function BookingScreen() {
   const [services, setServices] = useState<MobileDiscoverService[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(route.params?.serviceId ?? null);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => formatDateKey(new Date()));
   const [slots, setSlots] = useState<Array<{ start_at: string; end_at: string }>>([]);
   const [availabilityMessage, setAvailabilityMessage] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
@@ -102,10 +102,11 @@ export function BookingScreen() {
         staff_id: staffId || undefined,
         service_id: service.id,
       });
-      setSlots(response.data.slots);
+      const openSlots = filterFutureSlots(response.data.slots);
+      setSlots(openSlots);
       setAvailabilityMessage(
         response.data.message ||
-          (response.data.slots.length
+          (openSlots.length
             ? ''
             : 'No timeslot available for this date. Try another day or stylist.'),
       );
@@ -139,6 +140,7 @@ export function BookingScreen() {
         start_at: selectedSlot,
         duration_minutes: selectedService.duration_minutes,
         notes: notes.trim() || undefined,
+        payment_mode: 'pay_at_venue',
       });
       const timeout = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('Booking is taking too long. Please try again.')), 45000);
@@ -197,6 +199,7 @@ export function BookingScreen() {
           <SummaryRow label="Date" value={new Date(selectedSlot).toLocaleDateString()} />
           <SummaryRow label="Time" value={formatTime(selectedSlot)} />
           <SummaryRow label="Reference" value={bookingRef} />
+          <SummaryRow label="Payment" value="Pay at venue" />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={[styles.totalValue, { color: primary }]}>

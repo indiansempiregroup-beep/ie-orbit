@@ -1,19 +1,22 @@
-import React, { useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MobileReview } from '@ie-platform/sdk';
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { useBootstrap } from '../../contexts/BootstrapContext';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 
 export function ChangePasswordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { branding } = useBootstrap();
+  const { biometricEnabled, disableBiometrics } = useAuth();
   const primary = branding?.primaryColor ?? colors.primary;
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -28,10 +31,18 @@ export function ChangePasswordScreen() {
     setLoading(true);
     try {
       await mobileClient.auth.changePassword({ current_password: currentPassword, new_password: newPassword });
-      Alert.alert('Password updated', 'Your password has been changed successfully.');
+      if (biometricEnabled) {
+        await disableBiometrics();
+        Alert.alert(
+          'Password updated',
+          'Biometric login was disabled — re-enable it in Privacy & Security.',
+        );
+      } else {
+        Alert.alert('Password updated', 'Your password has been changed successfully.');
+      }
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Unable to update', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Unable to update', getApiErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -96,13 +107,100 @@ function PrefRow({ label, value, onChange }: { label: string; value: boolean; on
 export function PrivacySecurityScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { branding } = useBootstrap();
+  const {
+    biometricAvailable,
+    biometricEnabled,
+    biometricLabel,
+    enableBiometrics,
+    disableBiometrics,
+    refreshBiometricState,
+  } = useAuth();
   const primary = branding?.primaryColor ?? colors.primary;
+  const [busy, setBusy] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshBiometricState().catch(() => undefined);
+    }, [refreshBiometricState]),
+  );
+
+  function onToggleBiometric(next: boolean) {
+    if (!biometricAvailable) {
+      Alert.alert(
+        `${biometricLabel} unavailable`,
+        `Set up ${biometricLabel} in your phone Settings first, then try again.`,
+      );
+      return;
+    }
+
+    if (!next) {
+      Alert.alert(`Disable ${biometricLabel}`, `Stop using ${biometricLabel} to sign in on this device?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disable',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                setBusy(true);
+                await disableBiometrics();
+                Alert.alert('Disabled', `${biometricLabel} login is off.`);
+              } catch (err) {
+                Alert.alert('Unable to disable', getApiErrorMessage(err, 'Could not update biometric login.'));
+              } finally {
+                setBusy(false);
+              }
+            })();
+          },
+        },
+      ]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        setBusy(true);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await enableBiometrics();
+        Alert.alert(
+          `${biometricLabel} enabled`,
+          `Sign out, then tap “Sign in with ${biometricLabel}” on the login screen.`,
+        );
+      } catch (err) {
+        Alert.alert(`Unable to enable ${biometricLabel}`, getApiErrorMessage(err, 'Please try again.'));
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }
 
   return (
     <ProfileMenuScreen title="Privacy & Security" onBack={() => navigation.goBack()}>
       <Text style={styles.body}>
         Your data is stored securely and used only to manage your appointments with {branding?.appName ?? 'this business'}.
       </Text>
+
+      <View style={styles.biometricRow}>
+        <View style={styles.biometricCopy}>
+          <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
+          <Text style={styles.biometricHint}>
+            {busy
+              ? 'Updating…'
+              : biometricAvailable
+                ? biometricEnabled
+                  ? `On · use after signing out`
+                  : `Off · tap to enable with ${biometricLabel} only`
+                : `Not available on this device`}
+          </Text>
+        </View>
+        <Switch
+          value={biometricEnabled}
+          onValueChange={onToggleBiometric}
+          disabled={busy || (!biometricAvailable && !biometricEnabled)}
+          trackColor={{ true: primary }}
+        />
+      </View>
+
       <Button label="Change password" fullWidth primaryColor={primary} onPress={() => navigation.navigate('ChangePassword')} />
       <Text style={styles.body}>
         We never sell your personal information. You can update your profile details or sign out at any time from the Profile tab.
@@ -113,12 +211,17 @@ export function PrivacySecurityScreen() {
 
 export function PaymentMethodsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { branding } = useBootstrap();
   return (
     <ProfileMenuScreen title="Payment Methods" onBack={() => navigation.goBack()}>
-      <View style={styles.comingSoon}>
-        <Text style={styles.comingTitle}>Payments coming soon</Text>
+      <View style={styles.paymentCard}>
+        <Text style={styles.comingTitle}>Pay at venue</Text>
         <Text style={styles.body}>
-          In-app payments and saved cards will be available in a future update. You can pay at the salon for now.
+          Your default payment method for {branding?.appName ?? 'this salon'} is pay at the venue. Online cards and UPI
+          checkout will arrive in a later release.
+        </Text>
+        <Text style={styles.body}>
+          When you book in the app, your appointment is confirmed and you settle payment when you visit.
         </Text>
       </View>
     </ProfileMenuScreen>
@@ -127,14 +230,57 @@ export function PaymentMethodsScreen() {
 
 export function ReviewsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { branding } = useBootstrap();
+  const { tenantSlug, businessCode } = useBusinessContext();
+  const primary = branding?.primaryColor ?? colors.primary;
+  const [reviews, setReviews] = useState<MobileReview[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadReviews = useCallback(async () => {
+    if (!tenantSlug || !businessCode) return;
+    setLoading(true);
+    try {
+      const res = await mobileClient.mobile.listMyReviews({
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+      });
+      setReviews(res.data);
+    } catch {
+      setReviews([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantSlug, businessCode]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadReviews();
+    }, [loadReviews]),
+  );
+
+  useEffect(() => {
+    void loadReviews();
+  }, [loadReviews]);
+
   return (
     <ProfileMenuScreen title="My Reviews" onBack={() => navigation.goBack()}>
-      <View style={styles.comingSoon}>
-        <Text style={styles.comingTitle}>Reviews coming soon</Text>
-        <Text style={styles.body}>
-          After completed appointments you will be able to rate your experience and share feedback here.
-        </Text>
-      </View>
+      {loading ? <ActivityIndicator color={primary} /> : null}
+      {!loading && !reviews.length ? (
+        <View style={styles.comingSoon}>
+          <Text style={styles.comingTitle}>No reviews yet</Text>
+          <Text style={styles.body}>
+            After a completed appointment, open it from My Appointments and leave a rating.
+          </Text>
+        </View>
+      ) : null}
+      {reviews.map((review) => (
+        <View key={review.id} style={styles.reviewCard}>
+          <Text style={styles.comingTitle}>{review.service_name || 'Appointment'}</Text>
+          <Text style={[styles.rating, { color: primary }]}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</Text>
+          {review.comment ? <Text style={styles.body}>{review.comment}</Text> : null}
+          <Text style={styles.meta}>#{review.booking_number}</Text>
+        </View>
+      ))}
     </ProfileMenuScreen>
   );
 }
@@ -161,6 +307,20 @@ export function HelpSupportScreen() {
 const styles = StyleSheet.create({
   body: { ...typography.body, color: colors.mutedForeground, lineHeight: 22 },
   contact: { ...typography.label, color: colors.foreground },
+  biometricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  biometricCopy: { flex: 1, gap: 2 },
+  biometricTitle: { ...typography.label, color: colors.foreground },
+  biometricHint: { ...typography.caption, color: colors.mutedForeground },
   prefRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -174,5 +334,23 @@ const styles = StyleSheet.create({
   prefLabel: { ...typography.body, color: colors.foreground, fontWeight: '500' },
   comingSoon: { gap: spacing.md, backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xxl },
   comingTitle: { ...typography.title, color: colors.foreground },
+  paymentCard: {
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xxl,
+  },
+  reviewCard: {
+    gap: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  rating: { ...typography.label, fontWeight: '700', letterSpacing: 1 },
+  meta: { ...typography.caption, color: colors.mutedForeground },
   faqTitle: { ...typography.title, color: colors.foreground, marginTop: spacing.md },
 });

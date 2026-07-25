@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,19 +10,31 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
+import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 export function LoginScreen({ navigation }: Props) {
-  const { login } = useAuth();
+  const {
+    login,
+    loginWithBiometrics,
+    enableBiometrics,
+    loading,
+    biometricEnabled,
+    biometricAvailable,
+    biometricLabel,
+    refreshBiometricState,
+  } = useAuth();
   const { branding } = useBootstrap();
   const primary = branding?.primaryColor ?? colors.primary;
 
@@ -30,6 +43,44 @@ export function LoginScreen({ navigation }: Props) {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+
+  useEffect(() => {
+    void refreshBiometricState();
+  }, [refreshBiometricState]);
+
+  const offerBiometricEnrollment = useCallback(async () => {
+    if (!biometricAvailable || biometricEnabled) return;
+    if (await wasBiometricPromptShown()) return;
+
+    Alert.alert(
+      `Enable ${biometricLabel}?`,
+      `Sign in faster next time with ${biometricLabel}. You can change this later in Privacy & Security.`,
+      [
+        {
+          text: 'Not now',
+          style: 'cancel',
+          onPress: () => {
+            void markBiometricPromptShown();
+          },
+        },
+        {
+          text: 'Enable',
+          onPress: () => {
+            setTimeout(() => {
+              void (async () => {
+                try {
+                  await enableBiometrics();
+                } catch (err) {
+                  Alert.alert('Unable to enable', getApiErrorMessage(err, `Could not enable ${biometricLabel}.`));
+                }
+              })();
+            }, 500);
+          },
+        },
+      ],
+    );
+  }, [biometricAvailable, biometricEnabled, biometricLabel, enableBiometrics]);
 
   async function onSubmit() {
     setError('');
@@ -40,10 +91,23 @@ export function LoginScreen({ navigation }: Props) {
     setSubmitting(true);
     try {
       await login(email.trim(), password, remember);
+      await offerBiometricEnrollment();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sign in.');
+      setError(getApiErrorMessage(err, 'Unable to sign in.'));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function onBiometricLogin() {
+    setError('');
+    setBiometricBusy(true);
+    try {
+      await loginWithBiometrics();
+    } catch (err) {
+      setError(getApiErrorMessage(err, `Unable to sign in with ${biometricLabel}.`));
+    } finally {
+      setBiometricBusy(false);
     }
   }
 
@@ -63,6 +127,25 @@ export function LoginScreen({ navigation }: Props) {
         <Text style={styles.subtitle}>Sign in to your account to continue</Text>
 
         <View style={styles.form}>
+          {biometricEnabled && biometricAvailable ? (
+            <Pressable
+              style={({ pressed }) => [styles.biometricCard, pressed && styles.pressed]}
+              onPress={() => void onBiometricLogin()}
+              disabled={loading || submitting || biometricBusy}
+            >
+              <View style={[styles.biometricIcon, { backgroundColor: `${primary}18` }]}>
+                <Feather name={Platform.OS === 'ios' ? 'smile' : 'smartphone'} size={22} color={primary} />
+              </View>
+              <View style={styles.biometricCopy}>
+                <Text style={styles.biometricTitle}>
+                  {biometricBusy ? `Waiting for ${biometricLabel}…` : `Sign in with ${biometricLabel}`}
+                </Text>
+                <Text style={styles.biometricHint}>Quick unlock for this device</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+            </Pressable>
+          ) : null}
+
           <Input
             label="Email address"
             leftIcon="mail"
@@ -99,7 +182,7 @@ export function LoginScreen({ navigation }: Props) {
             label="Sign in"
             size="lg"
             fullWidth
-            loading={submitting}
+            loading={(submitting || loading) && !biometricBusy}
             primaryColor={primary}
             onPress={onSubmit}
           />
@@ -125,6 +208,27 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, color: colors.foreground, marginBottom: 4 },
   subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.xxl },
   form: { gap: spacing.lg },
+  biometricCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  pressed: { opacity: 0.92 },
+  biometricIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  biometricCopy: { flex: 1, gap: 2 },
+  biometricTitle: { ...typography.label, color: colors.foreground },
+  biometricHint: { ...typography.caption, color: colors.mutedForeground },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   remember: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   checkbox: {

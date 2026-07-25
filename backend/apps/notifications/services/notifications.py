@@ -62,7 +62,8 @@ class NotificationService:
         ensure_notification_templates(tenant=event.tenant, business=event.booking.business)
         notifications: list[Notification] = []
         customer_user = self._resolve_customer_user(event)
-        if customer_user is not None:
+        # Customer already submitted the review; only notify business users.
+        if event.event_type != "BookingReviewed" and customer_user is not None:
             notification = self._deliver_for_user(
                 event=event,
                 user=customer_user,
@@ -156,6 +157,23 @@ class NotificationService:
             notification.external_id = "no_recipient"
             notification.save(update_fields=["status", "external_id", "updated_at"])
 
+        push_result = self._send_expo_push(
+            notification=notification,
+            user=user,
+            subject=str(context.get("subject", template.subject)),
+            body=str(context.get("body", template.body)),
+            audience=audience,
+            event_type=event.event_type,
+        )
+        if push_result is not None:
+            NotificationLog.objects.create(
+                tenant=event.tenant,
+                notification=notification,
+                provider="expo_push",
+                response_code="200" if not push_result.get("error") else "502",
+                response_body=push_result,
+            )
+
         NotificationQueue.objects.create(
             tenant=event.tenant,
             notification=notification,
@@ -172,6 +190,42 @@ class NotificationService:
         )
         publish_notification_created(notification=notification)
         return notification
+
+    def _send_expo_push(
+        self,
+        *,
+        notification: Notification,
+        user: User,
+        subject: str,
+        body: str,
+        audience: str,
+        event_type: str,
+    ) -> dict[str, Any] | None:
+        from apps.notifications.services.expo_push import send_push_to_user
+
+        try:
+            result = send_push_to_user(
+                tenant=notification.tenant,
+                user=user,
+                title=subject,
+                body=body,
+                data={
+                    "notification_id": str(notification.id),
+                    "booking_id": str(notification.booking_id) if notification.booking_id else "",
+                    "event_type": event_type,
+                    "audience": audience,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Expo push failed",
+                extra={"notification_id": str(notification.id), "user_id": str(user.id)},
+            )
+            return {"error": "exception"}
+
+        if result.get("skipped"):
+            return None
+        return result
 
     def _get_template(self, event: BookingEvent, template_code: str) -> NotificationTemplate | None:
         queryset = NotificationTemplate.objects.filter(
@@ -268,12 +322,17 @@ class NotificationService:
             user=user,
             business=booking.business,
         )
+        payload = event.payload or {}
+        rating = payload.get("rating")
+        comment = payload.get("comment") or ""
         replacements = {
             "{{booking_number}}": booking.booking_number,
             "{{service_name}}": service_name,
             "{{customer_name}}": customer_name,
             "{{start_at}}": start_label,
             "{{status}}": booking.status,
+            "{{rating}}": str(rating) if rating is not None else "",
+            "{{comment}}": str(comment),
         }
         subject = template.subject
         body = template.body
@@ -301,6 +360,7 @@ class NotificationService:
             "BookingRescheduled": "booking_rescheduled",
             "BookingReminder": "booking_reminder",
             "BookingCompleted": "booking_completed",
+            "BookingReviewed": "booking_reviewed",
         }
         base = base_mapping.get(event_type, "welcome")
         if audience == "admin":

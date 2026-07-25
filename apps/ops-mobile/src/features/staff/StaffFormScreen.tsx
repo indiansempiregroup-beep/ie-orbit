@@ -14,7 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useIamMutations, useStaffMember, useStaffMutations, useTeamMembers } from '../../hooks/useOpsExtended';
-import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -255,7 +255,7 @@ export function StaffFormScreen() {
 
 const styles = StyleSheet.create({
   intro: { gap: 4, marginBottom: 4 },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
+  title: { ...typography.heading, color: colors.foreground },
   subtitle: { ...typography.body, color: colors.mutedForeground },
   helper: { ...typography.caption, color: colors.mutedForeground },
   roleRow: { gap: spacing.sm },
@@ -263,10 +263,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: colors.border,
     gap: 4,
-    ...shadows.soft,
   },
-  roleCardActive: { backgroundColor: colors.secondary },
+  roleCardActive: { backgroundColor: colors.secondary, borderColor: colors.primary },
   roleLabel: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodyBold },
   roleHelper: { ...typography.caption, color: colors.mutedForeground },
   inviteToggle: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },

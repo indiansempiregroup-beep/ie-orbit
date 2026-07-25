@@ -121,6 +121,28 @@ export type BookingStatus =
   | 'expired'
   | 'rescheduled';
 
+export type BookingReview = {
+  id: string;
+  business?: string;
+  booking_id: string;
+  booking_number?: string;
+  customer_id: string;
+  customer_name?: string;
+  service_id?: string | null;
+  service_name?: string;
+  rating: number;
+  comment?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type BookingReviewSummary = {
+  id: string;
+  rating: number;
+  comment?: string;
+  created_at?: string;
+};
+
 export type Booking = {
   id: string;
   tenant?: string;
@@ -148,6 +170,7 @@ export type Booking = {
   history?: Array<Record<string, unknown>>;
   booking_notes?: Array<Record<string, unknown>>;
   attachments?: Array<Record<string, unknown>>;
+  review?: BookingReviewSummary | null;
   created_at?: string;
   updated_at?: string;
   is_active?: boolean;
@@ -514,7 +537,41 @@ export type MobileCustomerProfile = {
   display_name: string;
   email?: string;
   phone_number?: string;
+  profile_photo?: string;
   address?: CustomerAddress | null;
+};
+
+export type MobileDiscoverServiceDetail = MobileDiscoverService & {
+  short_description?: string;
+  online_booking_enabled?: boolean;
+  staff?: Array<{ id: string; display_name: string; title?: string }>;
+};
+
+export type MobileReview = {
+  id: string;
+  booking_id: string;
+  booking_number: string;
+  service_name: string;
+  rating: number;
+  comment?: string;
+  created_at: string;
+};
+
+export type MobileLoyaltyBalance = {
+  points_balance: number;
+  ledger: Array<{
+    id: string;
+    points_delta: number;
+    reason: string;
+    booking_id?: string | null;
+    created_at: string;
+  }>;
+};
+
+export type MobileDeviceRegistration = {
+  id: string;
+  expo_push_token: string;
+  platform?: string;
 };
 
 export type MobileAvailabilityResponse = {
@@ -538,6 +595,7 @@ export type MobileBookingRequestInput = {
   phone_number?: string;
   email?: string;
   notes?: string;
+  payment_mode?: 'pay_at_venue';
 };
 
 export type MobileBookingRequestResponse = {
@@ -559,7 +617,9 @@ export type MobileBooking = {
   end_at: string;
   duration_minutes: number;
   notes?: string;
+  payment_mode?: string;
   created_at: string;
+  review?: BookingReviewSummary | null;
 };
 
 export type MobileBootstrapBranding = {
@@ -1407,6 +1467,12 @@ class ApiClient {
     checkIn: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/check-in`, { method: 'POST', body }),
     complete: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/complete`, { method: 'POST', body }),
     reschedule: (bookingId: string, body: { start_at: string; reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/reschedule`, { method: 'POST', body }),
+    listReviews: (query?: {
+      business?: string;
+      customer?: string;
+      booking?: string;
+      rating?: number;
+    }) => this.request<BookingReview[]>('/booking-reviews', { method: 'GET', query }),
     availability: (query: {
       business?: string;
       staff_id?: string;
@@ -1633,6 +1699,11 @@ class ApiClient {
     }) => this.request<MobileBootstrapResponse>('/mobile/bootstrap', { method: 'GET', query, auth: false }),
     discoverServices: (query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileDiscoverResponse>('/mobile/discover/services', { method: 'GET', query }),
+    getService: (serviceId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileDiscoverServiceDetail>(`/mobile/discover/services/${serviceId}`, {
+        method: 'GET',
+        query,
+      }),
     listStaff: (query: { tenant_slug: string; business_code: string; service_id?: string }) =>
       this.request<MobileStaffMember[]>('/mobile/staff', { method: 'GET', query }),
     availability: (query: {
@@ -1676,6 +1747,27 @@ class ApiClient {
       body: { full_address?: string; latitude?: number | null; longitude?: number | null },
       query: { tenant_slug: string; business_code: string },
     ) => this.request<MobileCustomerProfile>('/mobile/customer/profile', { method: 'PATCH', body, query }),
+    listMyReviews: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileReview[]>('/mobile/reviews/mine', { method: 'GET', query }),
+    createReview: (
+      bookingId: string,
+      body: { tenant_slug: string; business_code: string; rating: number; comment?: string },
+    ) =>
+      this.request<MobileReview>(`/mobile/bookings/${bookingId}/reviews`, { method: 'POST', body }),
+    getLoyalty: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileLoyaltyBalance>('/mobile/loyalty', { method: 'GET', query }),
+    registerDevice: (body: {
+      tenant_slug: string;
+      business_code: string;
+      expo_push_token: string;
+      platform?: string;
+      app_flavor?: string;
+    }) => this.request<MobileDeviceRegistration>('/mobile/devices/register', { method: 'POST', body }),
+    unregisterDevice: (body: {
+      tenant_slug: string;
+      business_code: string;
+      expo_push_token: string;
+    }) => this.request<{ unregistered: number }>('/mobile/devices/unregister', { method: 'POST', body }),
     listNotifications: (query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileNotificationItem[]>('/mobile/notifications', { method: 'GET', query }),
     markNotificationRead: (notificationId: string, query: { tenant_slug: string; business_code: string }) =>

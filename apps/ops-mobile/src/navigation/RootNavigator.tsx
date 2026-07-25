@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
+import { usePushRegistration } from '../hooks/usePushRegistration';
 import { hasOpsAccess } from '../utils/roles';
 import { colors } from '../theme/tokens';
 import type { RootStackParamList } from './types';
@@ -18,6 +19,7 @@ import { BookingDetailScreen } from '../features/bookings/BookingDetailScreen';
 import { CustomersScreen } from '../features/customers/CustomersScreen';
 import { CustomerFormScreen } from '../features/customers/CustomerFormScreen';
 import { CustomerDetailScreen } from '../features/customers/CustomerDetailScreen';
+import { ReviewsScreen } from '../features/reviews/ReviewsScreen';
 import { ServicesScreen } from '../features/services/ServicesScreen';
 import { ServiceFormScreen } from '../features/services/ServiceFormScreen';
 import { ServiceDetailScreen } from '../features/services/ServiceDetailScreen';
@@ -70,6 +72,10 @@ export function RootNavigator() {
     if (!authLoading && !workspaceLoading) setBootstrapped(true);
   }, [authLoading, workspaceLoading]);
 
+  const isAuthenticated = Boolean(token && user);
+  const opsAccess = hasOpsAccess(user);
+  usePushRegistration(Boolean(isAuthenticated && opsAccess && ready && user?.email_verified_at));
+
   if (!bootstrapped) {
     return (
       <View style={styles.boot}>
@@ -78,8 +84,6 @@ export function RootNavigator() {
     );
   }
 
-  const isAuthenticated = Boolean(token && user);
-  const opsAccess = hasOpsAccess(user);
   const needsWorkspacePicker = isAuthenticated && opsAccess && tenants.length > 1 && !ready;
 
   return (
@@ -100,6 +104,7 @@ export function RootNavigator() {
             {stackScreen('Customers', CustomersScreen, 'Customers')}
             {stackScreen('CustomerForm', CustomerFormScreen, 'Customer')}
             {stackScreen('CustomerDetail', CustomerDetailScreen, 'Customer')}
+            {stackScreen('Reviews', ReviewsScreen, 'Reviews')}
             {stackScreen('Services', ServicesScreen, 'Services')}
             {stackScreen('ServiceForm', ServiceFormScreen, 'Service')}
             {stackScreen('ServiceDetail', ServiceDetailScreen, 'Service')}

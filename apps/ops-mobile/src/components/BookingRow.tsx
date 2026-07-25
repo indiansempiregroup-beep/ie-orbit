@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Badge } from './ui/Badge';
-import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 import { formatDateTime, formatTime, mapBookingStatus } from '../utils/format';
 
 type Props = {
@@ -67,8 +67,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    padding: spacing.lg,
-    ...shadows.soft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
   },
   pressed: { opacity: 0.92 },
   timeBlock: {
@@ -85,7 +86,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   body: { flex: 1, gap: 2 },
-  title: { ...typography.label, fontSize: 15, color: colors.foreground },
+  title: { ...typography.label, color: colors.foreground },
   meta: { ...typography.caption, color: colors.foreground },
   subMeta: { ...typography.tiny, color: colors.mutedForeground },
 });

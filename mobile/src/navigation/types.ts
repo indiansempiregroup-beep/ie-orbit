@@ -18,6 +18,7 @@ export type RootStackParamList = {
   ProfileEdit: undefined;
   BookingHistory: undefined;
   BookingDetail: { bookingId: string };
+  ServiceDetail: { serviceId: string };
   ChangePassword: undefined;
   NotificationPreferences: undefined;
   PrivacySecurity: undefined;

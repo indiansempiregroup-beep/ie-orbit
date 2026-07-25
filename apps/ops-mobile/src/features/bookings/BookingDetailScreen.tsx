@@ -95,6 +95,18 @@ export function BookingDetailScreen() {
         <DetailRow label="Notes" value={booking.notes || '—'} />
       </Card>
 
+      {booking.review ? (
+        <Card>
+          <SectionHeader title="Customer review" />
+          <Text style={styles.rating}>
+            {'★'.repeat(booking.review.rating)}
+            {'☆'.repeat(5 - booking.review.rating)}
+          </Text>
+          <Text style={styles.reviewComment}>{booking.review.comment?.trim() || 'No written comment.'}</Text>
+          <Text style={styles.reviewMeta}>{formatDateTime(booking.review.created_at)}</Text>
+        </Card>
+      ) : null}
+
       {canAct ? (
         <Card>
           <Input label="Reason (optional)" value={reason} onChangeText={setReason} placeholder="Visible in audit trail" />
@@ -194,4 +206,7 @@ const styles = StyleSheet.create({
   reschedule: { gap: spacing.md },
   summaryLabel: { ...typography.caption, color: colors.mutedForeground },
   summaryValue: { ...typography.title, fontSize: 16, color: colors.foreground, marginTop: 4 },
+  rating: { ...typography.title, fontSize: 18, color: colors.primary, marginTop: spacing.xs },
+  reviewComment: { ...typography.body, color: colors.mutedForeground, marginTop: spacing.sm, lineHeight: 20 },
+  reviewMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
 });

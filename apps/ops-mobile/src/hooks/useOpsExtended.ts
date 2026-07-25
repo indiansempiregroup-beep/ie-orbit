@@ -27,6 +27,7 @@ import type {
   TenantMember,
   TenantSettingsResponse,
 } from '@ie-platform/sdk';
+import { filterFutureSlots } from '../utils/format';
 import { useOpsClient } from './useOpsClient';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { buildNameMap } from '../utils/entities';
@@ -75,7 +76,7 @@ export function useAvailability(
         interval_minutes: 30,
       });
       if (seq !== requestSeq.current) return;
-      setSlots(response.data ?? []);
+      setSlots(filterFutureSlots(response.data ?? []));
     } finally {
       if (seq === requestSeq.current) {
         setLoading(false);

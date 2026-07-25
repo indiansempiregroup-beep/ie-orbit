@@ -17,6 +17,7 @@ from apps.bookings.api.serializers import (
     BookingCreateSerializer,
     BookingPatchSerializer,
     BookingRescheduleSerializer,
+    BookingReviewSerializer,
     BookingSerializer,
     StaffLeaveSerializer,
     StaffSpecialAvailabilitySerializer,
@@ -25,11 +26,14 @@ from apps.bookings.api.serializers import (
 )
 from apps.bookings.models import (
     Booking,
+    BookingReview,
     BookingStatus,
     StaffLeave,
     StaffSpecialAvailability,
     StaffWeeklySchedule,
 )
+from apps.customers.models import Customer
+from apps.services.models import Service
 from apps.bookings.repositories import BookingRepository
 from apps.bookings.services import AvailabilityService, BookingService
 from apps.businesses.models import Business
@@ -107,6 +111,69 @@ class BookingListCreateView(APIView):
         if not business:
             raise NotFound("No business exists for the current tenant.")
         return business
+
+
+class BookingReviewListView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    @extend_schema(
+        tags=["Bookings"],
+        parameters=[
+            OpenApiParameter("business", str, description="Filter by business UUID."),
+            OpenApiParameter("customer", str, description="Filter by customer UUID."),
+            OpenApiParameter("booking", str, description="Filter by booking UUID."),
+            OpenApiParameter("rating", int, description="Filter by exact rating (1-5)."),
+        ],
+        responses={200: BookingReviewSerializer(many=True)},
+        description="List customer booking reviews for the current tenant.",
+    )
+    def get(self, request: Request) -> Response:
+        reviews = (
+            BookingReview.objects.require_tenant(request.current_tenant)
+            .select_related("booking", "business")
+            .order_by("-created_at")
+        )
+        business_id = request.query_params.get("business")
+        if business_id:
+            reviews = reviews.filter(business_id=business_id)
+        customer_id = request.query_params.get("customer")
+        if customer_id:
+            reviews = reviews.filter(customer_id=customer_id)
+        booking_id = request.query_params.get("booking")
+        if booking_id:
+            reviews = reviews.filter(booking_id=booking_id)
+        rating = request.query_params.get("rating")
+        if rating:
+            reviews = reviews.filter(rating=rating)
+
+        review_list = list(reviews)
+        service_ids = {
+            str(review.booking.service_id)
+            for review in review_list
+            if review.booking.service_id
+        }
+        customer_ids = {str(review.customer_id) for review in review_list}
+        service_map = {
+            str(service.id): service
+            for service in Service.objects.require_tenant(request.current_tenant).filter(
+                id__in=service_ids
+            )
+        }
+        customer_map = {
+            str(customer.id): customer
+            for customer in Customer.objects.require_tenant(request.current_tenant).filter(
+                id__in=customer_ids
+            )
+        }
+        serializer = BookingReviewSerializer(
+            review_list,
+            many=True,
+            context={"service_map": service_map, "customer_map": customer_map},
+        )
+        return success_response(
+            serializer.data,
+            request_id=getattr(request, "request_id", None),
+        )
 
 
 class BookingDetailView(APIView):

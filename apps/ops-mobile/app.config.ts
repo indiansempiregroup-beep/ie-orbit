@@ -23,6 +23,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     ...(Array.isArray(config.plugins) ? config.plugins : []),
     'expo-font',
+    'expo-notifications',
     [
       'expo-splash-screen',
       {

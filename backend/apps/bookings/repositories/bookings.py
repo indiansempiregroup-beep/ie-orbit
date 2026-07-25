@@ -12,7 +12,7 @@ class BookingRepository:
     permissions = {"booking:read", "booking:write", "booking:manage"}
 
     def list_for_request(self, *, tenant: Any, user: Any) -> QuerySet[Booking]:
-        queryset = Booking.objects.require_tenant(tenant).select_related("business")
+        queryset = Booking.objects.require_tenant(tenant).select_related("business", "review")
         if getattr(user, "is_superuser", False):
             return queryset
         if self._has_booking_permission(user):

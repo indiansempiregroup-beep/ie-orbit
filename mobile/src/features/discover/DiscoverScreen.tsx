@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MobileDiscoverCategory, MobileDiscoverService } from '@ie-platform/sdk';
 import { mobileClient } from '../../api/client';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
@@ -12,10 +13,15 @@ import { Chip } from '../../components/ui/Chip';
 import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
-import type { MainTabParamList } from '../../navigation/types';
+import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 export function DiscoverScreen() {
-  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+  const navigation = useNavigation<
+    CompositeNavigationProp<
+      BottomTabNavigationProp<MainTabParamList, 'Discover'>,
+      NativeStackNavigationProp<RootStackParamList>
+    >
+  >();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const primary = branding?.primaryColor ?? colors.primary;
@@ -87,7 +93,7 @@ export function DiscoverScreen() {
           <Pressable
             key={service.id}
             style={styles.card}
-            onPress={() => navigation.navigate('Book', { serviceId: service.id })}
+            onPress={() => navigation.navigate('ServiceDetail', { serviceId: service.id })}
           >
             {service.image_url ? (
               <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.thumbImage} />

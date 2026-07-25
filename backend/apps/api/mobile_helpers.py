@@ -61,12 +61,16 @@ def serialize_customer_address(customer: Customer) -> dict | None:
     }
 
 
-def serialize_mobile_customer_profile(customer: Customer) -> dict:
+def serialize_mobile_customer_profile(customer: Customer, *, user: User | None = None) -> dict:
+    profile_photo = ""
+    if user is not None:
+        profile_photo = getattr(user, "profile_photo", "") or ""
     return {
         "id": str(customer.id),
         "display_name": customer.display_name,
         "email": customer.email,
         "phone_number": customer.phone_number,
+        "profile_photo": profile_photo,
         "address": serialize_customer_address(customer),
     }
 

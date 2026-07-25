@@ -48,6 +48,7 @@ export function MoreScreen() {
       <View style={styles.menu}>
         <MenuSection title="Business">
           <MenuRow icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
+          <MenuRow icon="star" label="Reviews" onPress={() => navigation.navigate('Reviews')} />
           <MenuRow icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
           <MenuRow icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
           <MenuRow

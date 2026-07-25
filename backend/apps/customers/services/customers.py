@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
@@ -24,6 +26,18 @@ from apps.customers.emails.registration_invite import build_customer_registratio
 from apps.customers.repositories import CustomerRepository
 
 logger = logging.getLogger("ie_platform.customers")
+
+_COORDINATE_QUANTUM = Decimal("0.000001")
+
+
+def _as_coordinate(value: Any) -> Decimal | None:
+    """Normalize GPS floats to Decimal(9,6) without binary float artifacts."""
+    if value in (None, ""):
+        return None
+    try:
+        return Decimal(str(value)).quantize(_COORDINATE_QUANTUM, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValidationError({"coordinates": "Invalid latitude/longitude."}) from exc
 
 
 class CustomerService:
@@ -214,12 +228,19 @@ class CustomerService:
         )
         if address is None:
             address = CustomerAddress(tenant=customer.tenant, customer=customer, is_default=True)
+        if "latitude" in payload:
+            payload["latitude"] = _as_coordinate(payload.get("latitude"))
+        if "longitude" in payload:
+            payload["longitude"] = _as_coordinate(payload.get("longitude"))
         for field, value in payload.items():
             if hasattr(address, field):
                 setattr(address, field, value)
         address.line1 = line1
         address.is_default = True
-        address.full_clean()
+        try:
+            address.full_clean()
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.message_dict if hasattr(exc, "message_dict") else exc.messages) from exc
         address.save()
         customer.addresses.exclude(id=address.id).update(is_default=False)
         return address

@@ -18,7 +18,7 @@ import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
-import { brand, colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { brand, colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
 import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -196,19 +196,15 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hero: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.xxxl, gap: spacing.lg },
   heroQuote: {
-    fontFamily: fonts.displayMedium,
-    fontSize: 22,
-    color: 'rgba(255,255,255,0.92)',
-    lineHeight: 30,
-    letterSpacing: -0.3,
+    ...typography.body,
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 22,
   },
   formWrap: { flexGrow: 1, padding: spacing.xxl, paddingTop: spacing.xxxl },
   title: {
-    fontFamily: fonts.display,
-    fontSize: 30,
+    ...typography.heading,
     color: colors.foreground,
     marginBottom: 4,
-    letterSpacing: -0.4,
   },
   subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.xxl },
   form: { gap: spacing.lg },
@@ -218,8 +214,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.card,
-    ...shadows.soft,
   },
   pressed: { opacity: 0.92 },
   biometricIcon: {

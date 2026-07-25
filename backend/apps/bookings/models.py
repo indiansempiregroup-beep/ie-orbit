@@ -336,3 +336,29 @@ class BookingEvent(TenantModel):
     class Meta(TenantModel.Meta):
         db_table = "booking_events"
         ordering = ["created_at"]
+
+
+class BookingReview(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business", on_delete=models.CASCADE, related_name="booking_reviews"
+    )
+    booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name="review")
+    customer_id = models.UUIDField(db_index=True)
+    rating = models.PositiveSmallIntegerField()
+    comment = models.TextField(blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "booking_reviews"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(rating__gte=1) & models.Q(rating__lte=5),
+                name="ck_booking_review_rating_range",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Review {self.rating}★ for {self.booking_id}"

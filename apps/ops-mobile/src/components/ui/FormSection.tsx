@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 
 type Props = {
   step?: number;
@@ -35,20 +35,21 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
   },
-  stepText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.accentForeground },
+  stepText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.primaryForeground },
   copy: { flex: 1, gap: 2 },
-  title: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.foreground },
+  title: { ...typography.title, color: colors.foreground },
   subtitle: { ...typography.caption, color: colors.mutedForeground },
   body: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.md,
-    ...shadows.soft,
   },
 });

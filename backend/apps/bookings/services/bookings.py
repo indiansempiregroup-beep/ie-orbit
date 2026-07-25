@@ -211,7 +211,33 @@ class BookingService:
             event_type=event_type,
             payload={"booking_id": str(booking.id), "from": from_status, "to": to_status},
         )
+        if to_status == BookingStatus.COMPLETED and from_status != BookingStatus.COMPLETED:
+            self._award_loyalty_on_complete(booking=booking)
         return booking
+
+    def _award_loyalty_on_complete(self, *, booking: Booking) -> None:
+        try:
+            from apps.customers.models import Customer
+            from apps.customers.services.loyalty import LoyaltyService
+
+            customer = (
+                Customer.objects.require_tenant(booking.tenant)
+                .filter(id=booking.customer_id, business=booking.business)
+                .first()
+            )
+            if customer is None:
+                return
+            LoyaltyService().award_for_completed_booking(
+                tenant=booking.tenant,
+                business=booking.business,
+                customer=customer,
+                booking_id=booking.id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to award loyalty points",
+                extra={"booking_id": str(booking.id)},
+            )
 
     @transaction.atomic
     def reschedule(

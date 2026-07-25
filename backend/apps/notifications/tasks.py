@@ -15,3 +15,10 @@ def process_booking_event_task(event_id: str) -> str | None:
     if not notifications:
         return None
     return str(notifications[0].id)
+
+
+@shared_task(name="notifications.send_booking_reminders")
+def send_booking_reminders_task(lead_minutes: int = 15) -> dict[str, int]:
+    from apps.notifications.services.reminders import BookingReminderService
+
+    return BookingReminderService().send_due_reminders(lead_minutes=lead_minutes)

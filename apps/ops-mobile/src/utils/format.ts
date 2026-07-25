@@ -6,19 +6,30 @@ type DateTimeZoneConfig = {
 let userTimezone: string | undefined;
 let businessTimezone: string | undefined;
 
+/** Common non-IANA labels → IANA zones (Intl rejects bare "IST"). */
+const TIMEZONE_ALIASES: Record<string, string> = {
+  IST: 'Asia/Kolkata',
+};
+
 function normalizeTimezone(value?: string | null): string | undefined {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
+  if (!trimmed) return undefined;
+  return TIMEZONE_ALIASES[trimmed.toUpperCase()] ?? trimmed;
 }
 
-/** Configure display zones: user profile → business → device local. */
+/** Configure display zones: business (venue) → user profile → device local. */
 export function configureDateTimeZones(config: DateTimeZoneConfig) {
   userTimezone = normalizeTimezone(config.userTimezone);
   businessTimezone = normalizeTimezone(config.businessTimezone);
 }
 
+/**
+ * Prefer business timezone so booking slots show venue wall-clock time.
+ * Auth users default to "UTC", which previously overrode Asia/Kolkata and
+ * made 3:30 PM IST slots render as 10:00 AM.
+ */
 export function resolveDisplayTimeZone(): string | undefined {
-  return userTimezone || businessTimezone || undefined;
+  return businessTimezone || userTimezone || undefined;
 }
 
 function withZone(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions {
@@ -74,6 +85,17 @@ export function formatDateKey(date: Date) {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/** Keep only slots that start strictly after now (hides past times for today). */
+export function filterFutureSlots<T extends { start_at: string }>(
+  slots: T[],
+  nowMs: number = Date.now(),
+): T[] {
+  return slots.filter((slot) => {
+    const ts = new Date(slot.start_at).getTime();
+    return Number.isFinite(ts) && ts > nowMs;
+  });
 }
 
 export function mapBookingStatus(status: string): 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'noshow' {

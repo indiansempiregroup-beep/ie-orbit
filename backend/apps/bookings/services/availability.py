@@ -706,6 +706,7 @@ class AvailabilityService:
         slots: list[AvailabilitySlot] = []
         duration = timedelta(minutes=duration_minutes)
         interval = timedelta(minutes=interval_minutes)
+        # Compare in absolute time so today's morning slots drop once the clock passes them.
         now = timezone.now()
         for start_time, end_time, capacity in windows:
             cursor = self._combine_local(
@@ -715,20 +716,22 @@ class AvailabilityService:
                 business=business, target_date=target_date, clock=end_time
             )
             while cursor + duration <= window_end:
-                if cursor > now:
-                    slot_end = cursor + duration
-                    conflict_start = cursor - timedelta(minutes=buffers.before_minutes)
-                    conflict_end = slot_end + timedelta(minutes=buffers.after_minutes)
-                    conflict_count = self.repository.conflict_count(
-                        tenant=tenant,
-                        business=business,
-                        staff_id=staff_id,
-                        start_at=conflict_start,
-                        end_at=conflict_end,
-                        respect_booking_buffers=True,
-                    )
-                    if conflict_count < capacity:
-                        slots.append(AvailabilitySlot(cursor, slot_end, staff_id, capacity))
+                if cursor <= now:
+                    cursor += interval
+                    continue
+                slot_end = cursor + duration
+                conflict_start = cursor - timedelta(minutes=buffers.before_minutes)
+                conflict_end = slot_end + timedelta(minutes=buffers.after_minutes)
+                conflict_count = self.repository.conflict_count(
+                    tenant=tenant,
+                    business=business,
+                    staff_id=staff_id,
+                    start_at=conflict_start,
+                    end_at=conflict_end,
+                    respect_booking_buffers=True,
+                )
+                if conflict_count < capacity:
+                    slots.append(AvailabilitySlot(cursor, slot_end, staff_id, capacity))
                 cursor += interval
         return slots
 

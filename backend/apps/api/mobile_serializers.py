@@ -55,6 +55,11 @@ class MobileBookingRequestSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=32, required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+    payment_mode = serializers.ChoiceField(
+        choices=[("pay_at_venue", "Pay at venue")],
+        required=False,
+        default="pay_at_venue",
+    )
 
 
 class MobileBookingRescheduleSerializer(serializers.Serializer):
@@ -88,6 +93,13 @@ class MobileBookingListQuerySerializer(MobileScopedQuerySerializer):
     status = serializers.CharField(required=False, allow_blank=True)
 
 
+class MobileBookingReviewSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    rating = serializers.IntegerField()
+    comment = serializers.CharField(allow_blank=True, required=False)
+    created_at = serializers.DateTimeField()
+
+
 class MobileBookingSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     booking_number = serializers.CharField()
@@ -102,6 +114,7 @@ class MobileBookingSerializer(serializers.Serializer):
     duration_minutes = serializers.IntegerField()
     notes = serializers.CharField(allow_blank=True)
     created_at = serializers.DateTimeField()
+    review = MobileBookingReviewSerializer(allow_null=True, required=False)
 
 
 class MobileCustomerRegisterSerializer(serializers.Serializer):
@@ -135,10 +148,52 @@ class MobileCustomerProfileSerializer(serializers.Serializer):
     display_name = serializers.CharField()
     email = serializers.EmailField(allow_blank=True)
     phone_number = serializers.CharField(allow_blank=True)
+    profile_photo = serializers.CharField(allow_blank=True, required=False)
     address = MobileCustomerAddressSerializer(allow_null=True)
 
 
 class MobileCustomerProfileUpdateSerializer(serializers.Serializer):
     full_address = serializers.CharField(required=False, allow_blank=True)
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    # Accept GPS floats (often >6 dp) then quantize for CustomerAddress DecimalFields.
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
+
+    @staticmethod
+    def _quantize_coordinate(value: float, *, minimum: float, maximum: float, label: str):
+        from decimal import Decimal, ROUND_HALF_UP
+
+        if value < minimum or value > maximum:
+            raise serializers.ValidationError(f"{label} must be between {minimum} and {maximum}.")
+        # str(value) avoids float→Decimal binary artifacts that break DecimalField(decimal_places=6).
+        return Decimal(str(value)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
+    def validate_latitude(self, value: float | None):
+        if value is None:
+            return None
+        return self._quantize_coordinate(float(value), minimum=-90, maximum=90, label="Latitude")
+
+    def validate_longitude(self, value: float | None):
+        if value is None:
+            return None
+        return self._quantize_coordinate(float(value), minimum=-180, maximum=180, label="Longitude")
+
+
+class MobileReviewCreateSerializer(serializers.Serializer):
+    tenant_slug = serializers.SlugField()
+    business_code = serializers.SlugField()
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    comment = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class MobileDeviceRegisterSerializer(serializers.Serializer):
+    tenant_slug = serializers.SlugField()
+    business_code = serializers.SlugField()
+    expo_push_token = serializers.CharField(max_length=255)
+    platform = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    app_flavor = serializers.CharField(required=False, allow_blank=True, max_length=120)
+
+
+class MobileDeviceUnregisterSerializer(serializers.Serializer):
+    tenant_slug = serializers.SlugField()
+    business_code = serializers.SlugField()
+    expo_push_token = serializers.CharField(max_length=255)

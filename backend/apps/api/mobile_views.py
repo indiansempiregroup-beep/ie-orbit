@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -30,8 +31,11 @@ from apps.api.mobile_serializers import (
     MobileCustomerProfileSerializer,
     MobileCustomerProfileUpdateSerializer,
     MobileCustomerRegisterSerializer,
+    MobileDeviceRegisterSerializer,
+    MobileDeviceUnregisterSerializer,
     MobileDiscoverQuerySerializer,
     MobileNotificationSerializer,
+    MobileReviewCreateSerializer,
     MobileScopedQuerySerializer,
     MobileStaffQuerySerializer,
 )
@@ -39,7 +43,7 @@ from apps.authentication.api.serializers import UserProfileSerializer
 from apps.authentication.api.utils import client_ip, user_agent
 from apps.authentication.constants import DEFAULT_ROLE_DEFINITIONS
 from apps.authentication.services.authentication import AuthenticationService
-from apps.bookings.models import Booking, BookingChannel, BookingSource, BookingStatus
+from apps.bookings.models import Booking, BookingChannel, BookingReview, BookingSource, BookingStatus
 from apps.bookings.services.availability import AvailabilityService
 from apps.bookings.services.bookings import BookingService
 from apps.businesses.models import Business, WhiteLabelProfile
@@ -47,10 +51,13 @@ from apps.businesses.services.white_label import ensure_white_label_profile, ser
 from apps.common.api.responses import success_response
 from apps.customers.models import Customer
 from apps.customers.services import CustomerService
-from apps.notifications.models import Notification, NotificationStatus
+from apps.customers.services.loyalty import LoyaltyService
+from apps.notifications.models import MobileDevice, Notification, NotificationStatus
 from apps.notifications.constants import AUDIENCE_CUSTOMER
 from apps.notifications.repositories.notifications import audience_filter
 from apps.notifications.services.notifications import NotificationService
+from apps.platform_media.models import MediaFolderType, MediaVisibility
+from apps.platform_media.services import MediaService
 from apps.services.models import Service, ServiceCategory, ServiceImage, ServicePricing, ServiceStatus, ServiceVisibility
 from apps.staff.models import EmploymentStatus, Staff, StaffServiceAssignment
 from apps.tenancy.models import Tenant
@@ -118,6 +125,19 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
         staff = Staff.objects.require_tenant(tenant).filter(id=booking.staff_id).first()
         if staff is not None:
             staff_name = staff.display_name
+    metadata = booking.metadata or {}
+    review_payload = None
+    try:
+        review = booking.review
+    except BookingReview.DoesNotExist:
+        review = None
+    if review is not None:
+        review_payload = {
+            "id": str(review.id),
+            "rating": review.rating,
+            "comment": review.comment or "",
+            "created_at": review.created_at,
+        }
     return {
         "id": booking.id,
         "booking_number": booking.booking_number,
@@ -131,7 +151,49 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
         "end_at": booking.end_at,
         "duration_minutes": booking.duration_minutes,
         "notes": booking.notes or "",
+        "payment_mode": metadata.get("payment_mode") or "pay_at_venue",
         "created_at": booking.created_at,
+        "review": review_payload,
+    }
+
+
+def _serialize_mobile_service(*, tenant: Tenant, business: Business, service: Service, request: Request | None = None) -> dict:
+    default_price = (
+        ServicePricing.objects.require_tenant(tenant)
+        .filter(service=service, is_default=True)
+        .order_by("-created_at")
+        .first()
+    )
+    duration = (
+        service.durations.filter(is_default=True).values_list("duration_minutes", flat=True).first() or 30
+    )
+    staff_ids = list(
+        StaffServiceAssignment.objects.require_tenant(tenant)
+        .filter(service=service, is_active_assignment=True, staff__employment_status=EmploymentStatus.ACTIVE)
+        .values_list("staff_id", flat=True)
+    )
+    staff_rows = [
+        {
+            "id": str(member.id),
+            "display_name": member.display_name,
+            "title": member.designation or "",
+        }
+        for member in Staff.objects.require_tenant(tenant).filter(id__in=staff_ids, business=business)
+    ]
+    return {
+        "id": str(service.id),
+        "service_code": service.service_code,
+        "name": service.display_name or service.name,
+        "description": service.description or service.short_description or "",
+        "short_description": service.short_description or "",
+        "duration_minutes": duration,
+        "currency": default_price.currency if default_price else business.currency,
+        "price": float(default_price.base_price) if default_price else 0,
+        "category_id": str(service.category_id) if service.category_id else None,
+        "category_name": service.category.name if service.category else "General",
+        "image_url": _service_image_url(tenant=tenant, service=service, request=request),
+        "online_booking_enabled": bool(service.online_booking_enabled),
+        "staff": staff_rows,
     }
 
 
@@ -403,6 +465,9 @@ class MobileBookingRequestView(APIView):
                     "source": BookingSource.CUSTOMER_APP,
                     "channel": BookingChannel.MOBILE,
                     "notes": serializer.validated_data.get("notes", ""),
+                    "metadata": {
+                        "payment_mode": serializer.validated_data.get("payment_mode") or "pay_at_venue",
+                    },
                 },
                 actor=user,
             )
@@ -504,7 +569,7 @@ class MobileCustomerProfileView(APIView):
 
         customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
         return success_response(
-            serialize_mobile_customer_profile(customer),
+            serialize_mobile_customer_profile(customer, user=request.user),
             request_id=getattr(request, "request_id", None),
         )
 
@@ -529,10 +594,14 @@ class MobileCustomerProfileView(APIView):
             if key in serializer.validated_data
         }
         if address_payload:
-            self.customer_service.upsert_default_address(customer=customer, data=address_payload)
+            try:
+                self.customer_service.upsert_default_address(customer=customer, data=address_payload)
+            except DjangoValidationError as exc:
+                message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+                return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
         customer.refresh_from_db()
         return success_response(
-            serialize_mobile_customer_profile(customer),
+            serialize_mobile_customer_profile(customer, user=request.user),
             request_id=getattr(request, "request_id", None),
         )
 
@@ -801,5 +870,275 @@ class MobileBookingRescheduleView(APIView):
             return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
         return success_response(
             _serialize_mobile_booking(booking=booking, tenant=tenant),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class MobileDiscoverServiceDetailView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    @extend_schema(tags=["Mobile"])
+    def get(self, request: Request, service_id: uuid.UUID) -> Response:
+        serializer = MobileDiscoverQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        service = (
+            Service.objects.require_tenant(tenant)
+            .filter(
+                id=service_id,
+                business=business,
+                status=ServiceStatus.ACTIVE,
+                visibility=ServiceVisibility.PUBLIC,
+            )
+            .select_related("category")
+            .first()
+        )
+        if service is None:
+            return Response({"error": {"message": "Service not found."}}, status=status.HTTP_404_NOT_FOUND)
+        return success_response(
+            _serialize_mobile_service(tenant=tenant, business=business, service=service, request=request),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class MobileCustomerProfilePhotoView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+    parser_classes = [MultiPartParser, FormParser]
+    media_service = MediaService()
+
+    @extend_schema(tags=["Mobile"])
+    def post(self, request: Request) -> Response:
+        serializer = MobileScopedQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            return Response({"error": {"message": "file is required."}}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+
+        ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        try:
+            result = self.media_service.upload(
+                uploaded_file=uploaded,
+                tenant=tenant,
+                business=business,
+                uploaded_by=request.user,
+                folder_type=MediaFolderType.CUSTOMERS,
+                visibility=MediaVisibility.PUBLIC,
+                tags=["profile", "photo", "customer"],
+                display_name=f"{request.user.full_name or request.user.email} profile photo",
+            )
+        except DjangoValidationError as exc:
+            message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+            return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
+
+        public_url = str(result.media.metadata.get("public_url") or "")
+        if public_url:
+            request.user.profile_photo = public_url
+            request.user.save(update_fields=["profile_photo", "updated_at"])
+
+        return success_response(
+            {
+                "profile_photo": request.user.profile_photo,
+                "media_id": str(result.media.id),
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class MobileMyReviewsView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+
+    @extend_schema(tags=["Mobile"])
+    def get(self, request: Request) -> Response:
+        serializer = MobileScopedQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customers = resolve_customers_for_user(tenant=tenant, business=business, user=request.user)
+        reviews = (
+            BookingReview.objects.require_tenant(tenant)
+            .filter(business=business, customer_id__in=customers.values_list("id", flat=True))
+            .select_related("booking")
+            .order_by("-created_at")
+        )
+        rows = []
+        for review in reviews:
+            booking = review.booking
+            service = Service.objects.require_tenant(tenant).filter(id=booking.service_id).first()
+            rows.append(
+                {
+                    "id": str(review.id),
+                    "booking_id": str(booking.id),
+                    "booking_number": booking.booking_number,
+                    "service_name": (service.display_name or service.name) if service else "",
+                    "rating": review.rating,
+                    "comment": review.comment,
+                    "created_at": review.created_at,
+                }
+            )
+        return success_response(rows, request_id=getattr(request, "request_id", None))
+
+
+class MobileBookingReviewCreateView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+
+    @extend_schema(tags=["Mobile"], request=MobileReviewCreateSerializer)
+    def post(self, request: Request, booking_id: uuid.UUID) -> Response:
+        serializer = MobileReviewCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        booking = get_customer_booking(
+            tenant=tenant,
+            business=business,
+            user=request.user,
+            booking_id=booking_id,
+        )
+        if booking is None:
+            return Response({"error": {"message": "Booking not found."}}, status=status.HTTP_404_NOT_FOUND)
+        if booking.status != BookingStatus.COMPLETED:
+            return Response(
+                {"error": {"message": "Only completed bookings can be reviewed."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if BookingReview.objects.require_tenant(tenant).filter(booking=booking).exists():
+            return Response(
+                {"error": {"message": "This booking already has a review."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        review = BookingReview.objects.create(
+            tenant=tenant,
+            business=business,
+            booking=booking,
+            customer_id=booking.customer_id,
+            rating=serializer.validated_data["rating"],
+            comment=serializer.validated_data.get("comment", ""),
+        )
+        from apps.bookings.services.events import BookingEventPublisher
+
+        BookingEventPublisher().publish(
+            booking=booking,
+            event_type="BookingReviewed",
+            payload={
+                "review_id": str(review.id),
+                "rating": review.rating,
+                "comment": review.comment,
+            },
+        )
+        service = Service.objects.require_tenant(tenant).filter(id=booking.service_id).first()
+        return success_response(
+            {
+                "id": str(review.id),
+                "booking_id": str(booking.id),
+                "booking_number": booking.booking_number,
+                "service_name": (service.display_name or service.name) if service else "",
+                "rating": review.rating,
+                "comment": review.comment,
+                "created_at": review.created_at,
+            },
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class MobileDeviceRegisterView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+
+    @extend_schema(tags=["Mobile"], request=MobileDeviceRegisterSerializer)
+    def post(self, request: Request) -> Response:
+        serializer = MobileDeviceRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, _business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        device, _created = MobileDevice.objects.update_or_create(
+            tenant=tenant,
+            user=request.user,
+            expo_push_token=serializer.validated_data["expo_push_token"],
+            defaults={
+                "platform": serializer.validated_data.get("platform", ""),
+                "app_flavor": serializer.validated_data.get("app_flavor", ""),
+                "last_seen_at": timezone.now(),
+                "is_active": True,
+                "deleted_at": None,
+            },
+        )
+        return success_response(
+            {
+                "id": str(device.id),
+                "expo_push_token": device.expo_push_token,
+                "platform": device.platform,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class MobileDeviceUnregisterView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+
+    @extend_schema(tags=["Mobile"], request=MobileDeviceUnregisterSerializer)
+    def post(self, request: Request) -> Response:
+        serializer = MobileDeviceUnregisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, _business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        updated = (
+            MobileDevice.objects.require_tenant(tenant)
+            .filter(user=request.user, expo_push_token=serializer.validated_data["expo_push_token"])
+            .update(is_active=False, updated_at=timezone.now())
+        )
+        return success_response({"unregistered": updated}, request_id=getattr(request, "request_id", None))
+
+
+class MobileLoyaltyView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+    loyalty_service = LoyaltyService()
+
+    @extend_schema(tags=["Mobile"])
+    def get(self, request: Request) -> Response:
+        serializer = MobileScopedQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        return success_response(
+            self.loyalty_service.get_balance(tenant=tenant, business=business, customer=customer),
             request_id=getattr(request, "request_id", None),
         )

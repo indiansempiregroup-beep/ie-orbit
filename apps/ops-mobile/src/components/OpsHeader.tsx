@@ -27,8 +27,8 @@ export function OpsHeader({ title, subtitle, right, children, compact }: Props) 
       <View style={styles.row}>
         <View style={styles.copy}>
           <Text style={styles.kicker}>{activeBusiness?.display_name ?? brand.appName}</Text>
-          <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          <Text style={styles.title}>{title}</Text>
         </View>
         {right}
       </View>
@@ -46,22 +46,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  copy: { flex: 1, gap: 4 },
+  copy: { flex: 1, gap: 2 },
   kicker: {
     ...typography.caption,
     fontFamily: fonts.bodyMedium,
-    color: 'rgba(255,255,255,0.72)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  title: {
-    fontFamily: fonts.display,
-    fontSize: 30,
-    color: colors.primaryForeground,
-    letterSpacing: -0.5,
+    color: 'rgba(255,255,255,0.7)',
   },
   subtitle: {
     ...typography.body,
-    color: 'rgba(255,255,255,0.88)',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  title: {
+    fontFamily: fonts.display,
+    fontSize: 22,
+    color: colors.primaryForeground,
+    marginTop: 2,
   },
 });

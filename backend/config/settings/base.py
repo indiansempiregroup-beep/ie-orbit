@@ -220,6 +220,11 @@ CELERY_BEAT_SCHEDULE = {
     }
     if BILLING_OPS_DIGEST_ENABLED
     else None,
+    "notifications-send-booking-reminders": {
+        "task": "notifications.send_booking_reminders",
+        "schedule": timedelta(minutes=1),
+        "kwargs": {"lead_minutes": 15},
+    },
 }
 CELERY_BEAT_SCHEDULE = {key: value for key, value in CELERY_BEAT_SCHEDULE.items() if value is not None}
 

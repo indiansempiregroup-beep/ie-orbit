@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
-import { useBootstrap } from '../../contexts/BootstrapContext';
+import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useMobileBookings } from '../../hooks/useMobileBookings';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
@@ -25,25 +26,59 @@ const menuItems = [
 
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { user, logout } = useAuth();
+  const { user, logout, biometricEnabled, biometricLabel } = useAuth();
   const { branding } = useBootstrap();
+  const { tenantSlug, businessCode } = useBusinessContext();
   const { bookings, loading, reload } = useMobileBookings();
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const primary = branding?.primaryColor ?? colors.primary;
-  const { refreshing, onRefresh } = usePullToRefresh(reload);
+
+  const loadLoyalty = useCallback(async () => {
+    if (!tenantSlug || !businessCode) return;
+    try {
+      const res = await mobileClient.mobile.getLoyalty({
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+      });
+      setLoyaltyPoints(res.data.points_balance ?? 0);
+    } catch {
+      setLoyaltyPoints(0);
+    }
+  }, [tenantSlug, businessCode]);
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await Promise.all([reload(), loadLoyalty()]);
+  });
   const isRefreshing = refreshing || loading;
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLoyalty();
+    }, [loadLoyalty]),
+  );
+
+  useEffect(() => {
+    void loadLoyalty();
+  }, [loadLoyalty]);
 
   const displayName = user?.full_name || [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Guest';
   const completedBookings = bookings.filter((booking) => booking.status === 'completed').length;
 
   async function onSignOut() {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: () => void logout(),
-      },
-    ]);
+    Alert.alert(
+      'Sign out',
+      biometricEnabled
+        ? `You'll return to the login screen. You can sign back in with ${biometricLabel}.`
+        : 'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          style: 'destructive',
+          onPress: () => void logout(),
+        },
+      ],
+    );
   }
 
   return (
@@ -68,7 +103,7 @@ export function ProfileScreen() {
           {[
             { label: 'Bookings', value: String(bookings.length) },
             { label: 'Completed', value: String(completedBookings) },
-            { label: 'Loyalty Pts', value: '0' },
+            { label: 'Loyalty Pts', value: String(loyaltyPoints) },
           ].map((stat) => (
             <View key={stat.label} style={styles.stat}>
               <Text style={styles.statValue}>{stat.value}</Text>

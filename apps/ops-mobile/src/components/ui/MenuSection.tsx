@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 
 type Props = {
   title: string;
@@ -29,7 +29,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     overflow: 'hidden',
-    ...shadows.soft,
   },
 });

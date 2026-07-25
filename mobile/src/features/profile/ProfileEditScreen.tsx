@@ -1,19 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { ImagePickerAsset } from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { mobileClient } from '../../api/client';
+import { uploadCustomerProfilePhoto } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useMobileCustomerProfile } from '../../hooks/useMobileCustomerProfile';
 import { AddressMapPicker } from '../../components/AddressMapPicker';
+import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { colors, spacing, typography } from '../../theme/tokens';
+import { getApiErrorMessage } from '../../utils/format';
+
+function roundCoord(value: number | null): number | null {
+  if (value == null || Number.isNaN(value)) return null;
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
 
 export function ProfileEditScreen() {
   const navigation = useNavigation();
-  const { user, refreshProfile } = useAuth();
+  const { user, token, refreshProfile } = useAuth();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { profile, reload: reloadCustomerProfile } = useMobileCustomerProfile(Boolean(user));
@@ -22,12 +31,23 @@ export function ProfileEditScreen() {
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [phone, setPhone] = useState(user?.phone_number ?? '');
+  const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(user?.profile_photo ?? null);
   const [fullAddress, setFullAddress] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    setFirstName(user?.first_name ?? '');
+    setLastName(user?.last_name ?? '');
+    setPhone(user?.phone_number ?? '');
+    if (!photoAsset) {
+      setPhotoPreview(user?.profile_photo ?? null);
+    }
+  }, [user, photoAsset]);
 
   useEffect(() => {
     const address = profile?.address;
@@ -42,6 +62,17 @@ export function ProfileEditScreen() {
     setSuccess('');
     setSaving(true);
     try {
+      if (photoAsset && token && tenantSlug && businessCode) {
+        const uploaded = await uploadCustomerProfilePhoto({
+          token,
+          tenantSlug,
+          businessCode,
+          asset: photoAsset,
+        });
+        setPhotoPreview(uploaded.profile_photo);
+        setPhotoAsset(null);
+      }
+
       await mobileClient.auth.patchMe({
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -51,8 +82,8 @@ export function ProfileEditScreen() {
         await mobileClient.mobile.updateCustomerProfile(
           {
             full_address: fullAddress.trim(),
-            latitude,
-            longitude,
+            latitude: roundCoord(latitude),
+            longitude: roundCoord(longitude),
           },
           { tenant_slug: tenantSlug, business_code: businessCode },
         );
@@ -61,7 +92,7 @@ export function ProfileEditScreen() {
       await refreshProfile();
       setSuccess('Profile updated.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to update profile.');
+      setError(getApiErrorMessage(err, 'Unable to update profile.'));
     } finally {
       setSaving(false);
     }
@@ -78,6 +109,16 @@ export function ProfileEditScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ImagePickerButton
+          label="Profile photo"
+          variant="avatar"
+          valueUri={photoPreview}
+          onPicked={(asset) => {
+            setPhotoAsset(asset);
+            setPhotoPreview(asset.uri);
+          }}
+          helperText="Tap to take a photo or choose from your gallery."
+        />
         <Input label="First name" value={firstName} onChangeText={setFirstName} placeholder="First name" />
         <Input label="Last name" value={lastName} onChangeText={setLastName} placeholder="Last name" />
         <Input
