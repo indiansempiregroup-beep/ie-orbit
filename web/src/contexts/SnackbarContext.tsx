@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 type Snackbar = { id: string; message: string; severity: 'info' | 'success' | 'warning' | 'error' };
 
@@ -11,7 +12,7 @@ type SnackbarContextState = {
 const SnackbarContext = createContext<SnackbarContextState | undefined>(undefined);
 
 function SnackbarHost({ items, dismiss }: { items: Snackbar[]; dismiss: (id: string) => void }) {
-  return (
+  return createPortal(
     <div className="snackbar-host" aria-live="polite" aria-atomic="true">
       {items.map((item) => (
         <div key={item.id} className={`snackbar snackbar-${item.severity}`} role="status">
@@ -26,7 +27,8 @@ function SnackbarHost({ items, dismiss }: { items: Snackbar[]; dismiss: (id: str
           </button>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

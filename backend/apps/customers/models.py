@@ -426,3 +426,75 @@ class CustomerLoyaltyLedger(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.points_delta} ({self.reason})"
+
+
+class BorrowLedgerEntryType(models.TextChoices):
+    CHARGE = "charge", "Charge"
+    PAYMENT = "payment", "Payment"
+    ADJUSTMENT = "adjustment", "Adjustment"
+
+
+class CustomerBorrowAccount(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="borrow_accounts",
+    )
+    customer = models.OneToOneField(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="borrow_account",
+    )
+    balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "customer_borrow_accounts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "customer"],
+                name="uq_borrow_account_tenant_business_customer",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.customer_id}: due {self.balance_due}"
+
+
+class CustomerBorrowLedger(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    account = models.ForeignKey(
+        CustomerBorrowAccount,
+        on_delete=models.CASCADE,
+        related_name="ledger_entries",
+    )
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="borrow_ledger_entries",
+    )
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="borrow_ledger_entries",
+    )
+    entry_type = models.CharField(max_length=32, choices=BorrowLedgerEntryType.choices)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    balance_after = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_method = models.CharField(max_length=32, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+    order_id = models.UUIDField(null=True, blank=True, db_index=True)
+    order_number = models.CharField(max_length=32, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "customer_borrow_ledger"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.entry_type} {self.amount}"

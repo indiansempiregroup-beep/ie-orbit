@@ -17,6 +17,8 @@ const ACCESS_KEY = 'ie.ops.access';
 const REFRESH_KEY = 'ie.ops.refresh';
 const LEGACY_ACCESS_KEY = 'ie:ops:access';
 const LEGACY_REFRESH_KEY = 'ie:ops:refresh';
+/** Match backend SIMPLE_JWT ACCESS_TOKEN_LIFETIME (15 minutes). */
+const ACCESS_TTL_SECONDS = 15 * 60;
 
 const STORE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -38,6 +40,8 @@ type AuthState = {
   bootstrapSession: (payload: WorkspaceProvisionResponse) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  /** Refresh the access token if needed; call before long uploads / analysis. */
+  ensureFreshAccess: () => Promise<string | null>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -92,10 +96,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
   const refreshTokenRef = useRef<string | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
+  const accessIssuedAtRef = useRef<number>(0);
 
   useEffect(() => {
     opsClient.setToken(token);
   }, [token]);
+
+  const clearRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+  }, []);
 
   const refreshBiometricState = useCallback(async () => {
     await migrateLegacyBiometricKeys().catch(() => undefined);
@@ -105,6 +119,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setBiometricEnabled(enabled);
   }, []);
 
+  const performRefresh = useCallback(async (): Promise<string | null> => {
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+
+    const run = (async () => {
+      const refresh =
+        refreshTokenRef.current ||
+        (await readToken(REFRESH_KEY)) ||
+        (await getStoredBiometricSession())?.refresh ||
+        null;
+      if (!refresh) return null;
+      try {
+        const response = await opsClient.auth.refresh({ refresh });
+        const access = response.data.access;
+        const nextRefresh = response.data.refresh || refresh;
+        if (!access) return null;
+
+        opsClient.setToken(access);
+        setToken(access);
+        refreshTokenRef.current = nextRefresh;
+        accessIssuedAtRef.current = Date.now();
+        await writeToken(ACCESS_KEY, access);
+        await writeToken(REFRESH_KEY, nextRefresh);
+
+        if (await isBiometricLoginEnabled()) {
+          const biometricSession = await getStoredBiometricSession();
+          const email = biometricSession?.email;
+          if (email) {
+            await storeBiometricSession(email, nextRefresh);
+          }
+        }
+        return access;
+      } catch {
+        return null;
+      } finally {
+        refreshInFlightRef.current = null;
+      }
+    })();
+
+    refreshInFlightRef.current = run;
+    return run;
+  }, []);
+
+  const scheduleRefresh = useCallback(
+    (expiresInSeconds = ACCESS_TTL_SECONDS) => {
+      clearRefreshTimer();
+      const whenMs = Math.max(5, expiresInSeconds - 60) * 1000;
+      refreshTimerRef.current = setTimeout(() => {
+        void performRefresh().then((access) => {
+          if (access) {
+            scheduleRefresh(ACCESS_TTL_SECONDS);
+          }
+        });
+      }, whenMs);
+    },
+    [clearRefreshTimer, performRefresh],
+  );
+
+  const ensureFreshAccess = useCallback(async (): Promise<string | null> => {
+    const ageMs = Date.now() - accessIssuedAtRef.current;
+    const nearExpiry = !token || ageMs > (ACCESS_TTL_SECONDS - 90) * 1000;
+    if (!nearExpiry) return token;
+
+    const refreshed = await performRefresh();
+    if (refreshed) {
+      scheduleRefresh(ACCESS_TTL_SECONDS);
+      return refreshed;
+    }
+    return token;
+  }, [performRefresh, scheduleRefresh, token]);
+
   const restore = useCallback(async () => {
     setLoading(true);
     try {
@@ -112,15 +198,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const migrated = await migrateLegacyAuthKeys();
       const access = migrated.access;
       refreshTokenRef.current = migrated.refresh;
-      if (!access) {
+      if (!access && !migrated.refresh) {
         setToken(null);
         setUser(null);
         return;
       }
-      opsClient.setToken(access);
-      const response = await opsClient.auth.me();
-      setToken(access);
-      setUser(response.data);
+      if (access) {
+        opsClient.setToken(access);
+        try {
+          const response = await opsClient.auth.me();
+          setToken(access);
+          setUser(response.data);
+          accessIssuedAtRef.current = Date.now();
+          scheduleRefresh(ACCESS_TTL_SECONDS);
+          return;
+        } catch {
+          // Access expired — try refresh before signing out.
+        }
+      }
+
+      const refreshed = await performRefresh();
+      if (!refreshed) {
+        await writeToken(ACCESS_KEY, null);
+        if (!(await isBiometricLoginEnabled())) {
+          await writeToken(REFRESH_KEY, null);
+          refreshTokenRef.current = null;
+        }
+        setToken(null);
+        setUser(null);
+        return;
+      }
+      const me = await opsClient.auth.me();
+      setUser(me.data);
+      scheduleRefresh(ACCESS_TTL_SECONDS);
     } catch {
       await writeToken(ACCESS_KEY, null);
       // Keep refresh when biometric login is enabled so Face ID can restore the session.
@@ -133,11 +243,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [refreshBiometricState]);
+  }, [performRefresh, refreshBiometricState, scheduleRefresh]);
 
   useEffect(() => {
     void restore();
-  }, [restore]);
+    return () => clearRefreshTimer();
+    // Intentionally run once on mount; restore reads latest secure-store tokens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applySession = useCallback(async (payload: LoginResponse) => {
     if (!payload.access) {
@@ -159,8 +272,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(payload.access);
     setUser(nextUser);
     refreshTokenRef.current = refresh;
+    accessIssuedAtRef.current = Date.now();
     await writeToken(ACCESS_KEY, payload.access);
     await writeToken(REFRESH_KEY, refresh);
+    scheduleRefresh(
+      typeof payload.expires_in === 'number' && payload.expires_in > 0
+        ? payload.expires_in
+        : ACCESS_TTL_SECONDS,
+    );
 
     if (await isBiometricLoginEnabled()) {
       const email = nextUser.email;
@@ -168,7 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await storeBiometricSession(email, refresh);
       }
     }
-  }, []);
+  }, [scheduleRefresh]);
 
   const login = useCallback(async (email: string, password: string, rememberMe = true) => {
     setLoading(true);
@@ -267,19 +386,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const bootstrapSession = useCallback(async (payload: WorkspaceProvisionResponse) => {
     setLoading(true);
     try {
+      opsClient.setToken(payload.access);
       setToken(payload.access);
       setUser(payload.user);
       refreshTokenRef.current = payload.refresh;
+      accessIssuedAtRef.current = Date.now();
       await writeToken(ACCESS_KEY, payload.access);
       await writeToken(REFRESH_KEY, payload.refresh);
+      scheduleRefresh(ACCESS_TTL_SECONDS);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scheduleRefresh]);
 
   const logout = useCallback(async () => {
     setLoading(true);
     try {
+      clearRefreshTimer();
       const biometricOn = await isBiometricLoginEnabled();
       const refresh = refreshTokenRef.current || (await readToken(REFRESH_KEY));
 
@@ -317,7 +440,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user?.email, refreshBiometricState]);
+  }, [user?.email, refreshBiometricState, clearRefreshTimer]);
 
   const refreshProfile = useCallback(async () => {
     if (!token) return;
@@ -341,6 +464,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       bootstrapSession,
       logout,
       refreshProfile,
+      ensureFreshAccess,
     }),
     [
       user,
@@ -357,6 +481,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       bootstrapSession,
       logout,
       refreshProfile,
+      ensureFreshAccess,
     ],
   );
 

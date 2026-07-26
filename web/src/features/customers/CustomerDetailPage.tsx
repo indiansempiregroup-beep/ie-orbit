@@ -13,6 +13,7 @@ import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { Customer360Tabs } from './Customer360Tabs';
+import { CustomerBorrowPanel } from './CustomerBorrowPanel';
 
 type AddressFormState = {
   full_address: string;
@@ -127,6 +128,13 @@ export function CustomerDetailPage() {
                   <p style={{ margin: '8px 0 0' }}>{customerQuery.data.phone_number ?? '—'}</p>
                 </div>
               </div>
+
+              <CustomerBorrowPanel
+                customerId={customerQuery.data.id}
+                balanceDue={Number(customerQuery.data.borrow_balance_due ?? 0)}
+                currency={customerQuery.data.borrow_currency || 'INR'}
+                onChanged={() => customerQuery.refetch()}
+              />
 
               <div style={{ display: 'grid', gap: 12 }}>
                 <p style={{ margin: 0, color: '#6b7280' }}>Address</p>

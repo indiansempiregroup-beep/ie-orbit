@@ -94,13 +94,14 @@ export const APPLICATION_DOMAINS: Record<string, PlatformDomain[]> = {
       owns: ['external calendar connections'],
     },
   ],
-  invoiceie: [
+  shopie: [
     {
-      id: 'invoicing',
-      label: 'Invoicing',
+      id: 'shop_commerce',
+      label: 'ShopIE Commerce',
       layer: 'application',
-      owns: ['invoices', 'payments', 'taxes', 'refunds'],
-      consumes: ['customer', 'staff', 'service_catalog', 'business'],
+      backendApps: ['shopie'],
+      owns: ['products', 'barcodes', 'orders', 'stock', 'invoices', 'quotations'],
+      consumes: ['customer', 'business', 'media'],
     },
   ],
   crmie: [
@@ -110,15 +111,6 @@ export const APPLICATION_DOMAINS: Record<string, PlatformDomain[]> = {
       layer: 'application',
       owns: ['campaigns', 'membership', 'loyalty', 'automation'],
       consumes: ['customer', 'staff', 'business'],
-    },
-  ],
-  inventoryie: [
-    {
-      id: 'inventory',
-      label: 'Inventory',
-      layer: 'application',
-      owns: ['stock', 'suppliers', 'purchase orders'],
-      consumes: ['business'],
     },
   ],
   hrie: [
@@ -132,7 +124,7 @@ export const APPLICATION_DOMAINS: Record<string, PlatformDomain[]> = {
   ],
 };
 
-export const PRODUCT_CODES = ['appointie', 'invoiceie', 'crmie', 'inventoryie', 'hrie'] as const;
+export const PRODUCT_CODES = ['appointie', 'shopie', 'crmie', 'hrie'] as const;
 export type ProductCode = (typeof PRODUCT_CODES)[number];
 
 export function getApplicationDomains(productCode: string): PlatformDomain[] {

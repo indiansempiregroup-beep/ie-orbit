@@ -11,7 +11,7 @@ export type ProductSubscriptionLike = {
 
 export const PRODUCT_CATALOG: ProductDefinition[] = [
   { id: 'appointie', name: 'AppointIE', description: 'Booking and scheduling for service businesses.' },
-  { id: 'invoiceie', name: 'InvoiceIE', description: 'Invoicing and payment workflows.' },
+  { id: 'shopie', name: 'ShopIE', description: 'Catalog, POS, inventory, and billing.' },
   { id: 'crmie', name: 'CRMIE', description: 'Customer relationship management.' },
 ];
 
@@ -32,4 +32,12 @@ export function getSubscribedProducts(subscriptions?: ProductSubscriptionLike[] 
 export function getAvailableProducts(subscriptions?: ProductSubscriptionLike[] | null) {
   const subscribed = new Set(getSubscribedProducts(subscriptions).map((p) => p.id));
   return PRODUCT_CATALOG.filter((p) => !subscribed.has(p.id));
+}
+
+export function getSubscribedProductIds(subscriptions?: ProductSubscriptionLike[] | null) {
+  return getSubscribedProducts(subscriptions).map((p) => p.id);
+}
+
+export function hasShopie(subscriptions?: ProductSubscriptionLike[] | null) {
+  return getSubscribedProductIds(subscriptions).includes('shopie');
 }

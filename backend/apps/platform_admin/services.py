@@ -362,7 +362,7 @@ class PlatformAdminService:
     # --- feature flags -------------------------------------------------------------
 
     def list_flags(self, *, tenant: Tenant) -> list[dict[str, Any]]:
-        defaults = ["appointie", "invoiceie", "crmie", "bi_full", "white_label"]
+        defaults = ["appointie", "shopie", "crmie", "bi_full", "white_label"]
         existing = {f.key: f for f in PlatformFeatureFlag.objects.filter(tenant=tenant)}
         rows = []
         for key in defaults:

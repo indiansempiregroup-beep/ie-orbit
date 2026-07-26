@@ -17,6 +17,7 @@ import {
   canManageTeam,
   formatUserRole,
 } from '../../utils/roles';
+import { hasShopie } from '../../utils/products';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -31,6 +32,7 @@ export function MoreScreen() {
   const showTeam = canManageTeam(user);
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
+  const showShop = hasShopie(activeBusiness?.product_subscriptions);
   const workspaceLabel = activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace');
 
   function onSignOut() {
@@ -59,10 +61,21 @@ export function MoreScreen() {
         <MenuSection title={t('settings.business')}>
           <MenuRow icon="users" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
           <MenuRow icon="star" label={t('settings.reviews')} onPress={() => navigation.navigate('Reviews')} />
+          {showShop ? (
+            <>
+              <MenuRow icon="shopping-cart" label={t('nav.pos')} onPress={() => navigation.navigate('ShopPos')} />
+              <MenuRow icon="shopping-bag" label={t('nav.shopProducts')} onPress={() => navigation.navigate('ShopProducts')} />
+              <MenuRow icon="list" label={t('nav.shopOrders')} onPress={() => navigation.navigate('ShopOrders')} />
+              <MenuRow icon="camera" label={t('nav.scanBarcode')} onPress={() => navigation.navigate('BarcodeScanner')} />
+              <MenuRow icon="rotate-ccw" label={t('nav.shopReturns')} onPress={() => navigation.navigate('ShopReturns')} />
+              <MenuRow icon="map-pin" label={t('nav.shopDeliveryZones')} onPress={() => navigation.navigate('ShopDeliveryZones')} />
+              <MenuRow icon="heart" label={t('nav.shopPets')} onPress={() => navigation.navigate('ShopPets')} />
+            </>
+          ) : null}
           <MenuRow
             icon="package"
             label={t('settings.services')}
-            last={!showStaff && !showReports && !showSettings && !showTeam}
+            last={!showStaff && !showReports && !showSettings && !showTeam && !showShop}
             onPress={() => navigation.navigate('Services')}
           />
           {showStaff ? (

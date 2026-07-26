@@ -7,7 +7,7 @@ require('../../scripts/load-root-env.cjs').loadRootEnv();
 const FACE_ID_USAGE =
   'Allow IE Platform to use Face ID for quick sign-in.';
 const CAMERA_USAGE =
-  'Allow IE Platform to use the camera for profile and business photos.';
+  'Allow IE Platform to use the camera for barcode scanning and profile photos.';
 const PHOTOS_USAGE =
   'Allow IE Platform to access your photos for profile and business images.';
 
@@ -28,6 +28,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...(Array.isArray(config.plugins) ? config.plugins : []),
     'expo-font',
     'expo-notifications',
+    [
+      'expo-camera',
+      {
+        cameraPermission: CAMERA_USAGE,
+        barcodeScannerEnabled: true,
+      },
+    ],
     [
       'expo-splash-screen',
       {

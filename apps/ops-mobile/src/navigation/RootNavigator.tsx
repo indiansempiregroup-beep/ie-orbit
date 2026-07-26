@@ -34,6 +34,15 @@ import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { BusinessProfileScreen } from '../features/settings/BusinessProfileScreen';
 import { BusinessEditScreen } from '../features/settings/BusinessEditScreen';
 import { ProductSettingsScreen } from '../features/settings/ProductSettingsScreen';
+import { ShopProductsScreen } from '../features/shop/ShopProductsScreen';
+import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
+import { ShopOrdersScreen } from '../features/shop/ShopOrdersScreen';
+import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
+import { ShopPosScreen } from '../features/shop/ShopPosScreen';
+import { BarcodeScannerScreen } from '../features/shop/BarcodeScannerScreen';
+import { ShopReturnsScreen } from '../features/shop/ShopReturnsScreen';
+import { ShopDeliveryZonesScreen } from '../features/shop/ShopDeliveryZonesScreen';
+import { ShopPetsScreen } from '../features/shop/ShopPetsScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
 import { BIScreen } from '../features/bi/BIScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
@@ -135,6 +144,15 @@ export function RootNavigator() {
           {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
           {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
           {stackScreen('ProductSettings', ProductSettingsScreen, t('settings.productsBilling'))}
+          {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
+          {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
+          {stackScreen('ShopOrders', ShopOrdersScreen, t('nav.shopOrders'))}
+          {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
+          {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}
+          {stackScreen('BarcodeScanner', BarcodeScannerScreen, t('nav.scanBarcode'))}
+          {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
+          {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
+          {stackScreen('ShopPets', ShopPetsScreen, t('nav.shopPets'))}
           {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
           {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
           {stackScreen('Reports', ReportsScreen, t('nav.reports'))}

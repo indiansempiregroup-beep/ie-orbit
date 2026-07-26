@@ -557,7 +557,19 @@ h6 {
   min-height: 0;
   overflow-y: auto;
   min-width: 0;
-  padding: 20px 24px 28px;
+  padding: 16px 24px 28px;
+}
+
+/* Only reserve space when a banner is actually rendered (empty = no gap). */
+.app-shell-banners:not(:empty) {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.page-stack {
+  display: grid;
+  gap: 16px;
 }
 
 .settings-layout {

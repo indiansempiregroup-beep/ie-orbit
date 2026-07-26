@@ -14,6 +14,9 @@ import { ProfileEditScreen } from '../features/profile/ProfileEditScreen';
 import { BookingHistoryScreen } from '../features/booking/BookingHistoryScreen';
 import { BookingDetailScreen } from '../features/booking/BookingDetailScreen';
 import { ServiceDetailScreen } from '../features/discover/ServiceDetailScreen';
+import { ShopProductDetailScreen } from '../features/shop/ShopProductDetailScreen';
+import { CartScreen } from '../features/shop/CartScreen';
+import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import {
   ChangePasswordScreen,
   HelpSupportScreen,
@@ -72,6 +75,9 @@ export function RootNavigator() {
             <Stack.Screen name="BookingHistory" component={BookingHistoryScreen} />
             <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
             <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
+            <Stack.Screen name="ShopProductDetail" component={ShopProductDetailScreen} />
+            <Stack.Screen name="Cart" component={CartScreen} />
+            <Stack.Screen name="ShopOrderDetail" component={ShopOrderDetailScreen} />
             <Stack.Screen
               name="ProfileEdit"
               component={ProfileEditScreen}

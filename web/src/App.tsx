@@ -35,6 +35,16 @@ const StaffDetailPage = lazy(() => import('./features/staff/StaffDetailPage').th
 const CalendarPage = lazy(() => import('./features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })));
 const BookingsPage = lazy(() => import('./features/bookings/BookingsPage').then((m) => ({ default: m.BookingsPage })));
 const BookingDetailPage = lazy(() => import('./features/bookings/BookingDetailPage').then((m) => ({ default: m.BookingDetailPage })));
+const ShopPosPage = lazy(() => import('./features/shop/ShopPosPage').then((m) => ({ default: m.ShopPosPage })));
+const ShopProductsPage = lazy(() => import('./features/shop/ShopProductsPage').then((m) => ({ default: m.ShopProductsPage })));
+const ShopOrdersPage = lazy(() => import('./features/shop/ShopOrdersPage').then((m) => ({ default: m.ShopOrdersPage })));
+const ShopOrderDetailPage = lazy(() => import('./features/shop/ShopOrderDetailPage').then((m) => ({ default: m.ShopOrderDetailPage })));
+const ShopReturnsPage = lazy(() => import('./features/shop/ShopReturnsPage').then((m) => ({ default: m.ShopReturnsPage })));
+const ShopDeliveryZonesPage = lazy(() =>
+  import('./features/shop/ShopDeliveryZonesPage').then((m) => ({ default: m.ShopDeliveryZonesPage })),
+);
+const ShopPetsPage = lazy(() => import('./features/shop/ShopPetsPage').then((m) => ({ default: m.ShopPetsPage })));
+const ShopBillingPage = lazy(() => import('./features/shop/ShopBillingPage').then((m) => ({ default: m.ShopBillingPage })));
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const ReportsPage = lazy(() => import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const BIOverviewPage = lazy(() => import('./features/bi/BIOverviewPage').then((m) => ({ default: m.BIOverviewPage })));
@@ -92,9 +102,9 @@ const NotFoundPage = lazy(() => import('./features/errors/NotFoundPage').then((m
 
 function PageFallback() {
   return (
-    <div style={{ minHeight: '40vh', display: 'grid', placeItems: 'center' }}>
-      <p role="status">Loading…</p>
-    </div>
+    <p role="status" style={{ margin: 0, padding: '8px 0', color: 'var(--muted-foreground)' }}>
+      Loading…
+    </p>
   );
 }
 
@@ -173,6 +183,18 @@ function App() {
                     <Route path="/calendar" element={<CalendarPage />} />
                     <Route path="/bookings" element={<BookingsPage />} />
                     <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
+                  </Route>
+                </Route>
+                <Route element={<ProductGuard products={['shopie']} />}>
+                  <Route element={<PermissionGuard anyPermissions={['business:read', 'business:write', 'booking:write', 'service:read']} />}>
+                    <Route path="/shop/pos" element={<ShopPosPage />} />
+                    <Route path="/shop/products" element={<ShopProductsPage />} />
+                    <Route path="/shop/orders" element={<ShopOrdersPage />} />
+                    <Route path="/shop/orders/:orderId" element={<ShopOrderDetailPage />} />
+                    <Route path="/shop/billing" element={<ShopBillingPage />} />
+                    <Route path="/shop/returns" element={<ShopReturnsPage />} />
+                    <Route path="/shop/delivery-zones" element={<ShopDeliveryZonesPage />} />
+                    <Route path="/shop/pets" element={<ShopPetsPage />} />
                   </Route>
                 </Route>
                 <Route path="/notifications" element={<NotificationsPage />} />

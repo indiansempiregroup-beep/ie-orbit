@@ -1105,6 +1105,361 @@ export type BusinessCreateInput = {
   selected_product?: string;
 };
 
+export type ShopProductBarcode = {
+  id: string;
+  code: string;
+  barcode_type: 'manufacturer' | 'internal' | 'rfid_epc' | string;
+  is_primary: boolean;
+};
+
+export type ShopProductCategory =
+  | 'food_grocery'
+  | 'beverages'
+  | 'snacks'
+  | 'dairy'
+  | 'personal_care'
+  | 'household'
+  | 'pet_food'
+  | 'pet_supplies'
+  | 'baby_care'
+  | 'health'
+  | 'electronics'
+  | 'apparel'
+  | 'other';
+
+export const SHOP_PRODUCT_CATEGORIES: Array<{ value: ShopProductCategory; label: string }> = [
+  { value: 'food_grocery', label: 'Food & grocery' },
+  { value: 'beverages', label: 'Beverages' },
+  { value: 'snacks', label: 'Snacks & confectionery' },
+  { value: 'dairy', label: 'Dairy' },
+  { value: 'personal_care', label: 'Personal care' },
+  { value: 'household', label: 'Household' },
+  { value: 'pet_food', label: 'Pet food' },
+  { value: 'pet_supplies', label: 'Pet supplies' },
+  { value: 'baby_care', label: 'Baby care' },
+  { value: 'health', label: 'Health & wellness' },
+  { value: 'electronics', label: 'Electronics & accessories' },
+  { value: 'apparel', label: 'Apparel' },
+  { value: 'other', label: 'Other' },
+];
+
+/** Map free-text enrichment categories onto a catalog option. */
+export function guessShopProductCategory(raw?: string | null): ShopProductCategory | '' {
+  const text = String(raw || '').trim().toLowerCase();
+  if (!text) return '';
+  const exact = SHOP_PRODUCT_CATEGORIES.find((item) => item.value === text || item.label.toLowerCase() === text);
+  if (exact) return exact.value;
+  const rules: Array<{ needle: RegExp; value: ShopProductCategory }> = [
+    { needle: /pet\s*food|dog food|cat food|en:pet-food/, value: 'pet_food' },
+    { needle: /pet\s*suppl|en:pet/, value: 'pet_supplies' },
+    { needle: /beverage|drink|soft.?drink|juice|water/, value: 'beverages' },
+    { needle: /snack|confection|chocolate|biscuit|cookie/, value: 'snacks' },
+    { needle: /dairy|milk|cheese|yogurt|yoghurt/, value: 'dairy' },
+    { needle: /personal.?care|shampoo|soap|toothpaste|cosmetic/, value: 'personal_care' },
+    { needle: /household|cleaning|detergent|laundry/, value: 'household' },
+    { needle: /baby|infant|diaper/, value: 'baby_care' },
+    { needle: /health|wellness|vitamin|supplement/, value: 'health' },
+    { needle: /electronic|charger|cable|accessory/, value: 'electronics' },
+    { needle: /apparel|clothing|fashion|wear/, value: 'apparel' },
+    { needle: /grocery|food|en:foods/, value: 'food_grocery' },
+  ];
+  for (const rule of rules) {
+    if (rule.needle.test(text)) return rule.value;
+  }
+  return 'other';
+}
+
+export type ShopProduct = {
+  id: string;
+  business: string;
+  sku?: string;
+  name: string;
+  brand?: string;
+  description?: string;
+  status: string;
+  price: string | number;
+  tax_rate?: string | number;
+  currency?: string;
+  stock_on_hand: string | number;
+  low_stock_threshold?: string | number;
+  pack_size?: string;
+  image_url?: string;
+  category?: ShopProductCategory | string;
+  metadata?: Record<string, unknown>;
+  barcodes?: ShopProductBarcode[];
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopProductWriteInput = {
+  business_id: string;
+  sku?: string;
+  name: string;
+  brand?: string;
+  description?: string;
+  status?: string;
+  price?: string | number;
+  tax_rate?: string | number;
+  currency?: string;
+  stock_on_hand?: string | number;
+  low_stock_threshold?: string | number;
+  pack_size?: string;
+  image_url?: string;
+  category?: ShopProductCategory | string;
+  metadata?: Record<string, unknown>;
+  barcodes?: Array<{
+    code: string;
+    barcode_type?: string;
+    is_primary?: boolean;
+  }>;
+};
+
+export type ShopBarcodeEnrichment = {
+  found: boolean;
+  code: string;
+  source?: string | null;
+  sku?: string;
+  name?: string;
+  brand?: string;
+  pack_size?: string;
+  serving_size?: string;
+  image_url?: string;
+  local_image_url?: string;
+  front_image_url?: string;
+  back_image_url?: string;
+  description?: string;
+  categories?: string;
+  query?: string;
+  message?: string;
+  barcode_candidates?: string[];
+  tools?: string[];
+  confidence?: 'high' | 'medium' | 'low' | 'none' | string;
+  match_method?: 'barcode' | 'search' | 'none' | string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+};
+
+export type ShopPackagingAnalyzeJob = {
+  job_id: string;
+  status: 'queued' | 'running' | 'done' | 'failed' | string;
+  result?: ShopBarcodeEnrichment | null;
+  error?: string | null;
+  front_image_url?: string;
+  back_image_url?: string;
+};
+
+export type ShopOrderLine = {
+  id: string;
+  product: string;
+  product_name: string;
+  barcode_scanned?: string;
+  quantity: string | number;
+  unit_price: string | number;
+  tax_rate?: string | number;
+  discount_type?: string;
+  discount_value?: string | number;
+  discount_amount?: string | number;
+  line_subtotal: string | number;
+  line_tax: string | number;
+  line_total: string | number;
+};
+
+export type ShopOrder = {
+  id: string;
+  business: string;
+  customer_id?: string | null;
+  order_number: string;
+  status: string;
+  fulfillment_mode: string;
+  currency?: string;
+  subtotal: string | number;
+  discount_total?: string | number;
+  tax_total: string | number;
+  total: string | number;
+  notes?: string;
+  delivery_address?: string;
+  metadata?: Record<string, unknown>;
+  lines?: ShopOrderLine[];
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopOrderCreateInput = {
+  business_id: string;
+  customer_id?: string | null;
+  fulfillment_mode?: string;
+  notes?: string;
+  delivery_address?: string;
+  delivery_city?: string;
+  delivery_postal_code?: string;
+  confirm?: boolean;
+  bill_discount_type?: '' | 'percent' | 'amount' | string;
+  bill_discount_value?: string | number;
+  payment_method?: '' | 'cash' | 'upi' | 'card' | 'borrow' | string;
+  lines: Array<{
+    product_id: string;
+    quantity?: string | number;
+    unit_price?: string | number;
+    tax_rate?: string | number;
+    barcode_scanned?: string;
+    discount_type?: '' | 'percent' | 'amount' | string;
+    discount_value?: string | number;
+  }>;
+};
+
+export type ShopReturn = {
+  id: string;
+  business: string;
+  order: string;
+  customer?: string | null;
+  return_number: string;
+  status: string;
+  reason?: string;
+  restock: boolean;
+  refund_total: string | number;
+  currency?: string;
+  credit_invoice?: string | null;
+  line_items?: unknown[];
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopReturnCreateInput = {
+  business_id: string;
+  order_id: string;
+  reason?: string;
+  restock?: boolean;
+  complete?: boolean;
+  lines: Array<{
+    order_line_id: string;
+    quantity: string | number;
+  }>;
+};
+
+export type ShopDeliveryZone = {
+  id: string;
+  business: string;
+  name: string;
+  enabled: boolean;
+  cities?: string[];
+  postal_prefixes?: string[];
+  same_day?: boolean;
+  fee?: string | number;
+  min_order_total?: string | number;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopDeliveryZoneWriteInput = {
+  business_id: string;
+  name: string;
+  enabled?: boolean;
+  cities?: string[];
+  postal_prefixes?: string[];
+  same_day?: boolean;
+  fee?: string | number;
+  min_order_total?: string | number;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShopPet = {
+  id: string;
+  business: string;
+  customer: string;
+  name: string;
+  species?: string;
+  breed?: string;
+  sex?: string;
+  birthday?: string | null;
+  medical_notes?: string;
+  medical_records?: unknown[];
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopPetWriteInput = {
+  business_id: string;
+  customer_id: string;
+  name: string;
+  species?: string;
+  breed?: string;
+  sex?: string;
+  birthday?: string | null;
+  medical_notes?: string;
+  medical_records?: unknown[];
+  metadata?: Record<string, unknown>;
+};
+
+export type ShopSettings = {
+  id: string;
+  business: string;
+  enabled_packs?: string[];
+  pets_enabled?: boolean;
+  default_fulfillment_mode?: string;
+  same_day_delivery_enabled?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShopBarcodeBulkLookupResult = {
+  items: Array<{
+    code: string;
+    found: boolean;
+    product?: ShopProduct;
+  }>;
+  found_count: number;
+};
+
+export type ShopInvoice = {
+  id: string;
+  business: string;
+  customer?: string | null;
+  order?: string | null;
+  invoice_number: string;
+  status: string;
+  currency?: string;
+  subtotal: string | number;
+  tax_total: string | number;
+  total: string | number;
+  amount_paid?: string | number;
+  notes?: string;
+  line_items?: unknown[];
+  created_at?: string;
+};
+
+export type ShopQuotation = {
+  id: string;
+  business: string;
+  customer?: string | null;
+  quotation_number: string;
+  status: string;
+  currency?: string;
+  subtotal: string | number;
+  tax_total: string | number;
+  total: string | number;
+  notes?: string;
+  line_items?: unknown[];
+  valid_until?: string | null;
+  converted_order?: string | null;
+  created_at?: string;
+};
+
+export type ShopQuotationCreateInput = {
+  business_id: string;
+  customer_id?: string | null;
+  notes?: string;
+  valid_until?: string | null;
+  lines: Array<{
+    product_id: string;
+    quantity?: string | number;
+    unit_price?: string | number;
+    tax_rate?: string | number;
+  }>;
+};
+
 export type BusinessUpdateInput = Partial<
   Pick<
     Business,
@@ -1209,8 +1564,49 @@ export type Customer = {
   longitude?: number | null;
   address?: CustomerAddress | null;
   addresses?: Array<CustomerAddress & { is_default?: boolean; full_address?: string | null }>;
+  borrow_balance_due?: string | number;
+  borrow_currency?: string;
   created_at?: string;
   updated_at?: string;
+};
+
+export type CustomerBorrowBalance = {
+  customer_id: string;
+  balance_due: string | number;
+  currency: string;
+};
+
+export type CustomerBorrowLedgerEntry = {
+  id: string;
+  entry_type: 'charge' | 'payment' | 'adjustment' | string;
+  amount: string | number;
+  balance_after: string | number;
+  payment_method?: string;
+  notes?: string;
+  order_id?: string | null;
+  order_number?: string;
+  created_at?: string;
+};
+
+export type CustomerBorrowPaymentInput = {
+  amount: string | number;
+  payment_method?: 'cash' | 'upi' | 'card' | string;
+  notes?: string;
+  order_id?: string | null;
+};
+
+export type CustomerBorrowPaymentResult = {
+  entry_id: string;
+  amount: string | number;
+  payment_method: string;
+  balance_due: string | number;
+  currency: string;
+  allocations?: Array<{
+    order_id: string;
+    order_number: string;
+    applied: string;
+    amount_due: string;
+  }>;
 };
 
 export type CustomerCreateInput = {
@@ -1646,6 +2042,85 @@ class ApiClient {
     patchMe: (body: PatchAuthMeRequest) => this.request<UserProfile>('/auth/me', { method: 'PATCH', body }),
   };
 
+  shop = {
+    listProducts: (query: {
+      business_id: string;
+      search?: string;
+      status?: string;
+      category?: string;
+    }) => this.request<ShopProduct[]>('/shop/products', { method: 'GET', query }),
+    createProduct: (body: ShopProductWriteInput) =>
+      this.request<ShopProduct>('/shop/products', { method: 'POST', body }),
+    getProduct: (productId: string) => this.request<ShopProduct>(`/shop/products/${productId}`, { method: 'GET' }),
+    patchProduct: (productId: string, body: Partial<ShopProductWriteInput>) =>
+      this.request<ShopProduct>(`/shop/products/${productId}`, { method: 'PATCH', body }),
+    lookupBarcode: (body: { business_id: string; code: string }) =>
+      this.request<ShopProduct>('/shop/barcodes/lookup', { method: 'POST', body }),
+    lookupBarcodesBulk: (body: { business_id: string; codes: string[] }) =>
+      this.request<ShopBarcodeBulkLookupResult>('/shop/barcodes/lookup-bulk', { method: 'POST', body }),
+    enrichBarcode: (body: { code?: string; query?: string; image_url?: string; hint?: string }) =>
+      this.request<ShopBarcodeEnrichment>('/shop/barcodes/enrich', { method: 'POST', body }),
+    analyzePackaging: (body: {
+      business_id: string;
+      front_image_url?: string;
+      back_image_url?: string;
+      hint?: string;
+      async_mode?: boolean;
+    }) => this.request<ShopPackagingAnalyzeJob>('/shop/products/analyze-packaging', { method: 'POST', body }),
+    getPackagingAnalysis: (jobId: string) =>
+      this.request<ShopPackagingAnalyzeJob>(`/shop/products/analyze-packaging/${jobId}`, { method: 'GET' }),
+    adjustStock: (productId: string, body: { quantity_delta: number | string; reason?: string; movement_type?: string }) =>
+      this.request<ShopProduct>(`/shop/products/${productId}/stock-adjust`, { method: 'POST', body }),
+    listOrders: (query: { business_id: string; status?: string; customer_id?: string }) =>
+      this.request<ShopOrder[]>('/shop/orders', { method: 'GET', query }),
+    createOrder: (body: ShopOrderCreateInput) => this.request<ShopOrder>('/shop/orders', { method: 'POST', body }),
+    getOrder: (orderId: string) => this.request<ShopOrder>(`/shop/orders/${orderId}`, { method: 'GET' }),
+    setOrderStatus: (orderId: string, body: { status: string }) =>
+      this.request<ShopOrder>(`/shop/orders/${orderId}/status`, { method: 'POST', body }),
+    settleOrderPayment: (orderId: string, body?: { settled_via?: 'cash' | 'upi' | 'card' | string }) =>
+      this.request<ShopOrder>(`/shop/orders/${orderId}/settle-payment`, { method: 'POST', body: body ?? {} }),
+    createInvoiceFromOrder: (orderId: string) =>
+      this.request<ShopInvoice>(`/shop/orders/${orderId}/invoice`, { method: 'POST' }),
+    listReturns: (query: { business_id: string; order_id?: string }) =>
+      this.request<ShopReturn[]>('/shop/returns', { method: 'GET', query }),
+    createReturn: (body: ShopReturnCreateInput) =>
+      this.request<ShopReturn>('/shop/returns', { method: 'POST', body }),
+    listDeliveryZones: (query: { business_id: string }) =>
+      this.request<ShopDeliveryZone[]>('/shop/delivery-zones', { method: 'GET', query }),
+    createDeliveryZone: (body: ShopDeliveryZoneWriteInput) =>
+      this.request<ShopDeliveryZone>('/shop/delivery-zones', { method: 'POST', body }),
+    patchDeliveryZone: (zoneId: string, body: Partial<ShopDeliveryZoneWriteInput>) =>
+      this.request<ShopDeliveryZone>(`/shop/delivery-zones/${zoneId}`, { method: 'PATCH', body }),
+    matchDeliveryZone: (body: { business_id: string; city?: string; postal_code?: string }) =>
+      this.request<{ matched: boolean; zone: ShopDeliveryZone | null }>('/shop/delivery-zones/match', {
+        method: 'POST',
+        body,
+      }),
+    getSettings: (query: { business_id: string }) =>
+      this.request<ShopSettings>('/shop/settings', { method: 'GET', query }),
+    patchSettings: (body: {
+      business_id: string;
+      enabled_packs?: string[];
+      enable_pets?: boolean;
+      default_fulfillment_mode?: string;
+      same_day_delivery_enabled?: boolean;
+      metadata?: Record<string, unknown>;
+    }) => this.request<ShopSettings>('/shop/settings', { method: 'PATCH', body }),
+    listPets: (query: { business_id: string; customer_id?: string }) =>
+      this.request<ShopPet[]>('/shop/pets', { method: 'GET', query }),
+    createPet: (body: ShopPetWriteInput) => this.request<ShopPet>('/shop/pets', { method: 'POST', body }),
+    getPet: (petId: string) => this.request<ShopPet>(`/shop/pets/${petId}`, { method: 'GET' }),
+    patchPet: (petId: string, body: Partial<ShopPetWriteInput>) =>
+      this.request<ShopPet>(`/shop/pets/${petId}`, { method: 'PATCH', body }),
+    deletePet: (petId: string) => this.request<{ deleted: boolean }>(`/shop/pets/${petId}`, { method: 'DELETE' }),
+    listInvoices: (query: { business_id: string }) =>
+      this.request<ShopInvoice[]>('/shop/invoices', { method: 'GET', query }),
+    listQuotations: (query: { business_id: string }) =>
+      this.request<ShopQuotation[]>('/shop/quotations', { method: 'GET', query }),
+    createQuotation: (body: ShopQuotationCreateInput) =>
+      this.request<ShopQuotation>('/shop/quotations', { method: 'POST', body }),
+  };
+
   bookings = {
     list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<Booking[]>('/bookings', { method: 'GET', query }),
     create: (body: BookingCreateInput) => this.request<Booking>('/bookings', { method: 'POST', body }),
@@ -1773,6 +2248,15 @@ class ApiClient {
     patch: (customerId: string, body: CustomerUpdateInput) => this.request<Customer>(`/customers/${customerId}`, { method: 'PATCH', body }),
     delete: (customerId: string) => this.request<null>(`/customers/${customerId}`, { method: 'DELETE' }),
     restore: (customerId: string) => this.request<Customer>(`/customers/${customerId}/restore`, { method: 'POST' }),
+    getBorrowBalance: (customerId: string) =>
+      this.request<CustomerBorrowBalance>(`/customers/${customerId}/borrow`, { method: 'GET' }),
+    listBorrowLedger: (customerId: string) =>
+      this.request<CustomerBorrowLedgerEntry[]>(`/customers/${customerId}/borrow/ledger`, { method: 'GET' }),
+    recordBorrowPayment: (customerId: string, body: CustomerBorrowPaymentInput) =>
+      this.request<CustomerBorrowPaymentResult>(`/customers/${customerId}/borrow/payments`, {
+        method: 'POST',
+        body,
+      }),
   };
 
   services = {
@@ -2116,6 +2600,24 @@ class ApiClient {
       this.request<MobileNotificationItem>(`/mobile/notifications/${notificationId}/read`, { method: 'PATCH', query }),
     readAllNotifications: (query: { tenant_slug: string; business_code: string }) =>
       this.request<{ updated: number }>('/mobile/notifications/read-all', { method: 'PATCH', query }),
+    listShopProducts: (query: { tenant_slug: string; business_code: string; search?: string }) =>
+      this.request<ShopProduct[]>('/mobile/shop/products', { method: 'GET', query, auth: false }),
+    getShopProduct: (productId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopProduct>(`/mobile/shop/products/${productId}`, { method: 'GET', query, auth: false }),
+    listShopOrders: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopOrder[]>('/mobile/shop/orders', { method: 'GET', query }),
+    createShopOrder: (body: {
+      tenant_slug: string;
+      business_code: string;
+      fulfillment_mode?: string;
+      notes?: string;
+      delivery_address?: string;
+      delivery_city?: string;
+      delivery_postal_code?: string;
+      lines: Array<{ product_id: string; quantity?: string | number; barcode_scanned?: string }>;
+    }) => this.request<ShopOrder>('/mobile/shop/orders', { method: 'POST', body }),
+    getShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopOrder>(`/mobile/shop/orders/${orderId}`, { method: 'GET', query }),
   };
 
   iam = {

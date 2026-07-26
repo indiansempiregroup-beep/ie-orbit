@@ -101,10 +101,27 @@ APPLICATION_DOMAINS: dict[str, tuple[DomainEntry, ...]] = {
             owns=("calendar_connection",),
         ),
     ),
+    "shopie": (
+        DomainEntry(
+            id="shop_commerce",
+            label="ShopIE Commerce",
+            layer="application",
+            django_apps=("shopie",),
+            owns=(
+                "shop_product",
+                "shop_barcode",
+                "shop_order",
+                "shop_stock",
+                "shop_invoice",
+                "shop_quotation",
+            ),
+            consumes=("customer", "business", "media"),
+        ),
+    ),
     "invoiceie": (
         DomainEntry(
             id="invoicing",
-            label="Invoicing",
+            label="Invoicing (legacy → ShopIE Billing)",
             layer="application",
             django_apps=(),
             owns=("invoice", "payment", "tax", "refund"),

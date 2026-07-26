@@ -26,6 +26,12 @@ from apps.api.mobile_views import (
     MobileStaffListView,
 )
 from apps.notifications.api.stream_views import MobileNotificationStreamView
+from apps.shopie.api.mobile_views import (
+    MobileShopOrderDetailView,
+    MobileShopOrderListCreateView,
+    MobileShopProductDetailView,
+    MobileShopProductListView,
+)
 
 urlpatterns = [
     path("mobile/bootstrap", MobileBootstrapView.as_view(), name="mobile-bootstrap"),
@@ -71,5 +77,17 @@ urlpatterns = [
         "mobile/notifications/<uuid:notification_id>/read",
         MobileNotificationMarkReadView.as_view(),
         name="mobile-notification-mark-read",
+    ),
+    path("mobile/shop/products", MobileShopProductListView.as_view(), name="mobile-shop-products"),
+    path(
+        "mobile/shop/products/<uuid:product_id>",
+        MobileShopProductDetailView.as_view(),
+        name="mobile-shop-product-detail",
+    ),
+    path("mobile/shop/orders", MobileShopOrderListCreateView.as_view(), name="mobile-shop-orders"),
+    path(
+        "mobile/shop/orders/<uuid:order_id>",
+        MobileShopOrderDetailView.as_view(),
+        name="mobile-shop-order-detail",
     ),
 ]

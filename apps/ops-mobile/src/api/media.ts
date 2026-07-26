@@ -89,6 +89,17 @@ export async function uploadServiceImage(args: Omit<UploadMediaArgs, 'folderType
   });
 }
 
+export async function uploadProductImage(
+  args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { productName?: string },
+) {
+  return uploadMedia({
+    ...args,
+    folderType: 'business',
+    tags: ['shop', 'product', 'image'],
+    displayName: `${args.productName?.trim() || 'Product'} image`,
+  });
+}
+
 export async function uploadStaffPhoto(args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { staffName: string }) {
   return uploadMedia({
     ...args,

@@ -114,8 +114,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastContext.Provider value={value}>
-      {children}
-      <ToastHost items={items} dismiss={dismiss} />
+      <View style={styles.root} pointerEvents="box-none">
+        {children}
+        <ToastHost items={items} dismiss={dismiss} />
+      </View>
     </ToastContext.Provider>
   );
 }
@@ -127,11 +129,15 @@ export function useToast() {
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   host: {
     position: 'absolute',
     left: spacing.lg,
     right: spacing.lg,
     zIndex: 99999,
+    elevation: 99999,
     gap: spacing.sm,
   },
   toast: {
@@ -146,7 +152,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    elevation: 8,
   },
   toastIcon: { marginTop: 1 },
   toastText: {

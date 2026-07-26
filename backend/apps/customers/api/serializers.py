@@ -88,6 +88,8 @@ class CustomerSerializer(serializers.ModelSerializer):
     addresses = CustomerAddressSerializer(many=True, read_only=True)
     communication_channels = CustomerCommunicationPreferenceSerializer(many=True, read_only=True)
     notes = CustomerNoteSerializer(many=True, read_only=True)
+    borrow_balance_due = serializers.SerializerMethodField()
+    borrow_currency = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
@@ -116,6 +118,8 @@ class CustomerSerializer(serializers.ModelSerializer):
             "addresses",
             "communication_channels",
             "notes",
+            "borrow_balance_due",
+            "borrow_currency",
             "created_at",
             "updated_at",
             "is_active",
@@ -128,10 +132,25 @@ class CustomerSerializer(serializers.ModelSerializer):
             "addresses",
             "communication_channels",
             "notes",
+            "borrow_balance_due",
+            "borrow_currency",
             "created_at",
             "updated_at",
             "is_active",
         ]
+
+    def get_borrow_balance_due(self, obj: Customer) -> str:
+        account = getattr(obj, "borrow_account", None)
+        if account is None:
+            return "0.00"
+        return str(account.balance_due)
+
+    def get_borrow_currency(self, obj: Customer) -> str:
+        account = getattr(obj, "borrow_account", None)
+        if account and account.currency:
+            return account.currency
+        business = getattr(obj, "business", None)
+        return getattr(business, "currency", None) or "INR"
 
     def validate_tags(self, value: list[str]) -> list[str]:
         return [tag.strip().lower() for tag in value if tag.strip()]
@@ -139,6 +158,34 @@ class CustomerSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict[str, object]) -> Customer:
         raise NotImplementedError("Customer creation is handled by the service layer.")
 
+
+class CustomerBorrowBalanceSerializer(serializers.Serializer):
+    customer_id = serializers.UUIDField()
+    balance_due = serializers.DecimalField(max_digits=12, decimal_places=2)
+    currency = serializers.CharField()
+
+
+class CustomerBorrowLedgerSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    entry_type = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    balance_after = serializers.DecimalField(max_digits=12, decimal_places=2)
+    payment_method = serializers.CharField(allow_blank=True)
+    notes = serializers.CharField(allow_blank=True)
+    order_id = serializers.UUIDField(allow_null=True)
+    order_number = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+
+
+class CustomerBorrowPaymentSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    payment_method = serializers.ChoiceField(
+        choices=[("cash", "Cash"), ("upi", "UPI"), ("card", "Card")],
+        required=False,
+        default="cash",
+    )
+    notes = serializers.CharField(required=False, allow_blank=True)
+    order_id = serializers.UUIDField(required=False, allow_null=True)
 
 class CustomerTagSerializer(serializers.ModelSerializer):
     class Meta:

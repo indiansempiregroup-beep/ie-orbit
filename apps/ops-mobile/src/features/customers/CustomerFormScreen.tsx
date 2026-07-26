@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { CommonActions, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AddressPlacesField } from '../../components/AddressPlacesField';
 import { FormScreen } from '../../components/FormScreen';
@@ -15,6 +15,33 @@ import { colors, fonts, typography } from '../../theme/tokens';
 import { parseCustomerAddress, type ParsedCustomerAddress } from '../../utils/customerAddress';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
+import { writePosSession } from '../shop/posSession';
+
+function returnToPos(
+  navigation: NativeStackNavigationProp<RootStackParamList>,
+  customerId: string,
+) {
+  writePosSession({ customerId });
+  navigation.dispatch((state) => {
+    const posIndex = state.routes.findIndex((route) => route.name === 'ShopPos');
+    if (posIndex >= 0) {
+      const routes = state.routes.slice(0, posIndex + 1).map((route, index) =>
+        index === posIndex
+          ? { ...route, params: { ...(route.params as object), selectCustomerId: customerId } }
+          : route,
+      );
+      return CommonActions.reset({
+        ...state,
+        routes,
+        index: posIndex,
+      });
+    }
+    return CommonActions.navigate({
+      name: 'ShopPos',
+      params: { selectCustomerId: customerId },
+    });
+  });
+}
 
 export function CustomerFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CustomerForm'>>();
@@ -83,7 +110,11 @@ export function CustomerFormScreen() {
 
               if (isEdit && route.params?.customerId) {
                 await mutations.update(route.params.customerId, payload);
-                navigation.replace('CustomerDetail', { customerId: route.params.customerId });
+                if (route.params?.returnTo === 'pos') {
+                  returnToPos(navigation, route.params.customerId);
+                } else {
+                  navigation.replace('CustomerDetail', { customerId: route.params.customerId });
+                }
               } else {
                 const code = `c-${Date.now().toString(36)}`;
                 const created = await mutations.create({
@@ -92,7 +123,11 @@ export function CustomerFormScreen() {
                   ...payload,
                   display_name: payload.display_name || code,
                 });
-                navigation.replace('CustomerDetail', { customerId: created.id });
+                if (route.params?.returnTo === 'pos') {
+                  returnToPos(navigation, created.id);
+                } else {
+                  navigation.replace('CustomerDetail', { customerId: created.id });
+                }
               }
             } catch (err) {
               setError(getApiErrorMessage(err, 'Unable to save customer.'));

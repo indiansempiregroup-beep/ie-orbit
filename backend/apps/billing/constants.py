@@ -4,6 +4,8 @@ from __future__ import annotations
 PLAN_PRICE_PAISE: dict[str, int] = {
     "appointie-starter": 99900,
     "appointie-pro": 199900,
+    "shopie-starter": 99900,
+    "shopie-pro": 199900,
     "invoiceie-starter": 79900,
     "invoiceie-pro": 149900,
     "crmie-starter": 59900,

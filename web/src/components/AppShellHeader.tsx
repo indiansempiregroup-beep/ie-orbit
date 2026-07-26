@@ -6,9 +6,8 @@ import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import { useGlobalSearch } from '../hooks/useGlobalSearch';
-import { getProductName, getSubscribedProducts } from '../config/products';
+import { getSubscribedProducts } from '../config/products';
 import { useAppShellTitle } from '../hooks/useAppShellTitle';
-import { useSnackbar } from '../hooks/useSnackbar';
 import { buildWorkspaceSnapshot, formatWorkspaceLabel } from '../lib/workspaceModel';
 import { canManageBusinessSettings, hasPermission, isPlatformAdmin } from '../utils/roles';
 
@@ -18,7 +17,6 @@ export function AppShellHeader() {
   const { user } = useAuth();
   const businessOptions = useBusinessOptions();
   const theme = useTheme();
-  const snackbar = useSnackbar();
   const canSearchStaff = hasPermission(user, 'staff:read') || hasPermission(user, 'staff:write') || hasPermission(user, 'staff:manage');
   const canManageWorkspace = canManageBusinessSettings(user);
   const showPlatformAdminLink = isPlatformAdmin(user);
@@ -85,23 +83,11 @@ export function AppShellHeader() {
     () => getSubscribedProducts(workspace.activeBusiness?.product_subscriptions),
     [workspace.activeBusiness?.product_subscriptions],
   );
-  const selectedProduct = workspace.activeProduct ?? '';
 
   const handleBusinessChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
     if (!value || value === '__add__') return;
     workspace.setBusinessId(value);
-  };
-
-  const handleProductChange = async (event: ChangeEvent<HTMLSelectElement>) => {
-    const nextProduct = event.target.value;
-    if (!nextProduct) return;
-    try {
-      await workspace.switchProduct(nextProduct);
-      snackbar.push(`Switched to ${getProductName(nextProduct)} for ${businessName}.`, 'success');
-    } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to change product.', 'error');
-    }
   };
 
   return (
@@ -189,20 +175,11 @@ export function AppShellHeader() {
           </button>
           <div className="app-shell-workspace-switcher" aria-label="Workspace switcher">
             <label className="app-shell-workspace-field">
-              <span>Product</span>
+              <span>Products</span>
               {subscribedProducts.length > 0 ? (
-                <select
-                  value={selectedProduct}
-                  onChange={handleProductChange}
-                  disabled={!workspace.businessId || workspace.loading}
-                >
-                  {!selectedProduct ? <option value="">Select product</option> : null}
-                  {subscribedProducts.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="app-shell-workspace-empty" title={subscribedProducts.map((p) => p.name).join(', ')}>
+                  {subscribedProducts.map((product) => product.name).join(' · ')}
+                </div>
               ) : (
                 <div className="app-shell-workspace-empty">No subscribed products</div>
               )}

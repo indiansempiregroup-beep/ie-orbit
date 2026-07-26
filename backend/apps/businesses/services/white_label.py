@@ -7,6 +7,7 @@ from apps.businesses.models import Business, BusinessProductSubscription, Busine
 
 PRODUCT_FEATURES: dict[str, list[str]] = {
     "appointie": ["mobile_booking", "mobile_discover", "mobile_availability"],
+    "shopie": ["mobile_shop", "mobile_cart", "mobile_orders"],
     "bi": ["bi_overview", "bi_revenue", "bi_reports", "bi_forecast"],
 }
 

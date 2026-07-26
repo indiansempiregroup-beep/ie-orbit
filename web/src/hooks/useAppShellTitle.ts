@@ -20,6 +20,14 @@ const STATIC_TITLES: Record<string, string> = {
   profile: 'Profile',
   overview: 'BI Overview',
   revenue: 'BI Revenue',
+  shop: 'Shop',
+  pos: 'POS',
+  products: 'Products',
+  orders: 'Shop orders',
+  billing: 'Billing',
+  returns: 'Returns',
+  'delivery-zones': 'Delivery zones',
+  pets: 'Pets',
 };
 
 function isUuid(value: string | undefined) {

@@ -16,9 +16,9 @@ export const PRODUCT_CATALOG: ProductDefinition[] = [
     description: 'Booking, scheduling, and customer operations for service businesses.',
   },
   {
-    id: 'invoiceie',
-    name: 'InvoiceIE',
-    description: 'Invoicing and payment workflows for growing teams.',
+    id: 'shopie',
+    name: 'ShopIE',
+    description: 'Catalog, POS, inventory, and billing for retail businesses.',
   },
   {
     id: 'crmie',
@@ -58,6 +58,19 @@ export function getAvailableProducts(
   return PRODUCT_CATALOG.filter((product) => !subscribedIds.has(product.id));
 }
 
+export function getSubscribedProductIds(
+  subscriptions?: ProductSubscriptionLike[] | null,
+): string[] {
+  return getSubscribedProducts(subscriptions).map((product) => product.id);
+}
+
+export function hasSubscribedProduct(
+  subscriptions: ProductSubscriptionLike[] | null | undefined,
+  productId: string,
+): boolean {
+  return getSubscribedProductIds(subscriptions).includes(productId);
+}
+
 export function resolveEnabledProducts(
   selectedProduct?: string | null,
   productCode?: string | null,
@@ -78,5 +91,5 @@ export function resolveEnabledProducts(
 
   const activeId = selectedProduct ?? productCode ?? (typeof featureFlags?.selected_product === 'string' ? featureFlags.selected_product : null);
   const activeProduct = getProductById(activeId);
-  return activeProduct ? [activeProduct] : [];
+  return activeProduct ? [activeProduct] : [PRODUCT_CATALOG[0]];
 }

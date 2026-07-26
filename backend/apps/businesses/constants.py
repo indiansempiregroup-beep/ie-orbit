@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 PRODUCT_APPOINTIE = "appointie"
-PRODUCT_INVOICEIE = "invoiceie"
+PRODUCT_SHOPIE = "shopie"
 PRODUCT_CRMIE = "crmie"
+# Legacy stub kept for existing subscription rows; not offered in new catalogs.
+PRODUCT_INVOICEIE = "invoiceie"
 
 VALID_PRODUCT_CODES = frozenset(
     {
         PRODUCT_APPOINTIE,
-        PRODUCT_INVOICEIE,
+        PRODUCT_SHOPIE,
         PRODUCT_CRMIE,
+        PRODUCT_INVOICEIE,
     }
 )
 
@@ -72,11 +75,37 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "features": list(PLAN_FEATURES_FULL),
         },
     ],
+    PRODUCT_SHOPIE: [
+        {
+            "code": "shopie-starter",
+            "name": "ShopIE Starter",
+            "description": "Catalog, POS, inventory, and billing for a single location.",
+            "billing_interval": BILLING_INTERVAL_MONTHLY,
+            "trial_days": DEFAULT_TRIAL_DAYS,
+            "is_default": True,
+            "max_staff": 2,
+            "max_branches": 1,
+            "bi_features": list(BI_FEATURES_LIMITED),
+            "features": list(PLAN_FEATURES_LIMITED),
+        },
+        {
+            "code": "shopie-pro",
+            "name": "ShopIE Pro",
+            "description": "Multi-location commerce with advanced inventory and billing.",
+            "billing_interval": BILLING_INTERVAL_MONTHLY,
+            "trial_days": DEFAULT_TRIAL_DAYS,
+            "is_default": False,
+            "max_staff": 5,
+            "max_branches": 5,
+            "bi_features": list(BI_FEATURES_FULL),
+            "features": list(PLAN_FEATURES_FULL),
+        },
+    ],
     PRODUCT_INVOICEIE: [
         {
             "code": "invoiceie-starter",
-            "name": "InvoiceIE Starter",
-            "description": "Invoicing essentials for small teams.",
+            "name": "InvoiceIE Starter (legacy)",
+            "description": "Legacy plan — use ShopIE Billing instead.",
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": True,
@@ -87,8 +116,8 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
         },
         {
             "code": "invoiceie-pro",
-            "name": "InvoiceIE Pro",
-            "description": "Advanced invoicing, reminders, and reporting.",
+            "name": "InvoiceIE Pro (legacy)",
+            "description": "Legacy plan — use ShopIE Billing instead.",
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": False,

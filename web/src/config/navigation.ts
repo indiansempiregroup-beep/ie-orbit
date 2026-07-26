@@ -6,12 +6,20 @@ import {
   CalendarDays,
   ChartColumnBig,
   LayoutDashboard,
+  MapPinned,
   NotebookPen,
+  Package,
+  PawPrint,
+  Receipt,
+  RotateCcw,
   Settings,
   Scissors,
+  ShoppingCart,
   UserCog,
   Users,
+  WalletCards,
 } from 'lucide-react';
+import { getSubscribedProductIds, type ProductSubscriptionLike } from './products';
 import type { UserProfile } from '@ie-platform/sdk';
 import {
   canAccessReports,
@@ -58,6 +66,62 @@ export const navigationItems: AppNavItem[] = [
     group: 'operations',
     products: ['appointie'],
     anyPermissions: ['booking:read'],
+  },
+  {
+    to: '/shop/pos',
+    labelKey: 'nav.pos',
+    icon: ShoppingCart,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'business:write', 'booking:write'],
+  },
+  {
+    to: '/shop/products',
+    labelKey: 'nav.shopProducts',
+    icon: Package,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'service:read'],
+  },
+  {
+    to: '/shop/orders',
+    labelKey: 'nav.shopOrders',
+    icon: Receipt,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'booking:read'],
+  },
+  {
+    to: '/shop/billing',
+    labelKey: 'nav.shopBilling',
+    icon: WalletCards,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'business:write', 'booking:write'],
+  },
+  {
+    to: '/shop/returns',
+    labelKey: 'nav.shopReturns',
+    icon: RotateCcw,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'booking:write'],
+  },
+  {
+    to: '/shop/delivery-zones',
+    labelKey: 'nav.shopDeliveryZones',
+    icon: MapPinned,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'business:write'],
+  },
+  {
+    to: '/shop/pets',
+    labelKey: 'nav.shopPets',
+    icon: PawPrint,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['customer:read', 'business:read'],
   },
   {
     to: '/customers',
@@ -169,13 +233,19 @@ export const quickActionItems: AppNavItem[] = [
   },
 ];
 
+/** True when item has no product gate, or any required product is in the subscription union. */
 export function isProductAllowed(
   products: string[] | undefined,
   activeProduct: string | null | undefined,
+  subscribedProductIds?: string[] | null,
 ): boolean {
   if (!products?.length) return true;
-  const product = activeProduct ?? 'appointie';
-  return products.includes(product);
+  const subscribed = subscribedProductIds?.length
+    ? subscribedProductIds
+    : activeProduct
+      ? [activeProduct]
+      : ['appointie'];
+  return products.some((product) => subscribed.includes(product));
 }
 
 export function isNavItemVisibleForUser(
@@ -191,8 +261,9 @@ export function isNavItemVisible(
   item: AppNavItem,
   activeProduct: string | null | undefined,
   user?: UserProfile | null,
+  subscribedProductIds?: string[] | null,
 ): boolean {
-  if (!isProductAllowed(item.products, activeProduct)) return false;
+  if (!isProductAllowed(item.products, activeProduct, subscribedProductIds)) return false;
   return isNavItemVisibleForUser(item, user);
 }
 
@@ -200,8 +271,10 @@ export function filterNavigationByProduct(
   items: AppNavItem[],
   activeProduct: string | null | undefined,
   user?: UserProfile | null,
+  subscriptions?: ProductSubscriptionLike[] | null,
 ): AppNavItem[] {
-  return items.filter((item) => isNavItemVisible(item, activeProduct, user));
+  const subscribedIds = getSubscribedProductIds(subscriptions);
+  return items.filter((item) => isNavItemVisible(item, activeProduct, user, subscribedIds));
 }
 
 /** @deprecated Prefer hasPermission from utils/roles */

@@ -13,23 +13,19 @@ import { DiscoverScreen } from '../features/discover/DiscoverScreen';
 import { BookingScreen } from '../features/booking/BookingScreen';
 import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
+import { ShopScreen } from '../features/shop/ShopScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Feather.glyphMap> = {
-  Home: 'home',
-  Discover: 'search',
-  Book: 'calendar',
-  Alerts: 'bell',
-  Profile: 'user',
-};
-
 export function MainTabs() {
   const { t } = useTranslation();
-  const { branding } = useBootstrap();
+  const { branding, bootstrap } = useBootstrap();
   const { unreadCount, reload } = useMobileNotifications();
   useNotificationStream({ onNotification: reload });
   const primary = branding?.primaryColor ?? colors.primary;
+  const features = bootstrap?.features ?? {};
+  const showShop = Boolean(features.mobile_shop);
+  const showBooking = Boolean(features.mobile_booking ?? features.mobile_discover ?? true);
 
   return (
     <Tab.Navigator
@@ -39,14 +35,36 @@ export function MainTabs() {
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarIcon: ({ color, size, focused }) => (
-          <Feather name={TAB_ICONS[route.name]} size={size} color={color} style={focused ? styles.activeIcon : undefined} />
-        ),
+        tabBarIcon: ({ color, size, focused }) => {
+          const icons: Record<string, keyof typeof Feather.glyphMap> = {
+            Home: 'home',
+            Discover: 'search',
+            Book: 'calendar',
+            Shop: 'shopping-bag',
+            Alerts: 'bell',
+            Profile: 'user',
+          };
+          return (
+            <Feather
+              name={icons[route.name] ?? 'circle'}
+              size={size}
+              color={color}
+              style={focused ? styles.activeIcon : undefined}
+            />
+          );
+        },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: t('nav.home') }} />
-      <Tab.Screen name="Discover" component={DiscoverScreen} options={{ title: t('nav.discover') }} />
-      <Tab.Screen name="Book" component={BookingScreen} options={{ title: t('nav.book') }} />
+      {showBooking ? (
+        <Tab.Screen name="Discover" component={DiscoverScreen} options={{ title: t('nav.discover') }} />
+      ) : null}
+      {showBooking ? (
+        <Tab.Screen name="Book" component={BookingScreen} options={{ title: t('nav.book') }} />
+      ) : null}
+      {showShop ? (
+        <Tab.Screen name="Shop" component={ShopScreen} options={{ title: t('nav.shop') }} />
+      ) : null}
       <Tab.Screen
         name="Alerts"
         component={NotificationsScreen}

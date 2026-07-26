@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.services",
     "apps.staff",
     "apps.bookings",
+    "apps.shopie",
     "apps.notifications",
     "apps.calendar",
     "apps.analytics",

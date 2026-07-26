@@ -32,7 +32,7 @@ export type RootStackParamList = {
   };
   BookingDetail: { bookingId: string };
   Customers: undefined;
-  CustomerForm: { customerId?: string };
+  CustomerForm: { customerId?: string; returnTo?: 'pos' };
   CustomerDetail: { customerId: string };
   Reviews: undefined;
   Services: undefined;
@@ -47,6 +47,23 @@ export type RootStackParamList = {
   BusinessProfile: undefined;
   BusinessEdit: undefined;
   ProductSettings: undefined;
+  ShopProducts: undefined;
+  ShopProductAdd: { enrichCode?: string; productId?: string; returnTo?: 'pos' } | undefined;
+  ShopOrders: undefined;
+  ShopOrderDetail: { orderId: string };
+  ShopPos:
+    | {
+        addCode?: string;
+        addProductId?: string;
+        selectCustomerId?: string;
+        /** Persisted POS customer selection across scanner / add-product navigations. */
+        selectedCustomerId?: string;
+      }
+    | undefined;
+  BarcodeScanner: { target?: 'pos' | 'addProduct'; productId?: string } | undefined;
+  ShopReturns: undefined;
+  ShopDeliveryZones: undefined;
+  ShopPets: undefined;
   Branches: undefined;
   BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };
   Reports: undefined;

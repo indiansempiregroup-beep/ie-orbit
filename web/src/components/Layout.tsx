@@ -107,7 +107,7 @@ export function Layout() {
       <div className="app-shell-content">
         <AppShellHeader />
         <main className="app-shell-main" role="main">
-          <div style={{ padding: '0 0 16px', display: 'grid', gap: 12 }}>
+          <div className="app-shell-banners">
             <EmailVerificationBanner />
             <SoftLockBanner />
           </div>

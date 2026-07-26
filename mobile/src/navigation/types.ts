@@ -9,6 +9,7 @@ export type MainTabParamList = {
   Home: undefined;
   Discover: undefined;
   Book: { serviceId?: string } | undefined;
+  Shop: undefined;
   Alerts: undefined;
   Profile: undefined;
 };
@@ -19,6 +20,9 @@ export type RootStackParamList = {
   BookingHistory: undefined;
   BookingDetail: { bookingId: string };
   ServiceDetail: { serviceId: string };
+  ShopProductDetail: { productId: string };
+  Cart: undefined;
+  ShopOrderDetail: { orderId: string };
   ChangePassword: undefined;
   NotificationPreferences: undefined;
   PrivacySecurity: undefined;
