@@ -5,8 +5,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { mobileClient } from '../../api/client';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
@@ -30,7 +32,13 @@ export function ForgotPasswordScreen({ navigation }: Props) {
       await mobileClient.auth.forgotPassword({ email: email.trim() });
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to send reset link.');
+      setError(
+        getApiErrorMessage(
+          err,
+          "We couldn't send a reset link right now. Please check the email and try again.",
+          'forgot',
+        ),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -60,7 +68,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
               value={email}
               onChangeText={setEmail}
             />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <FormAlert message={error} /> : null}
             <Button label="Send reset link" size="lg" fullWidth loading={submitting} primaryColor={primary} onPress={onSubmit} />
           </View>
         </>
@@ -96,7 +104,6 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, color: colors.foreground, marginBottom: spacing.sm },
   subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.xxl },
   form: { gap: spacing.lg },
-  error: { ...typography.caption, color: colors.destructive },
   success: { alignItems: 'center', gap: spacing.lg },
   successIcon: {
     width: 64,

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useDashboardSettings, useBusinessLists, useBookingLists, useBusinessProfile, useSearchResults, deriveDashboardKpis } from './dashboardHooks';
 import { DashboardWidget } from './DashboardWidget';
 import { Button, IconButton } from '../../components/Button';
@@ -14,6 +15,7 @@ import { GettingStartedChecklist } from '../onboarding/GettingStartedChecklist';
 import { getProductName } from '../../config/products';
 
 export function DashboardPage() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const navigate = useNavigate();
   const auth = useAuth();
@@ -90,9 +92,9 @@ export function DashboardPage() {
           <div className="dashboard-actions">
             {quickActions.map((action) => (
               <IconButton
-                key={action.label}
+                key={action.labelKey}
                 icon={<action.icon size={20} strokeWidth={2} />}
-                label={action.label}
+                label={t(action.labelKey)}
                 variant="ghost"
                 style={{ minWidth: 56, minHeight: 56 }}
                 onClick={() => navigate(action.to)}

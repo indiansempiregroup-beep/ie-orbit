@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -26,11 +28,15 @@ from apps.authentication.api.utils import client_ip, user_agent
 from apps.authentication.models import User
 from apps.authentication.services.authentication import AuthenticationService
 from apps.authentication.services.passwords import PasswordService
+from apps.authentication.services.roles import RoleService
 from apps.authentication.services.verification import EmailVerificationService
 from apps.authentication.services.workspace_provisioning import WorkspaceProvisioningService
 from apps.audit.services.audit import record_audit
 from apps.audit.services.events import publish_domain_event
+from apps.businesses.models import Business
 from apps.common.api.responses import success_response
+from apps.platform_media.models import MediaFolderType, MediaVisibility
+from apps.platform_media.services import MediaService
 from apps.tenancy.models import Tenant
 
 
@@ -50,13 +56,14 @@ class LoginView(APIView):
             ip_address=client_ip(request),
             user_agent=user_agent(request),
         )
+        user = RoleService().ensure_superuser_platform_role(user=result.user)
         return success_response(
             {
                 "access": result.tokens.access,
                 "refresh": result.tokens.refresh,
                 "token_type": result.tokens.token_type,
                 "expires_in": result.tokens.expires_in,
-                "user": UserProfileSerializer(result.user).data,
+                "user": UserProfileSerializer(user).data,
             },
             status_code=status.HTTP_200_OK,
             request_id=getattr(request, "request_id", None),
@@ -282,8 +289,9 @@ class MeView(APIView):
     serializer_class = UserProfileSerializer
 
     def get(self, request: Request) -> Response:
+        user = RoleService().ensure_superuser_platform_role(user=request.user)
         return success_response(
-            UserProfileSerializer(request.user).data,
+            UserProfileSerializer(user).data,
             request_id=getattr(request, "request_id", None),
         )
 
@@ -292,3 +300,66 @@ class MeView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save(updated_at=timezone.now())
         return success_response(serializer.data, request_id=getattr(request, "request_id", None))
+
+
+class MeProfilePhotoView(APIView):
+    """Allow any authenticated user to upload their own profile photo (no media:write required)."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    media_service = MediaService()
+
+    def post(self, request: Request) -> Response:
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            return Response(
+                {"error": {"message": "file is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        tenant = getattr(request, "current_tenant", None)
+        if tenant is None:
+            return Response(
+                {"error": {"message": "A tenant context is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        business = getattr(request, "current_business", None)
+        if business is None:
+            business = Business.objects.require_tenant(tenant).order_by("created_at").first()
+        if business is None:
+            return Response(
+                {"error": {"message": "A business context is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = self.media_service.upload(
+                uploaded_file=uploaded,
+                tenant=tenant,
+                business=business,
+                uploaded_by=request.user,
+                folder_type=MediaFolderType.BUSINESS,
+                visibility=MediaVisibility.PUBLIC,
+                tags=["profile", "photo"],
+                display_name=f"{request.user.full_name or request.user.email} profile photo",
+            )
+        except DjangoValidationError as exc:
+            message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+            return Response(
+                {"error": {"message": message}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        public_url = str(result.media.metadata.get("public_url") or "")
+        if public_url:
+            request.user.profile_photo = public_url
+            request.user.save(update_fields=["profile_photo", "updated_at"])
+
+        return success_response(
+            {
+                "profile_photo": request.user.profile_photo,
+                "media_id": str(result.media.id),
+            },
+            request_id=getattr(request, "request_id", None),
+        )

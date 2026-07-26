@@ -436,7 +436,12 @@ class AvailabilityService:
 
         return (
             Staff.objects.require_tenant(tenant)
-            .filter(id=staff_id, employment_status=EmploymentStatus.ACTIVE)
+            .filter(
+                id=staff_id,
+                employment_status=EmploymentStatus.ACTIVE,
+                is_bookable=True,
+                is_active=True,
+            )
             .exists()
         )
 
@@ -474,6 +479,8 @@ class AvailabilityService:
         queryset = Staff.objects.require_tenant(tenant).filter(
             business=business,
             employment_status=EmploymentStatus.ACTIVE,
+            is_bookable=True,
+            is_active=True,
         )
         if service_id:
             assigned_ids = set(
@@ -483,6 +490,8 @@ class AvailabilityService:
                     is_active_assignment=True,
                     staff__business=business,
                     staff__employment_status=EmploymentStatus.ACTIVE,
+                    staff__is_bookable=True,
+                    staff__is_active=True,
                 )
                 .values_list("staff_id", flat=True)
             )
@@ -495,6 +504,8 @@ class AvailabilityService:
                     is_active_assignment=True,
                     staff__business=business,
                     staff__employment_status=EmploymentStatus.ACTIVE,
+                    staff__is_bookable=True,
+                    staff__is_active=True,
                 )
                 .values_list("staff_id", flat=True)
                 .distinct()

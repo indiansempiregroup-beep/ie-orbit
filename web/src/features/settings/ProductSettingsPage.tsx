@@ -18,6 +18,7 @@ import {
   useProductPlansQuery,
 } from './businessSettingsHooks';
 import type { BusinessProductSubscription, ProductPlan } from '@ie-platform/sdk';
+import { RewardPointsSettingsPanel } from './RewardPointsSettingsPanel';
 
 function formatDate(value?: string | null) {
   if (!value) return '—';
@@ -32,10 +33,45 @@ function SubscriptionMeta({ subscription }: { subscription?: BusinessProductSubs
   if (!subscription) return null;
 
   return (
-    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: '#6b7280' }}>
-      <span>Plan: {subscription.plan_name ?? subscription.plan_code ?? 'Trial'}</span>
+    <div className="product-settings-meta">
+      <span>
+        Plan: <strong>{subscription.plan_name ?? subscription.plan_code ?? 'Trial'}</strong>
+      </span>
+      <span className="product-settings-meta-sep" aria-hidden="true">
+        ·
+      </span>
       <span>Billing: {subscription.billing_interval ?? 'monthly'}</span>
-      {subscription.status === 'trialing' ? <span>Trial ends {formatDate(subscription.trial_ends_at)}</span> : null}
+      {subscription.status === 'trialing' ? (
+        <>
+          <span className="product-settings-meta-sep" aria-hidden="true">
+            ·
+          </span>
+          <span>Trial ends {formatDate(subscription.trial_ends_at)}</span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusChips({
+  isCurrent,
+  subscription,
+}: {
+  isCurrent: boolean;
+  subscription?: BusinessProductSubscription;
+}) {
+  return (
+    <div className="product-settings-chips">
+      {isCurrent ? <span className="product-settings-chip product-settings-chip--active">Active workspace</span> : null}
+      {subscription?.status === 'trialing' ? (
+        <span className="product-settings-chip product-settings-chip--trial">Trial</span>
+      ) : null}
+      {subscription?.status === 'active' ? (
+        <span className="product-settings-chip product-settings-chip--subscribed">Subscribed</span>
+      ) : null}
+      {!isCurrent && subscription && subscription.status !== 'trialing' && subscription.status !== 'active' ? (
+        <span className="product-settings-chip">{subscription.status}</span>
+      ) : null}
     </div>
   );
 }
@@ -83,6 +119,7 @@ export function ProductSettingsPage() {
     workspace.activeProduct ?? subscribedProducts[0]?.id ?? '',
   );
   const [pendingPlanByProduct, setPendingPlanByProduct] = useState<Record<string, string>>({});
+  const [planSelectResetKey, setPlanSelectResetKey] = useState(0);
   const [pendingAction, setPendingAction] = useState<{ type: 'subscribe' | 'unsubscribe'; productId: string } | null>(
     null,
   );
@@ -146,43 +183,72 @@ export function ProductSettingsPage() {
   }
 
   async function handlePlanChange(productId: string, planCode: string) {
+    const current = subscriptionByProduct.get(productId)?.plan_code;
+    const isDowngrade =
+      Boolean(current) &&
+      String(current).includes('pro') &&
+      planCode.includes('starter');
+
+    if (current && planCode === current) {
+      return;
+    }
+
+    if (isDowngrade) {
+      const accepted = window.confirm(
+        'This plan change will take effect at the end of your current billing period. You keep your current plan until then. Continue?',
+      );
+      if (!accepted) {
+        setPlanSelectResetKey((key) => key + 1);
+        return;
+      }
+    }
+
     try {
       await changePlan.mutateAsync({ productCode: productId, planCode });
-      snackbar.push(`Plan updated for ${getProductName(productId)}.`, 'success');
+      snackbar.push(
+        isDowngrade
+          ? `Plan change for ${getProductName(productId)} scheduled for period end.`
+          : `Plan updated for ${getProductName(productId)}.`,
+        'success',
+      );
     } catch (error) {
+      setPlanSelectResetKey((key) => key + 1);
       snackbar.push(getApiErrorMessage(error, 'Unable to change plan.'), 'error');
     }
   }
 
   if (!workspace.businessId) {
     return (
-      <Card style={{ padding: 24 }}>
-        <h2 style={{ marginTop: 0 }}>Select a business first</h2>
-        <p style={{ color: '#6b7280' }}>Create or switch to a business before managing its products.</p>
+      <Card className="product-settings-card">
+        <p className="product-settings-kicker">Products</p>
+        <h2 className="product-settings-title">Select a business first</h2>
+        <p className="product-settings-lead">Create or switch to a business before managing its products.</p>
       </Card>
     );
   }
 
   return (
-    <div style={{ display: 'grid', gap: 20 }}>
-      <Card style={{ padding: 24 }}>
-        <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>
-          Subscribed products
-        </p>
-        <h2 style={{ margin: '8px 0 0', fontSize: 24 }}>
+    <div className="product-settings">
+      <Card className="product-settings-card">
+        <p className="product-settings-kicker product-settings-kicker--success">Subscribed products</p>
+        <h2 className="product-settings-title">
           Products for {workspace.activeBusiness?.display_name ?? 'active business'}
         </h2>
-        <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
-          Only subscribed products appear in the header. Unsubscribing cancels billing for that product on this business.
+        <p className="product-settings-lead">
+          Only subscribed products appear in the header. Unsubscribing cancels billing for that product on this
+          business.
         </p>
 
         {subscribedProducts.length === 0 ? (
-          <p style={{ marginTop: 20, color: '#6b7280' }}>
-            This business has not subscribed to any products yet. Choose one below to get started.
-          </p>
+          <div className="product-settings-empty">
+            <p className="product-settings-empty-title">No products subscribed yet</p>
+            <p className="product-settings-lead">
+              Choose a product below under Available products to start a trial.
+            </p>
+          </div>
         ) : (
           <>
-            <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
+            <div className="product-settings-tiles">
               {subscribedProducts.map((product) => {
                 const isActive = selectedProduct === product.id;
                 const isCurrent = workspace.activeProduct === product.id;
@@ -192,42 +258,33 @@ export function ProductSettingsPage() {
                 return (
                   <div
                     key={product.id}
-                    style={{
-                      border: isActive ? '1px solid #1a56db' : '1px solid #e5e7eb',
-                      borderRadius: 14,
-                      padding: 16,
-                      background: isActive ? '#eef2ff' : '#fff',
-                    }}
+                    className={`product-settings-tile${isActive ? ' product-settings-tile--selected' : ''}`}
                   >
                     <button
                       type="button"
                       onClick={() => setSelectedProduct(product.id)}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 0,
-                        cursor: 'pointer',
-                      }}
+                      className="product-settings-tile-main"
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <strong>{product.name}</strong>
-                        {isCurrent ? <CheckCircle2 size={18} color="#10b981" /> : null}
+                      <div className="product-settings-tile-header">
+                        <div>
+                          <strong className="product-settings-tile-name">{product.name}</strong>
+                          <StatusChips isCurrent={isCurrent} subscription={subscription} />
+                        </div>
+                        {isCurrent ? <CheckCircle2 size={18} className="product-settings-check" aria-hidden="true" /> : null}
                       </div>
-                      <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>{product.description}</p>
+                      <p className="product-settings-tile-desc">{product.description}</p>
                       <SubscriptionMeta subscription={subscription} />
                     </button>
 
-                    <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <div className="product-settings-tile-footer">
                       {plans.length > 1 ? (
-                        <label style={{ display: 'grid', gap: 4, minWidth: 180 }}>
-                          <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase' }}>Plan</span>
+                        <label className="product-settings-plan-field">
+                          <span>Plan</span>
                           <select
+                            key={`${product.id}-${subscription?.plan_code ?? 'none'}-${planSelectResetKey}`}
                             value={subscription?.plan_code ?? getDefaultPlanCode(plans)}
-                            onChange={(event) => handlePlanChange(product.id, event.target.value)}
+                            onChange={(event) => void handlePlanChange(product.id, event.target.value)}
                             disabled={changePlan.isPending}
-                            style={{ borderRadius: 10, border: '1px solid #e5e7eb', padding: '8px 10px' }}
                           >
                             {plans.map((plan) => (
                               <option key={plan.code} value={plan.code}>
@@ -255,7 +312,7 @@ export function ProductSettingsPage() {
               })}
             </div>
 
-            <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="product-settings-actions">
               <Button
                 variant="primary"
                 onClick={handleSaveProduct}
@@ -268,17 +325,17 @@ export function ProductSettingsPage() {
         )}
       </Card>
 
+      <RewardPointsSettingsPanel />
+
       {availableProducts.length > 0 ? (
-        <Card style={{ padding: 24 }}>
-          <p style={{ margin: 0, color: '#2563eb', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>
-            Available products
-          </p>
-          <h2 style={{ margin: '8px 0 0', fontSize: 24 }}>Subscribe to more products</h2>
-          <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
+        <Card className="product-settings-card">
+          <p className="product-settings-kicker">Available products</p>
+          <h2 className="product-settings-title">Subscribe to more products</h2>
+          <p className="product-settings-lead">
             Choose a plan to start a trial. Billing provider integration will attach to these subscriptions later.
           </p>
 
-          <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
+          <div className="product-settings-tiles">
             {availableProducts.map((product) => {
               const plans = plansByProduct.get(product.id) ?? [];
               const selectedPlanCode = pendingPlanByProduct[product.id] ?? getDefaultPlanCode(plans);
@@ -286,23 +343,14 @@ export function ProductSettingsPage() {
                 pendingAction?.type === 'subscribe' && pendingAction.productId === product.id;
 
               return (
-                <div
-                  key={product.id}
-                  style={{
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 14,
-                    padding: 16,
-                    display: 'grid',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                <div key={product.id} className="product-settings-tile">
+                  <div className="product-settings-tile-header">
                     <div>
-                      <strong>{product.name}</strong>
-                      <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>{product.description}</p>
+                      <strong className="product-settings-tile-name">{product.name}</strong>
+                      <p className="product-settings-tile-desc">{product.description}</p>
                     </div>
                     <Button
-                      variant="neutral"
+                      variant="primary"
                       onClick={() => handleSubscribe(product.id)}
                       disabled={pendingAction !== null || !selectedPlanCode}
                     >
@@ -311,7 +359,7 @@ export function ProductSettingsPage() {
                   </div>
 
                   {plans.length > 0 ? (
-                    <div style={{ display: 'grid', gap: 8 }}>
+                    <div className="product-settings-plan-options">
                       {plans.map((plan) => {
                         const isSelected = selectedPlanCode === plan.code;
                         return (
@@ -321,17 +369,12 @@ export function ProductSettingsPage() {
                             onClick={() =>
                               setPendingPlanByProduct((current) => ({ ...current, [product.id]: plan.code }))
                             }
-                            style={{
-                              textAlign: 'left',
-                              border: isSelected ? '1px solid #1a56db' : '1px solid #e5e7eb',
-                              borderRadius: 12,
-                              padding: 12,
-                              background: isSelected ? '#eef2ff' : '#fff',
-                              cursor: 'pointer',
-                            }}
+                            className={`product-settings-plan-option${
+                              isSelected ? ' product-settings-plan-option--selected' : ''
+                            }`}
                           >
                             <strong>{plan.name}</strong>
-                            <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 12 }}>
+                            <p>
                               {plan.description} · {plan.billing_interval} · {plan.trial_days}-day trial
                             </p>
                           </button>

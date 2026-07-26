@@ -1,6 +1,7 @@
 import type { UserProfile } from '@ie-platform/sdk';
 
 const PLATFORM_ROLES = new Set(['platform_admin', 'super_admin']);
+const TENANT_OPS_ROLES = new Set(['business_owner', 'manager', 'staff']);
 const OWNER_ROLES = new Set(['business_owner', ...PLATFORM_ROLES]);
 const MANAGER_ROLES = new Set(['manager', ...OWNER_ROLES]);
 
@@ -27,6 +28,21 @@ export function isPlatformAdmin(user: UserProfile | null | undefined): boolean {
   return hasAnyRole(user, [...PLATFORM_ROLES]);
 }
 
+/** Tenant business roles — not platform-only accounts. */
+export function hasTenantOpsRole(user: UserProfile | null | undefined): boolean {
+  return Boolean(user?.roles?.some((role) => TENANT_OPS_ROLES.has(role)));
+}
+
+/** Platform management only — no business_owner/manager/staff role. */
+export function isPlatformAdminOnly(user: UserProfile | null | undefined): boolean {
+  return isPlatformAdmin(user) && !hasTenantOpsRole(user);
+}
+
+/** Default landing route after sign-in. Platform admins manage the IE Platform, not a tenant dashboard. */
+export function getPostLoginPath(user: UserProfile | null | undefined): string {
+  return isPlatformAdmin(user) ? '/admin' : '/dashboard';
+}
+
 export function isOwner(user: UserProfile | null | undefined): boolean {
   return hasAnyRole(user, [...OWNER_ROLES]);
 }
@@ -44,6 +60,10 @@ export function canManageBusinessSettings(user: UserProfile | null | undefined):
 
 export function canAccessReports(user: UserProfile | null | undefined): boolean {
   return isManagerOrAbove(user) || hasPermission(user, 'booking:manage');
+}
+
+export function canWriteServices(user: UserProfile | null | undefined): boolean {
+  return hasAnyPermission(user, ['service:write', 'service:manage', 'business:manage']);
 }
 
 export function formatUserRole(roles: string[] | undefined): string {

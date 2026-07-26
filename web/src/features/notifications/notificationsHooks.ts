@@ -39,7 +39,7 @@ export function useMarkAllNotificationsAsRead() {
   const client = useApiClient();
   const queryClient = useQueryClient();
 
-  return useMutation<{ read: boolean }, Error, void>({
+  return useMutation<{ updated: number }, Error, void>({
     mutationFn: async () => {
       const response = await client.notifications.readAll();
       return response.data;

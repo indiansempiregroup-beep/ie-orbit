@@ -19,6 +19,7 @@ import {
   HelpSupportScreen,
   NotificationPreferencesScreen,
   PaymentMethodsScreen,
+  PlatformAdminScreen,
   PrivacySecurityScreen,
   ReviewsScreen,
 } from '../features/profile/ProfileSubScreens';
@@ -82,6 +83,7 @@ export function RootNavigator() {
             <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
             <Stack.Screen name="Reviews" component={ReviewsScreen} />
             <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+            <Stack.Screen name="PlatformAdmin" component={PlatformAdminScreen} />
           </Stack.Navigator>
         ) : needsVerification ? (
           <VerifyEmailStack />

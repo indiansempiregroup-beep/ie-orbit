@@ -19,8 +19,8 @@ import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
 const ROLE_OPTIONS = [
-  { value: 'staff', label: 'Staff', helper: 'Bookings, calendar, and customers' },
-  { value: 'manager', label: 'Manager', helper: 'Full access including Settings and Team' },
+  { value: 'staff', label: 'Staff', helper: 'Bookings, calendar, and customers only' },
+  { value: 'manager', label: 'Manager', helper: 'Settings, Team, staff directory, and reports' },
 ] as const;
 
 type AppRole = 'staff' | 'manager';
@@ -45,6 +45,7 @@ export function StaffFormScreen() {
   const [role, setRole] = useState<AppRole>('staff');
   const [initialRole, setInitialRole] = useState<AppRole | null>(null);
   const [sendInvite, setSendInvite] = useState(true);
+  const [isBookable, setIsBookable] = useState(true);
   const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +68,7 @@ export function StaffFormScreen() {
     setDisplayName(member.display_name ?? member.full_name ?? '');
     setEmail(member.email ?? '');
     setPhone(member.phone_number ?? '');
+    setIsBookable(member.is_bookable !== false);
   }, [member]);
 
   useEffect(() => {
@@ -129,6 +131,7 @@ export function StaffFormScreen() {
                 display_name: displayName || `${firstName} ${lastName}`.trim() || email,
                 email,
                 phone_number: phone,
+                is_bookable: isBookable,
                 ...(photo ? { photo } : {}),
               };
 
@@ -213,8 +216,25 @@ export function StaffFormScreen() {
       </FormSection>
 
       <FormSection
+        title="Booking availability"
+        subtitle="Turn off if this person should never appear as a bookable stylist or count as a staff seat."
+      >
+        <Pressable style={styles.inviteToggle} onPress={() => setIsBookable((value) => !value)}>
+          <View style={[styles.checkbox, isBookable && styles.checkboxOn]}>
+            {isBookable ? <Text style={styles.checkMark}>✓</Text> : null}
+          </View>
+          <View style={styles.inviteCopy}>
+            <Text style={styles.inviteTitle}>Available for bookings</Text>
+            <Text style={styles.helper}>
+              Bookable people can be assigned to appointments and count toward your staff limit.
+            </Text>
+          </View>
+        </Pressable>
+      </FormSection>
+
+      <FormSection
         title="App access"
-        subtitle="Staff manage bookings and customers. Managers also get Settings and Team."
+        subtitle="Staff manage bookings and customers. Managers also get Settings, Team, and the staff directory."
       >
         <View style={styles.roleRow}>
           {ROLE_OPTIONS.map((option) => (

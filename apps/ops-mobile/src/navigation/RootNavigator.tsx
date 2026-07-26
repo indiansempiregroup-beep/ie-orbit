@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { usePushRegistration } from '../hooks/usePushRegistration';
-import { hasOpsAccess } from '../utils/roles';
+import { hasOpsAccess, hasTenantOpsRole, isPlatformAdminOnly } from '../utils/roles';
 import { colors } from '../theme/tokens';
 import type { RootStackParamList } from './types';
 import { opsStackScreenOptions } from './OpsStackHeader';
@@ -13,6 +14,7 @@ import { AuthStack } from './AuthStack';
 import { MainTabs } from './MainTabs';
 import { WorkspacePickerScreen } from '../features/workspace/WorkspacePickerScreen';
 import { NoAccessScreen } from '../features/auth/NoAccessScreen';
+import { PlatformAdminWebOnlyScreen } from '../features/auth/PlatformAdminWebOnlyScreen';
 import { SearchScreen } from '../features/search/SearchScreen';
 import { CreateBookingScreen } from '../features/bookings/CreateBookingScreen';
 import { BookingDetailScreen } from '../features/bookings/BookingDetailScreen';
@@ -35,7 +37,6 @@ import { ProductSettingsScreen } from '../features/settings/ProductSettingsScree
 import { BranchesScreen } from '../features/branches/BranchesScreen';
 import { BIScreen } from '../features/bi/BIScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
-import { AdminScreen } from '../features/admin/AdminScreen';
 import { TeamScreen } from '../features/team/TeamScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
 import { ProfileEditScreen } from '../features/profile/ProfileEditScreen';
@@ -64,16 +65,23 @@ const stackScreen = (
 );
 
 export function RootNavigator() {
+  const { t } = useTranslation();
   const { user, token, loading: authLoading } = useAuth();
   const { ready, loading: workspaceLoading, tenants } = useWorkspace();
   const [bootstrapped, setBootstrapped] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && !workspaceLoading) setBootstrapped(true);
-  }, [authLoading, workspaceLoading]);
-
   const isAuthenticated = Boolean(token && user);
-  const opsAccess = hasOpsAccess(user);
+  const platformAdminOnly = isPlatformAdminOnly(user);
+  const tenantOps = hasTenantOpsRole(user);
+  const opsAccess = hasOpsAccess(user) && tenantOps;
+
+  useEffect(() => {
+    // Platform-admin-only accounts skip workspace bootstrap.
+    if (!authLoading && (platformAdminOnly || !workspaceLoading)) {
+      setBootstrapped(true);
+    }
+  }, [authLoading, workspaceLoading, platformAdminOnly]);
+
   usePushRegistration(Boolean(isAuthenticated && opsAccess && ready && user?.email_verified_at));
 
   if (!bootstrapped) {
@@ -84,52 +92,60 @@ export function RootNavigator() {
     );
   }
 
-  const needsWorkspacePicker = isAuthenticated && opsAccess && tenants.length > 1 && !ready;
+  const needsWorkspacePicker =
+    isAuthenticated && opsAccess && tenants.length > 1 && !ready;
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
+      {!isAuthenticated ? (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Auth" component={AuthStack} />
-        ) : !opsAccess ? (
+        </Stack.Navigator>
+      ) : platformAdminOnly ? (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="PlatformAdminWebOnly" component={PlatformAdminWebOnlyScreen} />
+        </Stack.Navigator>
+      ) : !opsAccess ? (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="NoAccess" component={NoAccessScreen} />
-        ) : needsWorkspacePicker || !ready ? (
+        </Stack.Navigator>
+      ) : needsWorkspacePicker || !ready ? (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="WorkspacePicker" component={WorkspacePickerScreen} />
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            {stackScreen('Search', SearchScreen, 'Search')}
-            {stackScreen('CreateBooking', CreateBookingScreen, 'New booking')}
-            {stackScreen('BookingDetail', BookingDetailScreen, 'Booking')}
-            {stackScreen('Customers', CustomersScreen, 'Customers')}
-            {stackScreen('CustomerForm', CustomerFormScreen, 'Customer')}
-            {stackScreen('CustomerDetail', CustomerDetailScreen, 'Customer')}
-            {stackScreen('Reviews', ReviewsScreen, 'Reviews')}
-            {stackScreen('Services', ServicesScreen, 'Services')}
-            {stackScreen('ServiceForm', ServiceFormScreen, 'Service')}
-            {stackScreen('ServiceDetail', ServiceDetailScreen, 'Service')}
-            {stackScreen('StaffList', StaffScreen, 'Staff')}
-            {stackScreen('StaffForm', StaffFormScreen, 'Staff')}
-            {stackScreen('StaffDetail', StaffDetailScreen, 'Staff')}
-            {stackScreen('StaffSchedule', StaffScheduleScreen, 'Weekly schedule')}
-            {stackScreen('StaffAvailability', StaffAvailabilityScreen, 'Staff availability')}
-            {stackScreen('Settings', SettingsScreen, 'Settings')}
-            {stackScreen('BusinessProfile', BusinessProfileScreen, 'Business profile')}
-            {stackScreen('BusinessEdit', BusinessEditScreen, 'Edit business')}
-            {stackScreen('ProductSettings', ProductSettingsScreen, 'Products & billing')}
-            {stackScreen('Branches', BranchesScreen, 'Branches')}
-            {stackScreen('BI', BIScreen, 'Business intelligence', 'Last 30 days')}
-            {stackScreen('Reports', ReportsScreen, 'Reports')}
-            {stackScreen('Admin', AdminScreen, 'Platform admin')}
-            {stackScreen('Team', TeamScreen, 'Team')}
-            {stackScreen('Profile', ProfileScreen, 'Profile')}
-            {stackScreen('ProfileEdit', ProfileEditScreen, 'Edit profile')}
-            {stackScreen('Security', SecurityScreen, 'Security')}
-            {stackScreen('Sessions', SessionsScreen, 'Sessions')}
-            {stackScreen('VerifyEmail', VerifyEmailScreen, 'Verify email')}
-          </>
-        )}
-      </Stack.Navigator>
+        </Stack.Navigator>
+      ) : (
+        <Stack.Navigator initialRouteName="Main" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Main" component={MainTabs} />
+          {stackScreen('Search', SearchScreen, t('common.search'))}
+          {stackScreen('CreateBooking', CreateBookingScreen, t('nav.newBookingShort'))}
+          {stackScreen('BookingDetail', BookingDetailScreen, t('bookings.appointment'))}
+          {stackScreen('Customers', CustomersScreen, t('nav.customers'))}
+          {stackScreen('CustomerForm', CustomerFormScreen, t('bookings.customer'))}
+          {stackScreen('CustomerDetail', CustomerDetailScreen, t('bookings.customer'))}
+          {stackScreen('Reviews', ReviewsScreen, t('settings.reviews'))}
+          {stackScreen('Services', ServicesScreen, t('nav.services'))}
+          {stackScreen('ServiceForm', ServiceFormScreen, t('bookings.service'))}
+          {stackScreen('ServiceDetail', ServiceDetailScreen, t('bookings.service'))}
+          {stackScreen('StaffList', StaffScreen, t('nav.staff'))}
+          {stackScreen('StaffForm', StaffFormScreen, t('nav.staff'))}
+          {stackScreen('StaffDetail', StaffDetailScreen, t('nav.staff'))}
+          {stackScreen('StaffSchedule', StaffScheduleScreen, t('nav.weeklySchedule'))}
+          {stackScreen('StaffAvailability', StaffAvailabilityScreen, t('nav.staffAvailability'))}
+          {stackScreen('Settings', SettingsScreen, t('nav.settings'))}
+          {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
+          {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
+          {stackScreen('ProductSettings', ProductSettingsScreen, t('settings.productsBilling'))}
+          {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
+          {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
+          {stackScreen('Reports', ReportsScreen, t('nav.reports'))}
+          {stackScreen('Team', TeamScreen, t('settings.team'))}
+          {stackScreen('Profile', ProfileScreen, t('profile.title'))}
+          {stackScreen('ProfileEdit', ProfileEditScreen, t('profile.editTitle'))}
+          {stackScreen('Security', SecurityScreen, t('profile.security'))}
+          {stackScreen('Sessions', SessionsScreen, t('profile.sessions'))}
+          {stackScreen('VerifyEmail', VerifyEmailScreen, t('profile.verifyEmail'))}
+        </Stack.Navigator>
+      )}
     </NavigationContainer>
   );
 }

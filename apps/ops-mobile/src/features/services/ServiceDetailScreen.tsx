@@ -8,7 +8,9 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { DetailRow } from '../../components/ui/DetailRow';
 import { ScreenState } from '../../components/ScreenState';
+import { useAuth } from '../../contexts/AuthContext';
 import { useService } from '../../hooks/useOpsExtended';
+import { canWriteServices } from '../../utils/roles';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import {
@@ -22,6 +24,8 @@ import type { RootStackParamList } from '../../navigation/types';
 export function ServiceDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ServiceDetail'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
+  const canManageServices = canWriteServices(user);
   const { service, loading } = useService(route.params.serviceId);
 
   if (loading || !service) return <ScreenState loading={loading} empty={!loading && !service} />;
@@ -51,7 +55,9 @@ export function ServiceDetailScreen() {
         <DetailRow label="Price" value={priceLabel ?? '—'} />
         <DetailRow label="Status" value={service.status ?? '—'} />
       </Card>
-      <Button label="Edit service" fullWidth onPress={() => navigation.navigate('ServiceForm', { serviceId: service.id })} />
+      {canManageServices ? (
+        <Button label="Edit service" fullWidth onPress={() => navigation.navigate('ServiceForm', { serviceId: service.id })} />
+      ) : null}
       <Button
         label="Book this service"
         variant="secondary"

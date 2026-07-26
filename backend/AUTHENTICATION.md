@@ -56,6 +56,16 @@ PATCH /api/v1/auth/me
 - `staff`
 - `customer`
 
+## Platform admin access
+
+Django `createsuperuser` sets `is_superuser=True` but does **not** assign a platform role by itself.
+
+The web and ops-mobile **Platform Admin** UI is gated on the `platform_admin` or `super_admin` **role code** in `/auth/me` (and the login payload).
+
+On login and `GET /auth/me`, the API automatically assigns `platform_admin` to any Django superuser that is missing that role, so local superusers get the Platform Admin menu and land on `/admin` (web) without a manual IAM step.
+
+Tenant workspaces (for example a white-label business such as Rupali’s) may still appear in the workspace picker because superusers can see all tenants for support — that does not mean the superuser owns that business.
+
 ## Local Validation
 
 ```bash

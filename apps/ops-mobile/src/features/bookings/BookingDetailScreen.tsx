@@ -17,6 +17,7 @@ import { useBooking } from '../../hooks/useOpsData';
 import { useAvailability, useBookingMutations, useEntityMaps } from '../../hooks/useOpsExtended';
 import { canWriteBookings } from '../../utils/roles';
 import { entityLabel } from '../../utils/entities';
+import { formatServicePrice } from '../../utils/services';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage, mapBookingStatus } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -25,7 +26,7 @@ export function BookingDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BookingDetail'>>();
   const { user } = useAuth();
   const { booking, loading, error, reload } = useBooking(route.params.bookingId);
-  const { customerMap, serviceMap, staffMap } = useEntityMaps();
+  const { services, customerMap, serviceMap, staffMap } = useEntityMaps();
   const mutations = useBookingMutations();
   const [reason, setReason] = useState('');
   const [showReschedule, setShowReschedule] = useState(false);
@@ -49,6 +50,10 @@ export function BookingDetailScreen() {
     () => entityLabel(serviceMap, booking?.service_id, 'Booking'),
     [serviceMap, booking?.service_id],
   );
+  const servicePriceLabel = useMemo(() => {
+    const service = services.find((item) => item.id === booking?.service_id);
+    return formatServicePrice(service);
+  }, [services, booking?.service_id]);
 
   async function run(action: 'confirm' | 'checkin' | 'complete' | 'cancel' | 'reschedule') {
     if (!booking) return;
@@ -92,6 +97,7 @@ export function BookingDetailScreen() {
         <DetailRow label="Staff" value={entityLabel(staffMap, booking.staff_id, 'Unassigned')} />
         <DetailRow label="When" value={formatDateTime(booking.start_at)} />
         <DetailRow label="Duration" value={booking.duration_minutes ? `${booking.duration_minutes} min` : '—'} />
+        <DetailRow label="Price" value={servicePriceLabel || '—'} />
         <DetailRow label="Notes" value={booking.notes || '—'} />
       </Card>
 

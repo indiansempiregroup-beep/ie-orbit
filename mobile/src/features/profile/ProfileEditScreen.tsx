@@ -3,6 +3,8 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
+import { applyAppLanguage, setActiveIntlLocale } from '@ie-platform/i18n';
 import { mobileClient } from '../../api/client';
 import { uploadCustomerProfilePhoto } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,8 +12,10 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { useMobileCustomerProfile } from '../../hooks/useMobileCustomerProfile';
 import { AddressMapPicker } from '../../components/AddressMapPicker';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
+import { LanguagePicker } from '../../components/LanguagePicker';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { persistLanguagePreference } from '../../i18n';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 
@@ -21,6 +25,7 @@ function roundCoord(value: number | null): number | null {
 }
 
 export function ProfileEditScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const { user, token, refreshProfile } = useAuth();
   const { branding } = useBootstrap();
@@ -31,6 +36,7 @@ export function ProfileEditScreen() {
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [phone, setPhone] = useState(user?.phone_number ?? '');
+  const [language, setLanguage] = useState(user?.language || 'en');
   const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(user?.profile_photo ?? null);
   const [fullAddress, setFullAddress] = useState('');
@@ -44,6 +50,7 @@ export function ProfileEditScreen() {
     setFirstName(user?.first_name ?? '');
     setLastName(user?.last_name ?? '');
     setPhone(user?.phone_number ?? '');
+    setLanguage(user?.language || 'en');
     if (!photoAsset) {
       setPhotoPreview(user?.profile_photo ?? null);
     }
@@ -77,6 +84,7 @@ export function ProfileEditScreen() {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone_number: phone.trim() || null,
+        language,
       });
       if (tenantSlug && businessCode) {
         await mobileClient.mobile.updateCustomerProfile(
@@ -89,10 +97,13 @@ export function ProfileEditScreen() {
         );
         await reloadCustomerProfile();
       }
+      setActiveIntlLocale(language);
+      await persistLanguagePreference(language);
+      await applyAppLanguage(language);
       await refreshProfile();
-      setSuccess('Profile updated.');
+      setSuccess(t('profile.updated'));
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to update profile.'));
+      setError(getApiErrorMessage(err, t('profile.updateFailed')));
     } finally {
       setSaving(false);
     }
@@ -104,38 +115,45 @@ export function ProfileEditScreen() {
         <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
           <Feather name="x" size={22} color={colors.foreground} />
         </Pressable>
-        <Text style={styles.title}>Personal Information</Text>
+        <Text style={styles.title}>{t('profile.personalInfo')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <ImagePickerButton
-          label="Profile photo"
+          label={t('common.profilePhoto')}
           variant="avatar"
           valueUri={photoPreview}
           onPicked={(asset) => {
             setPhotoAsset(asset);
             setPhotoPreview(asset.uri);
           }}
-          helperText="Tap to take a photo or choose from your gallery."
+          helperText={t('profile.photoHelper')}
         />
-        <Input label="First name" value={firstName} onChangeText={setFirstName} placeholder="First name" />
-        <Input label="Last name" value={lastName} onChangeText={setLastName} placeholder="Last name" />
+        <Input label={t('common.firstName')} value={firstName} onChangeText={setFirstName} placeholder={t('common.firstName')} />
+        <Input label={t('common.lastName')} value={lastName} onChangeText={setLastName} placeholder={t('common.lastName')} />
         <Input
-          label="Email"
+          label={t('common.email')}
           value={user?.email ?? ''}
           editable={false}
-          placeholder="Email"
+          placeholder={t('common.email')}
           leftIcon="mail"
         />
         <Input
-          label="Phone"
+          label={t('common.phone')}
           value={phone}
           onChangeText={setPhone}
-          placeholder="Phone number"
+          placeholder={t('common.phone')}
           leftIcon="phone"
           keyboardType="phone-pad"
         />
+        <LanguagePicker
+          label={t('common.language')}
+          value={language}
+          onChange={setLanguage}
+          primaryColor={primary}
+        />
+        <Text style={styles.hint}>{t('profile.languageHint')}</Text>
 
         <AddressMapPicker
           value={fullAddress}
@@ -152,7 +170,14 @@ export function ProfileEditScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {success ? <Text style={styles.success}>{success}</Text> : null}
 
-        <Button label="Save changes" size="lg" fullWidth loading={saving} primaryColor={primary} onPress={onSave} />
+        <Button
+          label={t('common.saveChanges')}
+          size="lg"
+          fullWidth
+          loading={saving}
+          primaryColor={primary}
+          onPress={onSave}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -173,6 +198,7 @@ const styles = StyleSheet.create({
   },
   title: { ...typography.title, color: colors.foreground },
   content: { padding: spacing.xl, gap: spacing.lg },
+  hint: { ...typography.caption, color: colors.mutedForeground, marginTop: -8 },
   error: { ...typography.caption, color: colors.destructive },
   success: { ...typography.caption, color: colors.success },
 });

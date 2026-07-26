@@ -1,3 +1,5 @@
+import { APP_LANGUAGES, languageSelectOptions as sharedLanguageSelectOptions } from '@ie-platform/i18n';
+
 export const BUSINESS_CATEGORIES = [
   'Salon & Spa',
   'Clinic & Healthcare',
@@ -32,11 +34,7 @@ export const CURRENCIES = [
   { code: 'AED', label: 'UAE Dirham (AED)' },
 ] as const;
 
-export const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'en-IN', label: 'English (India)' },
-  { code: 'hi', label: 'Hindi' },
-] as const;
+export const LANGUAGES = APP_LANGUAGES;
 
 export const WEEK_START_DAYS = [
   { value: 'monday', label: 'Monday' },
@@ -107,10 +105,7 @@ export const timezoneSelectOptions = TIMEZONES.map((timezone) => ({
   label: timezone,
 }));
 
-export const languageSelectOptions = LANGUAGES.map((language) => ({
-  value: language.code,
-  label: language.label,
-}));
+export const languageSelectOptions = sharedLanguageSelectOptions();
 
 export function ensureSelectOption(
   options: Array<{ value: string; label: string }>,

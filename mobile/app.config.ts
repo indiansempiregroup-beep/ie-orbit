@@ -1,5 +1,9 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
+// Monorepo-wide env: ie-platform/.env (not mobile/.env)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../scripts/load-root-env.cjs').loadRootEnv();
+
 type FlavorManifestEntry = {
   key: string;
   appName: string;

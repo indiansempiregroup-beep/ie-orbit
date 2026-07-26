@@ -1,9 +1,13 @@
+import { languageSelectOptions } from '@ie-platform/i18n';
+
 export const TIMEZONES = [
   { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },
   { value: 'America/New_York', label: 'America/New_York (EST)' },
   { value: 'Europe/London', label: 'Europe/London (GMT)' },
   { value: 'UTC', label: 'UTC' },
 ];
+
+export const LANGUAGES = languageSelectOptions();
 
 export const CURRENCIES = [
   { value: 'INR', label: 'INR' },

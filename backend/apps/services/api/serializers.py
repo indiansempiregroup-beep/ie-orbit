@@ -143,6 +143,7 @@ class ServiceSerializer(serializers.ModelSerializer):
             "max_age",
             "tags",
             "display_order",
+            "loyalty_points_earn",
             "addons_metadata",
             "packages_metadata",
             "metadata",

@@ -1,5 +1,4 @@
-import { Card } from '../../components/Card';
-import { Button } from '../../components/Button';
+import { Link } from 'react-router-dom';
 import { formatTimestamp } from '../../lib/datetime';
 import {
   useBillingPlatformAuditFeedQuery,
@@ -7,6 +6,7 @@ import {
   useBillingPlatformOpsSummaryQuery,
   useBillingPlatformSubscriptionsQuery,
 } from '../settings/billingHooks';
+import { AdminEmpty, AdminKpi, AdminListRow, AdminPageHeader, AdminSection, AdminStatus } from './AdminChrome';
 import { usePlatformTenantsQuery } from './adminHooks';
 
 export function PlatformDashboardPage() {
@@ -16,53 +16,86 @@ export function PlatformDashboardPage() {
   const monitoringQuery = useBillingPlatformMonitoringQuery(24, true);
   const auditFeedQuery = useBillingPlatformAuditFeedQuery(10, true);
 
-  return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <Card>
-        <h1 style={{ marginTop: 0 }}>Platform Dashboard</h1>
-        <p style={{ color: 'var(--muted-foreground)' }}>
-          Cross-tenant readiness, subscriptions, and operational health.
-        </p>
-      </Card>
+  const tenantCount = tenantsQuery.isLoading ? '…' : (tenantsQuery.data?.length ?? 0);
+  const failed = monitoringQuery.data?.failed_events ?? 0;
 
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <Card>
-          <strong>Tenants</strong>
-          <p style={{ marginBottom: 0 }}>{tenantsQuery.isLoading ? '...' : tenantsQuery.data?.length ?? 0}</p>
-        </Card>
-        <Card>
-          <strong>Ready tenants</strong>
-          <p style={{ marginBottom: 0 }}>{opsQuery.data?.ready_count ?? '...'}</p>
-        </Card>
-        <Card>
-          <strong>Subscriptions</strong>
-          <p style={{ marginBottom: 0 }}>{subsQuery.data?.total_subscriptions ?? '...'}</p>
-        </Card>
-        <Card>
-          <strong>Failed events (24h)</strong>
-          <p style={{ marginBottom: 0 }}>{monitoringQuery.data?.failed_events ?? '...'}</p>
-        </Card>
+  return (
+    <div className="admin-main">
+      <AdminPageHeader
+        title="Command center"
+        description="Cross-tenant readiness, subscriptions, and operational health at a glance."
+        actions={
+          <>
+            <Link className="admin-btn admin-btn--secondary" to="/admin/tenants">
+              Browse tenants
+            </Link>
+            <button type="button" className="admin-btn admin-btn--primary" onClick={() => window.location.reload()}>
+              Refresh
+            </button>
+          </>
+        }
+      />
+
+      <div className="admin-kpi-grid">
+        <AdminKpi label="Tenants" value={tenantCount} hint="All workspaces" />
+        <AdminKpi
+          label="Ready"
+          value={opsQuery.data?.ready_count ?? '…'}
+          hint="Go-live ready"
+          tone="good"
+        />
+        <AdminKpi
+          label="Subscriptions"
+          value={subsQuery.data?.total_subscriptions ?? '…'}
+          hint="Active catalog"
+        />
+        <AdminKpi
+          label="Failed events"
+          value={failed}
+          hint="Last 24 hours"
+          tone={failed > 0 ? 'danger' : 'good'}
+        />
       </div>
 
-      {auditFeedQuery.data ? (
-        <Card>
-          <h2 style={{ marginTop: 0 }}>Recent audit activity</h2>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {auditFeedQuery.data.rows.slice(0, 8).map((row) => (
-              <div key={row.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                <strong>{row.action}</strong>
-                <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                  Tenant {row.tenant_id} · {formatTimestamp(row.created_at)}
-                </p>
-              </div>
+      <div className="admin-split">
+        <AdminSection
+          title="Recent tenants"
+          description="Jump into a workspace for billing or support actions."
+          actions={
+            <Link className="admin-btn admin-btn--ghost" to="/admin/tenants">
+              View all
+            </Link>
+          }
+        >
+          <div className="admin-list">
+            {(tenantsQuery.data ?? []).slice(0, 6).map((tenant) => (
+              <AdminListRow
+                key={tenant.id}
+                href={`/admin/tenants/${tenant.id}`}
+                title={tenant.display_name}
+                meta={`${tenant.slug} · ${tenant.business_count} business(es)`}
+                trailing={<AdminStatus status={tenant.status} />}
+              />
             ))}
+            {!tenantsQuery.isLoading && (tenantsQuery.data ?? []).length === 0 ? (
+              <AdminEmpty>No tenants yet.</AdminEmpty>
+            ) : null}
           </div>
-        </Card>
-      ) : null}
+        </AdminSection>
 
-      <Button variant="ghost" onClick={() => window.location.reload()}>
-        Refresh dashboard
-      </Button>
+        <AdminSection title="Live audit pulse" description="Latest billing and ops signals.">
+          <div className="admin-list">
+            {(auditFeedQuery.data?.rows ?? []).slice(0, 6).map((row) => (
+              <AdminListRow
+                key={row.id}
+                title={row.action}
+                meta={`Tenant ${row.tenant_id} · ${formatTimestamp(row.created_at)}`}
+              />
+            ))}
+            {!auditFeedQuery.data?.rows?.length ? <AdminEmpty>No recent audit rows.</AdminEmpty> : null}
+          </div>
+        </AdminSection>
+      </div>
     </div>
   );
 }

@@ -9,10 +9,13 @@ import { TimeSlotGrid } from '../../components/TimeSlotGrid';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
+import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useAvailability, useBookingMutations, useEntityMaps } from '../../hooks/useOpsExtended';
+import { useAvailability, useBookingMutations, useBranches, useEntityMaps } from '../../hooks/useOpsExtended';
+import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
+import { formatServiceMeta, formatServicePrice, serviceDurationMinutes } from '../../utils/services';
 import type { RootStackParamList } from '../../navigation/types';
 
 function dateFromIso(value?: string) {
@@ -22,42 +25,42 @@ function dateFromIso(value?: string) {
   return formatDateKey(date);
 }
 
-function serviceDurationMinutes(
-  service?: {
-    duration_minutes?: number;
-    durations?: Array<{ duration_minutes: number; is_default?: boolean }>;
-  } | null,
-  fallback = 30,
-) {
-  if (!service) return fallback;
-  if (typeof service.duration_minutes === 'number' && service.duration_minutes > 0) {
-    return service.duration_minutes;
-  }
-  const defaultDuration = service.durations?.find((row) => row.is_default) ?? service.durations?.[0];
-  if (defaultDuration?.duration_minutes && defaultDuration.duration_minutes > 0) {
-    return defaultDuration.duration_minutes;
-  }
-  return fallback;
-}
-
 export function CreateBookingScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CreateBooking'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
+  const showStaffPicker = canAccessStaffDirectory(user);
   const { businessId } = useWorkspace();
   const { customers, services, staff, customerMap, serviceMap, staffMap } = useEntityMaps();
+  const { branches } = useBranches();
   const mutations = useBookingMutations();
 
   const [customerId, setCustomerId] = useState(route.params?.customerId ?? '');
   const [serviceId, setServiceId] = useState(route.params?.serviceId ?? '');
-  const [staffId, setStaffId] = useState(route.params?.staffId ?? '');
+  const [staffId, setStaffId] = useState(showStaffPicker ? route.params?.staffId ?? '' : '');
+  const [branchId, setBranchId] = useState('');
   const [date, setDate] = useState(() => dateFromIso(route.params?.startAt));
   const [selectedSlot, setSelectedSlot] = useState(route.params?.startAt ?? '');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!branches.length) return;
+    if (branches.length === 1) {
+      setBranchId(branches[0].id);
+      return;
+    }
+    setBranchId((current) => {
+      if (current && branches.some((branch) => branch.id === current)) return current;
+      return branches.find((branch) => branch.is_primary)?.id ?? branches[0].id;
+    });
+  }, [branches]);
+
   const selectedService = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
   const durationMinutes = serviceDurationMinutes(selectedService, route.params?.durationMinutes ?? 30);
+  const servicePriceLabel = formatServicePrice(selectedService);
+  const serviceMetaLabel = formatServiceMeta(selectedService);
 
   const { slots, loading: slotsLoading } = useAvailability(
     date,
@@ -93,18 +96,39 @@ export function CreateBookingScreen() {
     ],
     [staff, staffMap],
   );
+  const branchOptions = useMemo(
+    () =>
+      branches.map((branch) => ({
+        value: branch.id,
+        label:
+          branch.display_name ||
+          branch.branch_name ||
+          [branch.address_line1, branch.city].filter(Boolean).join(', ') ||
+          branch.id,
+      })),
+    [branches],
+  );
+  const needsOfficePicker = branches.length > 1;
 
   return (
     <FormScreen
       footer={
         <Button
-          label={selectedSlot ? `Book · ${formatDateTime(selectedSlot)}` : 'Create booking'}
+          label={
+            selectedSlot
+              ? `Book · ${formatDateTime(selectedSlot)}${servicePriceLabel ? ` · ${servicePriceLabel}` : ''}`
+              : 'Create booking'
+          }
           loading={loading}
           fullWidth
           size="lg"
           onPress={async () => {
             if (!customerId || !serviceId) {
               setError('Customer and service are required.');
+              return;
+            }
+            if (needsOfficePicker && !branchId) {
+              setError('Select an office for this booking.');
               return;
             }
             if (!selectedSlot) {
@@ -119,6 +143,7 @@ export function CreateBookingScreen() {
                 customer_id: customerId,
                 service_id: serviceId,
                 staff_id: staffId || null,
+                branch_id: branchId || null,
                 start_at: selectedSlot,
                 duration_minutes: durationMinutes,
                 notes: notes || undefined,
@@ -140,7 +165,15 @@ export function CreateBookingScreen() {
         <Text style={styles.subtitle}>Who, what, then when — three quick steps.</Text>
       </View>
 
-      <FormSection step={1} title="Who & what" subtitle="Customer, service, and preferred staff">
+      <FormSection
+        step={1}
+        title="Who & what"
+        subtitle={
+          showStaffPicker
+            ? 'Customer, service, office, and preferred staff'
+            : 'Customer, service, and office'
+        }
+      >
         <SelectField label="Customer" value={customerId} options={customerOptions} onChange={setCustomerId} />
         <SelectField
           label="Service"
@@ -151,21 +184,21 @@ export function CreateBookingScreen() {
             setSelectedSlot('');
           }}
         />
-        <SelectField
-          label="Staff"
-          value={staffId}
-          options={staffOptions}
-          onChange={(value) => {
-            setStaffId(value);
-            setSelectedSlot('');
-          }}
-        />
-        {selectedService ? (
-          <Text style={styles.hint}>
-            Duration · {durationMinutes} min
-            {selectedService.price != null ? ` · ${selectedService.price}` : ''}
-          </Text>
+        {needsOfficePicker ? (
+          <SelectField label="Office" value={branchId} options={branchOptions} onChange={setBranchId} />
         ) : null}
+        {showStaffPicker ? (
+          <SelectField
+            label="Staff"
+            value={staffId}
+            options={staffOptions}
+            onChange={(value) => {
+              setStaffId(value);
+              setSelectedSlot('');
+            }}
+          />
+        ) : null}
+        {selectedService ? <Text style={styles.hint}>{serviceMetaLabel}</Text> : null}
       </FormSection>
 
       <FormSection step={2} title="Date & time" subtitle="Only open slots for the selected service are shown">

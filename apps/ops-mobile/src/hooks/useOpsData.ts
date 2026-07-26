@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Booking, BookingReview, Customer, Notification, Service, StaffMember } from '@ie-platform/sdk';
-import { subscribeToNotificationStream } from '@ie-platform/sdk';
-import { useAuth } from '../contexts/AuthContext';
+import type { Booking, BookingReview, Customer, Service, StaffMember } from '@ie-platform/sdk';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useOpsClient } from './useOpsClient';
-import { getApiBaseUrl } from '../config/apiBaseUrl';
+
+export { useNotifications } from '../contexts/NotificationsContext';
 
 export function useBookings(date?: string) {
   const client = useOpsClient();
@@ -210,54 +209,6 @@ export function useReviews(customerId?: string) {
   }, [reload]);
 
   return { reviews, loading, error, reload };
-}
-
-export function useNotifications() {
-  const client = useOpsClient();
-  const { token } = useAuth();
-  const { tenantId, businessId, ready } = useWorkspace();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const reload = useCallback(async () => {
-    if (!client || !ready) return;
-    setLoading(true);
-    try {
-      const response = await client.notifications.list();
-      setNotifications(response.data ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, [client, ready]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  useEffect(() => {
-    if (!token || !ready) return undefined;
-
-    const headers: HeadersInit = { Authorization: `Bearer ${token}` };
-    if (tenantId) headers['X-Tenant-ID'] = tenantId;
-    if (businessId) headers['X-Business-ID'] = businessId;
-
-    const subscription = subscribeToNotificationStream({
-      url: `${getApiBaseUrl()}/notifications/stream`,
-      headers,
-      onEvent: (event) => {
-        if (event.type === 'notification.created') {
-          const audience = event.data?.audience;
-          if (!audience || audience === 'admin') void reload();
-        }
-      },
-    });
-
-    return () => subscription.close();
-  }, [token, tenantId, businessId, ready, reload]);
-
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
-
-  return { notifications, loading, unreadCount, reload };
 }
 
 export function useDashboardSummary() {

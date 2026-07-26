@@ -15,6 +15,27 @@ class RoleService:
         )
         return user_role
 
+    def ensure_superuser_platform_role(self, *, user: User) -> User:
+        """Django createsuperuser sets is_superuser but not platform_admin.
+
+        Web/ops Platform Admin UI is gated on role codes, so bootstrap the role
+        for superusers that are missing it.
+        """
+        if not getattr(user, "is_superuser", False):
+            return user
+        has_platform_role = user.user_roles.filter(
+            role__code__in={"platform_admin", "super_admin"},
+            role__is_active=True,
+        ).exists()
+        if has_platform_role:
+            return user
+        self.assign_role(
+            user=user,
+            role_code="platform_admin",
+            assigned_by=None,
+        )
+        return user
+
     def user_permission_codes(self, *, user: User) -> set[str]:
         if user.is_superuser:
             return set(Permission.objects.values_list("code", flat=True))

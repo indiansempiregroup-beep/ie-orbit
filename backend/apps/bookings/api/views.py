@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -39,6 +39,38 @@ from apps.bookings.services import AvailabilityService, BookingService
 from apps.businesses.models import Business
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
+from apps.common.utils.workspace_access import (
+    is_workspace_manager_or_above,
+    linked_staff_ids_for_user,
+)
+from apps.staff.repositories import StaffRepository
+
+_staff_repository = StaffRepository()
+
+
+def _ensure_staff_record_access(request: Request, staff_id: str | None) -> None:
+    if not _staff_repository.can_access_staff_record(
+        tenant=request.current_tenant,
+        user=request.user,
+        staff_id=staff_id,
+    ):
+        raise PermissionDenied("You do not have access to this staff member.")
+
+
+def _resolve_availability_staff_id(request: Request, staff_id: object | None) -> object | None:
+    """Staff-only users may only query their own availability (or none if unlinked)."""
+    if is_workspace_manager_or_above(user=request.user, tenant=request.current_tenant):
+        return staff_id
+    own_ids = linked_staff_ids_for_user(tenant=request.current_tenant, user=request.user)
+    if staff_id is not None:
+        _ensure_staff_record_access(request, str(staff_id))
+        return staff_id
+    if len(own_ids) == 1:
+        return own_ids[0]
+    if not own_ids:
+        raise PermissionDenied("You do not have a linked staff profile for availability.")
+    # Multiple linked profiles: require an explicit staff_id.
+    raise ValidationError({"staff_id": "Select your staff profile to load availability."})
 
 
 class BookingListCreateView(APIView):
@@ -85,6 +117,17 @@ class BookingListCreateView(APIView):
         serializer = BookingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         business = self._business(request, serializer.validated_data.get("business"))
+        staff_id = serializer.validated_data.get("staff_id")
+        if staff_id is not None:
+            _ensure_staff_record_access(request, str(staff_id))
+        elif not is_workspace_manager_or_above(user=request.user, tenant=request.current_tenant):
+            own_ids = linked_staff_ids_for_user(
+                tenant=request.current_tenant,
+                user=request.user,
+                business=business,
+            )
+            if len(own_ids) == 1:
+                serializer.validated_data["staff_id"] = own_ids[0]
         try:
             booking = self.service.create_booking(
                 tenant=request.current_tenant,
@@ -133,6 +176,12 @@ class BookingReviewListView(APIView):
             .select_related("booking", "business")
             .order_by("-created_at")
         )
+        if not is_workspace_manager_or_above(user=request.user, tenant=request.current_tenant):
+            staff_ids = linked_staff_ids_for_user(
+                tenant=request.current_tenant,
+                user=request.user,
+            )
+            reviews = reviews.filter(booking__staff_id__in=staff_ids) if staff_ids else reviews.none()
         business_id = request.query_params.get("business")
         if business_id:
             reviews = reviews.filter(business_id=business_id)
@@ -325,10 +374,14 @@ class AvailabilityView(APIView):
         serializer = AvailabilityQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
         business = self._business(request, serializer.validated_data.get("business"))
+        staff_id = _resolve_availability_staff_id(
+            request,
+            serializer.validated_data.get("staff_id"),
+        )
         slots = self.service.available_slots(
             tenant=request.current_tenant,
             business=business,
-            staff_id=serializer.validated_data.get("staff_id"),
+            staff_id=staff_id,
             service_id=serializer.validated_data.get("service_id"),
             target_date=serializer.validated_data["date"],
             duration_minutes=serializer.validated_data["duration_minutes"],
@@ -377,6 +430,7 @@ class StaffWeeklyScheduleListCreateView(APIView):
         staff_id = request.query_params.get("staff_id")
         if not staff_id:
             raise ValidationError({"staff_id": "This query parameter is required."})
+        _ensure_staff_record_access(request, staff_id)
         business = AvailabilityView()._business(request, request.query_params.get("business"))
         rows = (
             StaffWeeklySchedule.objects.for_tenant(request.current_tenant)
@@ -397,6 +451,7 @@ class StaffWeeklyScheduleListCreateView(APIView):
     def post(self, request: Request) -> Response:
         serializer = StaffWeeklyScheduleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        _ensure_staff_record_access(request, str(serializer.validated_data["staff_id"]))
         business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
         defaults = {
             key: serializer.validated_data[key]
@@ -438,6 +493,7 @@ class StaffWeeklyScheduleBulkView(APIView):
         serializer.is_valid(raise_exception=True)
         business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
         staff_id = serializer.validated_data["staff_id"]
+        _ensure_staff_record_access(request, str(staff_id))
         saved: list[StaffWeeklySchedule] = []
         for entry in serializer.validated_data["schedules"]:
             row, _ = StaffWeeklySchedule.objects.update_or_create(
@@ -479,6 +535,7 @@ class StaffLeaveListCreateView(APIView):
         staff_id = request.query_params.get("staff_id")
         if not staff_id:
             raise ValidationError({"staff_id": "This query parameter is required."})
+        _ensure_staff_record_access(request, staff_id)
         business = AvailabilityView()._business(request, request.query_params.get("business"))
         rows = StaffLeave.objects.for_tenant(request.current_tenant).filter(
             business=business, staff_id=staff_id
@@ -502,6 +559,7 @@ class StaffLeaveListCreateView(APIView):
     def post(self, request: Request) -> Response:
         serializer = StaffLeaveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        _ensure_staff_record_access(request, str(serializer.validated_data["staff_id"]))
         business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
         row = StaffLeave.objects.create(
             tenant=request.current_tenant,
@@ -524,9 +582,11 @@ class StaffLeaveDetailView(APIView):
     permission_classes = [BookingAccessPermission]
 
     def _get(self, request: Request, leave_id: str) -> StaffLeave:
-        return get_object_or_404(
+        row = get_object_or_404(
             StaffLeave.objects.for_tenant(request.current_tenant), id=leave_id
         )
+        _ensure_staff_record_access(request, str(row.staff_id))
+        return row
 
     @extend_schema(tags=["Staff Leave"], responses={200: StaffLeaveSerializer})
     def get(self, request: Request, leave_id: str) -> Response:
@@ -577,6 +637,7 @@ class StaffSpecialAvailabilityListCreateView(APIView):
         staff_id = request.query_params.get("staff_id")
         if not staff_id:
             raise ValidationError({"staff_id": "This query parameter is required."})
+        _ensure_staff_record_access(request, staff_id)
         business = AvailabilityView()._business(request, request.query_params.get("business"))
         rows = StaffSpecialAvailability.objects.for_tenant(request.current_tenant).filter(
             business=business, staff_id=staff_id
@@ -600,6 +661,7 @@ class StaffSpecialAvailabilityListCreateView(APIView):
     def post(self, request: Request) -> Response:
         serializer = StaffSpecialAvailabilitySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        _ensure_staff_record_access(request, str(serializer.validated_data["staff_id"]))
         business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
         row = StaffSpecialAvailability.objects.create(
             tenant=request.current_tenant,
@@ -621,9 +683,11 @@ class StaffSpecialAvailabilityDetailView(APIView):
     permission_classes = [BookingAccessPermission]
 
     def _get(self, request: Request, special_id: str) -> StaffSpecialAvailability:
-        return get_object_or_404(
+        row = get_object_or_404(
             StaffSpecialAvailability.objects.for_tenant(request.current_tenant), id=special_id
         )
+        _ensure_staff_record_access(request, str(row.staff_id))
+        return row
 
     @extend_schema(
         tags=["Staff Special Availability"], responses={200: StaffSpecialAvailabilitySerializer}

@@ -13,11 +13,13 @@ import { useDialog } from '../../hooks/useDialog';
 import { useTheme } from '../../hooks/useTheme';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
+import { canWriteServices } from '../../utils/roles';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServicesPage() {
   const theme = useTheme();
   const auth = useAuth();
+  const canManageServices = canWriteServices(auth.user);
   const workspace = useWorkspace();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,6 +38,7 @@ export function ServicesPage() {
     buffer_after_minutes: 0,
     cleanup_minutes: 0,
     price: '',
+    loyalty_points_earn: 0,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -72,6 +75,7 @@ export function ServicesPage() {
       buffer_after_minutes: 0,
       cleanup_minutes: 0,
       price: '',
+      loyalty_points_earn: 0,
     });
     setImageFile(null);
   }
@@ -86,7 +90,9 @@ export function ServicesPage() {
     }
   }
 
-  const tableColumns = '56px 2fr 1fr 1fr 0.8fr 1.2fr';
+  const tableColumns = canManageServices
+    ? '56px 2fr 1fr 1fr 0.8fr 1.2fr'
+    : '56px 2fr 1fr 1fr 0.8fr';
 
   function ServiceThumbnail({ name, imageUrl }: { name: string; imageUrl?: string | null }) {
     const src = resolveMediaAssetUrl(imageUrl);
@@ -139,7 +145,9 @@ export function ServicesPage() {
             <p style={{ margin: 0, color: '#6b7280' }}>Create and maintain appointment services, duration, and pricing.</p>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Button variant="primary" onClick={() => dialog.show()}>Add service</Button>
+            {canManageServices ? (
+              <Button variant="primary" onClick={() => dialog.show()}>Add service</Button>
+            ) : null}
             <Button variant="neutral" onClick={() => refetch()}>Refresh</Button>
           </div>
         </header>
@@ -175,7 +183,7 @@ export function ServicesPage() {
               <span>Duration</span>
               <span>Price</span>
               <span>Status</span>
-              <span>Actions</span>
+              {canManageServices ? <span>Actions</span> : null}
             </div>
             <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
               {isLoading || search.isLoading ? (
@@ -218,22 +226,24 @@ export function ServicesPage() {
                       <span>{service.duration_minutes ? `${service.duration_minutes} min` : '—'}</span>
                       <span>{formatPrice(service)}</span>
                       <span style={{ color: isActive ? '#10b981' : '#6b7280' }}>{service.status ?? 'Unknown'}</span>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <Button
-                          type="button"
-                          variant={isActive ? 'neutral' : 'primary'}
-                          disabled={updateService.isPending}
-                          onClick={() =>
-                            service.id &&
-                            updateService.mutate({
-                              serviceId: service.id,
-                              service: { status: isActive ? 'inactive' : 'active' },
-                            })
-                          }
-                        >
-                          {isActive ? 'Deactivate' : 'Activate'}
-                        </Button>
-                      </div>
+                      {canManageServices ? (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <Button
+                            type="button"
+                            variant={isActive ? 'neutral' : 'primary'}
+                            disabled={updateService.isPending}
+                            onClick={() =>
+                              service.id &&
+                              updateService.mutate({
+                                serviceId: service.id,
+                                service: { status: isActive ? 'inactive' : 'active' },
+                              })
+                            }
+                          >
+                            {isActive ? 'Deactivate' : 'Activate'}
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })
@@ -277,6 +287,7 @@ export function ServicesPage() {
                   display_name: serviceName,
                   status: formState.status,
                   short_description: formState.short_description,
+                  loyalty_points_earn: Math.max(0, Number(formState.loyalty_points_earn) || 0),
                   default_duration: {
                     duration_minutes: formState.duration_minutes,
                     buffer_before_minutes: formState.buffer_before_minutes,
@@ -332,7 +343,7 @@ export function ServicesPage() {
             placeholder="Display name"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <label style={{ display: 'grid', gap: 8 }}>
               Duration (minutes)
               <input
@@ -354,6 +365,19 @@ export function ServicesPage() {
                 value={formState.price}
                 onChange={(event) => setFormState({ ...formState, price: event.target.value })}
                 placeholder="0.00"
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Points earned on complete
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={formState.loyalty_points_earn}
+                onChange={(event) =>
+                  setFormState({ ...formState, loyalty_points_earn: Number(event.target.value) || 0 })
+                }
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               />
             </label>

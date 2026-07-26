@@ -4,9 +4,12 @@ import { type Business, type TenantSummary } from '@ie-platform/sdk';
 import { createAuthenticatedClient } from '../lib/apiClient';
 import { invalidateWorkspaceData } from '../lib/workspace';
 import { useAuth } from '../hooks/useAuth';
+import { isPlatformAdmin } from '../utils/roles';
 
 export const ACTIVE_TENANT_STORAGE_KEY = 'ie:active-tenant-id';
 export const ACTIVE_BUSINESS_STORAGE_KEY = 'ie:active-business-id';
+/** When set, platform/super admins may load a tenant workspace (opt-in). */
+export const WORKSPACE_MODE_STORAGE_KEY = 'ie:workspace-mode';
 
 type WorkspaceState = {
   tenants: TenantSummary[];
@@ -15,6 +18,8 @@ type WorkspaceState = {
   activeBusiness: Business | null;
   activeProduct: string | null;
   loading: boolean;
+  /** True when a platform admin has opted into tenant workspace mode. */
+  workspaceMode: boolean;
   setTenantId: (tenantId: string) => void;
   setBusinessId: (businessId: string) => void;
   switchBusiness: (businessId: string) => void;
@@ -22,9 +27,43 @@ type WorkspaceState = {
   subscribeProduct: (productId: string, setActive?: boolean) => Promise<void>;
   setActiveBusiness: (business: Business) => void;
   refreshWorkspace: () => Promise<void>;
+  enterWorkspaceMode: () => Promise<void>;
+  exitWorkspaceMode: () => void;
 };
 
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
+
+function readWorkspaceModeFlag(): boolean {
+  try {
+    return localStorage.getItem(WORKSPACE_MODE_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeWorkspaceModeFlag(enabled: boolean) {
+  try {
+    if (enabled) {
+      localStorage.setItem(WORKSPACE_MODE_STORAGE_KEY, '1');
+    } else {
+      localStorage.removeItem(WORKSPACE_MODE_STORAGE_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function clearWorkspaceState(
+  setTenants: (value: TenantSummary[]) => void,
+  setActiveBusiness: (value: Business | null) => void,
+  setBusinessIdState: (value: string | null) => void,
+  setTenantIdState: (value: string | null) => void,
+) {
+  setTenants([]);
+  setActiveBusiness(null);
+  setBusinessIdState(null);
+  setTenantIdState(null);
+}
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -46,6 +85,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   });
   const [activeBusiness, setActiveBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState(readWorkspaceModeFlag);
+
+  const platformAdmin = isPlatformAdmin(auth.user);
+  const shouldLoadWorkspace = Boolean(auth.token && auth.user && (!platformAdmin || workspaceMode));
 
   const loadActiveBusiness = useCallback(async (token: string, resolvedTenantId: string | null, preferredBusinessId?: string | null) => {
     const client = createAuthenticatedClient(token, resolvedTenantId);
@@ -69,9 +112,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const refreshWorkspace = useCallback(async () => {
     if (!auth.token) {
-      setTenants([]);
-      setActiveBusiness(null);
-      setBusinessIdState(null);
+      clearWorkspaceState(setTenants, setActiveBusiness, setBusinessIdState, setTenantIdState);
+      return;
+    }
+
+    if (isPlatformAdmin(auth.user) && !readWorkspaceModeFlag()) {
+      clearWorkspaceState(setTenants, setActiveBusiness, setBusinessIdState, setTenantIdState);
+      setLoading(false);
       return;
     }
 
@@ -95,17 +142,42 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       await loadActiveBusiness(auth.token, resolvedTenantId);
     } catch {
-      setTenants([]);
-      setActiveBusiness(null);
-      setBusinessIdState(null);
+      clearWorkspaceState(setTenants, setActiveBusiness, setBusinessIdState, setTenantIdState);
     } finally {
       setLoading(false);
     }
-  }, [auth.token, loadActiveBusiness]);
+  }, [auth.token, auth.user, loadActiveBusiness]);
 
   useEffect(() => {
+    if (!auth.token || !auth.user) {
+      clearWorkspaceState(setTenants, setActiveBusiness, setBusinessIdState, setTenantIdState);
+      setWorkspaceMode(false);
+      writeWorkspaceModeFlag(false);
+      setLoading(false);
+      return;
+    }
+
+    if (!shouldLoadWorkspace) {
+      clearWorkspaceState(setTenants, setActiveBusiness, setBusinessIdState, setTenantIdState);
+      setLoading(false);
+      return;
+    }
+
     void refreshWorkspace();
+  }, [auth.token, auth.user, shouldLoadWorkspace, refreshWorkspace]);
+
+  const enterWorkspaceMode = useCallback(async () => {
+    writeWorkspaceModeFlag(true);
+    setWorkspaceMode(true);
+    await refreshWorkspace();
   }, [refreshWorkspace]);
+
+  const exitWorkspaceMode = useCallback(() => {
+    writeWorkspaceModeFlag(false);
+    setWorkspaceMode(false);
+    clearWorkspaceState(setTenants, setActiveBusiness, setBusinessIdState, setTenantIdState);
+    setLoading(false);
+  }, []);
 
   const setTenantId = useCallback((nextTenantId: string) => {
     setTenantIdState(nextTenantId);
@@ -174,6 +246,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       activeBusiness,
       activeProduct,
       loading,
+      workspaceMode,
       setTenantId,
       setBusinessId: switchBusiness,
       switchBusiness,
@@ -181,8 +254,26 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       subscribeProduct,
       setActiveBusiness: setActiveBusinessState,
       refreshWorkspace,
+      enterWorkspaceMode,
+      exitWorkspaceMode,
     }),
-    [tenants, tenantId, businessId, activeBusiness, activeProduct, loading, setTenantId, switchBusiness, switchProduct, subscribeProduct, setActiveBusinessState, refreshWorkspace],
+    [
+      tenants,
+      tenantId,
+      businessId,
+      activeBusiness,
+      activeProduct,
+      loading,
+      workspaceMode,
+      setTenantId,
+      switchBusiness,
+      switchProduct,
+      subscribeProduct,
+      setActiveBusinessState,
+      refreshWorkspace,
+      enterWorkspaceMode,
+      exitWorkspaceMode,
+    ],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

@@ -221,6 +221,13 @@ class Booking(TenantModel):
     business = models.ForeignKey(
         "businesses.Business", on_delete=models.PROTECT, related_name="bookings"
     )
+    branch = models.ForeignKey(
+        "businesses.Branch",
+        on_delete=models.PROTECT,
+        related_name="bookings",
+        null=True,
+        blank=True,
+    )
     booking_number = models.CharField(max_length=32, unique=True, db_index=True)
     customer_id = models.UUIDField(db_index=True)
     staff_id = models.UUIDField(null=True, blank=True, db_index=True)

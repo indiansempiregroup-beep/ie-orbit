@@ -85,6 +85,11 @@ class Staff(TenantModel):
         default=EmploymentStatus.ACTIVE,
         db_index=True,
     )
+    is_bookable = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="When false, this person does not consume a staff seat and cannot be assigned to bookings.",
+    )
     emergency_contact = models.JSONField(default=dict, blank=True)
     preferences = models.JSONField(default=dict, blank=True)
     tags = models.JSONField(default=list, blank=True, validators=[validate_tags])

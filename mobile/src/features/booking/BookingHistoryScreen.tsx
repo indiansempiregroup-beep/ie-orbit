@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { BookingCard } from '../../components/BookingCard';
 import { Chip } from '../../components/ui/Chip';
 import { useBootstrap } from '../../contexts/BootstrapContext';
@@ -14,6 +15,7 @@ import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 const FILTERS = ['All', 'Upcoming', 'Past'] as const;
 
 export function BookingHistoryScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { branding } = useBootstrap();
   const primary = branding?.primaryColor ?? colors.primary;
@@ -22,10 +24,15 @@ export function BookingHistoryScreen() {
   const upcomingQuery = filter === 'Upcoming' ? true : filter === 'Past' ? false : undefined;
   const { bookings, loading, reload } = useMobileBookings({ upcoming: upcomingQuery });
   const { refreshing, onRefresh } = usePullToRefresh(reload);
+  const filterLabels: Record<(typeof FILTERS)[number], string> = {
+    All: t('common.all'),
+    Upcoming: t('bookings.upcoming'),
+    Past: t('bookings.past'),
+  };
 
   return (
     <ProfileMenuScreen
-      title="My Appointments"
+      title={t('bookings.myAppointments')}
       onBack={() => navigation.goBack()}
       refreshing={refreshing || loading}
       onRefresh={onRefresh}
@@ -33,12 +40,18 @@ export function BookingHistoryScreen() {
     >
       <View style={styles.filters}>
         {FILTERS.map((item) => (
-          <Chip key={item} label={item} active={filter === item} primaryColor={primary} onPress={() => setFilter(item)} />
+          <Chip
+            key={item}
+            label={filterLabels[item]}
+            active={filter === item}
+            primaryColor={primary}
+            onPress={() => setFilter(item)}
+          />
         ))}
       </View>
       {loading ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
       {!loading && !bookings.length ? (
-        <Text style={styles.empty}>No appointments found for this filter.</Text>
+        <Text style={styles.empty}>{t('bookings.empty')}</Text>
       ) : null}
       {bookings.map((booking) => (
         <BookingCard

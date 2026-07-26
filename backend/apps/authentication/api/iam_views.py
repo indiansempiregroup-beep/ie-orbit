@@ -21,6 +21,8 @@ from apps.authentication.services.roles import RoleService
 from apps.common.api.responses import success_response
 from apps.staff.models import Staff
 
+MANAGER_ASSIGNABLE_ROLES = frozenset({"manager", "staff"})
+
 
 def _tenant_member_user_ids(request: Request) -> set[str]:
     tenant = request.current_tenant
@@ -32,6 +34,30 @@ def _tenant_member_user_ids(request: Request) -> set[str]:
         )
     )
     return user_ids
+
+
+def _actor_is_workspace_admin(request: Request) -> bool:
+    user = request.user
+    if getattr(user, "is_superuser", False):
+        return True
+    tenant = getattr(request, "current_tenant", None)
+    if tenant and tenant.owner_id == user.id:
+        return True
+    return user.user_roles.filter(
+        role__is_active=True,
+        role__code__in={"business_owner", "platform_admin", "super_admin"},
+    ).exists()
+
+
+def _assert_workspace_role_mutation(request: Request, role_code: str, *, removing: bool = False) -> None:
+    if role_code in {"super_admin", "platform_admin"}:
+        raise ValidationError({"role_code": "This role cannot be changed from the workspace."})
+    if removing and role_code == "business_owner":
+        raise ValidationError({"role_code": "This role cannot be removed from the workspace."})
+    if not removing and role_code == "business_owner" and not _actor_is_workspace_admin(request):
+        raise ValidationError({"role_code": "Only owners can assign the business owner role."})
+    if not _actor_is_workspace_admin(request) and role_code not in MANAGER_ASSIGNABLE_ROLES:
+        raise ValidationError({"role_code": "Managers can only assign or remove manager or staff roles."})
 
 
 class RoleListView(APIView):
@@ -99,9 +125,7 @@ class MemberRoleAssignView(APIView):
         serializer = AssignRoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         role_code = serializer.validated_data["role_code"]
-
-        if role_code in {"super_admin", "platform_admin"}:
-            raise ValidationError({"role_code": "This role cannot be assigned from the workspace."})
+        _assert_workspace_role_mutation(request, role_code, removing=False)
 
         if str(user_id) not in _tenant_member_user_ids(request):
             raise NotFound("User is not part of the current tenant.")
@@ -135,8 +159,7 @@ class MemberRoleRemoveView(APIView):
 
     @extend_schema(tags=["IAM"])
     def delete(self, request: Request, user_id: str, role_code: str) -> Response:
-        if role_code in {"super_admin", "platform_admin", "business_owner"}:
-            raise ValidationError({"role_code": "This role cannot be removed from the workspace."})
+        _assert_workspace_role_mutation(request, role_code, removing=True)
         if str(user_id) not in _tenant_member_user_ids(request):
             raise NotFound("User is not part of the current tenant.")
 

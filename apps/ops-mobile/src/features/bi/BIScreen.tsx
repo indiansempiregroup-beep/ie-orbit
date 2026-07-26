@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { RouteProp, useRoute } from '@react-navigation/native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Card } from '../../components/ui/Card';
@@ -13,6 +14,7 @@ import {
   useBIOverview,
   useBIReports,
   useBIRevenue,
+  useBusinessBillingSnapshot,
 } from '../../hooks/useOpsExtended';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -45,12 +47,22 @@ function money(amount?: number | null, currency?: string | null) {
 
 export function BIScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BI'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { billing } = useBusinessBillingSnapshot();
+  const allowed = useMemo(
+    () => new Set(billing?.bi_features?.length ? billing.bi_features : ['overview']),
+    [billing?.bi_features],
+  );
   const [tab, setTab] = useState<Tab>(route.params?.tab ?? 'overview');
   const overview = useBIOverview();
   const growth = useBIGrowth();
   const revenue = useBIRevenue();
   const forecast = useBIForecast();
   const reports = useBIReports();
+
+  useEffect(() => {
+    if (!allowed.has(tab)) setTab('overview');
+  }, [allowed, tab]);
 
   const reload = async () => {
     await Promise.all([
@@ -64,24 +76,51 @@ export function BIScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const loading =
     overview.loading || growth.loading || revenue.loading || forecast.loading || reports.loading;
+  const tabLocked = !allowed.has(tab);
 
   return (
     <View style={styles.screen}>
       <View style={styles.tabs}>
-        {(Object.keys(TAB_LABELS) as Tab[]).map((key) => (
-          <Chip key={key} label={TAB_LABELS[key]} active={tab === key} onPress={() => setTab(key)} />
-        ))}
+        {(Object.keys(TAB_LABELS) as Tab[]).map((key) => {
+          const locked = !allowed.has(key);
+          return (
+            <Chip
+              key={key}
+              label={locked ? `${TAB_LABELS[key]} · Pro` : TAB_LABELS[key]}
+              active={tab === key}
+              onPress={() => {
+                if (locked) {
+                  setTab('overview');
+                  return;
+                }
+                setTab(key);
+              }}
+            />
+          );
+        })}
       </View>
       <RefreshableScrollView
         refreshing={refreshing || loading}
         onRefresh={onRefresh}
         contentContainerStyle={styles.content}
       >
-        {tab === 'overview' ? <BIOverview data={overview.data} loading={overview.loading} /> : null}
-        {tab === 'growth' ? <BIGrowth data={growth.data} loading={growth.loading} /> : null}
-        {tab === 'revenue' ? <BIRevenue data={revenue.data} loading={revenue.loading} /> : null}
-        {tab === 'forecast' ? <BIForecast data={forecast.data} loading={forecast.loading} /> : null}
-        {tab === 'reports' ? <BIReports data={reports.data} loading={reports.loading} /> : null}
+        {tabLocked ? (
+          <Card style={styles.lockCard}>
+            <Text style={styles.lockTitle}>Pro feature</Text>
+            <Text style={styles.lockMeta}>
+              Your current plan includes BI Overview only. Upgrade to Pro for Growth, Revenue, Forecast, and
+              Reports.
+            </Text>
+            <Pressable style={styles.lockCta} onPress={() => navigation.navigate('ProductSettings')}>
+              <Text style={styles.lockCtaText}>Upgrade plan</Text>
+            </Pressable>
+          </Card>
+        ) : null}
+        {!tabLocked && tab === 'overview' ? <BIOverview data={overview.data} loading={overview.loading} /> : null}
+        {!tabLocked && tab === 'growth' ? <BIGrowth data={growth.data} loading={growth.loading} /> : null}
+        {!tabLocked && tab === 'revenue' ? <BIRevenue data={revenue.data} loading={revenue.loading} /> : null}
+        {!tabLocked && tab === 'forecast' ? <BIForecast data={forecast.data} loading={forecast.loading} /> : null}
+        {!tabLocked && tab === 'reports' ? <BIReports data={reports.data} loading={reports.loading} /> : null}
       </RefreshableScrollView>
     </View>
   );
@@ -367,6 +406,18 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  lockCard: { gap: spacing.sm },
+  lockTitle: { ...typography.title, fontSize: 18, color: colors.foreground },
+  lockMeta: { ...typography.body, color: colors.mutedForeground },
+  lockCta: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  lockCtaText: { ...typography.caption, fontWeight: '700', color: '#fff' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   stack: { gap: spacing.md },
   metric: { width: '47%' },

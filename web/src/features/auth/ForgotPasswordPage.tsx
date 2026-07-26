@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { getPostLoginPath } from '../../utils/roles';
 
 export function ForgotPasswordPage() {
   usePageMeta({ title: 'Forgot password — AppointIE' });
@@ -16,7 +17,7 @@ export function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
 
   if (auth.token && auth.user) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={getPostLoginPath(auth.user)} replace />;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -28,7 +29,12 @@ export function ForgotPasswordPage() {
       await client.auth.forgotPassword({ email });
       setSubmitted(true);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to send reset email.'));
+      setError(
+        getApiErrorMessage(
+          err,
+          "We couldn't send a reset link right now. Please check the email and try again.",
+        ),
+      );
     } finally {
       setLoading(false);
     }

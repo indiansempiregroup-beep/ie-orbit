@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -211,11 +211,35 @@ export function BookingDetailScreen() {
         />
         <DetailRow label="Duration" value={`${booking.duration_minutes} minutes`} />
         {booking.staff_name ? <DetailRow label="Stylist" value={booking.staff_name} /> : null}
+        {booking.branch?.display_name ? (
+          <DetailRow label="Office" value={booking.branch.display_name} />
+        ) : null}
+        {booking.branch?.formatted_address ? (
+          <DetailRow label="Address" value={booking.branch.formatted_address} />
+        ) : null}
         <DetailRow
           label="Payment"
           value={booking.payment_mode === 'pay_at_venue' || !booking.payment_mode ? 'Pay at venue' : booking.payment_mode}
         />
         {booking.notes ? <DetailRow label="Notes" value={booking.notes} /> : null}
+        {booking.branch && (booking.branch.latitude != null || booking.branch.formatted_address) ? (
+          <Button
+            label="Get directions"
+            variant="outline"
+            fullWidth
+            primaryColor={primary}
+            onPress={() => {
+              const { latitude, longitude, formatted_address } = booking.branch!;
+              const url =
+                latitude != null && longitude != null
+                  ? `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+                  : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                      formatted_address || booking.branch!.display_name,
+                    )}`;
+              void Linking.openURL(url);
+            }}
+          />
+        ) : null}
       </Card>
 
       {review ? (

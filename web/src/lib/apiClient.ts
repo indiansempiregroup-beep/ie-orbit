@@ -20,7 +20,11 @@ function humanizeField(field: string): string {
 function collectValidationMessages(details: unknown, prefix = ''): string[] {
   if (!details) return [];
   if (typeof details === 'string') {
-    return prefix ? [`${prefix}: ${details}`] : [details];
+    // Full sentences from the API already read well in toasts — skip "Field: …" noise.
+    if (!prefix || details.length > 48 || /[.!?]$/.test(details.trim())) {
+      return [details];
+    }
+    return [`${prefix}: ${details}`];
   }
   if (Array.isArray(details)) {
     return details.flatMap((entry) => collectValidationMessages(entry, prefix));
@@ -40,13 +44,30 @@ export function formatApiValidationDetails(details: unknown): string | null {
   return messages.join(' ');
 }
 
+const TECHNICAL_AUTH_MESSAGES = new Set([
+  'authentication credentials were not provided or are invalid.',
+  'authentication credentials were not provided.',
+  'incorrect authentication credentials.',
+  'invalid credentials.',
+  'unable to log in with provided credentials.',
+]);
+
+function humanizeAuthMessage(message: string, fallback: string): string {
+  if (TECHNICAL_AUTH_MESSAGES.has(message.trim().toLowerCase())) {
+    return fallback;
+  }
+  return message;
+}
+
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiClientError) {
     const details = formatApiValidationDetails(error.payload.error.details);
-    return details || error.payload.error.message || error.message || fallback;
+    if (details) return details;
+    const message = error.payload.error.message || error.message || fallback;
+    return humanizeAuthMessage(message, fallback);
   }
   if (error instanceof Error && error.message) {
-    return error.message;
+    return humanizeAuthMessage(error.message, fallback);
   }
   return fallback;
 }

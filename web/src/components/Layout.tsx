@@ -1,8 +1,10 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AppShellHeader } from './AppShellHeader';
 import { EmailVerificationBanner } from './EmailVerificationBanner';
+import { SoftLockBanner } from './SoftLockBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useProductNavigation } from '../hooks/useProductNavigation';
 import { formatUserRole } from '../utils/roles';
@@ -12,6 +14,7 @@ import { useNotificationStream } from '../hooks/useNotificationStream';
 import { buildWorkspaceSnapshot } from '../lib/workspaceModel';
 
 export function Layout() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuth();
   const workspace = useWorkspace();
@@ -51,13 +54,14 @@ export function Layout() {
           </div>
           <div>
             <p className="app-shell-brand-label">
-              Workspace <span className="app-shell-brand-product">· {workspaceSnapshot.productName}</span>
+              {t('common.workspace')}{' '}
+              <span className="app-shell-brand-product">· {workspaceSnapshot.productName}</span>
             </p>
             <h1 className="app-shell-brand-name">{workspaceSnapshot.businessName}</h1>
           </div>
         </div>
 
-        <nav className="app-shell-nav" aria-label="Primary navigation">
+        <nav className="app-shell-nav" aria-label={t('nav.primary')}>
           {primaryNav.map((item) => (
             <NavLink
               key={item.to}
@@ -67,7 +71,7 @@ export function Layout() {
               <span className="app-shell-link-icon">
                 <item.icon size={18} />
               </span>
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </NavLink>
           ))}
 
@@ -82,7 +86,7 @@ export function Layout() {
             <span className="app-shell-link-icon">
               <LogOut size={18} />
             </span>
-            <span>Sign Out</span>
+            <span>{t('auth.signOut')}</span>
           </button>
         </nav>
 
@@ -90,10 +94,10 @@ export function Layout() {
           <div className="app-shell-user-pill">
             <div className="app-shell-user-avatar">{(auth.user?.full_name ?? 'U').charAt(0).toUpperCase()}</div>
             <div>
-              <strong>{auth.user?.full_name ?? 'User'}</strong>
+              <strong>{auth.user?.full_name ?? t('common.user')}</strong>
               <p>
                 {roleLabel}
-                {!auth.user?.email_verified_at ? ' · Email not verified' : ''}
+                {!auth.user?.email_verified_at ? ` · ${t('auth.emailNotVerified')}` : ''}
               </p>
             </div>
           </div>
@@ -103,8 +107,9 @@ export function Layout() {
       <div className="app-shell-content">
         <AppShellHeader />
         <main className="app-shell-main" role="main">
-          <div style={{ padding: '0 0 16px' }}>
+          <div style={{ padding: '0 0 16px', display: 'grid', gap: 12 }}>
             <EmailVerificationBanner />
+            <SoftLockBanner />
           </div>
           <Outlet />
         </main>

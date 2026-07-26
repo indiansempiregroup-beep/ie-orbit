@@ -101,6 +101,31 @@ class RazorpayClient:
         ).hexdigest()
         return hmac.compare_digest(expected, signature)
 
+    def refund_payment(
+        self,
+        *,
+        payment_id: str,
+        amount_paise: int,
+        notes: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        if not self.is_configured or payment_id.startswith("pay_mock"):
+            mock_id = f"rfnd_mock_{uuid.uuid4().hex[:16]}"
+            logger.info(
+                "razorpay.mock_refund_created",
+                extra={"refund_id": mock_id, "payment_id": payment_id, "amount": amount_paise},
+            )
+            return {
+                "id": mock_id,
+                "payment_id": payment_id,
+                "amount": amount_paise,
+                "status": "processed",
+                "mock": True,
+            }
+        payload: dict[str, Any] = {"amount": amount_paise}
+        if notes:
+            payload["notes"] = notes
+        return self._request("POST", f"/payments/{payment_id}/refund", payload)
+
     def _request(self, method: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{RAZORPAY_API_BASE}{path}"
         credentials = base64.b64encode(

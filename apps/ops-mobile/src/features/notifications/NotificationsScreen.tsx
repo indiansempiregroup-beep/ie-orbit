@@ -1,20 +1,38 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { Notification } from '@ie-platform/sdk';
 import { OpsHeader } from '../../components/OpsHeader';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Card } from '../../components/ui/Card';
 import { ScreenState } from '../../components/ScreenState';
+import { useNotifications } from '../../contexts/NotificationsContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { useNotifications } from '../../hooks/useOpsData';
-import { useOpsClient } from '../../hooks/useOpsClient';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { formatRelativeTime } from '../../utils/format';
+import type { RootStackParamList } from '../../navigation/types';
+
+function openRelatedItem(
+  navigation: NativeStackNavigationProp<RootStackParamList>,
+  notification: Notification,
+) {
+  if (notification.booking_id) {
+    navigation.navigate('BookingDetail', { bookingId: notification.booking_id });
+  }
+}
 
 export function NotificationsScreen() {
-  const client = useOpsClient();
-  const { notifications, loading, reload } = useNotifications();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { notifications, loading, reload, markRead, markAllRead, unreadCount } = useNotifications();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
-  const hasUnread = notifications.some((item) => !item.is_read);
+  const hasUnread = unreadCount > 0;
+
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
 
   return (
     <View style={styles.screen}>
@@ -24,11 +42,7 @@ export function NotificationsScreen() {
         right={
           <Pressable
             disabled={!hasUnread}
-            onPress={async () => {
-              if (!client) return;
-              await client.notifications.readAll();
-              await reload();
-            }}
+            onPress={() => void markAllRead()}
             style={styles.markReadHit}
           >
             <Text style={[styles.markRead, !hasUnread && styles.markReadDisabled]}>Mark all read</Text>
@@ -36,14 +50,17 @@ export function NotificationsScreen() {
         }
       />
       <RefreshableScrollView refreshing={refreshing || loading} onRefresh={onRefresh} contentContainerStyle={styles.content}>
-        <ScreenState loading={loading && !notifications.length} empty={!loading && notifications.length === 0} emptyMessage="No alerts yet." />
+        <ScreenState
+          loading={loading && !notifications.length}
+          empty={!loading && notifications.length === 0}
+          emptyMessage="No alerts yet."
+        />
         {notifications.map((notification) => (
           <Pressable
             key={notification.id}
-            onPress={async () => {
-              if (!client || notification.is_read) return;
-              await client.notifications.markRead(notification.id);
-              await reload();
+            onPress={() => {
+              if (!notification.is_read) void markRead(notification.id);
+              openRelatedItem(navigation, notification);
             }}
           >
             <Card style={!notification.is_read ? styles.unread : undefined}>

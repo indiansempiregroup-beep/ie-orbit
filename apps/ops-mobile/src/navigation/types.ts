@@ -18,6 +18,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Auth: undefined;
   NoAccess: undefined;
+  PlatformAdminWebOnly: undefined;
   WorkspacePicker: undefined;
   Main: undefined;
   Search: undefined;
@@ -49,7 +50,6 @@ export type RootStackParamList = {
   Branches: undefined;
   BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };
   Reports: undefined;
-  Admin: undefined;
   Team: undefined;
   Profile: undefined;
   ProfileEdit: undefined;

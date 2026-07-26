@@ -13,11 +13,13 @@ import { LogoUploadField } from '../../components/LogoUploadField';
 import { formatTimestamp } from '../../lib/datetime';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { useTheme } from '../../hooks/useTheme';
+import { canWriteServices } from '../../utils/roles';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServiceDetailPage() {
   const theme = useTheme();
   const auth = useAuth();
+  const canManageServices = canWriteServices(auth.user);
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency ?? 'USD';
   const { serviceId } = useParams();
@@ -35,6 +37,7 @@ export function ServiceDetailPage() {
     buffer_after_minutes: 0,
     cleanup_minutes: 0,
     price: '',
+    loyalty_points_earn: 0,
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -53,6 +56,7 @@ export function ServiceDetailPage() {
       buffer_after_minutes: service.buffer_after_minutes ?? 0,
       cleanup_minutes: service.cleanup_minutes ?? 0,
       price: service.price != null ? String(service.price) : '',
+      loyalty_points_earn: service.loyalty_points_earn ?? 0,
     });
     setCurrentImageUrl(resolveMediaAssetUrl(service.image_url));
     setImageFile(null);
@@ -79,6 +83,7 @@ export function ServiceDetailPage() {
       display_name: formState.display_name || formState.name,
       short_description: formState.description,
       status: formState.status,
+      loyalty_points_earn: Math.max(0, Number(formState.loyalty_points_earn) || 0),
       default_duration: {
         duration_minutes: formState.duration_minutes,
         buffer_before_minutes: formState.buffer_before_minutes,
@@ -109,15 +114,17 @@ export function ServiceDetailPage() {
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Button variant="ghost" onClick={() => navigate('/services')}>Back to services</Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (serviceQuery.data) editDialog.show();
-              }}
-              disabled={!serviceQuery.data}
-            >
-              Edit service
-            </Button>
+            {canManageServices ? (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (serviceQuery.data) editDialog.show();
+                }}
+                disabled={!serviceQuery.data}
+              >
+                Edit service
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -139,7 +146,7 @@ export function ServiceDetailPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Duration</p>
                   <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.duration_minutes ? `${serviceQuery.data.duration_minutes} min` : '—'}</p>
@@ -147,6 +154,10 @@ export function ServiceDetailPage() {
                 <div>
                   <p style={{ margin: 0, color: '#6b7280' }}>Price</p>
                   <p style={{ margin: '8px 0 0' }}>{formatPrice(serviceQuery.data.price, serviceQuery.data.currency ?? currency)}</p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, color: '#6b7280' }}>Reward points on complete</p>
+                  <p style={{ margin: '8px 0 0' }}>{serviceQuery.data.loyalty_points_earn ?? 0}</p>
                 </div>
               </div>
 
@@ -256,7 +267,7 @@ export function ServiceDetailPage() {
             placeholder="Display name"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <label style={{ display: 'grid', gap: 8 }}>
               Duration (minutes)
               <input
@@ -278,6 +289,19 @@ export function ServiceDetailPage() {
                 value={formState.price}
                 onChange={(event) => setFormState({ ...formState, price: event.target.value })}
                 placeholder="0.00"
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 8 }}>
+              Points earned on complete
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={formState.loyalty_points_earn}
+                onChange={(event) =>
+                  setFormState({ ...formState, loyalty_points_earn: Number(event.target.value) || 0 })
+                }
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               />
             </label>

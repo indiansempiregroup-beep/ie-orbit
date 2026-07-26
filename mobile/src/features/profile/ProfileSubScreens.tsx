@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import type { MobileReview } from '@ie-platform/sdk';
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -286,20 +287,108 @@ export function ReviewsScreen() {
 }
 
 export function HelpSupportScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
   const { bootstrap, branding } = useBootstrap();
   const business = bootstrap?.business;
+  const [articles, setArticles] = useState<Array<{ id: string; slug: string; title: string; category?: string }>>([]);
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+  const isPlatformAdmin = (user?.roles ?? []).some((role) =>
+    ['platform_admin', 'super_admin'].includes(role),
+  );
+
+  useEffect(() => {
+    void mobileClient.help
+      .articles()
+      .then((res) => setArticles(res.data.articles ?? []))
+      .catch(() => setArticles([]));
+  }, []);
+
+  async function submitTicket() {
+    if (!subject.trim()) {
+      Alert.alert('Subject required', 'Please enter a short subject.');
+      return;
+    }
+    try {
+      await mobileClient.support.createTicket({ subject, body });
+      setSubject('');
+      setBody('');
+      setStatus('Ticket submitted. Our team will follow up by email.');
+    } catch (err) {
+      Alert.alert('Could not submit', getApiErrorMessage(err, 'Please try again.'));
+    }
+  }
 
   return (
-    <ProfileMenuScreen title="Help & Support" onBack={() => navigation.goBack()}>
+    <ProfileMenuScreen title={t('help.title')} onBack={() => navigation.goBack()}>
       <Text style={styles.body}>Need help with your booking? Contact {branding?.appName ?? 'us'} directly.</Text>
       {business?.phone ? <Text style={styles.contact}>Phone: {business.phone}</Text> : null}
       {business?.email ? <Text style={styles.contact}>Email: {business.email}</Text> : null}
       {business?.formatted_address ? <Text style={styles.contact}>Address: {business.formatted_address}</Text> : null}
+
+      {isPlatformAdmin ? (
+        <Button
+          label="Open platform admin tools"
+          onPress={() => navigation.navigate('PlatformAdmin')}
+        />
+      ) : null}
+
+      <Text style={styles.faqTitle}>{t('help.articles')}</Text>
+      {articles.length === 0 ? (
+        <Text style={styles.body}>No published articles yet.</Text>
+      ) : (
+        articles.map((article) => (
+          <Text key={article.id} style={styles.body}>
+            • {article.title}
+            {article.category ? ` (${article.category})` : ''}
+          </Text>
+        ))
+      )}
+
+      <Text style={styles.faqTitle}>{t('help.contactSupport')}</Text>
+      <Input label={t('help.subject')} value={subject} onChangeText={setSubject} />
+      <Input label={t('help.details')} value={body} onChangeText={setBody} multiline />
+      <Button label={t('help.submitTicket')} onPress={() => void submitTicket()} />
+      {status ? <Text style={styles.body}>{status}</Text> : null}
+
       <Text style={styles.faqTitle}>FAQs</Text>
       <Text style={styles.body}>• How do I reschedule? Open your appointment from Home or My Appointments.</Text>
       <Text style={styles.body}>• Can I cancel? Yes, up to 24 hours before your visit where policy allows.</Text>
       <Text style={styles.body}>• How do I update my phone number? Go to Profile → Personal Information.</Text>
+    </ProfileMenuScreen>
+  );
+}
+
+export function PlatformAdminScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [tenants, setTenants] = useState<Array<{ id: string; display_name: string; status: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void mobileClient.platform
+      .tenants()
+      .then((res) => setTenants(res.data.tenants ?? []))
+      .catch((err) => setError(getApiErrorMessage(err, 'Unable to load platform tenants')))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <ProfileMenuScreen title="Platform admin" onBack={() => navigation.goBack()}>
+      <Text style={styles.body}>
+        Platform admin tools in the customer app. Use web /admin or ops-mobile for full management.
+      </Text>
+      {loading ? <ActivityIndicator color={colors.primary} /> : null}
+      {error ? <Text style={styles.body}>{error}</Text> : null}
+      {tenants.map((tenant) => (
+        <View key={tenant.id} style={styles.prefRow}>
+          <Text style={styles.biometricTitle}>{tenant.display_name}</Text>
+          <Text style={styles.biometricHint}>{tenant.status}</Text>
+        </View>
+      ))}
     </ProfileMenuScreen>
   );
 }

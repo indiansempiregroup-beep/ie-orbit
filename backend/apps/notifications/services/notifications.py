@@ -117,6 +117,9 @@ class NotificationService:
         template = self._get_template(event, template_code)
         if not template:
             return None
+        if not self._channel_enabled_for_user(user=user, channel=template.channel):
+            return None
+
         context = self._render_context(event=event, template=template, user=user, audience=audience)
         notification = Notification.objects.create(
             tenant=event.tenant,
@@ -260,30 +263,25 @@ class NotificationService:
         return None
 
     def _resolve_admin_users(self, event: BookingEvent, exclude_user: User | None = None) -> list[User]:
-        users: dict[str, User] = {}
-        tenant = event.tenant
-        business = event.booking.business
-        owner = getattr(tenant, "owner", None)
-        if owner is not None and getattr(owner, "is_active", True):
-            users[str(owner.id)] = owner
+        """Notify owners/managers for the business, plus the staff assigned to the booking."""
+        from apps.common.utils.workspace_access import resolve_business_manager_users
+        from apps.staff.models import Staff
 
-        from apps.staff.models import Staff, StaffRoleAssignment
-
-        assignments = StaffRoleAssignment.objects.filter(
-            tenant=tenant,
-            staff__business=business,
-            staff__user__isnull=False,
-            staff__employment_status="active",
-            role__role_type__in=["owner", "manager", "receptionist"],
-        ).select_related("staff__user")
-        for assignment in assignments:
-            staff_user = assignment.staff.user
-            if staff_user is not None:
-                users[str(staff_user.id)] = staff_user
+        users: dict[str, User] = {
+            str(user.id): user
+            for user in resolve_business_manager_users(
+                tenant=event.tenant,
+                business=event.booking.business,
+            )
+        }
 
         assigned_staff_id = event.booking.staff_id
         if assigned_staff_id:
-            staff = Staff.objects.filter(id=assigned_staff_id, user__isnull=False).select_related("user").first()
+            staff = (
+                Staff.objects.filter(id=assigned_staff_id, user__isnull=False, user__is_active=True)
+                .select_related("user")
+                .first()
+            )
             if staff and staff.user is not None:
                 users[str(staff.user_id)] = staff.user
 
@@ -350,6 +348,28 @@ class NotificationService:
             "user": user,
             "audience": audience,
         }
+
+    def _channel_enabled_for_user(self, *, user: User, channel: str) -> bool:
+        prefs = getattr(user, "notification_preferences", None)
+        if not isinstance(prefs, dict):
+            return True
+        if channel == NotificationChannel.EMAIL:
+            if "email_updates" in prefs:
+                return prefs.get("email_updates") is not False
+            if "email" in prefs:
+                return prefs.get("email") is not False
+            return True
+        if channel == NotificationChannel.SMS:
+            if "sms_reminders" in prefs:
+                return prefs.get("sms_reminders") is not False
+            if "sms" in prefs:
+                return prefs.get("sms") is not False
+            return True
+        if channel == NotificationChannel.FIREBASE_PUSH:
+            return prefs.get("push", True) is not False
+        if channel == NotificationChannel.IN_APP:
+            return prefs.get("in_app", True) is not False
+        return True
 
     def _template_code_for_event(self, event_type: str, *, audience: str) -> str:
         base_mapping = {

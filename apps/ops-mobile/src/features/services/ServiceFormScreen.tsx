@@ -38,6 +38,7 @@ export function ServiceFormScreen() {
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState('30');
   const [price, setPrice] = useState('');
+  const [loyaltyPointsEarn, setLoyaltyPointsEarn] = useState('0');
   const [imageAsset, setImageAsset] = useState<ImagePickerAsset | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,7 @@ export function ServiceFormScreen() {
     setDuration(String(serviceDurationMinutes(service, 30)));
     const amount = servicePriceAmount(service);
     setPrice(amount != null ? String(amount) : '');
+    setLoyaltyPointsEarn(String(service.loyalty_points_earn ?? 0));
   }, [service]);
 
   if (isEdit && loading) return <ScreenState loading />;
@@ -85,6 +87,7 @@ export function ServiceFormScreen() {
                 name,
                 display_name: name,
                 description,
+                loyalty_points_earn: Math.max(0, Number(loyaltyPointsEarn) || 0),
                 default_duration: { duration_minutes: durationMinutes, is_default: true },
                 ...(price.trim()
                   ? {
@@ -143,6 +146,13 @@ export function ServiceFormScreen() {
           value={price}
           onChangeText={setPrice}
           keyboardType="decimal-pad"
+        />
+        <Input
+          label="Points earned on complete"
+          value={loyaltyPointsEarn}
+          onChangeText={setLoyaltyPointsEarn}
+          keyboardType="number-pad"
+          hint="Awarded when a booking for this service is completed (Pro reward points)."
         />
       </FormSection>
 

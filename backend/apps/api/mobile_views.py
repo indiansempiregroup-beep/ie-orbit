@@ -34,6 +34,7 @@ from apps.api.mobile_serializers import (
     MobileDeviceRegisterSerializer,
     MobileDeviceUnregisterSerializer,
     MobileDiscoverQuerySerializer,
+    MobileLoyaltyQuoteSerializer,
     MobileNotificationSerializer,
     MobileReviewCreateSerializer,
     MobileScopedQuerySerializer,
@@ -46,7 +47,7 @@ from apps.authentication.services.authentication import AuthenticationService
 from apps.bookings.models import Booking, BookingChannel, BookingReview, BookingSource, BookingStatus
 from apps.bookings.services.availability import AvailabilityService
 from apps.bookings.services.bookings import BookingService
-from apps.businesses.models import Business, WhiteLabelProfile
+from apps.businesses.models import Branch, BranchStatus, Business, WhiteLabelProfile
 from apps.businesses.services.white_label import ensure_white_label_profile, serialize_white_label_profile
 from apps.common.api.responses import success_response
 from apps.customers.models import Customer
@@ -138,6 +139,34 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
             "comment": review.comment or "",
             "created_at": review.created_at,
         }
+    branch = booking.branch
+    branch_payload = None
+    if branch is not None:
+        address_parts = [
+            part
+            for part in [
+                branch.address_line1,
+                branch.address_line2,
+                branch.city,
+                branch.state,
+                branch.postal_code,
+                branch.country,
+            ]
+            if part
+        ]
+        branch_payload = {
+            "id": str(branch.id),
+            "display_name": branch.display_name or branch.branch_name,
+            "address_line1": branch.address_line1 or "",
+            "address_line2": branch.address_line2 or "",
+            "city": branch.city or "",
+            "state": branch.state or "",
+            "country": branch.country or "",
+            "postal_code": branch.postal_code or "",
+            "formatted_address": ", ".join(address_parts),
+            "latitude": float(branch.latitude) if branch.latitude is not None else None,
+            "longitude": float(branch.longitude) if branch.longitude is not None else None,
+        }
     return {
         "id": booking.id,
         "booking_number": booking.booking_number,
@@ -146,6 +175,7 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
         "service_name": service_name,
         "staff_id": booking.staff_id,
         "staff_name": staff_name,
+        "branch": branch_payload,
         "appointment_date": booking.appointment_date,
         "start_at": booking.start_at,
         "end_at": booking.end_at,
@@ -189,6 +219,7 @@ def _serialize_mobile_service(*, tenant: Tenant, business: Business, service: Se
         "duration_minutes": duration,
         "currency": default_price.currency if default_price else business.currency,
         "price": float(default_price.base_price) if default_price else 0,
+        "loyalty_points_earn": int(service.loyalty_points_earn or 0),
         "category_id": str(service.category_id) if service.category_id else None,
         "category_name": service.category.name if service.category else "General",
         "image_url": _service_image_url(tenant=tenant, service=service, request=request),
@@ -218,17 +249,8 @@ def _service_image_url(*, tenant: Tenant, service: Service, request: Request | N
 
 
 def _serialize_mobile_notification(notification: Notification) -> dict:
-    metadata = notification.metadata or {}
-    event_type = str(metadata.get("event_type") or "")
-    notification_type = "booking"
-    if "cancel" in event_type.lower():
-        notification_type = "cancel"
-    elif "reminder" in event_type.lower():
-        notification_type = "reminder"
-    elif "complete" in event_type.lower():
-        notification_type = "review"
-    elif "payment" in event_type.lower():
-        notification_type = "payment"
+    from apps.notifications.api.serializers import notification_type_from_metadata
+
     return {
         "id": notification.id,
         "subject": notification.subject,
@@ -239,7 +261,7 @@ def _serialize_mobile_notification(notification: Notification) -> dict:
         "created_at": notification.created_at,
         "updated_at": notification.updated_at,
         "booking_id": notification.booking_id,
-        "notification_type": notification_type,
+        "notification_type": notification_type_from_metadata(notification.metadata),
     }
 
 
@@ -317,6 +339,7 @@ class MobileDiscoverServicesView(APIView):
                     ),
                     "currency": default_price.currency if default_price else business.currency,
                     "price": float(default_price.base_price) if default_price else 0,
+                    "loyalty_points_earn": int(service.loyalty_points_earn or 0),
                     "category_id": str(service.category_id) if service.category_id else None,
                     "category_name": service.category.name if service.category else "General",
                     "image_url": _service_image_url(tenant=tenant, service=service, request=request),
@@ -459,6 +482,7 @@ class MobileBookingRequestView(APIView):
                     "customer_id": customer.id,
                     "service_id": service.id,
                     "staff_id": staff_id,
+                    "branch_id": serializer.validated_data.get("branch_id"),
                     "start_at": start_at,
                     "duration_minutes": duration,
                     "status": BookingStatus.PENDING,
@@ -468,6 +492,7 @@ class MobileBookingRequestView(APIView):
                     "metadata": {
                         "payment_mode": serializer.validated_data.get("payment_mode") or "pay_at_venue",
                     },
+                    "points_to_redeem": serializer.validated_data.get("points_to_redeem"),
                 },
                 actor=user,
             )
@@ -748,6 +773,8 @@ class MobileStaffListView(APIView):
         staff_qs = Staff.objects.require_tenant(tenant).filter(
             business=business,
             employment_status=EmploymentStatus.ACTIVE,
+            is_bookable=True,
+            is_active=True,
         )
         service_id = serializer.validated_data.get("service_id")
         if service_id:
@@ -765,6 +792,59 @@ class MobileStaffListView(APIView):
             }
             for member in staff_qs.order_by("display_name")
         ]
+        return success_response(rows, request_id=getattr(request, "request_id", None))
+
+
+class MobileBranchesListView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    @extend_schema(tags=["Mobile"], request=MobileScopedQuerySerializer)
+    def get(self, request: Request) -> Response:
+        serializer = MobileScopedQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+
+        branches = (
+            Branch.objects.require_tenant(tenant)
+            .filter(business=business, status=BranchStatus.ACTIVE, is_active=True)
+            .order_by("-is_primary", "display_name")
+        )
+        rows = []
+        for branch in branches:
+            address_parts = [
+                part
+                for part in [
+                    branch.address_line1,
+                    branch.address_line2,
+                    branch.city,
+                    branch.state,
+                    branch.postal_code,
+                    branch.country,
+                ]
+                if part
+            ]
+            rows.append(
+                {
+                    "id": str(branch.id),
+                    "display_name": branch.display_name or branch.branch_name,
+                    "is_primary": branch.is_primary,
+                    "address_line1": branch.address_line1 or "",
+                    "city": branch.city or "",
+                    "state": branch.state or "",
+                    "country": branch.country or "",
+                    "postal_code": branch.postal_code or "",
+                    "formatted_address": ", ".join(address_parts),
+                    "latitude": float(branch.latitude) if branch.latitude is not None else None,
+                    "longitude": float(branch.longitude) if branch.longitude is not None else None,
+                }
+            )
         return success_response(rows, request_id=getattr(request, "request_id", None))
 
 
@@ -1142,3 +1222,39 @@ class MobileLoyaltyView(APIView):
             self.loyalty_service.get_balance(tenant=tenant, business=business, customer=customer),
             request_id=getattr(request, "request_id", None),
         )
+
+
+class MobileLoyaltyQuoteView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+    loyalty_service = LoyaltyService()
+
+    @extend_schema(tags=["Mobile"], request=MobileLoyaltyQuoteSerializer)
+    def post(self, request: Request) -> Response:
+        serializer = MobileLoyaltyQuoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        account = self.loyalty_service.ensure_account(
+            tenant=tenant, business=business, customer=customer
+        )
+        try:
+            quote = self.loyalty_service.quote_redemption(
+                business=business,
+                service_id=serializer.validated_data["service_id"],
+                points_to_redeem=serializer.validated_data["points_to_redeem"],
+                points_balance=account.points_balance,
+            )
+        except DjangoValidationError as exc:
+            message = (
+                exc.message_dict
+                if hasattr(exc, "message_dict")
+                else (exc.messages if hasattr(exc, "messages") else str(exc))
+            )
+            return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
+        return success_response(quote, request_id=getattr(request, "request_id", None))

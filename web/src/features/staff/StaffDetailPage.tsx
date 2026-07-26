@@ -29,6 +29,7 @@ export function StaffDetailPage() {
     email: '',
     phone_number: '',
     employment_status: 'active',
+    is_bookable: true,
   });
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -38,6 +39,7 @@ export function StaffDetailPage() {
       email: staff.email ?? '',
       phone_number: staff.phone_number ?? '',
       employment_status: staff.status ?? 'active',
+      is_bookable: staff.is_bookable !== false,
     });
   }, []);
 
@@ -109,6 +111,11 @@ export function StaffDetailPage() {
               </div>
 
               <div>
+                <p style={{ margin: 0, color: '#6b7280' }}>Available for bookings</p>
+                <p style={{ margin: '8px 0 0' }}>{staffQuery.data.is_bookable === false ? 'No' : 'Yes'}</p>
+              </div>
+
+              <div>
                 <p style={{ margin: 0, color: '#6b7280' }}>Staff ID</p>
                 <p style={{ margin: '8px 0 0' }}>{staffQuery.data.id}</p>
               </div>
@@ -149,6 +156,7 @@ export function StaffDetailPage() {
                   email: formState.email,
                   phone_number: formState.phone_number,
                   employment_status: formState.employment_status,
+                  is_bookable: formState.is_bookable,
                 },
               },
               {
@@ -199,6 +207,20 @@ export function StaffDetailPage() {
             </select>
             <span style={{ color: '#6b7280', fontSize: 13 }}>
               Status gates booking eligibility. Use the Leave section below for dated time-off that only blocks overlapping slots.
+            </span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={formState.is_bookable !== false}
+              onChange={(event) => setFormState({ ...formState, is_bookable: event.target.checked })}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              Available for bookings
+              <span style={{ display: 'block', color: '#6b7280', fontSize: 13 }}>
+                Turn off for owners or team members who should never be assigned to appointments.
+              </span>
             </span>
           </label>
           <div style={{ display: 'grid', gap: 12 }}>

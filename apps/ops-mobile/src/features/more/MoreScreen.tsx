@@ -3,30 +3,40 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
 import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { canAccessSettings, canManageTeam, formatUserRole } from '../../utils/roles';
+import {
+  canAccessReports,
+  canAccessSettings,
+  canAccessStaffDirectory,
+  canManageTeam,
+  formatUserRole,
+} from '../../utils/roles';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function MoreScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const { activeBusiness } = useWorkspace();
-  const isPlatformAdmin = user?.roles?.includes('platform_admin') || user?.roles?.includes('super_admin');
-  const displayName = user?.full_name || user?.email || 'Account';
+  const displayName = user?.full_name || user?.email || t('common.account');
   const showSettings = canAccessSettings(user);
   const showTeam = canManageTeam(user);
+  const showStaff = canAccessStaffDirectory(user);
+  const showReports = canAccessReports(user);
+  const workspaceLabel = activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace');
 
   function onSignOut() {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => void logout() },
+    Alert.alert(t('auth.signOut'), t('auth.signOutConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('auth.signOut'), style: 'destructive', onPress: () => void logout() },
     ]);
   }
 
@@ -40,57 +50,72 @@ export function MoreScreen() {
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         <Text style={styles.meta}>
-          {activeBusiness?.display_name ?? activeBusiness?.business_name ?? 'Workspace'}
+          {workspaceLabel}
           {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
         </Text>
       </View>
 
       <View style={styles.menu}>
-        <MenuSection title="Business">
-          <MenuRow icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
-          <MenuRow icon="star" label="Reviews" onPress={() => navigation.navigate('Reviews')} />
-          <MenuRow icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
-          <MenuRow icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
+        <MenuSection title={t('settings.business')}>
+          <MenuRow icon="users" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
+          <MenuRow icon="star" label={t('settings.reviews')} onPress={() => navigation.navigate('Reviews')} />
           <MenuRow
-            icon="bar-chart-2"
-            label="Business intelligence"
-            onPress={() => navigation.navigate('BI', { tab: 'overview' })}
+            icon="package"
+            label={t('settings.services')}
+            last={!showStaff && !showReports && !showSettings && !showTeam}
+            onPress={() => navigation.navigate('Services')}
           />
-          <MenuRow
-            icon="file-text"
-            label="Reports"
-            last={!showSettings && !showTeam && !isPlatformAdmin}
-            onPress={() => navigation.navigate('Reports')}
-          />
-          {showSettings ? (
+          {showStaff ? (
             <MenuRow
-              icon="settings"
-              label="Settings"
-              last={!showTeam && !isPlatformAdmin}
-              onPress={() => navigation.navigate('Settings')}
+              icon="user-check"
+              label={t('bookings.staff')}
+              last={!showReports && !showSettings && !showTeam}
+              onPress={() => navigation.navigate('StaffList')}
             />
+          ) : null}
+          {showReports ? (
+            <>
+              <MenuRow
+                icon="bar-chart-2"
+                label={t('nav.businessIntelligence')}
+                onPress={() => navigation.navigate('BI', { tab: 'overview' })}
+              />
+              <MenuRow
+                icon="file-text"
+                label={t('nav.reports')}
+                last={!showSettings && !showTeam}
+                onPress={() => navigation.navigate('Reports')}
+              />
+            </>
+          ) : null}
+          {showSettings ? (
+            <>
+              <MenuRow
+                icon="map-pin"
+                label={t('settings.offices')}
+                onPress={() => navigation.navigate('Branches')}
+              />
+              <MenuRow
+                icon="settings"
+                label={t('settings.title')}
+                last={!showTeam}
+                onPress={() => navigation.navigate('Settings')}
+              />
+            </>
           ) : null}
           {showTeam ? (
             <MenuRow
               icon="mail"
-              label="Team & invitations"
-              last={!isPlatformAdmin}
-              onPress={() => navigation.navigate('Team')}
-            />
-          ) : null}
-          {isPlatformAdmin ? (
-            <MenuRow
-              icon="shield"
-              label="Platform admin"
+              label={t('settings.team')}
               last
-              onPress={() => navigation.navigate('Admin')}
+              onPress={() => navigation.navigate('Team')}
             />
           ) : null}
         </MenuSection>
 
-        <MenuSection title="Account">
-          <MenuRow icon="user" label="Profile" onPress={() => navigation.navigate('Profile')} />
-          <MenuRow icon="log-out" label="Sign out" destructive last onPress={onSignOut} />
+        <MenuSection title={t('common.account')}>
+          <MenuRow icon="user" label={t('profile.title')} onPress={() => navigation.navigate('Profile')} />
+          <MenuRow icon="log-out" label={t('auth.signOut')} destructive last onPress={onSignOut} />
         </MenuSection>
       </View>
     </RefreshableScrollView>

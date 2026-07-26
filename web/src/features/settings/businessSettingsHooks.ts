@@ -4,6 +4,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { invalidateWorkspaceData } from '../../lib/workspace';
 import {
+  cancelPendingBusinessProductPlan,
   changeBusinessProductPlan,
   createBusinessProfile,
   listBusinessProfiles,
@@ -184,6 +185,31 @@ export function useBusinessProductPlanChange() {
     onSuccess: (business) => {
       workspace.setActiveBusiness(business);
       invalidateWorkspaceData(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ['business-billing-snapshot'] });
+    },
+  });
+}
+
+export function useCancelPendingProductPlanChange() {
+  const auth = useAuth();
+  const workspace = useWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation<Business, Error, { productCode: string }>({
+    mutationFn: async ({ productCode }) => {
+      if (!workspace.businessId) {
+        throw new Error('Select a business before canceling a pending plan change.');
+      }
+      return cancelPendingBusinessProductPlan(
+        auth.token,
+        workspace.tenantId,
+        workspace.businessId,
+        productCode,
+      );
+    },
+    onSuccess: (business) => {
+      workspace.setActiveBusiness(business);
+      invalidateWorkspaceData(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ['business-billing-snapshot'] });
     },
   });
 }

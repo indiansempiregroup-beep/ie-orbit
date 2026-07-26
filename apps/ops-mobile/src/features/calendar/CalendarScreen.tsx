@@ -12,10 +12,12 @@ import { ScreenState } from '../../components/ScreenState';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { SectionHeader } from '../../components/ui/SectionHeader';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useAvailability, useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
+import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -39,6 +41,8 @@ function addDays(date: Date, days: number) {
 
 export function CalendarScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
+  const showStaffFilter = canAccessStaffDirectory(user);
   const [selected, setSelected] = useState(() => new Date());
   const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
   const [staffFilter, setStaffFilter] = useState('');
@@ -47,7 +51,7 @@ export function CalendarScreen() {
   const { bookings, loading, error, reload } = useBookings(dateKey);
   const { slots, loading: slotsLoading, reload: reloadSlots } = useAvailability(
     dateKey,
-    staffFilter || undefined,
+    showStaffFilter ? staffFilter || undefined : undefined,
   );
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
   const { staff } = useStaffMembers();
@@ -66,14 +70,15 @@ export function CalendarScreen() {
     [staff],
   );
 
-  const activeFilterCount = Number(Boolean(statusFilter)) + Number(Boolean(staffFilter));
+  const activeFilterCount =
+    Number(Boolean(statusFilter)) + Number(Boolean(showStaffFilter && staffFilter));
 
   const sorted = useMemo(() => {
     let list = [...bookings];
     if (statusFilter) {
       list = list.filter((booking) => booking.status === statusFilter);
     }
-    if (staffFilter) {
+    if (showStaffFilter && staffFilter) {
       list = list.filter((booking) => booking.staff_id === staffFilter);
     }
     return list.sort(
@@ -203,7 +208,9 @@ export function CalendarScreen() {
                 options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
                 onChange={(value) => setStatusFilter(value as '' | BookingStatus)}
               />
-              <SelectField label="Staff" value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
+              {showStaffFilter ? (
+                <SelectField label="Staff" value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
+              ) : null}
               <Button
                 label="Reset filters"
                 variant="outline"

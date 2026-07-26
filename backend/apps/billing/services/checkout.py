@@ -10,9 +10,12 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.billing.constants import (
+    ADDON_OFFICE_PRICE_PAISE,
+    ADDON_STAFF_PRICE_PAISE,
     CHECKOUT_SESSION_TTL_HOURS,
     DEFAULT_CHECKOUT_CURRENCY,
     PLAN_PRICE_PAISE,
+    YEARLY_PRICE_MULTIPLIER,
 )
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.razorpay_client import RazorpayClient, get_razorpay_config
@@ -119,6 +122,9 @@ class CheckoutService:
             for plan in product_plans:
                 plan_code = str(plan["code"])
                 amount_paise = self._resolve_plan_price_paise(plan_code)
+                yearly_amount = (
+                    None if amount_paise is None else amount_paise * YEARLY_PRICE_MULTIPLIER
+                )
                 plans.append(
                     {
                         "product_code": product_code,
@@ -128,21 +134,35 @@ class CheckoutService:
                         "billing_interval": str(plan.get("billing_interval", "monthly")),
                         "trial_days": int(plan.get("trial_days", 0) or 0),
                         "is_default": bool(plan.get("is_default", False)),
+                        "max_staff": int(plan.get("max_staff", 1) or 1),
+                        "max_branches": int(plan.get("max_branches", 1) or 1),
+                        "bi_features": list(plan.get("bi_features") or []),
+                        "features": list(plan.get("features") or []),
                         "amount_paise": amount_paise,
+                        "yearly_amount_paise": yearly_amount,
+                        "addon_staff_price_paise": ADDON_STAFF_PRICE_PAISE,
+                        "addon_office_price_paise": ADDON_OFFICE_PRICE_PAISE,
                         "currency": DEFAULT_CHECKOUT_CURRENCY,
                     }
                 )
         return plans
 
-    def _resolve_plan_price_paise(self, plan_code: str) -> int | None:
+    def _resolve_plan_price_paise(self, plan_code: str, billing_interval: str = "monthly") -> int | None:
         overrides = getattr(settings, "BILLING_PLAN_PRICE_OVERRIDES", {}) or {}
         override = overrides.get(plan_code)
+        monthly: int | None
         if override is not None:
             try:
-                return int(override)
+                monthly = int(override)
             except (TypeError, ValueError):
-                pass
-        return PLAN_PRICE_PAISE.get(plan_code)
+                monthly = PLAN_PRICE_PAISE.get(plan_code)
+        else:
+            monthly = PLAN_PRICE_PAISE.get(plan_code)
+        if monthly is None:
+            return None
+        if billing_interval == "yearly":
+            return monthly * YEARLY_PRICE_MULTIPLIER
+        return monthly
 
     def mark_session_paid(
         self,

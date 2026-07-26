@@ -1,5 +1,11 @@
 from apps.businesses.services.businesses import BusinessService
+from apps.businesses.services.entitlements import EntitlementService
 from apps.businesses.services.product_billing import ProductBillingService
 from apps.businesses.services.search import BusinessSearchService
 
-__all__ = ["BusinessSearchService", "BusinessService", "ProductBillingService"]
+__all__ = [
+    "BusinessSearchService",
+    "BusinessService",
+    "EntitlementService",
+    "ProductBillingService",
+]

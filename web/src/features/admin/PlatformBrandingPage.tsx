@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Card } from '../../components/Card';
-import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { AdminEmpty, AdminPageHeader, AdminSection } from './AdminChrome';
 import {
   usePlatformWhiteLabelProfileQuery,
   usePlatformWhiteLabelProfilesQuery,
@@ -36,35 +35,31 @@ export function PlatformBrandingPage() {
   }, [selectedProfile]);
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <Card>
-        <h1 style={{ marginTop: 0 }}>Branding Configurator</h1>
-        <p style={{ color: 'var(--muted-foreground)' }}>
-          Configure business-level white-label mobile app branding.
-        </p>
-      </Card>
+    <div className="admin-main">
+      <AdminPageHeader
+        title="Branding"
+        description="Configure business-level white-label mobile app branding."
+      />
 
-      <Card>
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Business profile</span>
+      <AdminSection title="Select business">
+        <div className="admin-form-grid">
           <select
             value={selectedBusinessId}
             onChange={(event) => setSelectedBusinessId(event.target.value)}
-            style={{ padding: 10, borderRadius: 8, border: '1px solid var(--border)' }}
           >
-            <option value="">Select business...</option>
+            <option value="">Select business…</option>
             {(profilesQuery.data ?? []).map((profile) => (
               <option key={profile.id} value={profile.business_id}>
                 {profile.business_display_name} ({profile.flavor_key})
               </option>
             ))}
           </select>
-        </label>
-      </Card>
+        </div>
+      </AdminSection>
 
       {selectedBusinessId ? (
-        <Card>
-          <div style={{ display: 'grid', gap: 10 }}>
+        <AdminSection title="White-label profile">
+          <div className="admin-form-grid">
             <input
               value={form.app_name}
               onChange={(event) => setForm((prev) => ({ ...prev, app_name: event.target.value }))}
@@ -80,19 +75,42 @@ export function PlatformBrandingPage() {
               onChange={(event) => setForm((prev) => ({ ...prev, logo: event.target.value }))}
               placeholder="Logo URL"
             />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <input
-                type="color"
-                value={form.primary_color}
-                onChange={(event) => setForm((prev) => ({ ...prev, primary_color: event.target.value }))}
-              />
-              <input
-                type="color"
-                value={form.secondary_color}
-                onChange={(event) => setForm((prev) => ({ ...prev, secondary_color: event.target.value }))}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted-foreground)' }}>
+                Primary
+                <input
+                  type="color"
+                  value={form.primary_color}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, primary_color: event.target.value }))
+                  }
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted-foreground)' }}>
+                Secondary
+                <input
+                  type="color"
+                  value={form.secondary_color}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, secondary_color: event.target.value }))
+                  }
+                />
+              </label>
+              <div
+                style={{
+                  marginLeft: 'auto',
+                  width: 120,
+                  height: 56,
+                  borderRadius: 14,
+                  background: `linear-gradient(135deg, ${form.primary_color}, ${form.secondary_color})`,
+                  boxShadow: '0 8px 20px rgba(15,22,35,0.12)',
+                }}
               />
             </div>
-            <Button
+            <button
+              type="button"
+              className="admin-btn admin-btn--primary"
+              disabled={updateMutation.isPending}
               onClick={() =>
                 updateMutation.mutate({
                   app_name: form.app_name,
@@ -102,13 +120,16 @@ export function PlatformBrandingPage() {
                   secondary_color: form.secondary_color,
                 })
               }
-              disabled={updateMutation.isPending}
             >
-              Save branding
-            </Button>
+              {updateMutation.isPending ? 'Saving…' : 'Save branding'}
+            </button>
           </div>
-        </Card>
-      ) : null}
+        </AdminSection>
+      ) : (
+        <AdminSection>
+          <AdminEmpty>Select a business to edit its white-label branding.</AdminEmpty>
+        </AdminSection>
+      )}
     </div>
   );
 }

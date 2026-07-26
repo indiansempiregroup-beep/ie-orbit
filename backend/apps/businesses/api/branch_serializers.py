@@ -23,6 +23,8 @@ class BranchSerializer(serializers.ModelSerializer):
             "state",
             "country",
             "postal_code",
+            "latitude",
+            "longitude",
             "timezone",
             "status",
             "created_at",

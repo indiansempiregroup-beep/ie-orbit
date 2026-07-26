@@ -7,22 +7,31 @@ import { ListRow } from '../../components/ui/ListRow';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { ScreenState } from '../../components/ScreenState';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { useAuth } from '../../contexts/AuthContext';
 import { useGlobalSearch } from '../../hooks/useOpsExtended';
+import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
+  const showStaff = canAccessStaffDirectory(user);
   const [term, setTerm] = useState('');
   const { results, loading } = useGlobalSearch(term);
 
+  const staffResults = showStaff ? results?.staff ?? [] : [];
   const hasResults =
-    (results?.customers?.length ?? 0) + (results?.staff?.length ?? 0) + (results?.services?.length ?? 0) > 0;
+    (results?.customers?.length ?? 0) + staffResults.length + (results?.services?.length ?? 0) > 0;
 
   return (
     <View style={styles.screen}>
       <View style={styles.searchWrap}>
-        <SearchBar value={term} onChangeText={setTerm} placeholder="Customers, staff, services…" />
+        <SearchBar
+          value={term}
+          onChangeText={setTerm}
+          placeholder={showStaff ? 'Customers, staff, services…' : 'Customers, services…'}
+        />
       </View>
       <RefreshableScrollView contentContainerStyle={styles.content}>
         <ScreenState
@@ -51,11 +60,11 @@ export function SearchScreen() {
           </View>
         ) : null}
 
-        {results?.staff?.length ? (
+        {staffResults.length ? (
           <View style={styles.section}>
             <SectionHeader title="Staff" />
             <View style={styles.list}>
-              {results.staff.map((item) => {
+              {staffResults.map((item) => {
                 const name = item.display_name ?? item.full_name ?? item.email ?? 'Staff';
                 return (
                   <ListRow
@@ -88,7 +97,11 @@ export function SearchScreen() {
           </View>
         ) : null}
 
-        {!term ? <Text style={styles.hint}>Search customers, staff, and services.</Text> : null}
+        {!term ? (
+          <Text style={styles.hint}>
+            {showStaff ? 'Search customers, staff, and services.' : 'Search customers and services.'}
+          </Text>
+        ) : null}
       </RefreshableScrollView>
     </View>
   );

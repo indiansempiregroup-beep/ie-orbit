@@ -5,9 +5,9 @@ from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.businesses.constants import VALID_PRODUCT_CODES
+from apps.businesses.constants import VALID_PRODUCT_CODES, is_plan_upgrade
 from apps.businesses.models import (
     Business,
     BusinessProductSubscription,
@@ -16,14 +16,28 @@ from apps.businesses.models import (
     BusinessSettings,
 )
 from apps.businesses.repositories import BusinessRepository
+from apps.businesses.services.entitlements import EntitlementService
 from apps.businesses.services.product_billing import ProductBillingService
+from apps.businesses.services.subscription_lifecycle import SubscriptionLifecycleService
 
 logger = logging.getLogger("ie_platform.businesses")
 
 ACTIVE_SUBSCRIPTION_STATUSES = {
     BusinessProductSubscriptionStatus.TRIALING,
     BusinessProductSubscriptionStatus.ACTIVE,
+    BusinessProductSubscriptionStatus.SOFT_LOCKED,
 }
+
+
+def _actor_can_force_immediate_plan_change(actor: Any) -> bool:
+    if not actor or not getattr(actor, "is_authenticated", False):
+        return False
+    if getattr(actor, "is_superuser", False):
+        return True
+    return actor.user_roles.filter(
+        role__is_active=True,
+        role__code__in={"platform_admin", "super_admin"},
+    ).exists()
 
 
 class BusinessService:
@@ -31,8 +45,10 @@ class BusinessService:
         self,
         repository: BusinessRepository | None = None,
         billing_service: ProductBillingService | None = None,
+        entitlements: EntitlementService | None = None,
     ) -> None:
         self.repository = repository or BusinessRepository()
+        self.entitlements = entitlements or EntitlementService()
         if billing_service is not None:
             self.billing_service = billing_service
         else:
@@ -141,11 +157,25 @@ class BusinessService:
         return profile
 
     def update_settings(self, *, business: Business, data: dict[str, Any]) -> BusinessSettings:
+        from apps.customers.services.loyalty import LoyaltyService
+
         settings, _ = BusinessSettings.objects.get_or_create(
             tenant=business.tenant,
             business=business,
         )
-        for field, value in data.items():
+        payload = dict(data)
+        if "loyalty_preferences" in payload:
+            raw = payload.get("loyalty_preferences") or {}
+            if not isinstance(raw, dict):
+                raise ValidationError({"loyalty_preferences": "Must be an object."})
+            try:
+                payload["loyalty_preferences"] = LoyaltyService().normalize_loyalty_preferences(
+                    business=business,
+                    data=raw,
+                )
+            except PermissionDenied as exc:
+                raise ValidationError({"loyalty_preferences": str(exc.detail)}) from exc
+        for field, value in payload.items():
             setattr(settings, field, value)
         settings.full_clean()
         settings.save()
@@ -192,6 +222,14 @@ class BusinessService:
             plan=plan,
             plan_definition=plan_definition,
         )
+        # Checkout / renew clears any deferred downgrade and unlocks access.
+        SubscriptionLifecycleService().clear_pending(subscription=subscription)
+        if subscription.status in {
+            BusinessProductSubscriptionStatus.SOFT_LOCKED,
+            BusinessProductSubscriptionStatus.CANCELED,
+        }:
+            subscription.status = BusinessProductSubscriptionStatus.ACTIVE
+        subscription.renewal_reminder_last_sent_on = None
         subscription.save()
 
         if created or reactivated:
@@ -262,22 +300,88 @@ class BusinessService:
         product_code: str,
         plan_code: str,
         actor: Any,
+        billing_interval: str | None = None,
+        force_immediate: bool = False,
     ) -> BusinessProductSubscription:
         normalized_code = product_code.strip().lower()
-        subscription = business.product_subscriptions.filter(product_code=normalized_code).first()
+        subscription = (
+            business.product_subscriptions.filter(product_code=normalized_code)
+            .select_related("plan")
+            .first()
+        )
         if not subscription or subscription.status not in ACTIVE_SUBSCRIPTION_STATUSES:
             raise ValidationError({"product_code": "Subscribe to this product before changing its plan."})
 
-        previous_plan_code = subscription.plan.code if subscription.plan else None
+        current_plan_code = subscription.plan.code if subscription.plan else None
+        upgrade = is_plan_upgrade(current_plan_code=current_plan_code, target_plan_code=plan_code)
+        # Only platform admins / superusers may bypass period lock.
+        force = bool(force_immediate) and _actor_can_force_immediate_plan_change(actor)
+        period_active = (
+            subscription.status == BusinessProductSubscriptionStatus.ACTIVE
+            and subscription.current_period_ends_at is not None
+            and subscription.current_period_ends_at > timezone.now()
+        )
+        # Paid active period: downgrades/lateral changes are scheduled for period end.
+        defer = period_active and not upgrade and not force
+
+        if not upgrade:
+            self.entitlements.ensure_can_downgrade(
+                business=business,
+                target_plan_code=plan_code,
+                product_code=normalized_code,
+            )
+
         plan, plan_definition = self.billing_service.resolve_subscription_plan(
             product_code=normalized_code,
             plan_code=plan_code,
         )
+        if billing_interval:
+            plan_definition = {**(plan_definition or {}), "billing_interval": billing_interval}
+
+        if defer:
+            subscription.pending_plan = plan
+            subscription.pending_billing_interval = (
+                billing_interval or subscription.billing_interval or ""
+            )
+            subscription.pending_plan_scheduled_at = timezone.now()
+            subscription.pending_cancel = False
+            subscription.save(
+                update_fields=[
+                    "pending_plan",
+                    "pending_billing_interval",
+                    "pending_plan_scheduled_at",
+                    "pending_cancel",
+                    "updated_at",
+                ]
+            )
+            if getattr(actor, "is_authenticated", False):
+                business.mark_updated(actor_id=actor.id)
+                business.save(update_fields=["updated_at", "updated_by"])
+            logger.info(
+                "Business product plan change scheduled",
+                extra={
+                    "business_id": str(business.id),
+                    "product_code": normalized_code,
+                    "pending_plan_code": plan.code,
+                    "effective_at": str(subscription.current_period_ends_at),
+                },
+            )
+            return subscription
+
+        previous_plan_code = current_plan_code
         self.billing_service.apply_plan_to_subscription(
             subscription=subscription,
             plan=plan,
             plan_definition=plan_definition,
         )
+        SubscriptionLifecycleService().clear_pending(subscription=subscription)
+        # Paid plan selection ends trial / soft-lock.
+        if subscription.status in {
+            BusinessProductSubscriptionStatus.TRIALING,
+            BusinessProductSubscriptionStatus.SOFT_LOCKED,
+        }:
+            subscription.status = BusinessProductSubscriptionStatus.ACTIVE
+        subscription.renewal_reminder_last_sent_on = None
         subscription.save()
         self.billing_service.hooks.on_plan_changed(
             subscription=subscription,
@@ -294,6 +398,121 @@ class BusinessService:
                 "business_id": str(business.id),
                 "product_code": normalized_code,
                 "plan_code": plan.code,
+                "forced": force,
             },
         )
         return subscription
+
+    @transaction.atomic
+    def cancel_pending_plan_change(
+        self,
+        *,
+        business: Business,
+        product_code: str,
+        actor: Any,
+    ) -> BusinessProductSubscription:
+        normalized_code = product_code.strip().lower()
+        subscription = business.product_subscriptions.filter(product_code=normalized_code).first()
+        if not subscription:
+            raise ValidationError({"product_code": "No subscription found for this product."})
+        if not subscription.pending_plan_id and not subscription.pending_cancel:
+            raise ValidationError({"pending_plan": "There is no pending plan change to cancel."})
+        SubscriptionLifecycleService().clear_pending(subscription=subscription)
+        subscription.save(
+            update_fields=[
+                "pending_plan",
+                "pending_billing_interval",
+                "pending_extra_staff",
+                "pending_extra_offices",
+                "pending_plan_scheduled_at",
+                "pending_cancel",
+                "updated_at",
+            ]
+        )
+        if getattr(actor, "is_authenticated", False):
+            business.mark_updated(actor_id=actor.id)
+            business.save(update_fields=["updated_at", "updated_by"])
+        return subscription
+
+    @transaction.atomic
+    def schedule_cancel_at_period_end(
+        self,
+        *,
+        business: Business,
+        product_code: str,
+        actor: Any,
+    ) -> BusinessProductSubscription:
+        normalized_code = product_code.strip().lower()
+        subscription = business.product_subscriptions.filter(product_code=normalized_code).first()
+        if not subscription or subscription.status not in ACTIVE_SUBSCRIPTION_STATUSES:
+            raise ValidationError({"product_code": "Subscribe to this product before canceling."})
+        period_active = (
+            subscription.status == BusinessProductSubscriptionStatus.ACTIVE
+            and subscription.current_period_ends_at is not None
+            and subscription.current_period_ends_at > timezone.now()
+        )
+        if not period_active and not _actor_can_force_immediate_plan_change(actor):
+            raise ValidationError({"status": "No active paid period to schedule cancellation against."})
+        subscription.pending_cancel = True
+        subscription.pending_plan = None
+        subscription.pending_billing_interval = ""
+        subscription.pending_plan_scheduled_at = timezone.now()
+        subscription.save(
+            update_fields=[
+                "pending_cancel",
+                "pending_plan",
+                "pending_billing_interval",
+                "pending_plan_scheduled_at",
+                "updated_at",
+            ]
+        )
+        if getattr(actor, "is_authenticated", False):
+            business.mark_updated(actor_id=actor.id)
+            business.save(update_fields=["updated_at", "updated_by"])
+        return subscription
+
+    @transaction.atomic
+    def update_product_addons(
+        self,
+        *,
+        business: Business,
+        product_code: str,
+        extra_staff: int,
+        extra_offices: int,
+        actor: Any,
+    ) -> BusinessProductSubscription:
+        normalized_code = product_code.strip().lower()
+        subscription = business.product_subscriptions.filter(product_code=normalized_code).first()
+        if not subscription or subscription.status not in ACTIVE_SUBSCRIPTION_STATUSES:
+            raise ValidationError({"product_code": "Subscribe to this product before updating add-ons."})
+        if subscription.status == BusinessProductSubscriptionStatus.SOFT_LOCKED:
+            raise ValidationError({"status": "Upgrade your plan before changing add-ons."})
+
+        # Reducing add-ons must still fit current usage.
+        self.entitlements.ensure_can_downgrade(
+            business=business,
+            target_plan_code=subscription.plan.code if subscription.plan else "appointie-starter",
+            product_code=normalized_code,
+            extra_staff=extra_staff,
+            extra_offices=extra_offices,
+        )
+        subscription.extra_staff = extra_staff
+        subscription.extra_offices = extra_offices
+        subscription.save(update_fields=["extra_staff", "extra_offices", "updated_at"])
+        if getattr(actor, "is_authenticated", False):
+            business.mark_updated(actor_id=actor.id)
+            business.save(update_fields=["updated_at", "updated_by"])
+        logger.info(
+            "Business product addons updated",
+            extra={
+                "business_id": str(business.id),
+                "product_code": normalized_code,
+                "extra_staff": extra_staff,
+                "extra_offices": extra_offices,
+            },
+        )
+        return subscription
+
+    def billing_snapshot(self, *, business: Business, product_code: str | None = None) -> dict[str, Any]:
+        code = (product_code or business.selected_product or "appointie").strip().lower()
+        return self.entitlements.billing_snapshot(business=business, product_code=code)

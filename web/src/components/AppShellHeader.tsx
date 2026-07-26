@@ -1,21 +1,27 @@
-import { Bell, Moon, Search, Sun } from 'lucide-react';
+import { Bell, Moon, Search, Shield, Sun } from 'lucide-react';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useBusinessOptions } from '../features/dashboard/dashboardHooks';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useTheme } from '../hooks/useTheme';
+import { useAuth } from '../hooks/useAuth';
 import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { getProductName, getSubscribedProducts } from '../config/products';
 import { useAppShellTitle } from '../hooks/useAppShellTitle';
 import { useSnackbar } from '../hooks/useSnackbar';
 import { buildWorkspaceSnapshot, formatWorkspaceLabel } from '../lib/workspaceModel';
+import { canManageBusinessSettings, hasPermission, isPlatformAdmin } from '../utils/roles';
 
 export function AppShellHeader() {
   const navigate = useNavigate();
   const workspace = useWorkspace();
+  const { user } = useAuth();
   const businessOptions = useBusinessOptions();
   const theme = useTheme();
   const snackbar = useSnackbar();
+  const canSearchStaff = hasPermission(user, 'staff:read') || hasPermission(user, 'staff:write') || hasPermission(user, 'staff:manage');
+  const canManageWorkspace = canManageBusinessSettings(user);
+  const showPlatformAdminLink = isPlatformAdmin(user);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -44,15 +50,17 @@ export function AppShellHeader() {
         href: `/services/${item.id}`,
         group: 'Services',
       })),
-      ...data.staff.map((item) => ({
-        id: `staff-${item.id}`,
-        label: item.full_name ?? 'Staff member',
-        detail: item.status ?? 'Staff',
-        href: `/staff/${item.id}`,
-        group: 'Staff',
-      })),
+      ...(canSearchStaff
+        ? data.staff.map((item) => ({
+            id: `staff-${item.id}`,
+            label: item.full_name ?? 'Staff member',
+            detail: item.status ?? 'Staff',
+            href: `/staff/${item.id}`,
+            group: 'Staff',
+          }))
+        : []),
     ];
-  }, [searchResults.data]);
+  }, [searchResults.data, canSearchStaff]);
 
   const showSearchResults = searchOpen && debouncedSearch.length >= 2;
 
@@ -110,7 +118,7 @@ export function AppShellHeader() {
             <Search size={16} />
             <input
               type="search"
-              placeholder="Search customers, services, staff"
+              placeholder={canSearchStaff ? 'Search customers, services, staff' : 'Search customers, services'}
               value={searchTerm}
               onChange={(event) => {
                 setSearchTerm(event.target.value);
@@ -161,6 +169,16 @@ export function AppShellHeader() {
           >
             {theme.resolved === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+          {showPlatformAdminLink ? (
+            <Link
+              to="/admin"
+              className="app-shell-icon-button"
+              aria-label="Platform Admin"
+              title="Platform Admin"
+            >
+              <Shield size={18} />
+            </Link>
+          ) : null}
           <button
             type="button"
             className="app-shell-icon-button"
@@ -188,9 +206,11 @@ export function AppShellHeader() {
               ) : (
                 <div className="app-shell-workspace-empty">No subscribed products</div>
               )}
-              <Link to="/settings/products" className="app-shell-workspace-link">
-                {subscribedProducts.length > 0 ? 'Manage products' : 'Subscribe'}
-              </Link>
+              {canManageWorkspace ? (
+                <Link to="/settings/products" className="app-shell-workspace-link">
+                  {subscribedProducts.length > 0 ? 'Manage products' : 'Subscribe'}
+                </Link>
+              ) : null}
             </label>
             <label className="app-shell-workspace-field">
               <span>Business</span>
@@ -210,9 +230,11 @@ export function AppShellHeader() {
                 )}
                 <option value="__add__" disabled>──────────</option>
               </select>
-              <Link to="/settings/business" className="app-shell-workspace-link">
-                Business profile
-              </Link>
+              {canManageWorkspace ? (
+                <Link to="/settings/business" className="app-shell-workspace-link">
+                  Business profile
+                </Link>
+              ) : null}
             </label>
           </div>
         </div>

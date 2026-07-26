@@ -30,6 +30,7 @@ export function StaffPage() {
     designation: '',
     department: '',
     employment_status: 'active',
+    is_bookable: true,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
   const { data: staff, isLoading, error, refetch } = useStaffList();
@@ -63,6 +64,7 @@ export function StaffPage() {
       designation: '',
       department: '',
       employment_status: 'active',
+      is_bookable: true,
     });
   }
 
@@ -266,6 +268,20 @@ export function StaffPage() {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={formState.is_bookable}
+              onChange={(event) => setFormState({ ...formState, is_bookable: event.target.checked })}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              Available for bookings
+              <span style={{ display: 'block', color: '#6b7280', fontSize: 13 }}>
+                Bookable staff can be assigned to appointments and count toward your staff limit.
+              </span>
+            </span>
+          </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" loading={createStaff.isPending} loadingLabel="Creating…">
               Create staff

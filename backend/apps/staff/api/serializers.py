@@ -157,6 +157,7 @@ class StaffSerializer(serializers.ModelSerializer):
             "working_location",
             "joining_date",
             "employment_status",
+            "is_bookable",
             "emergency_contact",
             "preferences",
             "tags",

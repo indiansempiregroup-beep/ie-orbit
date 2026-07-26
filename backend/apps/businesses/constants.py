@@ -17,7 +17,33 @@ DEFAULT_PRODUCT_CODE = PRODUCT_APPOINTIE
 BILLING_INTERVAL_MONTHLY = "monthly"
 BILLING_INTERVAL_YEARLY = "yearly"
 
-DEFAULT_TRIAL_DAYS = 14
+DEFAULT_TRIAL_DAYS = 15
+
+BI_FEATURE_OVERVIEW = "overview"
+BI_FEATURE_GROWTH = "growth"
+BI_FEATURE_REVENUE = "revenue"
+BI_FEATURE_FORECAST = "forecast"
+BI_FEATURE_REPORTS = "reports"
+
+BI_FEATURES_LIMITED = (BI_FEATURE_OVERVIEW,)
+BI_FEATURES_FULL = (
+    BI_FEATURE_OVERVIEW,
+    BI_FEATURE_GROWTH,
+    BI_FEATURE_REVENUE,
+    BI_FEATURE_FORECAST,
+    BI_FEATURE_REPORTS,
+)
+
+FEATURE_REWARD_POINTS = "reward_points"
+PLAN_FEATURES_LIMITED: tuple[str, ...] = ()
+PLAN_FEATURES_FULL = (FEATURE_REWARD_POINTS,)
+
+DEFAULT_LOYALTY_PREFERENCES: dict[str, object] = {
+    "enabled": False,
+    "points_per_currency_unit": 10,
+    "max_redeem_percent": 50,
+    "min_redeem_points": 10,
+}
 
 PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
     PRODUCT_APPOINTIE: [
@@ -28,14 +54,22 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": True,
+            "max_staff": 1,
+            "max_branches": 1,
+            "bi_features": list(BI_FEATURES_LIMITED),
+            "features": list(PLAN_FEATURES_LIMITED),
         },
         {
             "code": "appointie-pro",
             "name": "AppointIE Pro",
-            "description": "Advanced scheduling, staff, and customer workflows.",
+            "description": "Multi-location scheduling with full business intelligence.",
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": False,
+            "max_staff": 5,
+            "max_branches": 5,
+            "bi_features": list(BI_FEATURES_FULL),
+            "features": list(PLAN_FEATURES_FULL),
         },
     ],
     PRODUCT_INVOICEIE: [
@@ -46,6 +80,10 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": True,
+            "max_staff": 1,
+            "max_branches": 1,
+            "bi_features": list(BI_FEATURES_LIMITED),
+            "features": list(PLAN_FEATURES_LIMITED),
         },
         {
             "code": "invoiceie-pro",
@@ -54,6 +92,10 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": False,
+            "max_staff": 5,
+            "max_branches": 5,
+            "bi_features": list(BI_FEATURES_FULL),
+            "features": list(PLAN_FEATURES_FULL),
         },
     ],
     PRODUCT_CRMIE: [
@@ -64,6 +106,10 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": True,
+            "max_staff": 1,
+            "max_branches": 1,
+            "bi_features": list(BI_FEATURES_LIMITED),
+            "features": list(PLAN_FEATURES_LIMITED),
         },
         {
             "code": "crmie-pro",
@@ -72,6 +118,10 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": False,
+            "max_staff": 5,
+            "max_branches": 5,
+            "bi_features": list(BI_FEATURES_FULL),
+            "features": list(PLAN_FEATURES_FULL),
         },
     ],
 }
@@ -90,3 +140,25 @@ def get_plan_definition(product_code: str, plan_code: str) -> dict[str, object] 
         if plan["code"] == plan_code:
             return plan
     return None
+
+
+def plan_rank(plan_code: str | None) -> int:
+    """Higher rank = higher tier. Used to decide upgrade vs deferred downgrade."""
+    code = (plan_code or "").strip().lower()
+    if not code:
+        return 0
+    if code.endswith("-pro") or code.endswith("_pro") or "-pro-" in code:
+        return 2
+    if "starter" in code:
+        return 1
+    definition_staff = 0
+    for plans in PRODUCT_PLAN_CATALOG.values():
+        for plan in plans:
+            if str(plan["code"]) == code:
+                definition_staff = int(plan.get("max_staff", 0) or 0)
+                break
+    return 2 if definition_staff >= 5 else 1 if definition_staff else 0
+
+
+def is_plan_upgrade(*, current_plan_code: str | None, target_plan_code: str) -> bool:
+    return plan_rank(target_plan_code) > plan_rank(current_plan_code)

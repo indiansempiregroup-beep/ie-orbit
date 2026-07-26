@@ -34,6 +34,7 @@ class BusinessMediaType(models.TextChoices):
 class BusinessProductSubscriptionStatus(models.TextChoices):
     TRIALING = "trialing", "Trialing"
     ACTIVE = "active", "Active"
+    SOFT_LOCKED = "soft_locked", "Soft Locked"
     CANCELED = "canceled", "Canceled"
 
 
@@ -164,6 +165,26 @@ class BusinessProductSubscription(TenantModel):
     current_period_starts_at = models.DateTimeField(null=True, blank=True)
     current_period_ends_at = models.DateTimeField(null=True, blank=True)
     external_billing_reference = models.CharField(max_length=120, blank=True, db_index=True)
+    extra_staff = models.PositiveIntegerField(default=0)
+    extra_offices = models.PositiveIntegerField(default=0)
+    pending_plan = models.ForeignKey(
+        "tenancy.SubscriptionPlan",
+        on_delete=models.SET_NULL,
+        related_name="pending_business_product_subscriptions",
+        null=True,
+        blank=True,
+    )
+    pending_billing_interval = models.CharField(
+        max_length=16,
+        choices=BillingInterval.choices,
+        blank=True,
+        default="",
+    )
+    pending_extra_staff = models.PositiveIntegerField(null=True, blank=True)
+    pending_extra_offices = models.PositiveIntegerField(null=True, blank=True)
+    pending_plan_scheduled_at = models.DateTimeField(null=True, blank=True)
+    pending_cancel = models.BooleanField(default=False)
+    renewal_reminder_last_sent_on = models.DateField(null=True, blank=True)
 
     class Meta(TenantModel.Meta):
         db_table = "business_product_subscriptions"
@@ -172,6 +193,7 @@ class BusinessProductSubscription(TenantModel):
             *TenantModel.Meta.indexes,
             models.Index(fields=["business", "product_code"]),
             models.Index(fields=["business", "status"]),
+            models.Index(fields=["current_period_ends_at", "status"]),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -227,6 +249,7 @@ class BusinessSettings(TenantModel):
     localization = models.JSONField(default=dict, blank=True)
     theme_overrides = models.JSONField(default=dict, blank=True)
     dashboard_preferences = models.JSONField(default=dict, blank=True)
+    loyalty_preferences = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):
         db_table = "business_settings"
@@ -252,6 +275,20 @@ class Branch(TenantModel):
     state = models.CharField(max_length=120, blank=True)
     country = models.CharField(max_length=120, blank=True, db_index=True)
     postal_code = models.CharField(max_length=32, blank=True)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[validate_latitude],
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[validate_longitude],
+    )
     timezone = models.CharField(max_length=64, blank=True)
     status = models.CharField(
         max_length=32,

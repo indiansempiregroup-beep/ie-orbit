@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.businesses.api.permissions import BusinessAccessPermission
 from apps.businesses.api.serializers import (
+    BusinessAddonUpdateSerializer,
     BusinessProductPlanChangeSerializer,
     BusinessProductSubscribeSerializer,
     BusinessSerializer,
@@ -185,6 +186,8 @@ class BusinessViewSet(viewsets.ViewSet):
             product_code=product_code or "",
             plan_code=serializer.validated_data["plan_code"],
             actor=request.user,
+            billing_interval=serializer.validated_data.get("billing_interval"),
+            force_immediate=bool(serializer.validated_data.get("force_immediate")),
         )
         business = self.repository.get_for_request(
             business_id=str(business.id),
@@ -192,7 +195,101 @@ class BusinessViewSet(viewsets.ViewSet):
             user=request.user,
         )
         return success_response(
-            BusinessSerializer(business).data,
+            {
+                **BusinessSerializer(business).data,
+                "billing": self.service.billing_snapshot(
+                    business=business,
+                    product_code=product_code,
+                ),
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Businesses"],
+        responses={200: BusinessSerializer},
+        description="Cancel a pending period-end plan change.",
+    )
+    def cancel_pending_plan_change(
+        self,
+        request: Request,
+        pk: str | None = None,
+        product_code: str | None = None,
+    ) -> Response:
+        business = self.get_object(request=request, business_id=pk)
+        self.service.cancel_pending_plan_change(
+            business=business,
+            product_code=product_code or "",
+            actor=request.user,
+        )
+        business = self.repository.get_for_request(
+            business_id=str(business.id),
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return success_response(
+            {
+                **BusinessSerializer(business).data,
+                "billing": self.service.billing_snapshot(
+                    business=business,
+                    product_code=product_code,
+                ),
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Businesses"],
+        request=BusinessAddonUpdateSerializer,
+        responses={200: BusinessSerializer},
+        description="Update self-serve staff/office add-ons for a product subscription.",
+    )
+    def update_product_addons(
+        self,
+        request: Request,
+        pk: str | None = None,
+        product_code: str | None = None,
+    ) -> Response:
+        business = self.get_object(request=request, business_id=pk)
+        serializer = BusinessAddonUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.service.update_product_addons(
+            business=business,
+            product_code=product_code or "",
+            extra_staff=serializer.validated_data["extra_staff"],
+            extra_offices=serializer.validated_data["extra_offices"],
+            actor=request.user,
+        )
+        business = self.repository.get_for_request(
+            business_id=str(business.id),
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return success_response(
+            {
+                **BusinessSerializer(business).data,
+                "billing": self.service.billing_snapshot(
+                    business=business,
+                    product_code=product_code,
+                ),
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Businesses"],
+        responses={200: dict},
+        description="Billing entitlement snapshot for the business (limits, add-ons, pricing).",
+    )
+    def billing_snapshot(
+        self,
+        request: Request,
+        pk: str | None = None,
+    ) -> Response:
+        business = self.get_object(request=request, business_id=pk)
+        product_code = request.query_params.get("product_code")
+        return success_response(
+            self.service.billing_snapshot(business=business, product_code=product_code),
             request_id=getattr(request, "request_id", None),
         )
 

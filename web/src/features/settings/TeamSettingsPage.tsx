@@ -37,7 +37,8 @@ export function TeamSettingsPage() {
         <p className="public-kicker">Team</p>
         <h2 style={{ margin: '8px 0' }}>Members and roles</h2>
         <p style={{ color: 'var(--muted-foreground)', marginTop: 0 }}>
-          Invite staff, assign workspace roles, and manage pending invitations.
+          Invite managers or staff, assign workspace roles, and manage pending invitations. Staff accounts
+          cannot see the teammate directory.
         </p>
 
         {membersQuery.isLoading ? (

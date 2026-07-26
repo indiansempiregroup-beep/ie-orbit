@@ -10,6 +10,13 @@ PLAN_PRICE_PAISE: dict[str, int] = {
     "crmie-pro": 129900,
 }
 
+# Yearly = 10 × monthly (2 months free).
+YEARLY_PRICE_MULTIPLIER = 10
+
+# Self-serve add-on unit prices (monthly, paise).
+ADDON_STAFF_PRICE_PAISE = 19900
+ADDON_OFFICE_PRICE_PAISE = 29900
+
 DEFAULT_CHECKOUT_CURRENCY = "INR"
 CHECKOUT_SESSION_TTL_HOURS = 24
 

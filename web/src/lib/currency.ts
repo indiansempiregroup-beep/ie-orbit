@@ -1,3 +1,5 @@
+import { getActiveIntlLocale } from '@ie-platform/i18n';
+
 const FALLBACK_CURRENCY = 'USD';
 
 export function resolveBusinessCurrency(currency?: string | null): string {
@@ -10,14 +12,15 @@ export function resolveBusinessCurrency(currency?: string | null): string {
 
 export function formatMoney(amount: number, currency?: string | null, locale?: string): string {
   const resolvedCurrency = resolveBusinessCurrency(currency);
+  const resolvedLocale = locale || getActiveIntlLocale();
   try {
-    return new Intl.NumberFormat(locale, {
+    return new Intl.NumberFormat(resolvedLocale, {
       style: 'currency',
       currency: resolvedCurrency,
       maximumFractionDigits: 0,
     }).format(amount);
   } catch {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(getActiveIntlLocale(), {
       style: 'currency',
       currency: FALLBACK_CURRENCY,
       maximumFractionDigits: 0,

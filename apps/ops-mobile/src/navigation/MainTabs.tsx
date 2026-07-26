@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { colors, fonts } from '../theme/tokens';
 import type { MainTabParamList } from './types';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
@@ -9,7 +10,7 @@ import { BookingsScreen } from '../features/bookings/BookingsScreen';
 import { CalendarScreen } from '../features/calendar/CalendarScreen';
 import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
 import { MoreScreen } from '../features/more/MoreScreen';
-import { useNotifications } from '../hooks/useOpsData';
+import { useNotifications } from '../contexts/NotificationsContext';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -22,6 +23,7 @@ const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Feather.glyphMap> =
 };
 
 export function MainTabs() {
+  const { t } = useTranslation();
   const { unreadCount } = useNotifications();
 
   return (
@@ -42,15 +44,15 @@ export function MainTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="Bookings" component={BookingsScreen} />
-      <Tab.Screen name="Calendar" component={CalendarScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: t('nav.home') }} />
+      <Tab.Screen name="Bookings" component={BookingsScreen} options={{ title: t('nav.bookings') }} />
+      <Tab.Screen name="Calendar" component={CalendarScreen} options={{ title: t('nav.calendar') }} />
       <Tab.Screen
         name="Alerts"
         component={NotificationsScreen}
-        options={{ title: 'Alerts', tabBarBadge: unreadCount > 0 ? unreadCount : undefined }}
+        options={{ title: t('nav.alerts'), tabBarBadge: unreadCount > 0 ? unreadCount : undefined }}
       />
-      <Tab.Screen name="More" component={MoreScreen} />
+      <Tab.Screen name="More" component={MoreScreen} options={{ title: t('nav.more') }} />
     </Tab.Navigator>
   );
 }

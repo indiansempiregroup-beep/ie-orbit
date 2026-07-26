@@ -96,6 +96,19 @@ export async function changeBusinessProductPlan(
   return response.data;
 }
 
+export async function cancelPendingBusinessProductPlan(
+  token: string | null,
+  tenantId: string | null | undefined,
+  businessId: string,
+  productCode: string,
+) {
+  const response = await createAuthenticatedClient(token, tenantId).businesses.cancelPendingPlanChange(
+    businessId,
+    productCode,
+  );
+  return response.data;
+}
+
 export async function listProductPlans(
   token: string | null,
   tenantId: string | null | undefined,

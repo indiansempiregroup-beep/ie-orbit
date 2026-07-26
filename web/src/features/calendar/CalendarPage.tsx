@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useAvailability,
@@ -8,6 +8,7 @@ import {
   type BookingCreateInput,
 } from '../bookings/bookingsHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
+import { useBranchesQuery } from '../settings/branchesHooks';
 import { buildNameMap } from '../../lib/managementEntities';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -38,6 +39,7 @@ export function CalendarPage() {
   const staffQuery = useStaffList();
   const customersQuery = useCustomerList();
   const servicesQuery = useServiceList();
+  const branchesQuery = useBranchesQuery();
   const createBooking = useBookingCreation();
   const dialog = useDialog();
   const snackbar = useSnackbar();
@@ -46,10 +48,27 @@ export function CalendarPage() {
     customer_id: '',
     service_id: '',
     staff_id: null,
+    branch_id: null,
     start_at: new Date().toISOString(),
     duration_minutes: durationMinutes,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
+  const offices = branchesQuery.data ?? [];
+  const needsOfficePicker = offices.length > 1;
+
+  useEffect(() => {
+    if (!offices.length) return;
+    setFormState((current) => {
+      if (current.branch_id && offices.some((office) => office.id === current.branch_id)) {
+        return current;
+      }
+      const preferred =
+        offices.length === 1
+          ? offices[0]
+          : offices.find((office) => office.is_primary) ?? offices[0];
+      return { ...current, branch_id: preferred.id };
+    });
+  }, [offices]);
 
   const availability = availabilityQuery.data ?? [];
   const bookings = bookingsQuery.data ?? [];
@@ -375,6 +394,10 @@ export function CalendarPage() {
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
+            if (needsOfficePicker && !formState.branch_id) {
+              setCreationError('Select an office for this booking.');
+              return;
+            }
             createBooking.mutate(formState, {
               onSuccess: () => {
                 dialog.hide();
@@ -434,6 +457,28 @@ export function CalendarPage() {
               ))}
             </select>
           </label>
+
+          {needsOfficePicker ? (
+            <label style={{ display: 'grid', gap: 8 }}>
+              Office
+              <select
+                required
+                value={formState.branch_id ?? ''}
+                onChange={(event) => setFormState({ ...formState, branch_id: event.target.value || null })}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              >
+                <option value="">Select office</option>
+                {offices.map((office) => (
+                  <option key={office.id} value={office.id}>
+                    {office.display_name ??
+                      office.branch_name ??
+                      [office.address_line1, office.city].filter(Boolean).join(', ') ??
+                      office.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label style={{ display: 'grid', gap: 8 }}>
             Appointment start

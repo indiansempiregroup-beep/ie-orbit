@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useBootstrap } from '../contexts/BootstrapContext';
 import { useMobileNotifications } from '../hooks/useMobileNotifications';
 import { useNotificationStream } from '../hooks/useNotificationStream';
@@ -24,6 +25,7 @@ const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Feather.glyphMap> =
 };
 
 export function MainTabs() {
+  const { t } = useTranslation();
   const { branding } = useBootstrap();
   const { unreadCount, reload } = useMobileNotifications();
   useNotificationStream({ onNotification: reload });
@@ -42,15 +44,15 @@ export function MainTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Discover" component={DiscoverScreen} options={{ title: 'Discover' }} />
-      <Tab.Screen name="Book" component={BookingScreen} options={{ title: 'Book' }} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ title: t('nav.home') }} />
+      <Tab.Screen name="Discover" component={DiscoverScreen} options={{ title: t('nav.discover') }} />
+      <Tab.Screen name="Book" component={BookingScreen} options={{ title: t('nav.book') }} />
       <Tab.Screen
         name="Alerts"
         component={NotificationsScreen}
-        options={{ title: 'Alerts', tabBarBadge: unreadCount > 0 ? unreadCount : undefined }}
+        options={{ title: t('nav.alerts'), tabBarBadge: unreadCount > 0 ? unreadCount : undefined }}
       />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: t('nav.profile') }} />
     </Tab.Navigator>
   );
 }

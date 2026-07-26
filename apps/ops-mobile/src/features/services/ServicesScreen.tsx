@@ -7,15 +7,19 @@ import { SearchBar } from '../../components/SearchBar';
 import { Button } from '../../components/ui/Button';
 import { ListRow } from '../../components/ui/ListRow';
 import { ScreenState } from '../../components/ScreenState';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useServices } from '../../hooks/useOpsData';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
+import { canWriteServices } from '../../utils/roles';
 import { colors, spacing } from '../../theme/tokens';
 import { formatServiceMeta, serviceImageUrl } from '../../utils/services';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function ServicesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
+  const canManageServices = canWriteServices(user);
   const { services, loading, reload } = useServices();
   const [search, setSearch] = useState('');
   const { refreshing, onRefresh } = usePullToRefresh(reload);
@@ -36,7 +40,9 @@ export function ServicesScreen() {
     <View style={styles.screen}>
       <View style={styles.toolbar}>
         <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search services" />
-        <Button label="Add" onPress={() => navigation.navigate('ServiceForm', {})} />
+        {canManageServices ? (
+          <Button label="Add" onPress={() => navigation.navigate('ServiceForm', {})} />
+        ) : null}
       </View>
       <RefreshableScrollView
         refreshing={refreshing || loading}
@@ -48,10 +54,14 @@ export function ServicesScreen() {
           empty={!loading && filtered.length === 0}
           emptyTitle={search ? 'No matches' : 'No services yet'}
           emptyMessage={
-            search ? 'Try another service name.' : 'Add services so staff can be assigned and booked.'
+            search
+              ? 'Try another service name.'
+              : canManageServices
+                ? 'Add services so staff can be assigned and booked.'
+                : 'No services are available yet.'
           }
-          actionLabel={search ? undefined : 'Add service'}
-          onAction={search ? undefined : () => navigation.navigate('ServiceForm', {})}
+          actionLabel={search || !canManageServices ? undefined : 'Add service'}
+          onAction={search || !canManageServices ? undefined : () => navigation.navigate('ServiceForm', {})}
         />
         {filtered.map((service) => (
           <ListRow

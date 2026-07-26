@@ -142,7 +142,9 @@ DEFAULT_ROLE_PERMISSION_CODES: dict[str, tuple[str, ...]] = {
     )
     + _BUSINESS_DOMAIN_CODES,
     "manager": (
+        "iam:user:read",
         "iam:user:update_self",
+        "iam:role:assign",
         "business:read",
         "business:update",
         "customer:read",
@@ -153,6 +155,7 @@ DEFAULT_ROLE_PERMISSION_CODES: dict[str, tuple[str, ...]] = {
         "service:manage",
         "staff:read",
         "staff:write",
+        "staff:manage",
         "booking:read",
         "booking:write",
         "booking:manage",
@@ -165,7 +168,6 @@ DEFAULT_ROLE_PERMISSION_CODES: dict[str, tuple[str, ...]] = {
         "customer:read",
         "customer:write",
         "service:read",
-        "staff:read",
         "booking:read",
         "booking:write",
         "media:read",

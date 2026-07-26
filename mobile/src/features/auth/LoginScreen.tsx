@@ -12,10 +12,12 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
@@ -25,6 +27,7 @@ import type { AuthStackParamList } from '../../navigation/types';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 export function LoginScreen({ navigation }: Props) {
+  const { t } = useTranslation();
   const {
     login,
     loginWithBiometrics,
@@ -93,7 +96,7 @@ export function LoginScreen({ navigation }: Props) {
       await login(email.trim(), password, remember);
       await offerBiometricEnrollment();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to sign in.'));
+      setError(getApiErrorMessage(err, "That email or password doesn't look right. Please try again.", 'login'));
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +108,9 @@ export function LoginScreen({ navigation }: Props) {
     try {
       await loginWithBiometrics();
     } catch (err) {
-      setError(getApiErrorMessage(err, `Unable to sign in with ${biometricLabel}.`));
+      setError(
+        getApiErrorMessage(err, `Unable to sign in with ${biometricLabel}. Please try again.`, 'login'),
+      );
     } finally {
       setBiometricBusy(false);
     }
@@ -123,8 +128,8 @@ export function LoginScreen({ navigation }: Props) {
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.formWrap} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to your account to continue</Text>
+        <Text style={styles.title}>{t('auth.welcomeBack')}</Text>
+        <Text style={styles.subtitle}>{t('auth.signIn')}</Text>
 
         <View style={styles.form}>
           {biometricEnabled && biometricAvailable ? (
@@ -147,7 +152,7 @@ export function LoginScreen({ navigation }: Props) {
           ) : null}
 
           <Input
-            label="Email address"
+            label={t('common.email')}
             leftIcon="mail"
             placeholder="you@example.com"
             autoCapitalize="none"
@@ -156,7 +161,7 @@ export function LoginScreen({ navigation }: Props) {
             onChangeText={setEmail}
           />
           <Input
-            label="Password"
+            label={t('auth.password')}
             leftIcon="lock"
             placeholder="Your password"
             secureTextEntry
@@ -172,14 +177,14 @@ export function LoginScreen({ navigation }: Props) {
               <Text style={styles.rememberLabel}>Remember me</Text>
             </Pressable>
             <Pressable onPress={() => navigation.navigate('ForgotPassword')}>
-              <Text style={[styles.link, { color: primary }]}>Forgot password?</Text>
+              <Text style={[styles.link, { color: primary }]}>{t('auth.forgotPassword')}</Text>
             </Pressable>
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <FormAlert message={error} /> : null}
 
           <Button
-            label="Sign in"
+            label={t('auth.signIn')}
             size="lg"
             fullWidth
             loading={(submitting || loading) && !biometricBusy}
@@ -191,7 +196,7 @@ export function LoginScreen({ navigation }: Props) {
         <Text style={styles.footer}>
           Don&apos;t have an account?{' '}
           <Text style={[styles.link, { color: primary }]} onPress={() => navigation.navigate('Register')}>
-            Sign up free
+            {t('auth.createAccount')}
           </Text>
         </Text>
       </ScrollView>
@@ -243,6 +248,5 @@ const styles = StyleSheet.create({
   checkMark: { color: '#fff', fontSize: 11, fontWeight: '700' },
   rememberLabel: { ...typography.caption, color: colors.mutedForeground },
   link: { ...typography.label, fontWeight: '600' },
-  error: { ...typography.caption, color: colors.destructive },
   footer: { ...typography.body, color: colors.mutedForeground, textAlign: 'center', marginTop: spacing.xxl },
 });

@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { getApiErrorMessage } from '../../lib/apiClient';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { getPostLoginPath } from '../../utils/roles';
 
 export function AuthPage() {
+  const { t } = useTranslation();
   usePageMeta({ title: 'Sign in — AppointIE' });
   const auth = useAuthContext();
   const [email, setEmail] = useState('');
@@ -14,11 +18,11 @@ export function AuthPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (auth.loading) {
-    return <p role="status">Loading authentication status…</p>;
+    return <p role="status">{t('common.loading')}</p>;
   }
 
   if (auth.token && auth.user) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={getPostLoginPath(auth.user)} replace />;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -27,30 +31,48 @@ export function AuthPage() {
     try {
       await auth.login(email, password, remember);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sign in at this time.');
+      setError(
+        getApiErrorMessage(err, "That email or password doesn't look right. Please try again."),
+      );
     }
   }
 
   return (
     <>
-      <h1>Sign in to AppointIE</h1>
-      <p className="auth-lead">Use your business credentials to access the dashboard.</p>
+      <h1>{t('auth.signIn')} — AppointIE</h1>
+      <p className="auth-lead">{t('auth.welcomeBack')}</p>
       <form onSubmit={handleSubmit}>
-        <Input label="Email address" type="email" value={email} required onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-        <Input label="Password" type="password" value={password} required onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+        <Input
+          label={t('common.email')}
+          type="email"
+          value={email}
+          required
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          placeholder={t('auth.emailPlaceholder')}
+        />
+        <Input
+          label={t('auth.password')}
+          type="password"
+          value={password}
+          required
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          placeholder={t('auth.passwordPlaceholder')}
+        />
         <label className="auth-checkbox">
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          <span>Remember me on this device</span>
+          <span>{t('auth.rememberMe')}</span>
         </label>
         {error ? <div role="alert" className="auth-error">{error}</div> : null}
         <Button type="submit" variant="primary" disabled={auth.loading} style={{ width: '100%' }}>
-          {auth.loading ? 'Signing in…' : 'Sign in'}
+          {auth.loading ? t('auth.signingIn') : t('auth.signIn')}
         </Button>
       </form>
       <p className="auth-links">
-        <Link to="/auth/forgot-password">Forgot password?</Link>
+        <Link to="/auth/forgot-password">{t('auth.forgotPassword')}</Link>
         <span aria-hidden="true"> · </span>
-        <Link to="/auth/register/start">Create workspace</Link>
+        <Link to="/auth/register/start">{t('auth.createAccount')}</Link>
       </p>
     </>
   );

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AddressPlacesField } from '../../components/AddressPlacesField';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -14,30 +15,77 @@ export function BranchesScreen() {
   const { create, setPrimary } = useBranchMutations();
   const [showForm, setShowForm] = useState(false);
   const [branchName, setBranchName] = useState('');
+  const [address, setAddress] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
   const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const resetForm = () => {
+    setBranchName('');
+    setAddress('');
+    setAddressLine1('');
+    setCity('');
+    setState('');
+    setCountry('');
+    setPostalCode('');
+    setLatitude(null);
+    setLongitude(null);
+  };
+
   return (
     <RefreshableScrollView contentContainerStyle={styles.wrap} onRefresh={reload}>
-      <Text style={styles.title}>Branches</Text>
-      <Text style={styles.subtitle}>Manage physical locations for the active business.</Text>
+      <Text style={styles.title}>Offices</Text>
+      <Text style={styles.subtitle}>
+        At least one office is required. Each office needs a full address and Google Map pin.
+      </Text>
 
-      <Button label={showForm ? 'Cancel' : 'Add branch'} variant={showForm ? 'outline' : 'primary'} onPress={() => setShowForm((v) => !v)} />
+      <Button
+        label={showForm ? 'Cancel' : 'Add office'}
+        variant={showForm ? 'outline' : 'primary'}
+        onPress={() => setShowForm((v) => !v)}
+      />
 
       {showForm ? (
         <Card>
-          <Input label="Branch name" value={branchName} onChangeText={setBranchName} placeholder="Downtown clinic" />
-          <Input label="City" value={city} onChangeText={setCity} placeholder="Mumbai" />
+          <Input label="Office name" value={branchName} onChangeText={setBranchName} placeholder="Downtown clinic" />
+          <AddressPlacesField
+            label="Office address"
+            value={address}
+            onChangeText={setAddress}
+            onPlaceSelected={(place) => {
+              setAddress(place.formattedAddress);
+              setAddressLine1(place.line1 || place.formattedAddress);
+              setCity(place.city || '');
+              setState(place.state || '');
+              setCountry(place.country || '');
+              setPostalCode(place.postalCode || '');
+              setLatitude(place.latitude ?? null);
+              setLongitude(place.longitude ?? null);
+            }}
+          />
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Button
-            label="Create branch"
+            label="Create office"
             loading={submitting}
             fullWidth
             onPress={async () => {
               if (!branchName.trim()) {
-                setError('Branch name is required.');
+                setError('Office name is required.');
+                return;
+              }
+              if (!addressLine1.trim() || !city.trim() || !country.trim()) {
+                setError('Select a full office address from Google Places.');
+                return;
+              }
+              if (latitude == null || longitude == null) {
+                setError('Google Map location is required.');
                 return;
               }
               setSubmitting(true);
@@ -46,16 +94,21 @@ export function BranchesScreen() {
                 await create({
                   branch_name: branchName.trim(),
                   display_name: branchName.trim(),
-                  city: city.trim() || undefined,
+                  address_line1: addressLine1.trim(),
+                  city: city.trim(),
+                  state: state.trim() || undefined,
+                  country: country.trim(),
+                  postal_code: postalCode.trim() || undefined,
+                  latitude,
+                  longitude,
                   is_primary: branches.length === 0,
                 });
-                setBranchName('');
-                setCity('');
+                resetForm();
                 setShowForm(false);
-                setMessage('Branch created.');
+                setMessage('Office created.');
                 await reload();
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to create branch.'));
+                setError(getApiErrorMessage(err, 'Unable to create office.'));
               } finally {
                 setSubmitting(false);
               }
@@ -66,15 +119,25 @@ export function BranchesScreen() {
 
       {message ? <Text style={styles.success}>{message}</Text> : null}
 
-      <ScreenState loading={loading && !branches.length} empty={!loading && branches.length === 0} emptyMessage="No branches yet." />
+      <ScreenState
+        loading={loading && !branches.length}
+        empty={!loading && branches.length === 0}
+        emptyMessage="No offices yet. Add your first office to start taking bookings."
+      />
       {branches.map((branch) => (
         <Card key={branch.id}>
           <View style={styles.branchRow}>
             <View style={styles.branchInfo}>
               <Text style={styles.branchName}>{branch.display_name ?? branch.branch_name}</Text>
               <Text style={styles.branchMeta}>
-                {[branch.city, branch.state, branch.country].filter(Boolean).join(', ') || 'No location set'}
+                {[branch.address_line1, branch.city, branch.state, branch.country].filter(Boolean).join(', ') ||
+                  'No location set'}
               </Text>
+              {branch.latitude != null && branch.longitude != null ? (
+                <Text style={styles.branchMeta}>
+                  Map pin: {Number(branch.latitude).toFixed(4)}, {Number(branch.longitude).toFixed(4)}
+                </Text>
+              ) : null}
               {branch.is_primary ? <Text style={styles.primaryBadge}>Primary</Text> : null}
             </View>
             {!branch.is_primary ? (
@@ -82,10 +145,10 @@ export function BranchesScreen() {
                 onPress={async () => {
                   try {
                     await setPrimary(branch.id);
-                    setMessage('Primary branch updated.');
+                    setMessage('Primary office updated.');
                     await reload();
                   } catch (err) {
-                    setError(getApiErrorMessage(err, 'Unable to update branch.'));
+                    setError(getApiErrorMessage(err, 'Unable to update office.'));
                   }
                 }}
               >

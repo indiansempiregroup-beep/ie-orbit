@@ -52,6 +52,8 @@ class BusinessProductSubscriptionSerializer(serializers.ModelSerializer):
             "current_period_starts_at",
             "current_period_ends_at",
             "external_billing_reference",
+            "extra_staff",
+            "extra_offices",
             "created_at",
             "updated_at",
         ]
@@ -73,6 +75,7 @@ class BusinessSettingsSerializer(serializers.ModelSerializer):
             "localization",
             "theme_overrides",
             "dashboard_preferences",
+            "loyalty_preferences",
         ]
 
 
@@ -187,8 +190,31 @@ class BusinessSerializer(serializers.ModelSerializer):
         profile.save()
 
     def _update_settings(self, business: Business, data: dict[str, object]) -> None:
-        settings = business.settings
-        for field, value in data.items():
+        from apps.customers.services.loyalty import LoyaltyService
+
+        settings, _ = BusinessSettings.objects.get_or_create(
+            tenant=business.tenant,
+            business=business,
+        )
+        payload = dict(data)
+        if "loyalty_preferences" in payload:
+            from rest_framework.exceptions import PermissionDenied
+
+            raw = payload.get("loyalty_preferences") or {}
+            if not isinstance(raw, dict):
+                raise serializers.ValidationError(
+                    {"settings": {"loyalty_preferences": "Must be an object."}}
+                )
+            try:
+                payload["loyalty_preferences"] = LoyaltyService().normalize_loyalty_preferences(
+                    business=business,
+                    data=raw,
+                )
+            except PermissionDenied as exc:
+                raise serializers.ValidationError(
+                    {"settings": {"loyalty_preferences": str(exc.detail)}}
+                ) from exc
+        for field, value in payload.items():
             setattr(settings, field, value)
         settings.full_clean()
         settings.save()
@@ -202,6 +228,16 @@ class BusinessProductSubscribeSerializer(serializers.Serializer):
 
 class BusinessProductPlanChangeSerializer(serializers.Serializer):
     plan_code = serializers.CharField(max_length=80)
+    billing_interval = serializers.ChoiceField(
+        choices=["monthly", "yearly"],
+        required=False,
+    )
+    force_immediate = serializers.BooleanField(required=False, default=False)
+
+
+class BusinessAddonUpdateSerializer(serializers.Serializer):
+    extra_staff = serializers.IntegerField(min_value=0)
+    extra_offices = serializers.IntegerField(min_value=0)
 
 
 class ProductPlanSerializer(serializers.Serializer):
@@ -212,3 +248,7 @@ class ProductPlanSerializer(serializers.Serializer):
     billing_interval = serializers.CharField()
     trial_days = serializers.IntegerField()
     is_default = serializers.BooleanField(required=False)
+    max_staff = serializers.IntegerField(required=False)
+    max_branches = serializers.IntegerField(required=False)
+    bi_features = serializers.ListField(child=serializers.CharField(), required=False)
+    features = serializers.ListField(child=serializers.CharField(), required=False)

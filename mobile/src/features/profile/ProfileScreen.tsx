@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
@@ -15,22 +16,24 @@ import { colors, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 const menuItems = [
-  { icon: 'calendar', label: 'My Appointments', route: 'BookingHistory' as const },
-  { icon: 'user', label: 'Personal Information', route: 'ProfileEdit' as const },
-  { icon: 'bell', label: 'Notification Preferences', route: 'NotificationPreferences' as const },
-  { icon: 'credit-card', label: 'Payment Methods', route: 'PaymentMethods' as const },
-  { icon: 'shield', label: 'Privacy & Security', route: 'PrivacySecurity' as const },
-  { icon: 'star', label: 'My Reviews', route: 'Reviews' as const },
-  { icon: 'phone', label: 'Help & Support', route: 'HelpSupport' as const },
+  { icon: 'calendar', labelKey: 'bookings.myAppointments', route: 'BookingHistory' as const },
+  { icon: 'user', labelKey: 'profile.personalInfo', route: 'ProfileEdit' as const },
+  { icon: 'bell', labelKey: 'profile.notificationPreferences', route: 'NotificationPreferences' as const },
+  { icon: 'credit-card', labelKey: 'profile.paymentMethods', route: 'PaymentMethods' as const },
+  { icon: 'shield', labelKey: 'profile.privacySecurity', route: 'PrivacySecurity' as const },
+  { icon: 'star', labelKey: 'profile.myReviews', route: 'Reviews' as const },
+  { icon: 'phone', labelKey: 'help.title', route: 'HelpSupport' as const },
 ] as const;
 
 export function ProfileScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, logout, biometricEnabled, biometricLabel } = useAuth();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { bookings, loading, reload } = useMobileBookings();
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const primary = branding?.primaryColor ?? colors.primary;
 
   const loadLoyalty = useCallback(async () => {
@@ -40,8 +43,10 @@ export function ProfileScreen() {
         tenant_slug: tenantSlug,
         business_code: businessCode,
       });
-      setLoyaltyPoints(res.data.points_balance ?? 0);
+      setLoyaltyEnabled(Boolean(res.data.enabled));
+      setLoyaltyPoints(res.data.enabled ? res.data.points_balance ?? 0 : 0);
     } catch {
+      setLoyaltyEnabled(false);
       setLoyaltyPoints(0);
     }
   }, [tenantSlug, businessCode]);
@@ -66,14 +71,14 @@ export function ProfileScreen() {
 
   async function onSignOut() {
     Alert.alert(
-      'Sign out',
+      t('auth.signOut'),
       biometricEnabled
         ? `You'll return to the login screen. You can sign back in with ${biometricLabel}.`
-        : 'Are you sure you want to sign out?',
+        : t('auth.signOutConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Sign out',
+          text: t('auth.signOut'),
           style: 'destructive',
           onPress: () => void logout(),
         },
@@ -101,9 +106,9 @@ export function ProfileScreen() {
         <Text style={styles.email}>{user?.email}</Text>
         <View style={styles.stats}>
           {[
-            { label: 'Bookings', value: String(bookings.length) },
-            { label: 'Completed', value: String(completedBookings) },
-            { label: 'Loyalty Pts', value: String(loyaltyPoints) },
+            { label: t('nav.bookings'), value: String(bookings.length) },
+            { label: t('profile.completed'), value: String(completedBookings) },
+            ...(loyaltyEnabled ? [{ label: t('profile.loyaltyPts'), value: String(loyaltyPoints) }] : []),
           ].map((stat) => (
             <View key={stat.label} style={styles.stat}>
               <Text style={styles.statValue}>{stat.value}</Text>
@@ -116,14 +121,14 @@ export function ProfileScreen() {
       <View style={styles.menu}>
         {menuItems.map((item) => (
           <Pressable
-            key={item.label}
+            key={item.labelKey}
             style={styles.menuRow}
             onPress={() => navigation.navigate(item.route)}
           >
             <View style={styles.menuIcon}>
               <Feather name={item.icon} size={16} color={colors.mutedForeground} />
             </View>
-            <Text style={styles.menuLabel}>{item.label}</Text>
+            <Text style={styles.menuLabel}>{t(item.labelKey)}</Text>
             <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
           </Pressable>
         ))}
@@ -132,7 +137,7 @@ export function ProfileScreen() {
           <View style={[styles.menuIcon, styles.signOutIcon]}>
             <Feather name="log-out" size={16} color={colors.destructive} />
           </View>
-          <Text style={styles.signOutLabel}>Sign out</Text>
+          <Text style={styles.signOutLabel}>{t('auth.signOut')}</Text>
         </Pressable>
       </View>
     </RefreshableScrollView>

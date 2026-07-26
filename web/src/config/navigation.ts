@@ -9,7 +9,6 @@ import {
   NotebookPen,
   Settings,
   Scissors,
-  Shield,
   UserCog,
   Users,
 } from 'lucide-react';
@@ -19,12 +18,12 @@ import {
   canManageBusinessSettings,
   hasAnyPermission,
   hasPermission,
-  isPlatformAdmin,
 } from '../utils/roles';
 
 export type AppNavItem = {
   to: string;
-  label: string;
+  /** i18n key under the translation catalog (e.g. nav.dashboard). */
+  labelKey: string;
   icon: LucideIcon;
   group?: 'operations' | 'settings' | 'account';
   /** When set, nav item is visible only for these product codes. Omit = platform core (always visible). */
@@ -39,14 +38,14 @@ export type AppNavItem = {
 export const navigationItems: AppNavItem[] = [
   {
     to: '/dashboard',
-    label: 'Dashboard',
+    labelKey: 'nav.dashboard',
     icon: LayoutDashboard,
     group: 'operations',
     anyPermissions: ['business:read'],
   },
   {
     to: '/calendar',
-    label: 'Calendar',
+    labelKey: 'nav.calendar',
     icon: CalendarDays,
     group: 'operations',
     products: ['appointie'],
@@ -54,7 +53,7 @@ export const navigationItems: AppNavItem[] = [
   },
   {
     to: '/bookings',
-    label: 'Bookings',
+    labelKey: 'nav.bookings',
     icon: NotebookPen,
     group: 'operations',
     products: ['appointie'],
@@ -62,62 +61,55 @@ export const navigationItems: AppNavItem[] = [
   },
   {
     to: '/customers',
-    label: 'Customers',
+    labelKey: 'nav.customers',
     icon: Users,
     group: 'operations',
     anyPermissions: ['customer:read'],
   },
   {
     to: '/services',
-    label: 'Services',
+    labelKey: 'nav.services',
     icon: Scissors,
     group: 'operations',
     anyPermissions: ['service:read'],
   },
   {
     to: '/staff',
-    label: 'Staff',
+    labelKey: 'nav.staff',
     icon: UserCog,
     group: 'operations',
     anyPermissions: ['staff:read'],
   },
   {
     to: '/reports',
-    label: 'Reports',
+    labelKey: 'nav.reports',
     icon: ChartColumnBig,
     group: 'operations',
     isVisible: canAccessReports,
   },
   {
     to: '/bi/overview',
-    label: 'BI',
+    labelKey: 'nav.bi',
     icon: BarChart3,
     group: 'operations',
     isVisible: canAccessReports,
   },
   {
     to: '/notifications',
-    label: 'Notifications',
+    labelKey: 'nav.notifications',
     icon: Bell,
     group: 'operations',
   },
   {
     to: '/settings',
-    label: 'Settings',
+    labelKey: 'nav.settings',
     icon: Settings,
     group: 'settings',
     isVisible: canManageBusinessSettings,
   },
   {
-    to: '/admin',
-    label: 'Platform Admin',
-    icon: Shield,
-    group: 'settings',
-    isVisible: isPlatformAdmin,
-  },
-  {
     to: '/profile',
-    label: 'Profile',
+    labelKey: 'nav.profile',
     icon: BookOpenText,
     group: 'account',
   },
@@ -126,7 +118,7 @@ export const navigationItems: AppNavItem[] = [
 export const quickActionItems: AppNavItem[] = [
   {
     to: '/bookings',
-    label: 'New Booking',
+    labelKey: 'nav.newBooking',
     icon: NotebookPen,
     group: 'operations',
     products: ['appointie'],
@@ -134,28 +126,28 @@ export const quickActionItems: AppNavItem[] = [
   },
   {
     to: '/customers',
-    label: 'Add Customer',
+    labelKey: 'nav.addCustomer',
     icon: Users,
     group: 'operations',
     anyPermissions: ['customer:write', 'customer:manage'],
   },
   {
     to: '/services',
-    label: 'Add Service',
+    labelKey: 'nav.addService',
     icon: Scissors,
     group: 'operations',
     anyPermissions: ['service:write', 'service:manage'],
   },
   {
     to: '/staff',
-    label: 'Add Staff',
+    labelKey: 'nav.addStaff',
     icon: UserCog,
     group: 'operations',
     anyPermissions: ['staff:write', 'staff:manage'],
   },
   {
     to: '/calendar',
-    label: 'View Calendar',
+    labelKey: 'nav.viewCalendar',
     icon: CalendarDays,
     group: 'operations',
     products: ['appointie'],
@@ -163,14 +155,14 @@ export const quickActionItems: AppNavItem[] = [
   },
   {
     to: '/reports',
-    label: 'Reports',
+    labelKey: 'nav.reports',
     icon: ChartColumnBig,
     group: 'operations',
     isVisible: canAccessReports,
   },
   {
     to: '/settings',
-    label: 'Business Profile',
+    labelKey: 'nav.businessProfile',
     icon: Settings,
     group: 'settings',
     isVisible: canManageBusinessSettings,

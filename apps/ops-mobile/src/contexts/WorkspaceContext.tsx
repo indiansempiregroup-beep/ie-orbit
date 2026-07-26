@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import * as SecureStore from 'expo-secure-store';
 import type { Business, TenantSummary } from '@ie-platform/sdk';
 import { createScopedClient } from '../api/client';
+import { isPlatformAdminOnly } from '../utils/roles';
 import { useAuth } from './AuthContext';
 
 const TENANT_KEY = 'ie:ops:active-tenant-id';
@@ -41,7 +42,8 @@ async function writeKey(key: string, value: string | null) {
 }
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const platformAdminOnly = isPlatformAdminOnly(user);
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [tenantId, setTenantIdState] = useState<string | null>(null);
   const [businessId, setBusinessIdState] = useState<string | null>(null);
@@ -72,12 +74,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refreshWorkspace = useCallback(async () => {
-    if (!token) {
+    if (!token || platformAdminOnly) {
       setTenants([]);
       setBusinesses([]);
       setActiveBusiness(null);
       setTenantIdState(null);
       setBusinessIdState(null);
+      setLoading(false);
       return;
     }
 
@@ -112,7 +115,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [token, loadBusinesses]);
+  }, [token, platformAdminOnly, loadBusinesses]);
 
   useEffect(() => {
     void refreshWorkspace();

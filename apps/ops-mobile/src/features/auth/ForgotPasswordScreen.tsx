@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { opsClient } from '../../api/client';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
@@ -35,7 +36,13 @@ export function ForgotPasswordScreen() {
                 await opsClient.auth.forgotPassword({ email: email.trim() });
                 setMessage('If an account exists, a reset link has been sent.');
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to send reset link.'));
+                setError(
+                  getApiErrorMessage(
+                    err,
+                    "We couldn't send a reset link right now. Please check the email and try again.",
+                    'forgot',
+                  ),
+                );
               } finally {
                 setLoading(false);
               }
@@ -54,8 +61,8 @@ export function ForgotPasswordScreen() {
         value={email}
         onChangeText={setEmail}
       />
-      {message ? <Text style={styles.success}>{message}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {message ? <FormAlert message={message} tone="success" /> : null}
+      {error ? <FormAlert message={error} /> : null}
     </FormScreen>
   );
 }
@@ -63,6 +70,4 @@ export function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   content: { gap: spacing.lg },
   copy: { ...typography.body, color: colors.mutedForeground },
-  success: { ...typography.caption, color: colors.success },
-  error: { ...typography.caption, color: colors.destructive },
 });

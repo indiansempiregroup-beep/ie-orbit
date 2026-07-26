@@ -1,15 +1,17 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../hooks/useAuth';
 
 const settingsNav = [
-  { to: '/settings', label: 'Overview', end: true },
-  { to: '/settings/business', label: 'Business Profile' },
-  { to: '/settings/products', label: 'Products' },
-  { to: '/settings/team', label: 'Team', permission: 'iam:role:assign' },
+  { to: '/settings', labelKey: 'settings.overview', end: true },
+  { to: '/settings/business', labelKey: 'settings.businessProfile' },
+  { to: '/settings/products', labelKey: 'settings.products' },
+  { to: '/settings/team', labelKey: 'settings.team', permission: 'iam:role:assign' },
 ];
 
 export function SettingsLayout() {
+  const { t } = useTranslation();
   const auth = useAuth();
   const permissions = auth.user?.permissions ?? [];
   const visibleNav = settingsNav.filter(
@@ -19,7 +21,7 @@ export function SettingsLayout() {
   return (
     <div className="settings-layout" style={{ display: 'grid', gap: 20 }}>
       <Card style={{ padding: 16 }}>
-        <nav aria-label="Settings navigation" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <nav aria-label={t('settings.navigation')} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {visibleNav.map((item) => (
             <NavLink
               key={item.to}
@@ -35,7 +37,7 @@ export function SettingsLayout() {
                 border: isActive ? '1px solid #bfdbfe' : '1px solid transparent',
               })}
             >
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           ))}
         </nav>

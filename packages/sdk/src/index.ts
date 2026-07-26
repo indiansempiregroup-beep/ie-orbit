@@ -147,6 +147,7 @@ export type Booking = {
   id: string;
   tenant?: string;
   business?: string;
+  branch?: string | null;
   booking_number?: string;
   customer_id?: string;
   staff_id?: string | null;
@@ -178,6 +179,7 @@ export type Booking = {
 
 export type BookingCreateInput = {
   business?: string;
+  branch_id?: string | null;
   customer_id: string;
   staff_id?: string | null;
   service_id: string;
@@ -203,7 +205,7 @@ export type AvailabilitySlot = {
 export type BusinessProductSubscription = {
   id: string;
   product_code: string;
-  status: 'trialing' | 'active' | 'canceled';
+  status: 'trialing' | 'active' | 'soft_locked' | 'canceled';
   plan_code?: string | null;
   plan_name?: string | null;
   billing_interval?: 'monthly' | 'yearly' | null;
@@ -225,6 +227,10 @@ export type ProductPlan = {
   billing_interval: 'monthly' | 'yearly';
   trial_days: number;
   is_default?: boolean;
+  max_staff?: number;
+  max_branches?: number;
+  bi_features?: string[];
+  features?: string[];
 };
 
 export type BusinessProductSubscribeInput = {
@@ -235,6 +241,8 @@ export type BusinessProductSubscribeInput = {
 
 export type BusinessProductPlanChangeInput = {
   plan_code: string;
+  billing_interval?: 'monthly' | 'yearly';
+  force_immediate?: boolean;
 };
 
 export type BillingStatus = {
@@ -273,8 +281,53 @@ export type BillingPlanCatalogItem = {
   billing_interval: string;
   trial_days: number;
   is_default: boolean;
+  max_staff?: number;
+  max_branches?: number;
+  bi_features?: string[];
+  features?: string[];
   amount_paise?: number | null;
+  yearly_amount_paise?: number | null;
+  addon_staff_price_paise?: number;
+  addon_office_price_paise?: number;
   currency: string;
+};
+
+export type BusinessBillingSnapshot = {
+  plan_code: string;
+  status: string;
+  billing_interval: string;
+  soft_locked: boolean;
+  trial_ends_at?: string | null;
+  current_period_starts_at?: string | null;
+  current_period_ends_at?: string | null;
+  subscribed_at?: string | null;
+  canceled_at?: string | null;
+  /** Convenience alias for next renewal when a paid period is active. */
+  renews_at?: string | null;
+  pending_plan_code?: string | null;
+  pending_billing_interval?: string | null;
+  pending_cancel?: boolean;
+  pending_plan_scheduled_at?: string | null;
+  plan_change_effective_at?: string | null;
+  plan_locked_until?: string | null;
+  included_staff: number;
+  included_offices: number;
+  extra_staff: number;
+  extra_offices: number;
+  effective_max_staff: number;
+  effective_max_branches: number;
+  used_staff: number;
+  used_offices: number;
+  bi_features: string[];
+  features?: string[];
+  pricing: {
+    currency: string;
+    base_amount_paise: number;
+    addon_staff_unit_paise: number;
+    addon_office_unit_paise: number;
+    addon_amount_paise: number;
+    total_amount_paise: number;
+  };
 };
 
 export type BillingWebhookEvent = {
@@ -500,6 +553,7 @@ export type MobileDiscoverService = {
   duration_minutes: number;
   currency: string;
   price: number;
+  loyalty_points_earn?: number;
   category_id?: string | null;
   category_name?: string;
   image_url?: string;
@@ -557,8 +611,19 @@ export type MobileReview = {
   created_at: string;
 };
 
+export type MobileLoyaltyProgram = {
+  enabled: boolean;
+  plan_entitled: boolean;
+  points_per_currency_unit: number;
+  max_redeem_percent: number;
+  min_redeem_points: number;
+  currency: string;
+};
+
 export type MobileLoyaltyBalance = {
+  enabled: boolean;
   points_balance: number;
+  program?: MobileLoyaltyProgram;
   ledger: Array<{
     id: string;
     points_delta: number;
@@ -566,6 +631,15 @@ export type MobileLoyaltyBalance = {
     booking_id?: string | null;
     created_at: string;
   }>;
+};
+
+export type MobileLoyaltyQuote = {
+  points_redeemed: number;
+  discount_amount: string;
+  currency: string;
+  rate: number;
+  service_price: string;
+  max_discount_amount: string;
 };
 
 export type MobileDeviceRegistration = {
@@ -588,6 +662,7 @@ export type MobileBookingRequestInput = {
   tenant_slug: string;
   business_code: string;
   service_id: string;
+  branch_id?: string | null;
   staff_id?: string | null;
   start_at: string;
   duration_minutes: number;
@@ -596,12 +671,41 @@ export type MobileBookingRequestInput = {
   email?: string;
   notes?: string;
   payment_mode?: 'pay_at_venue';
+  points_to_redeem?: number;
 };
 
 export type MobileBookingRequestResponse = {
   booking_id: string;
   booking_number: string;
   status: string;
+};
+
+export type MobileBookingBranch = {
+  id: string;
+  display_name: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal_code?: string;
+  formatted_address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+export type MobileBranch = {
+  id: string;
+  display_name: string;
+  is_primary?: boolean;
+  address_line1?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal_code?: string;
+  formatted_address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type MobileBooking = {
@@ -612,6 +716,7 @@ export type MobileBooking = {
   service_name: string;
   staff_id?: string | null;
   staff_name?: string;
+  branch?: MobileBookingBranch | null;
   appointment_date: string;
   start_at: string;
   end_at: string;
@@ -716,7 +821,81 @@ export type PlatformTenantDetail = {
     selected_product?: string;
     has_white_label_profile: boolean;
     flavor_key?: string | null;
+    billing?: Record<string, unknown>;
   }>;
+};
+
+export type PlatformAuditEvent = {
+  id: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  reason: string;
+  actor_email?: string | null;
+  tenant_id?: string | null;
+  tenant_name?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
+
+export type PlatformPaymentRow = {
+  id: string;
+  order_id?: string;
+  payment_id?: string;
+  amount_paise: number;
+  currency: string;
+  status: string;
+  plan_code?: string;
+  product_code?: string;
+  business_id?: string;
+  paid_at?: string | null;
+  created_at: string;
+  refunded_paise?: number;
+  invoice_id?: string | null;
+  invoice_number?: string | null;
+};
+
+export type PlatformFeatureFlag = {
+  key: string;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type PlatformUserRow = {
+  id: string;
+  email: string;
+  full_name?: string;
+  roles?: string[];
+  is_active: boolean;
+  relation?: string;
+};
+
+export type SupportTicketSummary = {
+  id: string;
+  subject: string;
+  status: string;
+  tenant_id?: string;
+  requester_email?: string | null;
+  created_at: string;
+};
+
+export type HelpArticleSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  category?: string;
+  is_published?: boolean;
+  body?: string;
+};
+
+export type PlatformAnnouncement = {
+  id: string;
+  title: string;
+  message: string;
+  severity: string;
+  is_active?: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
 };
 
 export type AnalyticsPeriodComparison = {
@@ -967,6 +1146,8 @@ export type Branch = {
   state?: string;
   country?: string;
   postal_code?: string;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   timezone?: string;
   status?: string;
   created_at?: string;
@@ -987,6 +1168,8 @@ export type BranchCreateInput = {
   state?: string;
   country?: string;
   postal_code?: string;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   timezone?: string;
   status?: string;
 };
@@ -1081,6 +1264,7 @@ export type Service = {
   buffer_before_minutes?: number;
   buffer_after_minutes?: number;
   cleanup_minutes?: number;
+  loyalty_points_earn?: number;
   durations?: ServiceDuration[];
   price?: number;
   currency?: string | null;
@@ -1120,6 +1304,7 @@ export type ServiceCreateInput = {
   max_age?: number;
   tags?: string[];
   display_order?: number;
+  loyalty_points_earn?: number;
   addons_metadata?: Record<string, unknown>;
   packages_metadata?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -1149,6 +1334,7 @@ export type StaffMember = {
   designation?: string | null;
   department?: string | null;
   employment_status?: string;
+  is_bookable?: boolean;
   status?: string;
   is_active?: boolean;
   created_at?: string;
@@ -1266,6 +1452,7 @@ export type StaffCreateInput = {
   working_location?: string;
   joining_date?: string;
   employment_status?: string;
+  is_bookable?: boolean;
   emergency_contact?: Record<string, unknown>;
   preferences?: Record<string, unknown>;
   tags?: string[];
@@ -1285,6 +1472,8 @@ export type Notification = {
   is_read?: boolean;
   created_at?: string;
   updated_at?: string;
+  booking_id?: string | null;
+  notification_type?: string;
 };
 
 export type TenantSummary = {
@@ -1528,7 +1717,26 @@ class ApiClient {
     unsubscribeProduct: (businessId: string, productCode: string) =>
       this.request<Business>(`/businesses/${businessId}/product-subscriptions/${productCode}`, { method: 'DELETE' }),
     changeProductPlan: (businessId: string, productCode: string, body: BusinessProductPlanChangeInput) =>
-      this.request<Business>(`/businesses/${businessId}/product-subscriptions/${productCode}/plan`, { method: 'PATCH', body }),
+      this.request<Business & { billing?: BusinessBillingSnapshot }>(
+        `/businesses/${businessId}/product-subscriptions/${productCode}/plan`,
+        { method: 'PATCH', body },
+      ),
+    cancelPendingPlanChange: (businessId: string, productCode: string) =>
+      this.request<Business & { billing?: BusinessBillingSnapshot }>(
+        `/businesses/${businessId}/product-subscriptions/${productCode}/pending-plan`,
+        { method: 'DELETE' },
+      ),
+    updateProductAddons: (
+      businessId: string,
+      productCode: string,
+      body: { extra_staff: number; extra_offices: number },
+    ) =>
+      this.request<Business & { billing?: BusinessBillingSnapshot }>(
+        `/businesses/${businessId}/product-subscriptions/${productCode}/addons`,
+        { method: 'PATCH', body },
+      ),
+    billingSnapshot: (businessId: string, query?: { product_code?: string }) =>
+      this.request<BusinessBillingSnapshot>(`/businesses/${businessId}/billing`, { method: 'GET', query }),
     listProductPlans: (query?: { product_code?: string }) =>
       this.request<ProductPlan[]>('/product-plans', { method: 'GET', query }),
     branches: {
@@ -1603,7 +1811,7 @@ class ApiClient {
   notifications = {
     list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<Notification[]>('/notifications', { method: 'GET', query }),
     markRead: (notificationId: string) => this.request<Notification>(`/notifications/${notificationId}/read`, { method: 'PATCH' }),
-    readAll: () => this.request<{ read: boolean }>('/notifications/read-all', { method: 'PATCH' }),
+    readAll: () => this.request<{ updated: number }>('/notifications/read-all', { method: 'PATCH' }),
     delete: (notificationId: string) => this.request<null>(`/notifications/${notificationId}`, { method: 'DELETE' }),
   };
 
@@ -1639,13 +1847,139 @@ class ApiClient {
     tenants: () => this.request<{ tenants: PlatformTenantSummary[] }>('/platform/tenants', { method: 'GET' }),
     tenant: (tenantId: string) =>
       this.request<PlatformTenantDetail>(`/platform/tenants/${tenantId}`, { method: 'GET' }),
-    updateTenant: (tenantId: string, body: { status?: string }) =>
+    updateTenant: (tenantId: string, body: { status?: string; reason?: string }) =>
       this.request<PlatformTenantDetail>(`/platform/tenants/${tenantId}`, { method: 'PATCH', body }),
+    createTenant: (body: {
+      display_name: string;
+      business_name?: string;
+      owner_email?: string;
+      slug?: string;
+      selected_product?: string;
+      reason: string;
+    }) => this.request<{ tenant_id: string; slug: string; business_id: string }>('/platform/tenants/create', { method: 'POST', body }),
+    tenantAction: (tenantId: string, action: 'suspend' | 'reactivate' | 'archive', body: { reason: string }) =>
+      this.request<{ id: string; status: string }>(`/platform/tenants/${tenantId}/actions/${action}`, { method: 'POST', body }),
+    tenantBilling: (tenantId: string, query?: { product_code?: string }) =>
+      this.request<{ tenant_id: string; business_id: string; billing: Record<string, unknown> }>(
+        `/platform/tenants/${tenantId}/billing`,
+        { method: 'GET', query },
+      ),
+    tenantBillingAction: (
+      tenantId: string,
+      body: { action: string; reason: string; days?: number; plan_code?: string; product_code?: string },
+    ) => this.request<{ billing: Record<string, unknown> }>(`/platform/tenants/${tenantId}/billing/actions`, { method: 'POST', body }),
+    tenantUsers: (tenantId: string) =>
+      this.request<{ users: PlatformUserRow[] }>(`/platform/tenants/${tenantId}/users`, { method: 'GET' }),
+    tenantFlags: (tenantId: string) =>
+      this.request<{ flags: PlatformFeatureFlag[] }>(`/platform/tenants/${tenantId}/flags`, { method: 'GET' }),
+    updateTenantFlags: (tenantId: string, body: { flags: Record<string, boolean>; reason: string }) =>
+      this.request<{ flags: PlatformFeatureFlag[] }>(`/platform/tenants/${tenantId}/flags`, { method: 'PATCH', body }),
+    tenantPayments: (tenantId: string) =>
+      this.request<{ payments: PlatformPaymentRow[] }>(`/platform/tenants/${tenantId}/payments`, { method: 'GET' }),
+    refundPayment: (tenantId: string, paymentId: string, body: { reason: string; amount_paise?: number }) =>
+      this.request<Record<string, unknown>>(`/platform/tenants/${tenantId}/payments/${paymentId}/refund`, {
+        method: 'POST',
+        body,
+      }),
+    tenantCredits: (tenantId: string) =>
+      this.request<{ balance_paise: number }>(`/platform/tenants/${tenantId}/credits`, { method: 'GET' }),
+    grantCredit: (tenantId: string, body: { amount_paise: number; reason: string }) =>
+      this.request<Record<string, unknown>>(`/platform/tenants/${tenantId}/credits`, { method: 'POST', body }),
+    impersonate: (tenantId: string, body: { reason: string; user_id?: string }) =>
+      this.request<{
+        access: string;
+        refresh: string;
+        token_type: string;
+        expires_in: number;
+        impersonator_id: string;
+        acting_as: UserProfile;
+      }>(`/platform/tenants/${tenantId}/impersonate`, { method: 'POST', body }),
+    endImpersonation: () =>
+      this.request<{
+        access: string;
+        refresh: string;
+        token_type: string;
+        expires_in: number;
+        user: UserProfile;
+      }>('/platform/impersonation/end', { method: 'POST' }),
+    transferOwnership: (tenantId: string, body: { user_id: string; reason: string }) =>
+      this.request<{ tenant_id: string; owner_id: string }>(`/platform/tenants/${tenantId}/transfer-ownership`, {
+        method: 'POST',
+        body,
+      }),
+    purgeTenant: (tenantId: string, body: { confirm_slug: string; reason: string }) =>
+      this.request<{ tenant_id: string; status: string; purged: boolean }>(`/platform/tenants/${tenantId}/purge`, {
+        method: 'POST',
+        body,
+      }),
+    searchUsers: (email: string) =>
+      this.request<{ users: PlatformUserRow[] }>('/platform/users/search', { method: 'GET', query: { email } }),
+    userAction: (userId: string, action: 'disable' | 'enable' | 'reset_password', body: { reason: string }) =>
+      this.request<Record<string, unknown>>(`/platform/users/${userId}/actions/${action}`, { method: 'POST', body }),
+    audit: (query?: { tenant_id?: string; action?: string; limit?: number }) =>
+      this.request<{ events: PlatformAuditEvent[] }>('/platform/audit', { method: 'GET', query }),
+    coupons: () =>
+      this.request<{
+        coupons: Array<{
+          id: string;
+          code: string;
+          percent_off?: number | null;
+          amount_off_paise?: number | null;
+          is_active: boolean;
+          redemption_count: number;
+        }>;
+      }>('/platform/coupons', { method: 'GET' }),
+    upsertCoupon: (body: {
+      code: string;
+      percent_off?: number;
+      amount_off_paise?: number;
+      is_active?: boolean;
+      reason: string;
+    }) => this.request<{ id: string; code: string }>('/platform/coupons', { method: 'POST', body }),
+    tickets: (query?: { tenant_id?: string }) =>
+      this.request<{ tickets: SupportTicketSummary[] }>('/platform/tickets', { method: 'GET', query }),
+    createTicket: (body: { tenant_id: string; subject: string; body?: string }) =>
+      this.request<{ id: string }>('/platform/tickets', { method: 'POST', body }),
+    addTicketNote: (ticketId: string, body: { body: string; is_internal?: boolean; status?: string }) =>
+      this.request<{ id: string }>(`/platform/tickets/${ticketId}/notes`, { method: 'POST', body }),
+    announcements: () => this.request<{ announcements: PlatformAnnouncement[] }>('/platform/announcements', { method: 'GET' }),
+    createAnnouncement: (body: {
+      title: string;
+      message: string;
+      severity?: string;
+      is_active?: boolean;
+      reason?: string;
+    }) => this.request<{ id: string }>('/platform/announcements', { method: 'POST', body }),
+    helpArticlesAdmin: () => this.request<{ articles: HelpArticleSummary[] }>('/platform/help/articles', { method: 'GET' }),
+    upsertHelpArticle: (body: {
+      title: string;
+      slug?: string;
+      category?: string;
+      body?: string;
+      is_published?: boolean;
+      keywords?: string;
+    }) => this.request<{ id: string; slug: string }>('/platform/help/articles', { method: 'POST', body }),
     whiteLabelProfiles: () => this.request<WhiteLabelProfile[]>('/platform/white-label', { method: 'GET' }),
     whiteLabelProfile: (businessId: string) =>
       this.request<MobileBootstrapResponse>(`/platform/white-label/${businessId}`, { method: 'GET' }),
     updateWhiteLabelProfile: (businessId: string, body: Partial<WhiteLabelProfile>) =>
       this.request<MobileBootstrapResponse>(`/platform/white-label/${businessId}`, { method: 'PATCH', body }),
+  };
+
+  help = {
+    articles: (query?: { q?: string; slug?: string }) =>
+      this.request<{ articles?: HelpArticleSummary[] } & Partial<HelpArticleSummary>>('/help/articles', {
+        method: 'GET',
+        query,
+      }),
+    activeAnnouncements: () =>
+      this.request<{ announcements: PlatformAnnouncement[] }>('/platform/announcements/active', { method: 'GET' }),
+  };
+
+  support = {
+    tickets: () => this.request<{ tickets: SupportTicketSummary[] }>('/support/tickets', { method: 'GET' }),
+    createTicket: (body: { subject: string; body?: string; tenant_id?: string }) =>
+      this.request<{ id: string; status: string }>('/support/tickets', { method: 'POST', body }),
   };
 
   billing = {
@@ -1699,6 +2033,8 @@ class ApiClient {
     }) => this.request<MobileBootstrapResponse>('/mobile/bootstrap', { method: 'GET', query, auth: false }),
     discoverServices: (query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileDiscoverResponse>('/mobile/discover/services', { method: 'GET', query }),
+    branches: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileBranch[]>('/mobile/branches', { method: 'GET', query }),
     getService: (serviceId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileDiscoverServiceDetail>(`/mobile/discover/services/${serviceId}`, {
         method: 'GET',
@@ -1756,6 +2092,12 @@ class ApiClient {
       this.request<MobileReview>(`/mobile/bookings/${bookingId}/reviews`, { method: 'POST', body }),
     getLoyalty: (query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileLoyaltyBalance>('/mobile/loyalty', { method: 'GET', query }),
+    quoteLoyalty: (body: {
+      tenant_slug: string;
+      business_code: string;
+      service_id: string;
+      points_to_redeem: number;
+    }) => this.request<MobileLoyaltyQuote>('/mobile/loyalty/quote', { method: 'POST', body }),
     registerDevice: (body: {
       tenant_slug: string;
       business_code: string;

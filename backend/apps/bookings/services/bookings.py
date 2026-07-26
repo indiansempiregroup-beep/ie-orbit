@@ -18,6 +18,9 @@ from apps.bookings.repositories import BookingRepository
 from apps.bookings.services.availability import AvailabilityService
 from apps.bookings.services.events import BookingEventPublisher
 from apps.bookings.validators import validate_booking_transition, validate_time_range
+from apps.businesses.models import Branch, BranchStatus
+from apps.businesses.services.entitlements import EntitlementService
+from apps.staff.models import Staff
 
 logger = logging.getLogger("ie_platform.bookings")
 
@@ -29,23 +32,61 @@ class BookingService:
         repository: BookingRepository | None = None,
         availability_service: AvailabilityService | None = None,
         event_publisher: BookingEventPublisher | None = None,
+        entitlements: EntitlementService | None = None,
     ) -> None:
         self.repository = repository or BookingRepository()
         self.availability_service = availability_service or AvailabilityService(
             repository=self.repository
         )
         self.event_publisher = event_publisher or BookingEventPublisher()
+        self.entitlements = entitlements or EntitlementService()
+
+    def _resolve_branch(self, *, business: Any, branch_id: Any | None) -> Branch | None:
+        active_branches = list(
+            Branch.objects.filter(
+                business=business,
+                status=BranchStatus.ACTIVE,
+                is_active=True,
+            ).order_by("-is_primary", "display_name")
+        )
+        if not active_branches:
+            raise ValidationError("At least one office is required before creating bookings.")
+        if branch_id:
+            for branch in active_branches:
+                if str(branch.id) == str(branch_id):
+                    return branch
+            raise ValidationError({"branch_id": "Selected office was not found for this business."})
+        if len(active_branches) == 1:
+            return active_branches[0]
+        raise ValidationError({"branch_id": "Select an office for this booking."})
+
+    def _ensure_bookable_staff(self, *, tenant: Any, staff_id: Any) -> None:
+        if not staff_id:
+            return
+        staff = (
+            Staff.objects.require_tenant(tenant)
+            .filter(id=staff_id, is_active=True)
+            .first()
+        )
+        if staff is None:
+            raise ValidationError({"staff_id": "Staff member was not found."})
+        if not staff.is_bookable:
+            raise ValidationError(
+                {"staff_id": "This person is not bookable staff and cannot be assigned to bookings."}
+            )
 
     @transaction.atomic
     def create_booking(
         self, *, tenant: Any, business: Any, data: dict[str, Any], actor: Any
     ) -> Booking:
+        self.entitlements.ensure_can_create_booking(business=business)
         start_at = data["start_at"]
         duration_minutes = data["duration_minutes"]
         end_at = start_at + timedelta(minutes=duration_minutes)
         validate_time_range(start_at, end_at)
         staff_id = data.get("staff_id")
         service_id = data.get("service_id")
+        branch = self._resolve_branch(business=business, branch_id=data.get("branch_id") or data.get("branch"))
         service_buffers = self.availability_service.service_buffer_defaults(service_id=service_id)
         buffer_before = data.get("buffer_before_minutes")
         buffer_after = data.get("buffer_after_minutes")
@@ -67,6 +108,7 @@ class BookingService:
                 raise ValidationError(
                     "No timeslot available. No staff is available at the selected time."
                 )
+        self._ensure_bookable_staff(tenant=tenant, staff_id=staff_id)
         if service_id and not self.availability_service.staff_can_perform_service(
             tenant=tenant, staff_id=staff_id, service_id=service_id
         ):
@@ -84,9 +126,12 @@ class BookingService:
             buffer_before_minutes=buffer_before,
             buffer_after_minutes=buffer_after,
         )
+        metadata = dict(data.get("metadata") or {})
+        points_to_redeem = data.get("points_to_redeem")
         booking = Booking(
             tenant=tenant,
             business=business,
+            branch=branch,
             booking_number=self._booking_number(),
             customer_id=data["customer_id"],
             staff_id=staff_id,
@@ -103,12 +148,17 @@ class BookingService:
             notes=data.get("notes", ""),
             recurrence_frequency=data.get("recurrence_frequency", "none"),
             recurrence_rule=data.get("recurrence_rule", {}),
-            metadata=data.get("metadata", {}),
+            metadata=metadata,
         )
         if getattr(actor, "is_authenticated", False):
             booking.mark_created(actor_id=actor.id)
         booking.full_clean()
         booking.save()
+        if points_to_redeem:
+            self._redeem_loyalty_on_create(
+                booking=booking,
+                points_to_redeem=int(points_to_redeem),
+            )
         self._record_state(
             booking=booking,
             from_status="",
@@ -213,18 +263,44 @@ class BookingService:
         )
         if to_status == BookingStatus.COMPLETED and from_status != BookingStatus.COMPLETED:
             self._award_loyalty_on_complete(booking=booking)
+        if to_status == BookingStatus.CANCELLED and from_status != BookingStatus.CANCELLED:
+            self._refund_loyalty_on_cancel(booking=booking)
         return booking
+
+    def _resolve_loyalty_customer(self, *, booking: Booking):
+        from apps.customers.models import Customer
+
+        return (
+            Customer.objects.require_tenant(booking.tenant)
+            .filter(id=booking.customer_id, business=booking.business)
+            .first()
+        )
+
+    def _redeem_loyalty_on_create(self, *, booking: Booking, points_to_redeem: int) -> None:
+        from apps.customers.services.loyalty import LoyaltyService
+
+        customer = self._resolve_loyalty_customer(booking=booking)
+        if customer is None:
+            raise ValidationError({"points_to_redeem": "Customer was not found for reward redemption."})
+        loyalty = LoyaltyService()
+        snapshot = loyalty.redeem_for_booking(
+            tenant=booking.tenant,
+            business=booking.business,
+            customer=customer,
+            booking_id=booking.id,
+            service_id=booking.service_id,
+            points_to_redeem=points_to_redeem,
+        )
+        metadata = dict(booking.metadata or {})
+        metadata["loyalty"] = snapshot
+        booking.metadata = metadata
+        booking.save(update_fields=["metadata", "updated_at"])
 
     def _award_loyalty_on_complete(self, *, booking: Booking) -> None:
         try:
-            from apps.customers.models import Customer
             from apps.customers.services.loyalty import LoyaltyService
 
-            customer = (
-                Customer.objects.require_tenant(booking.tenant)
-                .filter(id=booking.customer_id, business=booking.business)
-                .first()
-            )
+            customer = self._resolve_loyalty_customer(booking=booking)
             if customer is None:
                 return
             LoyaltyService().award_for_completed_booking(
@@ -232,10 +308,41 @@ class BookingService:
                 business=booking.business,
                 customer=customer,
                 booking_id=booking.id,
+                service_id=booking.service_id,
             )
         except Exception:
             logger.exception(
                 "Failed to award loyalty points",
+                extra={"booking_id": str(booking.id)},
+            )
+
+    def _refund_loyalty_on_cancel(self, *, booking: Booking) -> None:
+        try:
+            from apps.customers.services.loyalty import LoyaltyService
+
+            loyalty_meta = (booking.metadata or {}).get("loyalty") or {}
+            points_redeemed = int(loyalty_meta.get("points_redeemed") or 0)
+            if points_redeemed <= 0:
+                return
+            customer = self._resolve_loyalty_customer(booking=booking)
+            if customer is None:
+                return
+            LoyaltyService().refund_redemption(
+                tenant=booking.tenant,
+                business=booking.business,
+                customer=customer,
+                booking_id=booking.id,
+                points_redeemed=points_redeemed,
+            )
+            metadata = dict(booking.metadata or {})
+            loyalty_meta = dict(metadata.get("loyalty") or {})
+            loyalty_meta["refunded"] = True
+            metadata["loyalty"] = loyalty_meta
+            booking.metadata = metadata
+            booking.save(update_fields=["metadata", "updated_at"])
+        except Exception:
+            logger.exception(
+                "Failed to refund loyalty redemption",
                 extra={"booking_id": str(booking.id)},
             )
 

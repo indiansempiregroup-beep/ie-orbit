@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
@@ -100,7 +101,13 @@ export function RegisterWizardScreen() {
       await bootstrapSession(payload);
       await initializeWorkspace(payload.tenant.id, payload.business.id);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to create workspace.'));
+      setError(
+        getApiErrorMessage(
+          err,
+          "We couldn't create your account with those details. Please review and try again.",
+          'register',
+        ),
+      );
       setSubmitting(false);
     }
   }
@@ -169,7 +176,7 @@ export function RegisterWizardScreen() {
           </>
         ) : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <FormAlert message={error} /> : null}
 
         <View style={styles.actions}>
           {step > 0 ? <Button label="Back" variant="outline" onPress={() => setStep((s) => s - 1)} /> : null}
@@ -208,6 +215,5 @@ const styles = StyleSheet.create({
   stepLabel: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginTop: spacing.sm },
   content: { padding: spacing.xxl, gap: spacing.md, paddingBottom: spacing.xxxl },
   hint: { ...typography.caption, color: colors.mutedForeground },
-  error: { ...typography.caption, color: colors.destructive },
   actions: { gap: spacing.md, marginTop: spacing.lg },
 });

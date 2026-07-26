@@ -107,6 +107,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "id",
             "tenant",
             "business",
+            "branch",
             "booking_number",
             "customer_id",
             "staff_id",
@@ -158,6 +159,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
 class BookingCreateSerializer(serializers.Serializer):
     business = serializers.UUIDField(required=False)
+    branch_id = serializers.UUIDField(required=False, allow_null=True)
     customer_id = serializers.UUIDField()
     staff_id = serializers.UUIDField(required=False, allow_null=True)
     service_id = serializers.UUIDField()
@@ -174,6 +176,7 @@ class BookingCreateSerializer(serializers.Serializer):
     )
     recurrence_rule = serializers.JSONField(required=False, default=dict)
     metadata = serializers.JSONField(required=False, default=dict)
+    points_to_redeem = serializers.IntegerField(min_value=1, required=False)
 
 
 class BookingPatchSerializer(serializers.Serializer):

@@ -1,3 +1,5 @@
+import { getActiveIntlLocale } from '@ie-platform/i18n';
+
 type DateTimeZoneConfig = {
   userTimezone?: string | null;
   businessTimezone?: string | null;
@@ -61,18 +63,22 @@ const TIMESTAMP_OPTIONS: Intl.DateTimeFormatOptions = {
   hour12: true,
 };
 
+function localeTag() {
+  return getActiveIntlLocale();
+}
+
 export function formatTime(value?: string | Date | null) {
   if (!value) return '—';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleTimeString(undefined, withZone(TIME_OPTIONS));
+  return date.toLocaleTimeString(localeTag(), withZone(TIME_OPTIONS));
 }
 
 export function formatDateTime(value?: string | Date | null) {
   if (!value) return '—';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString(undefined, withZone(DATE_TIME_OPTIONS));
+  return date.toLocaleString(localeTag(), withZone(DATE_TIME_OPTIONS));
 }
 
 /** Full timestamp for audit/created/updated fields. */
@@ -80,5 +86,19 @@ export function formatTimestamp(value?: string | Date | null) {
   if (!value) return '—';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString(undefined, withZone(TIMESTAMP_OPTIONS));
+  return date.toLocaleString(localeTag(), withZone(TIMESTAMP_OPTIONS));
+}
+
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+};
+
+/** Date-only labels for plan trial/renewal fields. */
+export function formatDate(value?: string | Date | null) {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(localeTag(), withZone(DATE_OPTIONS));
 }

@@ -1,5 +1,13 @@
 import React from 'react';
-import { StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 
@@ -11,6 +19,8 @@ type Props = {
 };
 
 export function SearchBar({ value, onChangeText, placeholder = 'Search…', style }: Props) {
+  const showClear = value.length > 0 && Platform.OS !== 'ios';
+
   return (
     <View style={[styles.wrap, style]}>
       <Feather name="search" size={16} color={colors.mutedForeground} />
@@ -24,6 +34,17 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search…', styl
         autoCorrect={false}
         clearButtonMode="while-editing"
       />
+      {showClear ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
+          hitSlop={8}
+          onPress={() => onChangeText('')}
+          style={({ pressed }) => [styles.clearBtn, pressed && styles.clearPressed]}
+        >
+          <Feather name="x" size={14} color={colors.mutedForeground} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -48,4 +69,13 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     height: 46,
   },
+  clearBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.muted,
+  },
+  clearPressed: { opacity: 0.75 },
 });

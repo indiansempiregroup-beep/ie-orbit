@@ -184,7 +184,7 @@ export function AddressPlacesField({
       </View>
       {!PLACES_KEY ? (
         <Text style={styles.hint}>
-          Set EXPO_PUBLIC_GOOGLE_PLACES_API_KEY to enable Google Places autocomplete.
+          Set EXPO_PUBLIC_GOOGLE_PLACES_API_KEY in the repo-root .env to enable Google Places autocomplete.
         </Text>
       ) : null}
       {predictions.length ? (

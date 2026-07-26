@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.billing",
     "apps.audit",
+    "apps.platform_admin",
     "apps.api",
 ]
 
@@ -59,6 +60,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.tenancy.middleware.TenantResolutionMiddleware",
     "apps.tenancy.middleware.BusinessResolutionMiddleware",
+    "apps.platform_admin.middleware.OptionalAdminHostMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -220,6 +222,14 @@ CELERY_BEAT_SCHEDULE = {
     }
     if BILLING_OPS_DIGEST_ENABLED
     else None,
+    "billing-apply-period-end-plan-changes": {
+        "task": "billing.apply_period_end_plan_changes",
+        "schedule": crontab(minute=15, hour="*/1"),
+    },
+    "billing-send-renewal-reminders": {
+        "task": "billing.send_renewal_reminders",
+        "schedule": crontab(minute=30, hour=3),
+    },
     "notifications-send-booking-reminders": {
         "task": "notifications.send_booking_reminders",
         "schedule": timedelta(minutes=1),
@@ -232,6 +242,7 @@ RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+ADMIN_HOST = os.getenv("ADMIN_HOST", "")
 BILLING_CURRENCY_DEFAULT = os.getenv("BILLING_CURRENCY_DEFAULT", "INR")
 BILLING_WEBHOOK_ALERT_RECIPIENTS = os.getenv("BILLING_WEBHOOK_ALERT_RECIPIENTS", "")
 BILLING_ENFORCE_LIVE_CHECKOUT = os.getenv("BILLING_ENFORCE_LIVE_CHECKOUT", "false").lower() in {

@@ -16,7 +16,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { brand, colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
@@ -24,6 +26,7 @@ import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
 
 export function LoginScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
   const {
     login,
@@ -89,7 +92,7 @@ export function LoginScreen() {
       await login(email.trim(), password, remember);
       await offerBiometricEnrollment();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to sign in.'));
+      setError(getApiErrorMessage(err, "That email or password doesn't look right. Please try again.", 'login'));
     }
   }
 
@@ -99,7 +102,9 @@ export function LoginScreen() {
     try {
       await loginWithBiometrics();
     } catch (err) {
-      setError(getApiErrorMessage(err, `Unable to sign in with ${biometricLabel}.`));
+      setError(
+        getApiErrorMessage(err, `Unable to sign in with ${biometricLabel}. Please try again.`, 'login'),
+      );
     } finally {
       setBiometricBusy(false);
     }
@@ -121,8 +126,8 @@ export function LoginScreen() {
         contentContainerStyle={[styles.formWrap, { paddingBottom: insets.bottom + spacing.xxxl }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to manage your business</Text>
+        <Text style={styles.title}>{t('auth.welcomeBack')}</Text>
+        <Text style={styles.subtitle}>{t('auth.signIn')}</Text>
 
         <View style={styles.form}>
           {biometricEnabled && biometricAvailable ? (
@@ -145,18 +150,18 @@ export function LoginScreen() {
           ) : null}
 
           <Input
-            label="Email address"
+            label={t('common.email')}
             leftIcon="mail"
-            placeholder="you@example.com"
+            placeholder={t('auth.emailPlaceholder')}
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
           />
           <Input
-            label="Password"
+            label={t('auth.password')}
             leftIcon="lock"
-            placeholder="Your password"
+            placeholder={t('auth.passwordPlaceholder')}
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -170,13 +175,19 @@ export function LoginScreen() {
               <Text style={styles.rememberLabel}>Remember me</Text>
             </Pressable>
             <Pressable onPress={() => navigation.navigate('ForgotPassword')}>
-              <Text style={styles.link}>Forgot password?</Text>
+              <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
             </Pressable>
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <FormAlert message={error} /> : null}
 
-          <Button label="Sign in" size="lg" fullWidth loading={loading && !biometricBusy} onPress={onSubmit} />
+          <Button
+            label={t('auth.signIn')}
+            size="lg"
+            fullWidth
+            loading={loading && !biometricBusy}
+            onPress={onSubmit}
+          />
         </View>
 
         <View style={styles.footerLinks}>
@@ -246,7 +257,6 @@ const styles = StyleSheet.create({
   checkMark: { color: '#fff', fontSize: 12, fontFamily: fonts.bodyBold },
   rememberLabel: { ...typography.caption, color: colors.mutedForeground },
   link: { ...typography.label, color: colors.primary },
-  error: { ...typography.caption, color: colors.destructive },
   footerLinks: { gap: spacing.sm, marginTop: spacing.xxl },
   footer: { ...typography.body, color: colors.mutedForeground, textAlign: 'center' },
 });

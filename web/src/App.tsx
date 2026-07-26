@@ -5,6 +5,7 @@ import { ProtectedRoute } from './routes/ProtectedRoute';
 import { ProductGuard } from './guards/ProductGuard';
 import { PermissionGuard } from './guards/PermissionGuard';
 import { PlatformAdminGuard } from './guards/PlatformAdminGuard';
+import { TenantOpsGuard } from './guards/TenantOpsGuard';
 import { PublicLayout } from './features/public/PublicLayout';
 import { AuthLayout } from './features/auth/AuthLayout';
 
@@ -64,6 +65,18 @@ const PlatformAuditPage = lazy(() =>
 const PlatformBrandingPage = lazy(() =>
   import('./features/admin/PlatformBrandingPage').then((m) => ({ default: m.PlatformBrandingPage })),
 );
+const PlatformTicketsPage = lazy(() =>
+  import('./features/admin/PlatformTicketsPage').then((m) => ({ default: m.PlatformTicketsPage })),
+);
+const PlatformAnnouncementsPage = lazy(() =>
+  import('./features/admin/PlatformAnnouncementsPage').then((m) => ({ default: m.PlatformAnnouncementsPage })),
+);
+const PlatformHelpCmsPage = lazy(() =>
+  import('./features/admin/PlatformHelpCmsPage').then((m) => ({ default: m.PlatformHelpCmsPage })),
+);
+const HelpCenterPage = lazy(() =>
+  import('./features/help/HelpCenterPage').then((m) => ({ default: m.HelpCenterPage })),
+);
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const BusinessManagementPage = lazy(() => import('./features/settings/BusinessManagementPage').then((m) => ({ default: m.BusinessManagementPage })));
 const BusinessProfileEditPage = lazy(() => import('./features/settings/BusinessProfileEditPage').then((m) => ({ default: m.BusinessProfileEditPage })));
@@ -99,6 +112,7 @@ function App() {
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/faq" element={<FaqPage />} />
+            <Route path="/help" element={<HelpCenterPage />} />
           </Route>
 
           <Route element={<AuthLayout />}>
@@ -114,68 +128,78 @@ function App() {
           <Route path="/onboarding/success" element={<OnboardingSuccess />} />
 
           <Route element={<ProtectedRoute />}>
-            <Route element={<Layout />}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/business" element={<Navigate to="/settings/business" replace />} />
-              <Route element={<PermissionGuard anyPermissions={['customer:read']} />}>
-                <Route path="/customers" element={<CustomersPage />} />
-                <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+            <Route element={<PlatformAdminGuard />}>
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<PlatformDashboardPage />} />
+                <Route path="tenants" element={<PlatformTenantsPage />} />
+                <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
+                <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
+                <Route path="tickets" element={<PlatformTicketsPage />} />
+                <Route path="announcements" element={<PlatformAnnouncementsPage />} />
+                <Route path="help" element={<PlatformHelpCmsPage />} />
+                <Route path="branding" element={<PlatformBrandingPage />} />
+                <Route path="monitoring" element={<PlatformMonitoringPage />} />
+                <Route path="audit" element={<PlatformAuditPage />} />
+                <Route path="profile" element={<ProfilePage />} />
+                <Route path="profile/edit" element={<ProfileEditPage />} />
+                <Route path="profile/security" element={<ProfileSecurityPage />} />
+                <Route path="profile/sessions" element={<ProfileSessionsPage />} />
               </Route>
-              <Route element={<PermissionGuard anyPermissions={['service:read']} />}>
-                <Route path="/services" element={<ServicesPage />} />
-                <Route path="/services/:serviceId" element={<ServiceDetailPage />} />
-              </Route>
-              <Route element={<PermissionGuard anyPermissions={['staff:read']} />}>
-                <Route path="/staff" element={<StaffPage />} />
-                <Route path="/staff/:staffId" element={<StaffDetailPage />} />
-              </Route>
-              <Route element={<ProductGuard products={['appointie']} />}>
-                <Route element={<PermissionGuard anyPermissions={['booking:read']} />}>
-                  <Route path="/calendar" element={<CalendarPage />} />
-                  <Route path="/bookings" element={<BookingsPage />} />
-                  <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
+            </Route>
+            <Route path="/admin/platform" element={<Navigate to="/admin" replace />} />
+
+            <Route element={<TenantOpsGuard />}>
+              <Route element={<Layout />}>
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/profile/edit" element={<ProfileEditPage />} />
+                <Route path="/profile/security" element={<ProfileSecurityPage />} />
+                <Route path="/profile/sessions" element={<ProfileSessionsPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/business" element={<Navigate to="/settings/business" replace />} />
+                <Route element={<PermissionGuard anyPermissions={['customer:read']} />}>
+                  <Route path="/customers" element={<CustomersPage />} />
+                  <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
                 </Route>
-              </Route>
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route element={<PermissionGuard anyPermissions={['booking:manage', 'business:manage', 'business:update']} />}>
-                <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/bi" element={<BILayout />}>
-                  <Route index element={<Navigate to="/bi/overview" replace />} />
-                  <Route path="overview" element={<BIOverviewPage />} />
-                  <Route path="growth" element={<BIGrowthPage />} />
-                  <Route path="revenue" element={<BIRevenuePage />} />
-                  <Route path="forecast" element={<BIForecastPage />} />
-                  <Route path="reports" element={<BIReportsPage />} />
+                <Route element={<PermissionGuard anyPermissions={['service:read']} />}>
+                  <Route path="/services" element={<ServicesPage />} />
+                  <Route path="/services/:serviceId" element={<ServiceDetailPage />} />
                 </Route>
-              </Route>
-              <Route element={<PermissionGuard anyPermissions={['business:update', 'business:write', 'business:manage']} />}>
-                <Route path="/settings" element={<SettingsLayout />}>
-                  <Route index element={<SettingsPage />} />
-                  <Route path="business" element={<BusinessManagementPage />} />
-                  <Route path="business/edit" element={<BusinessProfileEditPage />} />
-                  <Route path="products" element={<ProductSettingsPage />} />
-                  <Route element={<PermissionGuard permission="iam:role:assign" />}>
-                    <Route path="team" element={<TeamSettingsPage />} />
+                <Route element={<PermissionGuard anyPermissions={['staff:read']} />}>
+                  <Route path="/staff" element={<StaffPage />} />
+                  <Route path="/staff/:staffId" element={<StaffDetailPage />} />
+                </Route>
+                <Route element={<ProductGuard products={['appointie']} />}>
+                  <Route element={<PermissionGuard anyPermissions={['booking:read']} />}>
+                    <Route path="/calendar" element={<CalendarPage />} />
+                    <Route path="/bookings" element={<BookingsPage />} />
+                    <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
                   </Route>
-                  <Route path="business-profile" element={<Navigate to="/settings/business" replace />} />
+                </Route>
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route element={<PermissionGuard anyPermissions={['booking:manage', 'business:manage', 'business:update']} />}>
+                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/bi" element={<BILayout />}>
+                    <Route index element={<Navigate to="/bi/overview" replace />} />
+                    <Route path="overview" element={<BIOverviewPage />} />
+                    <Route path="growth" element={<BIGrowthPage />} />
+                    <Route path="revenue" element={<BIRevenuePage />} />
+                    <Route path="forecast" element={<BIForecastPage />} />
+                    <Route path="reports" element={<BIReportsPage />} />
+                  </Route>
+                </Route>
+                <Route element={<PermissionGuard anyPermissions={['business:update', 'business:write', 'business:manage']} />}>
+                  <Route path="/settings" element={<SettingsLayout />}>
+                    <Route index element={<SettingsPage />} />
+                    <Route path="business" element={<BusinessManagementPage />} />
+                    <Route path="business/edit" element={<BusinessProfileEditPage />} />
+                    <Route path="products" element={<ProductSettingsPage />} />
+                    <Route element={<PermissionGuard permission="iam:role:assign" />}>
+                      <Route path="team" element={<TeamSettingsPage />} />
+                    </Route>
+                    <Route path="business-profile" element={<Navigate to="/settings/business" replace />} />
+                  </Route>
                 </Route>
               </Route>
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/profile/edit" element={<ProfileEditPage />} />
-              <Route path="/profile/security" element={<ProfileSecurityPage />} />
-              <Route path="/profile/sessions" element={<ProfileSessionsPage />} />
-              <Route element={<PlatformAdminGuard />}>
-                <Route path="/admin" element={<AdminLayout />}>
-                  <Route index element={<PlatformDashboardPage />} />
-                  <Route path="tenants" element={<PlatformTenantsPage />} />
-                  <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
-                  <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
-                  <Route path="branding" element={<PlatformBrandingPage />} />
-                  <Route path="monitoring" element={<PlatformMonitoringPage />} />
-                  <Route path="audit" element={<PlatformAuditPage />} />
-                </Route>
-              </Route>
-              <Route path="/admin/platform" element={<Navigate to="/admin" replace />} />
             </Route>
           </Route>
 

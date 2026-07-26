@@ -77,6 +77,7 @@ export function normalizeService(raw: RawRecord): Service {
     buffer_before_minutes: defaultDuration?.buffer_before_minutes ?? 0,
     buffer_after_minutes: defaultDuration?.buffer_after_minutes ?? 0,
     cleanup_minutes: defaultDuration?.cleanup_minutes ?? 0,
+    loyalty_points_earn: Number(raw.loyalty_points_earn ?? 0) || 0,
     durations,
     price: basePrice != null ? Number(basePrice) : undefined,
     currency: (defaultPrice?.currency as string | undefined) ?? null,

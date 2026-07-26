@@ -59,12 +59,16 @@ class AuthenticationService:
                 user_agent=user_agent,
                 metadata={"email": email, "reason": "not_found_or_locked"},
             )
-            raise exceptions.AuthenticationFailed("Invalid credentials.")
+            raise exceptions.AuthenticationFailed(
+                "That email or password doesn't look right. Please try again."
+            )
 
         authenticated_user = authenticate(username=user.email, password=password)
         if not authenticated_user:
             self._record_failed_login(user=user, ip_address=ip_address, user_agent=user_agent)
-            raise exceptions.AuthenticationFailed("Invalid credentials.")
+            raise exceptions.AuthenticationFailed(
+                "That email or password doesn't look right. Please try again."
+            )
 
         if user.status not in {UserStatus.ACTIVE, UserStatus.PENDING_VERIFICATION}:
             raise exceptions.PermissionDenied("User account is not active.")

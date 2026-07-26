@@ -6,6 +6,7 @@ import { Button } from '../../components/Button';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useEmailVerification } from '../../hooks/useEmailVerification';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { getPostLoginPath, isPlatformAdmin } from '../../utils/roles';
 
 type VerifyEmailPageProps = {
   token?: string;
@@ -66,7 +67,11 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
               {resendState === 'loading' ? 'Sending…' : resendState === 'sent' ? 'Email sent' : 'Resend verification email'}
             </Button>
             {auth.token ? (
-              <Button variant="ghost" type="button" onClick={() => navigate('/profile')}>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => navigate(isPlatformAdmin(auth.user) ? '/admin/profile' : '/profile')}
+              >
                 Back to profile
               </Button>
             ) : null}
@@ -84,11 +89,15 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
         <div style={{ display: 'grid', gap: 16 }}>
           <p role="status">{message}</p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Button variant="primary" type="button" onClick={() => navigate('/profile')}>
+            <Button
+              variant="primary"
+              type="button"
+              onClick={() => navigate(isPlatformAdmin(auth.user) ? '/admin/profile' : '/profile')}
+            >
               View profile
             </Button>
-            <Button variant="ghost" type="button" onClick={() => navigate('/dashboard')}>
-              Go to dashboard
+            <Button variant="ghost" type="button" onClick={() => navigate(getPostLoginPath(auth.user))}>
+              Continue
             </Button>
           </div>
         </div>

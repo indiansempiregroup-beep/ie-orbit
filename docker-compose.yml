@@ -62,11 +62,12 @@ services:
         APP_ENV: development
     working_dir: /app
     command: >-
-      sh -c "rm -rf /app/node_modules /app/web/node_modules /app/packages/sdk/node_modules && pnpm install --frozen-lockfile --filter @ie-platform/web... && pnpm --dir web dev --host 0.0.0.0 --port 3000"
+      sh -c "rm -rf /app/node_modules /app/web/node_modules /app/packages/sdk/node_modules /app/packages/i18n/node_modules && pnpm install --frozen-lockfile --filter @ie-platform/web... && mkdir -p /app/web/node_modules/@ie-platform && ln -sfn ../../../packages/i18n /app/web/node_modules/@ie-platform/i18n && ln -sfn ../../../packages/sdk /app/web/node_modules/@ie-platform/sdk && pnpm --dir web dev --host 0.0.0.0 --port 3000"
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
+      VITE_DEV_API_PROXY: http://backend:8000
       PNPM_HOME: /root/.local/share/pnpm
       PNPM_STORE_DIR: /root/.local/share/pnpm/store/v3
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.development}

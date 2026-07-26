@@ -6,6 +6,7 @@ from typing import Any
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
+from apps.businesses.services.entitlements import EntitlementService
 from apps.staff.models import (
     BusinessRole,
     BusinessRoleType,
@@ -21,13 +22,22 @@ logger = logging.getLogger("ie_platform.staff")
 
 
 class StaffManagementService:
-    def __init__(self, repository: StaffRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: StaffRepository | None = None,
+        entitlements: EntitlementService | None = None,
+    ) -> None:
         self.repository = repository or StaffRepository()
+        self.entitlements = entitlements or EntitlementService()
 
     @transaction.atomic
     def create_staff(self, *, data: dict[str, Any], tenant: Any, actor: Any) -> Staff:
         profile_data = data.pop("profile", None)
         employment_data = data.pop("employment", None)
+        is_bookable = bool(data.get("is_bookable", True))
+        business = data.get("business")
+        if business is not None:
+            self.entitlements.ensure_can_add_staff(business=business, is_bookable=is_bookable)
         staff = Staff(tenant=tenant, **data)
         if getattr(actor, "is_authenticated", False):
             staff.mark_created(actor_id=actor.id)
@@ -46,6 +56,9 @@ class StaffManagementService:
     def update_staff(self, *, staff: Staff, data: dict[str, Any], actor: Any) -> Staff:
         profile_data = data.pop("profile", None)
         employment_data = data.pop("employment", None)
+        becoming_bookable = data.get("is_bookable") is True and not staff.is_bookable
+        if becoming_bookable:
+            self.entitlements.ensure_can_add_staff(business=staff.business, is_bookable=True)
         for field, value in data.items():
             setattr(staff, field, value)
         if getattr(actor, "is_authenticated", False):

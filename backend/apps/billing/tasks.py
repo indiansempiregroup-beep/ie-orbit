@@ -6,6 +6,20 @@ from django.core.mail import send_mail
 from celery import shared_task
 
 
+@shared_task(name="billing.apply_period_end_plan_changes")
+def apply_period_end_plan_changes_task() -> dict[str, object]:
+    from apps.businesses.services.subscription_lifecycle import SubscriptionLifecycleService
+
+    return SubscriptionLifecycleService().apply_due_period_ends()
+
+
+@shared_task(name="billing.send_renewal_reminders")
+def send_renewal_reminders_task() -> dict[str, object]:
+    from apps.businesses.services.subscription_lifecycle import SubscriptionLifecycleService
+
+    return SubscriptionLifecycleService().send_renewal_reminders()
+
+
 @shared_task(name="billing.reprocess_webhook_event")
 def reprocess_webhook_event_task(event_id: str) -> dict[str, object]:
     from apps.billing.models import BillingWebhookEvent

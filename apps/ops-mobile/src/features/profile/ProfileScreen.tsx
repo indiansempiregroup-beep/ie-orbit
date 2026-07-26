@@ -3,6 +3,7 @@ import { Alert, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { FormScreen } from '../../components/FormScreen';
 import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
@@ -16,6 +17,7 @@ import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function ProfileScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const {
@@ -29,7 +31,7 @@ export function ProfileScreen() {
     refreshBiometricState,
   } = useAuth();
   const { activeBusiness } = useWorkspace();
-  const displayName = user?.full_name || user?.email || 'Profile';
+  const displayName = user?.full_name || user?.email || t('profile.title');
   const [busy, setBusy] = useState(false);
   const faceIdBlockedInExpoGo = isExpoGo() && Platform.OS === 'ios';
 
@@ -39,13 +41,13 @@ export function ProfileScreen() {
 
   function onSignOut() {
     Alert.alert(
-      'Sign out',
+      t('auth.signOut'),
       biometricEnabled
         ? `You'll return to the login screen. You can sign back in with ${biometricLabel}.`
-        : 'Are you sure you want to sign out?',
+        : t('auth.signOutConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign out', style: 'destructive', onPress: () => void logout() },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('auth.signOut'), style: 'destructive', onPress: () => void logout() },
       ],
     );
   }
@@ -115,27 +117,27 @@ export function ProfileScreen() {
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         <Text style={styles.meta}>
-          {activeBusiness?.display_name ?? activeBusiness?.business_name ?? 'Workspace'}
+          {activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace')}
           {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
         </Text>
       </View>
 
       <View style={styles.menu}>
-        <MenuSection title="Account">
-          <MenuRow icon="edit-3" label="Edit profile" onPress={() => navigation.navigate('ProfileEdit')} />
-          <MenuRow icon="lock" label="Change password" onPress={() => navigation.navigate('Security')} />
+        <MenuSection title={t('common.account')}>
+          <MenuRow icon="edit-3" label={t('profile.editProfile')} onPress={() => navigation.navigate('ProfileEdit')} />
+          <MenuRow icon="lock" label={t('profile.changePassword')} onPress={() => navigation.navigate('Security')} />
           <MenuRow
             icon="smartphone"
-            label="Sessions"
+            label={t('profile.sessions')}
             last={Boolean(user?.email_verified_at)}
             onPress={() => navigation.navigate('Sessions')}
           />
           {!user?.email_verified_at ? (
-            <MenuRow icon="mail" label="Verify email" last onPress={() => navigation.navigate('VerifyEmail')} />
+            <MenuRow icon="mail" label={t('profile.verifyEmail')} last onPress={() => navigation.navigate('VerifyEmail')} />
           ) : null}
         </MenuSection>
 
-        <MenuSection title="Security">
+        <MenuSection title={t('profile.security')}>
           <View style={styles.biometricRow}>
             <View style={styles.biometricCopy}>
               <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
@@ -160,8 +162,8 @@ export function ProfileScreen() {
           </View>
         </MenuSection>
 
-        <MenuSection title="Session">
-          <MenuRow icon="log-out" label="Sign out" destructive last onPress={onSignOut} />
+        <MenuSection title={t('profile.session')}>
+          <MenuRow icon="log-out" label={t('auth.signOut')} destructive last onPress={onSignOut} />
         </MenuSection>
       </View>
     </FormScreen>

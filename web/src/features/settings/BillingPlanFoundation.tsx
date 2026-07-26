@@ -1,13 +1,16 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatTimestamp } from '../../lib/datetime';
 import {
   ACTIVE_BUSINESS_STORAGE_KEY,
   ACTIVE_TENANT_STORAGE_KEY,
 } from '../../contexts/WorkspaceContext';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { BillingDates } from './BillingDates';
 import {
   useBillingCheckout,
   useBillingGoLiveCheckQuery,
@@ -22,12 +25,21 @@ import {
   useBillingWebhookEventsQuery,
   useBillingWebhookReprocess,
   useBillingWebhookSummaryQuery,
+  useBusinessBillingSnapshotQuery,
+  useUpdateBusinessAddonsMutation,
 } from './billingHooks';
+import { useCancelPendingProductPlanChange } from './businessSettingsHooks';
 
 export function BillingPlanFoundation() {
   const [eventFilter, setEventFilter] = useState<'all' | 'failed' | 'dead_letter'>('all');
   const [selectedPlanCode, setSelectedPlanCode] = useState('appointie-starter');
   const [showPlatformSummary, setShowPlatformSummary] = useState(false);
+  const [extraStaff, setExtraStaff] = useState(0);
+  const [extraOffices, setExtraOffices] = useState(0);
+  const { businessId } = useWorkspace();
+  const billingSnapshotQuery = useBusinessBillingSnapshotQuery(businessId ?? undefined);
+  const updateAddons = useUpdateBusinessAddonsMutation(businessId ?? undefined);
+  const cancelPendingPlan = useCancelPendingProductPlanChange();
   const statusQuery = useBillingStatusQuery();
   const plansQuery = useBillingPlansQuery();
   const goLiveQuery = useBillingGoLiveCheckQuery();
@@ -65,48 +77,160 @@ export function BillingPlanFoundation() {
   const deadLetterDelta = opsSnapshot?.trend.dead_letter_delta ?? 0;
   const stuckRetryDelta = opsSnapshot?.trend.stuck_retries_delta ?? 0;
 
-  return (
-    <Card>
-      <p className="public-kicker">Billing foundation</p>
-      <h2 style={{ margin: '8px 0' }}>Razorpay checkout</h2>
-      <p style={{ color: 'var(--muted-foreground)', marginTop: 0 }}>
-        {isConfigured
-          ? 'Payments are configured. You can start a Razorpay checkout for the selected plan.'
-          : 'Razorpay is not configured yet. Checkout runs in mock mode until you add API keys.'}
-      </p>
+  const billing = billingSnapshotQuery.data;
 
-      <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-        <p style={{ margin: 0 }}>
-          <strong>Launch Ready:</strong>{' '}
-          {launchReady ? (
-            <span style={{ color: '#166534' }}>Yes</span>
-          ) : (
-            <span style={{ color: '#991b1b' }}>No</span>
-          )}
+  useEffect(() => {
+    if (!billing) return;
+    setExtraStaff(billing.extra_staff);
+    setExtraOffices(billing.extra_offices);
+  }, [billing?.extra_staff, billing?.extra_offices]);
+
+  return (
+    <Card className="billing-foundation">
+      <div className="billing-foundation-header">
+        <p className="public-kicker">Billing foundation</p>
+        <h2 style={{ margin: 0 }}>Your plan & usage</h2>
+        {billing ? (
+          <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+            <div className="billing-foundation-chips">
+              <span className="billing-chip billing-chip--ok">Plan: {billing.plan_code}</span>
+              <span className="billing-chip billing-chip--muted" style={{ textTransform: 'capitalize' }}>
+                {billing.status.replace('_', ' ')}
+              </span>
+              <span className="billing-chip billing-chip--muted">{billing.billing_interval}</span>
+              {billing.soft_locked ? (
+                <span className="billing-chip billing-chip--warn">Soft locked — renew required</span>
+              ) : null}
+              {billing.plan_locked_until ? (
+                <span className="billing-chip billing-chip--muted">
+                  Locked until period end
+                </span>
+              ) : null}
+              {billing.pending_plan_code ? (
+                <span className="billing-chip billing-chip--warn">
+                  Next: {billing.pending_plan_code}
+                </span>
+              ) : null}
+            </div>
+            <BillingDates billing={billing} />
+            {billing.pending_plan_code ? (
+              <p className="billing-section-meta" style={{ margin: 0 }}>
+                Downgrades take effect on the renewal date. You keep {billing.plan_code} until then.
+                {businessId ? (
+                  <>
+                    {' '}
+                    <Button
+                      variant="ghost"
+                      disabled={cancelPendingPlan.isPending}
+                      onClick={() => {
+                        cancelPendingPlan.mutate(
+                          { productCode: checkoutProductCode },
+                          {
+                            onSuccess: () => {
+                              void billingSnapshotQuery.refetch();
+                              snackbar.push('Pending plan change canceled.', 'success');
+                            },
+                            onError: () => snackbar.push('Unable to cancel pending plan change.', 'error'),
+                          },
+                        );
+                      }}
+                    >
+                      {cancelPendingPlan.isPending ? 'Canceling…' : 'Cancel pending change'}
+                    </Button>
+                  </>
+                ) : null}
+              </p>
+            ) : (
+              <p className="billing-section-meta" style={{ margin: 0 }}>
+                Renew before period end to avoid a soft lock. There is no automatic charge.
+              </p>
+            )}
+            <p className="billing-section-meta" style={{ margin: 0 }}>
+              Staff {billing.used_staff}/{billing.effective_max_staff} · Offices {billing.used_offices}/
+              {billing.effective_max_branches} · Total ₹{(billing.pricing.total_amount_paise / 100).toFixed(0)}
+              {billing.billing_interval === 'yearly' ? '/year' : '/month'}
+            </p>
+            <p className="billing-section-meta" style={{ margin: 0 }}>
+              Included {billing.included_staff} staff / {billing.included_offices} offices · Add-ons +
+              {billing.extra_staff} staff (+₹{(billing.pricing.addon_staff_unit_paise / 100).toFixed(0)} each) · +
+              {billing.extra_offices} offices (+₹{(billing.pricing.addon_office_unit_paise / 100).toFixed(0)} each)
+            </p>
+            <div className="billing-addons-row">
+              <label>
+                Extra staff
+                <input
+                  type="number"
+                  min={0}
+                  value={extraStaff}
+                  onChange={(event) => setExtraStaff(Number(event.target.value) || 0)}
+                />
+              </label>
+              <label>
+                Extra offices
+                <input
+                  type="number"
+                  min={0}
+                  value={extraOffices}
+                  onChange={(event) => setExtraOffices(Number(event.target.value) || 0)}
+                />
+              </label>
+              <Button
+                variant="primary"
+                disabled={updateAddons.isPending || !businessId}
+                onClick={() => {
+                  updateAddons.mutate(
+                    {
+                      productCode: checkoutProductCode,
+                      extra_staff: extraStaff,
+                      extra_offices: extraOffices,
+                    },
+                    {
+                      onSuccess: () => snackbar.push('Add-ons updated. Billing total refreshed.', 'success'),
+                      onError: (error) =>
+                        snackbar.push(
+                          getApiErrorMessage(error, 'Unable to update add-ons. Check usage limits.'),
+                          'error',
+                        ),
+                    },
+                  );
+                }}
+              >
+                {updateAddons.isPending ? 'Updating…' : 'Update add-ons'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="billing-section-meta">Loading current entitlements…</p>
+        )}
+        <h2 style={{ margin: '20px 0 0' }}>Razorpay checkout</h2>
+        <p className="billing-section-meta">
+          {isConfigured
+            ? 'Payments are configured. You can start a Razorpay checkout for the selected plan.'
+            : 'Razorpay is not configured yet. Checkout runs in mock mode until you add API keys.'}
         </p>
-        <p style={{ margin: 0 }}>
-          <strong>Provider:</strong> {status?.provider ?? 'razorpay'}
-        </p>
-        <p style={{ margin: 0 }}>
-          <strong>Currency:</strong> {status?.currency ?? 'INR'}
-        </p>
-        <p style={{ margin: 0 }}>
-          <strong>Mode:</strong> {mockMode ? 'Mock (no live charges)' : 'Live'}
-        </p>
+        <div className="billing-foundation-chips">
+          <span className={`billing-chip ${launchReady ? 'billing-chip--ok' : 'billing-chip--warn'}`}>
+            Launch Ready: {launchReady ? 'Yes' : 'No'}
+          </span>
+          <span className="billing-chip billing-chip--muted">Provider: {status?.provider ?? 'razorpay'}</span>
+          <span className="billing-chip billing-chip--muted">Currency: {status?.currency ?? 'INR'}</span>
+          <span className={`billing-chip ${mockMode ? 'billing-chip--muted' : 'billing-chip--ok'}`}>
+            Mode: {mockMode ? 'Mock (no live charges)' : 'Live'}
+          </span>
+        </div>
       </div>
 
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
-        <strong>Plan catalog:</strong>
+      <div className="billing-section">
+        <p className="billing-section-title">Plan catalog</p>
         {plansQuery.isLoading ? (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>Loading plans...</p>
+          <p className="billing-section-meta">Loading plans...</p>
         ) : plans.length === 0 ? (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>No billable plans configured.</p>
+          <p className="billing-section-meta">No billable plans configured.</p>
         ) : (
-          <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8 }}>
             <select
               value={selectedPlan?.plan_code ?? selectedPlanCode}
               onChange={(event) => setSelectedPlanCode(event.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}
             >
               {plans.map((plan) => (
                 <option key={plan.plan_code} value={plan.plan_code}>
@@ -115,7 +239,7 @@ export function BillingPlanFoundation() {
               ))}
             </select>
             {selectedPlan ? (
-              <p style={{ margin: 0, color: 'var(--muted-foreground)', fontSize: 14 }}>
+              <p className="billing-section-meta">
                 {selectedPlan.description} · Trial {selectedPlan.trial_days} days · {selectedPlan.billing_interval}
               </p>
             ) : null}
@@ -123,36 +247,40 @@ export function BillingPlanFoundation() {
         )}
       </div>
 
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
-        <strong>Go-live readiness:</strong>{' '}
-        {goLive?.ready ? (
-          <span style={{ color: '#166534' }}>Ready</span>
-        ) : (
-          <span style={{ color: '#991b1b' }}>Not ready</span>
-        )}
+      <div className="billing-section">
+        <p className="billing-section-title">
+          Go-live readiness:{' '}
+          {goLive?.ready ? (
+            <span style={{ color: '#166534' }}>Ready</span>
+          ) : (
+            <span style={{ color: '#991b1b' }}>Not ready</span>
+          )}
+        </p>
         {!goLiveQuery.isLoading && goLive ? (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>
+          <p className="billing-section-meta">
             Blockers: {goLive.blockers.length} · Warnings: {goLive.warnings.length}
           </p>
         ) : null}
       </div>
 
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
-        <strong>Release gate preflight:</strong>{' '}
-        {releaseGate?.passed ? (
-          <span style={{ color: '#166534' }}>Pass</span>
-        ) : (
-          <span style={{ color: '#991b1b' }}>Fail</span>
-        )}
+      <div className="billing-section">
+        <p className="billing-section-title">
+          Release gate preflight:{' '}
+          {releaseGate?.passed ? (
+            <span style={{ color: '#166534' }}>Pass</span>
+          ) : (
+            <span style={{ color: '#991b1b' }}>Fail</span>
+          )}
+        </p>
         {!releaseGateQuery.isLoading && releaseGate ? (
-          <div style={{ marginTop: 8 }}>
-            <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+          <div>
+            <p className="billing-section-meta">
               Blockers: {releaseGate.blockers.length} · Warnings: {releaseGate.warnings.length}
             </p>
             {releaseGate.failing_checks.length > 0 ? (
-              <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+              <ul className="billing-fail-list">
                 {releaseGate.failing_checks.slice(0, 3).map((check) => (
-                  <li key={check.id} style={{ marginBottom: 6, color: 'var(--muted-foreground)' }}>
+                  <li key={check.id}>
                     <strong>{check.label}:</strong> {check.remediation}
                   </li>
                 ))}
@@ -162,12 +290,12 @@ export function BillingPlanFoundation() {
         ) : null}
       </div>
 
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
-        <strong>Operational signals (24h):</strong>
+      <div className="billing-section">
+        <p className="billing-section-title">Operational signals (24h)</p>
         {observabilityQuery.isLoading || !observability ? (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>Loading signals...</p>
+          <p className="billing-section-meta">Loading signals...</p>
         ) : (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>
+          <p className="billing-section-meta">
             Failed events: {observability.events.billing_webhook_failed} · Dead-letter events:{' '}
             {observability.events.billing_webhook_dead_letter} · Onboarding provisions:{' '}
             {observability.events.onboarding_workspace_provisioned} · Reconciliation runs:{' '}
@@ -176,18 +304,18 @@ export function BillingPlanFoundation() {
         )}
       </div>
 
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
-        <strong>Ops snapshot export:</strong>
+      <div className="billing-section">
+        <p className="billing-section-title">Ops snapshot export</p>
         {!opsSnapshotQuery.isLoading && opsSnapshot ? (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>
-            Generated {formatTimestamp(opsSnapshot.generated_at)} · Ready:{' '}
-            {opsSnapshot.ready ? 'yes' : 'no'} · Health score: {opsSnapshot.health_score}/100
+          <p className="billing-section-meta">
+            Generated {formatTimestamp(opsSnapshot.generated_at)} · Ready: {opsSnapshot.ready ? 'yes' : 'no'} ·
+            Health score: {opsSnapshot.health_score}/100
           </p>
         ) : (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>Preparing snapshot...</p>
+          <p className="billing-section-meta">Preparing snapshot...</p>
         )}
         {opsSnapshot && opsSnapshot.recommendations.length > 0 ? (
-          <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: 'var(--muted-foreground)' }}>
+          <ul className="billing-fail-list">
             {opsSnapshot.recommendations.slice(0, 3).map((item, index) => (
               <li key={`${item.severity}-${index}`}>
                 [{item.severity}] {item.action}
@@ -196,46 +324,23 @@ export function BillingPlanFoundation() {
           </ul>
         ) : null}
         {opsSnapshot ? (
-          <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8 }}>
             <p style={{ margin: 0, color: trendDirectionColor, fontWeight: 600 }}>
               Trend vs previous {opsSnapshot.trend.comparison_window_hours}h:{' '}
               {opsSnapshot.trend.direction === 'improving' ? '↘ Improving' : '↗ Degrading'}
             </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  border: '1px solid var(--border)',
-                  color: failureDelta <= 0 ? '#166534' : '#991b1b',
-                  background: failureDelta <= 0 ? '#ecfdf5' : '#fef2f2',
-                }}
-              >
+            <div className="billing-trend-chips">
+              <span className={`billing-trend-chip ${failureDelta <= 0 ? 'billing-trend-chip--down' : 'billing-trend-chip--up'}`}>
                 Failure rate {failureDelta <= 0 ? '↓' : '↑'} {(failureDelta * 100).toFixed(2)}%
               </span>
               <span
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  border: '1px solid var(--border)',
-                  color: deadLetterDelta <= 0 ? '#166534' : '#991b1b',
-                  background: deadLetterDelta <= 0 ? '#ecfdf5' : '#fef2f2',
-                }}
+                className={`billing-trend-chip ${deadLetterDelta <= 0 ? 'billing-trend-chip--down' : 'billing-trend-chip--up'}`}
               >
                 Dead-letter {deadLetterDelta <= 0 ? '↓' : '↑'} {deadLetterDelta >= 0 ? '+' : ''}
                 {deadLetterDelta}
               </span>
               <span
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  border: '1px solid var(--border)',
-                  color: stuckRetryDelta <= 0 ? '#166534' : '#991b1b',
-                  background: stuckRetryDelta <= 0 ? '#ecfdf5' : '#fef2f2',
-                }}
+                className={`billing-trend-chip ${stuckRetryDelta <= 0 ? 'billing-trend-chip--down' : 'billing-trend-chip--up'}`}
               >
                 Stuck retries {stuckRetryDelta <= 0 ? '↓' : '↑'} {stuckRetryDelta >= 0 ? '+' : ''}
                 {stuckRetryDelta}
@@ -243,7 +348,7 @@ export function BillingPlanFoundation() {
             </div>
           </div>
         ) : null}
-        <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div className="billing-actions-ops" style={{ marginTop: 4 }}>
           <Button
             variant="ghost"
             onClick={() => {
@@ -295,14 +400,14 @@ export function BillingPlanFoundation() {
         </div>
       </div>
 
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
-        <strong>Ops handoff digest:</strong>
+      <div className="billing-section">
+        <p className="billing-section-title">Ops handoff digest</p>
         {opsDigestQuery.isLoading || !opsDigest ? (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>Generating digest...</p>
+          <p className="billing-section-meta">Generating digest...</p>
         ) : (
           <>
-            <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>{opsDigest.digest_text}</p>
-            <div style={{ marginTop: 8 }}>
+            <p className="billing-section-meta">{opsDigest.digest_text}</p>
+            <div>
               <Button
                 variant="ghost"
                 onClick={async () => {
@@ -321,9 +426,9 @@ export function BillingPlanFoundation() {
         )}
       </div>
 
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
-        <strong>Platform ops summary (admin):</strong>
-        <div style={{ marginTop: 8 }}>
+      <div className="billing-section">
+        <p className="billing-section-title">Platform ops summary (admin)</p>
+        <div>
           <Button
             variant="ghost"
             onClick={() => setShowPlatformSummary(true)}
@@ -333,54 +438,45 @@ export function BillingPlanFoundation() {
           </Button>
         </div>
         {showPlatformSummary && platformSummaryQuery.error ? (
-          <p style={{ margin: '8px 0 0', color: '#991b1b' }}>
+          <p style={{ margin: 0, color: '#991b1b' }}>
             {platformSummaryQuery.error.message || 'Platform summary is only available to platform admins.'}
           </p>
         ) : null}
         {showPlatformSummary && platformSummaryQuery.data ? (
-          <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)' }}>
-            Tenants: {platformSummaryQuery.data.tenant_count} · Ready: {platformSummaryQuery.data.ready_count} ·
-            Not ready: {platformSummaryQuery.data.not_ready_count}
+          <p className="billing-section-meta">
+            Tenants: {platformSummaryQuery.data.tenant_count} · Ready: {platformSummaryQuery.data.ready_count} · Not
+            ready: {platformSummaryQuery.data.not_ready_count}
           </p>
         ) : null}
       </div>
 
       {summary?.stuck_retries ? (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            borderRadius: 10,
-            border: '1px solid #fecaca',
-            background: '#fef2f2',
-            color: '#991b1b',
-          }}
-        >
+        <div className="billing-alert">
           <strong>Retry backlog detected.</strong> {summary.stuck_retries} webhook
           {summary.stuck_retries === 1 ? '' : 's'} missed scheduled retry windows.
         </div>
       ) : null}
 
-      <div style={{ marginTop: 12, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-        <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+      <div className="billing-metric-strip">
+        <div className="billing-metric">
           <strong>Total (24h)</strong>
-          <p style={{ margin: '4px 0 0' }}>{summary?.total ?? 0}</p>
+          <p>{summary?.total ?? 0}</p>
         </div>
-        <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+        <div className="billing-metric">
           <strong>Processed</strong>
-          <p style={{ margin: '4px 0 0' }}>{summary?.processed ?? 0}</p>
+          <p>{summary?.processed ?? 0}</p>
         </div>
-        <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+        <div className="billing-metric">
           <strong>Failed</strong>
-          <p style={{ margin: '4px 0 0' }}>{(summary?.failed ?? 0) + (summary?.dead_letter ?? 0)}</p>
+          <p>{(summary?.failed ?? 0) + (summary?.dead_letter ?? 0)}</p>
         </div>
-        <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+        <div className="billing-metric">
           <strong>Failure rate</strong>
-          <p style={{ margin: '4px 0 0' }}>{((summary?.failure_rate ?? 0) * 100).toFixed(1)}%</p>
+          <p>{((summary?.failure_rate ?? 0) * 100).toFixed(1)}%</p>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
+      <div className="billing-actions">
         <Button
           variant="primary"
           disabled={checkout.isPending || plansQuery.isLoading || plans.length === 0}
@@ -408,66 +504,67 @@ export function BillingPlanFoundation() {
         <Link to="/pricing">
           <Button variant="ghost">View pricing</Button>
         </Link>
-        <Button
-          variant="neutral"
-          disabled={bulkReprocessWebhook.isPending}
-          onClick={() => {
-            if (!window.confirm('Reprocess up to 50 failed webhook events now?')) {
-              return;
-            }
-            bulkReprocessWebhook.mutate(
-              { scope: 'failed', limit: 50, confirm: true },
-              {
-                onSuccess: (result) =>
-                  snackbar.push(
-                    `Bulk retry completed: ${result.processed}/${result.selected} processed.`,
-                    result.failed ? 'warning' : 'success',
-                  ),
-                onError: (error) => snackbar.push(error.message, 'error'),
-              },
-            );
-          }}
-        >
-          Reprocess failed (bulk)
-        </Button>
-        <Button
-          variant="neutral"
-          disabled={bulkReprocessWebhook.isPending}
-          onClick={() => {
-            if (!window.confirm('Reprocess up to 50 dead-letter webhook events now?')) {
-              return;
-            }
-            bulkReprocessWebhook.mutate(
-              { scope: 'dead_letter', limit: 50, confirm: true },
-              {
-                onSuccess: (result) =>
-                  snackbar.push(
-                    `Dead-letter retry: ${result.processed}/${result.selected} processed.`,
-                    result.failed ? 'warning' : 'success',
-                  ),
-                onError: (error) => snackbar.push(error.message, 'error'),
-              },
-            );
-          }}
-        >
-          Reprocess dead-letter (bulk)
-        </Button>
+        <div className="billing-actions-ops">
+          <Button
+            variant="neutral"
+            disabled={bulkReprocessWebhook.isPending}
+            onClick={() => {
+              if (!window.confirm('Reprocess up to 50 failed webhook events now?')) {
+                return;
+              }
+              bulkReprocessWebhook.mutate(
+                { scope: 'failed', limit: 50, confirm: true },
+                {
+                  onSuccess: (result) =>
+                    snackbar.push(
+                      `Bulk retry completed: ${result.processed}/${result.selected} processed.`,
+                      result.failed ? 'warning' : 'success',
+                    ),
+                  onError: (error) => snackbar.push(error.message, 'error'),
+                },
+              );
+            }}
+          >
+            Reprocess failed (bulk)
+          </Button>
+          <Button
+            variant="neutral"
+            disabled={bulkReprocessWebhook.isPending}
+            onClick={() => {
+              if (!window.confirm('Reprocess up to 50 dead-letter webhook events now?')) {
+                return;
+              }
+              bulkReprocessWebhook.mutate(
+                { scope: 'dead_letter', limit: 50, confirm: true },
+                {
+                  onSuccess: (result) =>
+                    snackbar.push(
+                      `Dead-letter retry: ${result.processed}/${result.selected} processed.`,
+                      result.failed ? 'warning' : 'success',
+                    ),
+                  onError: (error) => snackbar.push(error.message, 'error'),
+                },
+              );
+            }}
+          >
+            Reprocess dead-letter (bulk)
+          </Button>
+        </div>
       </div>
 
       {!isConfigured ? (
-        <p style={{ marginTop: 16, color: 'var(--muted-foreground)', fontSize: 14 }}>
-          When your Razorpay account is ready, set <code>RAZORPAY_KEY_ID</code>,{' '}
-          <code>RAZORPAY_KEY_SECRET</code>, and <code>RAZORPAY_WEBHOOK_SECRET</code> in the backend environment.
+        <p className="billing-section-meta" style={{ fontSize: 14 }}>
+          When your Razorpay account is ready, set <code>RAZORPAY_KEY_ID</code>, <code>RAZORPAY_KEY_SECRET</code>, and{' '}
+          <code>RAZORPAY_WEBHOOK_SECRET</code> in the backend environment.
         </p>
       ) : null}
 
-      <div style={{ marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <h3 style={{ marginBottom: 8 }}>Recent webhook events</h3>
+      <div>
+        <div className="billing-webhook-toolbar">
+          <h3>Recent webhook events</h3>
           <select
             value={eventFilter}
             onChange={(event) => setEventFilter(event.target.value as 'all' | 'failed' | 'dead_letter')}
-            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)' }}
           >
             <option value="all">All</option>
             <option value="failed">Failed</option>
@@ -475,35 +572,36 @@ export function BillingPlanFoundation() {
           </select>
         </div>
         {webhookEventsQuery.isLoading ? (
-          <p style={{ color: 'var(--muted-foreground)' }}>Loading webhook events…</p>
+          <p className="billing-section-meta">Loading webhook events…</p>
         ) : (webhookEventsQuery.data ?? []).length === 0 ? (
-          <p style={{ color: 'var(--muted-foreground)' }}>No webhook events recorded yet.</p>
+          <p className="billing-section-meta">No webhook events recorded yet.</p>
         ) : (
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div className="billing-webhook-list">
             {(webhookEventsQuery.data ?? []).slice(0, 5).map((event) => (
-              <div
-                key={event.id}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: 10,
-                  padding: 10,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}
-              >
+              <div key={event.id} className="billing-webhook-row">
                 <div>
                   <strong>{event.event_type}</strong>
-                  <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)' }}>{event.external_event_id}</p>
+                  <p>{event.external_event_id}</p>
                   {typeof event.retry_count === 'number' ? (
-                    <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
+                    <p>
                       Retries: {event.retry_count}
                       {event.next_retry_at ? ` · next ${formatTimestamp(event.next_retry_at)}` : ''}
                     </p>
                   ) : null}
                 </div>
-                <div style={{ display: 'grid', justifyItems: 'end', gap: 6 }}>
-                  <span style={{ textTransform: 'capitalize' }}>{event.status}</span>
+                <div className="billing-webhook-side">
+                  <span
+                    className={`billing-chip ${
+                      event.status === 'failed' || event.status === 'dead_letter'
+                        ? 'billing-chip--warn'
+                        : event.status === 'processed'
+                          ? 'billing-chip--ok'
+                          : 'billing-chip--muted'
+                    }`}
+                    style={{ textTransform: 'capitalize' }}
+                  >
+                    {event.status}
+                  </span>
                   {event.status === 'failed' || event.status === 'dead_letter' ? (
                     <Button
                       variant="ghost"

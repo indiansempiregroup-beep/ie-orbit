@@ -1,3 +1,6 @@
+// Ensure EXPO_PUBLIC_* from the repo-root `.env` are available at bundle time.
+require('../scripts/load-root-env.cjs').loadRootEnv();
+
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 

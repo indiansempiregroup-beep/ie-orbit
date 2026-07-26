@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { BookingRow } from '../../components/BookingRow';
 import { OpsHeader } from '../../components/OpsHeader';
+import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
 import { SectionHeader } from '../../components/ui/SectionHeader';
@@ -13,6 +14,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
 import { useBIOverview, useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
+import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
 import { brand, colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -27,13 +29,15 @@ function greeting() {
 export function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const showStaff = canAccessStaffDirectory(user);
+  const showReports = canAccessReports(user);
   const today = formatDateKey(new Date());
   const { todayCount, reload: reloadSummary } = useDashboardSummary();
   const { bookings, loading, reload: reloadBookings } = useBookings(today);
   const { customers } = useCustomers();
   const { services } = useServices();
   const { staff } = useStaffMembers();
-  const { data: bi } = useBIOverview();
+  const { data: bi } = useBIOverview(showReports);
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
 
   const reload = async () => {
@@ -99,14 +103,15 @@ export function DashboardScreen() {
         </OpsHeader>
 
         <View style={styles.body}>
+          <SoftLockBanner />
           <View style={styles.statsRow}>
             <StatCard value={String(todayCount)} label="Today" />
             <StatCard value={String(customers.length)} label="Customers" />
-            <StatCard value={String(staff.length)} label="Staff" />
+            {showStaff ? <StatCard value={String(staff.length)} label="Staff" /> : null}
             <StatCard value={String(services.length)} label="Services" />
           </View>
 
-          {bi?.revenue?.estimated_revenue != null ? (
+          {showReports && bi?.revenue?.estimated_revenue != null ? (
             <Pressable style={styles.revenueCard} onPress={() => navigation.navigate('BI', { tab: 'overview' })}>
               <View style={styles.revenueIcon}>
                 <Feather name="trending-up" size={18} color={brand.primary} />
@@ -125,7 +130,9 @@ export function DashboardScreen() {
             <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
             <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
             <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
-            <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
+            {showStaff ? (
+              <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
+            ) : null}
           </View>
 
           <SectionHeader

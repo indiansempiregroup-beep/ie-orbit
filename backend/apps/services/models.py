@@ -114,6 +114,7 @@ class Service(TenantModel):
     max_age = models.PositiveSmallIntegerField(null=True, blank=True)
     tags = models.JSONField(default=list, blank=True, validators=[validate_tags])
     display_order = models.PositiveIntegerField(default=0, db_index=True)
+    loyalty_points_earn = models.PositiveIntegerField(default=0)
     addons_metadata = models.JSONField(default=dict, blank=True)
     packages_metadata = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)

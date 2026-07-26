@@ -19,6 +19,32 @@ export function useBillingPlansQuery() {
   });
 }
 
+export function useBusinessBillingSnapshotQuery(businessId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['business', businessId, 'billing'],
+    queryFn: async () => (await client.businesses.billingSnapshot(businessId!)).data,
+    enabled: Boolean(businessId),
+  });
+}
+
+export function useUpdateBusinessAddonsMutation(businessId: string | undefined) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { productCode: string; extra_staff: number; extra_offices: number }) =>
+      (
+        await client.businesses.updateProductAddons(businessId!, body.productCode, {
+          extra_staff: body.extra_staff,
+          extra_offices: body.extra_offices,
+        })
+      ).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['business', businessId, 'billing'] });
+    },
+  });
+}
+
 export function useBillingWebhookSummaryQuery(windowHours = 24) {
   const client = useApiClient();
   return useQuery({

@@ -78,8 +78,8 @@ export function TeamScreen() {
         </View>
         <Text style={styles.helper}>
           {role === 'manager'
-            ? 'Managers: full OPS-Mobile access including Settings and Team.'
-            : 'Staff: bookings, calendar, and customers only.'}
+            ? 'Managers: Settings, Team, staff directory, and reports.'
+            : 'Staff: bookings, calendar, and customers only — no teammate directory.'}
         </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button

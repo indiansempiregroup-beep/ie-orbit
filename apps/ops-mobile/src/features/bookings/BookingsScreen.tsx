@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import type { BookingStatus } from '@ie-platform/sdk';
 import { BookingRow } from '../../components/BookingRow';
 import { OpsHeader } from '../../components/OpsHeader';
@@ -12,10 +13,12 @@ import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { ScreenState } from '../../components/ScreenState';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
+import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -41,7 +44,10 @@ const SORT_OPTIONS = [
 type SortKey = (typeof SORT_OPTIONS)[number]['value'];
 
 export function BookingsScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
+  const showStaffFilter = canAccessStaffDirectory(user);
   const [range, setRange] = useState<'today' | 'all'>('today');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
@@ -65,7 +71,10 @@ export function BookingsScreen() {
     [staff],
   );
 
-  const activeFilterCount = Number(Boolean(statusFilter)) + Number(Boolean(staffFilter)) + Number(sortBy !== 'start_asc');
+  const activeFilterCount =
+    Number(Boolean(statusFilter)) +
+    Number(Boolean(showStaffFilter && staffFilter)) +
+    Number(sortBy !== 'start_asc');
 
   const sorted = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -74,7 +83,7 @@ export function BookingsScreen() {
     if (statusFilter) {
       list = list.filter((booking) => booking.status === statusFilter);
     }
-    if (staffFilter) {
+    if (showStaffFilter && staffFilter) {
       list = list.filter((booking) => booking.staff_id === staffFilter);
     }
     if (q) {
@@ -107,22 +116,22 @@ export function BookingsScreen() {
     });
 
     return list;
-  }, [bookings, search, statusFilter, staffFilter, sortBy, customerMap, serviceMap, staffMap]);
+  }, [bookings, search, statusFilter, staffFilter, showStaffFilter, sortBy, customerMap, serviceMap, staffMap]);
 
   return (
     <View style={styles.screen}>
       <OpsHeader
         compact
-        title="Bookings"
-        subtitle={range === 'today' ? "Today's schedule" : 'All bookings'}
+        title={t('bookings.title')}
+        subtitle={range === 'today' ? t('bookings.todaySchedule') : t('bookings.allBookings')}
       />
       <View style={styles.toolbar}>
-        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search bookings" />
-        <Button label="New" onPress={() => navigation.navigate('CreateBooking', {})} />
+        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder={t('bookings.search')} />
+        <Button label={t('common.new')} onPress={() => navigation.navigate('CreateBooking', {})} />
       </View>
       <View style={styles.filters}>
-        <Chip label="Today" active={range === 'today'} onPress={() => setRange('today')} />
-        <Chip label="All" active={range === 'all'} onPress={() => setRange('all')} />
+        <Chip label={t('common.today')} active={range === 'today'} onPress={() => setRange('today')} />
+        <Chip label={t('common.all')} active={range === 'all'} onPress={() => setRange('all')} />
         <Pressable style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]} onPress={() => setFiltersOpen(true)}>
           <Feather name="sliders" size={14} color={activeFilterCount > 0 ? colors.primaryForeground : colors.foreground} />
           <Text style={[styles.filterBtnText, activeFilterCount > 0 && styles.filterBtnTextActive]}>
@@ -142,12 +151,14 @@ export function BookingsScreen() {
             </View>
             <ScrollView contentContainerStyle={styles.sheetContent}>
               <SelectField
-                label="Status"
+                label={t('bookings.status')}
                 value={statusFilter}
                 options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
                 onChange={(value) => setStatusFilter(value as '' | BookingStatus)}
               />
-              <SelectField label="Staff" value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
+              {showStaffFilter ? (
+                <SelectField label={t('bookings.staff')} value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
+              ) : null}
               <SelectField
                 label="Sort by"
                 value={sortBy}
@@ -179,8 +190,8 @@ export function BookingsScreen() {
           loading={loading && !bookings.length}
           error={error}
           empty={!loading && sorted.length === 0}
-          emptyTitle="No bookings"
-          emptyMessage={range === 'today' ? 'Nothing scheduled for today yet.' : 'No bookings match these filters.'}
+          emptyTitle={t('bookings.emptyTitle')}
+          emptyMessage={range === 'today' ? t('bookings.emptyToday') : t('bookings.emptyFiltered')}
           actionLabel="New booking"
           onAction={() => navigation.navigate('CreateBooking', {})}
         />

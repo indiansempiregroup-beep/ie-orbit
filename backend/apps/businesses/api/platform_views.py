@@ -14,6 +14,7 @@ from apps.businesses.api.white_label_serializers import (
     WhiteLabelProfileUpsertSerializer,
 )
 from apps.businesses.models import Business, WhiteLabelProfile
+from apps.businesses.services.entitlements import EntitlementService
 from apps.businesses.services.white_label import ensure_white_label_profile, serialize_white_label_profile
 from apps.common.api.responses import success_response
 from apps.tenancy.models import Tenant
@@ -68,7 +69,7 @@ class PlatformTenantAdminListView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request) -> Response:
-        tenants = Tenant.active_objects.order_by("display_name")
+        tenants = Tenant.objects.order_by("display_name")
         rows = []
         for tenant in tenants:
             business_count = Business.active_objects.filter(tenant=tenant).count()
@@ -91,11 +92,21 @@ class PlatformTenantAdminDetailView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request, tenant_id: str) -> Response:
-        tenant = get_object_or_404(Tenant.active_objects, id=tenant_id)
-        businesses = Business.active_objects.filter(tenant=tenant).select_related("white_label_profile").order_by("display_name")
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        businesses = (
+            Business.objects.filter(tenant=tenant)
+            .select_related("white_label_profile")
+            .prefetch_related("product_subscriptions__plan")
+            .order_by("display_name")
+        )
+        entitlements = EntitlementService()
         business_rows = []
         for business in businesses:
             profile = getattr(business, "white_label_profile", None)
+            billing = entitlements.billing_snapshot(
+                business=business,
+                product_code=business.selected_product or "appointie",
+            )
             business_rows.append(
                 {
                     "id": str(business.id),
@@ -105,6 +116,7 @@ class PlatformTenantAdminDetailView(APIView):
                     "selected_product": business.selected_product,
                     "has_white_label_profile": profile is not None,
                     "flavor_key": profile.flavor_key if profile else None,
+                    "billing": billing,
                 }
             )
         return success_response(
@@ -120,11 +132,18 @@ class PlatformTenantAdminDetailView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def patch(self, request: Request, tenant_id: str) -> Response:
-        tenant = get_object_or_404(Tenant.active_objects, id=tenant_id)
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
         status_value = request.data.get("status")
         if status_value:
-            tenant.status = status_value
-            tenant.save(update_fields=["status", "updated_at"])
+            from apps.platform_admin.services import PlatformAdminService
+
+            PlatformAdminService().set_tenant_status(
+                tenant=tenant,
+                status=status_value,
+                actor=request.user,
+                reason=request.data.get("reason") or f"status set to {status_value}",
+            )
+            tenant.refresh_from_db()
         return success_response(
             {
                 "id": str(tenant.id),

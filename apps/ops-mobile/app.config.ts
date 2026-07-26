@@ -1,5 +1,9 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
+// Monorepo-wide env: ie-platform/.env (not apps/ops-mobile/.env)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../../scripts/load-root-env.cjs').loadRootEnv();
+
 const FACE_ID_USAGE =
   'Allow IE Platform to use Face ID for quick sign-in.';
 const CAMERA_USAGE =

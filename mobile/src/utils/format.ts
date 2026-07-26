@@ -1,3 +1,4 @@
+import { getActiveIntlLocale } from '@ie-platform/i18n';
 import { ApiClientError } from '@ie-platform/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 
@@ -52,13 +53,13 @@ export function formatRelativeTime(isoDate?: string | null) {
   const days = Math.floor(hours / 24);
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  return date.toLocaleDateString(undefined, withZone({}));
+  return date.toLocaleDateString(getActiveIntlLocale(), withZone({}));
 }
 
 export function formatTime(isoDate?: string | null) {
   if (!isoDate) return '—';
   return new Date(isoDate).toLocaleTimeString(
-    undefined,
+    getActiveIntlLocale(),
     withZone({
       hour: 'numeric',
       minute: '2-digit',
@@ -72,6 +73,17 @@ export function formatDateKey(date: Date = new Date()) {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/** Format a service price for display; returns em dash when amount is missing or zero. */
+export function formatMoney(amount?: number | null, currency?: string | null): string {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return '—';
+  const code = currency?.trim() || 'INR';
+  try {
+    return new Intl.NumberFormat(getActiveIntlLocale(), { style: 'currency', currency: code }).format(amount);
+  } catch {
+    return `${code} ${amount.toFixed(2)}`;
+  }
 }
 
 /** Keep only slots that start strictly after now (hides past times for today). */
@@ -88,7 +100,7 @@ export function filterFutureSlots<T extends { start_at: string }>(
 export function formatDateTime(isoDate?: string | null) {
   if (!isoDate) return '—';
   return new Date(isoDate).toLocaleString(
-    undefined,
+    getActiveIntlLocale(),
     withZone({
       weekday: 'short',
       month: 'short',
@@ -152,7 +164,39 @@ function isNetworkFailure(error: unknown): boolean {
   );
 }
 
-export function getApiErrorMessage(error: unknown, fallback: string): string {
+const TECHNICAL_AUTH_MESSAGES = new Set([
+  'authentication credentials were not provided or are invalid.',
+  'authentication credentials were not provided.',
+  'incorrect authentication credentials.',
+  'invalid credentials.',
+  'unable to log in with provided credentials.',
+]);
+
+export type AuthFormContext = 'login' | 'register' | 'forgot' | 'generic';
+
+const AUTH_FORM_FALLBACKS: Record<AuthFormContext, string> = {
+  login: "That email or password doesn't look right. Please try again.",
+  register: "We couldn't create your account with those details. Please review and try again.",
+  forgot: "We couldn't send a reset link right now. Please check the email and try again.",
+  generic: 'Something went wrong with those details. Please try again.',
+};
+
+function isTechnicalAuthMessage(message: string): boolean {
+  return TECHNICAL_AUTH_MESSAGES.has(message.trim().toLowerCase());
+}
+
+function humanizeAuthMessage(message: string, context: AuthFormContext = 'generic'): string {
+  if (isTechnicalAuthMessage(message)) {
+    return AUTH_FORM_FALLBACKS[context];
+  }
+  return message;
+}
+
+export function getApiErrorMessage(
+  error: unknown,
+  fallback: string,
+  context: AuthFormContext = 'generic',
+): string {
   if (isNetworkFailure(error)) {
     return `Cannot reach API at ${getApiBaseUrl()}. Check Wi‑Fi / hotspot and that Windows Firewall allows TCP 8000.`;
   }
@@ -162,8 +206,13 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     if (details && message === 'One or more request fields are invalid.') {
       return details;
     }
-    return details ? `${message} (${details})` : message;
+    if (error.payload.error.code === 'AUTHENTICATION_FAILED' || isTechnicalAuthMessage(message)) {
+      return humanizeAuthMessage(message, context);
+    }
+    return details ? `${humanizeAuthMessage(message, context)} (${details})` : humanizeAuthMessage(message, context);
   }
-  if (error instanceof Error && error.message) return error.message;
+  if (error instanceof Error && error.message) {
+    return humanizeAuthMessage(error.message, context);
+  }
   return fallback;
 }

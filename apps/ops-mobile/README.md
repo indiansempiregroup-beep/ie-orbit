@@ -19,15 +19,20 @@ Operations app for business owners, managers, and staff. Separate from the white
 | **Settings** | Business profile, edit business, products/billing, team |
 | **Team** | Invite staff/manager, list members, revoke pending invites |
 | **Profile** | View, edit, change password, sessions, verify email |
-| **Admin** | Platform tenant list (platform_admin only) |
 | **Workspace** | Multi-tenant / multi-business picker and switcher |
+
+Platform Admin (`platform_admin` / `super_admin`) is **web-only** — use the web Platform Admin console. Ops mobile is for business owners, managers, and staff.
 
 ## Run locally
 
+Env vars come from the **repo-root** `.env` (same file as Docker/backend/web). Copy from `.env.example` at the monorepo root if needed — do not create `apps/ops-mobile/.env`.
+
 ```bash
 cd apps/ops-mobile
-EXPO_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 corepack pnpm start -- --clear
+corepack pnpm start -- --clear
 ```
+
+Shell overrides still work when you need a device-reachable API host, e.g. `EXPO_PUBLIC_API_BASE_URL=http://172.x.x.x:8000/api/v1`.
 
 Sign in with a **business owner** or **invited staff** account.
 

@@ -98,11 +98,47 @@ export async function uploadStaffPhoto(args: Omit<UploadMediaArgs, 'folderType' 
   });
 }
 
-export async function uploadProfilePhoto(args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { userName: string }) {
-  return uploadMedia({
-    ...args,
-    folderType: 'business',
-    tags: ['profile', 'photo'],
-    displayName: `${args.userName} profile photo`,
+export async function uploadProfilePhoto({
+  token,
+  tenantId,
+  businessId,
+  asset,
+}: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { userName?: string }): Promise<MediaUploadResult> {
+  const formData = new FormData();
+  const fileName = asset.fileName ?? `upload-${Date.now()}.jpg`;
+  const mimeType = asset.mimeType ?? 'image/jpeg';
+
+  formData.append('file', {
+    uri: asset.uri,
+    name: fileName,
+    type: mimeType,
+  } as unknown as Blob);
+
+  const response = await fetch(`${getApiBaseUrl()}/auth/me/photo`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Tenant-ID': tenantId,
+      'X-Business-ID': businessId,
+    },
+    body: formData,
   });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'Profile photo upload failed.');
+  }
+
+  const payload = (await response.json()) as {
+    data?: { profile_photo?: string; media_id?: string };
+  };
+
+  if (!payload.data?.profile_photo) {
+    throw new Error('Photo uploaded but no URL was returned.');
+  }
+
+  return {
+    id: String(payload.data.media_id ?? ''),
+    public_url: payload.data.profile_photo,
+  };
 }

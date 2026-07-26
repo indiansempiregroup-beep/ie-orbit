@@ -4,11 +4,17 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useTheme } from '../../hooks/useTheme';
 import { useEmailVerification } from '../../hooks/useEmailVerification';
+import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { useProfileDetails } from './profileHooks';
+import { useProfileRoutes } from './profileRoutes';
 
 const notificationPreferenceLabels: Record<string, string> = {
   email_updates: 'Email reminders',
+  push: 'Push notifications',
   sms_reminders: 'SMS reminders',
+  in_app: 'In-app notifications',
+  email: 'Email reminders',
+  sms: 'SMS reminders',
 };
 
 function renderNotificationPreferenceValue(value: unknown) {
@@ -21,11 +27,19 @@ export function ProfilePage() {
   const profile = useProfileDetails();
   const user = profile.user;
   const navigate = useNavigate();
+  const routes = useProfileRoutes();
   const { isVerified, resendState, message, resendVerification } = useEmailVerification();
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
-      <div style={{ maxWidth: 960, margin: '0 auto', display: 'grid', gap: 24 }}>
+    <div
+      className="profile-page"
+      style={{
+        minHeight: routes.embeddedInAdmin ? undefined : '100%',
+        padding: routes.embeddedInAdmin ? 0 : 8,
+        color: theme.resolved === 'dark' ? '#f8fafc' : '#111827',
+      }}
+    >
+      <div style={{ maxWidth: 960, margin: '0 auto', display: 'grid', gap: 24, width: '100%' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', paddingBottom: 8 }}>
           <div>
             <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>User Profile</p>
@@ -33,7 +47,7 @@ export function ProfilePage() {
             <p style={{ margin: '8px 0 0', color: '#6b7280', maxWidth: 720 }}>Manage your account details, role access, and notification preferences.</p>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Button variant="primary" onClick={() => navigate('/profile/edit')}>
+            <Button variant="primary" onClick={() => navigate(routes.edit)}>
               Edit profile
             </Button>
             <Button variant="ghost" onClick={() => profile.logout()} disabled={profile.loading}>
@@ -44,10 +58,36 @@ export function ProfilePage() {
 
         <Card style={{ padding: 24 }}>
           <div style={{ display: 'grid', gap: 24 }}>
-            <div style={{ display: 'grid', gap: 12 }}>
-              <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Your profile</p>
-              <h2 style={{ margin: 0, fontSize: 24 }}>{user?.full_name ?? 'Profile details'}</h2>
-              <p style={{ margin: 0, color: '#6b7280' }}>Personal and account-related information is shown below. Edit your profile to update these details.</p>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              {resolveMediaAssetUrl(user?.profile_photo) ? (
+                <img
+                  src={resolveMediaAssetUrl(user?.profile_photo) ?? undefined}
+                  alt={user?.full_name ?? 'Profile'}
+                  style={{ width: 72, height: 72, borderRadius: 999, objectFit: 'cover', border: '1px solid #e5e7eb' }}
+                />
+              ) : (
+                <div
+                  aria-hidden
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 999,
+                    background: '#e0f2fe',
+                    color: '#0369a1',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontWeight: 700,
+                    fontSize: 28,
+                  }}
+                >
+                  {(user?.full_name ?? user?.email ?? 'U').charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div style={{ display: 'grid', gap: 8 }}>
+                <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Your profile</p>
+                <h2 style={{ margin: 0, fontSize: 24 }}>{user?.full_name ?? 'Profile details'}</h2>
+                <p style={{ margin: 0, color: '#6b7280' }}>Personal and account-related information is shown below. Edit your profile to update these details.</p>
+              </div>
             </div>
 
             <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
@@ -164,10 +204,10 @@ export function ProfilePage() {
             <h2 style={{ margin: 0, fontSize: 18 }}>Security</h2>
             <p style={{ marginTop: 12, color: '#6b7280' }}>Secure your account with password controls and active session review tools.</p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
-              <Button variant="ghost" onClick={() => navigate('/profile/security')}>
+              <Button variant="ghost" onClick={() => navigate(routes.security)}>
                 Manage security
               </Button>
-              <Button variant="ghost" onClick={() => navigate('/profile/sessions')}>
+              <Button variant="ghost" onClick={() => navigate(routes.sessions)}>
                 Review sessions
               </Button>
             </div>

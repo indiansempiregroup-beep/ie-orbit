@@ -6,6 +6,10 @@ from typing import Any
 from django.db.models import QuerySet
 
 from apps.bookings.models import Booking, BookingStatus
+from apps.common.utils.workspace_access import (
+    is_workspace_manager_or_above,
+    scope_bookings_queryset_for_user,
+)
 
 
 class BookingRepository:
@@ -15,8 +19,10 @@ class BookingRepository:
         queryset = Booking.objects.require_tenant(tenant).select_related("business", "review")
         if getattr(user, "is_superuser", False):
             return queryset
-        if self._has_booking_permission(user):
+        if is_workspace_manager_or_above(user=user, tenant=tenant):
             return queryset
+        if self._has_booking_permission(user):
+            return scope_bookings_queryset_for_user(queryset, tenant=tenant, user=user)
         return queryset.filter(tenant__owner=user)
 
     def get_for_request(self, *, booking_id: str, tenant: Any, user: Any) -> Booking:

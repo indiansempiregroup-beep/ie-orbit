@@ -48,6 +48,7 @@ class MobileBookingRequestSerializer(serializers.Serializer):
     tenant_slug = serializers.SlugField()
     business_code = serializers.SlugField()
     service_id = serializers.UUIDField()
+    branch_id = serializers.UUIDField(required=False, allow_null=True)
     staff_id = serializers.UUIDField(required=False, allow_null=True)
     start_at = serializers.DateTimeField()
     duration_minutes = serializers.IntegerField(min_value=1)
@@ -60,6 +61,14 @@ class MobileBookingRequestSerializer(serializers.Serializer):
         required=False,
         default="pay_at_venue",
     )
+    points_to_redeem = serializers.IntegerField(min_value=1, required=False)
+
+
+class MobileLoyaltyQuoteSerializer(serializers.Serializer):
+    tenant_slug = serializers.SlugField()
+    business_code = serializers.SlugField()
+    service_id = serializers.UUIDField()
+    points_to_redeem = serializers.IntegerField(min_value=1)
 
 
 class MobileBookingRescheduleSerializer(serializers.Serializer):

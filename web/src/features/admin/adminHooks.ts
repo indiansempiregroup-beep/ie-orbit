@@ -21,6 +21,91 @@ export function usePlatformTenantDetailQuery(tenantId: string | undefined) {
   });
 }
 
+export function usePlatformTenantUsersQuery(tenantId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'tenant', tenantId, 'users'],
+    queryFn: async () => (await client.platform.tenantUsers(tenantId!)).data.users,
+    enabled: Boolean(tenantId),
+    retry: false,
+  });
+}
+
+export function usePlatformTenantFlagsQuery(tenantId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'tenant', tenantId, 'flags'],
+    queryFn: async () => (await client.platform.tenantFlags(tenantId!)).data.flags,
+    enabled: Boolean(tenantId),
+    retry: false,
+  });
+}
+
+export function usePlatformTenantPaymentsQuery(tenantId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'tenant', tenantId, 'payments'],
+    queryFn: async () => (await client.platform.tenantPayments(tenantId!)).data.payments,
+    enabled: Boolean(tenantId),
+    retry: false,
+  });
+}
+
+export function usePlatformTenantCreditsQuery(tenantId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'tenant', tenantId, 'credits'],
+    queryFn: async () => (await client.platform.tenantCredits(tenantId!)).data.balance_paise,
+    enabled: Boolean(tenantId),
+    retry: false,
+  });
+}
+
+export function usePlatformAuditQuery(limit = 100) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'audit', limit],
+    queryFn: async () => (await client.platform.audit({ limit })).data.events,
+    retry: false,
+  });
+}
+
+export function usePlatformTicketsQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'tickets'],
+    queryFn: async () => (await client.platform.tickets()).data.tickets,
+    retry: false,
+  });
+}
+
+export function usePlatformAnnouncementsQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'announcements'],
+    queryFn: async () => (await client.platform.announcements()).data.announcements,
+    retry: false,
+  });
+}
+
+export function usePlatformHelpArticlesQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'help'],
+    queryFn: async () => (await client.platform.helpArticlesAdmin()).data.articles,
+    retry: false,
+  });
+}
+
+export function usePlatformCouponsQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'coupons'],
+    queryFn: async () => (await client.platform.coupons()).data.coupons,
+    retry: false,
+  });
+}
+
 export function usePlatformWhiteLabelProfilesQuery() {
   const client = useApiClient();
   return useQuery({
@@ -51,4 +136,11 @@ export function useUpdateWhiteLabelProfileMutation(businessId: string) {
       queryClient.invalidateQueries({ queryKey: ['platform', 'white-label', businessId] });
     },
   });
+}
+
+export function useInvalidatePlatform() {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['platform'] });
+  };
 }

@@ -6,10 +6,12 @@ import { Card } from '../../components/Card';
 import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useTheme } from '../../hooks/useTheme';
+import { useProfileRoutes } from './profileRoutes';
 
 export function ProfileSecurityPage() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const routes = useProfileRoutes();
   const snackbar = useSnackbar();
   const theme = useTheme();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -47,8 +49,15 @@ export function ProfileSecurityPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 24 }}>
+    <div
+      className="profile-page"
+      style={{
+        minHeight: routes.embeddedInAdmin ? undefined : '100%',
+        padding: routes.embeddedInAdmin ? 0 : 8,
+        color: theme.resolved === 'dark' ? '#f8fafc' : '#111827',
+      }}
+    >
+      <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 24, width: '100%' }}>
         <div style={{ display: 'grid', gap: 8 }}>
           <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Security</p>
           <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.2 }}>Change password</h1>

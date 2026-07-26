@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useBookingCreation, useBookingList, useCancelBooking, useConfirmBooking, type BookingCreateInput } from './bookingsHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
+import { useBranchesQuery } from '../settings/branchesHooks';
 import { buildNameMap } from '../../lib/managementEntities';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -22,14 +23,32 @@ export function BookingsPage() {
   const customersQuery = useCustomerList();
   const servicesQuery = useServiceList();
   const staffQuery = useStaffList();
+  const branchesQuery = useBranchesQuery();
   const dialog = useDialog();
   const [formState, setFormState] = useState<BookingCreateInput>({
     customer_id: '',
     service_id: '',
+    branch_id: null,
     start_at: new Date().toISOString(),
     duration_minutes: 30,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
+  const offices = branchesQuery.data ?? [];
+  const needsOfficePicker = offices.length > 1;
+
+  useEffect(() => {
+    if (!offices.length) return;
+    setFormState((current) => {
+      if (current.branch_id && offices.some((office) => office.id === current.branch_id)) {
+        return current;
+      }
+      const preferred =
+        offices.length === 1
+          ? offices[0]
+          : offices.find((office) => office.is_primary) ?? offices[0];
+      return { ...current, branch_id: preferred.id };
+    });
+  }, [offices]);
 
   const customerMap = useMemo(() => buildNameMap(customersQuery.data), [customersQuery.data]);
   const serviceMap = useMemo(() => buildNameMap(servicesQuery.data), [servicesQuery.data]);
@@ -55,6 +74,13 @@ export function BookingsPage() {
   }, [bookingsQuery.data]);
 
   const isSubmitting = createBooking.isPending || confirmBooking.isPending || cancelBooking.isPending;
+  const tableColumns = 'minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(160px, 1.4fr)';
+  const tableCellStyle: React.CSSProperties = {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  };
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
@@ -64,7 +90,7 @@ export function BookingsPage() {
           createBooking.isPending ? 'Creating booking…' : confirmBooking.isPending ? 'Confirming booking…' : 'Cancelling booking…'
         }
       />
-      <div style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gap: 24 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gap: 24 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Booking Workspace</p>
@@ -104,88 +130,130 @@ export function BookingsPage() {
             <Button variant="ghost" onClick={() => setSearchTerm('')}>Clear</Button>
           </div>
 
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 1fr 1.2fr 0.8fr 1.4fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
-              <span>Booking</span>
-              <span>Customer</span>
-              <span>Service</span>
-              <span>Staff</span>
-              <span>Start</span>
-              <span>Status</span>
-              <span>Actions</span>
-            </div>
-            <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
-              {bookingsQuery.isLoading ? (
-                <div style={{ padding: 28, textAlign: 'center' }}>Loading bookings…</div>
-              ) : bookingsQuery.error ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{bookingsQuery.error.message}</div>
-              ) : filteredBookings.length === 0 ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No bookings found.</div>
-              ) : (
-                filteredBookings.map((booking) => {
-                  const status = booking.status ?? 'unknown';
-                  const canConfirm = status === 'pending' || status === 'draft';
-                  const canCancel = status !== 'cancelled' && status !== 'completed';
-                  return (
-                    <div
-                      key={booking.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1.2fr 1.2fr 1fr 1.2fr 0.8fr 1.4fr',
-                        padding: '16px 20px',
-                        background: theme.resolved === 'dark' ? '#111827' : '#fff',
-                        alignItems: 'center',
-                        gap: 8,
-                      }}
-                    >
-                      <span>{booking.booking_number ?? booking.id}</span>
-                      <span>{customerMap.get(String(booking.customer_id)) ?? '—'}</span>
-                      <span>{serviceMap.get(String(booking.service_id)) ?? '—'}</span>
-                      <span>{booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : 'Unassigned'}</span>
-                      <span>{booking.start_at ? formatDateTime(booking.start_at) : '—'}</span>
-                      <span style={{ color: status === 'confirmed' ? '#10b981' : status === 'cancelled' ? '#dc2626' : '#6b7280' }}>{status}</span>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {canConfirm ? (
-                          <Button
-                            type="button"
-                            variant="primary"
-                            loading={confirmBooking.isPending}
-                            loadingLabel="Confirming…"
-                            disabled={isSubmitting && !confirmBooking.isPending}
-                            onClick={() =>
-                              booking.id &&
-                              confirmBooking.mutate(booking.id, {
-                                onSuccess: () => snackbar.push('Booking confirmed.', 'success'),
-                                onError: (error) => snackbar.push(error.message, 'error'),
-                              })
-                            }
-                          >
-                            Confirm
-                          </Button>
-                        ) : null}
-                        {canCancel ? (
-                          <Button
-                            type="button"
-                            variant="neutral"
-                            loading={cancelBooking.isPending}
-                            loadingLabel="Cancelling…"
-                            disabled={isSubmitting && !cancelBooking.isPending}
-                            onClick={() =>
-                              booking.id &&
-                              cancelBooking.mutate(booking.id, {
-                                onSuccess: () => snackbar.push('Booking cancelled.', 'success'),
-                                onError: (error) => snackbar.push(error.message, 'error'),
-                              })
-                            }
-                          >
-                            Cancel
-                          </Button>
-                        ) : null}
+          <Card style={{ padding: 0, overflowX: 'auto' }}>
+            <div style={{ minWidth: 960 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: tableColumns,
+                  gap: 12,
+                  padding: '16px 20px',
+                  background: theme.resolved === 'dark' ? '#111827' : '#f9fafb',
+                  fontWeight: 700,
+                  color: '#6b7280',
+                  alignItems: 'center',
+                }}
+              >
+                <span style={tableCellStyle}>Booking</span>
+                <span style={tableCellStyle}>Customer</span>
+                <span style={tableCellStyle}>Service</span>
+                <span style={tableCellStyle}>Staff</span>
+                <span style={tableCellStyle}>Start</span>
+                <span style={tableCellStyle}>Status</span>
+                <span style={tableCellStyle}>Actions</span>
+              </div>
+              <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
+                {bookingsQuery.isLoading ? (
+                  <div style={{ padding: 28, textAlign: 'center' }}>Loading bookings…</div>
+                ) : bookingsQuery.error ? (
+                  <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{bookingsQuery.error.message}</div>
+                ) : filteredBookings.length === 0 ? (
+                  <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No bookings found.</div>
+                ) : (
+                  filteredBookings.map((booking) => {
+                    const status = booking.status ?? 'unknown';
+                    const canConfirm = status === 'pending' || status === 'draft';
+                    const canCancel = status !== 'cancelled' && status !== 'completed';
+                    return (
+                      <div
+                        key={booking.id}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: tableColumns,
+                          gap: 12,
+                          padding: '16px 20px',
+                          background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <span style={tableCellStyle} title={booking.booking_number ?? booking.id}>
+                          {booking.booking_number ?? booking.id}
+                        </span>
+                        <span style={tableCellStyle} title={customerMap.get(String(booking.customer_id)) ?? '—'}>
+                          {customerMap.get(String(booking.customer_id)) ?? '—'}
+                        </span>
+                        <span style={tableCellStyle} title={serviceMap.get(String(booking.service_id)) ?? '—'}>
+                          {serviceMap.get(String(booking.service_id)) ?? '—'}
+                        </span>
+                        <span
+                          style={tableCellStyle}
+                          title={booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : 'Unassigned'}
+                        >
+                          {booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : 'Unassigned'}
+                        </span>
+                        <span style={tableCellStyle}>
+                          {booking.start_at ? formatDateTime(booking.start_at) : '—'}
+                        </span>
+                        <span
+                          style={{
+                            ...tableCellStyle,
+                            textTransform: 'capitalize',
+                            color:
+                              status === 'confirmed'
+                                ? '#10b981'
+                                : status === 'cancelled'
+                                  ? '#dc2626'
+                                  : status === 'completed'
+                                    ? '#2563eb'
+                                    : '#6b7280',
+                          }}
+                        >
+                          {status}
+                        </span>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'nowrap', justifyContent: 'flex-start' }}>
+                          {canConfirm ? (
+                            <Button
+                              type="button"
+                              variant="primary"
+                              loading={confirmBooking.isPending}
+                              loadingLabel="Confirming…"
+                              disabled={isSubmitting && !confirmBooking.isPending}
+                              onClick={() =>
+                                booking.id &&
+                                confirmBooking.mutate(booking.id, {
+                                  onSuccess: () => snackbar.push('Booking confirmed.', 'success'),
+                                  onError: (error) => snackbar.push(error.message, 'error'),
+                                })
+                              }
+                            >
+                              Confirm
+                            </Button>
+                          ) : null}
+                          {canCancel ? (
+                            <Button
+                              type="button"
+                              variant="neutral"
+                              loading={cancelBooking.isPending}
+                              loadingLabel="Cancelling…"
+                              disabled={isSubmitting && !cancelBooking.isPending}
+                              onClick={() =>
+                                booking.id &&
+                                cancelBooking.mutate(booking.id, {
+                                  onSuccess: () => snackbar.push('Booking cancelled.', 'success'),
+                                  onError: (error) => snackbar.push(error.message, 'error'),
+                                })
+                              }
+                            >
+                              Cancel
+                            </Button>
+                          ) : null}
+                          {!canConfirm && !canCancel ? <span style={{ color: '#9ca3af' }}>—</span> : null}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
           </Card>
         </section>
@@ -203,11 +271,21 @@ export function BookingsPage() {
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
+            if (needsOfficePicker && !formState.branch_id) {
+              setCreationError('Select an office for this booking.');
+              return;
+            }
             createBooking.mutate(formState, {
               onSuccess: () => {
                 snackbar.push('Booking created.', 'success');
                 dialog.hide();
-                setFormState({ customer_id: '', service_id: '', start_at: new Date().toISOString(), duration_minutes: 30 });
+                setFormState({
+                  customer_id: '',
+                  service_id: '',
+                  branch_id: offices.length === 1 ? offices[0].id : offices.find((o) => o.is_primary)?.id ?? null,
+                  start_at: new Date().toISOString(),
+                  duration_minutes: 30,
+                });
               },
               onError: (err) => {
                 setCreationError(err.message ?? 'Failed to create booking');
@@ -239,6 +317,25 @@ export function BookingsPage() {
               <option key={service.id} value={service.id}>{service.name ?? service.id}</option>
             ))}
           </select>
+
+          {needsOfficePicker ? (
+            <select
+              required
+              value={formState.branch_id ?? ''}
+              onChange={(event) => setFormState({ ...formState, branch_id: event.target.value || null })}
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            >
+              <option value="">Select office</option>
+              {offices.map((office) => (
+                <option key={office.id} value={office.id}>
+                  {office.display_name ??
+                    office.branch_name ??
+                    [office.address_line1, office.city].filter(Boolean).join(', ') ??
+                    office.id}
+                </option>
+              ))}
+            </select>
+          ) : null}
 
           <select
             value={formState.staff_id ?? ''}

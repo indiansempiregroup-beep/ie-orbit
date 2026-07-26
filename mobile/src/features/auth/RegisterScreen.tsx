@@ -6,8 +6,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
@@ -47,7 +49,13 @@ export function RegisterScreen({ navigation }: Props) {
         phone_number: phone.trim() || undefined,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to create account.');
+      setError(
+        getApiErrorMessage(
+          err,
+          "We couldn't create your account with those details. Please review and try again.",
+          'register',
+        ),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +113,7 @@ export function RegisterScreen({ navigation }: Props) {
             ))}
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <FormAlert message={error} /> : null}
 
           <Button label="Create account" size="lg" fullWidth loading={submitting} primaryColor={primary} onPress={onSubmit} />
         </View>
@@ -137,7 +145,6 @@ const styles = StyleSheet.create({
   },
   perkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   perkText: { ...typography.caption, color: colors.secondaryForeground, flex: 1 },
-  error: { ...typography.caption, color: colors.destructive },
   footer: { ...typography.body, color: colors.mutedForeground, textAlign: 'center' },
   link: { fontWeight: '600' },
 });

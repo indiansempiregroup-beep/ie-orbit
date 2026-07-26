@@ -19,10 +19,18 @@ def global_exception_handler(exc: Exception, context: dict[str, Any]) -> Any:
     if isinstance(exc, exceptions.ValidationError):
         return validation_response(response.data if response else _detail(exc))
 
-    if isinstance(exc, (exceptions.AuthenticationFailed, exceptions.NotAuthenticated)):
+    if isinstance(exc, exceptions.AuthenticationFailed):
         return error_response(
             code="AUTHENTICATION_FAILED",
-            message="Authentication credentials were not provided or are invalid.",
+            message=_auth_failed_message(exc),
+            details=_response_details(response),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    if isinstance(exc, exceptions.NotAuthenticated):
+        return error_response(
+            code="AUTHENTICATION_REQUIRED",
+            message="Please sign in to continue.",
             details=_response_details(response),
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
@@ -73,3 +81,18 @@ def _message_from_detail(detail: Any) -> str:
     if isinstance(detail, (dict, list)):
         return "One or more request fields are invalid."
     return str(detail)
+
+
+def _auth_failed_message(exc: exceptions.AuthenticationFailed) -> str:
+    message = _message_from_detail(_detail(exc)).strip()
+    technical_defaults = {
+        "Incorrect authentication credentials.",
+        "Authentication credentials were not provided.",
+        "Authentication credentials were not provided or are invalid.",
+        "Invalid credentials.",
+        "Invalid token.",
+        "Token is invalid or expired",
+    }
+    if not message or message in technical_defaults:
+        return "That email or password doesn't look right. Please try again."
+    return message

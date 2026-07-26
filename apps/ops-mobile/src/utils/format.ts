@@ -1,3 +1,5 @@
+import { getActiveIntlLocale } from '@ie-platform/i18n';
+
 type DateTimeZoneConfig = {
   userTimezone?: string | null;
   businessTimezone?: string | null;
@@ -56,7 +58,7 @@ export function formatDateTime(isoDate?: string | null) {
   if (!isoDate) return '—';
   const date = new Date(isoDate);
   return date.toLocaleString(
-    undefined,
+    getActiveIntlLocale(),
     withZone({
       weekday: 'short',
       month: 'short',
@@ -68,10 +70,24 @@ export function formatDateTime(isoDate?: string | null) {
   );
 }
 
+export function formatDate(isoDate?: string | null) {
+  if (!isoDate) return '—';
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(
+    getActiveIntlLocale(),
+    withZone({
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
+  );
+}
+
 export function formatTime(isoDate?: string | null) {
   if (!isoDate) return '—';
   return new Date(isoDate).toLocaleTimeString(
-    undefined,
+    getActiveIntlLocale(),
     withZone({
       hour: 'numeric',
       minute: '2-digit',
@@ -119,18 +135,21 @@ export function mapBookingStatus(status: string): 'confirmed' | 'pending' | 'can
 import { ApiClientError } from '@ie-platform/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 
-function formatErrorDetails(details: unknown): string {
+function formatErrorDetails(details: unknown, prefix = ''): string {
   if (!details) return '';
-  if (typeof details === 'string') return details;
+  if (typeof details === 'string') {
+    // API messages are already readable sentences — avoid "staff: Reduce…" noise in toasts.
+    if (!prefix || details.length > 40 || /[.!?]$/.test(details.trim())) {
+      return details;
+    }
+    return `${prefix}: ${details}`;
+  }
   if (Array.isArray(details)) {
-    return details.map((item) => formatErrorDetails(item)).filter(Boolean).join(' ');
+    return details.map((item) => formatErrorDetails(item, prefix)).filter(Boolean).join(' ');
   }
   if (typeof details === 'object') {
     return Object.entries(details as Record<string, unknown>)
-      .map(([key, value]) => {
-        const text = formatErrorDetails(value);
-        return text ? `${key}: ${text}` : '';
-      })
+      .map(([key, value]) => formatErrorDetails(value, key))
       .filter(Boolean)
       .join(' ');
   }
@@ -148,18 +167,55 @@ function isNetworkFailure(error: unknown): boolean {
   );
 }
 
-export function getApiErrorMessage(error: unknown, fallback: string): string {
+const TECHNICAL_AUTH_MESSAGES = new Set([
+  'authentication credentials were not provided or are invalid.',
+  'authentication credentials were not provided.',
+  'incorrect authentication credentials.',
+  'invalid credentials.',
+  'unable to log in with provided credentials.',
+]);
+
+export type AuthFormContext = 'login' | 'register' | 'forgot' | 'generic';
+
+const AUTH_FORM_FALLBACKS: Record<AuthFormContext, string> = {
+  login: "That email or password doesn't look right. Please try again.",
+  register: "We couldn't create your account with those details. Please review and try again.",
+  forgot: "We couldn't send a reset link right now. Please check the email and try again.",
+  generic: 'Something went wrong with those details. Please try again.',
+};
+
+function isTechnicalAuthMessage(message: string): boolean {
+  return TECHNICAL_AUTH_MESSAGES.has(message.trim().toLowerCase());
+}
+
+function humanizeAuthMessage(message: string, context: AuthFormContext = 'generic'): string {
+  if (isTechnicalAuthMessage(message)) {
+    return AUTH_FORM_FALLBACKS[context];
+  }
+  return message;
+}
+
+export function getApiErrorMessage(
+  error: unknown,
+  fallback: string,
+  context: AuthFormContext = 'generic',
+): string {
   if (isNetworkFailure(error)) {
     return `Cannot reach API at ${getApiBaseUrl()}. Check Wi‑Fi / hotspot and that Windows Firewall allows TCP 8000.`;
   }
   if (error instanceof ApiClientError) {
     const details = formatErrorDetails(error.payload.error.details);
     const message = error.payload.error.message || error.message || fallback;
-    if (details && message === 'One or more request fields are invalid.') {
+    if (details) {
       return details;
     }
-    return details ? `${message} (${details})` : message;
+    if (error.payload.error.code === 'AUTHENTICATION_FAILED' || isTechnicalAuthMessage(message)) {
+      return humanizeAuthMessage(message, context);
+    }
+    return humanizeAuthMessage(message, context);
   }
-  if (error instanceof Error && error.message) return error.message;
+  if (error instanceof Error && error.message) {
+    return humanizeAuthMessage(error.message, context);
+  }
   return fallback;
 }

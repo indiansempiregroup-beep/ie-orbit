@@ -10,6 +10,7 @@ import type {
   BookingCreateInput,
   Branch,
   BranchCreateInput,
+  BusinessBillingSnapshot,
   Customer,
   CustomerCreateInput,
   CustomerUpdateInput,
@@ -116,14 +117,14 @@ export function useGlobalSearch(term: string) {
   return { results, loading };
 }
 
-export function useBIOverview() {
+export function useBIOverview(enabled = true) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
   const [data, setData] = useState<BIReportsBundle | null>(null);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
-    if (!client || !ready) return;
+    if (!enabled || !client || !ready) return;
     setLoading(true);
     try {
       const end = new Date().toISOString().slice(0, 10);
@@ -133,7 +134,7 @@ export function useBIOverview() {
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, enabled, ready]);
 
   useEffect(() => {
     void reload();
@@ -290,6 +291,44 @@ export function useBillingStatus() {
   }, [reload]);
 
   return { status, loading, reload };
+}
+
+export function useBusinessBillingSnapshot() {
+  const client = useOpsClient();
+  const { businessId, ready } = useWorkspace();
+  const [billing, setBilling] = useState<BusinessBillingSnapshot | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const reload = useCallback(async () => {
+    if (!client || !ready || !businessId) return;
+    setLoading(true);
+    try {
+      const response = await client.businesses.billingSnapshot(businessId);
+      setBilling(response.data);
+    } catch {
+      setBilling(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, ready, businessId]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { billing, loading, reload };
+}
+
+export function useUpdateBusinessAddons() {
+  const client = useOpsClient();
+  const { businessId } = useWorkspace();
+
+  return {
+    update: async (productCode: string, body: { extra_staff: number; extra_offices: number }) => {
+      if (!client || !businessId) throw new Error('Not ready');
+      return (await client.businesses.updateProductAddons(businessId, productCode, body)).data;
+    },
+  };
 }
 
 export function useTeamMembers() {
