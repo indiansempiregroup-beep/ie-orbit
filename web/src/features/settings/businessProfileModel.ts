@@ -30,6 +30,8 @@ export type BusinessProfileFormState = {
   secondary_color: string;
   theme_mode: string;
   logo: string;
+  upi_vpa: string;
+  payment_qr_url: string;
 };
 
 type BusinessRecord = Business & {
@@ -92,6 +94,8 @@ export function createEmptyBusinessProfileFormState(): BusinessProfileFormState 
     secondary_color: '#111827',
     theme_mode: 'system',
     logo: '',
+    upi_vpa: '',
+    payment_qr_url: '',
   };
 }
 
@@ -143,6 +147,8 @@ export function businessToFormState(
     secondary_color: tenantBranding?.secondary_color ?? asString(themeOverrides.secondary_color, '#111827'),
     theme_mode: tenantBranding?.theme_mode ?? asString(themeOverrides.theme_mode, 'system'),
     logo: business.logo ?? '',
+    upi_vpa: business.upi_vpa ?? '',
+    payment_qr_url: business.payment_qr_url ?? '',
   };
 }
 
@@ -194,6 +200,8 @@ export function formStateToBusinessUpdate(
     timezone: formState.timezone,
     language: formState.language,
     selected_product: formState.selected_product,
+    upi_vpa: formState.upi_vpa,
+    payment_qr_url: formState.payment_qr_url,
     settings,
   };
 }

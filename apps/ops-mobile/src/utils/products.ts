@@ -7,6 +7,7 @@ export type ProductDefinition = {
 export type ProductSubscriptionLike = {
   product_code: string;
   status?: string | null;
+  pets_pack_enabled?: boolean | null;
 };
 
 export const PRODUCT_CATALOG: ProductDefinition[] = [
@@ -14,6 +15,8 @@ export const PRODUCT_CATALOG: ProductDefinition[] = [
   { id: 'shopie', name: 'ShopIE', description: 'Catalog, POS, inventory, and billing.' },
   { id: 'crmie', name: 'CRMIE', description: 'Customer relationship management.' },
 ];
+
+export const PETS_PACK_PRICE_INR = 500;
 
 const ACTIVE = new Set(['trialing', 'active']);
 
@@ -40,4 +43,14 @@ export function getSubscribedProductIds(subscriptions?: ProductSubscriptionLike[
 
 export function hasShopie(subscriptions?: ProductSubscriptionLike[] | null) {
   return getSubscribedProductIds(subscriptions).includes('shopie');
+}
+
+export function hasPetsPack(subscriptions?: ProductSubscriptionLike[] | null) {
+  if (!subscriptions?.length) return false;
+  return subscriptions.some(
+    (subscription) =>
+      subscription.product_code === 'shopie' &&
+      ACTIVE.has(subscription.status ?? '') &&
+      Boolean(subscription.pets_pack_enabled),
+  );
 }

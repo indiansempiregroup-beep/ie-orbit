@@ -386,6 +386,27 @@ class ShopOrderSettlePaymentView(APIView):
         return success_response(ShopOrderSerializer(order).data)
 
 
+class ShopOrderConfirmPaymentView(APIView):
+    permission_classes = [ShopAccessPermission]
+    orders = OrderService()
+
+    def post(self, request: Request, order_id) -> Response:
+        order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        action = str(request.data.get("action") or "").strip().lower()
+        note = str(request.data.get("note") or "")
+        try:
+            order = self.orders.confirm_or_reject_payment(
+                tenant=request.current_tenant,
+                business=order.business,
+                order=order,
+                action=action,
+                note=note,
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopOrderSerializer(order).data)
+
+
 class ShopInvoiceFromOrderView(APIView):
     permission_classes = [ShopAccessPermission]
     orders = OrderService()

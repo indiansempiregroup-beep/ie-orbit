@@ -300,12 +300,21 @@ class ReturnService:
                 order.metadata = metadata
                 order.save(update_fields=["metadata", "updated_at", "version"])
 
-    def list_returns(self, *, tenant: Tenant, business: Business, order_id: UUID | None = None):
+    def list_returns(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order_id: UUID | None = None,
+        customer_id: UUID | None = None,
+    ):
         qs = ShopReturn.objects.filter(tenant=tenant, business=business).select_related(
             "order", "customer", "credit_invoice"
         )
         if order_id:
             qs = qs.filter(order_id=order_id)
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
         return qs.order_by("-created_at")
 
     def _next_number(self, *, business: Business) -> str:

@@ -7,6 +7,7 @@ export type ProductDefinition = {
 export type ProductSubscriptionLike = {
   product_code: string;
   status?: string | null;
+  pets_pack_enabled?: boolean | null;
 };
 
 export const PRODUCT_CATALOG: ProductDefinition[] = [
@@ -27,6 +28,7 @@ export const PRODUCT_CATALOG: ProductDefinition[] = [
   },
 ];
 
+export const PETS_PACK_PRICE_INR = 500;
 export function getProductById(productId: string | null | undefined): ProductDefinition | undefined {
   if (!productId) return undefined;
   return PRODUCT_CATALOG.find((product) => product.id === productId);
@@ -69,6 +71,16 @@ export function hasSubscribedProduct(
   productId: string,
 ): boolean {
   return getSubscribedProductIds(subscriptions).includes(productId);
+}
+
+export function hasPetsPack(subscriptions?: ProductSubscriptionLike[] | null): boolean {
+  if (!subscriptions?.length) return false;
+  return subscriptions.some(
+    (subscription) =>
+      subscription.product_code === 'shopie' &&
+      ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status ?? '') &&
+      Boolean(subscription.pets_pack_enabled),
+  );
 }
 
 export function resolveEnabledProducts(

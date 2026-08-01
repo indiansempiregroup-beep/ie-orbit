@@ -17,6 +17,10 @@ function openRelatedItem(
   navigation: NativeStackNavigationProp<RootStackParamList>,
   notification: Notification,
 ) {
+  if (notification.pet_id) {
+    navigation.navigate('ShopPetDetail', { petId: notification.pet_id, openNotify: true });
+    return;
+  }
   if (notification.booking_id) {
     navigation.navigate('BookingDetail', { bookingId: notification.booking_id });
   }

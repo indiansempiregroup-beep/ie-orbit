@@ -7,6 +7,7 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
 import { ScreenState } from '../../components/ScreenState';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import {
   useBIForecast,
@@ -16,6 +17,7 @@ import {
   useBIRevenue,
   useBusinessBillingSnapshot,
 } from '../../hooks/useOpsExtended';
+import { getSubscribedProductIds } from '../../utils/products';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -28,6 +30,8 @@ const TAB_LABELS: Record<Tab, string> = {
   forecast: 'Forecast',
   reports: 'Reports',
 };
+
+const APPOINTIE_ONLY_TABS: Tab[] = ['growth', 'revenue', 'forecast', 'reports'];
 
 function pct(value?: number | null) {
   if (value == null) return '—';
@@ -48,10 +52,20 @@ function money(amount?: number | null, currency?: string | null) {
 export function BIScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BI'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { activeBusiness } = useWorkspace();
   const { billing } = useBusinessBillingSnapshot();
+  const subscribedIds = useMemo(
+    () => getSubscribedProductIds(activeBusiness?.product_subscriptions),
+    [activeBusiness?.product_subscriptions],
+  );
+  const hasAppointie = subscribedIds.includes('appointie') || subscribedIds.length === 0;
   const allowed = useMemo(
     () => new Set(billing?.bi_features?.length ? billing.bi_features : ['overview']),
     [billing?.bi_features],
+  );
+  const visibleTabs = useMemo(
+    () => (Object.keys(TAB_LABELS) as Tab[]).filter((key) => !APPOINTIE_ONLY_TABS.includes(key) || hasAppointie),
+    [hasAppointie],
   );
   const [tab, setTab] = useState<Tab>(route.params?.tab ?? 'overview');
   const overview = useBIOverview();
@@ -61,8 +75,8 @@ export function BIScreen() {
   const reports = useBIReports();
 
   useEffect(() => {
-    if (!allowed.has(tab)) setTab('overview');
-  }, [allowed, tab]);
+    if (!visibleTabs.includes(tab) || !allowed.has(tab)) setTab('overview');
+  }, [allowed, tab, visibleTabs]);
 
   const reload = async () => {
     await Promise.all([
@@ -81,7 +95,7 @@ export function BIScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.tabs}>
-        {(Object.keys(TAB_LABELS) as Tab[]).map((key) => {
+        {visibleTabs.map((key) => {
           const locked = !allowed.has(key);
           return (
             <Chip
@@ -182,73 +196,136 @@ function MiniBar({ label, value, max }: { label: string; value: number; max: num
 
 function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>['data']; loading: boolean }) {
   if (loading && !data) return <ScreenState loading />;
-  const summary = data?.summary;
+
+  const appointieBundle =
+    data?.appointie ??
+    (data?.summary && data?.revenue && data?.trends
+      ? {
+          summary: data.summary,
+          revenue: data.revenue,
+          trends: data.trends,
+          growth: data.growth,
+          operations: data.operations,
+          insights: data.insights,
+        }
+      : null);
+  const shopie = data?.shopie;
+  const pets = data?.pets;
+  const summary = appointieBundle?.summary;
   const comparison = summary?.comparison;
-  const operations = data?.operations;
+  const operations = appointieBundle?.operations;
   const weekdayMax = Math.max(...(operations?.by_weekday ?? []).map((row) => row.total), 1);
 
   return (
     <View style={styles.stack}>
-      <SectionTitle title="Last 30 days" subtitle="Snapshot of bookings, revenue, and demand." />
-      <View style={styles.grid}>
-        <Metric
-          label="Bookings"
-          value={summary?.bookings ?? 0}
-          icon="calendar"
-          hint={changeLabel(comparison?.bookings_change_pct)}
-        />
-        <Metric
-          label="Est. revenue"
-          value={money(data?.revenue?.estimated_revenue, data?.revenue?.currency)}
-          icon="dollar-sign"
-          hint={changeLabel(comparison?.revenue_change_pct)}
-        />
-        <Metric label="Completed" value={summary?.completed ?? 0} icon="check-circle" hint={pct(summary?.completion_rate)} />
-        <Metric label="No-shows" value={summary?.no_shows ?? 0} icon="user-x" hint={pct(summary?.no_show_rate)} />
-        <Metric label="Cancelled" value={summary?.cancelled ?? 0} icon="x-circle" hint={pct(summary?.cancellation_rate)} />
-        <Metric
-          label="Avg / day"
-          value={summary?.avg_bookings_per_day ?? 0}
-          icon="activity"
-          hint={operations?.busiest_day ? `Peak: ${operations.busiest_day}` : null}
-        />
-      </View>
+      <SectionTitle
+        title="Last 30 days"
+        subtitle={
+          data?.products?.length
+            ? `Snapshot for ${data.products.join(' · ')}.`
+            : 'Snapshot of bookings, revenue, and demand.'
+        }
+      />
 
-      {(data?.insights ?? []).length ? (
+      {appointieBundle ? (
         <View style={styles.stack}>
-          <SectionTitle title="What stands out" />
-          {(data?.insights ?? []).map((insight) => (
+          <SectionTitle title="AppointIE" subtitle="Bookings and estimated revenue." />
+          <View style={styles.grid}>
+            <Metric
+              label="Bookings"
+              value={summary?.bookings ?? 0}
+              icon="calendar"
+              hint={changeLabel(comparison?.bookings_change_pct)}
+            />
+            <Metric
+              label="Est. revenue"
+              value={money(appointieBundle.revenue?.estimated_revenue, appointieBundle.revenue?.currency)}
+              icon="dollar-sign"
+              hint={changeLabel(comparison?.revenue_change_pct)}
+            />
+            <Metric label="Completed" value={summary?.completed ?? 0} icon="check-circle" hint={pct(summary?.completion_rate)} />
+            <Metric label="No-shows" value={summary?.no_shows ?? 0} icon="user-x" hint={pct(summary?.no_show_rate)} />
+            <Metric label="Cancelled" value={summary?.cancelled ?? 0} icon="x-circle" hint={pct(summary?.cancellation_rate)} />
+            <Metric
+              label="Avg / day"
+              value={summary?.avg_bookings_per_day ?? 0}
+              icon="activity"
+              hint={operations?.busiest_day ? `Peak: ${operations.busiest_day}` : null}
+            />
+          </View>
+
+          {(appointieBundle.insights ?? []).length ? (
+            <View style={styles.stack}>
+              <SectionTitle title="What stands out" />
+              {(appointieBundle.insights ?? []).map((insight) => (
+                <InsightCard key={`${insight.type}-${insight.title}`} title={insight.title} detail={insight.detail} />
+              ))}
+            </View>
+          ) : null}
+
+          {operations?.by_weekday?.length ? (
+            <Card>
+              <SectionTitle title="Demand by weekday" subtitle="Plan staffing around busy days." />
+              <View style={styles.barList}>
+                {operations.by_weekday.map((row) => (
+                  <MiniBar key={row.weekday} label={row.weekday_name.slice(0, 3)} value={row.total} max={weekdayMax} />
+                ))}
+              </View>
+            </Card>
+          ) : null}
+
+          {(operations?.by_staff ?? []).length ? (
+            <View style={styles.stack}>
+              <SectionTitle title="Top staff" subtitle="By bookings this period." />
+              {(operations?.by_staff ?? []).slice(0, 5).map((row) => (
+                <Card key={row.staff_id} style={styles.serviceRow}>
+                  <View style={styles.flex}>
+                    <Text style={styles.serviceName}>{row.staff_name}</Text>
+                    <Text style={styles.rowMeta}>
+                      {row.completed} completed · {row.no_shows} no-show
+                    </Text>
+                  </View>
+                  <Text style={styles.serviceValue}>{row.bookings}</Text>
+                </Card>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {shopie ? (
+        <View style={styles.stack}>
+          <SectionTitle title="ShopIE" subtitle="Orders, GMV, returns, and delivery." />
+          <View style={styles.grid}>
+            <Metric label="Orders" value={shopie.orders} icon="shopping-cart" />
+            <Metric label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" />
+            <Metric label="Avg order" value={money(shopie.avg_order_value, shopie.currency)} icon="tag" />
+            <Metric label="Returns" value={shopie.returns} icon="rotate-ccw" hint={pct(shopie.return_rate)} />
+            <Metric label="Pending returns" value={shopie.pending_returns} icon="clock" />
+            <Metric label="Delivery fees" value={money(shopie.delivery_fee_total, shopie.currency)} icon="truck" />
+          </View>
+          {(shopie.insights ?? []).map((insight) => (
             <InsightCard key={`${insight.type}-${insight.title}`} title={insight.title} detail={insight.detail} />
           ))}
         </View>
       ) : null}
 
-      {operations?.by_weekday?.length ? (
-        <Card>
-          <SectionTitle title="Demand by weekday" subtitle="Plan staffing around busy days." />
-          <View style={styles.barList}>
-            {operations.by_weekday.map((row) => (
-              <MiniBar key={row.weekday} label={row.weekday_name.slice(0, 3)} value={row.total} max={weekdayMax} />
-            ))}
+      {pets ? (
+        <View style={styles.stack}>
+          <SectionTitle title="Pets pack" subtitle="Roster and birthday pipeline." />
+          <View style={styles.grid}>
+            <Metric label="Pets" value={pets.total} icon="heart" />
+            <Metric label="Birthdays 7d" value={pets.birthdays_next_7d} icon="gift" />
+            <Metric label="Birthdays 30d" value={pets.birthdays_next_30d} icon="calendar" />
+            <Metric label="With photo" value={pets.with_photo} icon="camera" />
           </View>
-        </Card>
+        </View>
       ) : null}
 
-      {(operations?.by_staff ?? []).length ? (
-        <View style={styles.stack}>
-          <SectionTitle title="Top staff" subtitle="By bookings this period." />
-          {(operations?.by_staff ?? []).slice(0, 5).map((row) => (
-            <Card key={row.staff_id} style={styles.serviceRow}>
-              <View style={styles.flex}>
-                <Text style={styles.serviceName}>{row.staff_name}</Text>
-                <Text style={styles.rowMeta}>
-                  {row.completed} completed · {row.no_shows} no-show
-                </Text>
-              </View>
-              <Text style={styles.serviceValue}>{row.bookings}</Text>
-            </Card>
-          ))}
-        </View>
+      {!appointieBundle && !shopie && !pets ? (
+        <Card>
+          <Text style={styles.empty}>No analytics sections available for your subscribed products yet.</Text>
+        </Card>
       ) : null}
     </View>
   );

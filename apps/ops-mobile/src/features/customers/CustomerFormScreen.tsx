@@ -43,6 +43,34 @@ function returnToPos(
   });
 }
 
+function returnToPets(
+  navigation: NativeStackNavigationProp<RootStackParamList>,
+  customerId: string,
+) {
+  navigation.dispatch((state) => {
+    const petsIndex = state.routes.findIndex((route) => route.name === 'ShopPets');
+    const baseRoutes =
+      petsIndex >= 0
+        ? state.routes.slice(0, petsIndex + 1)
+        : [
+            ...state.routes.filter((route) => route.name === 'Main'),
+            { name: 'ShopPets' as const, key: `ShopPets-${Date.now()}`, params: {} },
+          ];
+    return CommonActions.reset({
+      ...state,
+      routes: [
+        ...baseRoutes,
+        {
+          name: 'ShopPetForm',
+          key: `ShopPetForm-${Date.now()}`,
+          params: { selectCustomerId: customerId },
+        },
+      ],
+      index: baseRoutes.length,
+    });
+  });
+}
+
 export function CustomerFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CustomerForm'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -112,6 +140,8 @@ export function CustomerFormScreen() {
                 await mutations.update(route.params.customerId, payload);
                 if (route.params?.returnTo === 'pos') {
                   returnToPos(navigation, route.params.customerId);
+                } else if (route.params?.returnTo === 'pets') {
+                  returnToPets(navigation, route.params.customerId);
                 } else {
                   navigation.replace('CustomerDetail', { customerId: route.params.customerId });
                 }
@@ -125,6 +155,8 @@ export function CustomerFormScreen() {
                 });
                 if (route.params?.returnTo === 'pos') {
                   returnToPos(navigation, created.id);
+                } else if (route.params?.returnTo === 'pets') {
+                  returnToPets(navigation, created.id);
                 } else {
                   navigation.replace('CustomerDetail', { customerId: created.id });
                 }

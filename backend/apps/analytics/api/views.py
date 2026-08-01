@@ -95,8 +95,8 @@ class BIViewSet(viewsets.ViewSet):
         business = self._require_bi_feature(request, BI_FEATURE_OVERVIEW)
         if parsed_start is None or parsed_end is None:
             parsed_end = timezone.now().date()
-            parsed_start = parsed_end.replace(day=1)
-        result = self.service.reports(
+            parsed_start = parsed_end - timedelta(days=29)
+        result = self.service.product_aware_overview(
             tenant=request.current_tenant,
             business=business,
             start_date=parsed_start,
@@ -187,6 +187,7 @@ class BIViewSet(viewsets.ViewSet):
 
 class DashboardViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
+    service = AnalyticsService()
 
     @extend_schema(tags=["Dashboard"], responses={200: dict})
     def summary(self, request: Request) -> Response:
@@ -194,14 +195,21 @@ class DashboardViewSet(viewsets.ViewSet):
             raise PermissionDenied("A tenant context is required.")
         business = _resolve_business(request)
         today = timezone.now().date()
-        queryset = Booking.objects.require_tenant(request.current_tenant).filter(
-            business=business,
-            appointment_date=today,
-        )
-        queryset = scope_bookings_queryset_for_user(
-            queryset,
+        today_count = 0
+        if business is not None:
+            queryset = Booking.objects.require_tenant(request.current_tenant).filter(
+                business=business,
+                appointment_date=today,
+            )
+            queryset = scope_bookings_queryset_for_user(
+                queryset,
+                tenant=request.current_tenant,
+                user=request.user,
+            )
+            today_count = queryset.count()
+        result = self.service.dashboard_summary(
             tenant=request.current_tenant,
-            user=request.user,
+            business=business,
+            today_count=today_count,
         )
-        result = {"today_count": queryset.count()}
         return success_response(result, request_id=getattr(request, "request_id", None))

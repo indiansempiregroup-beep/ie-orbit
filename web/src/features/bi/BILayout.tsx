@@ -1,14 +1,16 @@
+import { useMemo } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { getSubscribedProductIds } from '../../config/products';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 
 const biNav = [
-  { to: '/bi/overview', labelKey: 'bi.overview', feature: 'overview' },
-  { to: '/bi/growth', labelKey: 'bi.growth', feature: 'growth' },
-  { to: '/bi/revenue', labelKey: 'bi.revenue', feature: 'revenue' },
-  { to: '/bi/forecast', labelKey: 'bi.forecast', feature: 'forecast' },
-  { to: '/bi/reports', labelKey: 'bi.reports', feature: 'reports' },
+  { to: '/bi/overview', labelKey: 'bi.overview', feature: 'overview', appointieOnly: false },
+  { to: '/bi/growth', labelKey: 'bi.growth', feature: 'growth', appointieOnly: true },
+  { to: '/bi/revenue', labelKey: 'bi.revenue', feature: 'revenue', appointieOnly: true },
+  { to: '/bi/forecast', labelKey: 'bi.forecast', feature: 'forecast', appointieOnly: true },
+  { to: '/bi/reports', labelKey: 'bi.reports', feature: 'reports', appointieOnly: true },
 ] as const;
 
 function featureFromPath(pathname: string) {
@@ -21,9 +23,20 @@ export function BILayout() {
   const location = useLocation();
   const workspace = useWorkspace();
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
+  const subscribedIds = useMemo(
+    () => getSubscribedProductIds(workspace.activeBusiness?.product_subscriptions),
+    [workspace.activeBusiness?.product_subscriptions],
+  );
+  const hasAppointie = subscribedIds.includes('appointie') || subscribedIds.length === 0;
+  const visibleNav = useMemo(
+    () => biNav.filter((item) => !item.appointieOnly || hasAppointie),
+    [hasAppointie],
+  );
   const allowed = new Set(billingQuery.data?.bi_features ?? ['overview']);
   const currentFeature = featureFromPath(location.pathname);
-  const locked = !allowed.has(currentFeature);
+  const currentItem = biNav.find((item) => item.feature === currentFeature);
+  const productBlocked = Boolean(currentItem?.appointieOnly && !hasAppointie);
+  const locked = productBlocked || !allowed.has(currentFeature);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, alignItems: 'start' }}>
@@ -39,7 +52,7 @@ export function BILayout() {
       >
         <strong style={{ display: 'block', marginBottom: 10 }}>{t('bi.title')}</strong>
         <nav style={{ display: 'grid', gap: 6 }}>
-          {biNav.map((item) => {
+          {visibleNav.map((item) => {
             const itemLocked = !allowed.has(item.feature);
             if (itemLocked) {
               return (
@@ -84,6 +97,11 @@ export function BILayout() {
             </Link>
           </p>
         ) : null}
+        {!hasAppointie ? (
+          <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--muted-foreground, #6b7280)' }}>
+            Growth, Revenue, Forecast, and Reports are available with AppointIE.
+          </p>
+        ) : null}
       </aside>
       {locked ? (
         <div
@@ -96,12 +114,14 @@ export function BILayout() {
             gap: 12,
           }}
         >
-          <h2 style={{ margin: 0 }}>Pro feature</h2>
+          <h2 style={{ margin: 0 }}>{productBlocked ? 'AppointIE feature' : 'Pro feature'}</h2>
           <p style={{ margin: 0, color: 'var(--muted-foreground, #6b7280)' }}>
-            Your current plan includes BI Overview only. Upgrade to Pro for Growth, Revenue, Forecast, and Reports.
+            {productBlocked
+              ? 'This BI tab is available when AppointIE is subscribed. Overview covers ShopIE analytics.'
+              : 'Your current plan includes BI Overview only. Upgrade to Pro for Growth, Revenue, Forecast, and Reports.'}
           </p>
           <Link to="/settings" style={{ color: 'var(--primary)', fontWeight: 600, width: 'fit-content' }}>
-            Upgrade plan
+            {productBlocked ? 'Manage products' : 'Upgrade plan'}
           </Link>
         </div>
       ) : (

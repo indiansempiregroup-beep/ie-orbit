@@ -8,6 +8,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.billing.constants import (
     ADDON_OFFICE_PRICE_PAISE,
+    ADDON_PETS_PRICE_PAISE,
     ADDON_STAFF_PRICE_PAISE,
     PLAN_PRICE_PAISE,
     YEARLY_PRICE_MULTIPLIER,
@@ -40,6 +41,7 @@ class PlanEntitlements:
     features: tuple[str, ...]
     extra_staff: int
     extra_offices: int
+    pets_pack_enabled: bool
     billing_interval: str
     status: str
     soft_locked: bool
@@ -72,10 +74,15 @@ class PlanEntitlements:
     def addon_amount_paise(self) -> int:
         staff_unit = ADDON_STAFF_PRICE_PAISE
         office_unit = ADDON_OFFICE_PRICE_PAISE
+        pets_unit = ADDON_PETS_PRICE_PAISE
         if self.billing_interval == "yearly":
             staff_unit *= YEARLY_PRICE_MULTIPLIER
             office_unit *= YEARLY_PRICE_MULTIPLIER
-        return (self.extra_staff * staff_unit) + (self.extra_offices * office_unit)
+            pets_unit *= YEARLY_PRICE_MULTIPLIER
+        total = (self.extra_staff * staff_unit) + (self.extra_offices * office_unit)
+        if self.pets_pack_enabled:
+            total += pets_unit
+        return total
 
     @property
     def total_amount_paise(self) -> int:
@@ -90,9 +97,11 @@ class PlanEntitlements:
     ) -> dict[str, Any]:
         staff_unit = ADDON_STAFF_PRICE_PAISE
         office_unit = ADDON_OFFICE_PRICE_PAISE
+        pets_unit = ADDON_PETS_PRICE_PAISE
         if self.billing_interval == "yearly":
             staff_unit *= YEARLY_PRICE_MULTIPLIER
             office_unit *= YEARLY_PRICE_MULTIPLIER
+            pets_unit *= YEARLY_PRICE_MULTIPLIER
         pending_payload = pending or {}
         return {
             "plan_code": self.plan_code,
@@ -135,6 +144,7 @@ class PlanEntitlements:
             "included_offices": self.max_branches,
             "extra_staff": self.extra_staff,
             "extra_offices": self.extra_offices,
+            "pets_pack_enabled": self.pets_pack_enabled,
             "effective_max_staff": self.effective_max_staff,
             "effective_max_branches": self.effective_max_branches,
             "used_staff": used_staff,
@@ -146,6 +156,7 @@ class PlanEntitlements:
                 "base_amount_paise": self.base_amount_paise,
                 "addon_staff_unit_paise": staff_unit,
                 "addon_office_unit_paise": office_unit,
+                "addon_pets_unit_paise": pets_unit,
                 "addon_amount_paise": self.addon_amount_paise,
                 "total_amount_paise": self.total_amount_paise,
             },
@@ -184,6 +195,7 @@ class EntitlementService:
         canceled_at = None
         extra_staff = 0
         extra_offices = 0
+        pets_pack_enabled = False
         soft_locked = False
 
         if subscription is not None:
@@ -197,6 +209,7 @@ class EntitlementService:
             canceled_at = subscription.canceled_at
             extra_staff = int(getattr(subscription, "extra_staff", 0) or 0)
             extra_offices = int(getattr(subscription, "extra_offices", 0) or 0)
+            pets_pack_enabled = bool(getattr(subscription, "pets_pack_enabled", False))
             soft_locked = self.is_soft_locked(subscription)
 
         definition = get_plan_definition(product_code.strip().lower(), plan_code) or {}
@@ -226,6 +239,7 @@ class EntitlementService:
             features=features,
             extra_staff=extra_staff,
             extra_offices=extra_offices,
+            pets_pack_enabled=pets_pack_enabled,
             billing_interval=billing_interval,
             status=status,
             soft_locked=soft_locked,

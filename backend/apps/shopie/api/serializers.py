@@ -151,6 +151,12 @@ class ShopOrderLineSerializer(serializers.ModelSerializer):
 class ShopOrderSerializer(serializers.ModelSerializer):
     lines = ShopOrderLineSerializer(many=True, read_only=True)
     customer_id = serializers.UUIDField(source="customer.id", read_only=True, allow_null=True)
+    payment_method = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
+    upi_utr = serializers.SerializerMethodField()
+    payment_proof_url = serializers.SerializerMethodField()
+    upi_pay_url = serializers.SerializerMethodField()
+    delivery_fee = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopOrder
@@ -169,10 +175,57 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "notes",
             "delivery_address",
             "metadata",
+            "payment_method",
+            "payment_status",
+            "upi_utr",
+            "payment_proof_url",
+            "upi_pay_url",
+            "delivery_fee",
             "lines",
             "created_at",
             "updated_at",
         ]
+
+    def _pos(self, obj: ShopOrder) -> dict:
+        metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
+        pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
+        return pos
+
+    def get_payment_method(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("payment_method") or "")
+
+    def get_payment_status(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("payment_status") or "")
+
+    def get_upi_utr(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("upi_utr") or "")
+
+    def get_payment_proof_url(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("payment_proof_url") or "")
+
+    def get_delivery_fee(self, obj: ShopOrder) -> str:
+        metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
+        return str(metadata.get("delivery_fee") or "0")
+
+    def get_upi_pay_url(self, obj: ShopOrder) -> str:
+        from apps.common.upi import build_upi_pay_url
+
+        pos = self._pos(obj)
+        method = str(pos.get("payment_method") or "").lower()
+        status_value = str(pos.get("payment_status") or "").lower()
+        if method != "upi" or status_value in {"paid", "settled"}:
+            return ""
+        business = getattr(obj, "business", None)
+        vpa = str(getattr(business, "upi_vpa", "") or "").strip() if business else ""
+        if not vpa:
+            return ""
+        return build_upi_pay_url(
+            vpa=vpa,
+            payee_name=str(getattr(business, "display_name", "") or "Shop"),
+            amount=obj.total,
+            note=obj.order_number,
+            currency=obj.currency or "INR",
+        )
 
 
 class ShopOrderCreateSerializer(serializers.Serializer):
@@ -281,23 +334,33 @@ class ShopDeliveryMatchSerializer(serializers.Serializer):
 
 
 class ShopPetSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+
     class Meta:
         model = ShopPet
         fields = [
             "id",
             "business",
             "customer",
+            "customer_name",
             "name",
             "species",
             "breed",
             "sex",
             "birthday",
+            "photo_url",
             "medical_notes",
             "medical_records",
             "metadata",
             "created_at",
             "updated_at",
         ]
+
+    def get_customer_name(self, obj: ShopPet) -> str:
+        customer = getattr(obj, "customer", None)
+        if customer is None:
+            return ""
+        return str(getattr(customer, "display_name", None) or getattr(customer, "full_name", None) or "")
 
 
 class ShopPetWriteSerializer(serializers.Serializer):
@@ -308,9 +371,20 @@ class ShopPetWriteSerializer(serializers.Serializer):
     breed = serializers.CharField(required=False, allow_blank=True, max_length=120)
     sex = serializers.CharField(required=False, allow_blank=True, max_length=32)
     birthday = serializers.DateField(required=False, allow_null=True)
+    photo_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)
     medical_notes = serializers.CharField(required=False, allow_blank=True)
     medical_records = serializers.ListField(child=serializers.DictField(), required=False)
     metadata = serializers.DictField(required=False)
+
+
+class ShopPetNotifySerializer(serializers.Serializer):
+    subject = serializers.CharField(max_length=255)
+    body = serializers.CharField()
+    channels = serializers.ListField(
+        child=serializers.ChoiceField(choices=["in_app", "email"]),
+        required=False,
+        default=["in_app", "email"],
+    )
 
 
 class ShopSettingsSerializer(serializers.ModelSerializer):

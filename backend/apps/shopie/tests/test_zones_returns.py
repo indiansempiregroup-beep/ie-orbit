@@ -266,9 +266,20 @@ def test_pets_pack_gate(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
             customer=customer,
             data={"name": "Bruno"},
         )
-    pets.set_pack_enabled(
-        tenant=tenant, business=business, pack=VerticalPack.PETS, enabled=True
-    )
+    subscription = business.product_subscriptions.filter(product_code="shopie").first()
+    if subscription is None:
+        from apps.businesses.models import BusinessProductSubscription, BusinessProductSubscriptionStatus
+
+        subscription = BusinessProductSubscription.objects.create(
+            tenant=tenant,
+            business=business,
+            product_code="shopie",
+            status=BusinessProductSubscriptionStatus.ACTIVE,
+            pets_pack_enabled=True,
+        )
+    else:
+        subscription.pets_pack_enabled = True
+        subscription.save(update_fields=["pets_pack_enabled", "updated_at"])
     pet = pets.create_pet(
         tenant=tenant,
         business=business,
@@ -276,3 +287,54 @@ def test_pets_pack_gate(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
         data={"name": "Bruno", "species": "Dog"},
     )
     assert pet.name == "Bruno"
+
+
+@pytest.mark.django_db
+def test_pet_birthday_reminder_marks_year(shop_ctx: tuple[Tenant, Business, Customer], monkeypatch) -> None:
+    from datetime import date, timedelta
+
+    tenant, business, customer = shop_ctx
+    customer.email = "pet-owner@example.com"
+    customer.save(update_fields=["email", "updated_at"])
+    pets = PetsService()
+    subscription = business.product_subscriptions.filter(product_code="shopie").first()
+    if subscription is None:
+        from apps.businesses.models import BusinessProductSubscription, BusinessProductSubscriptionStatus
+
+        BusinessProductSubscription.objects.create(
+            tenant=tenant,
+            business=business,
+            product_code="shopie",
+            status=BusinessProductSubscriptionStatus.ACTIVE,
+            pets_pack_enabled=True,
+        )
+    else:
+        subscription.pets_pack_enabled = True
+        subscription.save(update_fields=["pets_pack_enabled", "updated_at"])
+    target = date.today() + timedelta(days=5)
+    pet = pets.create_pet(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        data={
+            "name": "Milo",
+            "species": "Cat",
+            "birthday": date(2020, target.month, target.day),
+            "photo_url": "https://cdn.example.com/milo.jpg",
+        },
+    )
+    assert pet.photo_url.endswith("milo.jpg")
+
+    def fake_notify(**kwargs):
+        return {"sent_channels": ["email"], "notification_ids": ["n1"], "user_id": None}
+
+    monkeypatch.setattr(pets, "notify_owner", lambda **kwargs: fake_notify(**kwargs))
+    monkeypatch.setattr(pets, "notify_managers", lambda **kwargs: fake_notify(**kwargs))
+    result = pets.send_birthday_reminders(lead_days=5)
+    assert result["sent"] == 1
+    pet.refresh_from_db()
+    assert pet.metadata.get("birthday_reminder_year") == str(date.today().year)
+    # Second run should skip
+    result2 = pets.send_birthday_reminders(lead_days=5)
+    assert result2["sent"] == 0
+

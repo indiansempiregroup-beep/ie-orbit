@@ -215,6 +215,9 @@ export type BusinessProductSubscription = {
   current_period_starts_at?: string | null;
   current_period_ends_at?: string | null;
   external_billing_reference?: string | null;
+  extra_staff?: number;
+  extra_offices?: number;
+  pets_pack_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -289,6 +292,7 @@ export type BillingPlanCatalogItem = {
   yearly_amount_paise?: number | null;
   addon_staff_price_paise?: number;
   addon_office_price_paise?: number;
+  addon_pets_price_paise?: number;
   currency: string;
 };
 
@@ -314,6 +318,7 @@ export type BusinessBillingSnapshot = {
   included_offices: number;
   extra_staff: number;
   extra_offices: number;
+  pets_pack_enabled?: boolean;
   effective_max_staff: number;
   effective_max_branches: number;
   used_staff: number;
@@ -325,6 +330,7 @@ export type BusinessBillingSnapshot = {
     base_amount_paise: number;
     addon_staff_unit_paise: number;
     addon_office_unit_paise: number;
+    addon_pets_unit_paise?: number;
     addon_amount_paise: number;
     total_amount_paise: number;
   };
@@ -583,6 +589,7 @@ export type MobileNotificationItem = {
   created_at?: string;
   updated_at?: string;
   booking_id?: string | null;
+  pet_id?: string | null;
   notification_type?: string;
 };
 
@@ -766,6 +773,8 @@ export type MobileBootstrapResponse = {
     formatted_address?: string;
     cancellation_policy?: string;
     rescheduling_policy?: string;
+    upi_vpa?: string;
+    payment_qr_url?: string;
   };
   branding: MobileBootstrapBranding;
   enabled_products: string[];
@@ -1012,6 +1021,79 @@ export type BIReportsBundle = {
   insights?: BIInsight[];
 };
 
+export type DashboardAppointieSummary = {
+  today_bookings: number;
+  upcoming_7d: number;
+  today_completed: number;
+  today_cancelled: number;
+  estimated_revenue_today: number;
+  estimated_revenue_month: number;
+  active_customers: number;
+  new_customers_today: number;
+  staff_on_duty: number;
+  unread_notifications: number;
+};
+
+export type DashboardShopieSummary = {
+  orders_today: number;
+  orders_month: number;
+  gmv_today: number;
+  gmv_month: number;
+  pending_returns: number;
+  open_orders: number;
+  delivery_fee_month: number;
+};
+
+export type DashboardPetsSummary = {
+  total: number;
+  birthdays_next_7d: number;
+  birthdays_next_30d: number;
+  with_photo: number;
+};
+
+export type DashboardSummary = {
+  products: string[];
+  pets_pack_enabled: boolean;
+  currency?: string | null;
+  today_count: number;
+  appointie?: DashboardAppointieSummary;
+  shopie?: DashboardShopieSummary;
+  pets?: DashboardPetsSummary;
+};
+
+export type BIShopieOverview = {
+  orders: number;
+  cancelled_orders: number;
+  gmv: number;
+  avg_order_value: number;
+  returns: number;
+  pending_returns: number;
+  return_rate: number;
+  refund_total: number;
+  delivery_fee_total: number;
+  currency?: string | null;
+  trend: Array<{ day: string; orders: number; gmv: number }>;
+  insights?: BIInsight[];
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIOverviewResponse = {
+  products: string[];
+  pets_pack_enabled: boolean;
+  currency?: string | null;
+  period?: { start_date?: string | null; end_date?: string | null };
+  appointie?: BIReportsBundle;
+  shopie?: BIShopieOverview;
+  pets?: DashboardPetsSummary;
+  /** Present when AppointIE is subscribed (backward-compatible aliases). */
+  summary?: AnalyticsSummary;
+  revenue?: BIRevenueReport;
+  trends?: BITrendsReport;
+  growth?: BIGrowthReport;
+  operations?: BIOperationsReport;
+  insights?: BIInsight[];
+};
+
 export type IamRole = {
   id: string;
   code: string;
@@ -1068,6 +1150,8 @@ export type Business = {
   business_type?: string;
   email?: string | null;
   logo?: string | null;
+  upi_vpa?: string | null;
+  payment_qr_url?: string | null;
   status?: string;
   currency?: string | null;
   timezone?: string | null;
@@ -1279,6 +1363,12 @@ export type ShopOrder = {
   notes?: string;
   delivery_address?: string;
   metadata?: Record<string, unknown>;
+  payment_method?: string;
+  payment_status?: string;
+  upi_utr?: string;
+  payment_proof_url?: string;
+  upi_pay_url?: string;
+  delivery_fee?: string | number;
   lines?: ShopOrderLine[];
   created_at?: string;
   updated_at?: string;
@@ -1369,11 +1459,13 @@ export type ShopPet = {
   id: string;
   business: string;
   customer: string;
+  customer_name?: string;
   name: string;
   species?: string;
   breed?: string;
   sex?: string;
   birthday?: string | null;
+  photo_url?: string;
   medical_notes?: string;
   medical_records?: unknown[];
   metadata?: Record<string, unknown>;
@@ -1389,6 +1481,7 @@ export type ShopPetWriteInput = {
   breed?: string;
   sex?: string;
   birthday?: string | null;
+  photo_url?: string;
   medical_notes?: string;
   medical_records?: unknown[];
   metadata?: Record<string, unknown>;
@@ -1472,6 +1565,8 @@ export type BusinessUpdateInput = Partial<
     | 'status'
     | 'selected_product'
     | 'logo'
+    | 'upi_vpa'
+    | 'payment_qr_url'
   >
 > & {
   industry_category?: string;
@@ -1539,14 +1634,17 @@ export type OperationsSearchResult = {
 
 export type CustomerAddress = {
   id?: string;
+  address_type?: string;
   line1?: string;
+  line2?: string;
   full_address?: string | null;
   city?: string | null;
   state?: string | null;
   country?: string | null;
   postal_code?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  is_default?: boolean;
 };
 
 export type Customer = {
@@ -1869,6 +1967,7 @@ export type Notification = {
   created_at?: string;
   updated_at?: string;
   booking_id?: string | null;
+  pet_id?: string | null;
   notification_type?: string;
 };
 
@@ -2077,6 +2176,8 @@ class ApiClient {
     getOrder: (orderId: string) => this.request<ShopOrder>(`/shop/orders/${orderId}`, { method: 'GET' }),
     setOrderStatus: (orderId: string, body: { status: string }) =>
       this.request<ShopOrder>(`/shop/orders/${orderId}/status`, { method: 'POST', body }),
+    confirmOrderPayment: (orderId: string, body: { action: 'confirm' | 'reject' | string; note?: string }) =>
+      this.request<ShopOrder>(`/shop/orders/${orderId}/confirm-payment`, { method: 'POST', body }),
     settleOrderPayment: (orderId: string, body?: { settled_via?: 'cash' | 'upi' | 'card' | string }) =>
       this.request<ShopOrder>(`/shop/orders/${orderId}/settle-payment`, { method: 'POST', body: body ?? {} }),
     createInvoiceFromOrder: (orderId: string) =>
@@ -2113,6 +2214,15 @@ class ApiClient {
     patchPet: (petId: string, body: Partial<ShopPetWriteInput>) =>
       this.request<ShopPet>(`/shop/pets/${petId}`, { method: 'PATCH', body }),
     deletePet: (petId: string) => this.request<{ deleted: boolean }>(`/shop/pets/${petId}`, { method: 'DELETE' }),
+    notifyPetOwner: (
+      petId: string,
+      body: { subject: string; body: string; channels?: Array<'in_app' | 'email'> },
+    ) =>
+      this.request<{
+        sent_channels: string[];
+        notification_ids: string[];
+        user_id?: string | null;
+      }>(`/shop/pets/${petId}/notify`, { method: 'POST', body }),
     listInvoices: (query: { business_id: string }) =>
       this.request<ShopInvoice[]>('/shop/invoices', { method: 'GET', query }),
     listQuotations: (query: { business_id: string }) =>
@@ -2204,7 +2314,7 @@ class ApiClient {
     updateProductAddons: (
       businessId: string,
       productCode: string,
-      body: { extra_staff: number; extra_offices: number },
+      body: { extra_staff: number; extra_offices: number; pets_pack_enabled?: boolean },
     ) =>
       this.request<Business & { billing?: BusinessBillingSnapshot }>(
         `/businesses/${businessId}/product-subscriptions/${productCode}/addons`,
@@ -2306,13 +2416,13 @@ class ApiClient {
       this.request<AnalyticsSummary[]>('/analytics', { method: 'GET', query }),
     dashboard: {
       summary: (query?: Record<string, string | number | boolean | undefined | null>) =>
-        this.request<{ today_count: number }>('/dashboard/summary', { method: 'GET', query }),
+        this.request<DashboardSummary>('/dashboard/summary', { method: 'GET', query }),
     },
   };
 
   bi = {
     overview: (query?: { start_date?: string; end_date?: string }) =>
-      this.request<BIReportsBundle>('/bi/overview', { method: 'GET', query }),
+      this.request<BIOverviewResponse>('/bi/overview', { method: 'GET', query }),
     revenue: (query?: { start_date?: string; end_date?: string }) =>
       this.request<BIRevenueReport>('/bi/revenue', { method: 'GET', query }),
     trends: (query?: { start_date?: string; end_date?: string }) =>
@@ -2488,6 +2598,41 @@ class ApiClient {
     runReconciliation: (body?: { lookback_hours?: number }) =>
       this.request<BillingReconciliationResult>('/billing/reconciliation/run', { method: 'POST', body }),
     checkout: (body: BillingCheckoutInput) => this.request<BillingCheckoutSession>('/billing/checkout', { method: 'POST', body }),
+    createUpiCheckout: (body: {
+      product_code: string;
+      plan_code: string;
+      business_id?: string;
+      amount_paise?: number;
+      extra_staff?: number;
+      extra_offices?: number;
+      pets_pack_enabled?: boolean;
+    }) =>
+      this.request<{
+        session_id: string;
+        order_id: string;
+        amount: number;
+        currency: string;
+        product_code: string;
+        plan_code: string;
+        upi_vpa: string;
+        upi_pay_url: string;
+        payment_qr_url?: string;
+        payment_status: string;
+        expires_at: string;
+      }>('/billing/checkout/upi', { method: 'POST', body }),
+    claimUpiCheckout: (
+      sessionId: string,
+      body: { upi_utr: string; payment_proof_url?: string; business_id?: string },
+    ) =>
+      this.request<{ session_id: string; payment_status?: string; upi_utr?: string }>(
+        `/billing/checkout/upi/${sessionId}/claim`,
+        { method: 'POST', body },
+      ),
+    confirmUpiCheckout: (sessionId: string, body: { action: 'confirm' | 'reject' | string; note?: string }) =>
+      this.request<{ session_id: string; status: string; payment_status?: string }>(
+        `/billing/checkout/upi/${sessionId}/confirm`,
+        { method: 'POST', body },
+      ),
     webhookSummary: (query?: { window_hours?: number }) =>
       this.request<BillingWebhookSummary>('/billing/webhooks/summary', { method: 'GET', query }),
     webhookEvents: (
@@ -2600,8 +2745,12 @@ class ApiClient {
       this.request<MobileNotificationItem>(`/mobile/notifications/${notificationId}/read`, { method: 'PATCH', query }),
     readAllNotifications: (query: { tenant_slug: string; business_code: string }) =>
       this.request<{ updated: number }>('/mobile/notifications/read-all', { method: 'PATCH', query }),
-    listShopProducts: (query: { tenant_slug: string; business_code: string; search?: string }) =>
-      this.request<ShopProduct[]>('/mobile/shop/products', { method: 'GET', query, auth: false }),
+    listShopProducts: (query: {
+      tenant_slug: string;
+      business_code: string;
+      search?: string;
+      category?: string;
+    }) => this.request<ShopProduct[]>('/mobile/shop/products', { method: 'GET', query, auth: false }),
     getShopProduct: (productId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopProduct>(`/mobile/shop/products/${productId}`, { method: 'GET', query, auth: false }),
     listShopOrders: (query: { tenant_slug: string; business_code: string }) =>
@@ -2614,10 +2763,52 @@ class ApiClient {
       delivery_address?: string;
       delivery_city?: string;
       delivery_postal_code?: string;
+      payment_method?: string;
       lines: Array<{ product_id: string; quantity?: string | number; barcode_scanned?: string }>;
     }) => this.request<ShopOrder>('/mobile/shop/orders', { method: 'POST', body }),
     getShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopOrder>(`/mobile/shop/orders/${orderId}`, { method: 'GET', query }),
+    cancelShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopOrder>(`/mobile/shop/orders/${orderId}/cancel`, { method: 'POST', query }),
+    claimShopPayment: (
+      orderId: string,
+      body: { tenant_slug: string; business_code: string; upi_utr: string; payment_proof_url?: string },
+    ) => this.request<ShopOrder>(`/mobile/shop/orders/${orderId}/claim-payment`, { method: 'POST', body }),
+    matchDeliveryZone: (query: {
+      tenant_slug: string;
+      business_code: string;
+      city?: string;
+      postal_code?: string;
+    }) =>
+      this.request<{
+        matched: boolean;
+        zone: null | {
+          id: string;
+          name: string;
+          fee: string;
+          min_order_total: string;
+          same_day: boolean;
+        };
+      }>('/mobile/shop/delivery-zones/match', { method: 'GET', query, auth: false }),
+    listMyPets: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopPet[]>('/mobile/shop/pets', { method: 'GET', query }),
+    getMyPet: (petId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopPet>(`/mobile/shop/pets/${petId}`, { method: 'GET', query }),
+    listMyReturns: (query: { tenant_slug: string; business_code: string; order_id?: string }) =>
+      this.request<ShopReturn[]>('/mobile/shop/returns', { method: 'GET', query }),
+    getMyReturn: (returnId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopReturn>(`/mobile/shop/returns/${returnId}`, { method: 'GET', query }),
+    listAddresses: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<CustomerAddress[]>('/mobile/customer/addresses', { method: 'GET', query }),
+    createAddress: (body: Record<string, unknown> & { tenant_slug: string; business_code: string }) =>
+      this.request<CustomerAddress>('/mobile/customer/addresses', { method: 'POST', body }),
+    updateAddress: (
+      addressId: string,
+      body: Record<string, unknown>,
+      query: { tenant_slug: string; business_code: string },
+    ) => this.request<CustomerAddress>(`/mobile/customer/addresses/${addressId}`, { method: 'PATCH', body, query }),
+    deleteAddress: (addressId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<{ deleted: boolean }>(`/mobile/customer/addresses/${addressId}`, { method: 'DELETE', query }),
   };
 
   iam = {

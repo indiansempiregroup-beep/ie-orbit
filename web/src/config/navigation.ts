@@ -19,7 +19,7 @@ import {
   Users,
   WalletCards,
 } from 'lucide-react';
-import { getSubscribedProductIds, type ProductSubscriptionLike } from './products';
+import { getSubscribedProductIds, hasPetsPack, type ProductSubscriptionLike } from './products';
 import type { UserProfile } from '@ie-platform/sdk';
 import {
   canAccessReports,
@@ -36,6 +36,8 @@ export type AppNavItem = {
   group?: 'operations' | 'settings' | 'account';
   /** When set, nav item is visible only for these product codes. Omit = platform core (always visible). */
   products?: string[];
+  /** Require ShopIE Pets pack add-on. */
+  requiresPetsPack?: boolean;
   /** Any one of these permissions allows the item. */
   anyPermissions?: string[];
   /** Custom visibility check (after product filter). */
@@ -121,6 +123,7 @@ export const navigationItems: AppNavItem[] = [
     icon: PawPrint,
     group: 'operations',
     products: ['shopie'],
+    requiresPetsPack: true,
     anyPermissions: ['customer:read', 'business:read'],
   },
   {
@@ -274,7 +277,12 @@ export function filterNavigationByProduct(
   subscriptions?: ProductSubscriptionLike[] | null,
 ): AppNavItem[] {
   const subscribedIds = getSubscribedProductIds(subscriptions);
-  return items.filter((item) => isNavItemVisible(item, activeProduct, user, subscribedIds));
+  const petsEnabled = hasPetsPack(subscriptions);
+  return items.filter((item) => {
+    if (!isNavItemVisible(item, activeProduct, user, subscribedIds)) return false;
+    if (item.requiresPetsPack && !petsEnabled) return false;
+    return true;
+  });
 }
 
 /** @deprecated Prefer hasPermission from utils/roles */

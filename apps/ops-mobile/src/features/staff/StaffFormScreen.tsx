@@ -47,6 +47,7 @@ export function StaffFormScreen() {
   const [sendInvite, setSendInvite] = useState(true);
   const [isBookable, setIsBookable] = useState(true);
   const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +71,11 @@ export function StaffFormScreen() {
     setPhone(member.phone_number ?? '');
     setIsBookable(member.is_bookable !== false);
   }, [member]);
+
+  useEffect(() => {
+    if (!member || photoAsset) return;
+    setPhotoPreview(member.photo_url || null);
+  }, [member, photoAsset]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -196,8 +202,11 @@ export function StaffFormScreen() {
         <ImagePickerButton
           label="Profile photo"
           variant="avatar"
-          valueUri={member?.photo_url}
-          onPicked={setPhotoAsset}
+          valueUri={photoPreview || member?.photo_url}
+          onPicked={(asset) => {
+            setPhotoAsset(asset);
+            setPhotoPreview(asset.uri);
+          }}
         />
         <Input label="First name" value={firstName} onChangeText={setFirstName} />
         <Input label="Last name" value={lastName} onChangeText={setLastName} />

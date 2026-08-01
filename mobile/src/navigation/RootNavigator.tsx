@@ -17,6 +17,12 @@ import { ServiceDetailScreen } from '../features/discover/ServiceDetailScreen';
 import { ShopProductDetailScreen } from '../features/shop/ShopProductDetailScreen';
 import { CartScreen } from '../features/shop/CartScreen';
 import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
+import { ShopOrderHistoryScreen } from '../features/shop/ShopOrderHistoryScreen';
+import { AddressBookScreen } from '../features/shop/AddressBookScreen';
+import { MyReturnsScreen } from '../features/shop/MyReturnsScreen';
+import { ReturnDetailScreen } from '../features/shop/ReturnDetailScreen';
+import { MyPetsScreen } from '../features/pets/MyPetsScreen';
+import { PetDetailScreen } from '../features/pets/PetDetailScreen';
 import {
   ChangePasswordScreen,
   HelpSupportScreen,
@@ -78,6 +84,12 @@ export function RootNavigator() {
             <Stack.Screen name="ShopProductDetail" component={ShopProductDetailScreen} />
             <Stack.Screen name="Cart" component={CartScreen} />
             <Stack.Screen name="ShopOrderDetail" component={ShopOrderDetailScreen} />
+            <Stack.Screen name="ShopOrderHistory" component={ShopOrderHistoryScreen} />
+            <Stack.Screen name="AddressBook" component={AddressBookScreen} />
+            <Stack.Screen name="MyReturns" component={MyReturnsScreen} />
+            <Stack.Screen name="ReturnDetail" component={ReturnDetailScreen} />
+            <Stack.Screen name="MyPets" component={MyPetsScreen} />
+            <Stack.Screen name="PetDetail" component={PetDetailScreen} />
             <Stack.Screen
               name="ProfileEdit"
               component={ProfileEditScreen}

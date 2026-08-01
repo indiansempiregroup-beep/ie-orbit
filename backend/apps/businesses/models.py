@@ -66,6 +66,8 @@ class Business(TenantModel):
     description = models.TextField(blank=True)
     logo = models.CharField(max_length=500, blank=True)
     banner_image = models.CharField(max_length=500, blank=True)
+    upi_vpa = models.CharField(max_length=120, blank=True)
+    payment_qr_url = models.CharField(max_length=500, blank=True)
     primary_contact = models.CharField(max_length=32, blank=True)
     secondary_contact = models.CharField(max_length=32, blank=True)
     email = models.EmailField(blank=True)
@@ -167,6 +169,7 @@ class BusinessProductSubscription(TenantModel):
     external_billing_reference = models.CharField(max_length=120, blank=True, db_index=True)
     extra_staff = models.PositiveIntegerField(default=0)
     extra_offices = models.PositiveIntegerField(default=0)
+    pets_pack_enabled = models.BooleanField(default=False)
     pending_plan = models.ForeignKey(
         "tenancy.SubscriptionPlan",
         on_delete=models.SET_NULL,

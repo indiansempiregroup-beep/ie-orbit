@@ -54,6 +54,7 @@ class BusinessProductSubscriptionSerializer(serializers.ModelSerializer):
             "external_billing_reference",
             "extra_staff",
             "extra_offices",
+            "pets_pack_enabled",
             "created_at",
             "updated_at",
         ]
@@ -118,6 +119,8 @@ class BusinessSerializer(serializers.ModelSerializer):
             "description",
             "logo",
             "banner_image",
+            "upi_vpa",
+            "payment_qr_url",
             "primary_contact",
             "secondary_contact",
             "email",
@@ -164,6 +167,9 @@ class BusinessSerializer(serializers.ModelSerializer):
         return normalize_stored_asset_url(value)
 
     def validate_banner_image(self, value: str) -> str:
+        return normalize_stored_asset_url(value)
+
+    def validate_payment_qr_url(self, value: str) -> str:
         return normalize_stored_asset_url(value)
 
     def create(self, validated_data: dict[str, object]) -> Business:
@@ -238,6 +244,7 @@ class BusinessProductPlanChangeSerializer(serializers.Serializer):
 class BusinessAddonUpdateSerializer(serializers.Serializer):
     extra_staff = serializers.IntegerField(min_value=0)
     extra_offices = serializers.IntegerField(min_value=0)
+    pets_pack_enabled = serializers.BooleanField(required=False)
 
 
 class ProductPlanSerializer(serializers.Serializer):

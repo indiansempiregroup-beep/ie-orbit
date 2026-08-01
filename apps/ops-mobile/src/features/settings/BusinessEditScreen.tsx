@@ -32,6 +32,10 @@ export function BusinessEditScreen() {
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [currency, setCurrency] = useState('INR');
   const [logoAsset, setLogoAsset] = useState<ImagePickerAsset | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [upiVpa, setUpiVpa] = useState('');
+  const [paymentQrAsset, setPaymentQrAsset] = useState<ImagePickerAsset | null>(null);
+  const [paymentQrPreview, setPaymentQrPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -50,7 +54,19 @@ export function BusinessEditScreen() {
     setCountry(activeBusiness.country ?? '');
     setTimezone(activeBusiness.timezone || 'Asia/Kolkata');
     setCurrency(activeBusiness.currency || 'INR');
+    setUpiVpa((activeBusiness as { upi_vpa?: string }).upi_vpa || '');
+    setPaymentQrPreview((activeBusiness as { payment_qr_url?: string }).payment_qr_url || null);
   }, [activeBusiness]);
+
+  useEffect(() => {
+    if (!activeBusiness || logoAsset) return;
+    setLogoPreview(activeBusiness.logo || null);
+  }, [activeBusiness, logoAsset]);
+
+  useEffect(() => {
+    if (!activeBusiness || paymentQrAsset) return;
+    setPaymentQrPreview((activeBusiness as { payment_qr_url?: string }).payment_qr_url || null);
+  }, [activeBusiness, paymentQrAsset]);
 
   const timezoneOptions =
     timezone && !TIMEZONES.some((option) => option.value === timezone)
@@ -75,6 +91,7 @@ export function BusinessEditScreen() {
             setError(null);
             try {
               let logo = activeBusiness?.logo;
+              let paymentQrUrl = (activeBusiness as { payment_qr_url?: string } | null)?.payment_qr_url;
               if (logoAsset) {
                 const uploaded = await uploadBrandingLogo({
                   token,
@@ -84,6 +101,16 @@ export function BusinessEditScreen() {
                   displayName: displayName || activeBusiness?.business_name || 'Business',
                 });
                 logo = uploaded.public_url || uploaded.private_url || logo;
+              }
+              if (paymentQrAsset) {
+                const uploaded = await uploadBrandingLogo({
+                  token,
+                  tenantId,
+                  businessId,
+                  asset: paymentQrAsset,
+                  displayName: `${displayName || 'Business'} payment QR`,
+                });
+                paymentQrUrl = uploaded.public_url || uploaded.private_url || paymentQrUrl;
               }
               await client.businesses.patch(businessId, {
                 business_name: businessName || displayName,
@@ -98,6 +125,8 @@ export function BusinessEditScreen() {
                 state: state || undefined,
                 postal_code: postalCode || undefined,
                 country: country || undefined,
+                upi_vpa: upiVpa || '',
+                payment_qr_url: paymentQrUrl || '',
                 ...(logo ? { logo } : {}),
               });
               await refreshWorkspace();
@@ -120,8 +149,11 @@ export function BusinessEditScreen() {
         <ImagePickerButton
           label="Business logo"
           variant="card"
-          valueUri={activeBusiness?.logo}
-          onPicked={setLogoAsset}
+          valueUri={logoPreview || activeBusiness?.logo}
+          onPicked={(asset) => {
+            setLogoAsset(asset);
+            setLogoPreview(asset.uri);
+          }}
           helperText="Shown in OPS-Mobile and customer-facing branding."
         />
         <Input label="Legal / business name" value={businessName} onChangeText={setBusinessName} />
@@ -146,6 +178,27 @@ export function BusinessEditScreen() {
         <Input label="State" value={state} onChangeText={setState} />
         <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} />
         <Input label="Country" value={country} onChangeText={setCountry} />
+      </FormSection>
+
+      <FormSection title="Shop payments">
+        <Input
+          label="UPI ID"
+          value={upiVpa}
+          onChangeText={setUpiVpa}
+          autoCapitalize="none"
+          placeholder="shop@okaxis"
+          hint="Used to generate amount-specific QR codes for online orders."
+        />
+        <ImagePickerButton
+          label="Static payment QR (optional)"
+          variant="card"
+          valueUri={paymentQrPreview || undefined}
+          onPicked={(asset) => {
+            setPaymentQrAsset(asset);
+            setPaymentQrPreview(asset.uri);
+          }}
+          helperText="Fallback image if UPI ID is not set."
+        />
       </FormSection>
 
       <FormSection title="Regional">

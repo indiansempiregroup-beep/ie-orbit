@@ -43,6 +43,8 @@ import { BarcodeScannerScreen } from '../features/shop/BarcodeScannerScreen';
 import { ShopReturnsScreen } from '../features/shop/ShopReturnsScreen';
 import { ShopDeliveryZonesScreen } from '../features/shop/ShopDeliveryZonesScreen';
 import { ShopPetsScreen } from '../features/shop/ShopPetsScreen';
+import { ShopPetFormScreen } from '../features/shop/ShopPetFormScreen';
+import { ShopPetDetailScreen } from '../features/shop/ShopPetDetailScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
 import { BIScreen } from '../features/bi/BIScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
@@ -153,6 +155,8 @@ export function RootNavigator() {
           {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
           {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
           {stackScreen('ShopPets', ShopPetsScreen, t('nav.shopPets'))}
+          {stackScreen('ShopPetForm', ShopPetFormScreen, 'Pet')}
+          {stackScreen('ShopPetDetail', ShopPetDetailScreen, 'Pet details')}
           {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
           {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
           {stackScreen('Reports', ReportsScreen, t('nav.reports'))}

@@ -17,5 +17,8 @@
   },
   "devDependencies": {
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "react-native-reanimated": "~4.1.1"
   }
 }

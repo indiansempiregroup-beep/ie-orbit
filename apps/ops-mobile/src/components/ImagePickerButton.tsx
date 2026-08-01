@@ -24,11 +24,19 @@ export function ImagePickerButton({
   variant = 'card',
   helperText,
 }: Props) {
-  const [preview, setPreview] = useState<string | null>(resolveMediaUrl(valueUri) || null);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
 
   useEffect(() => {
-    setPreview(resolveMediaUrl(valueUri) || null);
+    // Parent URL changed (initial load / saved remote URL) — prefer that over a stale local pick.
+    setLocalPreview(null);
   }, [valueUri]);
+
+  const preview = localPreview || resolveMediaUrl(valueUri) || null;
+
+  function applyPicked(asset: ImagePickerAsset) {
+    setLocalPreview(asset.uri);
+    onPicked(asset);
+  }
 
   async function pickFromLibrary() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -45,8 +53,7 @@ export function ImagePickerButton({
     });
 
     if (result.canceled || !result.assets[0]) return;
-    setPreview(result.assets[0].uri);
-    onPicked(result.assets[0]);
+    applyPicked(result.assets[0]);
   }
 
   async function takePhoto() {
@@ -64,8 +71,7 @@ export function ImagePickerButton({
     });
 
     if (result.canceled || !result.assets[0]) return;
-    setPreview(result.assets[0].uri);
-    onPicked(result.assets[0]);
+    applyPicked(result.assets[0]);
   }
 
   function openPicker() {

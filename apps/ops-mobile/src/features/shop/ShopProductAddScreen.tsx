@@ -4,7 +4,6 @@ import {
   Alert,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,7 +14,6 @@ import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { CommonActions, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShopBarcodeEnrichment, ShopProduct } from '@ie-platform/sdk';
 import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-platform/sdk';
 import type { IEPlatformClient } from '@ie-platform/sdk';
@@ -25,6 +23,10 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadProductImage } from '../../api/media';
+import { FormScreen } from '../../components/FormScreen';
+import { Button } from '../../components/ui/Button';
+import { SelectField } from '../../components/SelectField';
+import { CURRENCIES } from '../../constants/options';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, fonts, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -124,7 +126,6 @@ function formFromProduct(product: ShopProduct): FormState {
 }
 
 export function ShopProductAddScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
   const client = useOpsClient();
@@ -513,10 +514,17 @@ export function ShopProductAddScreen() {
   const imageSlots = ensureProductImageSlots(form.images);
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, paddingTop: spacing.md }}
-      keyboardShouldPersistTaps="handled"
+    <FormScreen
+      footer={
+        <Button
+          label={busy ? 'Working…' : isEditing ? 'Update product' : 'Save product'}
+          loading={busy}
+          fullWidth
+          size="lg"
+          disabled={busy || analyzing}
+          onPress={() => void save()}
+        />
+      }
     >
       <Text style={styles.helper}>
         Upload up to {MAX_PRODUCT_IMAGES} photos. The first photo is the primary image on product
@@ -603,7 +611,6 @@ export function ShopProductAddScreen() {
           ['sku', 'SKU'],
           ['price', 'Price'],
           ['tax_rate', 'Tax %'],
-          ['currency', 'Currency'],
           ['stock_on_hand', 'Stock on hand'],
           ['low_stock_threshold', 'Low stock alert'],
           ['pack_size', 'Pack size / quantity'],
@@ -622,10 +629,20 @@ export function ShopProductAddScreen() {
                 ? 'decimal-pad'
                 : 'default'
             }
-            autoCapitalize={key === 'currency' ? 'characters' : 'sentences'}
           />
         </View>
       ))}
+
+      <SelectField
+        label="Currency"
+        value={form.currency}
+        options={
+          form.currency && !CURRENCIES.some((option) => option.value === form.currency)
+            ? [...CURRENCIES, { value: form.currency, label: form.currency }]
+            : CURRENCIES
+        }
+        onChange={(value) => setField('currency', value)}
+      />
 
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>Category</Text>
@@ -665,28 +682,16 @@ export function ShopProductAddScreen() {
           </Pressable>
         ))}
       </View>
-
-      <Pressable
-        style={[styles.saveBtn, (busy || analyzing) && styles.saveDisabled]}
-        disabled={busy}
-        onPress={() => void save()}
-      >
-        <Text style={styles.saveBtnText}>
-          {busy ? 'Working…' : isEditing ? 'Update product' : 'Save product'}
-        </Text>
-      </Pressable>
-    </ScrollView>
+    </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  helper: { color: colors.mutedForeground, marginBottom: spacing.md, lineHeight: 20 },
+  helper: { color: colors.mutedForeground, lineHeight: 20 },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: spacing.md,
   },
   photoCard: { width: '47%' },
   photo: { width: '100%', height: 140, borderRadius: 12, backgroundColor: colors.muted },
@@ -712,7 +717,7 @@ const styles = StyleSheet.create({
   },
   removeBtn: { alignItems: 'center', marginTop: 4 },
   removeText: { color: colors.destructive, fontSize: 12, fontWeight: '600' },
-  actions: { flexDirection: 'row', gap: 8, marginBottom: spacing.md },
+  actions: { flexDirection: 'row', gap: 8 },
   actionBtn: {
     flex: 1,
     backgroundColor: colors.primary,
@@ -730,7 +735,7 @@ const styles = StyleSheet.create({
   },
   actionText: { color: '#fff', fontWeight: '600' },
   actionSecondaryText: { color: colors.primary, fontWeight: '600' },
-  row: { flexDirection: 'row', gap: 8, marginBottom: spacing.sm, alignItems: 'center' },
+  row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   lookupBtn: {
     width: 44,
     height: 44,
@@ -740,16 +745,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
+    flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 0,
     color: colors.foreground,
     backgroundColor: colors.card,
   },
-  field: { marginBottom: spacing.sm },
+  field: {},
   fieldLabel: {
     marginBottom: 6,
     color: colors.foreground,
@@ -757,7 +762,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
   },
   textarea: { minHeight: 90, textAlignVertical: 'top' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -767,13 +772,5 @@ const styles = StyleSheet.create({
   },
   chipActive: { borderColor: colors.primary, backgroundColor: colors.muted },
   chipText: { color: colors.foreground, fontSize: 13 },
-  saveBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveDisabled: { opacity: 0.6 },
-  saveBtnText: { color: '#fff', fontWeight: '600', fontFamily: fonts.bodyMedium },
-  meta: { color: colors.mutedForeground, marginBottom: spacing.sm },
+  meta: { color: colors.mutedForeground },
 });

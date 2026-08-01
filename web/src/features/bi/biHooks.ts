@@ -22,7 +22,7 @@ export function useBIOverviewQuery(startDate?: string, endDate?: string) {
   const end = endDate ?? range.endDate;
   return useQuery({
     queryKey: ['bi', 'overview', start, end],
-    queryFn: async () => (await client.bi.overview({ start_date: start, end_date: end })).data as BIReportsBundle,
+    queryFn: async () => (await client.bi.overview({ start_date: start, end_date: end })).data,
   });
 }
 

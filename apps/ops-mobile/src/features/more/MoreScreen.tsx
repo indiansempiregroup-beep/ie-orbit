@@ -66,7 +66,6 @@ export function MoreScreen() {
               <MenuRow icon="shopping-cart" label={t('nav.pos')} onPress={() => navigation.navigate('ShopPos')} />
               <MenuRow icon="shopping-bag" label={t('nav.shopProducts')} onPress={() => navigation.navigate('ShopProducts')} />
               <MenuRow icon="list" label={t('nav.shopOrders')} onPress={() => navigation.navigate('ShopOrders')} />
-              <MenuRow icon="camera" label={t('nav.scanBarcode')} onPress={() => navigation.navigate('BarcodeScanner')} />
               <MenuRow icon="rotate-ccw" label={t('nav.shopReturns')} onPress={() => navigation.navigate('ShopReturns')} />
               <MenuRow icon="map-pin" label={t('nav.shopDeliveryZones')} onPress={() => navigation.navigate('ShopDeliveryZones')} />
               <MenuRow icon="heart" label={t('nav.shopPets')} onPress={() => navigation.navigate('ShopPets')} />

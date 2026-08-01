@@ -11,6 +11,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.billing.constants import (
     ADDON_OFFICE_PRICE_PAISE,
+    ADDON_PETS_PRICE_PAISE,
     ADDON_STAFF_PRICE_PAISE,
     CHECKOUT_SESSION_TTL_HOURS,
     DEFAULT_CHECKOUT_CURRENCY,
@@ -142,6 +143,7 @@ class CheckoutService:
                         "yearly_amount_paise": yearly_amount,
                         "addon_staff_price_paise": ADDON_STAFF_PRICE_PAISE,
                         "addon_office_price_paise": ADDON_OFFICE_PRICE_PAISE,
+                        "addon_pets_price_paise": ADDON_PETS_PRICE_PAISE,
                         "currency": DEFAULT_CHECKOUT_CURRENCY,
                     }
                 )
@@ -187,3 +189,198 @@ class CheckoutService:
         }
         session.save(update_fields=["status", "paid_at", "metadata", "updated_at"])
         return session
+
+    def create_upi_checkout_session(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        product_code: str,
+        plan_code: str,
+        amount_paise: int | None = None,
+        extra_staff: int = 0,
+        extra_offices: int = 0,
+        pets_pack_enabled: bool = False,
+        actor_id: str | None = None,
+    ) -> dict[str, Any]:
+        from apps.common.upi import build_upi_pay_url
+
+        normalized_product = product_code.strip().lower()
+        normalized_plan = plan_code.strip().lower()
+        if normalized_product not in VALID_PRODUCT_CODES:
+            raise ValidationError({"product_code": "Unknown product code."})
+        if get_plan_definition(normalized_product, normalized_plan) is None:
+            raise ValidationError({"plan_code": "Unknown plan for this product."})
+
+        base = self._resolve_plan_price_paise(normalized_plan)
+        if base is None:
+            raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
+        total = amount_paise if amount_paise is not None else (
+            base
+            + max(0, int(extra_staff)) * ADDON_STAFF_PRICE_PAISE
+            + max(0, int(extra_offices)) * ADDON_OFFICE_PRICE_PAISE
+            + (ADDON_PETS_PRICE_PAISE if pets_pack_enabled else 0)
+        )
+        if total <= 0:
+            raise ValidationError({"amount": "Checkout amount must be positive."})
+
+        vpa = str(getattr(settings, "PLATFORM_UPI_VPA", "") or "").strip()
+        if not vpa:
+            raise ValidationError({"upi": "Platform UPI ID is not configured."})
+
+        order_id = f"upi_{uuid.uuid4().hex}"
+        expires_at = timezone.now() + timedelta(hours=CHECKOUT_SESSION_TTL_HOURS)
+        amount_rupees = total / 100
+        pay_url = build_upi_pay_url(
+            vpa=vpa,
+            payee_name=str(getattr(settings, "PLATFORM_UPI_NAME", "") or "IE Platform"),
+            amount=amount_rupees,
+            note=f"{normalized_product}-{normalized_plan}",
+            currency=DEFAULT_CHECKOUT_CURRENCY,
+        )
+        session = BillingCheckoutSession.objects.create(
+            tenant=tenant,
+            business=business,
+            product_code=normalized_product,
+            plan_code=normalized_plan,
+            razorpay_order_id=order_id,
+            amount_paise=total,
+            currency=DEFAULT_CHECKOUT_CURRENCY,
+            status=CheckoutSessionStatus.CREATED,
+            expires_at=expires_at,
+            metadata={
+                "payment_channel": "upi_claim",
+                "payment_status": "due",
+                "created_by": actor_id,
+                "extra_staff": int(extra_staff),
+                "extra_offices": int(extra_offices),
+                "pets_pack_enabled": bool(pets_pack_enabled),
+                "upi_pay_url": pay_url,
+                "upi_vpa": vpa,
+            },
+        )
+        return {
+            "session_id": str(session.id),
+            "order_id": session.razorpay_order_id,
+            "amount": session.amount_paise,
+            "currency": session.currency,
+            "product_code": session.product_code,
+            "plan_code": session.plan_code,
+            "upi_vpa": vpa,
+            "upi_pay_url": pay_url,
+            "payment_qr_url": str(getattr(settings, "PLATFORM_PAYMENT_QR_URL", "") or ""),
+            "payment_status": "due",
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def claim_upi_session(
+        self,
+        *,
+        session_id: str,
+        business: Business,
+        upi_utr: str,
+        payment_proof_url: str = "",
+    ) -> BillingCheckoutSession:
+        session = BillingCheckoutSession.objects.filter(id=session_id, business=business).first()
+        if session is None:
+            raise ValidationError({"session": "Checkout session not found."})
+        meta = dict(session.metadata or {})
+        if str(meta.get("payment_channel") or "") != "upi_claim":
+            raise ValidationError({"session": "Not a UPI claim session."})
+        if session.status == CheckoutSessionStatus.PAID:
+            raise ValidationError({"session": "Already paid."})
+        utr = str(upi_utr or "").strip()
+        proof = str(payment_proof_url or "").strip()
+        if len(utr) < 6 and not proof:
+            raise ValidationError(
+                {"upi_utr": "Enter a UPI / UTR reference or upload a payment screenshot."}
+            )
+        meta.update(
+            {
+                "payment_status": "awaiting_confirmation",
+                "upi_utr": utr,
+                "payment_proof_url": proof,
+                "claimed_at": timezone.now().isoformat(),
+            }
+        )
+        session.metadata = meta
+        session.save(update_fields=["metadata", "updated_at"])
+        return session
+
+    def confirm_upi_session(
+        self,
+        *,
+        session_id: str,
+        action: str,
+        note: str = "",
+        actor_id: str | None = None,
+    ) -> BillingCheckoutSession:
+        session = BillingCheckoutSession.objects.filter(id=session_id).first()
+        if session is None:
+            raise ValidationError({"session": "Checkout session not found."})
+        meta = dict(session.metadata or {})
+        act = str(action or "").strip().lower()
+        if act == "confirm":
+            session = self.mark_session_paid(
+                order_id=session.razorpay_order_id,
+                payment_id=str(meta.get("upi_utr") or session.razorpay_order_id),
+            )
+            if session is None:
+                raise ValidationError({"session": "Unable to mark paid."})
+            meta = dict(session.metadata or {})
+            meta["payment_status"] = "paid"
+            meta["confirm_note"] = str(note or "").strip()
+            meta["confirmed_by"] = actor_id
+            session.metadata = meta
+            session.save(update_fields=["metadata", "updated_at"])
+            self._activate_subscription_for_session(session)
+            return session
+        if act == "reject":
+            meta["payment_status"] = "rejected"
+            meta["reject_note"] = str(note or "").strip()
+            meta["rejected_by"] = actor_id
+            session.metadata = meta
+            session.save(update_fields=["metadata", "updated_at"])
+            return session
+        raise ValidationError({"action": "action must be confirm or reject."})
+
+    def _activate_subscription_for_session(self, session: BillingCheckoutSession) -> None:
+        from apps.businesses.models import BusinessProductSubscriptionStatus
+        from apps.businesses.repositories import BusinessRepository
+        from apps.businesses.services import BusinessService
+        from apps.billing.services.webhooks import default_product_billing_service
+
+        billing_service = default_product_billing_service()
+        business_service = BusinessService(
+            repository=BusinessRepository(),
+            billing_service=billing_service,
+        )
+        subscription = business_service.subscribe_to_product(
+            business=session.business,
+            product_code=session.product_code,
+            plan_code=session.plan_code,
+            actor=None,
+            set_active=True,
+        )
+        meta = session.metadata or {}
+        if "extra_staff" in meta or "extra_offices" in meta or "pets_pack_enabled" in meta:
+            subscription.extra_staff = int(meta.get("extra_staff") or 0)
+            subscription.extra_offices = int(meta.get("extra_offices") or 0)
+            subscription.pets_pack_enabled = bool(meta.get("pets_pack_enabled"))
+            subscription.status = BusinessProductSubscriptionStatus.ACTIVE
+            subscription.save(
+                update_fields=[
+                    "extra_staff",
+                    "extra_offices",
+                    "pets_pack_enabled",
+                    "status",
+                    "updated_at",
+                ]
+            )
+        else:
+            subscription.status = BusinessProductSubscriptionStatus.ACTIVE
+            subscription.save(update_fields=["status", "updated_at"])
+        billing_service.attach_external_billing_reference(
+            subscription=subscription,
+            external_reference=str((meta or {}).get("upi_utr") or session.razorpay_order_id),
+        )

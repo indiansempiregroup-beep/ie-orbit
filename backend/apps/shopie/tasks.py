@@ -18,3 +18,10 @@ def analyze_packaging_images_task(
         back_image_url=back_image_url,
         hint=hint,
     )
+
+
+@shared_task(name="shopie.send_pet_birthday_reminders")
+def send_pet_birthday_reminders_task(lead_days: int = 5) -> dict[str, int]:
+    from apps.shopie.services.pets import PetsService
+
+    return PetsService().send_birthday_reminders(lead_days=lead_days)

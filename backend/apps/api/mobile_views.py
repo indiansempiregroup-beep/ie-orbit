@@ -261,6 +261,7 @@ def _serialize_mobile_notification(notification: Notification) -> dict:
         "created_at": notification.created_at,
         "updated_at": notification.updated_at,
         "booking_id": notification.booking_id,
+        "pet_id": (notification.metadata or {}).get("pet_id") or None,
         "notification_type": notification_type_from_metadata(notification.metadata),
     }
 
@@ -1258,3 +1259,123 @@ class MobileLoyaltyQuoteView(APIView):
             )
             return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
         return success_response(quote, request_id=getattr(request, "request_id", None))
+
+
+def _serialize_address(address) -> dict:
+    return {
+        "id": str(address.id),
+        "address_type": address.address_type,
+        "line1": address.line1,
+        "line2": address.line2,
+        "city": address.city,
+        "state": address.state,
+        "country": address.country,
+        "postal_code": address.postal_code,
+        "latitude": address.latitude,
+        "longitude": address.longitude,
+        "is_default": address.is_default,
+    }
+
+
+class MobileCustomerAddressListCreateView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+    customer_service = CustomerService()
+
+    @extend_schema(tags=["Mobile"])
+    def get(self, request: Request) -> Response:
+        serializer = MobileScopedQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        addresses = self.customer_service.list_addresses(customer=customer)
+        return success_response(
+            [_serialize_address(item) for item in addresses],
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Mobile"])
+    def post(self, request: Request) -> Response:
+        scope = MobileScopedQuerySerializer(
+            data={
+                "tenant_slug": request.query_params.get("tenant_slug") or request.data.get("tenant_slug"),
+                "business_code": request.query_params.get("business_code") or request.data.get("business_code"),
+            }
+        )
+        scope.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=scope.validated_data["tenant_slug"],
+                business_code=scope.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        try:
+            address = self.customer_service.create_address(customer=customer, data=request.data)
+        except Exception as exc:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            if hasattr(exc, "detail"):
+                raise exc
+            raise DRFValidationError({"detail": str(exc)}) from exc
+        return success_response(
+            _serialize_address(address),
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class MobileCustomerAddressDetailView(APIView):
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+    customer_service = CustomerService()
+
+    @extend_schema(tags=["Mobile"])
+    def patch(self, request: Request, address_id) -> Response:
+        scope = MobileScopedQuerySerializer(data=request.query_params)
+        scope.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=scope.validated_data["tenant_slug"],
+                business_code=scope.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        try:
+            address = self.customer_service.update_address(
+                customer=customer, address_id=address_id, data=request.data
+            )
+        except Exception as exc:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            raise DRFValidationError({"detail": str(exc)}) from exc
+        return success_response(
+            _serialize_address(address),
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Mobile"])
+    def delete(self, request: Request, address_id) -> Response:
+        scope = MobileScopedQuerySerializer(data=request.query_params)
+        scope.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=scope.validated_data["tenant_slug"],
+                business_code=scope.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        try:
+            self.customer_service.delete_address(customer=customer, address_id=address_id)
+        except Exception as exc:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            raise DRFValidationError({"detail": str(exc)}) from exc
+        return success_response({"deleted": True}, request_id=getattr(request, "request_id", None))

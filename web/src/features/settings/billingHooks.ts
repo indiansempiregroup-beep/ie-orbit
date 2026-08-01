@@ -32,11 +32,17 @@ export function useUpdateBusinessAddonsMutation(businessId: string | undefined) 
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { productCode: string; extra_staff: number; extra_offices: number }) =>
+    mutationFn: async (body: {
+      productCode: string;
+      extra_staff: number;
+      extra_offices: number;
+      pets_pack_enabled?: boolean;
+    }) =>
       (
         await client.businesses.updateProductAddons(businessId!, body.productCode, {
           extra_staff: body.extra_staff,
           extra_offices: body.extra_offices,
+          pets_pack_enabled: body.pets_pack_enabled,
         })
       ).data,
     onSuccess: () => {

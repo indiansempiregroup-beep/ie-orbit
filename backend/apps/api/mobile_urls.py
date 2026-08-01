@@ -10,6 +10,8 @@ from apps.api.mobile_views import (
     MobileBookingReviewCreateView,
     MobileBranchesListView,
     MobileBootstrapView,
+    MobileCustomerAddressDetailView,
+    MobileCustomerAddressListCreateView,
     MobileCustomerProfilePhotoView,
     MobileCustomerProfileView,
     MobileCustomerRegisterView,
@@ -27,10 +29,19 @@ from apps.api.mobile_views import (
 )
 from apps.notifications.api.stream_views import MobileNotificationStreamView
 from apps.shopie.api.mobile_views import (
+    MobileShopDeliveryZoneMatchView,
+    MobileShopOrderCancelView,
+    MobileShopOrderClaimPaymentView,
     MobileShopOrderDetailView,
     MobileShopOrderListCreateView,
+    MobileShopOrderPaymentProofView,
+    MobileShopPetDetailView,
+    MobileShopPetListView,
     MobileShopProductDetailView,
     MobileShopProductListView,
+    MobileShopReturnDetailView,
+    MobileShopReturnListView,
+    MobileUpiPreviewView,
 )
 
 urlpatterns = [
@@ -41,6 +52,16 @@ urlpatterns = [
         "mobile/customer/profile/photo",
         MobileCustomerProfilePhotoView.as_view(),
         name="mobile-customer-profile-photo",
+    ),
+    path(
+        "mobile/customer/addresses",
+        MobileCustomerAddressListCreateView.as_view(),
+        name="mobile-customer-addresses",
+    ),
+    path(
+        "mobile/customer/addresses/<uuid:address_id>",
+        MobileCustomerAddressDetailView.as_view(),
+        name="mobile-customer-address-detail",
     ),
     path("mobile/loyalty", MobileLoyaltyView.as_view(), name="mobile-loyalty"),
     path("mobile/loyalty/quote", MobileLoyaltyQuoteView.as_view(), name="mobile-loyalty-quote"),
@@ -90,4 +111,33 @@ urlpatterns = [
         MobileShopOrderDetailView.as_view(),
         name="mobile-shop-order-detail",
     ),
+    path(
+        "mobile/shop/orders/<uuid:order_id>/cancel",
+        MobileShopOrderCancelView.as_view(),
+        name="mobile-shop-order-cancel",
+    ),
+    path(
+        "mobile/shop/orders/<uuid:order_id>/claim-payment",
+        MobileShopOrderClaimPaymentView.as_view(),
+        name="mobile-shop-order-claim-payment",
+    ),
+    path(
+        "mobile/shop/orders/<uuid:order_id>/payment-proof",
+        MobileShopOrderPaymentProofView.as_view(),
+        name="mobile-shop-order-payment-proof",
+    ),
+    path(
+        "mobile/shop/delivery-zones/match",
+        MobileShopDeliveryZoneMatchView.as_view(),
+        name="mobile-shop-delivery-zone-match",
+    ),
+    path("mobile/shop/pets", MobileShopPetListView.as_view(), name="mobile-shop-pets"),
+    path("mobile/shop/pets/<uuid:pet_id>", MobileShopPetDetailView.as_view(), name="mobile-shop-pet-detail"),
+    path("mobile/shop/returns", MobileShopReturnListView.as_view(), name="mobile-shop-returns"),
+    path(
+        "mobile/shop/returns/<uuid:return_id>",
+        MobileShopReturnDetailView.as_view(),
+        name="mobile-shop-return-detail",
+    ),
+    path("mobile/shop/upi-preview", MobileUpiPreviewView.as_view(), name="mobile-shop-upi-preview"),
 ]

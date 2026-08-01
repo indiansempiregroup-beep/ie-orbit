@@ -32,7 +32,7 @@ export type RootStackParamList = {
   };
   BookingDetail: { bookingId: string };
   Customers: undefined;
-  CustomerForm: { customerId?: string; returnTo?: 'pos' };
+  CustomerForm: { customerId?: string; returnTo?: 'pos' | 'pets' };
   CustomerDetail: { customerId: string };
   Reviews: undefined;
   Services: undefined;
@@ -63,7 +63,9 @@ export type RootStackParamList = {
   BarcodeScanner: { target?: 'pos' | 'addProduct'; productId?: string } | undefined;
   ShopReturns: undefined;
   ShopDeliveryZones: undefined;
-  ShopPets: undefined;
+  ShopPets: { selectCustomerId?: string; openAdd?: boolean } | undefined;
+  ShopPetForm: { petId?: string; selectCustomerId?: string } | undefined;
+  ShopPetDetail: { petId: string; openNotify?: boolean };
   Branches: undefined;
   BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };
   Reports: undefined;

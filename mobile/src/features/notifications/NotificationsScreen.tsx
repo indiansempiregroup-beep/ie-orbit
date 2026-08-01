@@ -73,6 +73,8 @@ export function NotificationsScreen() {
               onPress={() => {
                 if (!item.is_read) void markRead(item.id);
                 if (item.booking_id) navigation.navigate('BookingDetail', { bookingId: item.booking_id });
+                const petId = String((item as { pet_id?: string }).pet_id || '');
+                if (petId) navigation.navigate('PetDetail', { petId });
               }}
             >
               <View style={[styles.iconWrap, type === 'review' ? styles.iconAmber : type === 'cancel' ? styles.iconRed : styles.iconBlue]}>

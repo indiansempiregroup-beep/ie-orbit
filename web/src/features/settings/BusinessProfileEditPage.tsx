@@ -272,6 +272,16 @@ export function BusinessProfileEditPage() {
               currentLogoUrl={currentLogoUrl}
               accentColor={formState.primary_color}
             />
+            <Input
+              label="Shop UPI ID"
+              value={formState.upi_vpa}
+              onChange={(e) => updateField('upi_vpa', e.target.value)}
+              placeholder="shop@okaxis"
+              disabled={saving}
+            />
+            <p style={{ margin: 0, color: 'var(--color-muted-foreground, #6b7280)', fontSize: 13 }}>
+              Used to generate amount-specific QR codes for customer online orders. Optional static QR URL can be set via API as payment_qr_url.
+            </p>
           </Section>
 
           {errorMessage ? (

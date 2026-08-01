@@ -16,7 +16,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "i18next": "^25.3.2"
+    "i18next": "^25.3.2",
+    "react-native-reanimated": "~4.1.1"
   },
   "peerDependencies": {
     "react": ">=18",

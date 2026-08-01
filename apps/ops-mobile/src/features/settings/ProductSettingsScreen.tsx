@@ -14,6 +14,10 @@ import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { Input } from '../../components/ui/Input';
 import { createScopedClient } from '../../api/client';
 import {
+  SubscriptionUpiPaySheet,
+  type SubscriptionUpiPayRequest,
+} from './SubscriptionUpiPaySheet';
+import {
   useBillingStatus,
   useBusinessBillingSnapshot,
   useProductMutations,
@@ -23,7 +27,7 @@ import {
 } from '../../hooks/useOpsExtended';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDate, getApiErrorMessage } from '../../utils/format';
-import { getAvailableProducts, getProductName, getSubscribedProducts, PRODUCT_CATALOG } from '../../utils/products';
+import { getAvailableProducts, getProductName, getSubscribedProducts, PETS_PACK_PRICE_INR, PRODUCT_CATALOG } from '../../utils/products';
 
 function getDefaultPlanCode(plans: { code?: string; is_default?: boolean }[]) {
   return plans.find((plan) => plan.is_default)?.code ?? plans[0]?.code ?? '';
@@ -76,6 +80,7 @@ export function ProductSettingsScreen() {
   const mutations = useProductMutations();
   const [extraStaff, setExtraStaff] = useState('0');
   const [extraOffices, setExtraOffices] = useState('0');
+  const [petsPackEnabled, setPetsPackEnabled] = useState(false);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const [pointsPerUnit, setPointsPerUnit] = useState('10');
   const [maxRedeemPercent, setMaxRedeemPercent] = useState('50');
@@ -116,6 +121,7 @@ export function ProductSettingsScreen() {
   const [selectedProduct, setSelectedProduct] = useState(activeBusiness?.selected_product ?? subscribedProducts[0]?.id ?? '');
   const [pendingPlanByProduct, setPendingPlanByProduct] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [upiPayRequest, setUpiPayRequest] = useState<SubscriptionUpiPayRequest | null>(null);
 
   useEffect(() => {
     setSelectedProduct(activeBusiness?.selected_product ?? subscribedProducts[0]?.id ?? '');
@@ -145,7 +151,8 @@ export function ProductSettingsScreen() {
     if (!snapshot) return;
     setExtraStaff(String(snapshot.extra_staff ?? 0));
     setExtraOffices(String(snapshot.extra_offices ?? 0));
-  }, [snapshot?.extra_staff, snapshot?.extra_offices]);
+    setPetsPackEnabled(Boolean(snapshot.pets_pack_enabled));
+  }, [snapshot?.extra_staff, snapshot?.extra_offices, snapshot?.pets_pack_enabled]);
 
   if (loading && !settings) return <ScreenState loading />;
 
@@ -159,6 +166,8 @@ export function ProductSettingsScreen() {
   }
 
   const checkoutProductCode = selectedProduct || subscribedProducts[0]?.id || 'appointie';
+  const scopedClient =
+    token && tenantId && businessId ? createScopedClient(token, tenantId, businessId) : null;
 
   return (
     <RefreshableScrollView
@@ -168,6 +177,23 @@ export function ProductSettingsScreen() {
       }}
     >
       <SoftLockBanner />
+
+      {upiPayRequest && scopedClient && token && tenantId && businessId ? (
+        <SubscriptionUpiPaySheet
+          client={scopedClient}
+          token={token}
+          tenantId={tenantId}
+          businessId={businessId}
+          request={upiPayRequest}
+          onClose={() => setUpiPayRequest(null)}
+          onClaimed={async () => {
+            await Promise.all([refreshWorkspace(), reloadSnapshot()]);
+            toast.push('Payment submitted. Waiting for platform confirmation.', 'success');
+          }}
+          onError={(message) => toast.push(message, 'error')}
+        />
+      ) : null}
+
       <Card>
         <SectionHeader title="Active product" />
         <View style={styles.stack}>
@@ -239,21 +265,23 @@ export function ProductSettingsScreen() {
                 <View style={styles.row}>
                   {productPlans.length > 0 ? (
                     <Button
-                      label="Update plan"
+                      label="Pay & update plan"
                       variant="outline"
                       loading={busy === `plan-${product.id}`}
-                      onPress={async () => {
+                      onPress={() => {
                         const planCode = pendingPlanByProduct[product.id] ?? currentPlan;
                         if (!planCode) return;
-                        setBusy(`plan-${product.id}`);
-                        try {
-                          await mutations.changePlan(product.id, planCode);
-                          await afterMutation(`Plan updated for ${product.name}.`);
-                        } catch (err) {
-                          showError(err, 'Unable to change plan.');
-                        } finally {
-                          setBusy(null);
-                        }
+                        const plan = productPlans.find((item) => item.code === planCode);
+                        setUpiPayRequest({
+                          productCode: product.id,
+                          planCode,
+                          productName: product.name,
+                          planName: plan?.name ?? planCode,
+                          extraStaff: Math.max(0, Number(extraStaff) || 0),
+                          extraOffices: Math.max(0, Number(extraOffices) || 0),
+                          petsPackEnabled: checkoutProductCode === 'shopie' ? petsPackEnabled : false,
+                          mode: 'change_plan',
+                        });
                       }}
                     />
                   ) : null}
@@ -298,23 +326,27 @@ export function ProductSettingsScreen() {
                   />
                 ) : null}
                 <Button
-                  label="Subscribe"
+                  label="Pay with UPI to subscribe"
                   loading={busy === `sub-${product.id}`}
                   fullWidth
-                  onPress={async () => {
-                    setBusy(`sub-${product.id}`);
-                    try {
-                      await mutations.subscribe(
-                        product.id,
-                        pendingPlanByProduct[product.id] ?? getDefaultPlanCode(productPlans),
-                        subscribedProducts.length === 0,
-                      );
-                      await afterMutation(`Subscribed to ${product.name}.`);
-                    } catch (err) {
-                      showError(err, 'Unable to subscribe.');
-                    } finally {
-                      setBusy(null);
+                  onPress={() => {
+                    const planCode =
+                      pendingPlanByProduct[product.id] ?? getDefaultPlanCode(productPlans);
+                    if (!planCode) {
+                      showError(new Error('Select a plan first.'), 'Select a plan first.');
+                      return;
                     }
+                    const plan = productPlans.find((item) => item.code === planCode);
+                    setUpiPayRequest({
+                      productCode: product.id,
+                      planCode,
+                      productName: product.name,
+                      planName: plan?.name ?? planCode,
+                      extraStaff: 0,
+                      extraOffices: 0,
+                      petsPackEnabled: false,
+                      mode: 'subscribe',
+                    });
                   }}
                 />
               </View>
@@ -345,6 +377,9 @@ export function ProductSettingsScreen() {
               Included {snapshot.included_staff} staff / {snapshot.included_offices} offices · Add-ons +
               {snapshot.extra_staff} staff (+₹{(snapshot.pricing.addon_staff_unit_paise / 100).toFixed(0)}) · +
               {snapshot.extra_offices} offices (+₹{(snapshot.pricing.addon_office_unit_paise / 100).toFixed(0)})
+              {checkoutProductCode === 'shopie'
+                ? ` · Pets ${snapshot.pets_pack_enabled ? 'on' : 'off'} (+₹${((snapshot.pricing.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100) / 100).toFixed(0)})`
+                : ''}
             </Text>
             <View style={styles.detailListTight}>
               <Detail label="Started" value={formatDate(snapshot.subscribed_at)} />
@@ -372,6 +407,15 @@ export function ProductSettingsScreen() {
                 onChangeText={setExtraOffices}
                 keyboardType="number-pad"
               />
+              {checkoutProductCode === 'shopie' ? (
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.label}>Pets pack</Text>
+                    <Text style={styles.meta}>₹{PETS_PACK_PRICE_INR}/month · profiles, birthdays, owner alerts</Text>
+                  </View>
+                  <Switch value={petsPackEnabled} onValueChange={setPetsPackEnabled} />
+                </View>
+              ) : null}
               <Button
                 label="Update add-ons"
                 loading={busy === 'addons'}
@@ -382,6 +426,7 @@ export function ProductSettingsScreen() {
                     await addons.update(checkoutProductCode, {
                       extra_staff: Math.max(0, Number(extraStaff) || 0),
                       extra_offices: Math.max(0, Number(extraOffices) || 0),
+                      ...(checkoutProductCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
                     });
                     await afterMutation('Add-ons updated. Billing total refreshed.');
                   } catch (err) {
@@ -389,6 +434,31 @@ export function ProductSettingsScreen() {
                   } finally {
                     setBusy(null);
                   }
+                }}
+              />
+              <Button
+                label="Pay current total via UPI"
+                variant="outline"
+                fullWidth
+                onPress={() => {
+                  const planCode =
+                    snapshot?.plan_code ||
+                    subscriptionByProduct.get(checkoutProductCode)?.plan_code ||
+                    getDefaultPlanCode(plansByProduct.get(checkoutProductCode) ?? []);
+                  if (!planCode) {
+                    showError(new Error('No plan selected.'), 'No plan selected.');
+                    return;
+                  }
+                  setUpiPayRequest({
+                    productCode: checkoutProductCode,
+                    planCode,
+                    productName: getProductName(checkoutProductCode),
+                    planName: planCode,
+                    extraStaff: Math.max(0, Number(extraStaff) || 0),
+                    extraOffices: Math.max(0, Number(extraOffices) || 0),
+                    petsPackEnabled: checkoutProductCode === 'shopie' ? petsPackEnabled : false,
+                    mode: 'addons',
+                  });
                 }}
               />
             </View>
@@ -576,6 +646,13 @@ const styles = StyleSheet.create({
   wrap: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
   stack: { gap: spacing.lg },
   meta: { ...typography.body, color: colors.mutedForeground },
+  label: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
   productBlock: {
     marginTop: spacing.md,
     gap: spacing.sm,

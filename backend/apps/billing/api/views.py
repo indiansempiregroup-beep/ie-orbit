@@ -97,6 +97,80 @@ class BillingCheckoutView(APIView):
         )
 
 
+class BillingUpiCheckoutView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(tags=["Billing"], description="Create a UPI amount-QR checkout session for a plan.")
+    def post(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.data.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        business = Business.objects.get(id=business_id, tenant=tenant)
+        checkout = CheckoutService().create_upi_checkout_session(
+            tenant=tenant,
+            business=business,
+            product_code=str(request.data.get("product_code") or ""),
+            plan_code=str(request.data.get("plan_code") or ""),
+            amount_paise=request.data.get("amount_paise"),
+            extra_staff=int(request.data.get("extra_staff") or 0),
+            extra_offices=int(request.data.get("extra_offices") or 0),
+            pets_pack_enabled=bool(request.data.get("pets_pack_enabled")),
+            actor_id=str(request.user.id),
+        )
+        return success_response(checkout, status_code=status.HTTP_201_CREATED)
+
+
+class BillingUpiClaimView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(tags=["Billing"], description="Claim UPI payment with UTR and optional screenshot URL.")
+    def post(self, request: Request, session_id) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.data.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        business = Business.objects.get(id=business_id, tenant=tenant)
+        session = CheckoutService().claim_upi_session(
+            session_id=str(session_id),
+            business=business,
+            upi_utr=str(request.data.get("upi_utr") or ""),
+            payment_proof_url=str(request.data.get("payment_proof_url") or ""),
+        )
+        return success_response(
+            {
+                "session_id": str(session.id),
+                "payment_status": (session.metadata or {}).get("payment_status"),
+                "upi_utr": (session.metadata or {}).get("upi_utr"),
+            }
+        )
+
+
+class BillingUpiConfirmView(APIView):
+    permission_classes = [IsAuthenticated, HasPlatformPermission]
+    required_permission = "platform.billing.manage"
+
+    @extend_schema(tags=["Billing"], description="Platform admin confirm/reject UPI subscription claim.")
+    def post(self, request: Request, session_id) -> Response:
+        session = CheckoutService().confirm_upi_session(
+            session_id=str(session_id),
+            action=str(request.data.get("action") or ""),
+            note=str(request.data.get("note") or ""),
+            actor_id=str(getattr(request.user, "id", "") or ""),
+        )
+        return success_response(
+            {
+                "session_id": str(session.id),
+                "status": session.status,
+                "payment_status": (session.metadata or {}).get("payment_status"),
+            }
+        )
+
+
 class BillingWebhookEventListView(APIView):
     permission_classes = [IsAuthenticated]
 

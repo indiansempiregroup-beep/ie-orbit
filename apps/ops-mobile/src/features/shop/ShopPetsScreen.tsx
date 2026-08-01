@@ -1,43 +1,53 @@
-import React, { useCallback, useLayoutEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useCustomers } from '../../hooks/useOpsData';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { SearchBar } from '../../components/SearchBar';
+import { SelectField } from '../../components/SelectField';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useUpdateBusinessAddons } from '../../hooks/useOpsExtended';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Customer, ShopPet, ShopSettings } from '@ie-platform/sdk';
+import type { ShopPet } from '@ie-platform/sdk';
+import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../utils/products';
 import { shopListRefreshControl } from './shopRefreshControl';
 
 export function ShopPetsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
-  const { businessId } = useWorkspace();
-  const [settings, setSettings] = useState<ShopSettings | null>(null);
+  const { businessId, activeBusiness, refreshWorkspace } = useWorkspace();
+  const { customers } = useCustomers();
+  const addons = useUpdateBusinessAddons();
+  const petsSubscribed = hasPetsPack(activeBusiness?.product_subscriptions);
   const [pets, setPets] = useState<ShopPet[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [showAdd, setShowAdd] = useState(false);
-  const [customerId, setCustomerId] = useState('');
-  const [name, setName] = useState('');
-  const [species, setSpecies] = useState('Dog');
   const [loading, setLoading] = useState(true);
+  const [subscribing, setSubscribing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [speciesFilter, setSpeciesFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
     setLoading(true);
     try {
-      const settingsRes = await client.shop.getSettings({ business_id: businessId });
-      setSettings(settingsRes.data);
-      const customersRes = await client.customers.list({ business: businessId });
-      setCustomers(customersRes.data);
-      if (!customerId && customersRes.data[0]) setCustomerId(customersRes.data[0].id);
-      if (settingsRes.data.pets_enabled) {
+      if (petsSubscribed) {
         const petsRes = await client.shop.listPets({ business_id: businessId });
         setPets(petsRes.data);
       } else {
@@ -48,44 +58,51 @@ export function ShopPetsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, customerId]);
+  }, [businessId, client, petsSubscribed]);
 
-  const togglePack = useCallback(async () => {
-    if (!client || !businessId) return;
-    try {
-      const response = await client.shop.patchSettings({
-        business_id: businessId,
-        enable_pets: !settings?.pets_enabled,
-      });
-      setSettings(response.data);
-      setMessage(response.data.pets_enabled ? 'Pets pack enabled' : 'Pets pack disabled');
-      await load();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to update settings');
+  const subscribePets = useCallback(async () => {
+    const shopie = activeBusiness?.product_subscriptions?.find(
+      (subscription) =>
+        subscription.product_code === 'shopie' &&
+        (subscription.status === 'active' || subscription.status === 'trialing'),
+    );
+    if (!shopie) {
+      setMessage('Subscribe to ShopIE first, then add the Pets pack.');
+      return;
     }
-  }, [businessId, client, load, settings?.pets_enabled]);
+    setSubscribing(true);
+    setMessage(null);
+    try {
+      await addons.update('shopie', {
+        extra_staff: shopie.extra_staff ?? 0,
+        extra_offices: shopie.extra_offices ?? 0,
+        pets_pack_enabled: true,
+      });
+      await refreshWorkspace();
+      setMessage(`Pets pack subscribed · ₹${PETS_PACK_PRICE_INR}/month`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Unable to subscribe to Pets pack');
+    } finally {
+      setSubscribing(false);
+    }
+  }, [activeBusiness?.product_subscriptions, addons, refreshWorkspace]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={() => {
-            if (!settings?.pets_enabled) {
-              void togglePack();
-              return;
-            }
-            setShowAdd((open) => !open);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={settings?.pets_enabled ? (showAdd ? 'Close' : 'Add pet') : 'Enable pets'}
-          hitSlop={8}
-          style={styles.headerBtn}
-        >
-          <Feather name={showAdd ? 'x' : 'plus'} size={20} color="#fff" />
-        </Pressable>
-      ),
+      headerRight: () =>
+        petsSubscribed ? (
+          <Pressable
+            onPress={() => navigation.navigate('ShopPetForm')}
+            accessibilityRole="button"
+            accessibilityLabel="Add pet"
+            hitSlop={8}
+            style={styles.headerBtn}
+          >
+            <Feather name="plus" size={20} color="#fff" />
+          </Pressable>
+        ) : null,
     });
-  }, [navigation, showAdd, settings?.pets_enabled, togglePack]);
+  }, [navigation, petsSubscribed]);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,91 +110,185 @@ export function ShopPetsScreen() {
     }, [load]),
   );
 
-  const { refreshing, onRefresh } = usePullToRefresh(load);
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await refreshWorkspace();
+    await load();
+  });
 
-  async function create() {
-    if (!client || !businessId || !customerId || !name.trim()) return;
-    setMessage(null);
-    try {
-      await client.shop.createPet({
-        business_id: businessId,
-        customer_id: customerId,
-        name: name.trim(),
-        species,
-      });
-      setName('');
-      setMessage('Pet saved');
-      setShowAdd(false);
-      await load();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to save pet');
+  const speciesOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(pets.map((pet) => (pet.species || '').trim()).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b));
+    return [{ value: '', label: 'All species' }, ...values.map((value) => ({ value, label: value }))];
+  }, [pets]);
+
+  const customerOptions = useMemo(() => {
+    const fromPets = pets
+      .map((pet) => ({
+        value: pet.customer,
+        label: pet.customer_name || pet.customer,
+      }))
+      .filter((item) => item.value);
+    const fromCustomers = (customers ?? []).map((customer) => ({
+      value: customer.id,
+      label:
+        customer.full_name ||
+        customer.display_name ||
+        [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
+        customer.email ||
+        customer.phone_number ||
+        customer.id,
+    }));
+    const map = new Map<string, string>();
+    for (const option of [...fromPets, ...fromCustomers]) {
+      if (!map.has(option.value)) map.set(option.value, option.label);
     }
-  }
+    return [
+      { value: '', label: 'All owners' },
+      ...Array.from(map.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    ];
+  }, [pets, customers]);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return pets.filter((pet) => {
+      if (speciesFilter && (pet.species || '').toLowerCase() !== speciesFilter.toLowerCase()) {
+        return false;
+      }
+      if (customerFilter && pet.customer !== customerFilter) return false;
+      if (!term) return true;
+      return [pet.name, pet.species ?? '', pet.breed ?? '', pet.customer_name ?? '', pet.medical_notes ?? '']
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [pets, search, speciesFilter, customerFilter]);
+
+  const activeFilterCount = [speciesFilter, customerFilter, search.trim()].filter(Boolean).length;
 
   return (
     <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
       {message ? <Text style={styles.meta}>{message}</Text> : null}
 
-      {!settings?.pets_enabled ? (
+      {!petsSubscribed ? (
         <RefreshableScrollView
           refreshing={refreshing}
           onRefresh={onRefresh}
           contentContainerStyle={{ gap: 8, paddingBottom: insets.bottom + spacing.xl }}
         >
-          <Text style={styles.meta}>Enable the Pets pack to manage pet profiles.</Text>
-          <Pressable style={styles.button} onPress={() => void togglePack()}>
-            <Text style={styles.buttonText}>Enable Pets pack</Text>
+          <Text style={styles.title}>Pets pack</Text>
+          <Text style={styles.meta}>
+            Manage pet profiles, photos, birthdays, and owner alerts. Birthday reminders go out 5 days
+            ahead to the pet owner (in-app + email) and to business owners/managers.
+          </Text>
+          <Text style={styles.price}>₹{PETS_PACK_PRICE_INR}/month</Text>
+          <Pressable
+            style={[styles.button, subscribing && styles.buttonDisabled]}
+            onPress={() => void subscribePets()}
+            disabled={subscribing}
+          >
+            <Text style={styles.buttonText}>
+              {subscribing ? 'Subscribing…' : `Subscribe · ₹${PETS_PACK_PRICE_INR}/mo`}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate('ProductSettings')}>
+            <Text style={styles.link}>Or manage from Product settings</Text>
           </Pressable>
         </RefreshableScrollView>
       ) : (
         <>
-          {showAdd ? (
-            <View style={styles.formCard}>
-              <Text style={styles.label}>Customer</Text>
-              <TextInput
-                style={styles.input}
-                value={customerId}
-                onChangeText={setCustomerId}
-                placeholder="Customer UUID"
-                placeholderTextColor={colors.mutedForeground}
+          <SearchBar
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search pet, breed, owner…"
+            style={styles.search}
+          />
+          <View style={styles.filters}>
+            <View style={styles.filterHalf}>
+              <SelectField
+                label="Species"
+                value={speciesFilter}
+                options={speciesOptions}
+                onChange={setSpeciesFilter}
               />
+            </View>
+            <View style={styles.filterHalf}>
+              <SelectField
+                label="Owner"
+                value={customerFilter}
+                options={customerOptions}
+                onChange={setCustomerFilter}
+                searchable
+              />
+            </View>
+          </View>
+          {activeFilterCount ? (
+            <View style={styles.filterMetaRow}>
               <Text style={styles.meta}>
-                Tip: {(customers[0]?.full_name ?? customers[0]?.id) || 'no customers yet'}
+                {filtered.length} pet{filtered.length === 1 ? '' : 's'}
+                {` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}`}
               </Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Pet name"
-                placeholderTextColor={colors.mutedForeground}
-              />
-              <TextInput
-                style={styles.input}
-                value={species}
-                onChangeText={setSpecies}
-                placeholder="Species"
-                placeholderTextColor={colors.mutedForeground}
-              />
-              <Pressable style={styles.button} onPress={() => void create()}>
-                <Text style={styles.buttonText}>Save pet</Text>
+              <Pressable
+                onPress={() => {
+                  setSearch('');
+                  setSpeciesFilter('');
+                  setCustomerFilter('');
+                }}
+              >
+                <Text style={styles.clearFilters}>Clear filters</Text>
               </Pressable>
             </View>
-          ) : null}
+          ) : (
+            <Text style={[styles.meta, styles.countMeta]}>
+              {filtered.length} pet{filtered.length === 1 ? '' : 's'}
+            </Text>
+          )}
+
+          {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
           <FlatList
-            data={pets}
+            data={filtered}
             keyExtractor={(item) => item.id}
             refreshControl={shopListRefreshControl(refreshing, onRefresh)}
             contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
-            renderItem={({ item }) => (
-              <View style={styles.row}>
-                <Text style={styles.name}>{item.name}</Text>
+            renderItem={({ item }) => {
+              const photoUri = resolveMediaUrl(item.photo_url);
+              return (
+                <Pressable
+                  style={styles.row}
+                  onPress={() => navigation.navigate('ShopPetDetail', { petId: item.id })}
+                >
+                  {photoUri ? (
+                    <Image source={{ uri: photoUri }} style={styles.thumb} />
+                  ) : (
+                    <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                      <Feather name="heart" size={18} color={colors.mutedForeground} />
+                    </View>
+                  )}
+                  <View style={styles.rowMain}>
+                    <Text style={styles.name}>{item.name}</Text>
+                    <Text style={styles.meta}>
+                      {[item.species, item.breed].filter(Boolean).join(' · ') || '—'}
+                      {item.birthday ? ` · birthday ${item.birthday}` : ''}
+                    </Text>
+                    {item.customer_name ? (
+                      <Text style={styles.meta}>Owner: {item.customer_name}</Text>
+                    ) : null}
+                  </View>
+                  <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+                </Pressable>
+              );
+            }}
+            ListEmptyComponent={
+              !loading ? (
                 <Text style={styles.meta}>
-                  {item.species || '—'} {item.birthday ? `· ${item.birthday}` : ''}
+                  {pets.length
+                    ? 'No pets match these filters.'
+                    : 'No pets yet. Tap + to add.'}
                 </Text>
-              </View>
-            )}
-            ListEmptyComponent={!loading ? <Text style={styles.meta}>No pets yet. Tap + to add.</Text> : null}
+              ) : null
+            }
           />
         </>
       )}
@@ -195,24 +306,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  formCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    backgroundColor: colors.card,
-  },
-  label: { fontWeight: '600', color: colors.foreground, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  search: { marginBottom: spacing.sm },
+  filters: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },
+  filterHalf: { flex: 1 },
+  filterMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: spacing.sm,
-    color: colors.foreground,
   },
+  countMeta: { marginBottom: spacing.sm },
+  clearFilters: { color: colors.primary, fontWeight: '600' },
+  title: { fontWeight: '700', fontSize: 22, color: colors.foreground },
+  price: { fontWeight: '700', fontSize: 28, color: colors.foreground, marginVertical: spacing.sm },
   button: {
     backgroundColor: colors.primary,
     borderRadius: 12,
@@ -220,8 +326,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.sm,
   },
+  buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontWeight: '600' },
-  row: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  link: { color: colors.primary, fontWeight: '600', marginTop: spacing.md },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  rowMain: { flex: 1 },
+  thumb: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.muted },
+  thumbPlaceholder: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   name: { fontWeight: '600', color: colors.foreground },
   meta: { color: colors.mutedForeground, marginTop: 2 },
 });

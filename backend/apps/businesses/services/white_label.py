@@ -27,7 +27,7 @@ def active_product_codes(business: Business) -> list[str]:
     return sorted(set(codes))
 
 
-def enabled_features(product_codes: list[str]) -> dict[str, bool]:
+def enabled_features(product_codes: list[str], *, business: Business | None = None) -> dict[str, bool]:
     features: dict[str, bool] = {}
     for product_code in product_codes:
         for feature in PRODUCT_FEATURES.get(product_code, []):
@@ -36,6 +36,11 @@ def enabled_features(product_codes: list[str]) -> dict[str, bool]:
         features = {feature: True for feature in PRODUCT_FEATURES["appointie"]}
     if not features:
         features = {feature: True for feature in PRODUCT_FEATURES["appointie"]}
+    if business is not None and "shopie" in {code.lower() for code in product_codes}:
+        from apps.shopie.services.pets import PetsService
+
+        if PetsService().has_pets_entitlement(business=business):
+            features["mobile_pets"] = True
     return features
 
 
@@ -87,6 +92,8 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
             "formatted_address": ", ".join(address_parts),
             "cancellation_policy": cancellation_policy,
             "rescheduling_policy": rescheduling_policy,
+            "upi_vpa": getattr(business, "upi_vpa", "") or "",
+            "payment_qr_url": getattr(business, "payment_qr_url", "") or "",
         },
         "branding": {
             "app_name": profile.app_name,
@@ -101,7 +108,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
             "typography_settings": profile.typography_settings,
         },
         "enabled_products": product_codes,
-        "features": enabled_features(product_codes),
+        "features": enabled_features(product_codes, business=business),
         "build_metadata": profile.build_metadata,
     }
 

@@ -12,6 +12,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useShopProductMutations, useShopProducts } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
 import { uploadProductImage } from './uploadProductImage';
+import { currencySelectOptions, ensureSelectOption } from '../../config/onboarding';
 import {
   MAX_PRODUCT_IMAGES,
   buildProductImageMetadata,
@@ -588,7 +589,6 @@ export function ShopProductsPage() {
                 ['sku', 'SKU', false],
                 ['price', 'Price', false],
                 ['tax_rate', 'Tax %', false],
-                ['currency', 'Currency', false],
                 ['stock_on_hand', 'Stock on hand', false],
                 ['low_stock_threshold', 'Low stock alert', false],
                 ['pack_size', 'Pack size / quantity', false],
@@ -599,18 +599,26 @@ export function ShopProductsPage() {
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{label}</span>
                 <input
                   value={form[key]}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      [key]: key === 'currency' ? e.target.value.toUpperCase() : e.target.value,
-                    })
-                  }
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                   required={required}
-                  maxLength={key === 'currency' ? 3 : undefined}
                   style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
                 />
               </label>
             ))}
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Currency</span>
+              <select
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              >
+                {ensureSelectOption(currencySelectOptions, form.currency).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Barcode type</span>
               <select

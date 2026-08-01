@@ -170,6 +170,7 @@ export function RegisterWizardScreen() {
             <ImagePickerButton
               label="Logo"
               variant="card"
+              valueUri={values.logoAsset?.uri || null}
               onPicked={(asset: ImagePickerAsset) => patch({ logoAsset: asset, skipBranding: false })}
               helperText="Optional. You can update this later in Settings."
             />

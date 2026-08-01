@@ -258,6 +258,7 @@ class BusinessViewSet(viewsets.ViewSet):
             product_code=product_code or "",
             extra_staff=serializer.validated_data["extra_staff"],
             extra_offices=serializer.validated_data["extra_offices"],
+            pets_pack_enabled=serializer.validated_data.get("pets_pack_enabled"),
             actor=request.user,
         )
         business = self.repository.get_for_request(

@@ -14,6 +14,7 @@ from rest_framework.exceptions import ValidationError
 from apps.customers.models import (
     Customer,
     CustomerAddress,
+    CustomerAddressType,
     CustomerExportJob,
     CustomerImportJob,
     CustomerMergeRecord,
@@ -244,6 +245,97 @@ class CustomerService:
         address.save()
         customer.addresses.exclude(id=address.id).update(is_default=False)
         return address
+
+    def list_addresses(self, *, customer: Customer):
+        return customer.addresses.order_by("-is_default", "created_at")
+
+    def create_address(self, *, customer: Customer, data: dict[str, Any]) -> CustomerAddress:
+        payload = dict(data)
+        full_address = str(payload.pop("full_address", "") or "").strip()
+        line1 = str(payload.pop("line1", "") or "").strip()
+        if full_address and not line1:
+            line1 = full_address
+        if not line1:
+            raise ValidationError({"line1": "Address line is required."})
+        if "latitude" in payload:
+            payload["latitude"] = _as_coordinate(payload.get("latitude"))
+        if "longitude" in payload:
+            payload["longitude"] = _as_coordinate(payload.get("longitude"))
+        make_default = bool(payload.pop("is_default", False)) or not customer.addresses.exists()
+        address = CustomerAddress(
+            tenant=customer.tenant,
+            customer=customer,
+            line1=line1,
+            address_type=str(payload.get("address_type") or CustomerAddressType.HOME),
+            line2=str(payload.get("line2") or ""),
+            city=str(payload.get("city") or ""),
+            state=str(payload.get("state") or ""),
+            country=str(payload.get("country") or ""),
+            postal_code=str(payload.get("postal_code") or ""),
+            latitude=payload.get("latitude"),
+            longitude=payload.get("longitude"),
+            is_default=make_default,
+        )
+        try:
+            address.full_clean()
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.message_dict if hasattr(exc, "message_dict") else exc.messages) from exc
+        address.save()
+        if make_default:
+            customer.addresses.exclude(id=address.id).update(is_default=False)
+        return address
+
+    def update_address(
+        self, *, customer: Customer, address_id: Any, data: dict[str, Any]
+    ) -> CustomerAddress:
+        address = customer.addresses.filter(id=address_id).first()
+        if address is None:
+            raise ValidationError({"address": "Address not found."})
+        payload = dict(data)
+        if "full_address" in payload and not payload.get("line1"):
+            payload["line1"] = str(payload.pop("full_address") or "").strip()
+        else:
+            payload.pop("full_address", None)
+        if "latitude" in payload:
+            payload["latitude"] = _as_coordinate(payload.get("latitude"))
+        if "longitude" in payload:
+            payload["longitude"] = _as_coordinate(payload.get("longitude"))
+        make_default = bool(payload.pop("is_default", False))
+        for field in (
+            "address_type",
+            "line1",
+            "line2",
+            "city",
+            "state",
+            "country",
+            "postal_code",
+            "latitude",
+            "longitude",
+        ):
+            if field in payload and payload[field] is not None:
+                setattr(address, field, payload[field])
+        if make_default:
+            address.is_default = True
+        try:
+            address.full_clean()
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.message_dict if hasattr(exc, "message_dict") else exc.messages) from exc
+        address.save()
+        if address.is_default:
+            customer.addresses.exclude(id=address.id).update(is_default=False)
+        return address
+
+    def delete_address(self, *, customer: Customer, address_id: Any) -> None:
+        address = customer.addresses.filter(id=address_id).first()
+        if address is None:
+            raise ValidationError({"address": "Address not found."})
+        was_default = address.is_default
+        address.delete()
+        if was_default:
+            nxt = customer.addresses.order_by("created_at").first()
+            if nxt:
+                nxt.is_default = True
+                nxt.save(update_fields=["is_default", "updated_at"])
 
     def _validate_business_tenant(self, obj: Any) -> None:
         if obj.business.tenant_id != obj.tenant_id:

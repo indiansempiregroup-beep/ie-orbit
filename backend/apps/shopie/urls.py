@@ -7,6 +7,7 @@ from apps.shopie.api.extended_views import (
     ShopDeliveryZoneListCreateView,
     ShopPetDetailView,
     ShopPetListCreateView,
+    ShopPetNotifyView,
     ShopReturnListCreateView,
     ShopSettingsView,
 )
@@ -15,6 +16,7 @@ from apps.shopie.api.views import (
     ShopBarcodeLookupView,
     ShopInvoiceFromOrderView,
     ShopInvoiceListView,
+    ShopOrderConfirmPaymentView,
     ShopOrderDetailView,
     ShopOrderListCreateView,
     ShopOrderSettlePaymentView,
@@ -63,6 +65,11 @@ urlpatterns = [
         name="shop-order-settle-payment",
     ),
     path(
+        "shop/orders/<uuid:order_id>/confirm-payment",
+        ShopOrderConfirmPaymentView.as_view(),
+        name="shop-order-confirm-payment",
+    ),
+    path(
         "shop/orders/<uuid:order_id>/invoice",
         ShopInvoiceFromOrderView.as_view(),
         name="shop-order-invoice",
@@ -78,6 +85,7 @@ urlpatterns = [
     path("shop/settings", ShopSettingsView.as_view(), name="shop-settings"),
     path("shop/pets", ShopPetListCreateView.as_view(), name="shop-pet-list-create"),
     path("shop/pets/<uuid:pet_id>", ShopPetDetailView.as_view(), name="shop-pet-detail"),
+    path("shop/pets/<uuid:pet_id>/notify", ShopPetNotifyView.as_view(), name="shop-pet-notify"),
     path("shop/invoices", ShopInvoiceListView.as_view(), name="shop-invoice-list"),
     path("shop/quotations", ShopQuotationListCreateView.as_view(), name="shop-quotation-list-create"),
 ]

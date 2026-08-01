@@ -330,3 +330,15 @@ export function deriveDashboardKpis(
     occupancyRate,
   };
 }
+
+export function useDashboardSummary() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  return useQuery({
+    queryKey: ['dashboard', 'summary', workspace.tenantId, workspace.businessId],
+    queryFn: async () => (await client.analytics.dashboard.summary()).data,
+    enabled: Boolean(workspace.businessId),
+    staleTime: 1000 * 30,
+    refetchOnWindowFocus: true,
+  });
+}

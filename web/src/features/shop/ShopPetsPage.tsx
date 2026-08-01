@@ -1,23 +1,31 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import type { ShopPet } from '@ie-platform/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { useDialog } from '../../hooks/useDialog';
-import { useShopPets, useShopSettings, useShopSettingsMutations, useShopPetMutations } from './shopHooks';
-import { useQuery } from '@tanstack/react-query';
+import { useShopPets, useShopPetMutations } from './shopHooks';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
+import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../config/products';
+import { useUpdateBusinessAddonsMutation } from '../settings/billingHooks';
+import { getApiErrorMessage } from '../../lib/apiClient';
 
 export function ShopPetsPage() {
-  const settings = useShopSettings();
   const pets = useShopPets();
-  const { patchSettings } = useShopSettingsMutations();
-  const { createPet } = useShopPetMutations();
+  const { createPet, notifyPetOwner } = useShopPetMutations();
   const dialog = useDialog();
+  const notifyDialog = useDialog();
   const client = useApiClient();
   const workspace = useWorkspace();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const updateAddons = useUpdateBusinessAddonsMutation(workspace.businessId ?? undefined);
+  const petsSubscribed = hasPetsPack(workspace.activeBusiness?.product_subscriptions);
   const customers = useQuery({
     queryKey: ['customers', workspace.businessId],
     enabled: Boolean(workspace.businessId),
@@ -29,7 +37,6 @@ export function ShopPetsPage() {
     },
   });
 
-  const petsEnabled = Boolean(settings.data?.pets_enabled);
   const [customerId, setCustomerId] = useState('');
   const [name, setName] = useState('');
   const [species, setSpecies] = useState('Dog');
@@ -40,6 +47,10 @@ export function ShopPetsPage() {
   const [search, setSearch] = useState('');
   const [speciesFilter, setSpeciesFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
+  const [selectedPet, setSelectedPet] = useState<ShopPet | null>(null);
+  const [notifySubject, setNotifySubject] = useState('');
+  const [notifyBody, setNotifyBody] = useState('');
+  const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -65,13 +76,45 @@ export function ShopPetsPage() {
     return Array.from(set).sort();
   }, [pets.data]);
 
-  async function togglePets() {
+  useEffect(() => {
+    const petId = searchParams.get('petId');
+    if (!petId || !pets.data?.length) return;
+    const pet = pets.data.find((item) => item.id === petId);
+    if (!pet) return;
+    setSelectedPet(pet);
+    if (searchParams.get('notify') === '1') {
+      setNotifySubject(`Happy birthday reminder for ${pet.name}`);
+      setNotifyBody('');
+      setNotifyMessage(null);
+      notifyDialog.show();
+    }
+    // Intentionally depend on show callback + query params/data only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pets.data, searchParams, notifyDialog.show]);
+
+  async function subscribePets() {
     setMessage(null);
+    const shopie = workspace.activeBusiness?.product_subscriptions?.find(
+      (subscription) =>
+        subscription.product_code === 'shopie' &&
+        (subscription.status === 'active' || subscription.status === 'trialing'),
+    );
+    if (!shopie) {
+      setMessage('Subscribe to ShopIE first, then add the Pets pack.');
+      return;
+    }
     try {
-      await patchSettings.mutateAsync({ enable_pets: !petsEnabled });
-      setMessage(petsEnabled ? 'Pets pack disabled.' : 'Pets pack enabled.');
+      await updateAddons.mutateAsync({
+        productCode: 'shopie',
+        extra_staff: shopie.extra_staff ?? 0,
+        extra_offices: shopie.extra_offices ?? 0,
+        pets_pack_enabled: true,
+      });
+      await workspace.refreshWorkspace();
+      await queryClient.invalidateQueries({ queryKey: ['shop'] });
+      setMessage(`Pets pack subscribed · ₹${PETS_PACK_PRICE_INR}/month`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to update settings.');
+      setMessage(getApiErrorMessage(error, 'Unable to subscribe to Pets pack.'));
     }
   }
 
@@ -84,6 +127,22 @@ export function ShopPetsPage() {
     setMedicalNotes('');
     setMessage(null);
     dialog.show();
+  }
+
+  function openNotify(pet: ShopPet) {
+    setSelectedPet(pet);
+    setNotifySubject(`Happy birthday reminder for ${pet.name}`);
+    setNotifyBody('');
+    setNotifyMessage(null);
+    notifyDialog.show();
+  }
+
+  function closeNotify() {
+    notifyDialog.hide();
+    const next = new URLSearchParams(searchParams);
+    next.delete('notify');
+    next.delete('petId');
+    setSearchParams(next, { replace: true });
   }
 
   async function submit(event: React.FormEvent) {
@@ -105,13 +164,43 @@ export function ShopPetsPage() {
     }
   }
 
+  async function submitNotify(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedPet) return;
+    if (!notifySubject.trim() || !notifyBody.trim()) {
+      setNotifyMessage('Subject and message are required.');
+      return;
+    }
+    setNotifyMessage(null);
+    try {
+      const result = await notifyPetOwner.mutateAsync({
+        petId: selectedPet.id,
+        subject: notifySubject.trim(),
+        body: notifyBody.trim(),
+      });
+      const channels = (result.sent_channels || []).join(', ') || 'none';
+      setNotifyMessage(`Notification sent (${channels}).`);
+      closeNotify();
+      setMessage(`Notification sent to owner of ${selectedPet.name} (${channels}).`);
+    } catch (error) {
+      setNotifyMessage(getApiErrorMessage(error, 'Unable to notify owner.'));
+    }
+  }
+
   return (
     <div className="page-stack">
-      {!petsEnabled ? (
+      {!petsSubscribed ? (
         <Card>
-          <p>Enable the Pets pack to manage pet profiles for this business.</p>
-          <Button type="button" variant="primary" onClick={togglePets} disabled={patchSettings.isPending}>
-            Enable Pets pack
+          <p>
+            Pets pack manages pet profiles, birthdays, and owner alerts for ₹{PETS_PACK_PRICE_INR}/month.
+          </p>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => void subscribePets()}
+            disabled={updateAddons.isPending}
+          >
+            {updateAddons.isPending ? 'Subscribing…' : `Subscribe · ₹${PETS_PACK_PRICE_INR}/mo`}
           </Button>
           {message ? <p role="status">{message}</p> : null}
         </Card>
@@ -160,13 +249,31 @@ export function ShopPetsPage() {
               },
             ]}
           />
+          {message ? <p role="status">{message}</p> : null}
           <div style={{ display: 'grid', gap: 8 }}>
             {filtered.map((pet) => (
-              <div key={pet.id}>
-                <strong>{pet.name}</strong> · {pet.species || '—'}{' '}
-                {pet.breed ? `· ${pet.breed}` : ''}
-                {pet.birthday ? ` · birthday ${pet.birthday}` : ''}
-                {pet.medical_notes ? <div style={{ opacity: 0.8 }}>{pet.medical_notes}</div> : null}
+              <div
+                key={pet.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                  padding: 12,
+                  borderRadius: 12,
+                  border: selectedPet?.id === pet.id ? '1px solid #2563eb' : '1px solid transparent',
+                  background: selectedPet?.id === pet.id ? '#eff6ff' : 'transparent',
+                }}
+              >
+                <div>
+                  <strong>{pet.name}</strong> · {pet.species || '—'}{' '}
+                  {pet.breed ? `· ${pet.breed}` : ''}
+                  {pet.birthday ? ` · birthday ${pet.birthday}` : ''}
+                  {pet.medical_notes ? <div style={{ opacity: 0.8 }}>{pet.medical_notes}</div> : null}
+                </div>
+                <Button type="button" variant="neutral" onClick={() => openNotify(pet)}>
+                  Notify owner
+                </Button>
               </div>
             ))}
             {!pets.data?.length ? <p>No pets yet.</p> : null}
@@ -251,6 +358,54 @@ export function ShopPetsPage() {
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}
+        </form>
+      </Dialog>
+
+      <Dialog
+        open={notifyDialog.open}
+        onClose={closeNotify}
+        title={selectedPet ? `Notify owner · ${selectedPet.name}` : 'Notify owner'}
+        labelledBy="notify-pet-owner-dialog"
+        busy={notifyPetOwner.isPending}
+      >
+        <form onSubmit={(event) => void submitNotify(event)} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
+          {selectedPet ? (
+            <p style={{ margin: 0, color: '#6b7280' }}>
+              Birthday: {selectedPet.birthday || 'Not set'} · Species: {selectedPet.species || '—'}
+            </p>
+          ) : null}
+          <label style={{ display: 'grid', gap: 8 }}>
+            Subject
+            <input
+              value={notifySubject}
+              onChange={(event) => setNotifySubject(event.target.value)}
+              required
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 8 }}>
+            Message
+            <textarea
+              value={notifyBody}
+              onChange={(event) => setNotifyBody(event.target.value)}
+              required
+              rows={4}
+              placeholder="Write a custom message for the pet owner…"
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+          </label>
+          <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
+            Sends in-app (if they have an account) and email.
+          </p>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Button type="submit" variant="primary" disabled={notifyPetOwner.isPending}>
+              {notifyPetOwner.isPending ? 'Sending…' : 'Send notification'}
+            </Button>
+            <Button type="button" variant="neutral" onClick={closeNotify} disabled={notifyPetOwner.isPending}>
+              Cancel
+            </Button>
+          </div>
+          {notifyMessage ? <p role="status">{notifyMessage}</p> : null}
         </form>
       </Dialog>
     </div>

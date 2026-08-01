@@ -68,6 +68,12 @@
     "completed": "Completed",
     "loyaltyPts": "Loyalty Pts"
   },
+  "shop": {
+    "myOrders": "My Orders",
+    "returns": "Returns",
+    "myPets": "My Pets",
+    "addresses": "Addresses"
+  },
   "nav": {
     "home": "Home",
     "dashboard": "Dashboard",

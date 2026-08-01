@@ -10,10 +10,12 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
 import { useBIOverview, useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
+import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/products';
 import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
 import { brand, colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
@@ -29,16 +31,30 @@ function greeting() {
 export function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const { activeBusiness } = useWorkspace();
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const today = formatDateKey(new Date());
-  const { todayCount, reload: reloadSummary } = useDashboardSummary();
+  const { summary, todayCount, reload: reloadSummary } = useDashboardSummary();
   const { bookings, loading, reload: reloadBookings } = useBookings(today);
   const { customers } = useCustomers();
   const { services } = useServices();
   const { staff } = useStaffMembers();
   const { data: bi } = useBIOverview(showReports);
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
+
+  const subscribedIds = useMemo(
+    () => getSubscribedProductIds(activeBusiness?.product_subscriptions),
+    [activeBusiness?.product_subscriptions],
+  );
+  const hasAppointie =
+    Boolean(summary?.appointie) ||
+    (summary?.products?.includes('appointie') ??
+      (subscribedIds.includes('appointie') || subscribedIds.length === 0));
+  const shopieEnabled =
+    Boolean(summary?.shopie) ||
+    (summary?.products?.includes('shopie') ?? hasShopie(activeBusiness?.product_subscriptions));
+  const petsEnabled = Boolean(summary?.pets) || hasPetsPack(activeBusiness?.product_subscriptions);
 
   const reload = async () => {
     await Promise.all([reloadSummary(), reloadBookings()]);
@@ -52,6 +68,14 @@ export function DashboardScreen() {
   );
   const nextBooking = upcoming[0];
   const displayName = user?.first_name || user?.full_name || 'there';
+  const appointie = summary?.appointie;
+  const shopie = summary?.shopie;
+  const pets = summary?.pets;
+  const revenueTeaser =
+    bi?.appointie?.revenue?.estimated_revenue ?? bi?.revenue?.estimated_revenue ?? bi?.shopie?.gmv ?? null;
+  const revenueCurrency =
+    bi?.appointie?.revenue?.currency ?? bi?.revenue?.currency ?? bi?.shopie?.currency ?? summary?.currency ?? '';
+  const revenueLabel = bi?.appointie || bi?.revenue ? 'Est. revenue · 30 days' : 'GMV · 30 days';
 
   return (
     <View style={styles.screen}>
@@ -65,61 +89,101 @@ export function DashboardScreen() {
             </Pressable>
           }
         >
-          <View style={styles.nextCard}>
-            <Text style={styles.nextLabel}>Next up today</Text>
-            {nextBooking ? (
-              <>
-                <Text style={styles.nextTitle}>{entityLabel(serviceMap, nextBooking.service_id, 'Booking')}</Text>
-                <Text style={styles.nextHint}>{entityLabel(customerMap, nextBooking.customer_id)}</Text>
-                <View style={styles.nextMetaRow}>
-                  <View style={styles.nextMetaItem}>
-                    <Feather name="clock" size={12} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.nextMetaText}>{formatTime(nextBooking.start_at)}</Text>
-                  </View>
-                  {nextBooking.staff_id ? (
+          {hasAppointie ? (
+            <View style={styles.nextCard}>
+              <Text style={styles.nextLabel}>Next up today</Text>
+              {nextBooking ? (
+                <>
+                  <Text style={styles.nextTitle}>{entityLabel(serviceMap, nextBooking.service_id, 'Booking')}</Text>
+                  <Text style={styles.nextHint}>{entityLabel(customerMap, nextBooking.customer_id)}</Text>
+                  <View style={styles.nextMetaRow}>
                     <View style={styles.nextMetaItem}>
-                      <Feather name="user" size={12} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.nextMetaText}>{entityLabel(staffMap, nextBooking.staff_id)}</Text>
+                      <Feather name="clock" size={12} color="rgba(255,255,255,0.7)" />
+                      <Text style={styles.nextMetaText}>{formatTime(nextBooking.start_at)}</Text>
                     </View>
-                  ) : null}
-                </View>
-                <Pressable
-                  style={styles.manageBtn}
-                  onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
-                >
-                  <Text style={styles.manageText}>Open booking</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Text style={styles.nextTitle}>No upcoming bookings</Text>
-                <Text style={styles.nextHint}>Fill today&apos;s schedule with a new appointment.</Text>
-                <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('CreateBooking', {})}>
-                  <Text style={styles.manageText}>New booking</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
+                    {nextBooking.staff_id ? (
+                      <View style={styles.nextMetaItem}>
+                        <Feather name="user" size={12} color="rgba(255,255,255,0.7)" />
+                        <Text style={styles.nextMetaText}>{entityLabel(staffMap, nextBooking.staff_id)}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    style={styles.manageBtn}
+                    onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
+                  >
+                    <Text style={styles.manageText}>Open booking</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.nextTitle}>No upcoming bookings</Text>
+                  <Text style={styles.nextHint}>Fill today&apos;s schedule with a new appointment.</Text>
+                  <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('CreateBooking', {})}>
+                    <Text style={styles.manageText}>New booking</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          ) : shopieEnabled ? (
+            <View style={styles.nextCard}>
+              <Text style={styles.nextLabel}>ShopIE today</Text>
+              <Text style={styles.nextTitle}>{shopie?.orders_today ?? 0} orders</Text>
+              <Text style={styles.nextHint}>
+                {shopie?.pending_returns ?? 0} pending returns · {shopie?.open_orders ?? 0} open
+              </Text>
+              <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('ShopOrders')}>
+                <Text style={styles.manageText}>Open orders</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.nextCard}>
+              <Text style={styles.nextLabel}>Workspace</Text>
+              <Text style={styles.nextTitle}>Ready when you are</Text>
+              <Text style={styles.nextHint}>Subscribe to AppointIE or ShopIE to see live ops metrics here.</Text>
+            </View>
+          )}
         </OpsHeader>
 
         <View style={styles.body}>
           <SoftLockBanner />
-          <View style={styles.statsRow}>
-            <StatCard value={String(todayCount)} label="Today" />
-            <StatCard value={String(customers.length)} label="Customers" />
-            {showStaff ? <StatCard value={String(staff.length)} label="Staff" /> : null}
-            <StatCard value={String(services.length)} label="Services" />
-          </View>
 
-          {showReports && bi?.revenue?.estimated_revenue != null ? (
+          {hasAppointie ? (
+            <View style={styles.statsRow}>
+              <StatCard value={String(appointie?.today_bookings ?? todayCount)} label="Today" />
+              <StatCard value={String(appointie?.active_customers ?? customers.length)} label="Customers" />
+              {showStaff ? <StatCard value={String(appointie?.staff_on_duty ?? staff.length)} label="Staff" /> : null}
+              <StatCard value={String(services.length)} label="Services" />
+            </View>
+          ) : null}
+
+          {shopieEnabled ? (
+            <View style={styles.statsRow}>
+              <StatCard value={String(shopie?.orders_today ?? 0)} label="Orders" />
+              <StatCard value={String(shopie?.open_orders ?? 0)} label="Open" />
+              <StatCard value={String(shopie?.pending_returns ?? 0)} label="Returns" />
+              <StatCard value={String(shopie?.orders_month ?? 0)} label="Month" />
+            </View>
+          ) : null}
+
+          {petsEnabled ? (
+            <View style={styles.statsRow}>
+              <StatCard value={String(pets?.total ?? 0)} label="Pets" />
+              <StatCard value={String(pets?.birthdays_next_7d ?? 0)} label="Bdays 7d" />
+              <StatCard value={String(pets?.birthdays_next_30d ?? 0)} label="Bdays 30d" />
+              <StatCard value={String(pets?.with_photo ?? 0)} label="Photos" />
+            </View>
+          ) : null}
+
+          {showReports && revenueTeaser != null ? (
             <Pressable style={styles.revenueCard} onPress={() => navigation.navigate('BI', { tab: 'overview' })}>
               <View style={styles.revenueIcon}>
                 <Feather name="trending-up" size={18} color={brand.primary} />
               </View>
               <View style={styles.revenueCopy}>
-                <Text style={styles.revenueLabel}>Est. revenue · 30 days</Text>
+                <Text style={styles.revenueLabel}>{revenueLabel}</Text>
                 <Text style={styles.revenueValue}>
-                  {bi.revenue.estimated_revenue} {bi.revenue.currency}
+                  {revenueTeaser} {revenueCurrency}
                 </Text>
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
@@ -127,50 +191,70 @@ export function DashboardScreen() {
           ) : null}
 
           <View style={styles.quickActions}>
-            <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
+            {hasAppointie ? (
+              <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
+            ) : null}
+            {shopieEnabled ? (
+              <QuickAction icon="shopping-cart" label="Orders" onPress={() => navigation.navigate('ShopOrders')} />
+            ) : null}
             <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
-            <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
-            {showStaff ? (
+            {hasAppointie ? (
+              <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
+            ) : null}
+            {petsEnabled ? (
+              <QuickAction icon="heart" label="Pets" onPress={() => navigation.navigate('ShopPets', undefined)} />
+            ) : null}
+            {showStaff && hasAppointie ? (
               <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
             ) : null}
           </View>
 
-          <SectionHeader
-            title="Upcoming today"
-            action={
-              <Pressable onPress={() => navigation.navigate('Main', { screen: 'Bookings' } as never)}>
-                <Text style={styles.link}>See all</Text>
-              </Pressable>
-            }
-          />
-          <ScreenState
-            loading={loading && !bookings.length}
-            empty={!loading && upcoming.length === 0}
-            emptyTitle="Clear schedule"
-            emptyMessage="No upcoming bookings left today."
-            actionLabel="New booking"
-            onAction={() => navigation.navigate('CreateBooking', {})}
-          />
-          <View style={styles.list}>
-            {upcoming.map((booking) => (
-              <BookingRow
-                key={booking.id}
-                serviceName={entityLabel(serviceMap, booking.service_id, 'Booking')}
-                customerName={entityLabel(customerMap, booking.customer_id)}
-                staffName={entityLabel(staffMap, booking.staff_id, '')}
-                startAt={booking.start_at}
-                bookingNumber={booking.booking_number}
-                status={booking.status}
-                onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+          {hasAppointie ? (
+            <>
+              <SectionHeader
+                title="Upcoming today"
+                action={
+                  <Pressable onPress={() => navigation.navigate('Main', { screen: 'Bookings' } as never)}>
+                    <Text style={styles.link}>See all</Text>
+                  </Pressable>
+                }
               />
-            ))}
-          </View>
+              <ScreenState
+                loading={loading && !bookings.length}
+                empty={!loading && upcoming.length === 0}
+                emptyTitle="Clear schedule"
+                emptyMessage="No upcoming bookings left today."
+                actionLabel="New booking"
+                onAction={() => navigation.navigate('CreateBooking', {})}
+              />
+              <View style={styles.list}>
+                {upcoming.map((booking) => (
+                  <BookingRow
+                    key={booking.id}
+                    serviceName={entityLabel(serviceMap, booking.service_id, 'Booking')}
+                    customerName={entityLabel(customerMap, booking.customer_id)}
+                    staffName={entityLabel(staffMap, booking.staff_id, '')}
+                    startAt={booking.start_at}
+                    bookingNumber={booking.booking_number}
+                    status={booking.status}
+                    onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                  />
+                ))}
+              </View>
+            </>
+          ) : null}
         </View>
       </RefreshableScrollView>
 
-      <Pressable style={styles.fab} onPress={() => navigation.navigate('CreateBooking', {})}>
-        <Feather name="plus" size={24} color="#fff" />
-      </Pressable>
+      {hasAppointie ? (
+        <Pressable style={styles.fab} onPress={() => navigation.navigate('CreateBooking', {})}>
+          <Feather name="plus" size={24} color="#fff" />
+        </Pressable>
+      ) : shopieEnabled ? (
+        <Pressable style={styles.fab} onPress={() => navigation.navigate('ShopOrders')}>
+          <Feather name="shopping-cart" size={22} color="#fff" />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -275,9 +359,10 @@ const styles = StyleSheet.create({
   revenueCopy: { flex: 1 },
   revenueLabel: { ...typography.caption, color: colors.mutedForeground },
   revenueValue: { ...typography.title, color: colors.foreground, marginTop: 2 },
-  quickActions: { flexDirection: 'row', gap: spacing.md },
+  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   quickCard: {
-    flex: 1,
+    minWidth: '22%',
+    flexGrow: 1,
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.card,

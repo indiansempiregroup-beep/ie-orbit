@@ -14,6 +14,9 @@ from apps.billing.api.views import (
     BillingReleaseGateView,
     BillingStatusView,
     BillingReconciliationRunView,
+    BillingUpiCheckoutView,
+    BillingUpiClaimView,
+    BillingUpiConfirmView,
     BillingWebhookBulkReprocessView,
     BillingWebhookEventListView,
     BillingWebhookEventReprocessView,
@@ -39,6 +42,17 @@ urlpatterns = [
         name="billing-reconciliation-run",
     ),
     path("billing/checkout", BillingCheckoutView.as_view(), name="billing-checkout"),
+    path("billing/checkout/upi", BillingUpiCheckoutView.as_view(), name="billing-upi-checkout"),
+    path(
+        "billing/checkout/upi/<uuid:session_id>/claim",
+        BillingUpiClaimView.as_view(),
+        name="billing-upi-claim",
+    ),
+    path(
+        "billing/checkout/upi/<uuid:session_id>/confirm",
+        BillingUpiConfirmView.as_view(),
+        name="billing-upi-confirm",
+    ),
     path("billing/webhooks/summary", BillingWebhookSummaryView.as_view(), name="billing-webhook-summary"),
     path(
         "billing/webhooks/reprocess-bulk",

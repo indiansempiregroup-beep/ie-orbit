@@ -480,6 +480,7 @@ class BusinessService:
         extra_staff: int,
         extra_offices: int,
         actor: Any,
+        pets_pack_enabled: bool | None = None,
     ) -> BusinessProductSubscription:
         normalized_code = product_code.strip().lower()
         subscription = business.product_subscriptions.filter(product_code=normalized_code).first()
@@ -487,6 +488,14 @@ class BusinessService:
             raise ValidationError({"product_code": "Subscribe to this product before updating add-ons."})
         if subscription.status == BusinessProductSubscriptionStatus.SOFT_LOCKED:
             raise ValidationError({"status": "Upgrade your plan before changing add-ons."})
+
+        next_pets = (
+            bool(pets_pack_enabled)
+            if pets_pack_enabled is not None
+            else bool(getattr(subscription, "pets_pack_enabled", False))
+        )
+        if next_pets and normalized_code != "shopie":
+            raise ValidationError({"pets_pack_enabled": "Pets pack is only available with ShopIE."})
 
         # Reducing add-ons must still fit current usage.
         self.entitlements.ensure_can_downgrade(
@@ -498,7 +507,22 @@ class BusinessService:
         )
         subscription.extra_staff = extra_staff
         subscription.extra_offices = extra_offices
-        subscription.save(update_fields=["extra_staff", "extra_offices", "updated_at"])
+        subscription.pets_pack_enabled = next_pets
+        subscription.save(
+            update_fields=["extra_staff", "extra_offices", "pets_pack_enabled", "updated_at"]
+        )
+
+        if normalized_code == "shopie":
+            from apps.shopie.models import VerticalPack
+            from apps.shopie.services.pets import PetsService
+
+            PetsService().set_pack_enabled(
+                tenant=business.tenant,
+                business=business,
+                pack=VerticalPack.PETS,
+                enabled=next_pets,
+            )
+
         if getattr(actor, "is_authenticated", False):
             business.mark_updated(actor_id=actor.id)
             business.save(update_fields=["updated_at", "updated_by"])
@@ -509,10 +533,10 @@ class BusinessService:
                 "product_code": normalized_code,
                 "extra_staff": extra_staff,
                 "extra_offices": extra_offices,
+                "pets_pack_enabled": next_pets,
             },
         )
         return subscription
-
     def billing_snapshot(self, *, business: Business, product_code: str | None = None) -> dict[str, Any]:
         code = (product_code or business.selected_product or "appointie").strip().lower()
         return self.entitlements.billing_snapshot(business=business, product_code=code)

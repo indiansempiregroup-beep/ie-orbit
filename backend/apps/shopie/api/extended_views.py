@@ -20,6 +20,7 @@ from apps.shopie.api.serializers import (
     ShopDeliveryMatchSerializer,
     ShopDeliveryZoneSerializer,
     ShopDeliveryZoneWriteSerializer,
+    ShopPetNotifySerializer,
     ShopPetSerializer,
     ShopPetWriteSerializer,
     ShopProductSerializer,
@@ -186,11 +187,21 @@ class ShopSettingsView(APIView):
         business = _business(request, data["business_id"])
         settings = self.pets.ensure_settings(tenant=request.current_tenant, business=business)
         if "enable_pets" in data:
+            want_enabled = bool(data["enable_pets"])
+            if want_enabled and not self.pets.has_pets_entitlement(business=business):
+                raise ValidationError(
+                    {
+                        "enable_pets": (
+                            "Pets pack requires a ₹500/month ShopIE add-on. "
+                            "Subscribe from Product settings."
+                        )
+                    }
+                )
             settings = self.pets.set_pack_enabled(
                 tenant=request.current_tenant,
                 business=business,
                 pack=VerticalPack.PETS,
-                enabled=bool(data["enable_pets"]),
+                enabled=want_enabled,
             )
         if "enabled_packs" in data and data["enabled_packs"] is not None:
             settings.enabled_packs = data["enabled_packs"]
@@ -249,7 +260,11 @@ class ShopPetDetailView(APIView):
     pets = PetsService()
 
     def get(self, request: Request, pet_id) -> Response:
-        pet = get_object_or_404(ShopPet, tenant=request.current_tenant, id=pet_id)
+        pet = get_object_or_404(
+            ShopPet.objects.select_related("customer"),
+            tenant=request.current_tenant,
+            id=pet_id,
+        )
         try:
             self.pets.require_pets_pack(tenant=request.current_tenant, business=pet.business)
         except DjangoValidationError as exc:
@@ -262,7 +277,6 @@ class ShopPetDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         data.pop("business_id", None)
-        data.pop("customer_id", None)
         try:
             pet = self.pets.update_pet(pet=pet, data=data)
         except DjangoValidationError as exc:
@@ -273,3 +287,38 @@ class ShopPetDetailView(APIView):
         pet = get_object_or_404(ShopPet, tenant=request.current_tenant, id=pet_id)
         pet.delete()
         return success_response({"deleted": True})
+
+
+class ShopPetNotifyView(APIView):
+    permission_classes = [ShopAccessPermission]
+    pets = PetsService()
+
+    def post(self, request: Request, pet_id) -> Response:
+        pet = get_object_or_404(
+            ShopPet.objects.select_related("customer", "business"),
+            tenant=request.current_tenant,
+            id=pet_id,
+        )
+        serializer = ShopPetNotifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = self.pets.notify_owner(
+                pet=pet,
+                subject=data["subject"],
+                body=data["body"],
+                channels=list(data.get("channels") or ["in_app", "email"]),
+                event_type="PetOwnerMessage",
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        if not result.get("sent_channels"):
+            raise ValidationError(
+                {
+                    "detail": (
+                        "Unable to notify owner. Ensure the customer has an email "
+                        "for email alerts, or a matching app account for in-app alerts."
+                    )
+                }
+            )
+        return success_response(result)

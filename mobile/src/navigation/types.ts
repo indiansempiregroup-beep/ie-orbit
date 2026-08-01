@@ -23,6 +23,12 @@ export type RootStackParamList = {
   ShopProductDetail: { productId: string };
   Cart: undefined;
   ShopOrderDetail: { orderId: string };
+  ShopOrderHistory: undefined;
+  AddressBook: undefined;
+  MyPets: undefined;
+  PetDetail: { petId: string };
+  MyReturns: undefined;
+  ReturnDetail: { returnId: string };
   ChangePassword: undefined;
   NotificationPreferences: undefined;
   PrivacySecurity: undefined;

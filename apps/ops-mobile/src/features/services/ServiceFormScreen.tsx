@@ -40,6 +40,7 @@ export function ServiceFormScreen() {
   const [price, setPrice] = useState('');
   const [loyaltyPointsEarn, setLoyaltyPointsEarn] = useState('0');
   const [imageAsset, setImageAsset] = useState<ImagePickerAsset | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +53,11 @@ export function ServiceFormScreen() {
     setPrice(amount != null ? String(amount) : '');
     setLoyaltyPointsEarn(String(service.loyalty_points_earn ?? 0));
   }, [service]);
+
+  useEffect(() => {
+    if (!service || imageAsset) return;
+    setImagePreview(serviceImageUrl(service) || null);
+  }, [service, imageAsset]);
 
   if (isEdit && loading) return <ScreenState loading />;
 
@@ -131,8 +137,11 @@ export function ServiceFormScreen() {
         <ImagePickerButton
           label="Service image"
           variant="card"
-          valueUri={serviceImageUrl(service)}
-          onPicked={setImageAsset}
+          valueUri={imagePreview || serviceImageUrl(service)}
+          onPicked={(asset) => {
+            setImageAsset(asset);
+            setImagePreview(asset.uri);
+          }}
           helperText="Shown on service lists and booking screens."
         />
         <Input label="Name" value={name} onChangeText={setName} />

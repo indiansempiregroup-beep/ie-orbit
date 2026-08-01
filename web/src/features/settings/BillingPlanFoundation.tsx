@@ -36,6 +36,7 @@ export function BillingPlanFoundation() {
   const [showPlatformSummary, setShowPlatformSummary] = useState(false);
   const [extraStaff, setExtraStaff] = useState(0);
   const [extraOffices, setExtraOffices] = useState(0);
+  const [petsPackEnabled, setPetsPackEnabled] = useState(false);
   const { businessId } = useWorkspace();
   const billingSnapshotQuery = useBusinessBillingSnapshotQuery(businessId ?? undefined);
   const updateAddons = useUpdateBusinessAddonsMutation(businessId ?? undefined);
@@ -83,7 +84,8 @@ export function BillingPlanFoundation() {
     if (!billing) return;
     setExtraStaff(billing.extra_staff);
     setExtraOffices(billing.extra_offices);
-  }, [billing?.extra_staff, billing?.extra_offices]);
+    setPetsPackEnabled(Boolean(billing.pets_pack_enabled));
+  }, [billing?.extra_staff, billing?.extra_offices, billing?.pets_pack_enabled]);
 
   return (
     <Card className="billing-foundation">
@@ -154,6 +156,9 @@ export function BillingPlanFoundation() {
               Included {billing.included_staff} staff / {billing.included_offices} offices · Add-ons +
               {billing.extra_staff} staff (+₹{(billing.pricing.addon_staff_unit_paise / 100).toFixed(0)} each) · +
               {billing.extra_offices} offices (+₹{(billing.pricing.addon_office_unit_paise / 100).toFixed(0)} each)
+              {checkoutProductCode === 'shopie'
+                ? ` · Pets ${billing.pets_pack_enabled ? 'on' : 'off'} (+₹${((billing.pricing.addon_pets_unit_paise ?? 50000) / 100).toFixed(0)}/mo)`
+                : ''}
             </p>
             <div className="billing-addons-row">
               <label>
@@ -174,6 +179,16 @@ export function BillingPlanFoundation() {
                   onChange={(event) => setExtraOffices(Number(event.target.value) || 0)}
                 />
               </label>
+              {checkoutProductCode === 'shopie' ? (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={petsPackEnabled}
+                    onChange={(event) => setPetsPackEnabled(event.target.checked)}
+                  />
+                  Pets pack (₹500/mo)
+                </label>
+              ) : null}
               <Button
                 variant="primary"
                 disabled={updateAddons.isPending || !businessId}
@@ -183,6 +198,7 @@ export function BillingPlanFoundation() {
                       productCode: checkoutProductCode,
                       extra_staff: extraStaff,
                       extra_offices: extraOffices,
+                      ...(checkoutProductCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
                     },
                     {
                       onSuccess: () => snackbar.push('Add-ons updated. Billing total refreshed.', 'success'),

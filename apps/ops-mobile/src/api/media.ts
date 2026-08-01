@@ -100,12 +100,14 @@ export async function uploadProductImage(
   });
 }
 
-export async function uploadStaffPhoto(args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { staffName: string }) {
+export async function uploadPetImage(
+  args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { petName?: string },
+) {
   return uploadMedia({
     ...args,
-    folderType: 'staff',
-    tags: ['staff', 'photo'],
-    displayName: `${args.staffName} photo`,
+    folderType: 'business',
+    tags: ['shop', 'pet', 'photo'],
+    displayName: `${args.petName?.trim() || 'Pet'} photo`,
   });
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AvailabilitySlot,
   BIReportsBundle,
+  BIOverviewResponse,
   BIForecastReport,
   BIGrowthReport,
   BIRevenueReport,
@@ -120,7 +121,7 @@ export function useGlobalSearch(term: string) {
 export function useBIOverview(enabled = true) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
-  const [data, setData] = useState<BIReportsBundle | null>(null);
+  const [data, setData] = useState<BIOverviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
@@ -324,7 +325,10 @@ export function useUpdateBusinessAddons() {
   const { businessId } = useWorkspace();
 
   return {
-    update: async (productCode: string, body: { extra_staff: number; extra_offices: number }) => {
+    update: async (
+      productCode: string,
+      body: { extra_staff: number; extra_offices: number; pets_pack_enabled?: boolean },
+    ) => {
       if (!client || !businessId) throw new Error('Not ready');
       return (await client.businesses.updateProductAddons(businessId, productCode, body)).data;
     },

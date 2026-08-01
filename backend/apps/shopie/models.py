@@ -505,6 +505,7 @@ class ShopPet(TenantModel):
     breed = models.CharField(max_length=120, blank=True)
     sex = models.CharField(max_length=32, blank=True)
     birthday = models.DateField(null=True, blank=True)
+    photo_url = models.CharField(max_length=1024, blank=True)
     medical_notes = models.TextField(blank=True)
     medical_records = models.JSONField(default=list, blank=True)
     metadata = models.JSONField(default=dict, blank=True)

@@ -16,25 +16,31 @@ import { colors, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 const menuItems = [
-  { icon: 'calendar', labelKey: 'bookings.myAppointments', route: 'BookingHistory' as const },
-  { icon: 'user', labelKey: 'profile.personalInfo', route: 'ProfileEdit' as const },
-  { icon: 'bell', labelKey: 'profile.notificationPreferences', route: 'NotificationPreferences' as const },
-  { icon: 'credit-card', labelKey: 'profile.paymentMethods', route: 'PaymentMethods' as const },
-  { icon: 'shield', labelKey: 'profile.privacySecurity', route: 'PrivacySecurity' as const },
-  { icon: 'star', labelKey: 'profile.myReviews', route: 'Reviews' as const },
-  { icon: 'phone', labelKey: 'help.title', route: 'HelpSupport' as const },
+  { icon: 'calendar', labelKey: 'bookings.myAppointments', route: 'BookingHistory' as const, feature: null },
+  { icon: 'shopping-bag', labelKey: 'shop.myOrders', route: 'ShopOrderHistory' as const, feature: 'mobile_shop' as const },
+  { icon: 'rotate-ccw', labelKey: 'shop.returns', route: 'MyReturns' as const, feature: 'mobile_shop' as const },
+  { icon: 'heart', labelKey: 'shop.myPets', route: 'MyPets' as const, feature: 'mobile_pets' as const },
+  { icon: 'map-pin', labelKey: 'shop.addresses', route: 'AddressBook' as const, feature: 'mobile_shop' as const },
+  { icon: 'user', labelKey: 'profile.personalInfo', route: 'ProfileEdit' as const, feature: null },
+  { icon: 'bell', labelKey: 'profile.notificationPreferences', route: 'NotificationPreferences' as const, feature: null },
+  { icon: 'credit-card', labelKey: 'profile.paymentMethods', route: 'PaymentMethods' as const, feature: null },
+  { icon: 'shield', labelKey: 'profile.privacySecurity', route: 'PrivacySecurity' as const, feature: null },
+  { icon: 'star', labelKey: 'profile.myReviews', route: 'Reviews' as const, feature: null },
+  { icon: 'phone', labelKey: 'help.title', route: 'HelpSupport' as const, feature: null },
 ] as const;
 
 export function ProfileScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, logout, biometricEnabled, biometricLabel } = useAuth();
-  const { branding } = useBootstrap();
+  const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { bookings, loading, reload } = useMobileBookings();
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const primary = branding?.primaryColor ?? colors.primary;
+  const features = bootstrap?.features ?? {};
+  const visibleMenuItems = menuItems.filter((item) => !item.feature || Boolean(features[item.feature]));
 
   const loadLoyalty = useCallback(async () => {
     if (!tenantSlug || !businessCode) return;
@@ -119,7 +125,7 @@ export function ProfileScreen() {
       </LinearGradient>
 
       <View style={styles.menu}>
-        {menuItems.map((item) => (
+        {visibleMenuItems.map((item) => (
           <Pressable
             key={item.labelKey}
             style={styles.menuRow}

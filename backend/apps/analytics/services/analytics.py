@@ -2,18 +2,32 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from django.db.models import Count, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.bookings.models import Booking, BookingStatus
-from apps.businesses.models import Business
+from apps.businesses.models import (
+    Business,
+    BusinessProductSubscriptionStatus,
+)
 from apps.customers.models import Customer
+from apps.notifications.models import Notification
 from apps.services.models import Service, ServicePricing
-from apps.staff.models import Staff
+from apps.shopie.models import OrderStatus, ReturnStatus, ShopOrder, ShopPet, ShopReturn
+from apps.staff.models import EmploymentStatus, Staff
 
 WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+ACTIVE_SUBSCRIPTION_STATUSES = {
+    BusinessProductSubscriptionStatus.TRIALING,
+    BusinessProductSubscriptionStatus.ACTIVE,
+    BusinessProductSubscriptionStatus.SOFT_LOCKED,
+}
 
 
 class AnalyticsService:
@@ -377,6 +391,343 @@ class AnalyticsService:
             "operations": operations,
             "insights": insights,
         }
+
+    def dashboard_summary(
+        self,
+        *,
+        tenant: Any,
+        business: Business | None,
+        today_count: int | None = None,
+    ) -> dict[str, Any]:
+        """Product-aware ops home snapshot. Omits sections for unsubscribed products."""
+        today = timezone.now().date()
+        products, pets_pack_enabled = self._subscribed_products(business)
+        result: dict[str, Any] = {
+            "products": products,
+            "pets_pack_enabled": pets_pack_enabled,
+            "currency": getattr(business, "currency", None) if business else None,
+            "today_count": int(today_count or 0),
+        }
+        if business is None:
+            return result
+
+        if "appointie" in products:
+            appointie = self._appointie_dashboard(tenant=tenant, business=business, today=today)
+            result["appointie"] = appointie
+            if today_count is None:
+                result["today_count"] = appointie["today_bookings"]
+            else:
+                result["today_count"] = int(today_count)
+
+        if "shopie" in products:
+            result["shopie"] = self._shopie_dashboard(tenant=tenant, business=business, today=today)
+
+        if pets_pack_enabled:
+            result["pets"] = self._pets_snapshot(tenant=tenant, business=business, today=today)
+
+        return result
+
+    def product_aware_overview(
+        self,
+        *,
+        tenant: Any,
+        business: Business | None,
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, Any]:
+        """BI overview with stacked product sections based on subscriptions."""
+        products, pets_pack_enabled = self._subscribed_products(business)
+        result: dict[str, Any] = {
+            "products": products,
+            "pets_pack_enabled": pets_pack_enabled,
+            "currency": getattr(business, "currency", None) if business else None,
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+            },
+        }
+        if business is None:
+            return result
+
+        if "appointie" in products:
+            appointie = self.reports(
+                tenant=tenant,
+                business=business,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            result["appointie"] = appointie
+            # Backward-compatible top-level aliases for existing AppointIE clients.
+            result.update(appointie)
+
+        if "shopie" in products:
+            result["shopie"] = self._shopie_overview(
+                tenant=tenant,
+                business=business,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        if pets_pack_enabled:
+            result["pets"] = self._pets_snapshot(
+                tenant=tenant,
+                business=business,
+                today=timezone.now().date(),
+            )
+
+        return result
+
+    def _subscribed_products(self, business: Business | None) -> tuple[list[str], bool]:
+        if business is None:
+            return [], False
+        subscriptions = list(
+            business.product_subscriptions.filter(status__in=ACTIVE_SUBSCRIPTION_STATUSES)
+        )
+        products = sorted({str(sub.product_code).strip().lower() for sub in subscriptions if sub.product_code})
+        pets_pack_enabled = any(
+            str(sub.product_code).strip().lower() == "shopie" and bool(getattr(sub, "pets_pack_enabled", False))
+            for sub in subscriptions
+        )
+        # Fallback for tenants that predate multi-product subscriptions.
+        if not products:
+            products = ["appointie"]
+        return products, pets_pack_enabled
+
+    def _appointie_dashboard(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        today: date,
+    ) -> dict[str, Any]:
+        month_start = today.replace(day=1)
+        upcoming_end = today + timedelta(days=6)
+        prices = self._price_map(tenant, business)
+
+        today_bookings = list(self._booking_queryset(tenant, business, today, today))
+        upcoming = list(self._booking_queryset(tenant, business, today, upcoming_end))
+        month_bookings = list(self._booking_queryset(tenant, business, month_start, today))
+
+        today_completed = sum(1 for b in today_bookings if b.status == BookingStatus.COMPLETED)
+        today_cancelled = sum(1 for b in today_bookings if b.status == BookingStatus.CANCELLED)
+
+        active_customers = (
+            Customer.objects.require_tenant(tenant).filter(business=business).count()
+        )
+        new_customers = (
+            Customer.objects.require_tenant(tenant)
+            .filter(business=business, created_at__date=today)
+            .count()
+        )
+        staff_on_duty = (
+            Staff.objects.require_tenant(tenant)
+            .filter(business=business, employment_status=EmploymentStatus.ACTIVE)
+            .count()
+        )
+        unread_notifications = (
+            Notification.objects.require_tenant(tenant)
+            .filter(business=business, is_read=False)
+            .count()
+        )
+
+        return {
+            "today_bookings": len(today_bookings),
+            "upcoming_7d": len(upcoming),
+            "today_completed": today_completed,
+            "today_cancelled": today_cancelled,
+            "estimated_revenue_today": round(self._estimate_revenue(today_bookings, prices), 2),
+            "estimated_revenue_month": round(self._estimate_revenue(month_bookings, prices), 2),
+            "active_customers": active_customers,
+            "new_customers_today": new_customers,
+            "staff_on_duty": staff_on_duty,
+            "unread_notifications": unread_notifications,
+        }
+
+    def _shopie_dashboard(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        today: date,
+    ) -> dict[str, Any]:
+        month_start = today.replace(day=1)
+
+        orders_qs = ShopOrder.objects.require_tenant(tenant).filter(business=business)
+        orders_today_qs = orders_qs.filter(created_at__date=today).exclude(status=OrderStatus.CANCELLED)
+        month_qs = orders_qs.filter(
+            created_at__date__gte=month_start,
+            created_at__date__lte=today,
+        ).exclude(status=OrderStatus.CANCELLED)
+
+        month_agg = month_qs.aggregate(
+            orders_count=Count("id"),
+            gmv=Coalesce(Sum("total"), Decimal("0.00")),
+        )
+        delivery_fee_month = self._sum_delivery_fees(month_qs.only("metadata"))
+        pending_returns = (
+            ShopReturn.objects.require_tenant(tenant)
+            .filter(business=business, status=ReturnStatus.PENDING)
+            .count()
+        )
+        open_orders = orders_qs.filter(
+            status__in=[OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.READY]
+        ).count()
+
+        return {
+            "orders_today": orders_today_qs.count(),
+            "orders_month": int(month_agg["orders_count"] or 0),
+            "gmv_today": float(
+                orders_today_qs.aggregate(total=Coalesce(Sum("total"), Decimal("0.00")))["total"] or 0
+            ),
+            "gmv_month": float(month_agg["gmv"] or 0),
+            "pending_returns": pending_returns,
+            "open_orders": open_orders,
+            "delivery_fee_month": round(delivery_fee_month, 2),
+        }
+
+    def _shopie_overview(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, Any]:
+        orders = list(
+            ShopOrder.objects.require_tenant(tenant)
+            .filter(
+                business=business,
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
+            )
+            .only("id", "status", "total", "created_at", "metadata", "currency")
+        )
+        active_orders = [o for o in orders if o.status != OrderStatus.CANCELLED]
+        cancelled = sum(1 for o in orders if o.status == OrderStatus.CANCELLED)
+        gmv = float(sum((o.total or Decimal("0")) for o in active_orders))
+        delivery_fee_total = self._sum_delivery_fees(active_orders)
+
+        returns = list(
+            ShopReturn.objects.require_tenant(tenant)
+            .filter(
+                business=business,
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
+            )
+            .only("id", "status", "refund_total")
+        )
+        refund_total = float(sum((r.refund_total or Decimal("0")) for r in returns))
+        pending_returns = sum(1 for r in returns if r.status == ReturnStatus.PENDING)
+        return_rate = round(len(returns) / len(active_orders), 4) if active_orders else 0.0
+
+        by_day: dict[str, dict[str, float | int | str]] = {}
+        for order in active_orders:
+            key = timezone.localtime(order.created_at).date().isoformat()
+            row = by_day.setdefault(key, {"day": key, "orders": 0, "gmv": 0.0})
+            row["orders"] = int(row["orders"]) + 1
+            row["gmv"] = round(float(row["gmv"]) + float(order.total or 0), 2)
+
+        insights: list[dict[str, str]] = []
+        if active_orders:
+            insights.append(
+                {
+                    "type": "commerce",
+                    "title": f"{len(active_orders)} orders · {business.currency or ''} {round(gmv, 2)} GMV",
+                    "detail": f"{cancelled} cancelled in this period.",
+                }
+            )
+        if returns:
+            insights.append(
+                {
+                    "type": "returns",
+                    "title": f"{len(returns)} returns ({round(return_rate * 100)}% of orders)",
+                    "detail": f"Refunds {business.currency or ''} {round(refund_total, 2)} · {pending_returns} pending.",
+                }
+            )
+        if delivery_fee_total > 0:
+            insights.append(
+                {
+                    "type": "delivery",
+                    "title": f"Delivery fees {business.currency or ''} {round(delivery_fee_total, 2)}",
+                    "detail": "Fees collected from zoned delivery orders.",
+                }
+            )
+
+        return {
+            "orders": len(active_orders),
+            "cancelled_orders": cancelled,
+            "gmv": round(gmv, 2),
+            "avg_order_value": round(gmv / len(active_orders), 2) if active_orders else 0,
+            "returns": len(returns),
+            "pending_returns": pending_returns,
+            "return_rate": return_rate,
+            "refund_total": round(refund_total, 2),
+            "delivery_fee_total": round(delivery_fee_total, 2),
+            "currency": business.currency,
+            "trend": [by_day[key] for key in sorted(by_day.keys())],
+            "insights": insights[:6],
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+            },
+        }
+
+    def _pets_snapshot(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        today: date,
+    ) -> dict[str, Any]:
+        pets = list(
+            ShopPet.objects.require_tenant(tenant)
+            .filter(business=business)
+            .only("id", "birthday", "photo_url")
+        )
+        birthdays_7 = 0
+        birthdays_30 = 0
+        with_photo = 0
+        for pet in pets:
+            if pet.photo_url:
+                with_photo += 1
+            if pet.birthday is None:
+                continue
+            days_until = self._days_until_birthday(pet.birthday, today)
+            if days_until is None:
+                continue
+            if days_until <= 7:
+                birthdays_7 += 1
+            if days_until <= 30:
+                birthdays_30 += 1
+        return {
+            "total": len(pets),
+            "birthdays_next_7d": birthdays_7,
+            "birthdays_next_30d": birthdays_30,
+            "with_photo": with_photo,
+        }
+
+    def _sum_delivery_fees(self, orders) -> float:
+        total = 0.0
+        for order in orders:
+            metadata = order.metadata if isinstance(getattr(order, "metadata", None), dict) else {}
+            try:
+                total += float(metadata.get("delivery_fee") or 0)
+            except (TypeError, ValueError):
+                continue
+        return total
+
+    def _days_until_birthday(self, birthday: date, today: date) -> int | None:
+        try:
+            next_bday = birthday.replace(year=today.year)
+        except ValueError:
+            # Feb 29 on non-leap years → Feb 28
+            next_bday = date(today.year, 2, 28)
+        if next_bday < today:
+            try:
+                next_bday = birthday.replace(year=today.year + 1)
+            except ValueError:
+                next_bday = date(today.year + 1, 2, 28)
+        return (next_bday - today).days
 
     def _booking_queryset(
         self,

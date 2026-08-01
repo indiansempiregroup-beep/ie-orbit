@@ -10,6 +10,9 @@ type SingleProps = {
   values?: never;
   onChangeValues?: never;
   allowPast?: boolean;
+  allowFuture?: boolean;
+  /** Month to show when browsing without changing the selected value. */
+  viewDate?: string;
 };
 
 type MultiProps = {
@@ -19,6 +22,8 @@ type MultiProps = {
   value?: never;
   onChange?: never;
   allowPast?: boolean;
+  allowFuture?: boolean;
+  viewDate?: string;
 };
 
 type Props = SingleProps | MultiProps;
@@ -39,15 +44,18 @@ function parseIso(value: string) {
 
 export function CalendarPicker(props: Props) {
   const allowPast = props.allowPast ?? true;
+  const allowFuture = props.allowFuture ?? true;
   const isMulti = props.mode === 'multiple';
   const selectedKey = isMulti ? props.values.join(',') : props.value || '';
   const selectedSet = useMemo(
     () => new Set(selectedKey ? selectedKey.split(',') : []),
     [selectedKey],
   );
-  const anchor = isMulti
-    ? props.values[props.values.length - 1] || toIso(new Date())
-    : props.value || toIso(new Date());
+  const anchor =
+    props.viewDate ||
+    (isMulti
+      ? props.values[props.values.length - 1] || toIso(new Date())
+      : props.value || toIso(new Date()));
   const selectedDate = parseIso(anchor);
   const [month, setMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
 
@@ -123,7 +131,8 @@ export function CalendarPicker(props: Props) {
             const isSelected = selectedSet.has(cell.iso);
             const isToday = cell.iso === todayIso;
             const isPast = cell.iso < todayIso;
-            const disabled = !allowPast && isPast;
+            const isFuture = cell.iso > todayIso;
+            const disabled = (!allowPast && isPast) || (!allowFuture && isFuture);
             return (
               <Pressable
                 key={cell.iso}

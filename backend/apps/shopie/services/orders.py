@@ -42,7 +42,7 @@ class OrderService:
     ) -> QuerySet[ShopOrder]:
         qs = (
             ShopOrder.objects.filter(tenant=tenant, business=business)
-            .select_related("customer")
+            .select_related("customer", "business")
             .prefetch_related("lines")
             .order_by("-created_at")
         )
@@ -55,7 +55,7 @@ class OrderService:
     def get_order(self, *, tenant: Tenant, business: Business, order_id: UUID) -> ShopOrder:
         return (
             ShopOrder.objects.filter(tenant=tenant, business=business, id=order_id)
-            .select_related("customer")
+            .select_related("customer", "business")
             .prefetch_related("lines__product")
             .get()
         )
@@ -117,13 +117,20 @@ class OrderService:
             metadata["same_day"] = zone.same_day
 
         payment = str(payment_method or "").strip().lower()
+        if payment in {"cod", "qr"}:
+            payment = "cash" if payment == "cod" else "upi"
         if payment == "borrow" and customer is None:
             raise ValidationError(
                 {"customer_id": "Select a customer for borrow / credit bills."}
             )
         bill_dtype = str(bill_discount_type or "").strip().lower()
         bill_dvalue = Decimal(str(bill_discount_value or "0"))
-        payment_status = "due" if payment == "borrow" else ("paid" if payment else "")
+        if payment == "borrow":
+            payment_status = "due"
+        elif payment in {"cash", "upi", "card"}:
+            payment_status = "due"
+        else:
+            payment_status = "due" if payment else ""
         metadata["pos"] = {
             **(metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}),
             "payment_method": payment,
@@ -374,6 +381,101 @@ class OrderService:
             order_id=locked.id,
         )
         return self.get_order(tenant=tenant, business=business, order_id=locked.id)
+
+    @transaction.atomic
+    def claim_payment(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        upi_utr: str,
+        payment_proof_url: str = "",
+    ) -> ShopOrder:
+        locked = (
+            ShopOrder.objects.select_for_update()
+            .filter(tenant=tenant, business=business, id=order.id)
+            .first()
+        )
+        if locked is None:
+            raise ValidationError({"order": "Order not found."})
+        metadata = dict(locked.metadata or {})
+        pos = dict(metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {})
+        method = str(pos.get("payment_method") or "").strip().lower()
+        status_value = str(pos.get("payment_status") or "").strip().lower()
+        if method not in {"upi", "qr"}:
+            raise ValidationError({"payment": "Only UPI / QR orders can claim payment."})
+        if status_value in {"paid", "settled"}:
+            raise ValidationError({"payment": "This order is already paid."})
+        utr = str(upi_utr or "").strip()
+        proof = str(payment_proof_url or "").strip()
+        if len(utr) < 6 and not proof:
+            raise ValidationError(
+                {"upi_utr": "Enter a UPI / UTR reference or upload a payment screenshot."}
+            )
+        pos["payment_method"] = "upi"
+        pos["payment_status"] = "awaiting_confirmation"
+        pos["upi_utr"] = utr
+        pos["payment_proof_url"] = proof
+        pos["claimed_at"] = timezone.now().isoformat()
+        metadata["pos"] = pos
+        locked.metadata = metadata
+        locked.save(update_fields=["metadata", "updated_at", "version"])
+        return self.get_order(tenant=tenant, business=business, order_id=locked.id)
+
+    @transaction.atomic
+    def confirm_or_reject_payment(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        action: str,
+        note: str = "",
+    ) -> ShopOrder:
+        locked = (
+            ShopOrder.objects.select_for_update()
+            .filter(tenant=tenant, business=business, id=order.id)
+            .first()
+        )
+        if locked is None:
+            raise ValidationError({"order": "Order not found."})
+        metadata = dict(locked.metadata or {})
+        pos = dict(metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {})
+        act = str(action or "").strip().lower()
+        if act == "confirm":
+            pos["payment_status"] = "paid"
+            pos["amount_paid"] = str(locked.total)
+            pos["amount_due"] = "0.00"
+            pos["confirmed_at"] = timezone.now().isoformat()
+            if note:
+                pos["confirm_note"] = str(note).strip()
+        elif act == "reject":
+            pos["payment_status"] = "rejected"
+            pos["rejected_at"] = timezone.now().isoformat()
+            pos["reject_note"] = str(note or "").strip()
+        else:
+            raise ValidationError({"action": "action must be confirm or reject."})
+        metadata["pos"] = pos
+        locked.metadata = metadata
+        locked.save(update_fields=["metadata", "updated_at", "version"])
+        return self.get_order(tenant=tenant, business=business, order_id=locked.id)
+
+    def cancel_customer_order(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+    ) -> ShopOrder:
+        if order.status != OrderStatus.PENDING:
+            raise ValidationError({"status": "Only pending orders can be cancelled."})
+        return self.transition(
+            tenant=tenant,
+            business=business,
+            order=order,
+            status=OrderStatus.CANCELLED,
+        )
 
     @transaction.atomic
     def create_invoice_from_order(

@@ -173,6 +173,7 @@ class PlatformAdminService:
                 product_code=product_code,
                 extra_staff=int(payload.get("extra_staff") or 0),
                 extra_offices=int(payload.get("extra_offices") or 0),
+                pets_pack_enabled=bool(payload.get("pets_pack_enabled", False)),
                 actor=actor,
             )
         elif action == "clear_soft_lock":

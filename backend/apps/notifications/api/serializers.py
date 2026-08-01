@@ -20,6 +20,7 @@ def notification_type_from_metadata(metadata: dict | None) -> str:
 
 class NotificationSerializer(serializers.ModelSerializer):
     booking_id = serializers.UUIDField(read_only=True, allow_null=True)
+    pet_id = serializers.SerializerMethodField()
     notification_type = serializers.SerializerMethodField()
 
     class Meta:
@@ -34,12 +35,17 @@ class NotificationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "booking_id",
+            "pet_id",
             "notification_type",
         ]
         read_only_fields = fields
 
     def get_notification_type(self, obj: Notification) -> str:
         return notification_type_from_metadata(obj.metadata)
+
+    def get_pet_id(self, obj: Notification) -> str | None:
+        pet_id = (obj.metadata or {}).get("pet_id")
+        return str(pet_id) if pet_id else None
 
 
 class NotificationTemplateSerializer(serializers.ModelSerializer):

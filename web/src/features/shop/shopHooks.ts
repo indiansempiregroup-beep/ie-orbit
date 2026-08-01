@@ -350,5 +350,21 @@ export function useShopPetMutations() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-pets'] }),
   });
 
-  return { createPet };
+  const notifyPetOwner = useMutation({
+    mutationFn: async (args: {
+      petId: string;
+      subject: string;
+      body: string;
+      channels?: Array<'in_app' | 'email'>;
+    }) => {
+      const response = await client.shop.notifyPetOwner(args.petId, {
+        subject: args.subject,
+        body: args.body,
+        channels: args.channels ?? ['in_app', 'email'],
+      });
+      return response.data;
+    },
+  });
+
+  return { createPet, notifyPetOwner };
 }

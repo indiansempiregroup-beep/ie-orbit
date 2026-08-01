@@ -2,7 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useDashboardSettings, useBusinessLists, useBookingLists, useBusinessProfile, useSearchResults, deriveDashboardKpis } from './dashboardHooks';
+import {
+  useDashboardSettings,
+  useBusinessLists,
+  useBookingLists,
+  useBusinessProfile,
+  useSearchResults,
+  useDashboardSummary,
+} from './dashboardHooks';
 import { DashboardWidget } from './DashboardWidget';
 import { Button, IconButton } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -12,7 +19,26 @@ import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatMoney } from '../../lib/currency';
 import { GettingStartedChecklist } from '../onboarding/GettingStartedChecklist';
-import { getProductName } from '../../config/products';
+import { getProductName, getSubscribedProductIds } from '../../config/products';
+import { useShopOrders } from '../shop/shopHooks';
+
+function KpiCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Card style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120, padding: 20 }}>
+      <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{label}</p>
+      <p style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{value}</p>
+    </Card>
+  );
+}
+
+function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
+      {subtitle ? <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 14 }}>{subtitle}</p> : null}
+    </div>
+  );
+}
 
 export function DashboardPage() {
   const { t } = useTranslation();
@@ -22,9 +48,13 @@ export function DashboardPage() {
   const workspace = useWorkspace();
   const queryClient = useQueryClient();
   const activeProduct = workspace.activeProduct ?? workspace.activeBusiness?.selected_product ?? 'appointie';
+  const subscribedIds = useMemo(
+    () => getSubscribedProductIds(workspace.activeBusiness?.product_subscriptions),
+    [workspace.activeBusiness?.product_subscriptions],
+  );
   const quickActions = useMemo(
-    () => filterNavigationByProduct(quickActionItems, activeProduct, auth.user),
-    [activeProduct, auth.user],
+    () => filterNavigationByProduct(quickActionItems, activeProduct, auth.user, workspace.activeBusiness?.product_subscriptions),
+    [activeProduct, auth.user, workspace.activeBusiness?.product_subscriptions],
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [searchActive, setSearchActive] = useState(false);
@@ -38,11 +68,18 @@ export function DashboardPage() {
   });
   const settings = useDashboardSettings();
   const business = useBusinessProfile();
-  const { customers, staff, services, notifications, availability } = useBusinessLists();
-  const { todayBookings, rangeBookings, upcomingBookings, refresh } = useBookingLists(new Date().toISOString().slice(0, 10), {
+  const summaryQuery = useDashboardSummary();
+  const summary = summaryQuery.data;
+  const hasAppointie = Boolean(summary?.appointie) || (summary ? summary.products.includes('appointie') : subscribedIds.includes('appointie'));
+  const hasShopie = Boolean(summary?.shopie) || (summary ? summary.products.includes('shopie') : subscribedIds.includes('shopie'));
+  const hasPets = Boolean(summary?.pets) || Boolean(summary?.pets_pack_enabled);
+
+  const { customers, staff, notifications, availability } = useBusinessLists();
+  const { todayBookings, refresh } = useBookingLists(new Date().toISOString().slice(0, 10), {
     from: new Date().toISOString().slice(0, 10),
     to: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 6).toISOString().slice(0, 10),
   });
+  const shopOrders = useShopOrders();
   const searchResults = useSearchResults(searchTerm);
 
   useEffect(() => {
@@ -53,30 +90,90 @@ export function DashboardPage() {
     return () => window.clearInterval(intervalId);
   }, [queryClient, settings.preferences.refreshInterval]);
 
-  const tileColumns = settings.preferences.layout === 'compact' ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))';
-
-  const kpis = useMemo(() => {
-    const bookings = todayBookings.data ?? [];
-    const monthly = rangeBookings.data ?? [];
-    const customerList = customers.data ?? [];
-    const staffList = staff.data ?? [];
-    const servicesList = services.data ?? [];
-    const availabilityList = availability.data ?? [];
-    return deriveDashboardKpis(bookings, monthly, customerList, staffList, servicesList, availabilityList);
-  }, [todayBookings.data, rangeBookings.data, customers.data, staff.data, services.data, availability.data]);
-
   const businessName = business.data?.business_name ?? business.data?.display_name ?? 'Your business';
-  const businessCurrency = business.data?.currency ?? workspace.activeBusiness?.currency;
+  const businessCurrency = summary?.currency ?? business.data?.currency ?? workspace.activeBusiness?.currency;
   const formatAmount = (amount: number) => formatMoney(amount, businessCurrency);
-  const staffOnDuty = staff.data?.filter((member) => member.status === 'active').length ?? 0;
-  const unreadNotifications = notifications.data?.filter((notification) => !notification.is_read).length ?? 0;
+  const staffOnDuty = summary?.appointie?.staff_on_duty ?? staff.data?.filter((member) => member.status === 'active').length ?? 0;
+  const unreadNotifications =
+    summary?.appointie?.unread_notifications ?? notifications.data?.filter((notification) => !notification.is_read).length ?? 0;
 
   const schedule = todayBookings.data?.slice(0, 5) ?? [];
+  const recentOrders = (shopOrders.data ?? []).slice(0, 5);
   const activity = [
-    ...(todayBookings.data?.slice(0, 3).map((booking) => ({ id: booking.id, title: booking.booking_number ?? 'Booking', subtitle: booking.status ?? 'Status' })) ?? []),
-    ...(customers.data?.slice(0, 2).map((customer) => ({ id: customer.id, title: customer.full_name ?? 'Customer', subtitle: customer.email ?? '' })) ?? []),
-    ...(staff.data?.slice(0, 2).map((member) => ({ id: member.id, title: member.full_name ?? 'Staff', subtitle: member.status ?? '' })) ?? []),
+    ...(hasAppointie
+      ? todayBookings.data?.slice(0, 3).map((booking) => ({
+          id: booking.id,
+          title: booking.booking_number ?? 'Booking',
+          subtitle: booking.status ?? 'Status',
+        })) ?? []
+      : []),
+    ...(hasShopie
+      ? recentOrders.slice(0, 3).map((order) => ({
+          id: order.id,
+          title: order.order_number ?? 'Order',
+          subtitle: `${order.status ?? 'Status'} · ${formatAmount(Number(order.total ?? 0))}`,
+        }))
+      : []),
+    ...(customers.data?.slice(0, 2).map((customer) => ({
+      id: customer.id,
+      title: customer.full_name ?? 'Customer',
+      subtitle: customer.email ?? '',
+    })) ?? []),
   ];
+
+  const welcomeSubtitle = useMemo(() => {
+    if (hasAppointie && hasShopie) {
+      return 'Your central workspace for bookings, shop operations, and day-to-day work.';
+    }
+    if (hasShopie) {
+      return 'Your central workspace for orders, inventory, and day-to-day shop operations.';
+    }
+    return 'Your central workspace for bookings, customers, and day-to-day operations.';
+  }, [hasAppointie, hasShopie]);
+
+  const planLabel = useMemo(() => {
+    const subs = workspace.activeBusiness?.product_subscriptions ?? [];
+    const active = subs.find((s) => subscribedIds.includes(s.product_code));
+    if (!active) return '—';
+    const status = active.status ?? 'trialing';
+    if (status === 'trialing') return 'Trial';
+    return status.replace(/_/g, ' ');
+  }, [subscribedIds, workspace.activeBusiness?.product_subscriptions]);
+
+  const appointieKpis = summary?.appointie
+    ? [
+        { label: "Today's Bookings", value: summary.appointie.today_bookings },
+        { label: 'Upcoming (7 days)', value: summary.appointie.upcoming_7d },
+        { label: 'Completed Today', value: summary.appointie.today_completed },
+        { label: 'Cancelled Today', value: summary.appointie.today_cancelled },
+        { label: 'Revenue Today', value: formatAmount(summary.appointie.estimated_revenue_today) },
+        { label: 'Revenue This Month', value: formatAmount(summary.appointie.estimated_revenue_month) },
+        { label: 'Active Customers', value: summary.appointie.active_customers },
+        { label: 'New Customers', value: summary.appointie.new_customers_today },
+        { label: 'Staff On Duty', value: summary.appointie.staff_on_duty },
+      ]
+    : [];
+
+  const shopieKpis = summary?.shopie
+    ? [
+        { label: 'Orders Today', value: summary.shopie.orders_today },
+        { label: 'Orders This Month', value: summary.shopie.orders_month },
+        { label: 'GMV Today', value: formatAmount(summary.shopie.gmv_today) },
+        { label: 'GMV This Month', value: formatAmount(summary.shopie.gmv_month) },
+        { label: 'Open Orders', value: summary.shopie.open_orders },
+        { label: 'Pending Returns', value: summary.shopie.pending_returns },
+        { label: 'Delivery Fees (Month)', value: formatAmount(summary.shopie.delivery_fee_month) },
+      ]
+    : [];
+
+  const petsKpis = summary?.pets
+    ? [
+        { label: 'Pets enrolled', value: summary.pets.total },
+        { label: 'Birthdays (7 days)', value: summary.pets.birthdays_next_7d },
+        { label: 'Birthdays (30 days)', value: summary.pets.birthdays_next_30d },
+        { label: 'With photo', value: summary.pets.with_photo },
+      ]
+    : [];
 
   return (
     <div style={{ padding: 0, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
@@ -85,9 +182,7 @@ export function DashboardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Workspace</p>
             <h1 style={{ margin: 0, fontSize: 36, lineHeight: 1.1 }}>Welcome back, {businessName}</h1>
-            <p style={{ margin: 0, color: theme.resolved === 'dark' ? '#d1d5db' : '#6b7280' }}>
-              Your central workspace for bookings, customers, and day-to-day operations.
-            </p>
+            <p style={{ margin: 0, color: theme.resolved === 'dark' ? '#d1d5db' : '#6b7280' }}>{welcomeSubtitle}</p>
           </div>
           <div className="dashboard-actions">
             {quickActions.map((action) => (
@@ -128,44 +223,90 @@ export function DashboardPage() {
 
         <section className="dashboard-main-grid">
           <div>
-            <div className="dashboard-kpi-grid" style={{ marginBottom: 24 }}>
-              {[
-                { label: "Today's Bookings", value: kpis.todayCount },
-                { label: 'Upcoming Bookings', value: upcomingBookings.data?.length ?? 0 },
-                { label: 'Completed Today', value: kpis.todayCompleted },
-                { label: 'Cancelled Today', value: kpis.todayCancelled },
-                { label: 'Revenue Today', value: formatAmount(kpis.revenueToday) },
-                { label: 'Revenue This Month', value: formatAmount(kpis.revenueMonth) },
-                { label: 'Active Customers', value: kpis.activeCustomers },
-                { label: 'New Customers', value: kpis.newCustomers },
-                { label: 'Staff On Duty', value: kpis.staffOnDuty },
-                { label: 'Occupancy Rate', value: `${kpis.occupancyRate}%` },
-              ].map((item) => (
-                <Card key={item.label} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120, padding: 20 }}>
-                  <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{item.label}</p>
-                  <p style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{item.value}</p>
-                </Card>
-              ))}
-            </div>
+            {summaryQuery.isLoading && !summary ? (
+              <Card style={{ marginBottom: 24, padding: 20 }}>
+                <p style={{ margin: 0, color: '#6b7280' }}>Loading dashboard metrics…</p>
+              </Card>
+            ) : null}
 
-            <div className="dashboard-widget-grid" style={{ marginBottom: 24 }}>
-              <DashboardWidget
-                title="Today's Schedule"
-                subtitle="Appointments for the current day"
-                loading={schedule.length === 0 && todayBookings.isLoading}
-                error={todayBookings.error as Error | null}
-                empty={!schedule.length && !todayBookings.isLoading}
-                onRefresh={refresh}
-              >
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {schedule.map((booking) => (
-                    <div key={booking.id} style={{ borderRadius: 12, padding: 14, background: theme.resolved === 'dark' ? '#111827' : '#f8fafc', display: 'grid', gap: 4 }}>
-                      <p style={{ margin: 0, fontWeight: 700 }}>{booking.booking_number ?? 'Booking #'}</p>
-                      <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{booking.status ?? 'Status unknown'}</p>
-                    </div>
+            {appointieKpis.length ? (
+              <div style={{ marginBottom: 24 }}>
+                <SectionHeading title="AppointIE" subtitle="Bookings and service operations" />
+                <div className="dashboard-kpi-grid">
+                  {appointieKpis.map((item) => (
+                    <KpiCard key={item.label} label={item.label} value={item.value} />
                   ))}
                 </div>
-              </DashboardWidget>
+              </div>
+            ) : null}
+
+            {shopieKpis.length ? (
+              <div style={{ marginBottom: 24 }}>
+                <SectionHeading title="ShopIE" subtitle="Orders, returns, and delivery" />
+                <div className="dashboard-kpi-grid">
+                  {shopieKpis.map((item) => (
+                    <KpiCard key={item.label} label={item.label} value={item.value} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {petsKpis.length ? (
+              <div style={{ marginBottom: 24 }}>
+                <SectionHeading title="Pets pack" subtitle="Roster and upcoming birthdays" />
+                <div className="dashboard-kpi-grid">
+                  {petsKpis.map((item) => (
+                    <KpiCard key={item.label} label={item.label} value={item.value} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="dashboard-widget-grid" style={{ marginBottom: 24 }}>
+              {hasAppointie ? (
+                <DashboardWidget
+                  title="Today's Schedule"
+                  subtitle="Appointments for the current day"
+                  loading={schedule.length === 0 && todayBookings.isLoading}
+                  error={todayBookings.error as Error | null}
+                  empty={!schedule.length && !todayBookings.isLoading}
+                  onRefresh={refresh}
+                >
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    {schedule.map((booking) => (
+                      <div key={booking.id} style={{ borderRadius: 12, padding: 14, background: theme.resolved === 'dark' ? '#111827' : '#f8fafc', display: 'grid', gap: 4 }}>
+                        <p style={{ margin: 0, fontWeight: 700 }}>{booking.booking_number ?? 'Booking #'}</p>
+                        <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{booking.status ?? 'Status unknown'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </DashboardWidget>
+              ) : null}
+
+              {hasShopie ? (
+                <DashboardWidget
+                  title="Recent Orders"
+                  subtitle="Latest shop activity"
+                  loading={!recentOrders.length && shopOrders.isLoading}
+                  error={shopOrders.error as Error | null}
+                  empty={!recentOrders.length && !shopOrders.isLoading}
+                  onRefresh={() => shopOrders.refetch()}
+                >
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    {recentOrders.map((order) => (
+                      <div key={order.id} style={{ borderRadius: 12, padding: 14, background: theme.resolved === 'dark' ? '#111827' : '#f8fafc', display: 'grid', gap: 4 }}>
+                        <p style={{ margin: 0, fontWeight: 700 }}>{order.order_number ?? 'Order'}</p>
+                        <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
+                          {order.status ?? 'Status'} · {formatAmount(Number(order.total ?? 0))}
+                        </p>
+                      </div>
+                    ))}
+                    <Button variant="ghost" onClick={() => navigate('/shop/orders')} style={{ width: '100%' }}>
+                      View all orders
+                    </Button>
+                  </div>
+                </DashboardWidget>
+              ) : null}
 
               <DashboardWidget
                 title="Notification Center"
@@ -201,28 +342,33 @@ export function DashboardPage() {
                 </div>
               </DashboardWidget>
 
-              <DashboardWidget title="Calendar Preview" subtitle="Today & week" loading={availability.isLoading} error={availability.error as Error | null} empty={!availability.data?.length && !availability.isLoading}>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <p style={{ margin: 0, fontWeight: 700 }}>Today&apos;s available capacity</p>
-                  <p style={{ margin: 0, color: '#6b7280' }}>{availability.data?.length ?? 0} slots</p>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {(availability.data ?? []).slice(0, 4).map((slot, index) => (
-                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <span>{new Date().toISOString().slice(0, 10)}</span>
-                        <span>{slot.capacity} capacity</span>
-                      </div>
-                    ))}
+              {hasAppointie ? (
+                <DashboardWidget title="Calendar Preview" subtitle="Today & week" loading={availability.isLoading} error={availability.error as Error | null} empty={!availability.data?.length && !availability.isLoading}>
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    <p style={{ margin: 0, fontWeight: 700 }}>Today&apos;s available capacity</p>
+                    <p style={{ margin: 0, color: '#6b7280' }}>{availability.data?.length ?? 0} slots</p>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {(availability.data ?? []).slice(0, 4).map((slot, index) => (
+                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span>{new Date().toISOString().slice(0, 10)}</span>
+                          <span>{slot.capacity} capacity</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </DashboardWidget>
+                </DashboardWidget>
+              ) : null}
 
               <DashboardWidget title="Business Summary" loading={business.isLoading} error={business.error as Error | null} empty={!business.data && !business.isLoading}>
                 {business.data ? (
                   <div style={{ display: 'grid', gap: 12 }}>
                     <p style={{ margin: 0, fontWeight: 700 }}>{businessName}</p>
                     <p style={{ margin: 0, color: '#6b7280' }}>{business.data.status ?? 'Status unavailable'}</p>
-                    <p style={{ margin: 0, color: '#6b7280' }}>{staffOnDuty} staff active</p>
-                    <p style={{ margin: 0, color: '#6b7280' }}>Working hours: 09:00 - 18:00</p>
+                    {hasAppointie ? <p style={{ margin: 0, color: '#6b7280' }}>{staffOnDuty} staff active</p> : null}
+                    <p style={{ margin: 0, color: '#6b7280' }}>
+                      Products:{' '}
+                      {(summary?.products?.length ? summary.products : subscribedIds).map((id) => getProductName(id)).join(', ') || '—'}
+                    </p>
                   </div>
                 ) : null}
               </DashboardWidget>
@@ -230,23 +376,48 @@ export function DashboardPage() {
           </div>
 
           <aside className="dashboard-sidebar">
-            {showWelcome ? (
-              <GettingStartedChecklist
-                onDismiss={() => setShowWelcome(false)}
-              />
-            ) : null}
+            {showWelcome ? <GettingStartedChecklist onDismiss={() => setShowWelcome(false)} /> : null}
 
             <Card>
               <p style={{ margin: 0, fontWeight: 700 }}>Workspace</p>
               <div style={{ marginTop: 12, display: 'grid', gap: 8, color: theme.resolved === 'dark' ? '#d1d5db' : '#6b7280', fontSize: 14 }}>
-                <p style={{ margin: 0 }}><strong>Business:</strong> {businessName}</p>
-                <p style={{ margin: 0 }}><strong>Status:</strong> {business.data?.status ?? workspace.activeBusiness?.status ?? 'Active'}</p>
-                <p style={{ margin: 0 }}><strong>Product:</strong> {getProductName(workspace.activeProduct ?? business.data?.selected_product)}</p>
-                <p style={{ margin: 0 }}><strong>Plan:</strong> Free Trial</p>
-                <p style={{ margin: 0 }}><strong>Currency:</strong> {businessCurrency ?? '—'}</p>
+                <p style={{ margin: 0 }}>
+                  <strong>Business:</strong> {businessName}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Status:</strong> {business.data?.status ?? workspace.activeBusiness?.status ?? 'Active'}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Products:</strong>{' '}
+                  {(summary?.products?.length ? summary.products : subscribedIds).map((id) => getProductName(id)).join(', ') ||
+                    getProductName(workspace.activeProduct ?? business.data?.selected_product)}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Plan:</strong> {planLabel}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Currency:</strong> {businessCurrency ?? '—'}
+                </p>
+                {hasPets ? (
+                  <p style={{ margin: 0 }}>
+                    <strong>Pets pack:</strong> Enabled
+                  </p>
+                ) : null}
               </div>
             </Card>
-            <DashboardWidget title="Search results" subtitle={searchActive ? 'Type to search' : 'Preview results by term'} loading={searchResults.isLoading} error={searchResults.error as Error | null} empty={!searchResults.data?.bookings.length && !searchResults.data?.customers.length && !searchResults.data?.staff.length && !searchResults.data?.services.length && !searchResults.isLoading}>
+            <DashboardWidget
+              title="Search results"
+              subtitle={searchActive ? 'Type to search' : 'Preview results by term'}
+              loading={searchResults.isLoading}
+              error={searchResults.error as Error | null}
+              empty={
+                !searchResults.data?.bookings.length &&
+                !searchResults.data?.customers.length &&
+                !searchResults.data?.staff.length &&
+                !searchResults.data?.services.length &&
+                !searchResults.isLoading
+              }
+            >
               <div style={{ display: 'grid', gap: 12 }}>
                 <div>
                   <p style={{ margin: 0, fontWeight: 700 }}>Bookings</p>
@@ -283,7 +454,9 @@ export function DashboardPage() {
                 </div>
                 <div style={{ display: 'grid', gap: 6 }}>
                   <span style={{ color: '#6b7280' }}>Refresh interval</span>
-                  <span style={{ fontWeight: 700 }}>{settings.preferences.refreshInterval === 0 ? 'Manual' : `${settings.preferences.refreshInterval / 1000}s`}</span>
+                  <span style={{ fontWeight: 700 }}>
+                    {settings.preferences.refreshInterval === 0 ? 'Manual' : `${settings.preferences.refreshInterval / 1000}s`}
+                  </span>
                 </div>
               </div>
             </Card>

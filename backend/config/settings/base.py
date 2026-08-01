@@ -236,12 +236,20 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(minutes=1),
         "kwargs": {"lead_minutes": 15},
     },
+    "shopie-send-pet-birthday-reminders": {
+        "task": "shopie.send_pet_birthday_reminders",
+        "schedule": crontab(minute=0, hour=4),
+        "kwargs": {"lead_days": 5},
+    },
 }
 CELERY_BEAT_SCHEDULE = {key: value for key, value in CELERY_BEAT_SCHEDULE.items() if value is not None}
 
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+PLATFORM_UPI_VPA = os.getenv("PLATFORM_UPI_VPA", "")
+PLATFORM_UPI_NAME = os.getenv("PLATFORM_UPI_NAME", "IE Platform")
+PLATFORM_PAYMENT_QR_URL = os.getenv("PLATFORM_PAYMENT_QR_URL", "")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 ADMIN_HOST = os.getenv("ADMIN_HOST", "")
 BILLING_CURRENCY_DEFAULT = os.getenv("BILLING_CURRENCY_DEFAULT", "INR")

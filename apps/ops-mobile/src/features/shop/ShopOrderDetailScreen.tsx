@@ -262,6 +262,54 @@ export function ShopOrderDetailScreen() {
         {payment ? <Text style={[styles.payment, due && styles.due]}>{payment}</Text> : null}
       </View>
 
+      {String(order.payment_status || pos.payment_status || '') === 'awaiting_confirmation' ? (
+        <View style={styles.headerCard}>
+          <Text style={styles.section}>Customer UPI claim</Text>
+          <Text style={styles.meta}>UTR: {String(order.upi_utr || pos.upi_utr || '—')}</Text>
+          {order.payment_proof_url || pos.payment_proof_url ? (
+            <Text style={styles.meta}>Screenshot attached</Text>
+          ) : null}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: colors.success }]}
+              disabled={busy}
+              onPress={() => {
+                if (!client) return;
+                setBusy(true);
+                void client.shop
+                  .confirmOrderPayment(orderId, { action: 'confirm' })
+                  .then(() => {
+                    toast.push('Payment confirmed', 'success');
+                    return load();
+                  })
+                  .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <Text style={styles.actionBtnText}>Confirm paid</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: colors.destructive }]}
+              disabled={busy}
+              onPress={() => {
+                if (!client) return;
+                setBusy(true);
+                void client.shop
+                  .confirmOrderPayment(orderId, { action: 'reject' })
+                  .then(() => {
+                    toast.push('Payment rejected', 'success');
+                    return load();
+                  })
+                  .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <Text style={styles.actionBtnText}>Reject</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Text style={styles.section}>Bill ({(order.lines ?? []).length} items)</Text>
@@ -629,6 +677,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnDisabled: { opacity: 0.55 },
+  actionBtn: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   secondaryBtnText: { color: colors.foreground, fontWeight: '600', fontSize: 14 },
   priorReturns: { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 10 },

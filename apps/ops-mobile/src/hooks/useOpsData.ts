@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Booking, BookingReview, Customer, Service, StaffMember } from '@ie-platform/sdk';
+import type { Booking, BookingReview, Customer, DashboardSummary, Service, StaffMember } from '@ie-platform/sdk';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useOpsClient } from './useOpsClient';
 
@@ -214,7 +214,7 @@ export function useReviews(customerId?: string) {
 export function useDashboardSummary() {
   const client = useOpsClient();
   const { ready } = useWorkspace();
-  const [todayCount, setTodayCount] = useState(0);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
@@ -222,9 +222,9 @@ export function useDashboardSummary() {
     setLoading(true);
     try {
       const response = await client.analytics.dashboard.summary();
-      setTodayCount(response.data?.today_count ?? 0);
+      setSummary(response.data ?? null);
     } catch {
-      setTodayCount(0);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
@@ -234,5 +234,10 @@ export function useDashboardSummary() {
     void reload();
   }, [reload]);
 
-  return { todayCount, loading, reload };
+  return {
+    summary,
+    todayCount: summary?.today_count ?? summary?.appointie?.today_bookings ?? 0,
+    loading,
+    reload,
+  };
 }
