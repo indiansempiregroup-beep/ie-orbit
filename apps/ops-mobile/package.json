@@ -4,9 +4,10 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "expo start --port 8082",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "start": "node ./start-expo.cjs start --port 8082",
+    "android": "node ./start-expo.cjs run:android",
+    "ios": "node ./start-expo.cjs run:ios",
+    "postinstall": "node ./scripts/patch-metro-windows.cjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

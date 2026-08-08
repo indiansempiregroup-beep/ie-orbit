@@ -19,10 +19,36 @@ const LEGACY_ACCESS_KEY = 'ie:ops:access';
 const LEGACY_REFRESH_KEY = 'ie:ops:refresh';
 /** Match backend SIMPLE_JWT ACCESS_TOKEN_LIFETIME (15 minutes). */
 const ACCESS_TTL_SECONDS = 15 * 60;
+/** Refresh when less than this many seconds remain on the access JWT. */
+const ACCESS_REFRESH_SKEW_SECONDS = 90;
 
 const STORE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
+
+function readAccessExpiryMs(accessToken: string): number | null {
+  try {
+    const parts = accessToken.split('.');
+    if (parts.length < 2) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const json =
+      typeof globalThis.atob === 'function'
+        ? globalThis.atob(padded)
+        : Buffer.from(padded, 'base64').toString('utf8');
+    const data = JSON.parse(json) as { exp?: unknown };
+    return typeof data.exp === 'number' ? data.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function remainingAccessSeconds(accessToken: string | null | undefined): number {
+  if (!accessToken) return 0;
+  const expMs = readAccessExpiryMs(accessToken);
+  if (!expMs) return 0;
+  return Math.max(0, Math.floor((expMs - Date.now()) / 1000));
+}
 
 type AuthState = {
   user: UserProfile | null;
@@ -179,13 +205,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const ensureFreshAccess = useCallback(async (): Promise<string | null> => {
-    const ageMs = Date.now() - accessIssuedAtRef.current;
-    const nearExpiry = !token || ageMs > (ACCESS_TTL_SECONDS - 90) * 1000;
-    if (!nearExpiry) return token;
+    const remaining = remainingAccessSeconds(token);
+    if (token && remaining > ACCESS_REFRESH_SKEW_SECONDS) return token;
 
     const refreshed = await performRefresh();
     if (refreshed) {
-      scheduleRefresh(ACCESS_TTL_SECONDS);
+      scheduleRefresh(remainingAccessSeconds(refreshed) || ACCESS_TTL_SECONDS);
       return refreshed;
     }
     return token;
@@ -203,17 +228,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         return;
       }
-      if (access) {
+
+      const remaining = remainingAccessSeconds(access);
+      if (access && remaining > ACCESS_REFRESH_SKEW_SECONDS) {
         opsClient.setToken(access);
         try {
           const response = await opsClient.auth.me();
           setToken(access);
           setUser(response.data);
-          accessIssuedAtRef.current = Date.now();
-          scheduleRefresh(ACCESS_TTL_SECONDS);
+          // Align issued-at with JWT remaining lifetime (not "now" for a stale stored token).
+          accessIssuedAtRef.current = Date.now() - (ACCESS_TTL_SECONDS - remaining) * 1000;
+          scheduleRefresh(remaining);
           return;
         } catch {
-          // Access expired — try refresh before signing out.
+          // Access rejected — try refresh before signing out.
         }
       }
 
@@ -230,7 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const me = await opsClient.auth.me();
       setUser(me.data);
-      scheduleRefresh(ACCESS_TTL_SECONDS);
+      scheduleRefresh(remainingAccessSeconds(refreshed) || ACCESS_TTL_SECONDS);
     } catch {
       await writeToken(ACCESS_KEY, null);
       // Keep refresh when biometric login is enabled so Face ID can restore the session.
@@ -275,10 +303,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     accessIssuedAtRef.current = Date.now();
     await writeToken(ACCESS_KEY, payload.access);
     await writeToken(REFRESH_KEY, refresh);
+    const jwtRemaining = remainingAccessSeconds(payload.access);
     scheduleRefresh(
-      typeof payload.expires_in === 'number' && payload.expires_in > 0
-        ? payload.expires_in
-        : ACCESS_TTL_SECONDS,
+      jwtRemaining > 0
+        ? jwtRemaining
+        : typeof payload.expires_in === 'number' && payload.expires_in > 0
+          ? payload.expires_in
+          : ACCESS_TTL_SECONDS,
     );
 
     if (await isBiometricLoginEnabled()) {

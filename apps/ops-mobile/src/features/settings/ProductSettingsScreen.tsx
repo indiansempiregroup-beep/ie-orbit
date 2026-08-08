@@ -311,8 +311,23 @@ export function ProductSettingsScreen() {
       {availableProducts.length > 0 ? (
         <Card>
           <SectionHeader title="Add product" />
+          <Text style={styles.meta}>Choose a plan to start a trial, or pay with UPI to subscribe immediately.</Text>
           {availableProducts.map((product, index) => {
             const productPlans = plansByProduct.get(product.id) ?? [];
+            const planCode =
+              pendingPlanByProduct[product.id] ?? getDefaultPlanCode(productPlans);
+            const resolvePlanCode = (): string | null => {
+              if (planCode) return planCode;
+              if (productPlans.length === 0) {
+                showError(
+                  new Error('Plans still loading.'),
+                  'Plans are still loading. Pull to refresh, then try again.',
+                );
+                return null;
+              }
+              showError(new Error('Select a plan first.'), 'Select a plan first.');
+              return null;
+            };
             return (
               <View key={product.id} style={[styles.productBlock, index === 0 && styles.productBlockFirst]}>
                 <Text style={styles.productName}>{product.name}</Text>
@@ -320,35 +335,58 @@ export function ProductSettingsScreen() {
                 {productPlans.length > 0 ? (
                   <SelectField
                     label="Plan"
-                    value={pendingPlanByProduct[product.id] ?? getDefaultPlanCode(productPlans)}
+                    value={planCode}
                     options={productPlans.map((plan) => ({ value: plan.code, label: plan.name ?? plan.code }))}
                     onChange={(value) => setPendingPlanByProduct((current) => ({ ...current, [product.id]: value }))}
                   />
-                ) : null}
-                <Button
-                  label="Pay with UPI to subscribe"
-                  loading={busy === `sub-${product.id}`}
-                  fullWidth
-                  onPress={() => {
-                    const planCode =
-                      pendingPlanByProduct[product.id] ?? getDefaultPlanCode(productPlans);
-                    if (!planCode) {
-                      showError(new Error('Select a plan first.'), 'Select a plan first.');
-                      return;
-                    }
-                    const plan = productPlans.find((item) => item.code === planCode);
-                    setUpiPayRequest({
-                      productCode: product.id,
-                      planCode,
-                      productName: product.name,
-                      planName: plan?.name ?? planCode,
-                      extraStaff: 0,
-                      extraOffices: 0,
-                      petsPackEnabled: false,
-                      mode: 'subscribe',
-                    });
-                  }}
-                />
+                ) : (
+                  <Text style={styles.meta}>Loading plans…</Text>
+                )}
+                <View style={styles.stack}>
+                  <Button
+                    label="Start trial"
+                    loading={busy === `sub-${product.id}`}
+                    fullWidth
+                    onPress={async () => {
+                      const selectedPlanCode = resolvePlanCode();
+                      if (!selectedPlanCode) return;
+                      setBusy(`sub-${product.id}`);
+                      try {
+                        await mutations.subscribe(
+                          product.id,
+                          selectedPlanCode,
+                          subscribedProducts.length === 0,
+                        );
+                        await afterMutation(`Subscribed to ${product.name}.`);
+                      } catch (err) {
+                        showError(err, 'Unable to subscribe to product.');
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  />
+                  <Button
+                    label="Pay with UPI to subscribe"
+                    variant="outline"
+                    loading={busy === `upi-sub-${product.id}`}
+                    fullWidth
+                    onPress={() => {
+                      const selectedPlanCode = resolvePlanCode();
+                      if (!selectedPlanCode) return;
+                      const plan = productPlans.find((item) => item.code === selectedPlanCode);
+                      setUpiPayRequest({
+                        productCode: product.id,
+                        planCode: selectedPlanCode,
+                        productName: product.name,
+                        planName: plan?.name ?? selectedPlanCode,
+                        extraStaff: 0,
+                        extraOffices: 0,
+                        petsPackEnabled: false,
+                        mode: 'subscribe',
+                      });
+                    }}
+                  />
+                </View>
               </View>
             );
           })}

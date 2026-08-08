@@ -30,6 +30,8 @@ import type {
   TenantSettingsResponse,
 } from '@ie-platform/sdk';
 import { filterFutureSlots } from '../utils/format';
+import { createScopedClient } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { useOpsClient } from './useOpsClient';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { buildNameMap } from '../utils/entities';
@@ -508,18 +510,24 @@ export function useProductPlans(productCode?: string) {
 }
 
 export function useProductMutations() {
-  const client = useOpsClient();
-  const { businessId } = useWorkspace();
+  const { ensureFreshAccess, token } = useAuth();
+  const { businessId, tenantId } = useWorkspace();
+
+  async function scopedClient() {
+    const access = (await ensureFreshAccess()) || token;
+    if (!access || !businessId) throw new Error('Not ready');
+    return createScopedClient(access, tenantId, businessId);
+  }
 
   return {
     setActiveProduct: async (productId: string) => {
-      if (!client || !businessId) throw new Error('Not ready');
-      return (await client.businesses.patch(businessId, { selected_product: productId })).data;
+      const client = await scopedClient();
+      return (await client.businesses.patch(businessId!, { selected_product: productId })).data;
     },
     subscribe: async (productCode: string, planCode?: string, setActive = false) => {
-      if (!client || !businessId) throw new Error('Not ready');
+      const client = await scopedClient();
       return (
-        await client.businesses.subscribeProduct(businessId, {
+        await client.businesses.subscribeProduct(businessId!, {
           product_code: productCode,
           plan_code: planCode,
           set_active: setActive,
@@ -527,12 +535,12 @@ export function useProductMutations() {
       ).data;
     },
     unsubscribe: async (productCode: string) => {
-      if (!client || !businessId) throw new Error('Not ready');
-      return (await client.businesses.unsubscribeProduct(businessId, productCode)).data;
+      const client = await scopedClient();
+      return (await client.businesses.unsubscribeProduct(businessId!, productCode)).data;
     },
     changePlan: async (productCode: string, planCode: string) => {
-      if (!client || !businessId) throw new Error('Not ready');
-      return (await client.businesses.changeProductPlan(businessId, productCode, { plan_code: planCode })).data;
+      const client = await scopedClient();
+      return (await client.businesses.changeProductPlan(businessId!, productCode, { plan_code: planCode })).data;
     },
   };
 }
