@@ -30,6 +30,7 @@ from apps.platform_admin.models import (
     PlatformAuditEvent,
     PlatformCoupon,
     PlatformLedgerInvoice,
+    PlatformPlanPackage,
     SupportTicket,
     SupportTicketNote,
 )
@@ -354,6 +355,58 @@ class PlatformCouponsView(APIView):
             user_agent=user_agent(request),
         )
         return success_response({"id": str(coupon.id), "code": coupon.code}, status_code=201)
+
+
+class PlatformPlanPackagesView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request) -> Response:
+        rows = _svc().list_plan_packages(product_code=request.query_params.get("product_code"))
+        return success_response({"plan_packages": rows})
+
+    @extend_schema(tags=["Platform Admin"])
+    def post(self, request: Request) -> Response:
+        data = request.data
+        package_id = data.get("id")
+        existing = get_object_or_404(PlatformPlanPackage, id=package_id) if package_id else None
+
+        def _field(key: str, default: object) -> object:
+            if key in data:
+                return data.get(key)
+            return getattr(existing, key) if existing is not None else default
+
+        package = _svc().upsert_plan_package(
+            actor=request.user,
+            code=_field("code", existing.code if existing else ""),
+            product_code=_field("product_code", ""),
+            name=_field("name", ""),
+            description=_field("description", ""),
+            billing_interval=_field("billing_interval", "monthly"),
+            trial_days=int(_field("trial_days", 15) or 15),
+            is_default=bool(_field("is_default", False)),
+            max_staff=int(_field("max_staff", 1) or 1),
+            max_branches=int(_field("max_branches", 1) or 1),
+            bi_features=_field("bi_features", []) or [],
+            features=_field("features", []) or [],
+            amount_paise=int(_field("amount_paise", 0) or 0),
+            yearly_amount_paise=(
+                int(data["yearly_amount_paise"])
+                if data.get("yearly_amount_paise") not in (None, "")
+                else (existing.yearly_amount_paise if existing else None)
+            ),
+            is_active=bool(_field("is_active", True)),
+            is_public=bool(_field("is_public", True)),
+            sort_order=int(_field("sort_order", 0) or 0),
+            metadata=_field("metadata", {}) or {},
+            reason=data.get("reason", "plan package upsert"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(
+            {"id": str(package.id), "code": package.code, "product_code": package.product_code},
+            status_code=201,
+        )
 
 
 class PlatformAuditFeedView(APIView):

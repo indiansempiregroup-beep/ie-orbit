@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    paddingTop: 4,
+    paddingTop: 6,
     height: 64,
   },
   tabLabel: {

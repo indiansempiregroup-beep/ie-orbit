@@ -17,7 +17,8 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { SelectField } from '../../components/SelectField';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { colors, fonts, spacing } from '../../theme/tokens';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-platform/sdk';
 import { SHOP_PRODUCT_CATEGORIES } from '@ie-platform/sdk';
@@ -64,7 +65,7 @@ export function ShopProductsScreen() {
           hitSlop={8}
           style={styles.headerBtn}
         >
-          <Feather name="plus" size={20} color="#fff" />
+          <Feather name="plus" size={20} color={colors.primary} />
         </Pressable>
       ),
     });
@@ -192,12 +193,13 @@ export function ShopProductsScreen() {
         }}
         ListEmptyComponent={
           !loading ? (
-            <View style={{ gap: 8 }}>
-              <Text style={styles.meta}>No products yet.</Text>
-              <Pressable style={styles.saveBtn} onPress={() => navigation.navigate('ShopProductAdd')}>
-                <Text style={styles.saveBtnText}>Add product</Text>
-              </Pressable>
-            </View>
+            <EmptyState
+              icon="package"
+              title="No products yet"
+              message="Add items with price and stock to sell from POS or sale invoices."
+              actionLabel="Add product"
+              onAction={() => navigation.navigate('ShopProductAdd')}
+            />
           ) : null
         }
       />
@@ -213,16 +215,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: colors.tint,
   },
-  saveBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  saveBtnText: { color: '#fff', fontWeight: '600' },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -239,20 +233,20 @@ const styles = StyleSheet.create({
   clearFiltersText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   row: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
   },
   rowInner: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  thumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: colors.muted },
+  thumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.muted },
   thumbEmpty: {
-    backgroundColor: colors.muted,
+    backgroundColor: colors.tint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground },
+  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
   meta: { marginTop: 4, color: colors.mutedForeground, fontSize: 13 },
   error: { color: colors.destructive, marginBottom: spacing.sm },
 });

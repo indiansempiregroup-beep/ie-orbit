@@ -663,8 +663,8 @@ export function ShopPosScreen() {
             {busy
               ? 'Creating bill…'
               : paymentMethod === 'borrow'
-                ? `Create Bill · Due ${totals.payable.toFixed(2)}`
-                : `Create Bill · ${totals.payable.toFixed(2)}`}
+                ? `Save bill · Due ${totals.payable.toFixed(2)}`
+                : `Save & print · ${totals.payable.toFixed(2)}`}
           </Text>
         </Pressable>
       </View>
@@ -850,40 +850,40 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: colors.background,
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.muted },
+  chipActive: { borderColor: colors.primary, backgroundColor: colors.tint },
   chipText: { color: colors.foreground, fontSize: 13, fontWeight: '600' },
   discountInput: { flexGrow: 0, flexBasis: 90, minWidth: 90 },
   totalsCard: {
     marginTop: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
     padding: spacing.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.tint,
     gap: 8,
   },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  payableLabel: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground },
-  payableValue: { fontFamily: fonts.bodyMedium, fontSize: 18, color: colors.foreground },
+  payableLabel: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.foreground },
+  payableValue: { fontFamily: fonts.bodyBold, fontSize: 20, color: colors.primary },
   chargeBar: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    backgroundColor: colors.background,
+    paddingTop: spacing.md,
+    backgroundColor: colors.card,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   checkout: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: radius.pill,
+    paddingVertical: 16,
     alignItems: 'center',
   },
   checkoutDisabled: { opacity: 0.5 },
-  checkoutText: { color: '#fff', fontWeight: '700' },
+  checkoutText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
   sheet: {

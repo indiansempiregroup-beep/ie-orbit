@@ -201,7 +201,7 @@ export function getApiErrorMessage(
   context: AuthFormContext = 'generic',
 ): string {
   if (isNetworkFailure(error)) {
-    return `Cannot reach API at ${getApiBaseUrl()}. Check Wi‑Fi / hotspot and that Windows Firewall allows TCP 8000.`;
+    return `Cannot reach API at ${getApiBaseUrl()}. Check that the device is on the same Wi‑Fi, the backend is running, and EXPO_PUBLIC_API_BASE_URL uses your computer’s LAN IP (not localhost) when testing on a phone.`;
   }
   if (error instanceof ApiClientError) {
     const details = formatErrorDetails(error.payload.error.details);

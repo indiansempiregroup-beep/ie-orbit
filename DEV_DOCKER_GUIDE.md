@@ -13,11 +13,11 @@ docker compose up --build
 - Health: http://localhost:8000/api/health/
 - Web app: http://localhost:3000
 - Mailpit UI: http://localhost:8025
-- Postgres: localhost:5432 (`ie` / `ie` / `ie_platform`)
+- Postgres: host Postgres on localhost:5432 (`postgres` / `admin` / `ie_platform`)
 
 ## Notes
 
-- Local PostgreSQL (`postgres:18-alpine`) is the default development database.
+- Host PostgreSQL is the default development database (not run in Compose).
 - Backend startup runs migrations and the pilot seed automatically.
 - Keep a Neon URL in `DATABASE_URL` only when you intentionally want a remote DB.
 - The compose stack uses Redis for cache and Celery broker state.
@@ -26,13 +26,14 @@ docker compose up --build
 
 ## Switch database
 
-- Local (default): `DATABASE_URL=postgresql://ie:ie@postgres:5432/ie_platform`
+- Local (default): `DATABASE_URL=postgresql://postgres:admin@host.docker.internal:5432/ie_platform`
+- Host Django (outside Docker): `DATABASE_URL=postgresql://postgres:admin@localhost:5432/ie_platform`
 - Neon: paste your Neon pooler URL into `.env` as `DATABASE_URL`
 - After changing `DATABASE_URL`, restart with `docker compose up -d`
 
 ## Troubleshooting
 
 - Run `docker compose ps` to inspect container states.
-- Run `docker compose logs -f backend web postgres` to review startup issues.
+- Run `docker compose logs -f backend web` to review startup issues.
 - Run `docker compose exec backend python manage.py migrate` if the first boot did not run migrations.
-- If the backend cannot connect, confirm `DATABASE_URL` uses host `postgres` inside Docker (not `localhost`).
+- If the backend cannot connect, confirm local Postgres is listening on `localhost:5432` and `DATABASE_URL` uses `host.docker.internal` from Compose.

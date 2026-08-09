@@ -63,6 +63,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: '#0B1F3A',
     },
   },
+  web: {
+    ...config.web,
+    bundler: 'metro',
+    output: 'single',
+    favicon: './assets/icon.png',
+  },
   extra: {
     ...config.extra,
     eas: {

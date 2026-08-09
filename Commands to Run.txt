@@ -58,6 +58,19 @@ pnpm install
 
 
 
+To run OPS in the browser (Expo RN-web — same app as mobile):
+
+cd apps/ops-mobile
+corepack pnpm web
+# or: corepack pnpm start  then press "w"
+# Open the URL Expo prints (often http://localhost:8082)
+# Login with the same credentials as before (e.g. pilot-owner@ieplatform.local / PilotPass123!)
+#
+# Platform-admin-only accounts now open Platform Admin inside Expo (Tenants / Coupons / Audit).
+# Vite web/ (:3000) is still used for marketing/register and remaining admin pages
+# (subscriptions, packages, tickets, branding, etc.) until those are fully ported.
+
+
 To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not localhost)
 
 

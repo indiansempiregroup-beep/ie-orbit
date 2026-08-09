@@ -58,6 +58,35 @@ class PlatformCoupon(BaseModel):
         ordering = ["code"]
 
 
+class PlatformPlanPackage(BaseModel):
+    """Platform-managed plan package definitions, overriding PRODUCT_PLAN_CATALOG."""
+
+    product_code = models.SlugField(max_length=40, db_index=True)
+    code = models.SlugField(max_length=60, unique=True)
+    name = models.CharField(max_length=160)
+    description = models.TextField(blank=True)
+    billing_interval = models.CharField(max_length=16, default="monthly")
+    trial_days = models.PositiveIntegerField(default=15)
+    is_default = models.BooleanField(default=False)
+    max_staff = models.PositiveIntegerField(default=1)
+    max_branches = models.PositiveIntegerField(default=1)
+    bi_features = models.JSONField(default=list, blank=True)
+    features = models.JSONField(default=list, blank=True)
+    amount_paise = models.PositiveIntegerField(default=0)
+    yearly_amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_plan_packages"
+        ordering = ["product_code", "sort_order", "code"]
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return self.code
+
+
 class PlatformCouponRedemption(TenantModel):
     coupon = models.ForeignKey(PlatformCoupon, on_delete=models.CASCADE, related_name="redemptions")
     business = models.ForeignKey(

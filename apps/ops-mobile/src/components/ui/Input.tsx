@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 
 type Props = TextInputProps & {
   label?: string;
@@ -10,18 +10,45 @@ type Props = TextInputProps & {
   leftIcon?: keyof typeof Feather.glyphMap;
 };
 
-export function Input({ label, error, hint, leftIcon, secureTextEntry, style, ...rest }: Props) {
+export function Input({
+  label,
+  error,
+  hint,
+  leftIcon,
+  secureTextEntry,
+  style,
+  onFocus,
+  onBlur,
+  ...rest
+}: Props) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
+  const [focused, setFocused] = useState(false);
   const isPassword = Boolean(secureTextEntry);
 
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={[styles.field, error ? styles.fieldError : null]}>
-        {leftIcon ? <Feather name={leftIcon} size={16} color={colors.mutedForeground} style={styles.leftIcon} /> : null}
+      <View
+        style={[
+          styles.field,
+          focused && styles.fieldFocused,
+          error ? styles.fieldError : null,
+        ]}
+      >
+        {leftIcon ? (
+          <Feather name={leftIcon} size={16} color={colors.mutedForeground} style={styles.leftIcon} />
+        ) : null}
         <TextInput
-          placeholderTextColor={colors.mutedForeground}
+          placeholderTextColor="#9B9EB8"
           secureTextEntry={isPassword ? hidden : false}
+          onFocus={(e) => {
+            setFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            onBlur?.(e);
+          }}
           style={[styles.input, leftIcon ? styles.inputWithIcon : null, style]}
           {...rest}
         />
@@ -39,7 +66,11 @@ export function Input({ label, error, hint, leftIcon, secureTextEntry, style, ..
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
+  label: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.mutedForeground,
+  },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -49,6 +80,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.inputBackground,
     paddingHorizontal: spacing.md,
+  },
+  fieldFocused: {
+    borderColor: colors.primary,
   },
   fieldError: { borderColor: colors.destructive },
   leftIcon: { marginRight: spacing.sm },

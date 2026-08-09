@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { WhiteLabelProfile } from '@ie-platform/sdk';
+import type { PlatformPlanPackageUpsertInput, WhiteLabelProfile } from '@ie-platform/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 
 export function usePlatformTenantsQuery() {
@@ -103,6 +103,43 @@ export function usePlatformCouponsQuery() {
     queryKey: ['platform', 'coupons'],
     queryFn: async () => (await client.platform.coupons()).data.coupons,
     retry: false,
+  });
+}
+
+export function useUpsertCouponMutation() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      code: string;
+      percent_off?: number;
+      amount_off_paise?: number;
+      is_active?: boolean;
+      reason: string;
+    }) => (await client.platform.upsertCoupon(body)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'coupons'] });
+    },
+  });
+}
+
+export function usePlatformPlanPackagesQuery(productCode?: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'plan-packages', productCode ?? 'all'],
+    queryFn: async () => (await client.platform.planPackages(productCode ? { product_code: productCode } : undefined)).data.plan_packages,
+    retry: false,
+  });
+}
+
+export function useUpsertPlanPackageMutation() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: PlatformPlanPackageUpsertInput) => (await client.platform.upsertPlanPackage(body)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'plan-packages'] });
+    },
   });
 }
 

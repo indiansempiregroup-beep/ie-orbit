@@ -20,7 +20,7 @@ from apps.billing.constants import (
 )
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.razorpay_client import RazorpayClient, get_razorpay_config
-from apps.businesses.constants import PRODUCT_PLAN_CATALOG, VALID_PRODUCT_CODES, get_plan_definition
+from apps.businesses.constants import VALID_PRODUCT_CODES, get_plan_definition
 from apps.businesses.models import Business
 from apps.tenancy.models import Tenant
 
@@ -118,47 +118,68 @@ class CheckoutService:
         }
 
     def list_plan_catalog(self) -> list[dict[str, Any]]:
+        from apps.businesses.services.plan_catalog import list_plan_definitions
+
         plans: list[dict[str, Any]] = []
-        for product_code, product_plans in PRODUCT_PLAN_CATALOG.items():
-            for plan in product_plans:
-                plan_code = str(plan["code"])
-                amount_paise = self._resolve_plan_price_paise(plan_code)
-                yearly_amount = (
-                    None if amount_paise is None else amount_paise * YEARLY_PRICE_MULTIPLIER
-                )
-                plans.append(
-                    {
-                        "product_code": product_code,
-                        "plan_code": plan_code,
-                        "name": str(plan.get("name", plan_code)),
-                        "description": str(plan.get("description", "")),
-                        "billing_interval": str(plan.get("billing_interval", "monthly")),
-                        "trial_days": int(plan.get("trial_days", 0) or 0),
-                        "is_default": bool(plan.get("is_default", False)),
-                        "max_staff": int(plan.get("max_staff", 1) or 1),
-                        "max_branches": int(plan.get("max_branches", 1) or 1),
-                        "bi_features": list(plan.get("bi_features") or []),
-                        "features": list(plan.get("features") or []),
-                        "amount_paise": amount_paise,
-                        "yearly_amount_paise": yearly_amount,
-                        "addon_staff_price_paise": ADDON_STAFF_PRICE_PAISE,
-                        "addon_office_price_paise": ADDON_OFFICE_PRICE_PAISE,
-                        "addon_pets_price_paise": ADDON_PETS_PRICE_PAISE,
-                        "currency": DEFAULT_CHECKOUT_CURRENCY,
-                    }
-                )
+        for definition in list_plan_definitions():
+            plan_code = str(definition["code"])
+            product_code = str(definition.get("product_code", ""))
+
+            definition_amount = definition.get("amount_paise")
+            amount_paise = (
+                int(definition_amount) if definition_amount is not None else self._resolve_plan_price_paise(plan_code)
+            )
+
+            definition_yearly = definition.get("yearly_amount_paise")
+            if definition_yearly is not None:
+                yearly_amount = int(definition_yearly)
+            else:
+                yearly_amount = None if amount_paise is None else amount_paise * YEARLY_PRICE_MULTIPLIER
+
+            plans.append(
+                {
+                    "product_code": product_code,
+                    "plan_code": plan_code,
+                    "name": str(definition.get("name", plan_code)),
+                    "description": str(definition.get("description", "")),
+                    "billing_interval": str(definition.get("billing_interval", "monthly")),
+                    "trial_days": int(definition.get("trial_days", 0) or 0),
+                    "is_default": bool(definition.get("is_default", False)),
+                    "max_staff": int(definition.get("max_staff", 1) or 1),
+                    "max_branches": int(definition.get("max_branches", 1) or 1),
+                    "bi_features": list(definition.get("bi_features") or []),
+                    "features": list(definition.get("features") or []),
+                    "amount_paise": amount_paise,
+                    "yearly_amount_paise": yearly_amount,
+                    "addon_staff_price_paise": ADDON_STAFF_PRICE_PAISE,
+                    "addon_office_price_paise": ADDON_OFFICE_PRICE_PAISE,
+                    "addon_pets_price_paise": ADDON_PETS_PRICE_PAISE,
+                    "currency": DEFAULT_CHECKOUT_CURRENCY,
+                }
+            )
         return plans
 
     def _resolve_plan_price_paise(self, plan_code: str, billing_interval: str = "monthly") -> int | None:
         overrides = getattr(settings, "BILLING_PLAN_PRICE_OVERRIDES", {}) or {}
         override = overrides.get(plan_code)
-        monthly: int | None
+        monthly: int | None = None
         if override is not None:
             try:
                 monthly = int(override)
             except (TypeError, ValueError):
-                monthly = PLAN_PRICE_PAISE.get(plan_code)
-        else:
+                monthly = None
+
+        if monthly is None:
+            from apps.businesses.services.plan_catalog import list_plan_definitions
+
+            for definition in list_plan_definitions():
+                if str(definition.get("code", "")) == plan_code:
+                    definition_amount = definition.get("amount_paise")
+                    if definition_amount is not None:
+                        monthly = int(definition_amount)
+                    break
+
+        if monthly is None:
             monthly = PLAN_PRICE_PAISE.get(plan_code)
         if monthly is None:
             return None

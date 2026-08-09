@@ -29,6 +29,7 @@ from apps.platform_admin.models import (
     PlatformCreditLedger,
     PlatformFeatureFlag,
     PlatformLedgerInvoice,
+    PlatformPlanPackage,
     SupportTicket,
     SupportTicketNote,
 )
@@ -653,6 +654,170 @@ class PlatformAdminService:
             user_agent=user_agent,
         )
         return {"code": coupon.code, "redemption_count": coupon.redemption_count}
+
+    # --- plan packages ---------------------------------------------------------------
+
+    def list_plan_packages(self, *, product_code: str | None = None) -> list[dict[str, Any]]:
+        qs = PlatformPlanPackage.objects.all()
+        if product_code:
+            qs = qs.filter(product_code=product_code.strip().lower())
+        return [
+            {
+                "id": str(row.id),
+                "product_code": row.product_code,
+                "code": row.code,
+                "name": row.name,
+                "description": row.description,
+                "billing_interval": row.billing_interval,
+                "trial_days": row.trial_days,
+                "is_default": row.is_default,
+                "max_staff": row.max_staff,
+                "max_branches": row.max_branches,
+                "bi_features": row.bi_features,
+                "features": row.features,
+                "amount_paise": row.amount_paise,
+                "yearly_amount_paise": row.yearly_amount_paise,
+                "is_active": row.is_active,
+                "is_public": row.is_public,
+                "sort_order": row.sort_order,
+                "metadata": row.metadata,
+            }
+            for row in qs
+        ]
+
+    @transaction.atomic
+    def upsert_plan_package(
+        self,
+        *,
+        actor: User,
+        code: str,
+        product_code: str,
+        name: str,
+        description: str = "",
+        billing_interval: str = "monthly",
+        trial_days: int = 15,
+        is_default: bool = False,
+        max_staff: int = 1,
+        max_branches: int = 1,
+        bi_features: list[str] | None = None,
+        features: list[str] | None = None,
+        amount_paise: int = 0,
+        yearly_amount_paise: int | None = None,
+        is_active: bool = True,
+        is_public: bool = True,
+        sort_order: int = 0,
+        metadata: dict[str, Any] | None = None,
+        reason: str = "",
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> PlatformPlanPackage:
+        reason = self.require_reason(reason or "plan package upsert")
+        normalized_code = slugify(code)[:60]
+        if not normalized_code:
+            raise ValidationError({"code": "Invalid code."})
+        normalized_product = (product_code or "").strip().lower()
+        if not normalized_product:
+            raise ValidationError({"product_code": "Required."})
+        if not (name or "").strip():
+            raise ValidationError({"name": "Required."})
+
+        existing = PlatformPlanPackage.objects.filter(code=normalized_code).first()
+        before = (
+            {
+                "name": existing.name,
+                "amount_paise": existing.amount_paise,
+                "is_active": existing.is_active,
+                "is_default": existing.is_default,
+            }
+            if existing
+            else None
+        )
+
+        if is_default:
+            PlatformPlanPackage.objects.filter(product_code=normalized_product).exclude(
+                code=normalized_code
+            ).update(is_default=False)
+
+        package, created = PlatformPlanPackage.objects.update_or_create(
+            code=normalized_code,
+            defaults={
+                "product_code": normalized_product,
+                "name": name.strip(),
+                "description": description or "",
+                "billing_interval": billing_interval or "monthly",
+                "trial_days": max(0, int(trial_days)),
+                "is_default": bool(is_default),
+                "max_staff": max(1, int(max_staff)),
+                "max_branches": max(1, int(max_branches)),
+                "bi_features": list(bi_features or []),
+                "features": list(features or []),
+                "amount_paise": max(0, int(amount_paise)),
+                "yearly_amount_paise": (
+                    int(yearly_amount_paise) if yearly_amount_paise is not None else None
+                ),
+                "is_active": bool(is_active),
+                "is_public": bool(is_public),
+                "sort_order": int(sort_order),
+                "metadata": metadata or {},
+            },
+        )
+        self.audit(
+            actor=actor,
+            action="platform.plan_package.upsert",
+            resource_type="plan_package",
+            resource_id=str(package.id),
+            reason=reason,
+            metadata={
+                "code": normalized_code,
+                "product_code": normalized_product,
+                "created": created,
+                "before": before,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return package
+
+    @transaction.atomic
+    def seed_plan_packages_from_catalog(self, *, actor: User | None = None) -> int:
+        from apps.billing.constants import PLAN_PRICE_PAISE, YEARLY_PRICE_MULTIPLIER
+        from apps.businesses.constants import PRODUCT_PLAN_CATALOG
+
+        count = 0
+        sort_order = 0
+        for product_code, plans in PRODUCT_PLAN_CATALOG.items():
+            for plan in plans:
+                sort_order += 1
+                code = str(plan["code"])
+                monthly = PLAN_PRICE_PAISE.get(code)
+                PlatformPlanPackage.objects.update_or_create(
+                    code=code,
+                    defaults={
+                        "product_code": product_code,
+                        "name": str(plan.get("name", code)),
+                        "description": str(plan.get("description", "")),
+                        "billing_interval": str(plan.get("billing_interval", "monthly")),
+                        "trial_days": int(plan.get("trial_days", 15) or 15),
+                        "is_default": bool(plan.get("is_default", False)),
+                        "max_staff": int(plan.get("max_staff", 1) or 1),
+                        "max_branches": int(plan.get("max_branches", 1) or 1),
+                        "bi_features": list(plan.get("bi_features") or []),
+                        "features": list(plan.get("features") or []),
+                        "amount_paise": monthly or 0,
+                        "yearly_amount_paise": monthly * YEARLY_PRICE_MULTIPLIER if monthly else None,
+                        "sort_order": sort_order,
+                    },
+                )
+                count += 1
+        if actor is not None:
+            self.audit(
+                actor=actor,
+                action="platform.plan_package.seed_from_catalog",
+                resource_type="plan_package",
+                reason="seed from catalog",
+                metadata={"count": count},
+            )
+        return count
 
     # --- tickets / announcements / help --------------------------------------------
 

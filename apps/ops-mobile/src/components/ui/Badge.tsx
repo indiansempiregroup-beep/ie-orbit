@@ -1,19 +1,21 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { fonts, radius, typography } from '../../theme/tokens';
+import { colors, fonts, radius, typography } from '../../theme/tokens';
 
 const STATUS_STYLES = {
-  confirmed: { bg: '#D1FAE5', text: '#047857', label: 'Confirmed' },
-  pending: { bg: '#FEF3C7', text: '#B45309', label: 'Pending' },
-  cancelled: { bg: '#FEE2E2', text: '#B91C1C', label: 'Cancelled' },
-  completed: { bg: '#E2E8F0', text: '#475569', label: 'Completed' },
-  noshow: { bg: '#FFEDD5', text: '#C2410C', label: 'No Show' },
+  confirmed: { bg: colors.successSoft, text: '#047857', label: 'Confirmed' },
+  pending: { bg: colors.warningSoft, text: '#B45309', label: 'Pending' },
+  cancelled: { bg: colors.destructiveSoft, text: '#B91C1C', label: 'Cancelled' },
+  completed: { bg: colors.muted, text: '#475569', label: 'Completed' },
+  noshow: { bg: colors.warningSoft, text: '#C2410C', label: 'No Show' },
+  paid: { bg: colors.successSoft, text: '#047857', label: 'Paid' },
+  unpaid: { bg: colors.destructiveSoft, text: '#B91C1C', label: 'Unpaid' },
 } as const;
 
 type Status = keyof typeof STATUS_STYLES;
 
 export function Badge({ status }: { status: Status }) {
-  const s = STATUS_STYLES[status];
+  const s = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
   return (
     <View style={[styles.badge, { backgroundColor: s.bg }]}>
       <Text style={[styles.text, { color: s.text }]}>{s.label}</Text>

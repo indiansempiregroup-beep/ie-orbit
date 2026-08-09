@@ -4,21 +4,36 @@ from rest_framework import serializers
 
 from apps.shopie.models import (
     BarcodeType,
+    CashAccountType,
+    EWaySupplyType,
     FulfillmentMode,
     OrderStatus,
+    PartyKind,
     ProductCategory,
     ProductStatus,
+    ShopBooksDocument,
+    ShopBooksVoucher,
     ShopBusinessSettings,
+    ShopCashAccount,
+    ShopCheque,
     ShopDeliveryZone,
+    ShopEInvoice,
+    ShopEWayBill,
+    ShopGodown,
     ShopInvoice,
+    ShopLoan,
     ShopOrder,
     ShopOrderLine,
+    ShopPartyLedgerEntry,
     ShopPet,
     ShopProduct,
     ShopProductBarcode,
     ShopQuotation,
     ShopReturn,
     ShopStockMovement,
+    ShopStockTransfer,
+    ShopSupplier,
+    VoucherStatus,
 )
 
 
@@ -43,6 +58,9 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "status",
             "price",
             "tax_rate",
+            "hsn_sac",
+            "gst_rate",
+            "batch_tracking_enabled",
             "currency",
             "stock_on_hand",
             "low_stock_threshold",
@@ -66,6 +84,9 @@ class ShopProductWriteSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=ProductStatus.choices, required=False)
     price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     tax_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+    hsn_sac = serializers.CharField(required=False, allow_blank=True, max_length=16)
+    gst_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+    batch_tracking_enabled = serializers.BooleanField(required=False)
     currency = serializers.CharField(required=False, allow_blank=True, max_length=3)
     stock_on_hand = serializers.DecimalField(max_digits=12, decimal_places=3, required=False)
     low_stock_threshold = serializers.DecimalField(max_digits=12, decimal_places=3, required=False)
@@ -498,3 +519,638 @@ class ShopStockMovementSerializer(serializers.ModelSerializer):
 
 # Silence unused import warning for BarcodeType used in docs/OpenAPI choices elsewhere
 _ = BarcodeType
+
+
+# ---------------------------------------------------------------------------
+# ShopIE GST books: suppliers, cash accounts, vouchers, party ledger
+# ---------------------------------------------------------------------------
+
+
+class ShopSupplierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopSupplier
+        fields = [
+            "id",
+            "business",
+            "name",
+            "phone",
+            "email",
+            "gstin",
+            "billing_state",
+            "billing_address",
+            "credit_limit",
+            "opening_balance",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ShopSupplierWriteSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=200)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    gstin = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    billing_state = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    billing_address = serializers.CharField(required=False, allow_blank=True)
+    credit_limit = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    opening_balance = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopSupplierPatchSerializer(ShopSupplierWriteSerializer):
+    business_id = serializers.UUIDField(required=False)
+    name = serializers.CharField(max_length=200, required=False)
+
+
+class ShopCashAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopCashAccount
+        fields = [
+            "id",
+            "business",
+            "name",
+            "account_type",
+            "opening_balance",
+            "current_balance",
+            "is_active",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "current_balance", "created_at", "updated_at"]
+
+
+class ShopCashAccountWriteSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=120)
+    account_type = serializers.ChoiceField(choices=CashAccountType.choices, required=False)
+    opening_balance = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, default=0
+    )
+    is_active = serializers.BooleanField(required=False, default=True)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopBooksVoucherLineSerializer(serializers.Serializer):
+    product_id = serializers.UUIDField(required=False, allow_null=True)
+    name = serializers.CharField(required=False, allow_blank=True)
+    hsn_sac = serializers.CharField(required=False, allow_blank=True)
+    qty = serializers.DecimalField(max_digits=12, decimal_places=3)
+    rate = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    discount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    gst_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+
+
+class ShopBooksVoucherSerializer(serializers.ModelSerializer):
+    voucher_type_display = serializers.CharField(source="get_voucher_type_display", read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    supplier_name = serializers.SerializerMethodField()
+    cash_account_name = serializers.SerializerMethodField()
+    contra_account_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopBooksVoucher
+        fields = [
+            "id",
+            "business",
+            "voucher_type",
+            "voucher_type_display",
+            "voucher_number",
+            "voucher_date",
+            "status",
+            "customer",
+            "customer_name",
+            "supplier",
+            "supplier_name",
+            "cash_account",
+            "cash_account_name",
+            "contra_account",
+            "contra_account_name",
+            "currency",
+            "subtotal",
+            "discount_total",
+            "tax_total",
+            "cgst_total",
+            "sgst_total",
+            "igst_total",
+            "total",
+            "amount_paid",
+            "place_of_supply",
+            "is_interstate",
+            "notes",
+            "line_items",
+            "linked_order",
+            "linked_invoice",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_customer_name(self, obj: ShopBooksVoucher) -> str:
+        return str(obj.customer.display_name) if obj.customer_id else ""
+
+    def get_supplier_name(self, obj: ShopBooksVoucher) -> str:
+        return str(obj.supplier.name) if obj.supplier_id else ""
+
+    def get_cash_account_name(self, obj: ShopBooksVoucher) -> str:
+        return str(obj.cash_account.name) if obj.cash_account_id else ""
+
+    def get_contra_account_name(self, obj: ShopBooksVoucher) -> str:
+        return str(obj.contra_account.name) if obj.contra_account_id else ""
+
+
+class ShopSaleVoucherCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    voucher_date = serializers.DateField(required=False)
+    voucher_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    status = serializers.ChoiceField(choices=VoucherStatus.choices, required=False)
+    lines = ShopBooksVoucherLineSerializer(many=True)
+    is_interstate = serializers.BooleanField(required=False, default=False)
+    place_of_supply = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    amount_paid = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, default=0
+    )
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+    currency = serializers.CharField(required=False, allow_blank=True, max_length=3)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopPurchaseVoucherCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    supplier_id = serializers.UUIDField(required=False, allow_null=True)
+    voucher_date = serializers.DateField(required=False)
+    voucher_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    status = serializers.ChoiceField(choices=VoucherStatus.choices, required=False)
+    lines = ShopBooksVoucherLineSerializer(many=True)
+    is_interstate = serializers.BooleanField(required=False, default=False)
+    place_of_supply = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    amount_paid = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, default=0
+    )
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+    currency = serializers.CharField(required=False, allow_blank=True, max_length=3)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopCreditNoteCreateSerializer(ShopSaleVoucherCreateSerializer):
+    """Same shape as sale — customer + lines; amount_paid is optional refund."""
+
+
+class ShopDebitNoteCreateSerializer(ShopPurchaseVoucherCreateSerializer):
+    """Same shape as purchase — supplier + lines."""
+
+
+class ShopPaymentInCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    customer_id = serializers.UUIDField()
+    cash_account_id = serializers.UUIDField()
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    voucher_date = serializers.DateField(required=False)
+    voucher_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopPaymentOutCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    supplier_id = serializers.UUIDField()
+    cash_account_id = serializers.UUIDField()
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    voucher_date = serializers.DateField(required=False)
+    voucher_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopExpenseCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    cash_account_id = serializers.UUIDField()
+    supplier_id = serializers.UUIDField(required=False, allow_null=True)
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    category = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    voucher_date = serializers.DateField(required=False)
+    voucher_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopOtherIncomeCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    cash_account_id = serializers.UUIDField()
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    category = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    voucher_date = serializers.DateField(required=False)
+    voucher_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopTransferCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    cash_account_id = serializers.UUIDField()
+    contra_account_id = serializers.UUIDField()
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    voucher_date = serializers.DateField(required=False)
+    voucher_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    metadata = serializers.DictField(required=False)
+
+
+class ShopPartyLedgerEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopPartyLedgerEntry
+        fields = [
+            "id",
+            "party_kind",
+            "customer",
+            "supplier",
+            "entry_type",
+            "amount",
+            "direction",
+            "balance_after",
+            "voucher",
+            "notes",
+            "metadata",
+            "created_at",
+        ]
+
+
+class ShopPartyStatementQuerySerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    kind = serializers.ChoiceField(choices=PartyKind.choices)
+    id = serializers.UUIDField()
+
+
+class ShopQuotationConvertSerializer(serializers.Serializer):
+    voucher_date = serializers.DateField(required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    amount_paid = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, default=0
+    )
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+    is_interstate = serializers.BooleanField(required=False, default=False)
+    place_of_supply = serializers.CharField(required=False, allow_blank=True, max_length=120)
+
+
+class ShopBooksDocumentSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    supplier_name = serializers.SerializerMethodField()
+    doc_type_display = serializers.CharField(source="get_doc_type_display", read_only=True)
+
+    class Meta:
+        model = ShopBooksDocument
+        fields = [
+            "id",
+            "business",
+            "doc_type",
+            "doc_type_display",
+            "document_number",
+            "document_date",
+            "status",
+            "customer",
+            "customer_name",
+            "supplier",
+            "supplier_name",
+            "currency",
+            "subtotal",
+            "tax_total",
+            "total",
+            "notes",
+            "line_items",
+            "converted_voucher",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_customer_name(self, obj) -> str:
+        if not obj.customer_id:
+            return ""
+        c = obj.customer
+        return (
+            getattr(c, "full_name", None)
+            or getattr(c, "display_name", None)
+            or " ".join(filter(None, [getattr(c, "first_name", ""), getattr(c, "last_name", "")])).strip()
+            or getattr(c, "email", "")
+            or str(c.id)
+        )
+
+    def get_supplier_name(self, obj) -> str:
+        return str(obj.supplier.name) if obj.supplier_id else ""
+
+
+class ShopBooksDocumentCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    doc_type = serializers.ChoiceField(
+        choices=["sale_order", "purchase_order", "delivery_challan", "job_work"]
+    )
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    supplier_id = serializers.UUIDField(required=False, allow_null=True)
+    document_date = serializers.DateField(required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+
+
+class ShopBooksDocumentConvertSerializer(serializers.Serializer):
+    amount_paid = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, default=0
+    )
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class ShopGodownSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopGodown
+        fields = [
+            "id",
+            "business",
+            "name",
+            "code",
+            "is_default",
+            "is_active",
+            "metadata",
+            "created_at",
+        ]
+
+
+class ShopGodownCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=120)
+    code = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    is_default = serializers.BooleanField(required=False, default=False)
+
+
+class ShopStockTransferSerializer(serializers.ModelSerializer):
+    from_godown_name = serializers.CharField(source="from_godown.name", read_only=True)
+    to_godown_name = serializers.CharField(source="to_godown.name", read_only=True)
+
+    class Meta:
+        model = ShopStockTransfer
+        fields = [
+            "id",
+            "business",
+            "from_godown",
+            "from_godown_name",
+            "to_godown",
+            "to_godown_name",
+            "transfer_number",
+            "transfer_date",
+            "status",
+            "notes",
+            "line_items",
+            "created_at",
+        ]
+
+
+class ShopStockTransferCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    from_godown_id = serializers.UUIDField()
+    to_godown_id = serializers.UUIDField()
+    transfer_date = serializers.DateField(required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+
+
+class ShopChequeSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    supplier_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopCheque
+        fields = [
+            "id",
+            "business",
+            "direction",
+            "status",
+            "customer",
+            "customer_name",
+            "supplier",
+            "supplier_name",
+            "cash_account",
+            "amount",
+            "cheque_number",
+            "bank_name",
+            "due_date",
+            "cleared_at",
+            "linked_voucher",
+            "notes",
+            "created_at",
+        ]
+
+    def get_customer_name(self, obj) -> str:
+        return str(obj.customer_id and (getattr(obj.customer, "full_name", None) or obj.customer_id) or "")
+
+    def get_supplier_name(self, obj) -> str:
+        return str(obj.supplier.name) if obj.supplier_id else ""
+
+
+class ShopChequeCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    direction = serializers.ChoiceField(choices=["in", "out"])
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    cheque_number = serializers.CharField(max_length=64)
+    bank_name = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    due_date = serializers.DateField(required=False)
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    supplier_id = serializers.UUIDField(required=False, allow_null=True)
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ShopChequeClearSerializer(serializers.Serializer):
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class ShopLoanSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    supplier_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopLoan
+        fields = [
+            "id",
+            "business",
+            "party_kind",
+            "customer",
+            "customer_name",
+            "supplier",
+            "supplier_name",
+            "title",
+            "principal",
+            "interest_rate",
+            "balance",
+            "start_date",
+            "status",
+            "notes",
+            "repayments",
+            "created_at",
+        ]
+
+    def get_customer_name(self, obj) -> str:
+        return str(obj.customer_id and (getattr(obj.customer, "full_name", None) or obj.customer_id) or "")
+
+    def get_supplier_name(self, obj) -> str:
+        return str(obj.supplier.name) if obj.supplier_id else ""
+
+
+class ShopLoanCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    title = serializers.CharField(max_length=160)
+    principal = serializers.DecimalField(max_digits=14, decimal_places=2)
+    interest_rate = serializers.DecimalField(
+        max_digits=7, decimal_places=2, required=False, default=0
+    )
+    party_kind = serializers.ChoiceField(choices=["customer", "supplier"], required=False, default="customer")
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    supplier_id = serializers.UUIDField(required=False, allow_null=True)
+    start_date = serializers.DateField(required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ShopLoanRepaymentSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+# ---------------------------------------------------------------------------
+# GST e-invoice (IRN) + e-way bill compliance
+# ---------------------------------------------------------------------------
+
+
+class ShopGstComplianceSerializer(serializers.Serializer):
+    provider = serializers.ChoiceField(
+        choices=["mock", "nic_sandbox", "nic_production", "custom"], required=False
+    )
+    username = serializers.CharField(required=False, allow_blank=True)
+    password = serializers.CharField(required=False, allow_blank=True)
+    client_id = serializers.CharField(required=False, allow_blank=True)
+    client_secret = serializers.CharField(required=False, allow_blank=True)
+    base_url = serializers.CharField(required=False, allow_blank=True)
+    seller_legal_name = serializers.CharField(required=False, allow_blank=True)
+    seller_trade_name = serializers.CharField(required=False, allow_blank=True)
+    seller_addr1 = serializers.CharField(required=False, allow_blank=True)
+    seller_addr2 = serializers.CharField(required=False, allow_blank=True)
+    seller_loc = serializers.CharField(required=False, allow_blank=True)
+    seller_pin = serializers.CharField(required=False, allow_blank=True)
+    seller_state_code = serializers.CharField(required=False, allow_blank=True)
+    seller_phone = serializers.CharField(required=False, allow_blank=True)
+    seller_email = serializers.CharField(required=False, allow_blank=True)
+
+
+class ShopComplianceSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopBusinessSettings
+        fields = [
+            "id",
+            "business",
+            "einvoice_enabled",
+            "eway_enabled",
+            "gst_compliance",
+        ]
+
+
+class ShopComplianceSettingsPatchSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    einvoice_enabled = serializers.BooleanField(required=False)
+    eway_enabled = serializers.BooleanField(required=False)
+    gst_compliance = ShopGstComplianceSerializer(required=False)
+
+
+class ShopEInvoiceSerializer(serializers.ModelSerializer):
+    voucher_number = serializers.CharField(source="voucher.voucher_number", read_only=True)
+
+    class Meta:
+        model = ShopEInvoice
+        fields = [
+            "id",
+            "business",
+            "voucher",
+            "voucher_number",
+            "status",
+            "doc_type",
+            "irn",
+            "ack_no",
+            "ack_date",
+            "signed_qr",
+            "signed_invoice",
+            "error_message",
+            "cancelled_at",
+            "cancel_reason",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ShopEInvoiceGenerateSerializer(serializers.Serializer):
+    allow_b2c = serializers.BooleanField(required=False, default=False)
+
+
+class ShopEInvoiceCancelSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=255)
+
+
+class ShopEWayBillSerializer(serializers.ModelSerializer):
+    voucher_number = serializers.CharField(source="voucher.voucher_number", read_only=True)
+
+    class Meta:
+        model = ShopEWayBill
+        fields = [
+            "id",
+            "business",
+            "voucher",
+            "voucher_number",
+            "einvoice",
+            "status",
+            "ewb_no",
+            "ewb_date",
+            "valid_upto",
+            "supply_type",
+            "sub_supply_type",
+            "doc_type",
+            "transporter_id",
+            "transporter_name",
+            "transport_mode",
+            "vehicle_no",
+            "vehicle_type",
+            "distance_km",
+            "from_place",
+            "from_state_code",
+            "to_place",
+            "to_state_code",
+            "error_message",
+            "cancelled_at",
+            "cancel_reason",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ShopEWayGenerateSerializer(serializers.Serializer):
+    supply_type = serializers.ChoiceField(choices=EWaySupplyType.choices, required=False)
+    sub_supply_type = serializers.CharField(required=False, allow_blank=True, max_length=8)
+    doc_type = serializers.CharField(required=False, allow_blank=True, max_length=8)
+    transporter_id = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    transporter_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    transport_mode = serializers.ChoiceField(
+        choices=[("1", "Road"), ("2", "Rail"), ("3", "Air"), ("4", "Ship")], required=False
+    )
+    vehicle_no = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    vehicle_type = serializers.ChoiceField(choices=[("R", "Regular"), ("O", "ODC")], required=False)
+    distance_km = serializers.IntegerField(required=False, min_value=0, default=0)
+    from_place = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    from_state_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    to_place = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    to_state_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
+
+
+class ShopEWayCancelSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=255)

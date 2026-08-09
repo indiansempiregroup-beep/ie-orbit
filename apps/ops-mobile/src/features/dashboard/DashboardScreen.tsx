@@ -1,25 +1,30 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { BookingRow } from '../../components/BookingRow';
-import { OpsHeader } from '../../components/OpsHeader';
+import { OpsHeader, OpsHeaderIconButton } from '../../components/OpsHeader';
 import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
 import { SectionHeader } from '../../components/ui/SectionHeader';
+import { StatTile } from '../../components/ui/StatTile';
+import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
 import { useBIOverview, useEntityMaps } from '../../hooks/useOpsExtended';
+import { useOpsClient } from '../../hooks/useOpsClient';
 import { entityLabel } from '../../utils/entities';
 import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/products';
 import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
-import { brand, colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
+import type { ShopBooksDashboard } from '@ie-platform/sdk';
+import { formatMoney } from '../shop/shopBooksHelpers';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -31,7 +36,8 @@ function greeting() {
 export function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
-  const { activeBusiness } = useWorkspace();
+  const { activeBusiness, businessId } = useWorkspace();
+  const client = useOpsClient();
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const today = formatDateKey(new Date());
@@ -42,6 +48,7 @@ export function DashboardScreen() {
   const { staff } = useStaffMembers();
   const { data: bi } = useBIOverview(showReports);
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
+  const [books, setBooks] = useState<ShopBooksDashboard | null>(null);
 
   const subscribedIds = useMemo(
     () => getSubscribedProductIds(activeBusiness?.product_subscriptions),
@@ -56,8 +63,24 @@ export function DashboardScreen() {
     (summary?.products?.includes('shopie') ?? hasShopie(activeBusiness?.product_subscriptions));
   const petsEnabled = Boolean(summary?.pets) || hasPetsPack(activeBusiness?.product_subscriptions);
 
+  const loadBooks = useCallback(async () => {
+    if (!shopieEnabled || !businessId || !client) return;
+    try {
+      const response = await client.shop.booksDashboard({ business_id: businessId });
+      setBooks(response.data);
+    } catch {
+      /* optional KPIs */
+    }
+  }, [shopieEnabled, businessId, client]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadBooks();
+    }, [loadBooks]),
+  );
+
   const reload = async () => {
-    await Promise.all([reloadSummary(), reloadBookings()]);
+    await Promise.all([reloadSummary(), reloadBookings(), loadBooks()]);
   };
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const isRefreshing = refreshing || loading;
@@ -83,11 +106,7 @@ export function DashboardScreen() {
         <OpsHeader
           title={displayName}
           subtitle={greeting()}
-          right={
-            <Pressable style={styles.iconBtn} onPress={() => navigation.navigate('Search')} hitSlop={8}>
-              <Feather name="search" size={18} color="#fff" />
-            </Pressable>
-          }
+          right={<OpsHeaderIconButton icon="search" onPress={() => navigation.navigate('Search')} accessibilityLabel="Search" />}
         >
           {hasAppointie ? (
             <View style={styles.nextCard}>
@@ -98,30 +117,34 @@ export function DashboardScreen() {
                   <Text style={styles.nextHint}>{entityLabel(customerMap, nextBooking.customer_id)}</Text>
                   <View style={styles.nextMetaRow}>
                     <View style={styles.nextMetaItem}>
-                      <Feather name="clock" size={12} color="rgba(255,255,255,0.7)" />
+                      <Feather name="clock" size={12} color={colors.mutedForeground} />
                       <Text style={styles.nextMetaText}>{formatTime(nextBooking.start_at)}</Text>
                     </View>
                     {nextBooking.staff_id ? (
                       <View style={styles.nextMetaItem}>
-                        <Feather name="user" size={12} color="rgba(255,255,255,0.7)" />
+                        <Feather name="user" size={12} color={colors.mutedForeground} />
                         <Text style={styles.nextMetaText}>{entityLabel(staffMap, nextBooking.staff_id)}</Text>
                       </View>
                     ) : null}
                   </View>
-                  <Pressable
-                    style={styles.manageBtn}
+                  <Button
+                    label="Open booking"
+                    size="sm"
+                    variant="soft"
+                    style={styles.nextBtn}
                     onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
-                  >
-                    <Text style={styles.manageText}>Open booking</Text>
-                  </Pressable>
+                  />
                 </>
               ) : (
                 <>
                   <Text style={styles.nextTitle}>No upcoming bookings</Text>
                   <Text style={styles.nextHint}>Fill today&apos;s schedule with a new appointment.</Text>
-                  <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('CreateBooking', {})}>
-                    <Text style={styles.manageText}>New booking</Text>
-                  </Pressable>
+                  <Button
+                    label="New booking"
+                    size="sm"
+                    style={styles.nextBtn}
+                    onPress={() => navigation.navigate('CreateBooking', {})}
+                  />
                 </>
               )}
             </View>
@@ -132,9 +155,7 @@ export function DashboardScreen() {
               <Text style={styles.nextHint}>
                 {shopie?.pending_returns ?? 0} pending returns · {shopie?.open_orders ?? 0} open
               </Text>
-              <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('ShopOrders')}>
-                <Text style={styles.manageText}>Open orders</Text>
-              </Pressable>
+              <Button label="Open orders" size="sm" variant="soft" style={styles.nextBtn} onPress={() => navigation.navigate('ShopOrders')} />
             </View>
           ) : (
             <View style={styles.nextCard}>
@@ -148,37 +169,60 @@ export function DashboardScreen() {
         <View style={styles.body}>
           <SoftLockBanner />
 
+          {shopieEnabled && books ? (
+            <View style={styles.kpiGrid}>
+              <StatTile
+                label="To collect"
+                value={formatMoney(books.to_collect)}
+                tone="positive"
+                hint="Receivable"
+                onPress={() => navigation.navigate('ShopBooks')}
+              />
+              <StatTile
+                label="To pay"
+                value={formatMoney(books.to_pay)}
+                tone="negative"
+                hint="Payable"
+                onPress={() => navigation.navigate('ShopBooks')}
+              />
+              <StatTile label="Cash in hand" value={formatMoney(books.cash)} onPress={() => navigation.navigate('ShopBooksCash')} />
+              <StatTile label="Bank balance" value={formatMoney(books.bank)} onPress={() => navigation.navigate('ShopBooksCash')} />
+            </View>
+          ) : null}
+
           {hasAppointie ? (
             <View style={styles.statsRow}>
-              <StatCard value={String(appointie?.today_bookings ?? todayCount)} label="Today" />
-              <StatCard value={String(appointie?.active_customers ?? customers.length)} label="Customers" />
-              {showStaff ? <StatCard value={String(appointie?.staff_on_duty ?? staff.length)} label="Staff" /> : null}
-              <StatCard value={String(services.length)} label="Services" />
+              <StatTile label="Today" value={String(appointie?.today_bookings ?? todayCount)} />
+              <StatTile label="Customers" value={String(appointie?.active_customers ?? customers.length)} />
+              {showStaff ? (
+                <StatTile label="Staff" value={String(appointie?.staff_on_duty ?? staff.length)} />
+              ) : null}
+              <StatTile label="Services" value={String(services.length)} />
             </View>
           ) : null}
 
           {shopieEnabled ? (
             <View style={styles.statsRow}>
-              <StatCard value={String(shopie?.orders_today ?? 0)} label="Orders" />
-              <StatCard value={String(shopie?.open_orders ?? 0)} label="Open" />
-              <StatCard value={String(shopie?.pending_returns ?? 0)} label="Returns" />
-              <StatCard value={String(shopie?.orders_month ?? 0)} label="Month" />
+              <StatTile label="Orders today" value={String(shopie?.orders_today ?? 0)} />
+              <StatTile label="Open" value={String(shopie?.open_orders ?? 0)} />
+              <StatTile label="Returns" value={String(shopie?.pending_returns ?? 0)} tone="warning" />
+              <StatTile label="Month" value={String(shopie?.orders_month ?? 0)} />
             </View>
           ) : null}
 
           {petsEnabled ? (
             <View style={styles.statsRow}>
-              <StatCard value={String(pets?.total ?? 0)} label="Pets" />
-              <StatCard value={String(pets?.birthdays_next_7d ?? 0)} label="Bdays 7d" />
-              <StatCard value={String(pets?.birthdays_next_30d ?? 0)} label="Bdays 30d" />
-              <StatCard value={String(pets?.with_photo ?? 0)} label="Photos" />
+              <StatTile label="Pets" value={String(pets?.total ?? 0)} />
+              <StatTile label="Bdays 7d" value={String(pets?.birthdays_next_7d ?? 0)} />
+              <StatTile label="Bdays 30d" value={String(pets?.birthdays_next_30d ?? 0)} />
+              <StatTile label="Photos" value={String(pets?.with_photo ?? 0)} />
             </View>
           ) : null}
 
           {showReports && revenueTeaser != null ? (
             <Pressable style={styles.revenueCard} onPress={() => navigation.navigate('BI', { tab: 'overview' })}>
               <View style={styles.revenueIcon}>
-                <Feather name="trending-up" size={18} color={brand.primary} />
+                <Feather name="trending-up" size={18} color={colors.primary} />
               </View>
               <View style={styles.revenueCopy}>
                 <Text style={styles.revenueLabel}>{revenueLabel}</Text>
@@ -190,12 +234,29 @@ export function DashboardScreen() {
             </Pressable>
           ) : null}
 
+          <Text style={styles.sectionLabel}>Most used</Text>
+          <View style={styles.reportRow}>
+            {shopieEnabled ? (
+              <>
+                <ReportLink
+                  label="Sale report"
+                  onPress={() => navigation.navigate('ShopBooksReports')}
+                />
+                <ReportLink label="POS billing" onPress={() => navigation.navigate('ShopPos')} />
+                <ReportLink label="Books" onPress={() => navigation.navigate('ShopBooks')} />
+              </>
+            ) : null}
+            {showReports ? (
+              <ReportLink label="Business intelligence" onPress={() => navigation.navigate('BI', { tab: 'overview' })} />
+            ) : null}
+          </View>
+
           <View style={styles.quickActions}>
             {hasAppointie ? (
               <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
             ) : null}
             {shopieEnabled ? (
-              <QuickAction icon="shopping-cart" label="Orders" onPress={() => navigation.navigate('ShopOrders')} />
+              <QuickAction icon="shopping-cart" label="POS" onPress={() => navigation.navigate('ShopPos')} />
             ) : null}
             <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
             {hasAppointie ? (
@@ -251,7 +312,7 @@ export function DashboardScreen() {
           <Feather name="plus" size={24} color="#fff" />
         </Pressable>
       ) : shopieEnabled ? (
-        <Pressable style={styles.fab} onPress={() => navigation.navigate('ShopOrders')}>
+        <Pressable style={styles.fab} onPress={() => navigation.navigate('ShopPos')}>
           <Feather name="shopping-cart" size={22} color="#fff" />
         </Pressable>
       ) : null}
@@ -259,12 +320,12 @@ export function DashboardScreen() {
   );
 }
 
-function StatCard({ value, label }: { value: string; label: string }) {
+function ReportLink({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <Pressable style={({ pressed }) => [styles.reportLink, pressed && styles.pressed]} onPress={onPress}>
+      <Text style={styles.reportLinkText}>{label}</Text>
+      <Feather name="chevron-right" size={14} color={colors.primary} />
+    </Pressable>
   );
 }
 
@@ -290,60 +351,35 @@ function QuickAction({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: 100 },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   nextCard: {
-    marginTop: spacing.xxl,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: radius.xl,
+    marginTop: spacing.xl,
+    backgroundColor: colors.tint,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.lg,
   },
   nextLabel: {
     ...typography.caption,
     fontFamily: fonts.bodyMedium,
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.mutedForeground,
     marginBottom: 4,
   },
-  nextTitle: { ...typography.title, color: '#fff' },
-  nextHint: { ...typography.caption, color: 'rgba(255,255,255,0.75)', marginTop: spacing.sm },
+  nextTitle: { ...typography.title, color: colors.foreground },
+  nextHint: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
   nextMetaRow: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
   nextMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  nextMetaText: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
-  manageBtn: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.md,
-    backgroundColor: '#fff',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-  },
-  manageText: { ...typography.caption, fontFamily: fonts.bodyBold, color: colors.primary },
+  nextMetaText: { ...typography.caption, color: colors.mutedForeground },
+  nextBtn: { alignSelf: 'flex-start', marginTop: spacing.md },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, gap: spacing.lg },
-  statsRow: { flexDirection: 'row', gap: spacing.sm },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-  },
-  statValue: { ...typography.title, color: colors.primary },
-  statLabel: { ...typography.tiny, color: colors.mutedForeground, marginTop: 2, textAlign: 'center' },
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   revenueCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
@@ -352,13 +388,31 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.md,
-    backgroundColor: `${brand.primary}14`,
+    backgroundColor: colors.tint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   revenueCopy: { flex: 1 },
   revenueLabel: { ...typography.caption, color: colors.mutedForeground },
   revenueValue: { ...typography.title, color: colors.foreground, marginTop: 2 },
+  sectionLabel: {
+    ...typography.label,
+    color: colors.mutedForeground,
+    marginBottom: -spacing.sm,
+  },
+  reportRow: { gap: spacing.sm },
+  reportLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  reportLinkText: { ...typography.body, fontFamily: fonts.bodyMedium, color: colors.foreground },
   quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   quickCard: {
     minWidth: '22%',
@@ -366,7 +420,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.card,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     paddingVertical: spacing.lg,
@@ -376,7 +430,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.md,
-    backgroundColor: `${brand.primary}14`,
+    backgroundColor: colors.tint,
     alignItems: 'center',
     justifyContent: 'center',
   },

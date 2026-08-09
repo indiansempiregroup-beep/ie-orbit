@@ -14,13 +14,17 @@ import {
   canAccessReports,
   canAccessSettings,
   canAccessStaffDirectory,
-  canManageTeam,
   formatUserRole,
 } from '../../utils/roles';
 import { hasShopie } from '../../utils/products';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
+/**
+ * More menu — Vyapar-inspired groups.
+ * Sale/Compliance only under Books; Offices/Team only under Settings.
+ * Reports absorbed into BI.
+ */
 export function MoreScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -29,7 +33,6 @@ export function MoreScreen() {
   const { activeBusiness } = useWorkspace();
   const displayName = user?.full_name || user?.email || t('common.account');
   const showSettings = canAccessSettings(user);
-  const showTeam = canManageTeam(user);
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const showShop = hasShopie(activeBusiness?.product_subscriptions);
@@ -58,69 +61,124 @@ export function MoreScreen() {
       </View>
 
       <View style={styles.menu}>
+        {showShop ? (
+          <MenuSection title="Sale">
+            <MenuRow
+              icon="shopping-cart"
+              label="POS billing"
+              subtitle="Counter checkout"
+              onPress={() => navigation.navigate('ShopPos')}
+            />
+            <MenuRow
+              icon="book-open"
+              label={t('nav.shopBooks')}
+              subtitle="Invoices, purchase, cash & reports"
+              onPress={() => navigation.navigate('ShopBooks')}
+            />
+            <MenuRow
+              icon="shopping-bag"
+              label={t('nav.shopProducts')}
+              onPress={() => navigation.navigate('ShopProducts')}
+            />
+            <MenuRow
+              icon="list"
+              label={t('nav.shopOrders')}
+              onPress={() => navigation.navigate('ShopOrders')}
+            />
+            <MenuRow
+              icon="rotate-ccw"
+              label={t('nav.shopReturns')}
+              onPress={() => navigation.navigate('ShopReturns')}
+            />
+            <MenuRow
+              icon="map-pin"
+              label={t('nav.shopDeliveryZones')}
+              onPress={() => navigation.navigate('ShopDeliveryZones')}
+            />
+            <MenuRow
+              icon="heart"
+              label={t('nav.shopPets')}
+              last
+              onPress={() => navigation.navigate('ShopPets')}
+            />
+          </MenuSection>
+        ) : null}
+
+        {showShop ? (
+          <MenuSection title="Grow">
+            <MenuRow
+              icon="message-circle"
+              label="WhatsApp"
+              subtitle="Default message & wa.me chat"
+              onPress={() => navigation.navigate('GrowWhatsApp')}
+            />
+            <MenuRow
+              icon="image"
+              label="AI Poster"
+              subtitle="Local promo poster & share"
+              onPress={() => navigation.navigate('GrowAIPoster')}
+            />
+            <MenuRow
+              icon="globe"
+              label="Google Profile"
+              subtitle="Listing URL & place ID"
+              onPress={() => navigation.navigate('GrowGoogleProfile')}
+            />
+            <MenuRow
+              icon="shopping-bag"
+              label="Online Store"
+              subtitle="Storefront link & toggle"
+              onPress={() => navigation.navigate('GrowOnlineStore')}
+            />
+            <MenuRow
+              icon="share-2"
+              label="Sync & share"
+              subtitle="Export voucher & product counts"
+              onPress={() => navigation.navigate('GrowSyncShare')}
+            />
+            <MenuRow
+              icon="tool"
+              label="Utilities"
+              subtitle="GST, margin, discount & EMI"
+              last
+              onPress={() => navigation.navigate('GrowUtilities')}
+            />
+          </MenuSection>
+        ) : null}
+
         <MenuSection title={t('settings.business')}>
           <MenuRow icon="users" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
           <MenuRow icon="star" label={t('settings.reviews')} onPress={() => navigation.navigate('Reviews')} />
-          {showShop ? (
-            <>
-              <MenuRow icon="shopping-cart" label={t('nav.pos')} onPress={() => navigation.navigate('ShopPos')} />
-              <MenuRow icon="shopping-bag" label={t('nav.shopProducts')} onPress={() => navigation.navigate('ShopProducts')} />
-              <MenuRow icon="list" label={t('nav.shopOrders')} onPress={() => navigation.navigate('ShopOrders')} />
-              <MenuRow icon="rotate-ccw" label={t('nav.shopReturns')} onPress={() => navigation.navigate('ShopReturns')} />
-              <MenuRow icon="map-pin" label={t('nav.shopDeliveryZones')} onPress={() => navigation.navigate('ShopDeliveryZones')} />
-              <MenuRow icon="heart" label={t('nav.shopPets')} onPress={() => navigation.navigate('ShopPets')} />
-            </>
-          ) : null}
           <MenuRow
             icon="package"
             label={t('settings.services')}
-            last={!showStaff && !showReports && !showSettings && !showTeam && !showShop}
+            last={!showStaff && !showReports && !showSettings}
             onPress={() => navigation.navigate('Services')}
           />
           {showStaff ? (
             <MenuRow
               icon="user-check"
               label={t('bookings.staff')}
-              last={!showReports && !showSettings && !showTeam}
+              last={!showReports && !showSettings}
               onPress={() => navigation.navigate('StaffList')}
             />
           ) : null}
           {showReports ? (
-            <>
-              <MenuRow
-                icon="bar-chart-2"
-                label={t('nav.businessIntelligence')}
-                onPress={() => navigation.navigate('BI', { tab: 'overview' })}
-              />
-              <MenuRow
-                icon="file-text"
-                label={t('nav.reports')}
-                last={!showSettings && !showTeam}
-                onPress={() => navigation.navigate('Reports')}
-              />
-            </>
+            <MenuRow
+              icon="bar-chart-2"
+              label={t('nav.businessIntelligence')}
+              subtitle="Overview, growth & reports"
+              last={!showSettings}
+              onPress={() => navigation.navigate('BI', { tab: 'overview' })}
+            />
           ) : null}
           {showSettings ? (
-            <>
-              <MenuRow
-                icon="map-pin"
-                label={t('settings.offices')}
-                onPress={() => navigation.navigate('Branches')}
-              />
-              <MenuRow
-                icon="settings"
-                label={t('settings.title')}
-                last={!showTeam}
-                onPress={() => navigation.navigate('Settings')}
-              />
-            </>
-          ) : null}
-          {showTeam ? (
             <MenuRow
-              icon="mail"
-              label={t('settings.team')}
+              icon="settings"
+              label={t('settings.title')}
+              subtitle="Profile, offices, team & plans"
               last
-              onPress={() => navigation.navigate('Team')}
+              onPress={() => navigation.navigate('Settings')}
             />
           ) : null}
         </MenuSection>
@@ -139,8 +197,8 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxxl, paddingHorizontal: spacing.xl },
   hero: { alignItems: 'center', paddingBottom: spacing.xxl },
   name: {
-    fontFamily: fonts.display,
-    fontSize: 28,
+    fontFamily: fonts.bodyBold,
+    fontSize: 26,
     color: colors.foreground,
     marginTop: spacing.md,
     letterSpacing: -0.4,

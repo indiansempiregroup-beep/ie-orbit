@@ -100,13 +100,13 @@ export function CalendarScreen() {
         right={
           <View style={styles.nav}>
             <Pressable style={styles.navBtn} onPress={() => setSelected((d) => addDays(d, -1))} hitSlop={8}>
-              <Feather name="chevron-left" size={20} color="#fff" />
+              <Feather name="chevron-left" size={20} color={colors.primary} />
             </Pressable>
             <Pressable style={styles.todayBtn} onPress={() => setSelected(new Date())} hitSlop={8}>
               <Text style={styles.today}>Today</Text>
             </Pressable>
             <Pressable style={styles.navBtn} onPress={() => setSelected((d) => addDays(d, 1))} hitSlop={8}>
-              <Feather name="chevron-right" size={20} color="#fff" />
+              <Feather name="chevron-right" size={20} color={colors.primary} />
             </Pressable>
           </View>
         }
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: colors.tint,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -244,9 +244,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: colors.tint,
   },
-  today: { ...typography.caption, fontFamily: fonts.bodySemi, color: '#fff' },
+  today: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
   filterBtn: {
     flexDirection: 'row',

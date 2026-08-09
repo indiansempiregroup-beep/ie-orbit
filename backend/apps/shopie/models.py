@@ -74,6 +74,39 @@ class QuotationStatus(models.TextChoices):
     EXPIRED = "expired", "Expired"
 
 
+class BooksDocumentType(models.TextChoices):
+    SALE_ORDER = "sale_order", "Sale Order"
+    PURCHASE_ORDER = "purchase_order", "Purchase Order"
+    DELIVERY_CHALLAN = "delivery_challan", "Delivery Challan"
+    JOB_WORK = "job_work", "Job Work"
+
+
+class BooksDocumentStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    CONFIRMED = "confirmed", "Confirmed"
+    CONVERTED = "converted", "Converted"
+    CANCELLED = "cancelled", "Cancelled"
+    DISPATCHED = "dispatched", "Dispatched"
+
+
+class ChequeDirection(models.TextChoices):
+    IN = "in", "Cheque In"
+    OUT = "out", "Cheque Out"
+
+
+class ChequeStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    CLEARED = "cleared", "Cleared"
+    BOUNCED = "bounced", "Bounced"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class LoanStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    CLOSED = "closed", "Closed"
+    WRITTEN_OFF = "written_off", "Written off"
+
+
 class StockMovementType(models.TextChoices):
     RECEIVE = "receive", "Receive"
     ADJUST = "adjust", "Adjust"
@@ -91,6 +124,76 @@ class ReturnStatus(models.TextChoices):
 
 class VerticalPack(models.TextChoices):
     PETS = "pets", "Pets"
+
+
+class CashAccountType(models.TextChoices):
+    CASH = "cash", "Cash"
+    BANK = "bank", "Bank"
+
+
+class VoucherType(models.TextChoices):
+    SALE = "sale", "Sale"
+    PURCHASE = "purchase", "Purchase"
+    PAYMENT_IN = "payment_in", "Payment In"
+    PAYMENT_OUT = "payment_out", "Payment Out"
+    CREDIT_NOTE = "credit_note", "Credit Note"
+    DEBIT_NOTE = "debit_note", "Debit Note"
+    EXPENSE = "expense", "Expense"
+    OTHER_INCOME = "other_income", "Other Income"
+    TRANSFER = "transfer", "Transfer"
+
+
+class VoucherStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    CONFIRMED = "confirmed", "Confirmed"
+    VOID = "void", "Void"
+
+
+class PartyKind(models.TextChoices):
+    CUSTOMER = "customer", "Customer"
+    SUPPLIER = "supplier", "Supplier"
+
+
+class LedgerEntryType(models.TextChoices):
+    SALE = "sale", "Sale"
+    PURCHASE = "purchase", "Purchase"
+    PAYMENT_IN = "payment_in", "Payment In"
+    PAYMENT_OUT = "payment_out", "Payment Out"
+    CREDIT = "credit", "Credit"
+    DEBIT = "debit", "Debit"
+    ADJUSTMENT = "adjustment", "Adjustment"
+    OPENING = "opening", "Opening"
+
+
+class LedgerDirection(models.TextChoices):
+    DEBIT = "debit", "Debit"
+    CREDIT = "credit", "Credit"
+
+
+class EInvoiceStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    PENDING = "pending", "Pending"
+    GENERATED = "generated", "Generated"
+    CANCELLED = "cancelled", "Cancelled"
+    FAILED = "failed", "Failed"
+
+
+class EInvoiceDocType(models.TextChoices):
+    INVOICE = "INV", "Tax Invoice"
+    CREDIT_NOTE = "CRN", "Credit Note"
+    DEBIT_NOTE = "DBN", "Debit Note"
+
+
+class EWayBillStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    GENERATED = "generated", "Generated"
+    CANCELLED = "cancelled", "Cancelled"
+    FAILED = "failed", "Failed"
+
+
+class EWaySupplyType(models.TextChoices):
+    OUTWARD = "O", "Outward"
+    INWARD = "I", "Inward"
 
 
 class ShopProduct(TenantModel):
@@ -126,6 +229,12 @@ class ShopProduct(TenantModel):
         default="",
         db_index=True,
     )
+    # GST books fields (ShopIE books: suppliers/vouchers/reports). hsn_sac + gst_rate
+    # drive tax computation there; tax_rate is kept for backward compatibility with
+    # the existing POS/order flow and is kept in sync with gst_rate on save.
+    hsn_sac = models.CharField(max_length=16, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
+    batch_tracking_enabled = models.BooleanField(default=False)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):
@@ -140,6 +249,15 @@ class ShopProduct(TenantModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args, **kwargs):
+        # gst_rate is the source of truth for the books/GST engine; tax_rate is kept
+        # in sync for legacy POS/order code paths that only read/write tax_rate.
+        if self.gst_rate:
+            self.tax_rate = self.gst_rate
+        elif self.tax_rate:
+            self.gst_rate = self.tax_rate
+        super().save(*args, **kwargs)
 
 
 class ShopProductBarcode(TenantModel):
@@ -384,6 +502,26 @@ class ShopQuotation(TenantModel):
         ordering = ["-created_at"]
 
 
+def _default_gst_compliance() -> dict:
+    return {
+        "provider": "mock",
+        "username": "",
+        "password": "",
+        "client_id": "",
+        "client_secret": "",
+        "base_url": "",
+        "seller_legal_name": "",
+        "seller_trade_name": "",
+        "seller_addr1": "",
+        "seller_addr2": "",
+        "seller_loc": "",
+        "seller_pin": "",
+        "seller_state_code": "",
+        "seller_phone": "",
+        "seller_email": "",
+    }
+
+
 class ShopBusinessSettings(TenantModel):
     """Per-business ShopIE settings (packs, default fulfillment, etc.)."""
 
@@ -402,6 +540,10 @@ class ShopBusinessSettings(TenantModel):
         default=FulfillmentMode.PICKUP,
     )
     same_day_delivery_enabled = models.BooleanField(default=False)
+    # Indian GST e-invoice (IRN) + e-way bill compliance toggles and GSP/portal config.
+    einvoice_enabled = models.BooleanField(default=False)
+    eway_enabled = models.BooleanField(default=False)
+    gst_compliance = models.JSONField(default=_default_gst_compliance, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):
@@ -516,3 +658,617 @@ class ShopPet(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.customer_id})"
+
+
+class ShopSupplier(TenantModel):
+    """Vendor/supplier for ShopIE books (purchases, payments out)."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_suppliers",
+    )
+    name = models.CharField(max_length=200)
+    phone = models.CharField(max_length=32, blank=True, db_index=True)
+    email = models.EmailField(blank=True, db_index=True)
+    gstin = models.CharField(max_length=20, blank=True, db_index=True)
+    billing_state = models.CharField(max_length=120, blank=True)
+    billing_address = models.TextField(blank=True)
+    credit_limit = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    opening_balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_suppliers"
+        ordering = ["name"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "name"]),
+            models.Index(fields=["tenant", "business", "phone"]),
+            models.Index(fields=["tenant", "business", "email"]),
+            models.Index(fields=["tenant", "business", "gstin"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ShopCashAccount(TenantModel):
+    """Cash-in-hand / bank account used to settle ShopIE books vouchers."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_cash_accounts",
+    )
+    name = models.CharField(max_length=120)
+    account_type = models.CharField(
+        max_length=16,
+        choices=CashAccountType.choices,
+        default=CashAccountType.CASH,
+    )
+    opening_balance = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    current_balance = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_cash_accounts"
+        ordering = ["name"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "account_type"]),
+            models.Index(fields=["tenant", "business", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.account_type})"
+
+
+class ShopBooksVoucher(TenantModel):
+    """Vyapar-style GST voucher: sale/purchase/payment/expense/transfer/etc."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_books_vouchers",
+    )
+    voucher_type = models.CharField(
+        max_length=32,
+        choices=VoucherType.choices,
+        db_index=True,
+    )
+    voucher_number = models.CharField(max_length=32, db_index=True)
+    voucher_date = models.DateField()
+    status = models.CharField(
+        max_length=16,
+        choices=VoucherStatus.choices,
+        default=VoucherStatus.CONFIRMED,
+        db_index=True,
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_books_vouchers",
+    )
+    supplier = models.ForeignKey(
+        ShopSupplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_books_vouchers",
+    )
+    cash_account = models.ForeignKey(
+        ShopCashAccount,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_books_vouchers",
+    )
+    contra_account = models.ForeignKey(
+        ShopCashAccount,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_books_vouchers_contra",
+        help_text="Destination account for transfer vouchers.",
+    )
+    currency = models.CharField(max_length=3, blank=True)
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    discount_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    tax_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    cgst_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    sgst_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    igst_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    amount_paid = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    place_of_supply = models.CharField(max_length=120, blank=True)
+    is_interstate = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+    line_items = models.JSONField(default=list, blank=True)
+    linked_order = models.ForeignKey(
+        ShopOrder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="books_vouchers",
+    )
+    linked_invoice = models.ForeignKey(
+        ShopInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="books_vouchers",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_books_vouchers"
+        ordering = ["-voucher_date", "-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "voucher_type"]),
+            models.Index(fields=["tenant", "business", "status"]),
+            models.Index(fields=["tenant", "business", "voucher_date"]),
+            models.Index(fields=["tenant", "business", "voucher_number"]),
+            models.Index(fields=["tenant", "business", "customer"]),
+            models.Index(fields=["tenant", "business", "supplier"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.voucher_type}:{self.voucher_number}"
+
+
+class ShopPartyLedgerEntry(TenantModel):
+    """Running ledger of dues per customer/supplier, driven by books vouchers."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_party_ledger_entries",
+    )
+    party_kind = models.CharField(max_length=16, choices=PartyKind.choices, db_index=True)
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_party_ledger_entries",
+    )
+    supplier = models.ForeignKey(
+        ShopSupplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_party_ledger_entries",
+    )
+    entry_type = models.CharField(max_length=16, choices=LedgerEntryType.choices)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    direction = models.CharField(max_length=8, choices=LedgerDirection.choices)
+    balance_after = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    voucher = models.ForeignKey(
+        ShopBooksVoucher,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ledger_entries",
+    )
+    notes = models.CharField(max_length=255, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_party_ledger_entries"
+        ordering = ["-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "party_kind"]),
+            models.Index(fields=["tenant", "business", "customer"]),
+            models.Index(fields=["tenant", "business", "supplier"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.party_kind}:{self.entry_type}:{self.amount}"
+
+
+class ShopProductBatch(TenantModel):
+    """Optional batch / lot tracking for products with batch_tracking_enabled."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_product_batches",
+    )
+    product = models.ForeignKey(
+        ShopProduct,
+        on_delete=models.CASCADE,
+        related_name="batches",
+    )
+    batch_number = models.CharField(max_length=64, db_index=True)
+    serial_number = models.CharField(max_length=64, blank=True, db_index=True)
+    manufactured_on = models.DateField(null=True, blank=True)
+    expires_on = models.DateField(null=True, blank=True)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0"))
+    cost_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    mrp = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_product_batches"
+        ordering = ["expires_on", "batch_number"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "product"]),
+            models.Index(fields=["tenant", "business", "batch_number"]),
+            models.Index(fields=["tenant", "business", "expires_on"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.batch_number} ({self.product_id})"
+
+
+class ShopEInvoice(TenantModel):
+    """GST e-invoice (IRN) generated against a ShopIE books voucher."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_einvoices",
+    )
+    voucher = models.OneToOneField(
+        ShopBooksVoucher,
+        on_delete=models.CASCADE,
+        related_name="einvoice",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=EInvoiceStatus.choices,
+        default=EInvoiceStatus.DRAFT,
+        db_index=True,
+    )
+    doc_type = models.CharField(
+        max_length=8,
+        choices=EInvoiceDocType.choices,
+        default=EInvoiceDocType.INVOICE,
+    )
+    irn = models.CharField(max_length=128, blank=True, db_index=True)
+    ack_no = models.CharField(max_length=64, blank=True)
+    ack_date = models.DateTimeField(null=True, blank=True)
+    signed_qr = models.TextField(blank=True)
+    signed_invoice = models.TextField(blank=True)
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancel_reason = models.CharField(max_length=255, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_einvoices"
+        ordering = ["-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "status"]),
+            models.Index(fields=["tenant", "business", "irn"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"EInvoice:{self.voucher_id}:{self.irn or self.status}"
+
+
+class ShopEWayBill(TenantModel):
+    """E-way bill generated for the movement of goods for a ShopIE books voucher."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_eway_bills",
+    )
+    voucher = models.ForeignKey(
+        ShopBooksVoucher,
+        on_delete=models.CASCADE,
+        related_name="eway_bills",
+    )
+    einvoice = models.ForeignKey(
+        ShopEInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="eway_bills",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=EWayBillStatus.choices,
+        default=EWayBillStatus.DRAFT,
+        db_index=True,
+    )
+    ewb_no = models.CharField(max_length=32, blank=True, db_index=True)
+    ewb_date = models.DateTimeField(null=True, blank=True)
+    valid_upto = models.DateTimeField(null=True, blank=True)
+    supply_type = models.CharField(
+        max_length=1,
+        choices=EWaySupplyType.choices,
+        default=EWaySupplyType.OUTWARD,
+    )
+    sub_supply_type = models.CharField(max_length=8, default="1")
+    doc_type = models.CharField(max_length=8, default=EInvoiceDocType.INVOICE)
+    transporter_id = models.CharField(max_length=20, blank=True)
+    transporter_name = models.CharField(max_length=200, blank=True)
+    transport_mode = models.CharField(max_length=4, default="1")
+    vehicle_no = models.CharField(max_length=20, blank=True)
+    vehicle_type = models.CharField(max_length=4, blank=True, default="R")
+    distance_km = models.PositiveIntegerField(default=0)
+    from_place = models.CharField(max_length=120, blank=True)
+    from_state_code = models.CharField(max_length=2, blank=True)
+    to_place = models.CharField(max_length=120, blank=True)
+    to_state_code = models.CharField(max_length=2, blank=True)
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancel_reason = models.CharField(max_length=255, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_eway_bills"
+        ordering = ["-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "status"]),
+            models.Index(fields=["tenant", "business", "voucher"]),
+            models.Index(fields=["tenant", "business", "ewb_no"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"EWayBill:{self.voucher_id}:{self.ewb_no or self.status}"
+
+
+class ShopBooksDocument(TenantModel):
+    """Non-posted books documents: sale/purchase orders, challan, job work."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_books_documents",
+    )
+    doc_type = models.CharField(max_length=32, choices=BooksDocumentType.choices, db_index=True)
+    document_number = models.CharField(max_length=32, db_index=True)
+    document_date = models.DateField()
+    status = models.CharField(
+        max_length=16,
+        choices=BooksDocumentStatus.choices,
+        default=BooksDocumentStatus.DRAFT,
+        db_index=True,
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_books_documents",
+    )
+    supplier = models.ForeignKey(
+        ShopSupplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_books_documents",
+    )
+    currency = models.CharField(max_length=3, blank=True)
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    tax_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    notes = models.TextField(blank=True)
+    line_items = models.JSONField(default=list, blank=True)
+    converted_voucher = models.ForeignKey(
+        ShopBooksVoucher,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="source_documents",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_books_documents"
+        ordering = ["-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "doc_type", "status"]),
+        ]
+
+
+class ShopGodown(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_godowns",
+    )
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=32, blank=True)
+    is_default = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_godowns"
+        ordering = ["name"]
+
+
+class ShopGodownStock(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_godown_stocks",
+    )
+    godown = models.ForeignKey(ShopGodown, on_delete=models.CASCADE, related_name="stocks")
+    product = models.ForeignKey(ShopProduct, on_delete=models.CASCADE, related_name="godown_stocks")
+    quantity = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_godown_stocks"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "godown", "product"],
+                name="uniq_shop_godown_stock",
+            )
+        ]
+
+
+class ShopStockTransfer(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_stock_transfers",
+    )
+    from_godown = models.ForeignKey(
+        ShopGodown, on_delete=models.PROTECT, related_name="transfers_out"
+    )
+    to_godown = models.ForeignKey(
+        ShopGodown, on_delete=models.PROTECT, related_name="transfers_in"
+    )
+    transfer_number = models.CharField(max_length=32, db_index=True)
+    transfer_date = models.DateField()
+    status = models.CharField(max_length=16, default="completed")
+    notes = models.TextField(blank=True)
+    line_items = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_stock_transfers"
+        ordering = ["-created_at"]
+
+
+class ShopCheque(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_cheques",
+    )
+    direction = models.CharField(max_length=8, choices=ChequeDirection.choices, db_index=True)
+    status = models.CharField(
+        max_length=16,
+        choices=ChequeStatus.choices,
+        default=ChequeStatus.PENDING,
+        db_index=True,
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_cheques",
+    )
+    supplier = models.ForeignKey(
+        ShopSupplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_cheques",
+    )
+    cash_account = models.ForeignKey(
+        ShopCashAccount,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_cheques",
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    cheque_number = models.CharField(max_length=64)
+    bank_name = models.CharField(max_length=120, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    cleared_at = models.DateTimeField(null=True, blank=True)
+    linked_voucher = models.ForeignKey(
+        ShopBooksVoucher,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="linked_cheques",
+    )
+    notes = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_cheques"
+        ordering = ["-created_at"]
+
+
+class ShopLoan(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_loans",
+    )
+    party_kind = models.CharField(max_length=16, choices=PartyKind.choices, default=PartyKind.CUSTOMER)
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_loans",
+    )
+    supplier = models.ForeignKey(
+        ShopSupplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_loans",
+    )
+    title = models.CharField(max_length=160)
+    principal = models.DecimalField(max_digits=14, decimal_places=2)
+    interest_rate = models.DecimalField(max_digits=7, decimal_places=2, default=Decimal("0.00"))
+    balance = models.DecimalField(max_digits=14, decimal_places=2)
+    start_date = models.DateField()
+    status = models.CharField(
+        max_length=16,
+        choices=LoanStatus.choices,
+        default=LoanStatus.ACTIVE,
+        db_index=True,
+    )
+    notes = models.TextField(blank=True)
+    repayments = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_loans"
+        ordering = ["-created_at"]

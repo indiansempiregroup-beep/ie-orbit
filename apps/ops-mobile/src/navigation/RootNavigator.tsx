@@ -14,7 +14,11 @@ import { AuthStack } from './AuthStack';
 import { MainTabs } from './MainTabs';
 import { WorkspacePickerScreen } from '../features/workspace/WorkspacePickerScreen';
 import { NoAccessScreen } from '../features/auth/NoAccessScreen';
-import { PlatformAdminWebOnlyScreen } from '../features/auth/PlatformAdminWebOnlyScreen';
+import { PlatformAdminHomeScreen } from '../features/admin/PlatformAdminHomeScreen';
+import { PlatformAdminTenantsScreen } from '../features/admin/PlatformAdminTenantsScreen';
+import { PlatformAdminTenantDetailScreen } from '../features/admin/PlatformAdminTenantDetailScreen';
+import { PlatformAdminAuditScreen } from '../features/admin/PlatformAdminAuditScreen';
+import { PlatformAdminCouponsScreen } from '../features/admin/PlatformAdminCouponsScreen';
 import { SearchScreen } from '../features/search/SearchScreen';
 import { CreateBookingScreen } from '../features/bookings/CreateBookingScreen';
 import { BookingDetailScreen } from '../features/bookings/BookingDetailScreen';
@@ -39,12 +43,33 @@ import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
 import { ShopOrdersScreen } from '../features/shop/ShopOrdersScreen';
 import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopPosScreen } from '../features/shop/ShopPosScreen';
-import { BarcodeScannerScreen } from '../features/shop/BarcodeScannerScreen';
 import { ShopReturnsScreen } from '../features/shop/ShopReturnsScreen';
 import { ShopDeliveryZonesScreen } from '../features/shop/ShopDeliveryZonesScreen';
 import { ShopPetsScreen } from '../features/shop/ShopPetsScreen';
 import { ShopPetFormScreen } from '../features/shop/ShopPetFormScreen';
 import { ShopPetDetailScreen } from '../features/shop/ShopPetDetailScreen';
+import { ShopBooksDashboardScreen } from '../features/shop/ShopBooksDashboardScreen';
+import { ShopBooksSaleScreen } from '../features/shop/ShopBooksSaleScreen';
+import { ShopBooksPurchaseScreen } from '../features/shop/ShopBooksPurchaseScreen';
+import { ShopBooksExpenseScreen } from '../features/shop/ShopBooksExpenseScreen';
+import { ShopBooksCashScreen } from '../features/shop/ShopBooksCashScreen';
+import { ShopBooksPartiesScreen } from '../features/shop/ShopBooksPartiesScreen';
+import { ShopBooksReportsScreen } from '../features/shop/ShopBooksReportsScreen';
+import { ShopBooksComplianceScreen } from '../features/shop/ShopBooksComplianceScreen';
+import { ShopBooksQuotationsScreen } from '../features/shop/ShopBooksQuotationsScreen';
+import { ShopBooksNotesScreen } from '../features/shop/ShopBooksNotesScreen';
+import { ShopBooksDocumentsScreen } from '../features/shop/ShopBooksDocumentsScreen';
+import { ShopGodownsScreen } from '../features/shop/ShopGodownsScreen';
+import { ShopBooksChequesScreen } from '../features/shop/ShopBooksChequesScreen';
+import { ShopBooksLoansScreen } from '../features/shop/ShopBooksLoansScreen';
+import { ShopLoyaltyScreen } from '../features/shop/ShopLoyaltyScreen';
+import { ShopStockAdjustScreen } from '../features/shop/ShopStockAdjustScreen';
+import { WhatsAppScreen } from '../features/grow/WhatsAppScreen';
+import { AIPosterScreen } from '../features/grow/AIPosterScreen';
+import { GoogleProfileScreen } from '../features/grow/GoogleProfileScreen';
+import { OnlineStoreScreen } from '../features/grow/OnlineStoreScreen';
+import { SyncShareScreen } from '../features/grow/SyncShareScreen';
+import { UtilitiesScreen } from '../features/grow/UtilitiesScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
 import { BIScreen } from '../features/bi/BIScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
@@ -55,6 +80,25 @@ import { SecurityScreen } from '../features/profile/SecurityScreen';
 import { SessionsScreen } from '../features/profile/SessionsScreen';
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen';
 
+/** Lazy so expo-camera is not pulled into the initial bundle (avoids Metro resolve crashes on boot). */
+const BarcodeScannerScreen = React.lazy(async () => {
+  const mod = await import('../features/shop/BarcodeScannerScreen');
+  return { default: mod.BarcodeScannerScreen };
+});
+
+function LazyBarcodeScanner(props: React.ComponentProps<typeof BarcodeScannerScreen>) {
+  return (
+    <React.Suspense
+      fallback={
+        <View style={styles.boot}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      }
+    >
+      <BarcodeScannerScreen {...props} />
+    </React.Suspense>
+  );
+}
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const stackScreen = (
@@ -113,8 +157,12 @@ export function RootNavigator() {
           <Stack.Screen name="Auth" component={AuthStack} />
         </Stack.Navigator>
       ) : platformAdminOnly ? (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="PlatformAdminWebOnly" component={PlatformAdminWebOnlyScreen} />
+        <Stack.Navigator initialRouteName="PlatformAdmin" screenOptions={{ headerShown: false }}>
+          {stackScreen('PlatformAdmin', PlatformAdminHomeScreen, 'Platform Admin')}
+          {stackScreen('PlatformAdminTenants', PlatformAdminTenantsScreen, 'Tenants')}
+          {stackScreen('PlatformAdminTenantDetail', PlatformAdminTenantDetailScreen, 'Tenant')}
+          {stackScreen('PlatformAdminAudit', PlatformAdminAuditScreen, 'Audit')}
+          {stackScreen('PlatformAdminCoupons', PlatformAdminCouponsScreen, 'Coupons')}
         </Stack.Navigator>
       ) : !opsAccess ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -151,12 +199,34 @@ export function RootNavigator() {
           {stackScreen('ShopOrders', ShopOrdersScreen, t('nav.shopOrders'))}
           {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
           {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}
-          {stackScreen('BarcodeScanner', BarcodeScannerScreen, t('nav.scanBarcode'))}
+          {stackScreen('BarcodeScanner', LazyBarcodeScanner, t('nav.scanBarcode'))}
           {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
           {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
           {stackScreen('ShopPets', ShopPetsScreen, t('nav.shopPets'))}
           {stackScreen('ShopPetForm', ShopPetFormScreen, 'Pet')}
           {stackScreen('ShopPetDetail', ShopPetDetailScreen, 'Pet details')}
+          {stackScreen('ShopBooks', ShopBooksDashboardScreen, t('nav.shopBooks'))}
+          {stackScreen('ShopBooksSale', ShopBooksSaleScreen, t('nav.shopSale'))}
+          {stackScreen('ShopBooksPurchase', ShopBooksPurchaseScreen, t('nav.shopPurchase'))}
+          {stackScreen('ShopBooksExpense', ShopBooksExpenseScreen, t('nav.shopExpense'))}
+          {stackScreen('ShopBooksCash', ShopBooksCashScreen, t('nav.shopCashBank'))}
+          {stackScreen('ShopBooksParties', ShopBooksPartiesScreen, t('nav.shopParties'))}
+          {stackScreen('ShopBooksReports', ShopBooksReportsScreen, t('nav.shopBooksReports'))}
+          {stackScreen('ShopBooksCompliance', ShopBooksComplianceScreen, t('nav.shopCompliance'))}
+          {stackScreen('ShopBooksQuotations', ShopBooksQuotationsScreen, 'Estimates / Proforma')}
+          {stackScreen('ShopBooksNotes', ShopBooksNotesScreen, 'Credit / Debit notes')}
+          {stackScreen('ShopBooksDocuments', ShopBooksDocumentsScreen, 'Documents')}
+          {stackScreen('ShopGodowns', ShopGodownsScreen, 'Godowns')}
+          {stackScreen('ShopBooksCheques', ShopBooksChequesScreen, 'Cheques')}
+          {stackScreen('ShopBooksLoans', ShopBooksLoansScreen, 'Loans')}
+          {stackScreen('ShopLoyalty', ShopLoyaltyScreen, 'Loyalty')}
+          {stackScreen('ShopStockAdjust', ShopStockAdjustScreen, 'Stock adjust')}
+          {stackScreen('GrowWhatsApp', WhatsAppScreen, 'WhatsApp')}
+          {stackScreen('GrowAIPoster', AIPosterScreen, 'AI Poster')}
+          {stackScreen('GrowGoogleProfile', GoogleProfileScreen, 'Google Profile')}
+          {stackScreen('GrowOnlineStore', OnlineStoreScreen, 'Online Store')}
+          {stackScreen('GrowSyncShare', SyncShareScreen, 'Sync & share')}
+          {stackScreen('GrowUtilities', UtilitiesScreen, 'Utilities')}
           {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
           {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
           {stackScreen('Reports', ReportsScreen, t('nav.reports'))}

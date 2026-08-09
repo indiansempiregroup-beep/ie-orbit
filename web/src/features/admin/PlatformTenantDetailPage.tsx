@@ -13,6 +13,7 @@ import {
 } from './AdminChrome';
 import {
   useInvalidatePlatform,
+  usePlatformPlanPackagesQuery,
   usePlatformTenantCreditsQuery,
   usePlatformTenantDetailQuery,
   usePlatformTenantFlagsQuery,
@@ -34,11 +35,16 @@ export function PlatformTenantDetailPage() {
   const flagsQuery = usePlatformTenantFlagsQuery(tenantId);
   const paymentsQuery = usePlatformTenantPaymentsQuery(tenantId);
   const creditsQuery = usePlatformTenantCreditsQuery(tenantId);
+  const packagesQuery = usePlatformPlanPackagesQuery();
   const [reason, setReason] = useState('Platform admin action');
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [purgeSlug, setPurgeSlug] = useState('');
+  const [planSelection, setPlanSelection] = useState<Record<string, string>>({});
+  const [addonInputs, setAddonInputs] = useState<
+    Record<string, { extra_staff: string; extra_offices: string; pets_pack_enabled: boolean }>
+  >({});
   usePageMeta({ title: 'Tenant Detail — Platform Admin' });
 
   async function run(label: string, fn: () => Promise<unknown>) {
@@ -254,6 +260,18 @@ export function PlatformTenantDetailPage() {
         <div className="admin-list">
           {(detailQuery.data?.businesses ?? []).map((business) => {
             const billing = business.billing;
+            const productCode = business.selected_product || '';
+            const availablePlans = (packagesQuery.data ?? []).filter(
+              (pkg) => pkg.product_code === productCode && pkg.is_active,
+            );
+            const currentPlanCode = String(billing?.plan_code ?? '');
+            const selectedPlan = planSelection[business.id] ?? currentPlanCode ?? '';
+            const addonState = addonInputs[business.id] ?? {
+              extra_staff: String(billing?.extra_staff ?? 0),
+              extra_offices: String(billing?.extra_offices ?? 0),
+              pets_pack_enabled: Boolean(billing?.pets_pack_enabled),
+            };
+            const isSoftLocked = String(billing?.status ?? '').includes('soft_locked');
             return (
               <div key={business.id} className="admin-list-row admin-list-row--static">
                 <div className="admin-list-row__main" style={{ width: '100%' }}>
@@ -328,6 +346,153 @@ export function PlatformTenantDetailPage() {
                           <strong>{formatDate(billing.canceled_at as string | null | undefined)}</strong>
                         </div>
                       ) : null}
+                    </div>
+                  ) : null}
+
+                  {billing && productCode ? (
+                    <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                      <div className="admin-action-bar" style={{ marginTop: 0, alignItems: 'center' }}>
+                        <select
+                          value={selectedPlan}
+                          disabled={Boolean(busy) || availablePlans.length === 0}
+                          onChange={(e) =>
+                            setPlanSelection((prev) => ({ ...prev, [business.id]: e.target.value }))
+                          }
+                        >
+                          <option value="" disabled>
+                            {availablePlans.length === 0 ? 'No plans for this product' : 'Select plan…'}
+                          </option>
+                          {availablePlans.map((plan) => (
+                            <option key={plan.id} value={plan.code}>
+                              {plan.name} ({plan.code})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--secondary"
+                          disabled={
+                            Boolean(busy) ||
+                            !selectedPlan ||
+                            selectedPlan === currentPlanCode
+                          }
+                          onClick={() =>
+                            run(`Change plan (${business.business_code})`, () =>
+                              client.platform.tenantBillingAction(tenantId!, {
+                                action: 'change_plan',
+                                plan_code: selectedPlan,
+                                product_code: productCode,
+                                reason,
+                              }),
+                            )
+                          }
+                        >
+                          Change plan
+                        </button>
+
+                        {isSoftLocked ? (
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn--secondary"
+                            disabled={Boolean(busy)}
+                            onClick={() =>
+                              run(`Clear soft-lock (${business.business_code})`, () =>
+                                client.platform.tenantBillingAction(tenantId!, {
+                                  action: 'clear_soft_lock',
+                                  product_code: productCode,
+                                  reason,
+                                }),
+                              )
+                            }
+                          >
+                            Clear soft-lock
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn--ghost"
+                            disabled={Boolean(busy)}
+                            onClick={() =>
+                              run(`Force soft-lock (${business.business_code})`, () =>
+                                client.platform.tenantBillingAction(tenantId!, {
+                                  action: 'force_soft_lock',
+                                  product_code: productCode,
+                                  reason,
+                                }),
+                              )
+                            }
+                          >
+                            Force soft-lock
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="admin-action-bar" style={{ marginTop: 0, alignItems: 'center' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>Extra staff</span>
+                          <input
+                            className="admin-inline-input"
+                            style={{ width: 72 }}
+                            type="number"
+                            min={0}
+                            value={addonState.extra_staff}
+                            onChange={(e) =>
+                              setAddonInputs((prev) => ({
+                                ...prev,
+                                [business.id]: { ...addonState, extra_staff: e.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>Extra branches</span>
+                          <input
+                            className="admin-inline-input"
+                            style={{ width: 72 }}
+                            type="number"
+                            min={0}
+                            value={addonState.extra_offices}
+                            onChange={(e) =>
+                              setAddonInputs((prev) => ({
+                                ...prev,
+                                [business.id]: { ...addonState, extra_offices: e.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input
+                            type="checkbox"
+                            checked={addonState.pets_pack_enabled}
+                            onChange={(e) =>
+                              setAddonInputs((prev) => ({
+                                ...prev,
+                                [business.id]: { ...addonState, pets_pack_enabled: e.target.checked },
+                              }))
+                            }
+                          />
+                          <span style={{ fontSize: 12 }}>Pets pack</span>
+                        </label>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--secondary"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            run(`Update addons (${business.business_code})`, () =>
+                              client.platform.tenantBillingAction(tenantId!, {
+                                action: 'update_addons',
+                                product_code: productCode,
+                                extra_staff: Number(addonState.extra_staff) || 0,
+                                extra_offices: Number(addonState.extra_offices) || 0,
+                                pets_pack_enabled: addonState.pets_pack_enabled,
+                                reason,
+                              }),
+                            )
+                          }
+                        >
+                          Update addons
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                 </div>

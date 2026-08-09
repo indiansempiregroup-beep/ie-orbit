@@ -12,6 +12,8 @@ const navGroups = [
       { to: '/admin', label: 'Dashboard', icon: '◆', end: true },
       { to: '/admin/tenants', label: 'Tenants', icon: '▦' },
       { to: '/admin/subscriptions', label: 'Subscriptions', icon: '◉' },
+      { to: '/admin/packages', label: 'Packages', icon: '◫' },
+      { to: '/admin/coupons', label: 'Coupons', icon: '%' },
     ],
   },
   {

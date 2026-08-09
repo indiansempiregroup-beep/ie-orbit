@@ -41,6 +41,14 @@ FEATURE_REWARD_POINTS = "reward_points"
 PLAN_FEATURES_LIMITED: tuple[str, ...] = ()
 PLAN_FEATURES_FULL = (FEATURE_REWARD_POINTS,)
 
+FEATURE_SHOPIE_BOOKS_SALE = "shopie_books_sale"
+FEATURE_SHOPIE_BOOKS_PURCHASE = "shopie_books_purchase"
+FEATURE_SHOPIE_BOOKS_CASH = "shopie_books_cash"
+FEATURE_SHOPIE_BOOKS_EXPENSE = "shopie_books_expense"
+FEATURE_SHOPIE_GST_REPORTS = "shopie_gst_reports"
+FEATURE_SHOPIE_EINVOICE = "shopie_einvoice"
+FEATURE_SHOPIE_EWAY = "shopie_eway"
+
 DEFAULT_LOYALTY_PREFERENCES: dict[str, object] = {
     "enabled": False,
     "points_per_currency_unit": 10,
@@ -98,7 +106,7 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "max_staff": 5,
             "max_branches": 5,
             "bi_features": list(BI_FEATURES_FULL),
-            "features": list(PLAN_FEATURES_FULL),
+            "features": [*PLAN_FEATURES_FULL, FEATURE_SHOPIE_EINVOICE, FEATURE_SHOPIE_EWAY],
         },
     ],
     PRODUCT_INVOICEIE: [
@@ -157,18 +165,15 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
 
 
 def get_default_plan_code(product_code: str) -> str | None:
-    plans = PRODUCT_PLAN_CATALOG.get(product_code, [])
-    for plan in plans:
-        if plan.get("is_default"):
-            return str(plan["code"])
-    return str(plans[0]["code"]) if plans else None
+    from apps.businesses.services.plan_catalog import get_default_plan_code_resolved
+
+    return get_default_plan_code_resolved(product_code)
 
 
 def get_plan_definition(product_code: str, plan_code: str) -> dict[str, object] | None:
-    for plan in PRODUCT_PLAN_CATALOG.get(product_code, []):
-        if plan["code"] == plan_code:
-            return plan
-    return None
+    from apps.businesses.services.plan_catalog import get_plan_definition_resolved
+
+    return get_plan_definition_resolved(product_code, plan_code)
 
 
 def plan_rank(plan_code: str | None) -> int:

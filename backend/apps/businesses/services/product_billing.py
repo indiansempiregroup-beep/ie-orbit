@@ -10,7 +10,6 @@ from rest_framework.exceptions import ValidationError
 
 from apps.businesses.constants import (
     DEFAULT_TRIAL_DAYS,
-    PRODUCT_PLAN_CATALOG,
     VALID_PRODUCT_CODES,
     get_default_plan_code,
     get_plan_definition,
@@ -81,20 +80,15 @@ class ProductBillingService:
         self.hooks = hooks or ProductBillingHooks()
 
     def list_product_plans(self, *, product_code: str | None = None) -> list[dict[str, Any]]:
+        from apps.businesses.services.plan_catalog import list_plan_definitions
+
         if product_code:
             normalized = product_code.strip().lower()
             if normalized not in VALID_PRODUCT_CODES:
                 raise ValidationError({"product_code": "Unknown product code."})
-            return [
-                {"product_code": normalized, **dict(plan)}
-                for plan in PRODUCT_PLAN_CATALOG.get(normalized, [])
-            ]
+            return list_plan_definitions(normalized)
 
-        plans: list[dict[str, Any]] = []
-        for code, product_plans in PRODUCT_PLAN_CATALOG.items():
-            for plan in product_plans:
-                plans.append({"product_code": code, **dict(plan)})
-        return plans
+        return list_plan_definitions()
 
     def resolve_subscription_plan(
         self,

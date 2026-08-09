@@ -13,6 +13,7 @@ from apps.platform_admin.api import (
     PlatformImpersonateView,
     PlatformImpersonationEndView,
     PlatformPaymentRefundView,
+    PlatformPlanPackagesView,
     PlatformPurgeTenantView,
     PlatformTenantActionView,
     PlatformTenantBillingActionView,
@@ -99,6 +100,7 @@ urlpatterns = [
     ),
     path("platform/impersonation/end", PlatformImpersonationEndView.as_view(), name="platform-impersonation-end"),
     path("platform/coupons", PlatformCouponsView.as_view(), name="platform-coupons"),
+    path("platform/plan-packages", PlatformPlanPackagesView.as_view(), name="platform-plan-packages"),
     path("platform/audit", PlatformAuditFeedView.as_view(), name="platform-audit-feed"),
     path("platform/tickets", PlatformTicketsView.as_view(), name="platform-tickets"),
     path(

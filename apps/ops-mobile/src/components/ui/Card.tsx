@@ -6,13 +6,23 @@ type Props = ViewProps & {
   padded?: boolean;
   elevated?: boolean;
   bordered?: boolean;
+  soft?: boolean;
 };
 
-export function Card({ children, style, padded = true, elevated = false, bordered = true, ...rest }: Props) {
+export function Card({
+  children,
+  style,
+  padded = true,
+  elevated = false,
+  bordered = true,
+  soft = false,
+  ...rest
+}: Props) {
   return (
     <View
       style={[
         styles.card,
+        soft && styles.soft,
         bordered && styles.bordered,
         elevated && shadows.soft,
         padded && styles.padded,
@@ -28,11 +38,14 @@ export function Card({ children, style, padded = true, elevated = false, bordere
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
+  },
+  soft: {
+    backgroundColor: colors.tint,
   },
   bordered: {
     borderWidth: 1,
     borderColor: colors.border,
   },
-  padded: { padding: spacing.xl },
+  padded: { padding: spacing.lg },
 });

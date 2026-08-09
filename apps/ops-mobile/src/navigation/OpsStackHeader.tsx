@@ -1,10 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { brand, colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 
 export type OpsStackHeaderOptions = {
   /** Optional line under the title (set via navigation.setOptions). */
@@ -19,6 +18,7 @@ export function setStackSubtitle(
   navigation.setOptions({ subtitle } satisfies OpsStackHeaderOptions);
 }
 
+/** Flat white stack header with navy back control. */
 export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderProps) {
   const insets = useSafeAreaInsets();
   const title = typeof options.headerTitle === 'string' ? options.headerTitle : options.title ?? '';
@@ -26,12 +26,7 @@ export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderP
   const canGoBack = Boolean(back) || navigation.canGoBack();
 
   return (
-    <LinearGradient
-      colors={[brand.primary, brand.primaryDark]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.wrap, { paddingTop: insets.top + spacing.sm }]}
-    >
+    <View style={[styles.wrap, { paddingTop: insets.top + spacing.sm }]}>
       <View style={styles.row}>
         {canGoBack ? (
           <Pressable
@@ -41,7 +36,7 @@ export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderP
             accessibilityLabel="Go back"
             hitSlop={8}
           >
-            <Feather name="chevron-left" size={22} color="#fff" />
+            <Feather name="chevron-left" size={22} color={colors.primary} />
           </Pressable>
         ) : (
           <View style={styles.backSpacer} />
@@ -60,11 +55,11 @@ export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderP
 
         <View style={styles.right}>
           {typeof options.headerRight === 'function'
-            ? options.headerRight({ canGoBack, tintColor: '#fff' })
+            ? options.headerRight({ canGoBack, tintColor: colors.primary })
             : null}
         </View>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -78,6 +73,9 @@ export const opsStackScreenOptions = {
 
 const styles = StyleSheet.create({
   wrap: {
+    backgroundColor: colors.headerBg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.headerBorder,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
   },
@@ -93,21 +91,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: colors.tint,
   },
   backBtnPressed: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: colors.tintStrong,
   },
   backSpacer: { width: 40 },
   copy: { flex: 1, gap: 2, justifyContent: 'center' },
   title: {
-    ...typography.title,
-    color: colors.primaryForeground,
+    fontFamily: fonts.bodySemi,
+    fontSize: 18,
+    color: colors.foreground,
   },
   subtitle: {
     ...typography.caption,
     fontFamily: fonts.bodyMedium,
-    color: 'rgba(255,255,255,0.78)',
+    color: colors.mutedForeground,
   },
   right: {
     minWidth: 40,

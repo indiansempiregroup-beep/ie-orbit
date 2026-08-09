@@ -29,23 +29,27 @@ export function SettingsScreen() {
           <MenuRow
             icon="briefcase"
             label={t('settings.businessProfile')}
+            subtitle="Name, address & branding"
             onPress={() => navigation.navigate('BusinessProfile')}
           />
           <MenuRow
             icon="package"
             label={t('settings.productsPlans')}
+            subtitle="Plans & pricing"
             onPress={() => navigation.navigate('ProductSettings')}
           />
           <MenuRow
             icon="map-pin"
             label={t('settings.offices')}
+            subtitle="Branches & locations"
             last={!showTeam}
             onPress={() => navigation.navigate('Branches')}
           />
           {showTeam ? (
             <MenuRow
               icon="users"
-              label={t('settings.teamInvitations')}
+              label="Sync & share"
+              subtitle="Team users, roles & invitations"
               last
               onPress={() => navigation.navigate('Team')}
             />

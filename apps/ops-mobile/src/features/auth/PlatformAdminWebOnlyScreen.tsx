@@ -1,28 +1,27 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BrandMark } from '../../components/BrandMark';
-import { Button } from '../../components/ui/Button';
-import { useAuth } from '../../contexts/AuthContext';
-import { colors, fonts, spacing, typography } from '../../theme/tokens';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { colors } from '../../theme/tokens';
+import type { RootStackParamList } from '../../navigation/types';
 
-/** Platform-admin-only accounts manage the console on web, not in ops-mobile. */
+/**
+ * Legacy gate screen. Platform-admin accounts now land on PlatformAdmin home.
+ * Kept so any stale deep link can redirect into the mobile admin stack.
+ */
 export function PlatformAdminWebOnlyScreen() {
-  const { logout, user } = useAuth();
-  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  useEffect(() => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'PlatformAdmin' }],
+    });
+  }, [navigation]);
 
   return (
-    <View style={[styles.wrap, { paddingTop: insets.top + spacing.xxxl, paddingBottom: insets.bottom + spacing.xl }]}>
-      <BrandMark />
-      <View style={styles.copyBlock}>
-        <Text style={styles.title}>Use Platform Admin on web</Text>
-        <Text style={styles.copy}>
-          {user?.email ?? 'This account'} is a platform admin account. Manage tenants, billing, and support from the
-          web Platform Admin console.
-        </Text>
-        <Text style={styles.hint}>Ops mobile is for business owners, managers, and staff running a workspace.</Text>
-      </View>
-      <Button label="Sign out" variant="outline" fullWidth size="lg" onPress={() => void logout()} />
+    <View style={styles.wrap}>
+      <ActivityIndicator color={colors.primary} />
     </View>
   );
 }
@@ -31,12 +30,7 @@ const styles = StyleSheet.create({
   wrap: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingHorizontal: spacing.xxl,
-    gap: spacing.xl,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  copyBlock: { gap: spacing.md },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
-  copy: { ...typography.body, color: colors.mutedForeground },
-  hint: { ...typography.caption, color: colors.mutedForeground },
 });

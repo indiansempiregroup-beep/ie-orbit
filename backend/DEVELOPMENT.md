@@ -18,7 +18,7 @@ Required environment variables:
 
 ## Infrastructure
 
-PostgreSQL is the transactional database. Local Docker Postgres is the default in development. Neon connection strings are also supported through `DATABASE_URL`.
+PostgreSQL is the transactional database. Host Postgres is the default in development. Neon connection strings are also supported through `DATABASE_URL`.
 
 Redis powers:
 

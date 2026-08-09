@@ -1,8 +1,8 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { brand, colors, fonts, spacing, typography } from '../theme/tokens';
+import { brand, colors, fonts, radius, spacing, typography } from '../theme/tokens';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 
 type Props = {
@@ -13,16 +13,18 @@ type Props = {
   compact?: boolean;
 };
 
+/** Flat white header (Vyapar-style) with Deep Navy accents. */
 export function OpsHeader({ title, subtitle, right, children, compact }: Props) {
   const insets = useSafeAreaInsets();
   const { activeBusiness } = useWorkspace();
 
   return (
-    <LinearGradient
-      colors={[brand.primary, brand.primaryDark]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.wrap, { paddingTop: insets.top + spacing.md }, compact && styles.compact]}
+    <View
+      style={[
+        styles.wrap,
+        { paddingTop: insets.top + spacing.md },
+        compact && styles.compact,
+      ]}
     >
       <View style={styles.row}>
         <View style={styles.copy}>
@@ -33,12 +35,40 @@ export function OpsHeader({ title, subtitle, right, children, compact }: Props) 
         {right}
       </View>
       {children}
-    </LinearGradient>
+    </View>
+  );
+}
+
+export function OpsHeaderIconButton({
+  icon,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+    >
+      <Feather name={icon} size={18} color={colors.primary} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
+  wrap: {
+    backgroundColor: colors.headerBg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.headerBorder,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xxl,
+  },
   compact: { paddingBottom: spacing.lg },
   row: {
     flexDirection: 'row',
@@ -50,16 +80,26 @@ const styles = StyleSheet.create({
   kicker: {
     ...typography.caption,
     fontFamily: fonts.bodyMedium,
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.mutedForeground,
   },
   subtitle: {
     ...typography.body,
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.mutedForeground,
   },
   title: {
-    fontFamily: fonts.display,
-    fontSize: 22,
-    color: colors.primaryForeground,
+    fontFamily: fonts.bodyBold,
+    fontSize: 24,
+    color: colors.foreground,
     marginTop: 2,
+    letterSpacing: -0.3,
   },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnPressed: { opacity: 0.85 },
 });

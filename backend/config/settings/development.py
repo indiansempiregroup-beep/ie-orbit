@@ -4,6 +4,9 @@ from config.settings.base import *  # noqa: F401,F403
 
 DEBUG = ENV.debug
 ALLOWED_HOSTS = ["*"] if DEBUG else ENV.allowed_hosts
+# Expo web (:8082) + LAN phone testing — reflect any Origin in DEBUG.
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",

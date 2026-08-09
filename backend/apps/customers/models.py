@@ -85,6 +85,10 @@ class Customer(TenantModel):
         blank=True,
     )
     archived_at = models.DateTimeField(null=True, blank=True)
+    # ShopIE books: optional receivable credit limit (0 = no limit enforced).
+    credit_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    billing_state = models.CharField(max_length=120, blank=True)
+    gstin = models.CharField(max_length=20, blank=True, db_index=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):

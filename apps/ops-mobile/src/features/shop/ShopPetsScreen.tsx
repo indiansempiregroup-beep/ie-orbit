@@ -98,7 +98,7 @@ export function ShopPetsScreen() {
             hitSlop={8}
             style={styles.headerBtn}
           >
-            <Feather name="plus" size={20} color="#fff" />
+            <Feather name="plus" size={20} color={colors.primary} />
           </Pressable>
         ) : null,
     });
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: colors.tint,
   },
   search: { marginBottom: spacing.sm },
   filters: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },

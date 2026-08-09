@@ -14,4 +14,4 @@ The Docker platform is designed to provide a complete local environment without 
 
 ## Database strategy
 
-Local PostgreSQL (`postgres:18-alpine` in Docker Compose) is the default development database. Set `DATABASE_URL` to a Neon pooler URL only when you intentionally want a remote shared database.
+Host PostgreSQL (local install on port 5432) is the default development database. Compose services reach it via `host.docker.internal`. Set `DATABASE_URL` to a Neon pooler URL only when you intentionally want a remote shared database.

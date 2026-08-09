@@ -864,6 +864,50 @@ export type PlatformPaymentRow = {
   invoice_number?: string | null;
 };
 
+export type PlatformPlanPackage = {
+  id: string;
+  product_code: string;
+  code: string;
+  name: string;
+  description?: string;
+  billing_interval: 'monthly' | 'yearly';
+  trial_days: number;
+  is_default: boolean;
+  max_staff: number;
+  max_branches: number;
+  bi_features: string[];
+  features: string[];
+  amount_paise: number;
+  yearly_amount_paise?: number | null;
+  is_active: boolean;
+  is_public: boolean;
+  sort_order: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type PlatformPlanPackageUpsertInput = {
+  /** Include to update an existing package; omit to create a new one. */
+  id?: string;
+  code: string;
+  product_code: string;
+  name: string;
+  description?: string;
+  billing_interval?: 'monthly' | 'yearly';
+  trial_days?: number;
+  is_default?: boolean;
+  max_staff?: number;
+  max_branches?: number;
+  bi_features?: string[];
+  features?: string[];
+  amount_paise?: number;
+  yearly_amount_paise?: number | null;
+  is_active?: boolean;
+  is_public?: boolean;
+  sort_order?: number;
+  metadata?: Record<string, unknown>;
+  reason: string;
+};
+
 export type PlatformFeatureFlag = {
   key: string;
   enabled: boolean;
@@ -1263,6 +1307,8 @@ export type ShopProduct = {
   status: string;
   price: string | number;
   tax_rate?: string | number;
+  gst_rate?: string | number;
+  hsn_sac?: string;
   currency?: string;
   stock_on_hand: string | number;
   low_stock_threshold?: string | number;
@@ -1284,6 +1330,8 @@ export type ShopProductWriteInput = {
   status?: string;
   price?: string | number;
   tax_rate?: string | number;
+  gst_rate?: string | number;
+  hsn_sac?: string;
   currency?: string;
   stock_on_hand?: string | number;
   low_stock_threshold?: string | number;
@@ -1551,6 +1599,403 @@ export type ShopQuotationCreateInput = {
     unit_price?: string | number;
     tax_rate?: string | number;
   }>;
+};
+
+export type ShopBooksDashboard = {
+  cash: string;
+  bank: string;
+  to_collect: string;
+  to_pay: string;
+  accounts: Array<{
+    id: string;
+    name: string;
+    account_type: string;
+    current_balance: string;
+  }>;
+};
+
+export type ShopSupplier = {
+  id: string;
+  business: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  billing_state?: string;
+  billing_address?: string;
+  credit_limit?: string | number;
+  opening_balance?: string | number;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopSupplierWriteInput = {
+  business_id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  billing_state?: string;
+  billing_address?: string;
+  credit_limit?: string | number;
+  opening_balance?: string | number;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShopCashAccount = {
+  id: string;
+  business: string;
+  name: string;
+  account_type: 'cash' | 'bank' | string;
+  opening_balance: string | number;
+  current_balance: string | number;
+  is_active: boolean;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopCashAccountWriteInput = {
+  business_id: string;
+  name: string;
+  account_type?: 'cash' | 'bank' | string;
+  opening_balance?: string | number;
+  is_active?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShopBooksVoucherType =
+  | 'sale'
+  | 'purchase'
+  | 'payment_in'
+  | 'payment_out'
+  | 'expense'
+  | 'other_income'
+  | 'transfer'
+  | 'credit_note'
+  | 'debit_note';
+
+export type ShopBooksVoucherLineInput = {
+  product_id?: string | null;
+  name?: string;
+  hsn_sac?: string;
+  qty: string | number;
+  rate?: string | number;
+  discount?: string | number;
+  gst_rate?: string | number;
+};
+
+export type ShopBooksVoucher = {
+  id: string;
+  business: string;
+  voucher_type: ShopBooksVoucherType | string;
+  voucher_type_display?: string;
+  voucher_number: string;
+  voucher_date?: string;
+  status: string;
+  customer?: string | null;
+  customer_name?: string;
+  supplier?: string | null;
+  supplier_name?: string;
+  cash_account?: string | null;
+  cash_account_name?: string;
+  contra_account?: string | null;
+  contra_account_name?: string;
+  currency?: string;
+  subtotal: string | number;
+  discount_total?: string | number;
+  tax_total: string | number;
+  cgst_total?: string | number;
+  sgst_total?: string | number;
+  igst_total?: string | number;
+  total: string | number;
+  amount_paid?: string | number;
+  place_of_supply?: string;
+  is_interstate?: boolean;
+  notes?: string;
+  line_items?: unknown[];
+  linked_order?: string | null;
+  linked_invoice?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopBooksVoucherCreateInput = {
+  voucher_type: ShopBooksVoucherType | string;
+  business_id: string;
+  customer_id?: string | null;
+  supplier_id?: string | null;
+  cash_account_id?: string | null;
+  contra_account_id?: string | null;
+  amount?: string | number;
+  category?: string;
+  voucher_date?: string;
+  voucher_number?: string;
+  status?: string;
+  lines?: ShopBooksVoucherLineInput[];
+  is_interstate?: boolean;
+  place_of_supply?: string;
+  notes?: string;
+  amount_paid?: string | number;
+  currency?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ShopPartyLedgerEntry = {
+  id: string;
+  party_kind: 'customer' | 'supplier' | string;
+  customer?: string | null;
+  supplier?: string | null;
+  entry_type: string;
+  amount: string | number;
+  direction: string;
+  balance_after: string | number;
+  voucher?: string | null;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type ShopPartyStatement = {
+  party_kind: 'customer' | 'supplier' | string;
+  party_id: string;
+  party_name: string;
+  opening_balance: string;
+  closing_balance: string;
+  entries: ShopPartyLedgerEntry[];
+};
+
+export type ShopBooksReportSlug = 'sales' | 'purchase' | 'daybook' | 'gstr1' | 'gstr3b' | 'pnl';
+
+export type ShopGstComplianceProvider = 'mock' | 'nic_sandbox' | 'nic_production' | 'custom';
+
+export type ShopGstCompliance = {
+  provider?: ShopGstComplianceProvider | string;
+  username?: string;
+  password?: string;
+  client_id?: string;
+  client_secret?: string;
+  base_url?: string;
+  seller_legal_name?: string;
+  seller_trade_name?: string;
+  seller_addr1?: string;
+  seller_addr2?: string;
+  seller_loc?: string;
+  seller_pin?: string;
+  seller_state_code?: string;
+};
+
+export type ShopComplianceSettings = {
+  id: string;
+  business: string;
+  einvoice_enabled: boolean;
+  eway_enabled: boolean;
+  gst_compliance: ShopGstCompliance;
+};
+
+export type ShopComplianceSettingsUpdateInput = {
+  business_id: string;
+  einvoice_enabled?: boolean;
+  eway_enabled?: boolean;
+  gst_compliance?: ShopGstCompliance;
+};
+
+export type ShopEInvoiceStatus = 'draft' | 'pending' | 'generated' | 'cancelled' | 'failed';
+
+export type ShopEInvoice = {
+  id: string;
+  business: string;
+  voucher: string;
+  voucher_number?: string;
+  status: ShopEInvoiceStatus | string;
+  doc_type: 'INV' | 'CRN' | 'DBN' | string;
+  irn?: string;
+  ack_no?: string;
+  ack_date?: string | null;
+  signed_qr?: string;
+  signed_invoice?: string;
+  error_message?: string;
+  cancelled_at?: string | null;
+  cancel_reason?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopEWayBillStatus = 'draft' | 'generated' | 'cancelled' | 'failed';
+
+export type ShopEWayGenerateInput = {
+  supply_type?: 'O' | 'I' | string;
+  sub_supply_type?: string;
+  doc_type?: string;
+  transporter_id?: string;
+  transporter_name?: string;
+  transport_mode?: '1' | '2' | '3' | '4' | string;
+  vehicle_no?: string;
+  vehicle_type?: 'R' | 'O' | string;
+  distance_km?: number | string;
+  from_place?: string;
+  from_state_code?: string;
+  to_place?: string;
+  to_state_code?: string;
+};
+
+export type ShopEWayBill = {
+  id: string;
+  business: string;
+  voucher: string;
+  voucher_number?: string;
+  einvoice?: string | null;
+  status: ShopEWayBillStatus | string;
+  ewb_no?: string;
+  ewb_date?: string | null;
+  valid_upto?: string | null;
+  supply_type: string;
+  sub_supply_type?: string;
+  doc_type?: string;
+  transporter_id?: string;
+  transporter_name?: string;
+  transport_mode?: string;
+  vehicle_no?: string;
+  vehicle_type?: string;
+  distance_km?: number;
+  from_place?: string;
+  from_state_code?: string;
+  to_place?: string;
+  to_state_code?: string;
+  error_message?: string;
+  cancelled_at?: string | null;
+  cancel_reason?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopQuotationConvertToSaleInput = {
+  voucher_date?: string;
+  notes?: string;
+  amount_paid?: string | number;
+  cash_account_id?: string | null;
+  is_interstate?: boolean;
+  place_of_supply?: string;
+};
+
+export type ShopBooksDocumentType = 'sale_order' | 'purchase_order' | 'delivery_challan' | 'job_work';
+
+export type ShopBooksDocument = {
+  id: string;
+  business: string;
+  doc_type: ShopBooksDocumentType | string;
+  doc_type_display?: string;
+  document_number: string;
+  document_date?: string;
+  status: string;
+  customer?: string | null;
+  customer_name?: string;
+  supplier?: string | null;
+  supplier_name?: string;
+  currency?: string;
+  subtotal: string | number;
+  tax_total: string | number;
+  total: string | number;
+  notes?: string;
+  line_items?: unknown[];
+  converted_voucher?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type ShopBooksDocumentCreateInput = {
+  business_id: string;
+  doc_type: ShopBooksDocumentType | string;
+  customer_id?: string | null;
+  supplier_id?: string | null;
+  document_date?: string;
+  notes?: string;
+  lines: Array<{
+    product_id: string;
+    quantity?: string | number;
+    qty?: string | number;
+    unit_price?: string | number;
+    rate?: string | number;
+    tax_rate?: string | number;
+    gst_rate?: string | number;
+  }>;
+};
+
+export type ShopGodown = {
+  id: string;
+  business: string;
+  name: string;
+  code?: string;
+  is_default?: boolean;
+  is_active?: boolean;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type ShopStockTransfer = {
+  id: string;
+  business: string;
+  from_godown: string;
+  from_godown_name?: string;
+  to_godown: string;
+  to_godown_name?: string;
+  transfer_number: string;
+  transfer_date?: string;
+  status: string;
+  notes?: string;
+  line_items?: unknown[];
+  created_at?: string;
+};
+
+export type ShopCheque = {
+  id: string;
+  business: string;
+  direction: 'in' | 'out' | string;
+  status: string;
+  customer?: string | null;
+  customer_name?: string;
+  supplier?: string | null;
+  supplier_name?: string;
+  cash_account?: string | null;
+  amount: string | number;
+  cheque_number: string;
+  bank_name?: string;
+  due_date?: string | null;
+  cleared_at?: string | null;
+  linked_voucher?: string | null;
+  notes?: string;
+  created_at?: string;
+};
+
+export type ShopLoan = {
+  id: string;
+  business: string;
+  party_kind: string;
+  customer?: string | null;
+  customer_name?: string;
+  supplier?: string | null;
+  supplier_name?: string;
+  title: string;
+  principal: string | number;
+  interest_rate?: string | number;
+  balance: string | number;
+  start_date?: string;
+  status: string;
+  notes?: string;
+  repayments?: Array<{ amount: string; date: string; notes?: string }>;
+  created_at?: string;
+};
+
+export type ShopGrowSettings = {
+  whatsapp?: { phone?: string; default_message?: string };
+  google_profile?: { url?: string; place_id?: string };
+  online_store?: { enabled?: boolean; url?: string; slug?: string };
+  sync?: { last_export_at?: string };
+  loyalty?: { enabled?: boolean; points_per_100?: number; redeem_value?: number };
 };
 
 export type BusinessUpdateInput = Partial<
@@ -2229,6 +2674,131 @@ class ApiClient {
       this.request<ShopQuotation[]>('/shop/quotations', { method: 'GET', query }),
     createQuotation: (body: ShopQuotationCreateInput) =>
       this.request<ShopQuotation>('/shop/quotations', { method: 'POST', body }),
+    convertQuotationToSale: (quotationId: string, body?: ShopQuotationConvertToSaleInput) =>
+      this.request<ShopBooksVoucher>(`/shop/quotations/${quotationId}/convert-to-sale`, {
+        method: 'POST',
+        body: body ?? {},
+      }),
+    listDocuments: (query: { business_id: string; doc_type?: string }) =>
+      this.request<ShopBooksDocument[]>('/shop/books/documents', { method: 'GET', query }),
+    createDocument: (body: ShopBooksDocumentCreateInput) =>
+      this.request<ShopBooksDocument>('/shop/books/documents', { method: 'POST', body }),
+    convertDocument: (
+      documentId: string,
+      body?: { amount_paid?: string | number; cash_account_id?: string | null },
+    ) =>
+      this.request<ShopBooksVoucher | ShopBooksDocument>(`/shop/books/documents/${documentId}/convert`, {
+        method: 'POST',
+        body: body ?? {},
+      }),
+    listGodowns: (query: { business_id: string }) =>
+      this.request<ShopGodown[]>('/shop/godowns', { method: 'GET', query }),
+    createGodown: (body: {
+      business_id: string;
+      name: string;
+      code?: string;
+      is_default?: boolean;
+    }) => this.request<ShopGodown>('/shop/godowns', { method: 'POST', body }),
+    listStockTransfers: (query: { business_id: string }) =>
+      this.request<ShopStockTransfer[]>('/shop/stock-transfers', { method: 'GET', query }),
+    createStockTransfer: (body: {
+      business_id: string;
+      from_godown_id: string;
+      to_godown_id: string;
+      transfer_date?: string;
+      notes?: string;
+      lines: Array<{ product_id: string; quantity?: string | number; qty?: string | number }>;
+    }) => this.request<ShopStockTransfer>('/shop/stock-transfers', { method: 'POST', body }),
+    listCheques: (query: { business_id: string }) =>
+      this.request<ShopCheque[]>('/shop/cheques', { method: 'GET', query }),
+    createCheque: (body: {
+      business_id: string;
+      direction: 'in' | 'out' | string;
+      amount: string | number;
+      cheque_number: string;
+      bank_name?: string;
+      due_date?: string;
+      customer_id?: string | null;
+      supplier_id?: string | null;
+      cash_account_id?: string | null;
+      notes?: string;
+    }) => this.request<ShopCheque>('/shop/cheques', { method: 'POST', body }),
+    clearCheque: (chequeId: string, body?: { cash_account_id?: string | null }) =>
+      this.request<ShopCheque>(`/shop/cheques/${chequeId}/clear`, { method: 'POST', body: body ?? {} }),
+    bounceCheque: (chequeId: string) =>
+      this.request<ShopCheque>(`/shop/cheques/${chequeId}/bounce`, { method: 'POST', body: {} }),
+    listLoans: (query: { business_id: string }) =>
+      this.request<ShopLoan[]>('/shop/loans', { method: 'GET', query }),
+    createLoan: (body: {
+      business_id: string;
+      title: string;
+      principal: string | number;
+      interest_rate?: string | number;
+      party_kind?: string;
+      customer_id?: string | null;
+      supplier_id?: string | null;
+      start_date?: string;
+      notes?: string;
+    }) => this.request<ShopLoan>('/shop/loans', { method: 'POST', body }),
+    repayLoan: (loanId: string, body: { amount: string | number; notes?: string }) =>
+      this.request<ShopLoan>(`/shop/loans/${loanId}/repay`, { method: 'POST', body }),
+    booksDashboard: (query: { business_id: string }) =>
+      this.request<ShopBooksDashboard>('/shop/books/dashboard', { method: 'GET', query }),
+    listSuppliers: (query: { business_id: string; search?: string }) =>
+      this.request<ShopSupplier[]>('/shop/suppliers', { method: 'GET', query }),
+    createSupplier: (body: ShopSupplierWriteInput) =>
+      this.request<ShopSupplier>('/shop/suppliers', { method: 'POST', body }),
+    updateSupplier: (supplierId: string, body: Partial<ShopSupplierWriteInput>) =>
+      this.request<ShopSupplier>(`/shop/suppliers/${supplierId}`, { method: 'PATCH', body }),
+    deleteSupplier: (supplierId: string) =>
+      this.request<{ deleted: boolean }>(`/shop/suppliers/${supplierId}`, { method: 'DELETE' }),
+    listCashAccounts: (query: { business_id: string }) =>
+      this.request<ShopCashAccount[]>('/shop/books/accounts', { method: 'GET', query }),
+    createCashAccount: (body: ShopCashAccountWriteInput) =>
+      this.request<ShopCashAccount>('/shop/books/accounts', { method: 'POST', body }),
+    listVouchers: (query: {
+      business_id: string;
+      type?: ShopBooksVoucherType | string;
+      status?: string;
+      date_from?: string;
+      date_to?: string;
+      customer_id?: string;
+      supplier_id?: string;
+    }) => this.request<ShopBooksVoucher[]>('/shop/books/vouchers', { method: 'GET', query }),
+    createVoucher: (body: ShopBooksVoucherCreateInput) =>
+      this.request<ShopBooksVoucher>('/shop/books/vouchers', { method: 'POST', body }),
+    getVoucher: (voucherId: string) =>
+      this.request<ShopBooksVoucher>(`/shop/books/vouchers/${voucherId}`, { method: 'GET' }),
+    voidVoucher: (voucherId: string) =>
+      this.request<ShopBooksVoucher>(`/shop/books/vouchers/${voucherId}/void`, { method: 'POST' }),
+    partyStatement: (query: { business_id: string; kind: 'customer' | 'supplier'; id: string }) =>
+      this.request<ShopPartyStatement>('/shop/books/party-statement', { method: 'GET', query }),
+    booksReport: (
+      slug: ShopBooksReportSlug | string,
+      query: { business_id: string; date_from?: string; date_to?: string },
+    ) => this.request<Record<string, unknown>>(`/shop/books/reports/${slug}`, { method: 'GET', query }),
+    getComplianceSettings: (query: { business_id: string }) =>
+      this.request<ShopComplianceSettings>('/shop/books/compliance-settings', { method: 'GET', query }),
+    updateComplianceSettings: (body: ShopComplianceSettingsUpdateInput) =>
+      this.request<ShopComplianceSettings>('/shop/books/compliance-settings', { method: 'PATCH', body }),
+    generateEInvoice: (voucherId: string, body?: { allow_b2c?: boolean }) =>
+      this.request<ShopEInvoice>(`/shop/books/vouchers/${voucherId}/einvoice`, {
+        method: 'POST',
+        body: body ?? {},
+      }),
+    getEInvoice: (voucherId: string) =>
+      this.request<ShopEInvoice>(`/shop/books/vouchers/${voucherId}/einvoice`, { method: 'GET' }),
+    cancelEInvoice: (voucherId: string, body: { reason: string }) =>
+      this.request<ShopEInvoice>(`/shop/books/vouchers/${voucherId}/einvoice/cancel`, {
+        method: 'POST',
+        body,
+      }),
+    generateEWay: (voucherId: string, body: ShopEWayGenerateInput) =>
+      this.request<ShopEWayBill>(`/shop/books/vouchers/${voucherId}/eway`, { method: 'POST', body }),
+    listEWay: (query: { business_id: string; voucher_id?: string; status?: string }) =>
+      this.request<ShopEWayBill[]>('/shop/books/eway', { method: 'GET', query }),
+    cancelEWay: (ewayId: string, body: { reason: string }) =>
+      this.request<ShopEWayBill>(`/shop/books/eway/${ewayId}/cancel`, { method: 'POST', body }),
   };
 
   bookings = {
@@ -2460,7 +3030,24 @@ class ApiClient {
       ),
     tenantBillingAction: (
       tenantId: string,
-      body: { action: string; reason: string; days?: number; plan_code?: string; product_code?: string },
+      body: {
+        action:
+          | 'change_plan'
+          | 'update_addons'
+          | 'clear_soft_lock'
+          | 'force_soft_lock'
+          | 'extend_trial'
+          | 'set_complimentary'
+          | string;
+        reason: string;
+        days?: number;
+        plan_code?: string;
+        product_code?: string;
+        billing_interval?: 'monthly' | 'yearly';
+        extra_staff?: number;
+        extra_offices?: number;
+        pets_pack_enabled?: boolean;
+      },
     ) => this.request<{ billing: Record<string, unknown> }>(`/platform/tenants/${tenantId}/billing/actions`, { method: 'POST', body }),
     tenantUsers: (tenantId: string) =>
       this.request<{ users: PlatformUserRow[] }>(`/platform/tenants/${tenantId}/users`, { method: 'GET' }),
@@ -2530,6 +3117,16 @@ class ApiClient {
       is_active?: boolean;
       reason: string;
     }) => this.request<{ id: string; code: string }>('/platform/coupons', { method: 'POST', body }),
+    planPackages: (query?: { product_code?: string }) =>
+      this.request<{ plan_packages: PlatformPlanPackage[] }>('/platform/plan-packages', {
+        method: 'GET',
+        query,
+      }),
+    upsertPlanPackage: (body: PlatformPlanPackageUpsertInput) =>
+      this.request<{ id: string; code: string; product_code: string }>('/platform/plan-packages', {
+        method: 'POST',
+        body,
+      }),
     tickets: (query?: { tenant_id?: string }) =>
       this.request<{ tickets: SupportTicketSummary[] }>('/platform/tickets', { method: 'GET', query }),
     createTicket: (body: { tenant_id: string; subject: string; body?: string }) =>

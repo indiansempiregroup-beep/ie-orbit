@@ -459,6 +459,10 @@ class OrderService:
         metadata["pos"] = pos
         locked.metadata = metadata
         locked.save(update_fields=["metadata", "updated_at", "version"])
+        if act == "confirm":
+            refreshed = self.get_order(tenant=tenant, business=business, order_id=locked.id)
+            self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+            return refreshed
         return self.get_order(tenant=tenant, business=business, order_id=locked.id)
 
     def cancel_customer_order(
@@ -496,7 +500,7 @@ class OrderService:
             }
             for line in order.lines.all()
         ]
-        return ShopInvoice.objects.create(
+        invoice = ShopInvoice.objects.create(
             tenant=tenant,
             business=business,
             customer=order.customer,
@@ -509,6 +513,30 @@ class OrderService:
             total=order.total,
             line_items=lines,
         )
+        self._post_order_to_books(tenant=tenant, business=business, order=order, invoice=invoice)
+        return invoice
+
+    def _post_order_to_books(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        invoice: ShopInvoice | None = None,
+    ) -> None:
+        """Best-effort post of a POS/order sale into ShopIE GST books."""
+        try:
+            from apps.shopie.services.books import BooksService
+
+            voucher = BooksService().create_sale_from_order(
+                tenant=tenant, business=business, order=order
+            )
+            if invoice is not None and voucher.linked_invoice_id is None:
+                voucher.linked_invoice = invoice
+                voucher.save(update_fields=["linked_invoice", "updated_at", "version"])
+        except Exception:
+            # Books posting must not block invoice issuance; ledger can be repaired later.
+            return
 
     @transaction.atomic
     def create_quotation(

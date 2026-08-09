@@ -16,9 +16,12 @@ export const fonts = {
   bodyBold: 'DMSans_700Bold',
 };
 
-/** Cool neutrals aligned with customer-mobile chrome; brand stays IE navy. */
+/**
+ * Vyapar-inspired patterns with IE Deep Navy:
+ * flat white chrome, soft canvas, tint selection, muted labels + bold values.
+ */
 export const colors = {
-  background: '#F7F8FA',
+  background: '#F3F4F8',
   foreground: '#0F1623',
   card: '#FFFFFF',
   primary: brand.primary,
@@ -32,10 +35,23 @@ export const colors = {
   destructive: '#DC2626',
   success: '#059669',
   warning: '#D97706',
-  border: 'rgba(15, 22, 35, 0.08)',
-  inputBackground: '#F0F2F7',
+  border: '#DDE2E7',
+  borderStrong: '#CBCCDE',
+  inputBackground: '#FFFFFF',
   sheet: '#FFFFFF',
   overlay: 'rgba(11, 31, 58, 0.45)',
+  /** Soft navy tint for selected rows / chips (Vyapar light-blue → navy). */
+  tint: '#E8EEF6',
+  tintStrong: '#D6E2F0',
+  headerBg: '#FFFFFF',
+  headerBorder: '#E8ECF4',
+  successSoft: '#DEF7EE',
+  warningSoft: '#FFF1DC',
+  destructiveSoft: '#FFE5E8',
+  sidebar: brand.primaryDark,
+  sidebarText: '#FFFFFF',
+  sidebarMuted: 'rgba(255,255,255,0.65)',
+  sidebarActive: 'rgba(255,255,255,0.12)',
 };
 
 export const spacing = {
@@ -49,10 +65,11 @@ export const spacing = {
 };
 
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
+  sm: 6,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  pill: 24,
   full: 999,
 };
 
@@ -64,9 +81,9 @@ export const typography = {
     letterSpacing: -0.2,
   },
   title: {
-    fontFamily: fonts.displayMedium,
+    fontFamily: fonts.bodySemi,
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '600' as const,
     letterSpacing: -0.1,
   },
   body: {
@@ -89,17 +106,30 @@ export const typography = {
     fontSize: 10,
     fontWeight: '500' as const,
   },
+  /** Muted KPI label (Vyapar summary cards). */
+  kpiLabel: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    fontWeight: '400' as const,
+    color: '#6B7A99',
+  },
+  /** Bold KPI value. */
+  kpiValue: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: '#0F1623',
+  },
 };
 
 export const avatarColors = ['#123A6B', '#0B8FBF', '#059669', '#D97706', '#2A9D8F', '#8B5A2B'];
 
-/** Opt-in only — customer-style UI prefers borders over elevation. */
 export const shadows = {
   soft: {
     shadowColor: '#0B1F3A',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
 };

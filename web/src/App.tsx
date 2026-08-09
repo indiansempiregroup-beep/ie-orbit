@@ -45,6 +45,26 @@ const ShopDeliveryZonesPage = lazy(() =>
 );
 const ShopPetsPage = lazy(() => import('./features/shop/ShopPetsPage').then((m) => ({ default: m.ShopPetsPage })));
 const ShopBillingPage = lazy(() => import('./features/shop/ShopBillingPage').then((m) => ({ default: m.ShopBillingPage })));
+const ShopBooksDashboardPage = lazy(() =>
+  import('./features/shop/ShopBooksDashboardPage').then((m) => ({ default: m.ShopBooksDashboardPage })),
+);
+const ShopSaleListPage = lazy(() => import('./features/shop/ShopSaleListPage').then((m) => ({ default: m.ShopSaleListPage })));
+const ShopSaleFormPage = lazy(() => import('./features/shop/ShopSaleFormPage').then((m) => ({ default: m.ShopSaleFormPage })));
+const ShopPurchaseListPage = lazy(() =>
+  import('./features/shop/ShopPurchaseListPage').then((m) => ({ default: m.ShopPurchaseListPage })),
+);
+const ShopPurchaseFormPage = lazy(() =>
+  import('./features/shop/ShopPurchaseFormPage').then((m) => ({ default: m.ShopPurchaseFormPage })),
+);
+const ShopExpensePage = lazy(() => import('./features/shop/ShopExpensePage').then((m) => ({ default: m.ShopExpensePage })));
+const ShopCashBankPage = lazy(() => import('./features/shop/ShopCashBankPage').then((m) => ({ default: m.ShopCashBankPage })));
+const ShopPartiesPage = lazy(() => import('./features/shop/ShopPartiesPage').then((m) => ({ default: m.ShopPartiesPage })));
+const ShopBooksReportsPage = lazy(() =>
+  import('./features/shop/ShopBooksReportsPage').then((m) => ({ default: m.ShopBooksReportsPage })),
+);
+const ShopComplianceSettingsPage = lazy(() =>
+  import('./features/shop/ShopComplianceSettingsPage').then((m) => ({ default: m.ShopComplianceSettingsPage })),
+);
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const ReportsPage = lazy(() => import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const BIOverviewPage = lazy(() => import('./features/bi/BIOverviewPage').then((m) => ({ default: m.BIOverviewPage })));
@@ -65,6 +85,12 @@ const PlatformTenantDetailPage = lazy(() =>
 );
 const PlatformSubscriptionsPage = lazy(() =>
   import('./features/admin/PlatformSubscriptionsPage').then((m) => ({ default: m.PlatformSubscriptionsPage })),
+);
+const PlatformPackagesPage = lazy(() =>
+  import('./features/admin/PlatformPackagesPage').then((m) => ({ default: m.PlatformPackagesPage })),
+);
+const PlatformCouponsPage = lazy(() =>
+  import('./features/admin/PlatformCouponsPage').then((m) => ({ default: m.PlatformCouponsPage })),
 );
 const PlatformMonitoringPage = lazy(() =>
   import('./features/admin/PlatformMonitoringPage').then((m) => ({ default: m.PlatformMonitoringPage })),
@@ -144,6 +170,8 @@ function App() {
                 <Route path="tenants" element={<PlatformTenantsPage />} />
                 <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
                 <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
+                <Route path="packages" element={<PlatformPackagesPage />} />
+                <Route path="coupons" element={<PlatformCouponsPage />} />
                 <Route path="tickets" element={<PlatformTicketsPage />} />
                 <Route path="announcements" element={<PlatformAnnouncementsPage />} />
                 <Route path="help" element={<PlatformHelpCmsPage />} />
@@ -193,6 +221,16 @@ function App() {
                     <Route path="/shop/orders/:orderId" element={<ShopOrderDetailPage />} />
                     <Route path="/shop/billing" element={<ShopBillingPage />} />
                     <Route path="/shop/returns" element={<ShopReturnsPage />} />
+                    <Route path="/shop/books" element={<ShopBooksDashboardPage />} />
+                    <Route path="/shop/books/sale" element={<ShopSaleListPage />} />
+                    <Route path="/shop/books/sale/new" element={<ShopSaleFormPage />} />
+                    <Route path="/shop/books/purchase" element={<ShopPurchaseListPage />} />
+                    <Route path="/shop/books/purchase/new" element={<ShopPurchaseFormPage />} />
+                    <Route path="/shop/books/expense" element={<ShopExpensePage />} />
+                    <Route path="/shop/books/cash" element={<ShopCashBankPage />} />
+                    <Route path="/shop/books/parties" element={<ShopPartiesPage />} />
+                    <Route path="/shop/books/reports" element={<ShopBooksReportsPage />} />
+                    <Route path="/shop/books/compliance" element={<ShopComplianceSettingsPage />} />
                     <Route path="/shop/delivery-zones" element={<ShopDeliveryZonesPage />} />
                     <Route path="/shop/pets" element={<ShopPetsPage />} />
                   </Route>

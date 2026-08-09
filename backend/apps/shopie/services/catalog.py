@@ -123,6 +123,9 @@ class CatalogService:
             status=str(data.get("status") or ProductStatus.ACTIVE),
             price=Decimal(str(data.get("price") or "0")),
             tax_rate=Decimal(str(data.get("tax_rate") or "0")),
+            hsn_sac=str(data.get("hsn_sac") or "").strip(),
+            gst_rate=Decimal(str(data.get("gst_rate") if data.get("gst_rate") is not None else data.get("tax_rate") or "0")),
+            batch_tracking_enabled=bool(data.get("batch_tracking_enabled") or False),
             currency=str(data.get("currency") or business.currency or "INR"),
             stock_on_hand=Decimal(str(data.get("stock_on_hand") or "0")),
             low_stock_threshold=Decimal(str(data.get("low_stock_threshold") or "0")),
@@ -164,12 +167,15 @@ class CatalogService:
             "status",
             "pack_size",
             "image_url",
+            "hsn_sac",
         ):
             if field in data and data[field] is not None:
                 setattr(product, field, str(data[field]).strip() if isinstance(data[field], str) else data[field])
-        for field in ("price", "tax_rate", "low_stock_threshold"):
+        for field in ("price", "tax_rate", "gst_rate", "low_stock_threshold"):
             if field in data and data[field] is not None:
                 setattr(product, field, Decimal(str(data[field])))
+        if "batch_tracking_enabled" in data and data["batch_tracking_enabled"] is not None:
+            product.batch_tracking_enabled = bool(data["batch_tracking_enabled"])
         if "currency" in data and data["currency"]:
             product.currency = str(data["currency"]).strip()
         if "category" in data:

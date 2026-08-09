@@ -33,6 +33,8 @@ const emptyForm = {
   description: '',
   price: '0',
   tax_rate: '0',
+  gst_rate: '0',
+  hsn_sac: '',
   currency: 'INR',
   stock_on_hand: '0',
   low_stock_threshold: '0',
@@ -80,6 +82,8 @@ function formFromProduct(product: ShopProduct): FormState {
     description: product.description || '',
     price: String(product.price ?? '0'),
     tax_rate: String(product.tax_rate ?? '0'),
+    gst_rate: String(product.gst_rate ?? product.tax_rate ?? '0'),
+    hsn_sac: product.hsn_sac || '',
     currency: product.currency || 'INR',
     stock_on_hand: String(product.stock_on_hand ?? '0'),
     low_stock_threshold: String(product.low_stock_threshold ?? '0'),
@@ -279,6 +283,8 @@ export function ShopProductsPage() {
       description: form.description,
       price: form.price,
       tax_rate: form.tax_rate,
+      gst_rate: form.gst_rate,
+      hsn_sac: form.hsn_sac,
       currency: form.currency,
       stock_on_hand: form.stock_on_hand,
       low_stock_threshold: form.low_stock_threshold,
@@ -438,7 +444,8 @@ export function ShopProductsPage() {
                     {product.currency || ''} {product.price}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    SKU {product.sku || '—'} ·{' '}
+                    SKU {product.sku || '—'} · HSN {product.hsn_sac || '—'} · GST{' '}
+                    {product.gst_rate ?? product.tax_rate ?? 0}% ·{' '}
                     {(product.barcodes ?? [])
                       .map((row) => `${row.code} (${row.barcode_type})`)
                       .join(' · ') || 'No barcodes'}
@@ -589,6 +596,8 @@ export function ShopProductsPage() {
                 ['sku', 'SKU', false],
                 ['price', 'Price', false],
                 ['tax_rate', 'Tax %', false],
+                ['gst_rate', 'GST % (Books)', false],
+                ['hsn_sac', 'HSN/SAC code', false],
                 ['stock_on_hand', 'Stock on hand', false],
                 ['low_stock_threshold', 'Low stock alert', false],
                 ['pack_size', 'Pack size / quantity', false],

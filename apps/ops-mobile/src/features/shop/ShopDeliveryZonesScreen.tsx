@@ -116,7 +116,7 @@ export function ShopDeliveryZonesScreen() {
           hitSlop={8}
           style={styles.headerBtn}
         >
-          <Feather name={showForm ? 'x' : 'plus'} size={20} color="#fff" />
+          <Feather name={showForm ? 'x' : 'plus'} size={20} color={colors.primary} />
         </Pressable>
       ),
     });
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: colors.tint,
   },
   formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
   input: {

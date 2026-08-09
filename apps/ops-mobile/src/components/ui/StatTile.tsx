@@ -1,0 +1,76 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+
+type Tone = 'default' | 'positive' | 'negative' | 'warning';
+
+type Props = {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: Tone;
+  onPress?: () => void;
+  style?: ViewStyle;
+};
+
+export function StatTile({ label, value, hint, tone = 'default', onPress, style }: Props) {
+  const content = (
+    <View style={[styles.tile, style]}>
+      <Text style={styles.label}>{label}</Text>
+      <Text
+        style={[
+          styles.value,
+          tone === 'positive' && styles.positive,
+          tone === 'negative' && styles.negative,
+          tone === 'warning' && styles.warning,
+        ]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+      {hint ? (
+        <View style={styles.hintRow}>
+          {tone === 'negative' ? <Feather name="arrow-down" size={12} color={colors.destructive} /> : null}
+          {tone === 'positive' ? <Feather name="arrow-up" size={12} color={colors.success} /> : null}
+          <Text style={styles.hint}>{hint}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => [pressed && styles.pressed]}>
+        {content}
+      </Pressable>
+    );
+  }
+  return content;
+}
+
+const styles = StyleSheet.create({
+  tile: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: 4,
+  },
+  label: { ...typography.caption, color: colors.mutedForeground },
+  value: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 22,
+    color: colors.foreground,
+    letterSpacing: -0.3,
+  },
+  positive: { color: colors.success },
+  negative: { color: colors.destructive },
+  warning: { color: colors.warning },
+  hintRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  hint: { ...typography.tiny, color: colors.mutedForeground },
+  pressed: { opacity: 0.92 },
+});
