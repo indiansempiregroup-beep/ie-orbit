@@ -6,6 +6,8 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { SelectField } from '../../components/SelectField';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { DesktopPage } from '../../components/DesktopPage';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { ShopBooksReportSlug } from '@ie-platform/sdk';
 
@@ -27,6 +29,7 @@ function summarize(value: unknown, depth = 0): string {
 }
 
 export function ShopBooksReportsScreen() {
+  const { isDesktop } = useBreakpoint();
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
@@ -69,76 +72,78 @@ export function ShopBooksReportsScreen() {
   }, [data]);
 
   return (
-    <RefreshableScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Books reports</Text>
-      <Text style={styles.subtitle}>Pick a report and an optional date range.</Text>
+    <DesktopPage>
+      <RefreshableScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Books reports</Text>
+        <Text style={styles.subtitle}>Pick a report and an optional date range.</Text>
 
-      <SelectField label="Report" value={slug} options={options} onChange={(value) => setSlug(value as ShopBooksReportSlug)} />
-      {activeOption ? <Text style={styles.hint}>{activeOption.hint}</Text> : null}
+        <SelectField label="Report" value={slug} options={options} onChange={(value) => setSlug(value as ShopBooksReportSlug)} />
+        {activeOption ? <Text style={styles.hint}>{activeOption.hint}</Text> : null}
 
-      <View style={styles.dateRow}>
-        <View style={styles.dateField}>
-          <Text style={styles.label}>From</Text>
-          <TextInput
-            style={styles.input}
-            value={dateFrom}
-            onChangeText={setDateFrom}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-        <View style={styles.dateField}>
-          <Text style={styles.label}>To</Text>
-          <TextInput
-            style={styles.input}
-            value={dateTo}
-            onChangeText={setDateTo}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-      </View>
-
-      <Pressable style={[styles.runBtn, loading && styles.runBtnDisabled]} onPress={() => void runReport()} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <>
-            <Feather name="bar-chart-2" size={16} color="#fff" />
-            <Text style={styles.runBtnText}>Run report</Text>
-          </>
-        )}
-      </Pressable>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {data ? (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>{activeOption?.label ?? slug}</Text>
-          {summaryEntries.length ? (
-            <View style={styles.summaryGrid}>
-              {summaryEntries.map(([key, value]) => (
-                <View key={key} style={styles.summaryTile}>
-                  <Text style={styles.summaryLabel}>{key.replace(/_/g, ' ')}</Text>
-                  <Text style={styles.summaryValue} numberOfLines={2}>
-                    {summarize(value)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          <Text style={styles.jsonLabel}>Full response</Text>
-          <View style={styles.jsonBox}>
-            <Text style={styles.jsonText} selectable>
-              {JSON.stringify(data, null, 2)}
-            </Text>
+        <View style={styles.dateRow}>
+          <View style={styles.dateField}>
+            <Text style={styles.label}>From</Text>
+            <TextInput
+              style={styles.input}
+              value={dateFrom}
+              onChangeText={setDateFrom}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.mutedForeground}
+            />
+          </View>
+          <View style={styles.dateField}>
+            <Text style={styles.label}>To</Text>
+            <TextInput
+              style={styles.input}
+              value={dateTo}
+              onChangeText={setDateTo}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.mutedForeground}
+            />
           </View>
         </View>
-      ) : !loading ? (
-        <Text style={styles.meta}>Run a report to see results here.</Text>
-      ) : null}
-    </RefreshableScrollView>
+
+        <Pressable style={[styles.runBtn, loading && styles.runBtnDisabled]} onPress={() => void runReport()} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Feather name="bar-chart-2" size={16} color="#fff" />
+              <Text style={styles.runBtnText}>Run report</Text>
+            </>
+          )}
+        </Pressable>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {data ? (
+          <View style={styles.resultCard}>
+            <Text style={styles.resultTitle}>{activeOption?.label ?? slug}</Text>
+            {summaryEntries.length ? (
+              <View style={styles.summaryGrid}>
+                {summaryEntries.map(([key, value]) => (
+                  <View key={key} style={[styles.summaryTile, isDesktop && styles.summaryTileDesktop]}>
+                    <Text style={styles.summaryLabel}>{key.replace(/_/g, ' ')}</Text>
+                    <Text style={styles.summaryValue} numberOfLines={2}>
+                      {summarize(value)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <Text style={styles.jsonLabel}>Full response</Text>
+            <View style={styles.jsonBox}>
+              <Text style={styles.jsonText} selectable>
+                {JSON.stringify(data, null, 2)}
+              </Text>
+            </View>
+          </View>
+        ) : !loading ? (
+          <Text style={styles.meta}>Run a report to see results here.</Text>
+        ) : null}
+      </RefreshableScrollView>
+    </DesktopPage>
   );
 }
 
@@ -190,6 +195,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+  },
+  summaryTileDesktop: {
+    minWidth: '22%',
   },
   summaryLabel: { ...typography.caption, color: colors.mutedForeground, textTransform: 'capitalize' },
   summaryValue: { ...typography.label, color: colors.foreground, marginTop: 4 },

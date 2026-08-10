@@ -21,6 +21,7 @@ import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopCashAccount, ShopCheque, ShopSupplier } from '@ie-platform/sdk';
@@ -301,69 +302,71 @@ export function ShopBooksChequesScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      <View style={styles.chips}>
-        <Chip label="In" active={filter === 'in'} onPress={() => setFilter('in')} />
-        <Chip label="Out" active={filter === 'out'} onPress={() => setFilter('out')} />
-      </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        renderItem={({ item }) => {
-          const badge = voucherStatusStyle(item.status);
-          const party = item.customer_name || item.supplier_name || '—';
-          const acting = actionId === item.id;
-          return (
-            <View style={styles.row}>
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>#{item.cheque_number}</Text>
-                <Text style={styles.total}>{formatMoney(item.amount)}</Text>
-              </View>
-              <Text style={styles.meta}>
-                {party}
-                {item.bank_name ? ` · ${item.bank_name}` : ''}
-                {item.due_date ? ` · Due ${item.due_date}` : ''}
-              </Text>
-              <View style={styles.rowBottom}>
-                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                  <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <View style={styles.chips}>
+          <Chip label="In" active={filter === 'in'} onPress={() => setFilter('in')} />
+          <Chip label="Out" active={filter === 'out'} onPress={() => setFilter('out')} />
+        </View>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          renderItem={({ item }) => {
+            const badge = voucherStatusStyle(item.status);
+            const party = item.customer_name || item.supplier_name || '—';
+            const acting = actionId === item.id;
+            return (
+              <View style={styles.row}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>#{item.cheque_number}</Text>
+                  <Text style={styles.total}>{formatMoney(item.amount)}</Text>
                 </View>
-                {isPending(item.status) ? (
-                  <View style={styles.actions}>
-                    <Pressable onPress={() => void onClear(item)} disabled={acting} hitSlop={8}>
-                      <Text style={[styles.actionText, acting && styles.disabled]}>
-                        {acting ? '…' : 'Clear'}
-                      </Text>
-                    </Pressable>
-                    <Pressable onPress={() => void onBounce(item)} disabled={acting} hitSlop={8}>
-                      <Text style={[styles.bounceText, acting && styles.disabled]}>Bounce</Text>
-                    </Pressable>
+                <Text style={styles.meta}>
+                  {party}
+                  {item.bank_name ? ` · ${item.bank_name}` : ''}
+                  {item.due_date ? ` · Due ${item.due_date}` : ''}
+                </Text>
+                <View style={styles.rowBottom}>
+                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
                   </View>
-                ) : null}
+                  {isPending(item.status) ? (
+                    <View style={styles.actions}>
+                      <Pressable onPress={() => void onClear(item)} disabled={acting} hitSlop={8}>
+                        <Text style={[styles.actionText, acting && styles.disabled]}>
+                          {acting ? '…' : 'Clear'}
+                        </Text>
+                      </Pressable>
+                      <Pressable onPress={() => void onBounce(item)} disabled={acting} hitSlop={8}>
+                        <Text style={[styles.bounceText, acting && styles.disabled]}>Bounce</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="credit-card"
-              title={`No cheque ${filter} records`}
-              message="Record incoming or outgoing cheques and clear or bounce them when settled."
-              actionLabel="New cheque"
-              onAction={() => {
-                setDirection(filter);
-                setShowForm(true);
-              }}
-            />
-          ) : null
-        }
-      />
-    </View>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="credit-card"
+                title={`No cheque ${filter} records`}
+                message="Record incoming or outgoing cheques and clear or bounce them when settled."
+                actionLabel="New cheque"
+                onAction={() => {
+                  setDirection(filter);
+                  setShowForm(true);
+                }}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

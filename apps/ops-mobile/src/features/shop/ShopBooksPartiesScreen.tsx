@@ -20,6 +20,7 @@ import { SearchBar } from '../../components/SearchBar';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopPartyStatement, ShopSupplier } from '@ie-platform/sdk';
@@ -249,64 +250,66 @@ export function ShopBooksPartiesScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search suppliers…" />
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
-        renderItem={({ item }) => {
-          const expanded = expandedId === item.id;
-          return (
-            <Pressable style={styles.row} onPress={() => void toggleStatement(item)}>
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{supplierLabel(item)}</Text>
-                <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
-              </View>
-              <Text style={styles.meta}>
-                {item.phone || 'No phone'} {item.email ? `· ${item.email}` : ''}
-              </Text>
-              {item.gstin ? <Text style={styles.meta}>GSTIN {item.gstin}</Text> : null}
-              {expanded ? (
-                <View style={styles.statement}>
-                  {statementLoading ? (
-                    <ActivityIndicator color={colors.primary} />
-                  ) : statement ? (
-                    <>
-                      <View style={styles.statementRow}>
-                        <Text style={styles.meta}>Opening balance</Text>
-                        <Text style={styles.statementValue}>{formatMoney(statement.opening_balance)}</Text>
-                      </View>
-                      <View style={styles.statementRow}>
-                        <Text style={styles.meta}>Closing balance</Text>
-                        <Text style={styles.statementValue}>{formatMoney(statement.closing_balance)}</Text>
-                      </View>
-                      <Text style={styles.hint}>{statement.entries.length} ledger entries</Text>
-                    </>
-                  ) : (
-                    <Text style={styles.meta}>No statement available.</Text>
-                  )}
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search suppliers…" />
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          renderItem={({ item }) => {
+            const expanded = expandedId === item.id;
+            return (
+              <Pressable style={styles.row} onPress={() => void toggleStatement(item)}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{supplierLabel(item)}</Text>
+                  <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
                 </View>
-              ) : null}
-            </Pressable>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="users"
-              title="No suppliers yet"
-              message="Add vendors to track purchase balances and statements."
-              actionLabel="Add supplier"
-              onAction={() => setShowForm(true)}
-            />
-          ) : null
-        }
-      />
-    </View>
+                <Text style={styles.meta}>
+                  {item.phone || 'No phone'} {item.email ? `· ${item.email}` : ''}
+                </Text>
+                {item.gstin ? <Text style={styles.meta}>GSTIN {item.gstin}</Text> : null}
+                {expanded ? (
+                  <View style={styles.statement}>
+                    {statementLoading ? (
+                      <ActivityIndicator color={colors.primary} />
+                    ) : statement ? (
+                      <>
+                        <View style={styles.statementRow}>
+                          <Text style={styles.meta}>Opening balance</Text>
+                          <Text style={styles.statementValue}>{formatMoney(statement.opening_balance)}</Text>
+                        </View>
+                        <View style={styles.statementRow}>
+                          <Text style={styles.meta}>Closing balance</Text>
+                          <Text style={styles.statementValue}>{formatMoney(statement.closing_balance)}</Text>
+                        </View>
+                        <Text style={styles.hint}>{statement.entries.length} ledger entries</Text>
+                      </>
+                    ) : (
+                      <Text style={styles.meta}>No statement available.</Text>
+                    )}
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="users"
+                title="No suppliers yet"
+                message="Add vendors to track purchase balances and statements."
+                actionLabel="Add supplier"
+                onAction={() => setShowForm(true)}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { BookingStatus } from '@ie-platform/sdk';
 import { BookingRow } from '../../components/BookingRow';
+import { DesktopPage } from '../../components/DesktopPage';
 import { OpsHeader } from '../../components/OpsHeader';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
@@ -119,7 +120,7 @@ export function BookingsScreen() {
   }, [bookings, search, statusFilter, staffFilter, showStaffFilter, sortBy, customerMap, serviceMap, staffMap]);
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <OpsHeader
         compact
         title={t('bookings.title')}
@@ -208,12 +209,11 @@ export function BookingsScreen() {
           />
         ))}
       </RefreshableScrollView>
-    </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   toolbar: {
     flexDirection: 'row',
     gap: spacing.sm,

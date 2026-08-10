@@ -7,6 +7,7 @@ from pathlib import Path
 
 import dj_database_url
 from celery.schedules import crontab
+from corsheaders.defaults import default_headers
 
 from config.env import load_environment
 
@@ -180,6 +181,14 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = ENV.cors_allowed_origins
 CORS_ALLOW_CREDENTIALS = True
+# Browser clients (ops-mobile web / Vite) send these on tenant-scoped API calls.
+# Without them, /tenants works but /businesses fails CORS preflight → empty workspace.
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    "x-tenant-id",
+    "x-tenant-slug",
+    "x-business-id",
+)
 CSRF_TRUSTED_ORIGINS = ENV.csrf_trusted_origins
 
 IAM_SETTINGS = {

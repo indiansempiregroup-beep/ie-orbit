@@ -7,6 +7,17 @@ ALLOWED_HOSTS = ["*"] if DEBUG else ENV.allowed_hosts
 # Expo web (:8082) + LAN phone testing — reflect any Origin in DEBUG.
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
+    # Mobile/Expo reloads fire many parallel list calls; keep local throttles loose.
+    REST_FRAMEWORK = {
+        **REST_FRAMEWORK,
+        "DEFAULT_THROTTLE_RATES": {
+            **REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {}),
+            "anon": "2000/hour",
+            "user": "20000/hour",
+            "auth_login": "60/minute",
+            "password_reset": "30/minute",
+        },
+    }
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",

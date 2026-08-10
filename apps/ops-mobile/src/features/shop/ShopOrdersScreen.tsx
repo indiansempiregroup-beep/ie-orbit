@@ -10,28 +10,33 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { SearchBar } from '../../components/SearchBar';
 import { SelectField } from '../../components/SelectField';
+import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomers } from '../../hooks/useOpsData';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, spacing } from '../../theme/tokens';
-import type { ShopOrder } from '@ie-platform/sdk';
+import type { Customer, ShopOrder } from '@ie-platform/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime } from '../../utils/format';
 import { shopListRefreshControl } from './shopRefreshControl';
 import {
   formatMoney,
+  formatShopOrderFulfillment,
   formatShopOrderPayment,
   getShopOrderPosMeta,
   isShopOrderBorrowDue,
 } from './posPayment';
 
+/** Online shopping only — counter Sale (POS) lives in Books as GST invoices. */
+const ONLINE_MODES = new Set(['pickup', 'delivery']);
+
 const FULFILLMENT_OPTIONS = [
-  { value: '', label: 'All modes' },
-  { value: 'pos', label: 'POS' },
+  { value: '', label: 'All online' },
   { value: 'pickup', label: 'Pickup' },
   { value: 'delivery', label: 'Delivery' },
 ];
@@ -45,13 +50,42 @@ const PAYMENT_OPTIONS = [
   { value: 'due', label: 'Borrow due' },
 ];
 
+function formatCustomerAddress(customer?: Customer | null): string {
+  if (!customer) return '';
+  if (customer.full_address?.trim()) return customer.full_address.trim();
+  const nested = customer.address;
+  if (nested?.full_address?.trim()) return nested.full_address.trim();
+  const parts = [nested?.line1, nested?.line2, nested?.city, nested?.state, nested?.postal_code]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean);
+  if (parts.length) return parts.join(', ');
+  const fallback = customer.addresses?.find((row) => row.is_default) ?? customer.addresses?.[0];
+  if (fallback?.full_address?.trim()) return fallback.full_address.trim();
+  return [fallback?.line1, fallback?.line2, fallback?.city, fallback?.state, fallback?.postal_code]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
+function orderDeliveryAddress(order: ShopOrder, customer?: Customer | null): string {
+  const delivery = String(order.delivery_address || '').trim();
+  if (delivery) return delivery;
+  return formatCustomerAddress(customer);
+}
+
 export function ShopOrdersScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const { businessId } = useWorkspace();
   const { customers } = useCustomers();
   const customerMap = useMemo(() => buildNameMap(customers), [customers]);
+  const customersById = useMemo(() => {
+    const map = new Map<string, Customer>();
+    customers.forEach((customer) => map.set(customer.id, customer));
+    return map;
+  }, [customers]);
 
   const [items, setItems] = useState<ShopOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,12 +116,17 @@ export function ShopOrdersScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
+  const onlineOrders = useMemo(
+    () => items.filter((order) => ONLINE_MODES.has(String(order.fulfillment_mode || '').toLowerCase())),
+    [items],
+  );
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return items.filter((order) => {
+    return onlineOrders.filter((order) => {
       if (fulfillment && order.fulfillment_mode !== fulfillment) return false;
       if (payment) {
-        const method = String(getShopOrderPosMeta(order).payment_method || '').toLowerCase();
+        const method = String(getShopOrderPosMeta(order).payment_method || order.payment_method || '').toLowerCase();
         if (payment === 'due') {
           if (!isShopOrderBorrowDue(order)) return false;
         } else if (method !== payment) {
@@ -98,6 +137,10 @@ export function ShopOrdersScreen() {
       const customer = order.customer_id
         ? entityLabel(customerMap, order.customer_id, '')
         : 'walk-in';
+      const address = orderDeliveryAddress(
+        order,
+        order.customer_id ? customersById.get(order.customer_id) : null,
+      );
       const haystack = [
         order.order_number,
         order.status,
@@ -105,13 +148,14 @@ export function ShopOrdersScreen() {
         String(order.total),
         formatShopOrderPayment(order),
         customer,
+        address,
         ...(order.lines ?? []).map((line) => line.product_name),
       ]
         .join(' ')
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [items, search, fulfillment, payment, customerMap]);
+  }, [onlineOrders, search, fulfillment, payment, customerMap, customersById]);
 
   const activeFilterCount = Number(Boolean(fulfillment)) + Number(Boolean(payment));
 
@@ -122,104 +166,115 @@ export function ShopOrdersScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      <SearchBar
-        style={styles.search}
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search order #, product, customer…"
-      />
-
-      <View style={styles.filterRow}>
-        <View style={styles.filterField}>
-          <SelectField
-            label="Fulfillment"
-            value={fulfillment}
-            options={FULFILLMENT_OPTIONS}
-            onChange={setFulfillment}
-            searchable={false}
-          />
-        </View>
-        <View style={styles.filterField}>
-          <SelectField
-            label="Payment"
-            value={payment}
-            options={PAYMENT_OPTIONS}
-            onChange={setPayment}
-            searchable={false}
-          />
-        </View>
-      </View>
-
-      <View style={styles.toolbar}>
-        <Text style={styles.count}>
-          {filtered.length} order{filtered.length === 1 ? '' : 's'}
-          {activeFilterCount ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}` : ''}
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <Text style={styles.pageHint}>
+          Online pickup &amp; delivery only. Counter bills are under Books → Sale invoice.
         </Text>
-        {search || activeFilterCount ? (
-          <Pressable onPress={clearFilters} hitSlop={8}>
-            <Text style={styles.clear}>Clear</Text>
-          </Pressable>
-        ) : null}
-      </View>
+        <SearchBar
+          style={styles.search}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search order #, product, customer, address…"
+        />
 
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+        <View style={styles.filterRow}>
+          <View style={styles.filterField}>
+            <SelectField
+              label="Fulfillment"
+              value={fulfillment}
+              options={FULFILLMENT_OPTIONS}
+              onChange={setFulfillment}
+              searchable={false}
+            />
+          </View>
+          <View style={styles.filterField}>
+            <SelectField
+              label="Payment"
+              value={payment}
+              options={PAYMENT_OPTIONS}
+              onChange={setPayment}
+              searchable={false}
+            />
+          </View>
+        </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
-        renderItem={({ item }) => {
-          const paymentLabel = formatShopOrderPayment(item);
-          const due = isShopOrderBorrowDue(item);
-          const customer = item.customer_id
-            ? entityLabel(customerMap, item.customer_id, 'Customer')
-            : 'Walk-in';
-          const preview = (item.lines ?? [])
-            .slice(0, 2)
-            .map((line) => `${line.product_name} × ${line.quantity}`)
-            .join(', ');
-          return (
-            <Pressable
-              style={styles.row}
-              onPress={() => navigation.navigate('ShopOrderDetail', { orderId: item.id })}
-            >
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.order_number}</Text>
-                <Text style={styles.total}>
-                  {item.currency || 'INR'} {formatMoney(item.total)}
-                </Text>
-              </View>
-              <Text style={styles.meta}>
-                {item.fulfillment_mode} · {customer}
-              </Text>
-              {item.created_at ? (
-                <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
-              ) : null}
-              {paymentLabel ? (
-                <Text style={[styles.meta, due && styles.due]}>{paymentLabel}</Text>
-              ) : null}
-              {preview ? <Text style={styles.preview}>{preview}</Text> : null}
-              <Text style={styles.openHint}>Tap for bill detail</Text>
+        <View style={styles.toolbar}>
+          <Text style={styles.count}>
+            {filtered.length} online order{filtered.length === 1 ? '' : 's'}
+            {activeFilterCount ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}` : ''}
+          </Text>
+          {search || activeFilterCount ? (
+            <Pressable onPress={clearFilters} hitSlop={8}>
+              <Text style={styles.clear}>Clear</Text>
             </Pressable>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <Text style={styles.meta}>
-              {items.length ? 'No orders match these filters.' : 'No orders yet.'}
-            </Text>
-          ) : null
-        }
-      />
-    </View>
+          ) : null}
+        </View>
+
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          renderItem={({ item }) => {
+            const paymentLabel = formatShopOrderPayment(item);
+            const due = isShopOrderBorrowDue(item);
+            const customerRow = item.customer_id ? customersById.get(item.customer_id) : null;
+            const customer = item.customer_id
+              ? entityLabel(customerMap, item.customer_id, 'Customer')
+              : 'Walk-in';
+            const address = orderDeliveryAddress(item, customerRow);
+            const preview = (item.lines ?? [])
+              .slice(0, 2)
+              .map((line) => `${line.product_name} × ${line.quantity}`)
+              .join(', ');
+            return (
+              <Pressable
+                style={styles.row}
+                onPress={() => navigation.navigate('ShopOrderDetail', { orderId: item.id })}
+              >
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{item.order_number}</Text>
+                  <Text style={styles.total}>
+                    {item.currency || 'INR'} {formatMoney(item.total)}
+                  </Text>
+                </View>
+                <Text style={styles.meta}>
+                  {formatShopOrderFulfillment(item.fulfillment_mode)} · {customer} · {item.status}
+                </Text>
+                {address ? <Text style={styles.address}>{address}</Text> : null}
+                {item.created_at ? (
+                  <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
+                ) : null}
+                {paymentLabel ? (
+                  <Text style={[styles.meta, due && styles.due]}>{paymentLabel}</Text>
+                ) : null}
+                {preview ? <Text style={styles.preview}>{preview}</Text> : null}
+                <Text style={styles.openHint}>Tap for order detail</Text>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <Text style={styles.meta}>
+                {onlineOrders.length
+                  ? 'No online orders match these filters.'
+                  : `No ${t('nav.shopOrders').toLowerCase()} yet.`}
+              </Text>
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  pageHint: { color: colors.mutedForeground, fontSize: 12, marginBottom: spacing.sm, lineHeight: 16 },
   search: { marginBottom: spacing.sm },
   filterRow: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },
   filterField: { flex: 1 },
@@ -244,6 +299,7 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground, flex: 1 },
   total: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
   meta: { color: colors.mutedForeground, fontSize: 13 },
+  address: { color: colors.foreground, fontSize: 13, lineHeight: 18 },
   preview: { color: colors.foreground, fontSize: 13, marginTop: 2 },
   openHint: { color: colors.primary, fontSize: 12, fontWeight: '600', marginTop: 4 },
   due: { color: colors.destructive, fontWeight: '600' },

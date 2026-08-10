@@ -22,6 +22,7 @@ import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksVoucher, ShopCashAccount } from '@ie-platform/sdk';
@@ -290,82 +291,77 @@ export function ShopBooksExpenseScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={visibleVouchers}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <View style={styles.chipRow}>
-              <Chip label="Expense" active={listKind === 'expense'} onPress={() => setListKind('expense')} />
-              <Chip
-                label="Other income"
-                active={listKind === 'other_income'}
-                onPress={() => setListKind('other_income')}
-              />
-            </View>
-            {visibleVouchers.length ? (
-              <VoucherSummaryCards
-                summary={summary}
-                filter="all"
-                onFilterChange={() => undefined}
-                mode="expense"
-              />
-            ) : null}
-          </View>
-        }
-        renderItem={({ item }) => {
-          const badge = voucherStatusStyle(item.status);
-          const canVoid = !isVoidedVoucher(item.status);
-          const isIncome = item.voucher_type === 'other_income';
-          return (
-            <View style={styles.row}>
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.voucher_number}</Text>
-                <Text style={[styles.total, isIncome && styles.incomeTotal]}>{formatMoney(item.total)}</Text>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={visibleVouchers}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <View style={styles.chipRow}>
+                <Chip label="Expense" active={listKind === 'expense'} onPress={() => setListKind('expense')} />
+                <Chip
+                  label="Other income"
+                  active={listKind === 'other_income'}
+                  onPress={() => setListKind('other_income')}
+                />
               </View>
-              <Text style={styles.meta}>
-                {item.cash_account_name || 'No account'}
-                {item.voucher_date ? ` · ${item.voucher_date}` : ''}
-              </Text>
-              {item.notes ? <Text style={styles.meta}>{item.notes}</Text> : null}
-              <View style={styles.rowBottom}>
-                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                  <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+              {visibleVouchers.length ? <VoucherSummaryCards summary={summary} mode="expense" /> : null}
+            </View>
+          }
+          renderItem={({ item }) => {
+            const badge = voucherStatusStyle(item.status);
+            const canVoid = !isVoidedVoucher(item.status);
+            const isIncome = item.voucher_type === 'other_income';
+            return (
+              <View style={styles.row}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{item.voucher_number}</Text>
+                  <Text style={[styles.total, isIncome && styles.incomeTotal]}>{formatMoney(item.total)}</Text>
                 </View>
-                {canVoid ? (
-                  <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
-                    <Text style={styles.voidText}>Void</Text>
-                  </Pressable>
-                ) : null}
+                <Text style={styles.meta}>
+                  {item.cash_account_name || 'No account'}
+                  {item.voucher_date ? ` · ${item.voucher_date}` : ''}
+                </Text>
+                {item.notes ? <Text style={styles.meta}>{item.notes}</Text> : null}
+                <View style={styles.rowBottom}>
+                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+                  </View>
+                  {canVoid ? (
+                    <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
+                      <Text style={styles.voidText}>Void</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon={listKind === 'expense' ? 'credit-card' : 'trending-up'}
-              title={listKind === 'expense' ? 'No expenses yet' : 'No other income yet'}
-              message={
-                listKind === 'expense'
-                  ? 'Track rent, utilities, and day-to-day costs.'
-                  : 'Record interest, commission, and other non-sale income.'
-              }
-              actionLabel={listKind === 'expense' ? 'Record expense' : 'Record income'}
-              onAction={() => {
-                setEntryKind(listKind);
-                setShowForm(true);
-              }}
-            />
-          ) : null
-        }
-      />
-    </View>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon={listKind === 'expense' ? 'credit-card' : 'trending-up'}
+                title={listKind === 'expense' ? 'No expenses yet' : 'No other income yet'}
+                message={
+                  listKind === 'expense'
+                    ? 'Track rent, utilities, and day-to-day costs.'
+                    : 'Record interest, commission, and other non-sale income.'
+                }
+                actionLabel={listKind === 'expense' ? 'Record expense' : 'Record income'}
+                onAction={() => {
+                  setEntryKind(listKind);
+                  setShowForm(true);
+                }}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

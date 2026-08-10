@@ -4,24 +4,35 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { layout } from '../../theme/layout';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 
 export function NoAccessScreen() {
   const { logout, user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useBreakpoint();
 
   return (
-    <View style={[styles.wrap, { paddingTop: insets.top + spacing.xxxl, paddingBottom: insets.bottom + spacing.xl }]}>
-      <BrandMark />
-      <View style={styles.copyBlock}>
-        <Text style={styles.title}>Staff access required</Text>
-        <Text style={styles.copy}>
-          {user?.email ?? 'This account'} is set up as a customer account. Use your business&apos;s customer app to book
-          services.
-        </Text>
-        <Text style={styles.hint}>Owners and staff should sign in here after accepting a team invitation.</Text>
+    <View
+      style={[
+        styles.wrap,
+        { paddingTop: insets.top + spacing.xxxl, paddingBottom: insets.bottom + spacing.xl },
+        isDesktop && styles.wrapDesktop,
+      ]}
+    >
+      <View style={[styles.card, isDesktop && styles.cardDesktop]}>
+        <BrandMark />
+        <View style={styles.copyBlock}>
+          <Text style={styles.title}>Staff access required</Text>
+          <Text style={styles.copy}>
+            {user?.email ?? 'This account'} is set up as a customer account. Use your business&apos;s customer app to
+            book services.
+          </Text>
+          <Text style={styles.hint}>Owners and staff should sign in here after accepting a team invitation.</Text>
+        </View>
+        <Button label="Sign out" variant="outline" fullWidth size="lg" onPress={() => void logout()} />
       </View>
-      <Button label="Sign out" variant="outline" fullWidth size="lg" onPress={() => void logout()} />
     </View>
   );
 }
@@ -33,6 +44,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     gap: spacing.xl,
     justifyContent: 'center',
+  },
+  wrapDesktop: {
+    alignItems: 'center',
+  },
+  card: {
+    gap: spacing.xl,
+    width: '100%',
+  },
+  cardDesktop: {
+    maxWidth: layout.authCardMaxWidth,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xxxl,
   },
   copyBlock: { gap: spacing.md },
   title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },

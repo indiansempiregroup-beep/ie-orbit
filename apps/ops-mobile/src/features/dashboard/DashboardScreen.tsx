@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
@@ -7,13 +7,16 @@ import { BookingRow } from '../../components/BookingRow';
 import { OpsHeader, OpsHeaderIconButton } from '../../components/OpsHeader';
 import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { DesktopContent } from '../../components/DesktopContent';
 import { ScreenState } from '../../components/ScreenState';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { StatTile } from '../../components/ui/StatTile';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useNotifications } from '../../contexts/NotificationsContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
 import { useBIOverview, useEntityMaps } from '../../hooks/useOpsExtended';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -36,8 +39,10 @@ function greeting() {
 export function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const { unreadCount } = useNotifications();
   const { activeBusiness, businessId } = useWorkspace();
   const client = useOpsClient();
+  const { isDesktop } = useBreakpoint();
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const today = formatDateKey(new Date());
@@ -49,6 +54,7 @@ export function DashboardScreen() {
   const { data: bi } = useBIOverview(showReports);
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
   const [books, setBooks] = useState<ShopBooksDashboard | null>(null);
+  const [fabOpen, setFabOpen] = useState(false);
 
   const subscribedIds = useMemo(
     () => getSubscribedProductIds(activeBusiness?.product_subscriptions),
@@ -89,6 +95,10 @@ export function DashboardScreen() {
     () => bookings.filter((b) => b.start_at && new Date(b.start_at) >= new Date()).slice(0, 5),
     [bookings],
   );
+  const completedToday = useMemo(
+    () => bookings.filter((b) => String(b.status || '').toLowerCase() === 'completed').length,
+    [bookings],
+  );
   const nextBooking = upcoming[0];
   const displayName = user?.first_name || user?.full_name || 'there';
   const appointie = summary?.appointie;
@@ -100,13 +110,118 @@ export function DashboardScreen() {
     bi?.appointie?.revenue?.currency ?? bi?.revenue?.currency ?? bi?.shopie?.currency ?? summary?.currency ?? '';
   const revenueLabel = bi?.appointie || bi?.revenue ? 'Est. revenue · 30 days' : 'GMV · 30 days';
 
+  const insightLines = useMemo(() => {
+    const lines: Array<{ icon: keyof typeof Feather.glyphMap; text: string }> = [];
+    if (hasAppointie) {
+      const remaining = upcoming.length;
+      lines.push({
+        icon: 'calendar',
+        text:
+          remaining > 0
+            ? `${remaining} booking${remaining === 1 ? '' : 's'} still ahead today · ${completedToday} done`
+            : todayCount > 0
+              ? `All ${todayCount} bookings for today are done`
+              : 'No bookings scheduled for today',
+      });
+      if (nextBooking?.start_at) {
+        lines.push({
+          icon: 'clock',
+          text: `Next: ${entityLabel(serviceMap, nextBooking.service_id, 'Booking')} at ${formatTime(nextBooking.start_at)}`,
+        });
+      }
+    }
+    if (shopieEnabled && books) {
+      if (Number(books.to_collect || 0) > 0) {
+        lines.push({
+          icon: 'trending-up',
+          text: `${formatMoney(books.to_collect)} waiting to collect from parties`,
+        });
+      }
+      if (Number(books.to_pay || 0) > 0) {
+        lines.push({
+          icon: 'alert-circle',
+          text: `${formatMoney(books.to_pay)} due to suppliers`,
+        });
+      }
+    }
+    if (shopieEnabled && shopie) {
+      if ((shopie.open_orders ?? 0) > 0) {
+        lines.push({
+          icon: 'shopping-bag',
+          text: `${shopie.open_orders} open order${shopie.open_orders === 1 ? '' : 's'} need attention`,
+        });
+      }
+      if ((shopie.pending_returns ?? 0) > 0) {
+        lines.push({
+          icon: 'rotate-ccw',
+          text: `${shopie.pending_returns} return${shopie.pending_returns === 1 ? '' : 's'} pending`,
+        });
+      }
+    }
+    if (petsEnabled && pets && (pets.birthdays_next_7d ?? 0) > 0) {
+      lines.push({
+        icon: 'heart',
+        text: `${pets.birthdays_next_7d} pet birthday${pets.birthdays_next_7d === 1 ? '' : 's'} in the next 7 days`,
+      });
+    }
+    return lines.slice(0, 4);
+  }, [
+    hasAppointie,
+    upcoming.length,
+    completedToday,
+    todayCount,
+    nextBooking,
+    serviceMap,
+    shopieEnabled,
+    books,
+    shopie,
+    petsEnabled,
+    pets,
+  ]);
+
+  const showFab = hasAppointie || shopieEnabled;
+  const fabNeedsMenu = hasAppointie && shopieEnabled;
+
+  function openCreateBooking() {
+    setFabOpen(false);
+    navigation.navigate('CreateBooking', {});
+  }
+
+  function openSale() {
+    setFabOpen(false);
+    navigation.navigate('ShopPos');
+  }
+
+  function onFabPress() {
+    if (fabNeedsMenu) {
+      setFabOpen(true);
+      return;
+    }
+    if (hasAppointie) openCreateBooking();
+    else openSale();
+  }
+
   return (
     <View style={styles.screen}>
       <RefreshableScrollView refreshing={isRefreshing} onRefresh={onRefresh} contentContainerStyle={styles.scrollContent}>
         <OpsHeader
           title={displayName}
           subtitle={greeting()}
-          right={<OpsHeaderIconButton icon="search" onPress={() => navigation.navigate('Search')} accessibilityLabel="Search" />}
+          right={
+            <View style={styles.headerActions}>
+              <OpsHeaderIconButton
+                icon="search"
+                onPress={() => navigation.navigate('Search')}
+                accessibilityLabel="Search"
+              />
+              <OpsHeaderIconButton
+                icon="bell"
+                badge={unreadCount}
+                onPress={() => navigation.navigate('Alerts')}
+                accessibilityLabel="Alerts"
+              />
+            </View>
+          }
         >
           {hasAppointie ? (
             <View style={styles.nextCard}>
@@ -155,7 +270,7 @@ export function DashboardScreen() {
               <Text style={styles.nextHint}>
                 {shopie?.pending_returns ?? 0} pending returns · {shopie?.open_orders ?? 0} open
               </Text>
-              <Button label="Open orders" size="sm" variant="soft" style={styles.nextBtn} onPress={() => navigation.navigate('ShopOrders')} />
+              <Button label="Open online orders" size="sm" variant="soft" style={styles.nextBtn} onPress={() => navigation.navigate('ShopOrders')} />
             </View>
           ) : (
             <View style={styles.nextCard}>
@@ -167,155 +282,210 @@ export function DashboardScreen() {
         </OpsHeader>
 
         <View style={styles.body}>
-          <SoftLockBanner />
+          <DesktopContent>
+            <View style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}>
+              <SoftLockBanner />
 
-          {shopieEnabled && books ? (
-            <View style={styles.kpiGrid}>
-              <StatTile
-                label="To collect"
-                value={formatMoney(books.to_collect)}
-                tone="positive"
-                hint="Receivable"
-                onPress={() => navigation.navigate('ShopBooks')}
-              />
-              <StatTile
-                label="To pay"
-                value={formatMoney(books.to_pay)}
-                tone="negative"
-                hint="Payable"
-                onPress={() => navigation.navigate('ShopBooks')}
-              />
-              <StatTile label="Cash in hand" value={formatMoney(books.cash)} onPress={() => navigation.navigate('ShopBooksCash')} />
-              <StatTile label="Bank balance" value={formatMoney(books.bank)} onPress={() => navigation.navigate('ShopBooksCash')} />
-            </View>
-          ) : null}
-
-          {hasAppointie ? (
-            <View style={styles.statsRow}>
-              <StatTile label="Today" value={String(appointie?.today_bookings ?? todayCount)} />
-              <StatTile label="Customers" value={String(appointie?.active_customers ?? customers.length)} />
-              {showStaff ? (
-                <StatTile label="Staff" value={String(appointie?.staff_on_duty ?? staff.length)} />
+              {insightLines.length ? (
+                <View style={styles.insightCard}>
+                  <Text style={styles.insightTitle}>Today at a glance</Text>
+                  {insightLines.map((line) => (
+                    <View key={line.text} style={styles.insightRow}>
+                      <View style={styles.insightIcon}>
+                        <Feather name={line.icon} size={14} color={colors.primary} />
+                      </View>
+                      <Text style={styles.insightText}>{line.text}</Text>
+                    </View>
+                  ))}
+                </View>
               ) : null}
-              <StatTile label="Services" value={String(services.length)} />
-            </View>
-          ) : null}
 
-          {shopieEnabled ? (
-            <View style={styles.statsRow}>
-              <StatTile label="Orders today" value={String(shopie?.orders_today ?? 0)} />
-              <StatTile label="Open" value={String(shopie?.open_orders ?? 0)} />
-              <StatTile label="Returns" value={String(shopie?.pending_returns ?? 0)} tone="warning" />
-              <StatTile label="Month" value={String(shopie?.orders_month ?? 0)} />
-            </View>
-          ) : null}
-
-          {petsEnabled ? (
-            <View style={styles.statsRow}>
-              <StatTile label="Pets" value={String(pets?.total ?? 0)} />
-              <StatTile label="Bdays 7d" value={String(pets?.birthdays_next_7d ?? 0)} />
-              <StatTile label="Bdays 30d" value={String(pets?.birthdays_next_30d ?? 0)} />
-              <StatTile label="Photos" value={String(pets?.with_photo ?? 0)} />
-            </View>
-          ) : null}
-
-          {showReports && revenueTeaser != null ? (
-            <Pressable style={styles.revenueCard} onPress={() => navigation.navigate('BI', { tab: 'overview' })}>
-              <View style={styles.revenueIcon}>
-                <Feather name="trending-up" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.revenueCopy}>
-                <Text style={styles.revenueLabel}>{revenueLabel}</Text>
-                <Text style={styles.revenueValue}>
-                  {revenueTeaser} {revenueCurrency}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ) : null}
-
-          <Text style={styles.sectionLabel}>Most used</Text>
-          <View style={styles.reportRow}>
-            {shopieEnabled ? (
-              <>
-                <ReportLink
-                  label="Sale report"
-                  onPress={() => navigation.navigate('ShopBooksReports')}
-                />
-                <ReportLink label="POS billing" onPress={() => navigation.navigate('ShopPos')} />
-                <ReportLink label="Books" onPress={() => navigation.navigate('ShopBooks')} />
-              </>
-            ) : null}
-            {showReports ? (
-              <ReportLink label="Business intelligence" onPress={() => navigation.navigate('BI', { tab: 'overview' })} />
-            ) : null}
-          </View>
-
-          <View style={styles.quickActions}>
-            {hasAppointie ? (
-              <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
-            ) : null}
-            {shopieEnabled ? (
-              <QuickAction icon="shopping-cart" label="POS" onPress={() => navigation.navigate('ShopPos')} />
-            ) : null}
-            <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
-            {hasAppointie ? (
-              <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
-            ) : null}
-            {petsEnabled ? (
-              <QuickAction icon="heart" label="Pets" onPress={() => navigation.navigate('ShopPets', undefined)} />
-            ) : null}
-            {showStaff && hasAppointie ? (
-              <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
-            ) : null}
-          </View>
-
-          {hasAppointie ? (
-            <>
-              <SectionHeader
-                title="Upcoming today"
-                action={
-                  <Pressable onPress={() => navigation.navigate('Main', { screen: 'Bookings' } as never)}>
-                    <Text style={styles.link}>See all</Text>
-                  </Pressable>
-                }
-              />
-              <ScreenState
-                loading={loading && !bookings.length}
-                empty={!loading && upcoming.length === 0}
-                emptyTitle="Clear schedule"
-                emptyMessage="No upcoming bookings left today."
-                actionLabel="New booking"
-                onAction={() => navigation.navigate('CreateBooking', {})}
-              />
-              <View style={styles.list}>
-                {upcoming.map((booking) => (
-                  <BookingRow
-                    key={booking.id}
-                    serviceName={entityLabel(serviceMap, booking.service_id, 'Booking')}
-                    customerName={entityLabel(customerMap, booking.customer_id)}
-                    staffName={entityLabel(staffMap, booking.staff_id, '')}
-                    startAt={booking.start_at}
-                    bookingNumber={booking.booking_number}
-                    status={booking.status}
-                    onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+              {shopieEnabled && books ? (
+                <View style={styles.kpiGrid}>
+                  <StatTile
+                    label="To collect"
+                    value={formatMoney(books.to_collect)}
+                    tone="positive"
+                    hint="Receivable"
+                    onPress={() => navigation.navigate('ShopBooks')}
                   />
-                ))}
+                  <StatTile
+                    label="To pay"
+                    value={formatMoney(books.to_pay)}
+                    tone="negative"
+                    hint="Payable"
+                    onPress={() => navigation.navigate('ShopBooks')}
+                  />
+                  <StatTile label="Cash in hand" value={formatMoney(books.cash)} onPress={() => navigation.navigate('ShopBooksCash')} />
+                  <StatTile label="Bank balance" value={formatMoney(books.bank)} onPress={() => navigation.navigate('ShopBooksCash')} />
+                </View>
+              ) : null}
+
+              {hasAppointie ? (
+                <View style={styles.statsRow}>
+                  <StatTile label="Today" value={String(appointie?.today_bookings ?? todayCount)} hint="Bookings" />
+                  <StatTile label="Left today" value={String(upcoming.length)} hint="Upcoming" />
+                  <StatTile label="Customers" value={String(appointie?.active_customers ?? customers.length)} />
+                  {showStaff ? (
+                    <StatTile label="Staff" value={String(appointie?.staff_on_duty ?? staff.length)} />
+                  ) : (
+                    <StatTile label="Services" value={String(services.length)} />
+                  )}
+                </View>
+              ) : null}
+
+              {shopieEnabled ? (
+                <View style={styles.statsRow}>
+                  <StatTile label="Orders today" value={String(shopie?.orders_today ?? 0)} />
+                  <StatTile label="Open" value={String(shopie?.open_orders ?? 0)} />
+                  <StatTile label="Returns" value={String(shopie?.pending_returns ?? 0)} tone="warning" />
+                  <StatTile label="Month" value={String(shopie?.orders_month ?? 0)} />
+                </View>
+              ) : null}
+
+              {petsEnabled ? (
+                <View style={styles.statsRow}>
+                  <StatTile label="Pets" value={String(pets?.total ?? 0)} />
+                  <StatTile label="Bdays 7d" value={String(pets?.birthdays_next_7d ?? 0)} />
+                  <StatTile label="Bdays 30d" value={String(pets?.birthdays_next_30d ?? 0)} />
+                  <StatTile label="Photos" value={String(pets?.with_photo ?? 0)} />
+                </View>
+              ) : null}
+
+              {showReports && revenueTeaser != null ? (
+                <Pressable style={styles.revenueCard} onPress={() => navigation.navigate('BI', { tab: 'overview' })}>
+                  <View style={styles.revenueIcon}>
+                    <Feather name="trending-up" size={18} color={colors.primary} />
+                  </View>
+                  <View style={styles.revenueCopy}>
+                    <Text style={styles.revenueLabel}>{revenueLabel}</Text>
+                    <Text style={styles.revenueValue}>
+                      {revenueTeaser} {revenueCurrency}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                </Pressable>
+              ) : null}
+
+              <View style={isDesktop ? styles.desktopSplit : undefined}>
+                <View style={isDesktop ? styles.desktopCol : undefined}>
+                  <Text style={styles.sectionLabel}>Quick actions</Text>
+                  <View style={styles.quickActions}>
+                    {hasAppointie ? (
+                      <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
+                    ) : null}
+                    {shopieEnabled ? (
+                      <QuickAction icon="shopping-cart" label="Sale" onPress={() => navigation.navigate('ShopPos')} />
+                    ) : null}
+                    <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
+                    {hasAppointie ? (
+                      <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
+                    ) : null}
+                    {shopieEnabled ? (
+                      <QuickAction icon="layers" label="Books" onPress={() => navigation.navigate('ShopBooks')} />
+                    ) : null}
+                    {petsEnabled ? (
+                      <QuickAction icon="heart" label="Pets" onPress={() => navigation.navigate('ShopPets', undefined)} />
+                    ) : null}
+                    {showStaff && hasAppointie ? (
+                      <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
+                    ) : null}
+                  </View>
+
+                  {(shopieEnabled || showReports) && (
+                    <>
+                      <Text style={styles.sectionLabel}>Reports</Text>
+                      <View style={styles.reportRow}>
+                        {shopieEnabled ? (
+                          <>
+                            <ReportLink label="Sale report" onPress={() => navigation.navigate('ShopBooksReports')} />
+                            <ReportLink label="Sale (POS)" onPress={() => navigation.navigate('ShopPos')} />
+                          </>
+                        ) : null}
+                        {showReports ? (
+                          <ReportLink label="Business intelligence" onPress={() => navigation.navigate('BI', { tab: 'overview' })} />
+                        ) : null}
+                      </View>
+                    </>
+                  )}
+                </View>
+
+                {hasAppointie ? (
+                  <View style={isDesktop ? styles.desktopCol : undefined}>
+                    <SectionHeader
+                      title="Upcoming today"
+                      action={
+                        <Pressable onPress={() => navigation.navigate('Main', { screen: 'Bookings' } as never)}>
+                          <Text style={styles.link}>See all</Text>
+                        </Pressable>
+                      }
+                    />
+                    <ScreenState
+                      loading={loading && !bookings.length}
+                      empty={!loading && upcoming.length === 0}
+                      emptyTitle="Clear schedule"
+                      emptyMessage="No upcoming bookings left today."
+                      actionLabel="New booking"
+                      onAction={() => navigation.navigate('CreateBooking', {})}
+                    />
+                    <View style={styles.list}>
+                      {upcoming.map((booking) => (
+                        <BookingRow
+                          key={booking.id}
+                          serviceName={entityLabel(serviceMap, booking.service_id, 'Booking')}
+                          customerName={entityLabel(customerMap, booking.customer_id)}
+                          staffName={entityLabel(staffMap, booking.staff_id, '')}
+                          startAt={booking.start_at}
+                          bookingNumber={booking.booking_number}
+                          status={booking.status}
+                          onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
               </View>
-            </>
-          ) : null}
+            </View>
+          </DesktopContent>
         </View>
       </RefreshableScrollView>
 
-      {hasAppointie ? (
-        <Pressable style={styles.fab} onPress={() => navigation.navigate('CreateBooking', {})}>
+      {showFab ? (
+        <Pressable
+          style={[styles.fab, isDesktop && styles.fabDesktop]}
+          onPress={onFabPress}
+          accessibilityLabel={fabNeedsMenu ? 'Create booking or sale' : hasAppointie ? 'New booking' : 'New sale'}
+        >
           <Feather name="plus" size={24} color="#fff" />
         </Pressable>
-      ) : shopieEnabled ? (
-        <Pressable style={styles.fab} onPress={() => navigation.navigate('ShopPos')}>
-          <Feather name="shopping-cart" size={22} color="#fff" />
-        </Pressable>
       ) : null}
+
+      <Modal visible={fabOpen} transparent animationType="fade" onRequestClose={() => setFabOpen(false)}>
+        <Pressable style={styles.fabBackdrop} onPress={() => setFabOpen(false)}>
+          <View style={styles.fabSheet}>
+            <Text style={styles.fabSheetTitle}>Create</Text>
+            <Pressable style={styles.fabOption} onPress={openCreateBooking}>
+              <View style={styles.fabOptionIcon}>
+                <Feather name="calendar" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.fabOptionCopy}>
+                <Text style={styles.fabOptionLabel}>Booking</Text>
+                <Text style={styles.fabOptionHint}>New appointment</Text>
+              </View>
+            </Pressable>
+            <Pressable style={styles.fabOption} onPress={openSale}>
+              <View style={styles.fabOptionIcon}>
+                <Feather name="shopping-cart" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.fabOptionCopy}>
+                <Text style={styles.fabOptionLabel}>Sale</Text>
+                <Text style={styles.fabOptionHint}>POS checkout</Text>
+              </View>
+            </Pressable>
+            <Button label="Cancel" variant="outline" fullWidth onPress={() => setFabOpen(false)} />
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -351,6 +521,7 @@ function QuickAction({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: 100 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nextCard: {
     marginTop: spacing.xl,
     backgroundColor: colors.tint,
@@ -371,7 +542,31 @@ const styles = StyleSheet.create({
   nextMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   nextMetaText: { ...typography.caption, color: colors.mutedForeground },
   nextBtn: { alignSelf: 'flex-start', marginTop: spacing.md },
-  body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, gap: spacing.lg },
+  body: { paddingTop: spacing.xxl },
+  bodyInner: { paddingHorizontal: spacing.xl, gap: spacing.lg },
+  bodyInnerDesktop: { paddingHorizontal: 0, gap: spacing.xl },
+  desktopSplit: { flexDirection: 'row', gap: spacing.xl, alignItems: 'flex-start' },
+  desktopCol: { flex: 1, gap: spacing.lg, minWidth: 0 },
+  insightCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  insightTitle: { ...typography.label, fontFamily: fonts.bodySemi, color: colors.foreground },
+  insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  insightIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  insightText: { ...typography.body, color: colors.foreground, flex: 1, lineHeight: 20 },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   revenueCard: {
@@ -448,4 +643,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  fabDesktop: {
+    display: 'none',
+  },
+  fabBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+    padding: spacing.xl,
+  },
+  fabSheet: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  fabSheetTitle: { ...typography.title, color: colors.foreground },
+  fabOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  fabOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabOptionCopy: { flex: 1 },
+  fabOptionLabel: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },
+  fabOptionHint: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 
 type Tone = 'default' | 'positive' | 'negative' | 'warning';
@@ -15,8 +16,9 @@ type Props = {
 };
 
 export function StatTile({ label, value, hint, tone = 'default', onPress, style }: Props) {
+  const { isDesktop } = useBreakpoint();
   const content = (
-    <View style={[styles.tile, style]}>
+    <View style={[styles.tile, isDesktop && styles.tileDesktop, style]}>
       <Text style={styles.label}>{label}</Text>
       <Text
         style={[
@@ -33,6 +35,7 @@ export function StatTile({ label, value, hint, tone = 'default', onPress, style 
         <View style={styles.hintRow}>
           {tone === 'negative' ? <Feather name="arrow-down" size={12} color={colors.destructive} /> : null}
           {tone === 'positive' ? <Feather name="arrow-up" size={12} color={colors.success} /> : null}
+          {tone === 'warning' ? <Feather name="alert-circle" size={12} color={colors.warning} /> : null}
           <Text style={styles.hint}>{hint}</Text>
         </View>
       ) : null}
@@ -41,7 +44,10 @@ export function StatTile({ label, value, hint, tone = 'default', onPress, style 
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [pressed && styles.pressed]}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [isDesktop && styles.pressableDesktop, pressed && styles.pressed]}
+      >
         {content}
       </Pressable>
     );
@@ -59,6 +65,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     gap: 4,
+  },
+  tileDesktop: {
+    minWidth: '22%',
+    flexBasis: '22%',
+    flexGrow: 1,
+  },
+  pressableDesktop: {
+    flexGrow: 1,
+    flexBasis: '22%',
+    minWidth: '22%',
   },
   label: { ...typography.caption, color: colors.mutedForeground },
   value: {

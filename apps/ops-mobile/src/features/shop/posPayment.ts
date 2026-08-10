@@ -37,6 +37,14 @@ export function isShopOrderBorrowDue(order: ShopOrder): boolean {
   );
 }
 
+export function formatShopOrderFulfillment(mode?: string | null): string {
+  const value = String(mode || '').toLowerCase();
+  if (value === 'pos') return 'Counter sale';
+  if (value === 'pickup') return 'Pickup';
+  if (value === 'delivery') return 'Delivery';
+  return mode || '—';
+}
+
 export function formatMoney(value: string | number | undefined | null, fallback = '0.00'): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n)) return fallback;

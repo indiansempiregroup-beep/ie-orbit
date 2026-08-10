@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AddressPlacesField } from '../../components/AddressPlacesField';
+import { DesktopPage } from '../../components/DesktopPage';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -40,6 +41,7 @@ export function BranchesScreen() {
   };
 
   return (
+    <DesktopPage>
     <RefreshableScrollView contentContainerStyle={styles.wrap} onRefresh={reload}>
       <Text style={styles.title}>Offices</Text>
       <Text style={styles.subtitle}>
@@ -159,6 +161,7 @@ export function BranchesScreen() {
         </Card>
       ))}
     </RefreshableScrollView>
+    </DesktopPage>
   );
 }
 

@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
 import { Button } from '../../components/ui/Button';
@@ -10,7 +11,7 @@ import { ScreenState } from '../../components/ScreenState';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useCustomers } from '../../hooks/useOpsData';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
-import { colors, spacing } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function CustomersScreen() {
@@ -34,7 +35,7 @@ export function CustomersScreen() {
   }, [customers, search]);
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <View style={styles.toolbar}>
         <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search customers" />
         <Button label="Add" onPress={() => navigation.navigate('CustomerForm', {})} />
@@ -72,12 +73,11 @@ export function CustomersScreen() {
           );
         })}
       </RefreshableScrollView>
-    </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   toolbar: {
     flexDirection: 'row',
     gap: spacing.sm,

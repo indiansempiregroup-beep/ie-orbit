@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { StatTile } from '../../components/ui/StatTile';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopBooksVoucher, ShopCashAccount, ShopSupplier } from '@ie-platform/sdk';
@@ -224,162 +225,164 @@ export function ShopBooksCashScreen() {
   }
 
   return (
-    <RefreshableScrollView
-      refreshing={refreshing || loading}
-      onRefresh={onRefresh}
-      contentContainerStyle={styles.content}
-    >
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+    <DesktopPage>
+      <RefreshableScrollView
+        refreshing={refreshing || loading}
+        onRefresh={onRefresh}
+        contentContainerStyle={styles.content}
+      >
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.grid}>
-        <StatTile label="Cash in hand" value={formatMoney(cashTotal)} />
-        <StatTile label="Bank balance" value={formatMoney(bankTotal)} />
-        <StatTile label="Payment in" value={formatMoney(paymentInTotal)} tone="positive" hint="Collected" />
-        <StatTile label="Payment out" value={formatMoney(paymentOutTotal)} tone="negative" hint="Paid out" />
-      </View>
+        <View style={styles.grid}>
+          <StatTile label="Cash in hand" value={formatMoney(cashTotal)} />
+          <StatTile label="Bank balance" value={formatMoney(bankTotal)} />
+          <StatTile label="Payment in" value={formatMoney(paymentInTotal)} tone="positive" hint="Collected" />
+          <StatTile label="Payment out" value={formatMoney(paymentOutTotal)} tone="negative" hint="Paid out" />
+        </View>
 
-      {showAccountForm ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Add account</Text>
-          <TextInput
-            style={styles.input}
-            value={accountName}
-            onChangeText={setAccountName}
-            placeholder="Account name"
-            placeholderTextColor={colors.mutedForeground}
-          />
-          <View style={styles.chipRow}>
-            <Chip label="Cash" active={accountType === 'cash'} onPress={() => setAccountType('cash')} />
-            <Chip label="Bank" active={accountType === 'bank'} onPress={() => setAccountType('bank')} />
+        {showAccountForm ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Add account</Text>
+            <TextInput
+              style={styles.input}
+              value={accountName}
+              onChangeText={setAccountName}
+              placeholder="Account name"
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <View style={styles.chipRow}>
+              <Chip label="Cash" active={accountType === 'cash'} onPress={() => setAccountType('cash')} />
+              <Chip label="Bank" active={accountType === 'bank'} onPress={() => setAccountType('bank')} />
+            </View>
+            <TextInput
+              style={styles.input}
+              value={accountOpening}
+              onChangeText={(value) => setAccountOpening(value.replace(/[^0-9.]/g, ''))}
+              placeholder="Opening balance"
+              keyboardType="decimal-pad"
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <Button label={busy ? 'Saving…' : 'Save account'} loading={busy} fullWidth onPress={() => void saveAccount()} />
           </View>
+        ) : null}
+
+        <Text style={styles.sectionTitle}>Accounts</Text>
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        {accounts.map((account) => (
+          <View key={account.id} style={styles.accountRow}>
+            <View style={styles.accountIcon}>
+              <Feather name={account.account_type === 'bank' ? 'credit-card' : 'dollar-sign'} size={16} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{account.name}</Text>
+              <Text style={styles.meta}>{account.account_type}</Text>
+            </View>
+            <Text style={styles.balance}>{formatMoney(account.current_balance)}</Text>
+          </View>
+        ))}
+        {!loading && !accounts.length ? (
+          <EmptyState
+            icon="credit-card"
+            title="No accounts yet"
+            message="Add a cash or bank account to record payments."
+            actionLabel="Add account"
+            onAction={() => setShowAccountForm(true)}
+          />
+        ) : null}
+
+        <Text style={styles.sectionTitle}>Record payment</Text>
+        <View style={styles.card}>
+          <View style={styles.chipRow}>
+            <Chip
+              label="Payment in"
+              active={paymentType === 'payment_in'}
+              onPress={() => {
+                setPaymentType('payment_in');
+                setPaymentPartyId('');
+              }}
+            />
+            <Chip
+              label="Payment out"
+              active={paymentType === 'payment_out'}
+              onPress={() => {
+                setPaymentType('payment_out');
+                setPaymentPartyId('');
+              }}
+            />
+          </View>
+
+          <SelectField
+            label={paymentType === 'payment_in' ? 'From customer' : 'To supplier'}
+            value={paymentPartyId}
+            options={partyOptions}
+            onChange={setPaymentPartyId}
+            searchable
+          />
+          <SelectField label="Account" value={paymentAccountId} options={accountOptions} onChange={setPaymentAccountId} />
           <TextInput
             style={styles.input}
-            value={accountOpening}
-            onChangeText={(value) => setAccountOpening(value.replace(/[^0-9.]/g, ''))}
-            placeholder="Opening balance"
+            value={paymentAmount}
+            onChangeText={(value) => setPaymentAmount(value.replace(/[^0-9.]/g, ''))}
+            placeholder="Amount"
             keyboardType="decimal-pad"
             placeholderTextColor={colors.mutedForeground}
           />
-          <Button label={busy ? 'Saving…' : 'Save account'} loading={busy} fullWidth onPress={() => void saveAccount()} />
-        </View>
-      ) : null}
-
-      <Text style={styles.sectionTitle}>Accounts</Text>
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      {accounts.map((account) => (
-        <View key={account.id} style={styles.accountRow}>
-          <View style={styles.accountIcon}>
-            <Feather name={account.account_type === 'bank' ? 'credit-card' : 'dollar-sign'} size={16} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{account.name}</Text>
-            <Text style={styles.meta}>{account.account_type}</Text>
-          </View>
-          <Text style={styles.balance}>{formatMoney(account.current_balance)}</Text>
-        </View>
-      ))}
-      {!loading && !accounts.length ? (
-        <EmptyState
-          icon="credit-card"
-          title="No accounts yet"
-          message="Add a cash or bank account to record payments."
-          actionLabel="Add account"
-          onAction={() => setShowAccountForm(true)}
-        />
-      ) : null}
-
-      <Text style={styles.sectionTitle}>Record payment</Text>
-      <View style={styles.card}>
-        <View style={styles.chipRow}>
-          <Chip
-            label="Payment in"
-            active={paymentType === 'payment_in'}
-            onPress={() => {
-              setPaymentType('payment_in');
-              setPaymentPartyId('');
-            }}
+          <TextInput
+            style={styles.input}
+            value={paymentDate}
+            onChangeText={setPaymentDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.mutedForeground}
           />
-          <Chip
-            label="Payment out"
-            active={paymentType === 'payment_out'}
-            onPress={() => {
-              setPaymentType('payment_out');
-              setPaymentPartyId('');
-            }}
+          <TextInput
+            style={[styles.input, styles.notes]}
+            value={paymentNotes}
+            onChangeText={setPaymentNotes}
+            placeholder="Notes (optional)"
+            multiline
+            placeholderTextColor={colors.mutedForeground}
+          />
+          <Button
+            label={busy ? 'Saving…' : `Record ${paymentType === 'payment_in' ? 'payment in' : 'payment out'}`}
+            loading={busy}
+            fullWidth
+            onPress={() => void submitPayment()}
           />
         </View>
 
-        <SelectField
-          label={paymentType === 'payment_in' ? 'From customer' : 'To supplier'}
-          value={paymentPartyId}
-          options={partyOptions}
-          onChange={setPaymentPartyId}
-          searchable
-        />
-        <SelectField label="Account" value={paymentAccountId} options={accountOptions} onChange={setPaymentAccountId} />
-        <TextInput
-          style={styles.input}
-          value={paymentAmount}
-          onChangeText={(value) => setPaymentAmount(value.replace(/[^0-9.]/g, ''))}
-          placeholder="Amount"
-          keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
-        <TextInput
-          style={styles.input}
-          value={paymentDate}
-          onChangeText={setPaymentDate}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.mutedForeground}
-        />
-        <TextInput
-          style={[styles.input, styles.notes]}
-          value={paymentNotes}
-          onChangeText={setPaymentNotes}
-          placeholder="Notes (optional)"
-          multiline
-          placeholderTextColor={colors.mutedForeground}
-        />
-        <Button
-          label={busy ? 'Saving…' : `Record ${paymentType === 'payment_in' ? 'payment in' : 'payment out'}`}
-          loading={busy}
-          fullWidth
-          onPress={() => void submitPayment()}
-        />
-      </View>
-
-      <Text style={styles.sectionTitle}>Recent payments</Text>
-      {payments.slice(0, 25).map((item) => {
-        const badge = voucherStatusStyle(item.status);
-        const isIn = item.voucher_type === 'payment_in';
-        const canVoid = !isVoidedVoucher(item.status);
-        return (
-          <View key={item.id} style={styles.row}>
-            <View style={styles.rowTop}>
-              <Text style={styles.name}>
-                {isIn ? '↓ In' : '↑ Out'} · {item.voucher_number}
-              </Text>
-              <Text style={[styles.total, isIn ? styles.inAmount : styles.outAmount]}>{formatMoney(item.total)}</Text>
-            </View>
-            <Text style={styles.meta}>
-              {item.customer_name || item.supplier_name || item.cash_account_name || '—'}
-              {item.voucher_date ? ` · ${item.voucher_date}` : ''}
-            </Text>
-            <View style={styles.rowBottom}>
-              <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+        <Text style={styles.sectionTitle}>Recent payments</Text>
+        {payments.slice(0, 25).map((item) => {
+          const badge = voucherStatusStyle(item.status);
+          const isIn = item.voucher_type === 'payment_in';
+          const canVoid = !isVoidedVoucher(item.status);
+          return (
+            <View key={item.id} style={styles.row}>
+              <View style={styles.rowTop}>
+                <Text style={styles.name}>
+                  {isIn ? '↓ In' : '↑ Out'} · {item.voucher_number}
+                </Text>
+                <Text style={[styles.total, isIn ? styles.inAmount : styles.outAmount]}>{formatMoney(item.total)}</Text>
               </View>
-              {canVoid ? (
-                <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
-                  <Text style={styles.voidText}>Void</Text>
-                </Pressable>
-              ) : null}
+              <Text style={styles.meta}>
+                {item.customer_name || item.supplier_name || item.cash_account_name || '—'}
+                {item.voucher_date ? ` · ${item.voucher_date}` : ''}
+              </Text>
+              <View style={styles.rowBottom}>
+                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                  <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+                </View>
+                {canVoid ? (
+                  <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
+                    <Text style={styles.voidText}>Void</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
-          </View>
-        );
-      })}
-      {!loading && !payments.length ? <Text style={styles.meta}>No payments recorded yet.</Text> : null}
-    </RefreshableScrollView>
+          );
+        })}
+        {!loading && !payments.length ? <Text style={styles.meta}>No payments recorded yet.</Text> : null}
+      </RefreshableScrollView>
+    </DesktopPage>
   );
 }
 

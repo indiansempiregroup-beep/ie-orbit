@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SearchBar } from '../../components/SearchBar';
 import { SelectField } from '../../components/SelectField';
+import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomers } from '../../hooks/useOpsData';
@@ -126,95 +127,97 @@ export function ShopReturnsScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      <SearchBar
-        style={styles.search}
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search return #, order, product…"
-      />
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <SearchBar
+          style={styles.search}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search return #, order, product…"
+        />
 
-      <View style={styles.filterRow}>
-        <View style={styles.filterField}>
-          <SelectField
-            label="Inventory"
-            value={restock}
-            options={RESTOCK_OPTIONS}
-            onChange={setRestock}
-            searchable={false}
-          />
+        <View style={styles.filterRow}>
+          <View style={styles.filterField}>
+            <SelectField
+              label="Inventory"
+              value={restock}
+              options={RESTOCK_OPTIONS}
+              onChange={setRestock}
+              searchable={false}
+            />
+          </View>
         </View>
-      </View>
 
-      <View style={styles.toolbar}>
-        <Text style={styles.count}>
-          {filtered.length} return{filtered.length === 1 ? '' : 's'}
-        </Text>
-        {search || restock ? (
-          <Pressable onPress={clearFilters} hitSlop={8}>
-            <Text style={styles.clear}>Clear</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      <Text style={styles.hint}>Process returns from an order’s bill detail.</Text>
-
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
-        renderItem={({ item }) => {
-          const order = orderMap.get(String(item.order));
-          const customerId = item.customer ? String(item.customer) : order?.customer_id;
-          const customer = customerId
-            ? entityLabel(customerMap, customerId, 'Customer')
-            : 'Walk-in';
-          const products = returnLineSummary(item);
-          return (
-            <Pressable
-              style={styles.row}
-              onPress={() => {
-                if (order?.id) {
-                  navigation.navigate('ShopOrderDetail', { orderId: order.id });
-                }
-              }}
-              disabled={!order?.id}
-            >
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.return_number}</Text>
-                <Text style={styles.total}>
-                  {item.currency || 'INR'} {formatMoney(item.refund_total)}
-                </Text>
-              </View>
-              <Text style={styles.meta}>
-                {order?.order_number ? `${order.order_number} · ` : ''}
-                {customer}
-              </Text>
-              {item.created_at ? (
-                <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
-              ) : null}
-              <Text style={styles.meta}>
-                {item.restock ? 'Restocked to inventory' : 'No restock'}
-                {item.reason ? ` · ${item.reason}` : ''}
-              </Text>
-              {products ? <Text style={styles.preview}>{products}</Text> : null}
-              {order?.id ? <Text style={styles.openHint}>Tap to open bill</Text> : null}
+        <View style={styles.toolbar}>
+          <Text style={styles.count}>
+            {filtered.length} return{filtered.length === 1 ? '' : 's'}
+          </Text>
+          {search || restock ? (
+            <Pressable onPress={clearFilters} hitSlop={8}>
+              <Text style={styles.clear}>Clear</Text>
             </Pressable>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <Text style={styles.meta}>
-              {returns.length ? 'No returns match these filters.' : 'No returns yet.'}
-            </Text>
-          ) : null
-        }
-      />
-    </View>
+          ) : null}
+        </View>
+
+        <Text style={styles.hint}>Process returns from an order’s bill detail.</Text>
+
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          renderItem={({ item }) => {
+            const order = orderMap.get(String(item.order));
+            const customerId = item.customer ? String(item.customer) : order?.customer_id;
+            const customer = customerId
+              ? entityLabel(customerMap, customerId, 'Customer')
+              : 'Walk-in';
+            const products = returnLineSummary(item);
+            return (
+              <Pressable
+                style={styles.row}
+                onPress={() => {
+                  if (order?.id) {
+                    navigation.navigate('ShopOrderDetail', { orderId: order.id });
+                  }
+                }}
+                disabled={!order?.id}
+              >
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{item.return_number}</Text>
+                  <Text style={styles.total}>
+                    {item.currency || 'INR'} {formatMoney(item.refund_total)}
+                  </Text>
+                </View>
+                <Text style={styles.meta}>
+                  {order?.order_number ? `${order.order_number} · ` : ''}
+                  {customer}
+                </Text>
+                {item.created_at ? (
+                  <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
+                ) : null}
+                <Text style={styles.meta}>
+                  {item.restock ? 'Restocked to inventory' : 'No restock'}
+                  {item.reason ? ` · ${item.reason}` : ''}
+                </Text>
+                {products ? <Text style={styles.preview}>{products}</Text> : null}
+                {order?.id ? <Text style={styles.openHint}>Tap to open bill</Text> : null}
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <Text style={styles.meta}>
+                {returns.length ? 'No returns match these filters.' : 'No returns yet.'}
+              </Text>
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

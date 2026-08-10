@@ -16,6 +16,7 @@ import { View } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { I18nextProvider } from 'react-i18next';
+import { AppErrorBoundary } from './src/components/AppErrorBoundary';
 import { BrandSplash } from './src/components/BrandSplash';
 import { DateTimeZoneSync } from './src/components/DateTimeZoneSync';
 import { LanguageSync } from './src/components/LanguageSync';
@@ -58,25 +59,29 @@ export default function App() {
   }
 
   return (
-    <I18nextProvider i18n={i18n}>
-      <SafeAreaProvider>
-        <KeyboardProvider>
-          <AuthProvider>
-            <LanguageSync>
-              <WorkspaceProvider>
-                <NotificationsProvider>
-                  <ToastProvider>
-                    <DateTimeZoneSync>
-                      <StatusBar style="dark" />
-                      <RootNavigator />
-                    </DateTimeZoneSync>
-                  </ToastProvider>
-                </NotificationsProvider>
-              </WorkspaceProvider>
-            </LanguageSync>
-          </AuthProvider>
-        </KeyboardProvider>
-      </SafeAreaProvider>
-    </I18nextProvider>
+    <AppErrorBoundary>
+      <I18nextProvider i18n={i18n}>
+        <SafeAreaProvider>
+          <KeyboardProvider>
+            <AuthProvider>
+              <LanguageSync>
+                <WorkspaceProvider>
+                  <NotificationsProvider>
+                    <ToastProvider>
+                      <DateTimeZoneSync>
+                        <StatusBar style="dark" />
+                        <View style={{ flex: 1 }}>
+                          <RootNavigator />
+                        </View>
+                      </DateTimeZoneSync>
+                    </ToastProvider>
+                  </NotificationsProvider>
+                </WorkspaceProvider>
+              </LanguageSync>
+            </AuthProvider>
+          </KeyboardProvider>
+        </SafeAreaProvider>
+      </I18nextProvider>
+    </AppErrorBoundary>
   );
 }

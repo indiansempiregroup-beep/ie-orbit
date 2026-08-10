@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, type NavigationState } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,8 @@ import type { RootStackParamList } from './types';
 import { opsStackScreenOptions } from './OpsStackHeader';
 import { AuthStack } from './AuthStack';
 import { MainTabs } from './MainTabs';
+import { DesktopShell } from './DesktopShell';
+import { rootNavigationRef } from './rootNavigationRef';
 import { WorkspacePickerScreen } from '../features/workspace/WorkspacePickerScreen';
 import { NoAccessScreen } from '../features/auth/NoAccessScreen';
 import { PlatformAdminHomeScreen } from '../features/admin/PlatformAdminHomeScreen';
@@ -20,6 +22,7 @@ import { PlatformAdminTenantDetailScreen } from '../features/admin/PlatformAdmin
 import { PlatformAdminAuditScreen } from '../features/admin/PlatformAdminAuditScreen';
 import { PlatformAdminCouponsScreen } from '../features/admin/PlatformAdminCouponsScreen';
 import { SearchScreen } from '../features/search/SearchScreen';
+import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
 import { CreateBookingScreen } from '../features/bookings/CreateBookingScreen';
 import { BookingDetailScreen } from '../features/bookings/BookingDetailScreen';
 import { CustomersScreen } from '../features/customers/CustomersScreen';
@@ -67,7 +70,6 @@ import { ShopStockAdjustScreen } from '../features/shop/ShopStockAdjustScreen';
 import { WhatsAppScreen } from '../features/grow/WhatsAppScreen';
 import { AIPosterScreen } from '../features/grow/AIPosterScreen';
 import { GoogleProfileScreen } from '../features/grow/GoogleProfileScreen';
-import { OnlineStoreScreen } from '../features/grow/OnlineStoreScreen';
 import { SyncShareScreen } from '../features/grow/SyncShareScreen';
 import { UtilitiesScreen } from '../features/grow/UtilitiesScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
@@ -101,12 +103,25 @@ function LazyBarcodeScanner(props: React.ComponentProps<typeof BarcodeScannerScr
 }
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+function getActiveRouteName(state: NavigationState | undefined): string | undefined {
+  if (!state) return undefined;
+  const route = state.routes[state.index];
+  if (route.state) {
+    return getActiveRouteName(route.state as NavigationState);
+  }
+  return route.name;
+}
+
 const stackScreen = (
   name: keyof RootStackParamList,
   component: React.ComponentType,
   title: string,
   subtitle?: string,
-) => (
+) => {
+  if (__DEV__ && typeof component !== 'function') {
+    console.error(`[RootNavigator] Screen "${String(name)}" component is not a function:`, component);
+  }
+  return (
   <Stack.Screen
     key={name}
     name={name}
@@ -117,13 +132,15 @@ const stackScreen = (
       ...(subtitle ? ({ subtitle } as object) : null),
     }}
   />
-);
+  );
+};
 
 export function RootNavigator() {
   const { t } = useTranslation();
   const { user, token, loading: authLoading } = useAuth();
-  const { ready, loading: workspaceLoading, tenants } = useWorkspace();
+  const { ready } = useWorkspace();
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [activeRoute, setActiveRoute] = useState<string | undefined>();
 
   const isAuthenticated = Boolean(token && user);
   const platformAdminOnly = isPlatformAdminOnly(user);
@@ -131,11 +148,11 @@ export function RootNavigator() {
   const opsAccess = hasOpsAccess(user) && tenantOps;
 
   useEffect(() => {
-    // Platform-admin-only accounts skip workspace bootstrap.
-    if (!authLoading && (platformAdminOnly || !workspaceLoading)) {
+    // Don't gate the tree on workspace fetch — picker handles loading/errors.
+    if (!authLoading) {
       setBootstrapped(true);
     }
-  }, [authLoading, workspaceLoading, platformAdminOnly]);
+  }, [authLoading]);
 
   usePushRegistration(Boolean(isAuthenticated && opsAccess && ready && user?.email_verified_at));
 
@@ -147,11 +164,15 @@ export function RootNavigator() {
     );
   }
 
-  const needsWorkspacePicker =
-    isAuthenticated && opsAccess && tenants.length > 1 && !ready;
+  // Stay on the picker until tenant + business IDs are resolved.
+  const showWorkspacePicker = isAuthenticated && opsAccess && !ready;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={rootNavigationRef}
+      onStateChange={(state) => setActiveRoute(getActiveRouteName(state))}
+      onReady={() => setActiveRoute(getActiveRouteName(rootNavigationRef.getRootState()))}
+    >
       {!isAuthenticated ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Auth" component={AuthStack} />
@@ -168,75 +189,77 @@ export function RootNavigator() {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="NoAccess" component={NoAccessScreen} />
         </Stack.Navigator>
-      ) : needsWorkspacePicker || !ready ? (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+      ) : showWorkspacePicker ? (
+        <Stack.Navigator key="workspace-picker" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="WorkspacePicker" component={WorkspacePickerScreen} />
         </Stack.Navigator>
       ) : (
-        <Stack.Navigator initialRouteName="Main" screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Main" component={MainTabs} />
-          {stackScreen('Search', SearchScreen, t('common.search'))}
-          {stackScreen('CreateBooking', CreateBookingScreen, t('nav.newBookingShort'))}
-          {stackScreen('BookingDetail', BookingDetailScreen, t('bookings.appointment'))}
-          {stackScreen('Customers', CustomersScreen, t('nav.customers'))}
-          {stackScreen('CustomerForm', CustomerFormScreen, t('bookings.customer'))}
-          {stackScreen('CustomerDetail', CustomerDetailScreen, t('bookings.customer'))}
-          {stackScreen('Reviews', ReviewsScreen, t('settings.reviews'))}
-          {stackScreen('Services', ServicesScreen, t('nav.services'))}
-          {stackScreen('ServiceForm', ServiceFormScreen, t('bookings.service'))}
-          {stackScreen('ServiceDetail', ServiceDetailScreen, t('bookings.service'))}
-          {stackScreen('StaffList', StaffScreen, t('nav.staff'))}
-          {stackScreen('StaffForm', StaffFormScreen, t('nav.staff'))}
-          {stackScreen('StaffDetail', StaffDetailScreen, t('nav.staff'))}
-          {stackScreen('StaffSchedule', StaffScheduleScreen, t('nav.weeklySchedule'))}
-          {stackScreen('StaffAvailability', StaffAvailabilityScreen, t('nav.staffAvailability'))}
-          {stackScreen('Settings', SettingsScreen, t('nav.settings'))}
-          {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
-          {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
-          {stackScreen('ProductSettings', ProductSettingsScreen, t('settings.productsBilling'))}
-          {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
-          {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
-          {stackScreen('ShopOrders', ShopOrdersScreen, t('nav.shopOrders'))}
-          {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
-          {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}
-          {stackScreen('BarcodeScanner', LazyBarcodeScanner, t('nav.scanBarcode'))}
-          {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
-          {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
-          {stackScreen('ShopPets', ShopPetsScreen, t('nav.shopPets'))}
-          {stackScreen('ShopPetForm', ShopPetFormScreen, 'Pet')}
-          {stackScreen('ShopPetDetail', ShopPetDetailScreen, 'Pet details')}
-          {stackScreen('ShopBooks', ShopBooksDashboardScreen, t('nav.shopBooks'))}
-          {stackScreen('ShopBooksSale', ShopBooksSaleScreen, t('nav.shopSale'))}
-          {stackScreen('ShopBooksPurchase', ShopBooksPurchaseScreen, t('nav.shopPurchase'))}
-          {stackScreen('ShopBooksExpense', ShopBooksExpenseScreen, t('nav.shopExpense'))}
-          {stackScreen('ShopBooksCash', ShopBooksCashScreen, t('nav.shopCashBank'))}
-          {stackScreen('ShopBooksParties', ShopBooksPartiesScreen, t('nav.shopParties'))}
-          {stackScreen('ShopBooksReports', ShopBooksReportsScreen, t('nav.shopBooksReports'))}
-          {stackScreen('ShopBooksCompliance', ShopBooksComplianceScreen, t('nav.shopCompliance'))}
-          {stackScreen('ShopBooksQuotations', ShopBooksQuotationsScreen, 'Estimates / Proforma')}
-          {stackScreen('ShopBooksNotes', ShopBooksNotesScreen, 'Credit / Debit notes')}
-          {stackScreen('ShopBooksDocuments', ShopBooksDocumentsScreen, 'Documents')}
-          {stackScreen('ShopGodowns', ShopGodownsScreen, 'Godowns')}
-          {stackScreen('ShopBooksCheques', ShopBooksChequesScreen, 'Cheques')}
-          {stackScreen('ShopBooksLoans', ShopBooksLoansScreen, 'Loans')}
-          {stackScreen('ShopLoyalty', ShopLoyaltyScreen, 'Loyalty')}
-          {stackScreen('ShopStockAdjust', ShopStockAdjustScreen, 'Stock adjust')}
-          {stackScreen('GrowWhatsApp', WhatsAppScreen, 'WhatsApp')}
-          {stackScreen('GrowAIPoster', AIPosterScreen, 'AI Poster')}
-          {stackScreen('GrowGoogleProfile', GoogleProfileScreen, 'Google Profile')}
-          {stackScreen('GrowOnlineStore', OnlineStoreScreen, 'Online Store')}
-          {stackScreen('GrowSyncShare', SyncShareScreen, 'Sync & share')}
-          {stackScreen('GrowUtilities', UtilitiesScreen, 'Utilities')}
-          {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
-          {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
-          {stackScreen('Reports', ReportsScreen, t('nav.reports'))}
-          {stackScreen('Team', TeamScreen, t('settings.team'))}
-          {stackScreen('Profile', ProfileScreen, t('profile.title'))}
-          {stackScreen('ProfileEdit', ProfileEditScreen, t('profile.editTitle'))}
-          {stackScreen('Security', SecurityScreen, t('profile.security'))}
-          {stackScreen('Sessions', SessionsScreen, t('profile.sessions'))}
-          {stackScreen('VerifyEmail', VerifyEmailScreen, t('profile.verifyEmail'))}
-        </Stack.Navigator>
+        <DesktopShell key="app-shell" activeRoute={activeRoute}>
+          <Stack.Navigator key="app-stack" initialRouteName="Main" screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Main" component={MainTabs} />
+            {stackScreen('Search', SearchScreen, t('common.search'))}
+            {stackScreen('Alerts', NotificationsScreen, t('nav.alerts'))}
+            {stackScreen('CreateBooking', CreateBookingScreen, t('nav.newBookingShort'))}
+            {stackScreen('BookingDetail', BookingDetailScreen, t('bookings.appointment'))}
+            {stackScreen('Customers', CustomersScreen, t('nav.customers'))}
+            {stackScreen('CustomerForm', CustomerFormScreen, t('bookings.customer'))}
+            {stackScreen('CustomerDetail', CustomerDetailScreen, t('bookings.customer'))}
+            {stackScreen('Reviews', ReviewsScreen, t('settings.reviews'))}
+            {stackScreen('Services', ServicesScreen, t('nav.services'))}
+            {stackScreen('ServiceForm', ServiceFormScreen, t('bookings.service'))}
+            {stackScreen('ServiceDetail', ServiceDetailScreen, t('bookings.service'))}
+            {stackScreen('StaffList', StaffScreen, t('nav.staff'))}
+            {stackScreen('StaffForm', StaffFormScreen, t('nav.staff'))}
+            {stackScreen('StaffDetail', StaffDetailScreen, t('nav.staff'))}
+            {stackScreen('StaffSchedule', StaffScheduleScreen, t('nav.weeklySchedule'))}
+            {stackScreen('StaffAvailability', StaffAvailabilityScreen, t('nav.staffAvailability'))}
+            {stackScreen('Settings', SettingsScreen, t('nav.settings'))}
+            {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
+            {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
+            {stackScreen('ProductSettings', ProductSettingsScreen, t('settings.productsBilling'))}
+            {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
+            {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
+            {stackScreen('ShopOrders', ShopOrdersScreen, t('nav.shopOrders'))}
+            {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
+            {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}
+            {stackScreen('BarcodeScanner', LazyBarcodeScanner, t('nav.scanBarcode'))}
+            {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
+            {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
+            {stackScreen('ShopPets', ShopPetsScreen, t('nav.shopPets'))}
+            {stackScreen('ShopPetForm', ShopPetFormScreen, 'Pet')}
+            {stackScreen('ShopPetDetail', ShopPetDetailScreen, 'Pet details')}
+            {stackScreen('ShopBooks', ShopBooksDashboardScreen, t('nav.shopBooks'))}
+            {stackScreen('ShopBooksSale', ShopBooksSaleScreen, t('nav.shopSale'))}
+            {stackScreen('ShopBooksPurchase', ShopBooksPurchaseScreen, t('nav.shopPurchase'))}
+            {stackScreen('ShopBooksExpense', ShopBooksExpenseScreen, t('nav.shopExpense'))}
+            {stackScreen('ShopBooksCash', ShopBooksCashScreen, t('nav.shopCashBank'))}
+            {stackScreen('ShopBooksParties', ShopBooksPartiesScreen, t('nav.shopParties'))}
+            {stackScreen('ShopBooksReports', ShopBooksReportsScreen, t('nav.shopBooksReports'))}
+            {stackScreen('ShopBooksCompliance', ShopBooksComplianceScreen, t('nav.shopCompliance'))}
+            {stackScreen('ShopBooksQuotations', ShopBooksQuotationsScreen, 'Estimates / Proforma')}
+            {stackScreen('ShopBooksNotes', ShopBooksNotesScreen, 'Credit / Debit notes')}
+            {stackScreen('ShopBooksDocuments', ShopBooksDocumentsScreen, 'Documents')}
+            {stackScreen('ShopGodowns', ShopGodownsScreen, 'Godowns')}
+            {stackScreen('ShopBooksCheques', ShopBooksChequesScreen, 'Cheques')}
+            {stackScreen('ShopBooksLoans', ShopBooksLoansScreen, 'Loans')}
+            {stackScreen('ShopLoyalty', ShopLoyaltyScreen, 'Loyalty')}
+            {stackScreen('ShopStockAdjust', ShopStockAdjustScreen, 'Stock adjust')}
+            {stackScreen('GrowWhatsApp', WhatsAppScreen, 'WhatsApp')}
+            {stackScreen('GrowAIPoster', AIPosterScreen, 'AI Poster')}
+            {stackScreen('GrowGoogleProfile', GoogleProfileScreen, 'Google Profile')}
+            {stackScreen('GrowSyncShare', SyncShareScreen, 'Sync & share')}
+            {stackScreen('GrowUtilities', UtilitiesScreen, 'Utilities')}
+            {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
+            {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
+            {stackScreen('Reports', ReportsScreen, t('nav.reports'))}
+            {stackScreen('Team', TeamScreen, t('settings.team'))}
+            {stackScreen('Profile', ProfileScreen, t('profile.title'))}
+            {stackScreen('ProfileEdit', ProfileEditScreen, t('profile.editTitle'))}
+            {stackScreen('Security', SecurityScreen, t('profile.security'))}
+            {stackScreen('Sessions', SessionsScreen, t('profile.sessions'))}
+            {stackScreen('VerifyEmail', VerifyEmailScreen, t('profile.verifyEmail'))}
+          </Stack.Navigator>
+        </DesktopShell>
       )}
     </NavigationContainer>
   );

@@ -22,6 +22,7 @@ from apps.shopie.models import (
     ShopBooksVoucher,
     ShopCashAccount,
     ShopOrder,
+    ShopOrderLine,
     ShopPartyLedgerEntry,
     ShopProduct,
     ShopQuotation,
@@ -153,6 +154,37 @@ class BooksService:
             tenant=tenant, business=business, id=cash_account_id
         )
 
+    def _ensure_cash_account(
+        self, *, tenant: Tenant, business: Business, cash_account_id: UUID | str | None = None
+    ) -> ShopCashAccount:
+        if cash_account_id:
+            return self._cash_account_for(
+                tenant=tenant, business=business, cash_account_id=cash_account_id
+            )
+        existing = (
+            ShopCashAccount.objects.select_for_update()
+            .filter(tenant=tenant, business=business, is_active=True, account_type=CashAccountType.CASH)
+            .order_by("created_at")
+            .first()
+        )
+        if existing is None:
+            existing = (
+                ShopCashAccount.objects.select_for_update()
+                .filter(tenant=tenant, business=business, is_active=True)
+                .order_by("created_at")
+                .first()
+            )
+        if existing is not None:
+            return existing
+        return ShopCashAccount.objects.create(
+            tenant=tenant,
+            business=business,
+            name="Cash",
+            account_type=CashAccountType.CASH,
+            opening_balance=Decimal("0.00"),
+            current_balance=Decimal("0.00"),
+        )
+
     def _adjust_cash_balance(self, *, account: ShopCashAccount | None, delta: Decimal) -> None:
         if account is None:
             return
@@ -177,7 +209,56 @@ class BooksService:
                 row["gst_rate"] = product.gst_rate
             if row.get("rate") is None:
                 row["rate"] = product.price
+            if row.get("tax_inclusive") is None:
+                product_meta = product.metadata if isinstance(product.metadata, dict) else {}
+                row["tax_inclusive"] = bool(product_meta.get("tax_inclusive"))
         return row
+
+    @staticmethod
+    def _product_tax_inclusive(product: ShopProduct | None) -> bool:
+        if product is None:
+            return False
+        meta = product.metadata if isinstance(product.metadata, dict) else {}
+        return bool(meta.get("tax_inclusive"))
+
+    @staticmethod
+    def _books_line_from_order_line(line: ShopOrderLine) -> dict[str, Any]:
+        """Build a books line that preserves finalized POS tax (incl. tax-inclusive pricing)."""
+        qty = Decimal(str(line.quantity or "0"))
+        unit = Decimal(str(line.unit_price or "0"))
+        tax_rate = Decimal(str(line.tax_rate or "0"))
+        line_subtotal = Decimal(str(line.line_subtotal or "0"))
+        line_total = Decimal(str(line.line_total or "0"))
+        inclusive = BooksService._product_tax_inclusive(line.product)
+        if inclusive:
+            # Keep shelf/MRP rate; fold line + bill discounts into discount so total matches POS.
+            discount = _q((unit * qty) - line_total)
+            if discount < 0:
+                discount = Decimal("0.00")
+            return {
+                "product_id": line.product_id,
+                "name": line.product_name,
+                "qty": qty,
+                "rate": unit,
+                "discount": discount,
+                "gst_rate": tax_rate,
+                "tax_inclusive": True,
+                "hsn_sac": getattr(line.product, "hsn_sac", "") if line.product_id else "",
+            }
+        # Exclusive: taxable base is already finalized on the order line.
+        discount = _q((unit * qty) - line_subtotal)
+        if discount < 0:
+            discount = Decimal("0.00")
+        return {
+            "product_id": line.product_id,
+            "name": line.product_name,
+            "qty": qty,
+            "rate": unit,
+            "discount": discount,
+            "gst_rate": tax_rate,
+            "tax_inclusive": False,
+            "hsn_sac": getattr(line.product, "hsn_sac", "") if line.product_id else "",
+        }
 
     # ------------------------------------------------------------------
     # Sale / purchase vouchers
@@ -429,6 +510,7 @@ class BooksService:
             is_interstate=interstate,
             notes=str(data.get("notes") or ""),
             line_items=totals["lines"],
+            linked_order=data.get("linked_order"),
             metadata=data.get("metadata") or {},
         )
 
@@ -1128,7 +1210,8 @@ class BooksService:
             tenant=tenant, business=business, linked_order=order
         ).first()
         if existing is not None:
-            return existing
+            return self._repair_sale_amount_paid_from_order(voucher=existing, order=order)
+
         if order.status not in {OrderStatus.CONFIRMED, OrderStatus.READY, OrderStatus.COMPLETED}:
             raise ValidationError(
                 {"order": "Only confirmed/ready/completed orders can be posted to books."}
@@ -1136,27 +1219,53 @@ class BooksService:
 
         metadata = order.metadata if isinstance(order.metadata, dict) else {}
         pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
+        payment_method = str(pos.get("payment_method") or "").strip().lower()
         payment_status = str(pos.get("payment_status") or "").lower()
         amount_paid = Decimal("0.00")
         if payment_status in {"paid", "settled"}:
             amount_paid = order.total
-        elif pos.get("amount_paid"):
+        elif pos.get("amount_paid") not in (None, ""):
             amount_paid = Decimal(str(pos.get("amount_paid") or "0"))
+        elif payment_method == "borrow":
+            amount_paid = Decimal("0.00")
+        elif (
+            str(order.fulfillment_mode or "").lower() == "pos"
+            and payment_method in {"cash", "upi", "card"}
+        ):
+            # Counter till payment — treat as collected even if metadata was incomplete.
+            amount_paid = order.total
 
         lines = [
-            {
-                "product_id": line.product_id,
-                "name": line.product_name,
-                "qty": line.quantity,
-                "rate": line.unit_price,
-                "discount": line.discount_amount,
-                "gst_rate": line.tax_rate,
-                "hsn_sac": getattr(line.product, "hsn_sac", "") if line.product_id else "",
-            }
+            self._books_line_from_order_line(line)
             for line in order.lines.select_related("product").all()
         ]
         if not lines:
             raise ValidationError({"order": "Order has no line items to post."})
+
+        resolved_cash_id = cash_account_id
+        if amount_paid > 0 and not resolved_cash_id:
+            resolved_cash_id = self._ensure_cash_account(tenant=tenant, business=business).id
+
+        customer_gstin = str(
+            metadata.get("customer_gstin")
+            or (getattr(order.customer, "gstin", None) if order.customer_id else "")
+            or ""
+        ).strip().upper()
+        customer_name = str(
+            metadata.get("customer_name")
+            or (
+                order.customer.display_name
+                if order.customer_id and order.customer
+                else "Walk-in / B2C"
+            )
+        )
+        voucher_meta: dict[str, Any] = {
+            "source_order_id": str(order.id),
+            "source": "sale",
+            "customer_name": customer_name,
+        }
+        if customer_gstin:
+            voucher_meta["customer_gstin"] = customer_gstin
 
         voucher = self.create_sale_voucher(
             tenant=tenant,
@@ -1165,15 +1274,91 @@ class BooksService:
                 "customer": order.customer,
                 "lines": lines,
                 "voucher_date": order.created_at.date(),
-                "notes": f"POS sale {order.order_number}",
+                "notes": f"Sale {order.order_number}",
                 "amount_paid": amount_paid,
-                "cash_account_id": cash_account_id,
+                "cash_account_id": resolved_cash_id,
                 "linked_order": order,
                 "adjust_stock": False,
-                "metadata": {"source_order_id": str(order.id)},
+                "metadata": voucher_meta,
             },
         )
         return voucher
+
+    def _expected_amount_paid_from_order(self, order: ShopOrder) -> Decimal:
+        metadata = order.metadata if isinstance(order.metadata, dict) else {}
+        pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
+        payment_method = str(pos.get("payment_method") or "").strip().lower()
+        payment_status = str(pos.get("payment_status") or "").lower()
+        if payment_status in {"paid", "settled"}:
+            return _q(order.total)
+        if pos.get("amount_paid") not in (None, ""):
+            return _q(pos.get("amount_paid") or "0")
+        if payment_method == "borrow":
+            return Decimal("0.00")
+        if (
+            str(order.fulfillment_mode or "").lower() == "pos"
+            and payment_method in {"cash", "upi", "card"}
+        ):
+            return _q(order.total)
+        return Decimal("0.00")
+
+    def _repair_sale_amount_paid_from_order(
+        self, *, voucher: ShopBooksVoucher, order: ShopOrder
+    ) -> ShopBooksVoucher:
+        """Fix vouchers that were posted before POS cash/UPI/card was marked paid."""
+        expected = self._expected_amount_paid_from_order(order)
+        current = _q(voucher.amount_paid or 0)
+        if expected == current:
+            return voucher
+        # Only auto-correct unpaid→paid for till payments (avoid clobbering partial payments).
+        if current == 0 and expected > 0:
+            cash_account = voucher.cash_account
+            if cash_account is None:
+                cash_account = self._ensure_cash_account(
+                    tenant=voucher.tenant, business=voucher.business
+                )
+                voucher.cash_account = cash_account
+            delta = expected - current
+            voucher.amount_paid = expected
+            voucher.save(update_fields=["amount_paid", "cash_account", "updated_at", "version"])
+            if delta > 0 and cash_account is not None:
+                self._adjust_cash_balance(account=cash_account, delta=delta)
+                self._record_ledger(
+                    tenant=voucher.tenant,
+                    business=voucher.business,
+                    party_kind=PartyKind.CUSTOMER,
+                    customer=voucher.customer,
+                    entry_type=LedgerEntryType.PAYMENT_IN,
+                    amount=delta,
+                    direction=LedgerDirection.CREDIT,
+                    voucher=voucher,
+                    notes=f"Payment repair {voucher.voucher_number}",
+                )
+        return voucher
+
+    def repair_unpaid_pos_sale_vouchers(self, *, tenant: Tenant, business: Business) -> int:
+        """Correct sale vouchers linked to paid POS orders that still show amount_paid=0."""
+        qs = (
+            ShopBooksVoucher.objects.filter(
+                tenant=tenant,
+                business=business,
+                voucher_type=VoucherType.SALE,
+                amount_paid=0,
+                linked_order__isnull=False,
+            )
+            .exclude(status=VoucherStatus.VOID)
+            .select_related("linked_order", "cash_account", "customer")[:80]
+        )
+        fixed = 0
+        for voucher in qs:
+            order = voucher.linked_order
+            if order is None:
+                continue
+            before = _q(voucher.amount_paid or 0)
+            repaired = self._repair_sale_amount_paid_from_order(voucher=voucher, order=order)
+            if _q(repaired.amount_paid or 0) != before:
+                fixed += 1
+        return fixed
 
     # ------------------------------------------------------------------
     # Reports

@@ -312,6 +312,18 @@ class ShopOrderListCreateView(APIView):
                 Customer, tenant=request.current_tenant, business=business, id=data["customer_id"]
             )
         try:
+            customer_gstin = str(data.get("customer_gstin") or "").strip().upper()
+            metadata_extra: dict = {}
+            if customer_gstin:
+                metadata_extra["customer_gstin"] = customer_gstin
+            elif customer is not None and getattr(customer, "gstin", None):
+                metadata_extra["customer_gstin"] = str(customer.gstin).strip().upper()
+            if customer is not None:
+                metadata_extra["customer_name"] = (
+                    customer.display_name
+                    or f"{customer.first_name or ''} {customer.last_name or ''}".strip()
+                    or str(customer.id)
+                )
             order = self.orders.create_order(
                 tenant=request.current_tenant,
                 business=business,
@@ -326,6 +338,7 @@ class ShopOrderListCreateView(APIView):
                 bill_discount_type=data.get("bill_discount_type") or "",
                 bill_discount_value=data.get("bill_discount_value") or 0,
                 payment_method=data.get("payment_method") or "",
+                metadata_extra=metadata_extra or None,
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc

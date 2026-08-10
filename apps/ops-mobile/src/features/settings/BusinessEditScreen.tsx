@@ -31,6 +31,7 @@ export function BusinessEditScreen() {
   const [country, setCountry] = useState('');
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [currency, setCurrency] = useState('INR');
+  const [gstTaxNumber, setGstTaxNumber] = useState('');
   const [logoAsset, setLogoAsset] = useState<ImagePickerAsset | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [upiVpa, setUpiVpa] = useState('');
@@ -54,6 +55,7 @@ export function BusinessEditScreen() {
     setCountry(activeBusiness.country ?? '');
     setTimezone(activeBusiness.timezone || 'Asia/Kolkata');
     setCurrency(activeBusiness.currency || 'INR');
+    setGstTaxNumber((activeBusiness as { gst_tax_number?: string }).gst_tax_number || '');
     setUpiVpa((activeBusiness as { upi_vpa?: string }).upi_vpa || '');
     setPaymentQrPreview((activeBusiness as { payment_qr_url?: string }).payment_qr_url || null);
   }, [activeBusiness]);
@@ -118,6 +120,7 @@ export function BusinessEditScreen() {
                 email,
                 timezone,
                 currency,
+                gst_tax_number: gstTaxNumber.trim().toUpperCase(),
                 primary_contact: primaryContact || undefined,
                 website: website || undefined,
                 address_line1: addressLine1 || undefined,
@@ -178,6 +181,17 @@ export function BusinessEditScreen() {
         <Input label="State" value={state} onChangeText={setState} />
         <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} />
         <Input label="Country" value={country} onChangeText={setCountry} />
+      </FormSection>
+
+      <FormSection title="Tax & GST">
+        <Input
+          label="GSTIN"
+          value={gstTaxNumber}
+          onChangeText={setGstTaxNumber}
+          autoCapitalize="characters"
+          placeholder="22AAAAA0000A1Z5"
+          hint="Business GST identification number used on invoices and e-invoicing."
+        />
       </FormSection>
 
       <FormSection title="Shop payments">

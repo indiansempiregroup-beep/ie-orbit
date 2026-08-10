@@ -244,6 +244,21 @@ class ShopBooksVoucherListCreateView(APIView):
             customer_id=request.query_params.get("customer_id") or None,
             supplier_id=request.query_params.get("supplier_id") or None,
         )
+        if str(request.query_params.get("type") or "").lower() == "sale":
+            # Heal POS cash/UPI/card invoices that were wrongly posted as unpaid.
+            self.books.repair_unpaid_pos_sale_vouchers(
+                tenant=request.current_tenant, business=business
+            )
+            qs = self.books.list_vouchers(
+                tenant=request.current_tenant,
+                business=business,
+                voucher_type=request.query_params.get("type"),
+                status=request.query_params.get("status"),
+                date_from=_parse_date(request.query_params.get("date_from")),
+                date_to=_parse_date(request.query_params.get("date_to")),
+                customer_id=request.query_params.get("customer_id") or None,
+                supplier_id=request.query_params.get("supplier_id") or None,
+            )
         return paginated_list_response(request, qs, ShopBooksVoucherSerializer)
 
     def post(self, request: Request) -> Response:

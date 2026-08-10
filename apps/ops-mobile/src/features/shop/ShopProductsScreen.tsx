@@ -18,6 +18,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { SelectField } from '../../components/SelectField';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-platform/sdk';
@@ -110,100 +111,102 @@ export function ShopProductsScreen() {
   }, [items, search]);
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      <TextInput
-        value={search}
-        onChangeText={setSearch}
-        onSubmitEditing={() => void load()}
-        placeholder="Search products"
-        style={styles.input}
-        placeholderTextColor={colors.mutedForeground}
-      />
-      <View style={styles.filters}>
-        <View style={styles.filterHalf}>
-          <SelectField label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
-        </View>
-        <View style={styles.filterHalf}>
-          <SelectField
-            label="Category"
-            value={category}
-            options={CATEGORY_OPTIONS}
-            onChange={setCategory}
-            searchable
-          />
-        </View>
-      </View>
-      {status || category ? (
-        <Pressable
-          onPress={() => {
-            setStatus('');
-            setCategory('');
-          }}
-          style={styles.clearFilters}
-        >
-          <Text style={styles.clearFiltersText}>Clear filters</Text>
-        </Pressable>
-      ) : null}
-
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
-        renderItem={({ item }) => {
-          const uri = resolveMediaUrl(primaryProductImageUrl(item));
-          const photoCount = normalizeProductGallery(galleryFromProduct(item)).length;
-          return (
-            <Pressable
-              style={styles.row}
-              onPress={() => navigation.navigate('ShopProductAdd', { productId: item.id })}
-            >
-              <View style={styles.rowInner}>
-                {uri ? (
-                  <Image source={{ uri }} style={styles.thumb} />
-                ) : (
-                  <View style={[styles.thumb, styles.thumbEmpty]}>
-                    <Feather name="package" size={18} color={colors.mutedForeground} />
-                  </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.meta}>
-                    {item.status}
-                    {item.category
-                      ? ` · ${
-                          SHOP_PRODUCT_CATEGORIES.find((c) => c.value === item.category)?.label ||
-                          item.category
-                        }`
-                      : ''}{' '}
-                    · {item.currency} {item.price} · stock {item.stock_on_hand}
-                  </Text>
-                  <Text style={styles.meta}>
-                    SKU {item.sku || '—'} ·{' '}
-                    {(item.barcodes ?? []).map((b) => b.code).join(' · ') || 'No barcodes'}
-                    {photoCount ? ` · ${photoCount}/${MAX_PRODUCT_IMAGES} photos` : ''}
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-              </View>
-            </Pressable>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="package"
-              title="No products yet"
-              message="Add items with price and stock to sell from POS or sale invoices."
-              actionLabel="Add product"
-              onAction={() => navigation.navigate('ShopProductAdd')}
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          onSubmitEditing={() => void load()}
+          placeholder="Search products"
+          style={styles.input}
+          placeholderTextColor={colors.mutedForeground}
+        />
+        <View style={styles.filters}>
+          <View style={styles.filterHalf}>
+            <SelectField label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
+          </View>
+          <View style={styles.filterHalf}>
+            <SelectField
+              label="Category"
+              value={category}
+              options={CATEGORY_OPTIONS}
+              onChange={setCategory}
+              searchable
             />
-          ) : null
-        }
-      />
-    </View>
+          </View>
+        </View>
+        {status || category ? (
+          <Pressable
+            onPress={() => {
+              setStatus('');
+              setCategory('');
+            }}
+            style={styles.clearFilters}
+          >
+            <Text style={styles.clearFiltersText}>Clear filters</Text>
+          </Pressable>
+        ) : null}
+
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          renderItem={({ item }) => {
+            const uri = resolveMediaUrl(primaryProductImageUrl(item));
+            const photoCount = normalizeProductGallery(galleryFromProduct(item)).length;
+            return (
+              <Pressable
+                style={styles.row}
+                onPress={() => navigation.navigate('ShopProductAdd', { productId: item.id })}
+              >
+                <View style={styles.rowInner}>
+                  {uri ? (
+                    <Image source={{ uri }} style={styles.thumb} />
+                  ) : (
+                    <View style={[styles.thumb, styles.thumbEmpty]}>
+                      <Feather name="package" size={18} color={colors.mutedForeground} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{item.name}</Text>
+                    <Text style={styles.meta}>
+                      {item.status}
+                      {item.category
+                        ? ` · ${
+                            SHOP_PRODUCT_CATEGORIES.find((c) => c.value === item.category)?.label ||
+                            item.category
+                          }`
+                        : ''}{' '}
+                      · {item.currency} {item.price} · stock {item.stock_on_hand}
+                    </Text>
+                    <Text style={styles.meta}>
+                      SKU {item.sku || '—'} ·{' '}
+                      {(item.barcodes ?? []).map((b) => b.code).join(' · ') || 'No barcodes'}
+                      {photoCount ? ` · ${photoCount}/${MAX_PRODUCT_IMAGES} photos` : ''}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+                </View>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="package"
+                title="No products yet"
+                message="Add items with price and stock to sell from Sale or invoices."
+                actionLabel="Add product"
+                onAction={() => navigation.navigate('ShopProductAdd')}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

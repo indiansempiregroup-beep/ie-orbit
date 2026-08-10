@@ -1,15 +1,17 @@
 import React from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { DesktopContent } from '../../components/DesktopContent';
 import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
 import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import {
   canAccessReports,
   canAccessSettings,
@@ -17,6 +19,7 @@ import {
   formatUserRole,
 } from '../../utils/roles';
 import { hasShopie } from '../../utils/products';
+import { confirmAction } from '../../utils/confirmAction';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -29,6 +32,7 @@ export function MoreScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useBreakpoint();
   const { user, logout } = useAuth();
   const { activeBusiness } = useWorkspace();
   const displayName = user?.full_name || user?.email || t('common.account');
@@ -38,41 +42,50 @@ export function MoreScreen() {
   const showShop = hasShopie(activeBusiness?.product_subscriptions);
   const workspaceLabel = activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace');
 
-  function onSignOut() {
-    Alert.alert(t('auth.signOut'), t('auth.signOutConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('auth.signOut'), style: 'destructive', onPress: () => void logout() },
-    ]);
+  async function onSignOut() {
+    const ok = await confirmAction({
+      title: t('auth.signOut'),
+      message: t('auth.signOutConfirm'),
+      confirmLabel: t('auth.signOut'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (ok) await logout();
   }
 
   return (
     <RefreshableScrollView
       style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl }]}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + spacing.xl },
+        isDesktop && styles.contentDesktop,
+      ]}
     >
-      <View style={styles.hero}>
-        <Avatar name={displayName} size="xl" src={user?.profile_photo} />
-        <Text style={styles.name}>{displayName}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
-        <Text style={styles.meta}>
-          {workspaceLabel}
-          {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
-        </Text>
-      </View>
+      <DesktopContent>
+        <View style={styles.hero}>
+          <Avatar name={displayName} size="xl" src={user?.profile_photo} />
+          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.email}>{user?.email}</Text>
+          <Text style={styles.meta}>
+            {workspaceLabel}
+            {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
+          </Text>
+        </View>
 
-      <View style={styles.menu}>
+        <View style={styles.menu}>
         {showShop ? (
           <MenuSection title="Sale">
             <MenuRow
               icon="shopping-cart"
-              label="POS billing"
-              subtitle="Counter checkout"
+              label={t('nav.pos')}
+              subtitle="Counter GST bill → Books"
               onPress={() => navigation.navigate('ShopPos')}
             />
             <MenuRow
               icon="book-open"
               label={t('nav.shopBooks')}
-              subtitle="Invoices, purchase, cash & reports"
+              subtitle="Sale invoices, purchase, cash & reports"
               onPress={() => navigation.navigate('ShopBooks')}
             />
             <MenuRow
@@ -83,6 +96,7 @@ export function MoreScreen() {
             <MenuRow
               icon="list"
               label={t('nav.shopOrders')}
+              subtitle="Pickup & delivery shopping"
               onPress={() => navigation.navigate('ShopOrders')}
             />
             <MenuRow
@@ -123,12 +137,6 @@ export function MoreScreen() {
               label="Google Profile"
               subtitle="Listing URL & place ID"
               onPress={() => navigation.navigate('GrowGoogleProfile')}
-            />
-            <MenuRow
-              icon="shopping-bag"
-              label="Online Store"
-              subtitle="Storefront link & toggle"
-              onPress={() => navigation.navigate('GrowOnlineStore')}
             />
             <MenuRow
               icon="share-2"
@@ -187,7 +195,8 @@ export function MoreScreen() {
           <MenuRow icon="user" label={t('profile.title')} onPress={() => navigation.navigate('Profile')} />
           <MenuRow icon="log-out" label={t('auth.signOut')} destructive last onPress={onSignOut} />
         </MenuSection>
-      </View>
+        </View>
+      </DesktopContent>
     </RefreshableScrollView>
   );
 }
@@ -195,6 +204,7 @@ export function MoreScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl, paddingHorizontal: spacing.xl },
+  contentDesktop: { paddingHorizontal: 0 },
   hero: { alignItems: 'center', paddingBottom: spacing.xxl },
   name: {
     fontFamily: fonts.bodyBold,

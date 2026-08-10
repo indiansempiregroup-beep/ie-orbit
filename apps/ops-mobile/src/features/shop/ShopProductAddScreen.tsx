@@ -51,6 +51,7 @@ const emptyForm = {
   description: '',
   price: '0',
   tax_rate: '0',
+  tax_inclusive: 'excluded' as 'included' | 'excluded',
   currency: 'INR',
   stock_on_hand: '0',
   low_stock_threshold: '0',
@@ -106,13 +107,19 @@ function applyEnrichment(
 
 function formFromProduct(product: ShopProduct): FormState {
   const primaryBarcode = product.barcodes?.find((row) => row.is_primary) || product.barcodes?.[0];
+  const meta = product.metadata && typeof product.metadata === 'object' ? product.metadata : {};
+  const taxInclusive =
+    typeof (product as { tax_inclusive?: boolean }).tax_inclusive === 'boolean'
+      ? Boolean((product as { tax_inclusive?: boolean }).tax_inclusive)
+      : Boolean(meta.tax_inclusive);
   return {
     sku: product.sku || '',
     name: product.name || '',
     brand: product.brand || '',
     description: product.description || '',
     price: String(product.price ?? '0'),
-    tax_rate: String(product.tax_rate ?? '0'),
+    tax_rate: String(product.tax_rate ?? product.gst_rate ?? '0'),
+    tax_inclusive: taxInclusive ? 'included' : 'excluded',
     currency: product.currency || 'INR',
     stock_on_hand: String(product.stock_on_hand ?? '0'),
     low_stock_threshold: String(product.low_stock_threshold ?? '0'),
@@ -461,6 +468,7 @@ export function ShopProductAddScreen() {
       description: form.description,
       price: form.price,
       tax_rate: form.tax_rate,
+      gst_rate: form.tax_rate,
       currency: form.currency,
       stock_on_hand: form.stock_on_hand,
       low_stock_threshold: form.low_stock_threshold,
@@ -470,6 +478,7 @@ export function ShopProductAddScreen() {
       ...(form.category ? { category: form.category } : { category: '' }),
       metadata: {
         images: buildProductImageMetadata(gallery),
+        tax_inclusive: form.tax_inclusive === 'included',
       },
       barcodes: form.barcode
         ? [{ code: form.barcode.trim(), barcode_type: form.barcode_type, is_primary: true }]
@@ -610,7 +619,7 @@ export function ShopProductAddScreen() {
           ['brand', 'Brand'],
           ['sku', 'SKU'],
           ['price', 'Price'],
-          ['tax_rate', 'Tax %'],
+          ['tax_rate', 'GST %'],
           ['stock_on_hand', 'Stock on hand'],
           ['low_stock_threshold', 'Low stock alert'],
           ['pack_size', 'Pack size / quantity'],
@@ -632,6 +641,29 @@ export function ShopProductAddScreen() {
           />
         </View>
       ))}
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>GST on price</Text>
+        <View style={styles.chips}>
+          <Pressable
+            style={[styles.chip, form.tax_inclusive === 'excluded' && styles.chipActive]}
+            onPress={() => setField('tax_inclusive', 'excluded')}
+          >
+            <Text style={styles.chipText}>GST excluded</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.chip, form.tax_inclusive === 'included' && styles.chipActive]}
+            onPress={() => setField('tax_inclusive', 'included')}
+          >
+            <Text style={styles.chipText}>GST included</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.meta}>
+          {form.tax_inclusive === 'included'
+            ? 'Selling price already includes GST. POS will split tax from the price.'
+            : 'GST is added on top of the selling price at checkout.'}
+        </Text>
+      </View>
 
       <SelectField
         label="Currency"

@@ -3,11 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
+import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
 import { ScreenState } from '../../components/ScreenState';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import {
   useBIForecast,
@@ -93,7 +95,7 @@ export function BIScreen() {
   const tabLocked = !allowed.has(tab);
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <View style={styles.tabs}>
         {visibleTabs.map((key) => {
           const locked = !allowed.has(key);
@@ -136,7 +138,7 @@ export function BIScreen() {
         {!tabLocked && tab === 'forecast' ? <BIForecast data={forecast.data} loading={forecast.loading} /> : null}
         {!tabLocked && tab === 'reports' ? <BIReports data={reports.data} loading={reports.loading} /> : null}
       </RefreshableScrollView>
-    </View>
+    </DesktopPage>
   );
 }
 
@@ -151,8 +153,9 @@ function Metric({
   icon: keyof typeof Feather.glyphMap;
   hint?: string | null;
 }) {
+  const { isDesktop } = useBreakpoint();
   return (
-    <Card style={styles.metric}>
+    <Card style={[styles.metric, isDesktop && styles.metricDesktop]}>
       <View style={styles.metricIcon}>
         <Feather name={icon} size={16} color={colors.primary} />
       </View>
@@ -473,7 +476,6 @@ function BIReports({ data, loading }: { data: ReturnType<typeof useBIReports>['d
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   tabs: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -498,6 +500,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   stack: { gap: spacing.md },
   metric: { width: '47%' },
+  metricDesktop: { width: '23%' },
   metricIcon: {
     width: 32,
     height: 32,

@@ -1,15 +1,25 @@
-import React, { useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import QRCode from 'react-native-qrcode-svg';
+import QRCodeSvg from 'react-native-qrcode-svg';
 import type { ApiClient } from '@ie-platform/sdk';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { SectionHeader } from '../../components/ui/SectionHeader';
 import { uploadMedia } from '../../api/media';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+
+/** Metro/babel interop sometimes leaves the default export nested under `.default`. */
+function PaymentQrCode({ value, size }: { value: string; size: number }) {
+  const Comp =
+    typeof QRCodeSvg === 'function'
+      ? QRCodeSvg
+      : (QRCodeSvg as { default?: React.ComponentType<{ value: string; size: number }> })?.default;
+  if (typeof Comp !== 'function') {
+    return <Text style={styles.meta}>QR unavailable</Text>;
+  }
+  return <Comp value={value} size={size} />;
+}
 
 export type SubscriptionUpiPayRequest = {
   productCode: string;
@@ -20,6 +30,8 @@ export type SubscriptionUpiPayRequest = {
   extraOffices?: number;
   petsPackEnabled?: boolean;
   mode: 'subscribe' | 'change_plan' | 'addons';
+  /** When true, generate QR immediately when the sheet opens. */
+  autoStart?: boolean;
 };
 
 type SessionPayload = {
@@ -68,7 +80,7 @@ export function SubscriptionUpiPaySheet({
 
   const title = useMemo(() => {
     if (request.mode === 'change_plan') return `Upgrade ${request.productName}`;
-    if (request.mode === 'addons') return `Pay add-ons · ${request.productName}`;
+    if (request.mode === 'addons') return `Pay current total · ${request.productName}`;
     return `Subscribe · ${request.productName}`;
   }, [request.mode, request.productName]);
 
@@ -92,11 +104,18 @@ export function SubscriptionUpiPaySheet({
     }
   }
 
+  useEffect(() => {
+    if (request.autoStart && status === 'idle' && !loading && !session) {
+      void startCheckout();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- start once when opened with autoStart
+  }, [request.autoStart]);
+
   async function pickProof() {
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
+        const picked = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+        });
     if (picked.canceled || !picked.assets[0]) return;
     try {
       const uploaded = await uploadMedia({
@@ -137,88 +156,138 @@ export function SubscriptionUpiPaySheet({
   }
 
   return (
-    <Card>
-      <SectionHeader title={title} />
-      <Text style={styles.meta}>
-        {request.planName || request.planCode}
-        {request.extraStaff ? ` · +${request.extraStaff} staff` : ''}
-        {request.extraOffices ? ` · +${request.extraOffices} offices` : ''}
-        {request.petsPackEnabled ? ' · Pets pack' : ''}
-      </Text>
-
-      {status === 'idle' ? (
-        <View style={styles.stack}>
-          <Text style={styles.body}>
-            Pay IE Platform via UPI for the exact amount, then submit your UTR for confirmation.
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityRole="button" />
+        <View style={styles.sheet}>
+          <View style={styles.handle} />
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.meta}>
+            {request.planName || request.planCode}
+            {request.extraStaff ? ` · +${request.extraStaff} staff` : ''}
+            {request.extraOffices ? ` · +${request.extraOffices} offices` : ''}
+            {request.petsPackEnabled ? ' · Pets pack' : ''}
           </Text>
-          <Button label="Generate payment QR" loading={loading} fullWidth onPress={() => void startCheckout()} />
-          <Button label="Cancel" variant="outline" fullWidth onPress={onClose} />
-        </View>
-      ) : null}
 
-      {session && (status === 'ready' || status === 'awaiting') ? (
-        <View style={styles.stack}>
-          <View style={styles.amountBox}>
-            <Text style={styles.amountLabel}>Amount due</Text>
-            <Text style={styles.amountValue}>{paiseToInr(session.amount)}</Text>
-            <Text style={styles.meta}>UPI: {session.upi_vpa}</Text>
-          </View>
-
-          {session.upi_pay_url ? (
-            <View style={styles.qrWrap}>
-              <QRCode value={session.upi_pay_url} size={188} />
-              <Text style={styles.meta}>Scan with any UPI app — amount is locked.</Text>
-            </View>
-          ) : session.payment_qr_url ? (
-            <Image source={{ uri: session.payment_qr_url }} style={styles.staticQr} />
-          ) : null}
-
-          {status === 'ready' ? (
-            <>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.stack}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+            bounces
+          >
+            {status === 'idle' ? (
               <Text style={styles.body}>
-                After paying, enter your UTR / UPI reference and/or upload a payment screenshot.
+                Pay IE Platform via UPI for the exact amount, then submit your UTR for confirmation.
               </Text>
-              <Input
-                label="UTR / UPI reference"
-                value={utr}
-                onChangeText={setUtr}
-                autoCapitalize="characters"
-                placeholder="From your UPI app"
-              />
-              <Button
-                label={proofUrl ? 'Change payment screenshot' : 'Upload payment screenshot'}
-                variant="outline"
-                fullWidth
-                onPress={() => void pickProof()}
-              />
-              {proofUrl ? <Image source={{ uri: proofUrl }} style={styles.proof} /> : null}
-              <Button
-                label={claiming ? 'Submitting…' : 'I’ve paid — submit for confirmation'}
-                loading={claiming}
-                fullWidth
-                onPress={() => void submitClaim()}
-              />
-              <Button label="Close" variant="outline" fullWidth onPress={onClose} />
-            </>
-          ) : (
-            <>
-              <View style={styles.awaiting}>
-                <Text style={styles.awaitingTitle}>Awaiting platform confirmation</Text>
-                <Text style={styles.meta}>
-                  Your payment claim was submitted{utr ? ` · UTR ${utr}` : ''}. Plan activates after IE confirms.
-                </Text>
-              </View>
-              <Button label="Done" fullWidth onPress={onClose} />
-            </>
-          )}
+            ) : null}
+
+            {session && (status === 'ready' || status === 'awaiting') ? (
+              <>
+                <View style={styles.amountBox}>
+                  <Text style={styles.amountLabel}>Amount due</Text>
+                  <Text style={styles.amountValue}>{paiseToInr(session.amount)}</Text>
+                  <Text style={styles.meta}>UPI: {session.upi_vpa}</Text>
+                </View>
+
+                {session.upi_pay_url ? (
+                  <View style={styles.qrWrap}>
+                    <PaymentQrCode value={session.upi_pay_url} size={188} />
+                    <Text style={styles.meta}>Scan with any UPI app — amount is locked.</Text>
+                  </View>
+                ) : session.payment_qr_url ? (
+                  <Image source={{ uri: session.payment_qr_url }} style={styles.staticQr} />
+                ) : null}
+
+                {status === 'ready' ? (
+                  <>
+                    <Text style={styles.body}>
+                      After paying, enter your UTR / UPI reference and/or upload a payment screenshot.
+                    </Text>
+                    <Input
+                      label="UTR / UPI reference"
+                      value={utr}
+                      onChangeText={setUtr}
+                      autoCapitalize="characters"
+                      placeholder="From your UPI app"
+                    />
+                    <Button
+                      label={proofUrl ? 'Change payment screenshot' : 'Upload payment screenshot'}
+                      variant="outline"
+                      fullWidth
+                      onPress={() => void pickProof()}
+                    />
+                    {proofUrl ? (
+                      <Image source={{ uri: proofUrl }} style={styles.proof} resizeMode="cover" />
+                    ) : null}
+                  </>
+                ) : (
+                  <View style={styles.awaiting}>
+                    <Text style={styles.awaitingTitle}>Awaiting platform confirmation</Text>
+                    <Text style={styles.meta}>
+                      Your payment claim was submitted{utr ? ` · UTR ${utr}` : ''}. Plan activates after IE confirms —
+                      the trial banner updates to “Payment under review” until then.
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : null}
+          </ScrollView>
+
+          <View style={styles.footer}>
+            {status === 'idle' ? (
+              <>
+                <Button label="Generate payment QR" loading={loading} fullWidth onPress={() => void startCheckout()} />
+                <Button label="Cancel" variant="outline" fullWidth onPress={onClose} />
+              </>
+            ) : null}
+            {status === 'ready' ? (
+              <>
+                <Button
+                  label={claiming ? 'Submitting…' : 'I’ve paid — submit for confirmation'}
+                  loading={claiming}
+                  fullWidth
+                  onPress={() => void submitClaim()}
+                />
+                <Button label="Close" variant="outline" fullWidth onPress={onClose} />
+              </>
+            ) : null}
+            {status === 'awaiting' ? <Button label="Done" fullWidth onPress={onClose} /> : null}
+          </View>
         </View>
-      ) : null}
-    </Card>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: spacing.md },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    maxHeight: '92%',
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  title: { ...typography.title, color: colors.foreground },
+  /** Lets the sheet hit maxHeight and scroll instead of clipping the footer. */
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  stack: { gap: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
+  footer: { gap: spacing.sm, paddingTop: spacing.md },
   meta: { ...typography.caption, color: colors.mutedForeground },
   body: { ...typography.body, color: colors.foreground, lineHeight: 20 },
   amountBox: {

@@ -42,6 +42,7 @@ class LineComputation(TypedDict):
     rate: Decimal
     discount: Decimal
     gst_rate: Decimal
+    tax_inclusive: bool
     taxable: Decimal
     cgst: Decimal
     sgst: Decimal
@@ -49,11 +50,22 @@ class LineComputation(TypedDict):
     total: Decimal
 
 
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def compute_line(raw: dict[str, Any], *, interstate: bool) -> LineComputation:
     """Compute one voucher line's taxable base, GST split, and line total.
 
     `raw` is a caller-provided dict — typically from a request payload or built
     from a `ShopProduct` — containing at least `qty` and `rate`.
+
+    When `tax_inclusive` is true, `rate` is treated as GST-inclusive (MRP-style)
+    and taxable + tax are extracted from the inclusive amount after discount.
     """
     qty_raw = raw.get("qty") if raw.get("qty") is not None else raw.get("quantity") or "0"
     rate_raw = raw.get("rate") if raw.get("rate") is not None else raw.get("unit_price") or "0"
@@ -64,15 +76,38 @@ def compute_line(raw: dict[str, Any], *, interstate: bool) -> LineComputation:
     rate = Decimal(str(rate_raw))
     discount = Decimal(str(raw.get("discount") or "0"))
     gst_rate = Decimal(str(gst_rate_raw))
+    tax_inclusive = _as_bool(raw.get("tax_inclusive"))
 
     gross = _q(qty * rate)
-    taxable = gross - discount
-    if taxable < 0:
-        taxable = Decimal("0.00")
-    taxable = _q(taxable)
+    after_discount = gross - discount
+    if after_discount < 0:
+        after_discount = Decimal("0.00")
+    after_discount = _q(after_discount)
 
-    split = split_gst(taxable, gst_rate, interstate=interstate)
-    total = _q(taxable + split["tax_total"])
+    if tax_inclusive and gst_rate > 0:
+        # Inclusive: after_discount is the customer-facing total for the line.
+        taxable = _q(after_discount * Decimal("100") / (Decimal("100") + gst_rate))
+        tax_total = _q(after_discount - taxable)
+        if interstate:
+            split = {
+                "cgst": Decimal("0.00"),
+                "sgst": Decimal("0.00"),
+                "igst": tax_total,
+                "tax_total": tax_total,
+            }
+        else:
+            half = _q(tax_total / 2)
+            split = {
+                "cgst": half,
+                "sgst": _q(tax_total - half),
+                "igst": Decimal("0.00"),
+                "tax_total": tax_total,
+            }
+        total = after_discount
+    else:
+        taxable = after_discount
+        split = split_gst(taxable, gst_rate, interstate=interstate)
+        total = _q(taxable + split["tax_total"])
 
     return {
         "product_id": str(raw.get("product_id")) if raw.get("product_id") else None,
@@ -82,6 +117,7 @@ def compute_line(raw: dict[str, Any], *, interstate: bool) -> LineComputation:
         "rate": rate,
         "discount": discount,
         "gst_rate": gst_rate,
+        "tax_inclusive": tax_inclusive,
         "taxable": taxable,
         "cgst": split["cgst"],
         "sgst": split["sgst"],
@@ -120,6 +156,7 @@ def compute_voucher_totals(lines: list[dict[str, Any]], *, interstate: bool) -> 
                 "rate": str(computed["rate"]),
                 "discount": str(computed["discount"]),
                 "gst_rate": str(computed["gst_rate"]),
+                "tax_inclusive": bool(computed.get("tax_inclusive")),
                 "taxable": str(computed["taxable"]),
                 "cgst": str(computed["cgst"]),
                 "sgst": str(computed["sgst"]),

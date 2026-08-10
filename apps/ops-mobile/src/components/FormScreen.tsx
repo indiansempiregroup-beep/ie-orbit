@@ -12,6 +12,8 @@ import {
   KeyboardToolbar,
 } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBreakpoint } from '../hooks/useBreakpoint';
+import { layout } from '../theme/layout';
 import { colors, spacing } from '../theme/tokens';
 
 type Props = {
@@ -33,12 +35,17 @@ export function FormScreen({
   onRefresh,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useBreakpoint();
 
   return (
     <View style={styles.root}>
       <KeyboardAwareScrollView
         style={[styles.screen, style]}
-        contentContainerStyle={[styles.content, contentContainerStyle]}
+        contentContainerStyle={[
+          styles.content,
+          isDesktop && styles.contentDesktop,
+          contentContainerStyle,
+        ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         bottomOffset={footer ? spacing.lg : spacing.xxxl}
@@ -55,13 +62,19 @@ export function FormScreen({
           ) : undefined
         }
       >
-        {children}
+        {isDesktop ? <View style={styles.formColumn}>{children}</View> : children}
       </KeyboardAwareScrollView>
 
       {footer ? (
         <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
-          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-            {footer}
+          <View
+            style={[
+              styles.footer,
+              isDesktop && styles.footerDesktop,
+              { paddingBottom: Math.max(insets.bottom, spacing.lg) },
+            ]}
+          >
+            {isDesktop ? <View style={styles.formColumn}>{footer}</View> : footer}
           </View>
         </KeyboardStickyView>
       ) : null}
@@ -80,6 +93,15 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.xxxl,
   },
+  contentDesktop: {
+    alignItems: 'center',
+    paddingHorizontal: layout.desktopGutter,
+  },
+  formColumn: {
+    width: '100%',
+    maxWidth: layout.formMaxWidth,
+    gap: spacing.lg,
+  },
   footer: {
     backgroundColor: colors.card,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -87,5 +109,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
     gap: spacing.sm,
+  },
+  footerDesktop: {
+    alignItems: 'center',
+    paddingHorizontal: layout.desktopGutter,
   },
 });

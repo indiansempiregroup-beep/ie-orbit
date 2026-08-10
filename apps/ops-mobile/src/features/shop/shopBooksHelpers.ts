@@ -29,7 +29,13 @@ export function voucherAmount(value: string | number | undefined | null): number
 /** Remaining balance on a sale/purchase voucher (0 if fully paid / voided). */
 export function voucherBalanceDue(voucher: ShopBooksVoucher): number {
   if (isVoidedVoucher(voucher.status)) return 0;
-  const total = voucherAmount(voucher.total);
+  const meta =
+    voucher.metadata && typeof voucher.metadata === 'object' ? voucher.metadata : {};
+  // After returns, net_total is original invoice total minus credit notes.
+  const total =
+    meta.net_total != null
+      ? voucherAmount(meta.net_total as string | number)
+      : voucherAmount(voucher.total);
   const paid = voucherAmount(voucher.amount_paid);
   const status = (voucher.status || '').toLowerCase();
   if (status === 'paid') return 0;
@@ -71,16 +77,108 @@ export function summarizeVouchers(vouchers: ShopBooksVoucher[]): VoucherListSumm
 
 export type VoucherPayFilter = 'all' | 'paid' | 'unpaid';
 
+export type VoucherPeriodFilter = 'all' | 'today' | '7d' | 'month';
+
+export type VoucherInvoiceTypeFilter = 'all' | 'b2b' | 'b2c';
+
+export function periodDateRange(period: VoucherPeriodFilter): { dateFrom?: string; dateTo?: string } {
+  if (period === 'all') return {};
+  const today = new Date();
+  const toIso = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const end = toIso(today);
+  if (period === 'today') return { dateFrom: end, dateTo: end };
+  if (period === '7d') {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 6);
+    return { dateFrom: toIso(start), dateTo: end };
+  }
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  return { dateFrom: toIso(monthStart), dateTo: end };
+}
+
+export function voucherHasGstin(voucher: ShopBooksVoucher): boolean {
+  const meta = voucher.metadata && typeof voucher.metadata === 'object' ? voucher.metadata : {};
+  return Boolean(String((meta as { customer_gstin?: string }).customer_gstin || '').trim());
+}
+
+export function filterSaleVouchers(
+  vouchers: ShopBooksVoucher[],
+  opts: {
+    pay?: VoucherPayFilter;
+    period?: VoucherPeriodFilter;
+    customerId?: string;
+    invoiceType?: VoucherInvoiceTypeFilter;
+    search?: string;
+  },
+): ShopBooksVoucher[] {
+  const pay = opts.pay ?? 'all';
+  const period = opts.period ?? 'all';
+  const invoiceType = opts.invoiceType ?? 'all';
+  const customerId = opts.customerId ?? '';
+  const term = (opts.search ?? '').trim().toLowerCase();
+  const { dateFrom, dateTo } = periodDateRange(period);
+
+  return vouchers.filter((voucher) => {
+    if (isVoidedVoucher(voucher.status) && pay !== 'all') return false;
+
+    if (pay !== 'all') {
+      const paid = isVoucherFullyPaid(voucher);
+      if (pay === 'paid' ? !paid : paid) return false;
+    }
+
+    if (dateFrom || dateTo) {
+      const d = String(voucher.voucher_date || '').slice(0, 10);
+      if (!d) return false;
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+    }
+
+    if (customerId === '__walkin__') {
+      if (voucher.customer) return false;
+    } else if (customerId) {
+      if (String(voucher.customer || '') !== customerId) return false;
+    }
+
+    if (invoiceType === 'b2b' && !voucherHasGstin(voucher)) return false;
+    if (invoiceType === 'b2c' && voucherHasGstin(voucher)) return false;
+
+    if (!term) return true;
+    const meta = voucher.metadata && typeof voucher.metadata === 'object' ? voucher.metadata : {};
+    const gstin = String((meta as { customer_gstin?: string }).customer_gstin || '');
+    const lines = Array.isArray(voucher.line_items) ? voucher.line_items : [];
+    const lineNames = lines
+      .map((row) => {
+        if (!row || typeof row !== 'object') return '';
+        const line = row as Record<string, unknown>;
+        return String(line.name || line.product_name || '');
+      })
+      .join(' ');
+    const haystack = [
+      voucher.voucher_number,
+      voucher.customer_name,
+      voucher.supplier_name,
+      voucher.notes,
+      voucher.status,
+      gstin,
+      lineNames,
+      String(voucher.total),
+    ]
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(term);
+  });
+}
+
 export function filterVouchersByPayStatus(
   vouchers: ShopBooksVoucher[],
   filter: VoucherPayFilter,
 ): ShopBooksVoucher[] {
-  if (filter === 'all') return vouchers;
-  return vouchers.filter((voucher) => {
-    if (isVoidedVoucher(voucher.status)) return false;
-    const paid = isVoucherFullyPaid(voucher);
-    return filter === 'paid' ? paid : !paid;
-  });
+  return filterSaleVouchers(vouchers, { pay: filter });
 }
 
 export function customerLabel(customer: Customer): string {

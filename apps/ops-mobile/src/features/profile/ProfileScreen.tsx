@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { DesktopPage } from '../../components/DesktopPage';
 import { FormScreen } from '../../components/FormScreen';
 import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
@@ -12,6 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatUserRole } from '../../utils/roles';
 import { isExpoGo } from '../../utils/biometrics';
+import { confirmAction } from '../../utils/confirmAction';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -39,17 +41,17 @@ export function ProfileScreen() {
     void refreshBiometricState().catch(() => undefined);
   }, [refreshBiometricState]);
 
-  function onSignOut() {
-    Alert.alert(
-      t('auth.signOut'),
-      biometricEnabled
+  async function onSignOut() {
+    const ok = await confirmAction({
+      title: t('auth.signOut'),
+      message: biometricEnabled
         ? `You'll return to the login screen. You can sign back in with ${biometricLabel}.`
         : t('auth.signOutConfirm'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('auth.signOut'), style: 'destructive', onPress: () => void logout() },
-      ],
-    );
+      confirmLabel: t('auth.signOut'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (ok) await logout();
   }
 
   function onToggleBiometric(next: boolean) {
@@ -111,62 +113,64 @@ export function ProfileScreen() {
   }
 
   return (
-    <FormScreen contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl }]}>
-      <View style={styles.hero}>
-        <Avatar name={displayName} size="xl" src={user?.profile_photo} />
-        <Text style={styles.name}>{displayName}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
-        <Text style={styles.meta}>
-          {activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace')}
-          {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
-        </Text>
-      </View>
+    <DesktopPage>
+      <FormScreen contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl }]}>
+        <View style={styles.hero}>
+          <Avatar name={displayName} size="xl" src={user?.profile_photo} />
+          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.email}>{user?.email}</Text>
+          <Text style={styles.meta}>
+            {activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace')}
+            {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
+          </Text>
+        </View>
 
-      <View style={styles.menu}>
-        <MenuSection title={t('common.account')}>
-          <MenuRow icon="edit-3" label={t('profile.editProfile')} onPress={() => navigation.navigate('ProfileEdit')} />
-          <MenuRow icon="lock" label={t('profile.changePassword')} onPress={() => navigation.navigate('Security')} />
-          <MenuRow
-            icon="smartphone"
-            label={t('profile.sessions')}
-            last={Boolean(user?.email_verified_at)}
-            onPress={() => navigation.navigate('Sessions')}
-          />
-          {!user?.email_verified_at ? (
-            <MenuRow icon="mail" label={t('profile.verifyEmail')} last onPress={() => navigation.navigate('VerifyEmail')} />
-          ) : null}
-        </MenuSection>
-
-        <MenuSection title={t('profile.security')}>
-          <View style={styles.biometricRow}>
-            <View style={styles.biometricCopy}>
-              <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
-              <Text style={styles.biometricHint}>
-                {faceIdBlockedInExpoGo
-                  ? `Unavailable in Expo Go · needs a development build`
-                  : busy
-                    ? 'Updating…'
-                    : biometricAvailable
-                      ? biometricEnabled
-                        ? `On · use after signing out`
-                        : `Off · tap to enable with ${biometricLabel} only`
-                      : `Not available on this device`}
-              </Text>
-            </View>
-            <Switch
-              value={biometricEnabled && !faceIdBlockedInExpoGo}
-              onValueChange={onToggleBiometric}
-              disabled={busy || faceIdBlockedInExpoGo || (!biometricAvailable && !biometricEnabled)}
-              trackColor={{ true: colors.primary }}
+        <View style={styles.menu}>
+          <MenuSection title={t('common.account')}>
+            <MenuRow icon="edit-3" label={t('profile.editProfile')} onPress={() => navigation.navigate('ProfileEdit')} />
+            <MenuRow icon="lock" label={t('profile.changePassword')} onPress={() => navigation.navigate('Security')} />
+            <MenuRow
+              icon="smartphone"
+              label={t('profile.sessions')}
+              last={Boolean(user?.email_verified_at)}
+              onPress={() => navigation.navigate('Sessions')}
             />
-          </View>
-        </MenuSection>
+            {!user?.email_verified_at ? (
+              <MenuRow icon="mail" label={t('profile.verifyEmail')} last onPress={() => navigation.navigate('VerifyEmail')} />
+            ) : null}
+          </MenuSection>
 
-        <MenuSection title={t('profile.session')}>
-          <MenuRow icon="log-out" label={t('auth.signOut')} destructive last onPress={onSignOut} />
-        </MenuSection>
-      </View>
-    </FormScreen>
+          <MenuSection title={t('profile.security')}>
+            <View style={styles.biometricRow}>
+              <View style={styles.biometricCopy}>
+                <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
+                <Text style={styles.biometricHint}>
+                  {faceIdBlockedInExpoGo
+                    ? `Unavailable in Expo Go · needs a development build`
+                    : busy
+                      ? 'Updating…'
+                      : biometricAvailable
+                        ? biometricEnabled
+                          ? `On · use after signing out`
+                          : `Off · tap to enable with ${biometricLabel} only`
+                        : `Not available on this device`}
+                </Text>
+              </View>
+              <Switch
+                value={biometricEnabled && !faceIdBlockedInExpoGo}
+                onValueChange={onToggleBiometric}
+                disabled={busy || faceIdBlockedInExpoGo || (!biometricAvailable && !biometricEnabled)}
+                trackColor={{ true: colors.primary }}
+              />
+            </View>
+          </MenuSection>
+
+          <MenuSection title={t('profile.session')}>
+            <MenuRow icon="log-out" label={t('auth.signOut')} destructive last onPress={onSignOut} />
+          </MenuSection>
+        </View>
+      </FormScreen>
+    </DesktopPage>
   );
 }
 

@@ -1,9 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Booking, BookingReview, Customer, DashboardSummary, Service, StaffMember } from '@ie-platform/sdk';
+import {
+  ApiClientError,
+  type Booking,
+  type BookingReview,
+  type Customer,
+  type DashboardSummary,
+  type Service,
+  type StaffMember,
+} from '@ie-platform/sdk';
 import { useWorkspace } from '../contexts/WorkspaceContext';
+import { getApiErrorMessage } from '../utils/format';
 import { useOpsClient } from './useOpsClient';
 
 export { useNotifications } from '../contexts/NotificationsContext';
+
+/** Normalize list payloads whether the API returns an array or `{ results: [] }`. */
+function asList<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    if (Array.isArray(record.results)) return record.results as T[];
+    if (Array.isArray(record.items)) return record.items as T[];
+    if (Array.isArray(record.data)) return record.data as T[];
+  }
+  return [];
+}
 
 export function useBookings(date?: string) {
   const client = useOpsClient();
@@ -18,9 +39,10 @@ export function useBookings(date?: string) {
     setError(null);
     try {
       const response = await client.bookings.list(date ? { date } : undefined);
-      setBookings(response.data ?? []);
+      setBookings(asList<Booking>(response.data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bookings');
+      setBookings([]);
     } finally {
       setLoading(false);
     }
@@ -33,41 +55,62 @@ export function useBookings(date?: string) {
   return { bookings, loading, error, reload };
 }
 
-export function useBooking(bookingId: string) {
+export function useBooking(bookingId: string, initialBooking?: Booking | null) {
   const client = useOpsClient();
-  const [booking, setBooking] = useState<Booking | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [booking, setBooking] = useState<Booking | null>(initialBooking ?? null);
+  const [loading, setLoading] = useState(!initialBooking);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    if (!client || !bookingId) return;
+    if (!client || !bookingId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    setError(null);
+    let lastError: unknown;
+    let fetched: Booking | null = null;
     try {
-      const response = await client.bookings.get(bookingId);
-      let next: Booking = { ...response.data };
-      if (!next.review) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          const reviews = await client.bookings.listReviews({ booking: bookingId });
-          const existing = reviews.data?.[0];
-          if (existing) {
-            next = {
-              ...next,
-              review: {
-                id: existing.id,
-                rating: existing.rating,
-                comment: existing.comment,
-                created_at: existing.created_at,
-              },
-            };
+          if (attempt > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
           }
-        } catch {
-          // Review lookup is best-effort; booking detail should still render.
+          const response = await client.bookings.get(bookingId);
+          let next: Booking = { ...response.data };
+          if (!next.review) {
+            try {
+              const reviews = await client.bookings.listReviews({ booking: bookingId });
+              const existing = asList<BookingReview>(reviews.data)[0];
+              if (existing) {
+                next = {
+                  ...next,
+                  review: {
+                    id: existing.id,
+                    rating: existing.rating,
+                    comment: existing.comment,
+                    created_at: existing.created_at,
+                  },
+                };
+              }
+            } catch {
+              // Review lookup is best-effort; booking detail should still render.
+            }
+          }
+          fetched = next;
+          break;
+        } catch (err) {
+          lastError = err;
+          const status = err instanceof ApiClientError ? err.status : 0;
+          if (status !== 429) break;
         }
       }
-      setBooking(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load booking');
+
+      if (fetched) {
+        setBooking(fetched);
+        setError(null);
+      } else if (lastError) {
+        setError(getApiErrorMessage(lastError, 'Failed to load booking'));
+      }
     } finally {
       setLoading(false);
     }
@@ -77,7 +120,7 @@ export function useBooking(bookingId: string) {
     void reload();
   }, [reload]);
 
-  return { booking, loading, error, reload };
+  return { booking, loading: loading && !booking, error: booking ? null : error, reload };
 }
 
 export function useCustomers() {
@@ -93,9 +136,10 @@ export function useCustomers() {
     setError(null);
     try {
       const response = await client.customers.list();
-      setCustomers(response.data ?? []);
+      setCustomers(asList<Customer>(response.data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load customers');
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
@@ -114,11 +158,16 @@ export function useCustomer(customerId: string) {
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    if (!client || !customerId) return;
+    if (!client || !customerId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const response = await client.customers.get(customerId);
       setCustomer(response.data);
+    } catch {
+      setCustomer(null);
     } finally {
       setLoading(false);
     }
@@ -142,7 +191,9 @@ export function useServices() {
     setLoading(true);
     try {
       const response = await client.services.list();
-      setServices(response.data ?? []);
+      setServices(asList<Service>(response.data));
+    } catch {
+      setServices([]);
     } finally {
       setLoading(false);
     }
@@ -166,7 +217,9 @@ export function useStaffMembers() {
     setLoading(true);
     try {
       const response = await client.staff.list();
-      setStaff(response.data ?? []);
+      setStaff(asList<StaffMember>(response.data));
+    } catch {
+      setStaff([]);
     } finally {
       setLoading(false);
     }
@@ -195,7 +248,7 @@ export function useReviews(customerId?: string) {
         business: businessId ?? undefined,
         customer: customerId,
       });
-      setReviews(response.data ?? []);
+      setReviews(asList<BookingReview>(response.data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load reviews');
       setReviews([]);

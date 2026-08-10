@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, type ScrollViewProps } from 'react-native';
 import { colors } from '../theme/tokens';
 
@@ -7,16 +7,13 @@ type Props = ScrollViewProps & {
   onRefresh?: () => void | Promise<void>;
 };
 
-export function RefreshableScrollView({
-  refreshing = false,
-  onRefresh,
-  children,
-  style,
-  contentContainerStyle,
-  ...rest
-}: Props) {
+export const RefreshableScrollView = forwardRef<ScrollView, Props>(function RefreshableScrollView(
+  { refreshing = false, onRefresh, children, style, contentContainerStyle, ...rest },
+  ref,
+) {
   return (
     <ScrollView
+      ref={ref}
       {...rest}
       style={[styles.scroll, style]}
       contentContainerStyle={[styles.content, contentContainerStyle]}
@@ -39,7 +36,7 @@ export function RefreshableScrollView({
       {children}
     </ScrollView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },

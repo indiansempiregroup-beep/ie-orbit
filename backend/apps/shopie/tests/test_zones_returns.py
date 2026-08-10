@@ -156,6 +156,19 @@ def test_return_restock_and_credit(shop_ctx: tuple[Tenant, Business, Customer]) 
     assert shop_return.refund_total == Decimal("50.00")
     assert product.stock_on_hand == stock_after_sale + Decimal("1")
 
+    from apps.shopie.models import ShopBooksVoucher, VoucherType
+
+    books_cn = ShopBooksVoucher.objects.filter(
+        tenant=tenant,
+        business=business,
+        voucher_type=VoucherType.CREDIT_NOTE,
+        metadata__source_return_id=str(shop_return.id),
+    ).first()
+    assert books_cn is not None
+    assert books_cn.linked_order_id == order.id
+    assert Decimal(str(books_cn.total)) == Decimal("50.00")
+    assert shop_return.metadata.get("books_credit_note_number") == books_cn.voucher_number
+
 
 @pytest.mark.django_db
 def test_return_cannot_exceed_remaining_qty(shop_ctx: tuple[Tenant, Business, Customer]) -> None:

@@ -1,15 +1,16 @@
 import React, { useLayoutEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
+import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { MenuRow } from '../../components/ui/MenuRow';
 import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
 import { canManageTeam } from '../../utils/roles';
-import { colors, spacing } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function SettingsScreen() {
@@ -23,7 +24,7 @@ export function SettingsScreen() {
   }, [navigation, t]);
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <RefreshableScrollView contentContainerStyle={styles.content}>
         <MenuSection title={t('settings.business')}>
           <MenuRow
@@ -56,11 +57,10 @@ export function SettingsScreen() {
           ) : null}
         </MenuSection>
       </RefreshableScrollView>
-    </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, gap: spacing.xl, paddingBottom: spacing.xxxl },
 });

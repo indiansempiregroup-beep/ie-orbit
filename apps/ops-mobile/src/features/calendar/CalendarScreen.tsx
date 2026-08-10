@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import type { BookingStatus } from '@ie-platform/sdk';
 import { BookingRow } from '../../components/BookingRow';
 import { CalendarPicker } from '../../components/CalendarPicker';
+import { DesktopPage } from '../../components/DesktopPage';
 import { OpsHeader } from '../../components/OpsHeader';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
@@ -92,7 +93,7 @@ export function CalendarScreen() {
       : 'No bookings on this day. Tap a free slot below to book.';
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <OpsHeader
         compact
         title="Calendar"
@@ -225,12 +226,11 @@ export function CalendarScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   nav: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   navBtn: {
     width: 34,

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { BusinessProductSubscription } from '@ie-platform/sdk';
+import { DesktopPage } from '../../components/DesktopPage';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { SectionHeader } from '../../components/ui/SectionHeader';
@@ -10,9 +11,10 @@ import { SelectField } from '../../components/SelectField';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { Input } from '../../components/ui/Input';
 import { createScopedClient } from '../../api/client';
+import { SoftLockBanner, PENDING_UPI_CLAIM_KEY } from '../../components/SoftLockBanner';
+import { setPersistentItem } from '../../utils/persistentStore';
 import {
   SubscriptionUpiPaySheet,
   type SubscriptionUpiPayRequest,
@@ -122,6 +124,7 @@ export function ProductSettingsScreen() {
   const [pendingPlanByProduct, setPendingPlanByProduct] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [upiPayRequest, setUpiPayRequest] = useState<SubscriptionUpiPayRequest | null>(null);
+  const [lockBannerKey, setLockBannerKey] = useState(0);
 
   useEffect(() => {
     setSelectedProduct(activeBusiness?.selected_product ?? subscribedProducts[0]?.id ?? '');
@@ -152,9 +155,18 @@ export function ProductSettingsScreen() {
     setExtraStaff(String(snapshot.extra_staff ?? 0));
     setExtraOffices(String(snapshot.extra_offices ?? 0));
     setPetsPackEnabled(Boolean(snapshot.pets_pack_enabled));
-  }, [snapshot?.extra_staff, snapshot?.extra_offices, snapshot?.pets_pack_enabled]);
+    if (!snapshot.soft_locked) {
+      void setPersistentItem(PENDING_UPI_CLAIM_KEY, null);
+    }
+  }, [snapshot?.extra_staff, snapshot?.extra_offices, snapshot?.pets_pack_enabled, snapshot?.soft_locked]);
 
-  if (loading && !settings) return <ScreenState loading />;
+  if (loading && !settings) {
+    return (
+      <DesktopPage>
+        <ScreenState loading />
+      </DesktopPage>
+    );
+  }
 
   async function afterMutation(successMessage: string) {
     await Promise.all([refreshWorkspace(), reloadSnapshot()]);
@@ -170,13 +182,14 @@ export function ProductSettingsScreen() {
     token && tenantId && businessId ? createScopedClient(token, tenantId, businessId) : null;
 
   return (
+    <DesktopPage>
     <RefreshableScrollView
       contentContainerStyle={styles.wrap}
       onRefresh={async () => {
         await Promise.all([refreshWorkspace(), reloadSnapshot()]);
       }}
     >
-      <SoftLockBanner />
+      <SoftLockBanner key={lockBannerKey} />
 
       {upiPayRequest && scopedClient && token && tenantId && businessId ? (
         <SubscriptionUpiPaySheet
@@ -187,7 +200,9 @@ export function ProductSettingsScreen() {
           request={upiPayRequest}
           onClose={() => setUpiPayRequest(null)}
           onClaimed={async () => {
+            await setPersistentItem(PENDING_UPI_CLAIM_KEY, '1');
             await Promise.all([refreshWorkspace(), reloadSnapshot()]);
+            setLockBannerKey((value) => value + 1);
             toast.push('Payment submitted. Waiting for platform confirmation.', 'success');
           }}
           onError={(message) => toast.push(message, 'error')}
@@ -496,6 +511,7 @@ export function ProductSettingsScreen() {
                     extraOffices: Math.max(0, Number(extraOffices) || 0),
                     petsPackEnabled: checkoutProductCode === 'shopie' ? petsPackEnabled : false,
                     mode: 'addons',
+                    autoStart: true,
                   });
                 }}
               />
@@ -629,6 +645,7 @@ export function ProductSettingsScreen() {
         ))}
       </Card>
     </RefreshableScrollView>
+    </DesktopPage>
   );
 }
 

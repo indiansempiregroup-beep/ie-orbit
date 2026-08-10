@@ -12,7 +12,9 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SelectField } from '../../components/SelectField';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { brand, colors, spacing, typography } from '../../theme/tokens';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { brand, colors, radius, spacing, typography } from '../../theme/tokens';
+import { layout } from '../../theme/layout';
 import { getApiErrorMessage } from '../../utils/format';
 import { PRODUCT_CATALOG } from '../../utils/products';
 import { provisionWorkspace, type RegisterWizardValues } from '../../utils/provisionWorkspace';
@@ -69,6 +71,7 @@ function defaultValues(): RegisterWizardValues {
 export function RegisterWizardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useBreakpoint();
   const { bootstrapSession } = useAuth();
   const { initializeWorkspace } = useWorkspace();
   const [step, setStep] = useState(0);
@@ -112,98 +115,191 @@ export function RegisterWizardScreen() {
     }
   }
 
+  const stepFields = (
+    <>
+      {step === 0 ? (
+        <>
+          <Input label="First name" value={values.firstName} onChangeText={(v) => patch({ firstName: v })} />
+          <Input label="Last name" value={values.lastName} onChangeText={(v) => patch({ lastName: v })} />
+          <Input
+            label="Email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={values.email}
+            onChangeText={(v) => patch({ email: v })}
+          />
+          <Input
+            label="Mobile"
+            keyboardType="phone-pad"
+            value={values.mobile}
+            onChangeText={(v) => patch({ mobile: v })}
+          />
+          <Input
+            label="Password"
+            secureTextEntry
+            value={values.password}
+            onChangeText={(v) => patch({ password: v })}
+          />
+          <Input
+            label="Confirm password"
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+        </>
+      ) : null}
+
+      {step === 1 ? (
+        <>
+          <Input
+            label="Business name"
+            value={values.businessName}
+            onChangeText={(v) => patch({ businessName: v, displayName: values.displayName || v })}
+          />
+          <Input label="Display name" value={values.displayName} onChangeText={(v) => patch({ displayName: v })} />
+          <Input
+            label="Business email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={values.businessEmail}
+            onChangeText={(v) => patch({ businessEmail: v })}
+          />
+          <Input
+            label="Phone"
+            keyboardType="phone-pad"
+            value={values.businessPhone}
+            onChangeText={(v) => patch({ businessPhone: v })}
+          />
+          <Input label="Address" value={values.address} onChangeText={(v) => patch({ address: v })} />
+          <Input label="City" value={values.city} onChangeText={(v) => patch({ city: v })} />
+          <Input label="State" value={values.state} onChangeText={(v) => patch({ state: v })} />
+          <Input
+            label="Country code"
+            value={values.country}
+            onChangeText={(v) => patch({ country: v })}
+            autoCapitalize="characters"
+          />
+          <Input label="Postal code" value={values.postalCode} onChangeText={(v) => patch({ postalCode: v })} />
+        </>
+      ) : null}
+
+      {step === 2 ? (
+        <>
+          <SelectField
+            label="Timezone"
+            value={values.timezone}
+            options={TIMEZONES}
+            onChange={(v) => patch({ timezone: v })}
+          />
+          <SelectField
+            label="Currency"
+            value={values.currency}
+            options={CURRENCIES}
+            onChange={(v) => patch({ currency: v })}
+          />
+          <SelectField
+            label="Language"
+            value={values.language}
+            options={LANGUAGES}
+            onChange={(v) => patch({ language: v })}
+          />
+          <SelectField
+            label="Product"
+            value={values.selectedProduct}
+            options={PRODUCT_CATALOG.map((p) => ({ value: p.id, label: p.name }))}
+            onChange={(v) => patch({ selectedProduct: v })}
+          />
+        </>
+      ) : null}
+
+      {step === 3 ? (
+        <>
+          <Text style={styles.hint}>
+            Optional branding for your workspace. You can skip and update later in settings.
+          </Text>
+          <Input
+            label="Primary color"
+            value={values.primaryColor}
+            onChangeText={(v) => patch({ primaryColor: v })}
+            autoCapitalize="none"
+          />
+          <Input
+            label="Secondary color"
+            value={values.secondaryColor}
+            onChangeText={(v) => patch({ secondaryColor: v })}
+            autoCapitalize="none"
+          />
+          <ImagePickerButton
+            label="Logo"
+            variant="card"
+            valueUri={values.logoAsset?.uri || null}
+            onPicked={(asset: ImagePickerAsset) => patch({ logoAsset: asset, skipBranding: false })}
+            helperText="Optional. You can update this later in Settings."
+          />
+        </>
+      ) : null}
+
+      {error ? <FormAlert message={error} /> : null}
+
+      <View style={styles.actions}>
+        {step > 0 ? <Button label="Back" variant="outline" onPress={() => setStep((s) => s - 1)} /> : null}
+        {step < STEPS.length - 1 ? (
+          <Button
+            label="Continue"
+            fullWidth
+            onPress={() => {
+              const message = validateStep();
+              if (message) {
+                setError(message);
+                return;
+              }
+              setError(null);
+              setStep((s) => s + 1);
+            }}
+          />
+        ) : (
+          <>
+            <Button label="Create workspace" loading={submitting} fullWidth onPress={() => void finish(false)} />
+            <Button
+              label="Skip branding & create"
+              variant="ghost"
+              loading={submitting}
+              onPress={() => void finish(true)}
+            />
+          </>
+        )}
+        <Button label="Already have an account?" variant="ghost" onPress={() => navigation.navigate('Login')} />
+      </View>
+    </>
+  );
+
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.kicker}>New workspace</Text>
-        <Text style={styles.title}>Register your business</Text>
-        <Text style={styles.stepLabel}>
-          Step {step + 1} of {STEPS.length}: {STEPS[step]}
-        </Text>
-      </View>
-
-      <RefreshableScrollView contentContainerStyle={styles.content}>
-        {step === 0 ? (
-          <>
-            <Input label="First name" value={values.firstName} onChangeText={(v) => patch({ firstName: v })} />
-            <Input label="Last name" value={values.lastName} onChangeText={(v) => patch({ lastName: v })} />
-            <Input label="Email" autoCapitalize="none" keyboardType="email-address" value={values.email} onChangeText={(v) => patch({ email: v })} />
-            <Input label="Mobile" keyboardType="phone-pad" value={values.mobile} onChangeText={(v) => patch({ mobile: v })} />
-            <Input label="Password" secureTextEntry value={values.password} onChangeText={(v) => patch({ password: v })} />
-            <Input label="Confirm password" secureTextEntry value={confirmPassword} onChangeText={setConfirmPassword} />
-          </>
-        ) : null}
-
-        {step === 1 ? (
-          <>
-            <Input label="Business name" value={values.businessName} onChangeText={(v) => patch({ businessName: v, displayName: values.displayName || v })} />
-            <Input label="Display name" value={values.displayName} onChangeText={(v) => patch({ displayName: v })} />
-            <Input label="Business email" autoCapitalize="none" keyboardType="email-address" value={values.businessEmail} onChangeText={(v) => patch({ businessEmail: v })} />
-            <Input label="Phone" keyboardType="phone-pad" value={values.businessPhone} onChangeText={(v) => patch({ businessPhone: v })} />
-            <Input label="Address" value={values.address} onChangeText={(v) => patch({ address: v })} />
-            <Input label="City" value={values.city} onChangeText={(v) => patch({ city: v })} />
-            <Input label="State" value={values.state} onChangeText={(v) => patch({ state: v })} />
-            <Input label="Country code" value={values.country} onChangeText={(v) => patch({ country: v })} autoCapitalize="characters" />
-            <Input label="Postal code" value={values.postalCode} onChangeText={(v) => patch({ postalCode: v })} />
-          </>
-        ) : null}
-
-        {step === 2 ? (
-          <>
-            <SelectField label="Timezone" value={values.timezone} options={TIMEZONES} onChange={(v) => patch({ timezone: v })} />
-            <SelectField label="Currency" value={values.currency} options={CURRENCIES} onChange={(v) => patch({ currency: v })} />
-            <SelectField label="Language" value={values.language} options={LANGUAGES} onChange={(v) => patch({ language: v })} />
-            <SelectField
-              label="Product"
-              value={values.selectedProduct}
-              options={PRODUCT_CATALOG.map((p) => ({ value: p.id, label: p.name }))}
-              onChange={(v) => patch({ selectedProduct: v })}
-            />
-          </>
-        ) : null}
-
-        {step === 3 ? (
-          <>
-            <Text style={styles.hint}>Optional branding for your workspace. You can skip and update later in settings.</Text>
-            <Input label="Primary color" value={values.primaryColor} onChangeText={(v) => patch({ primaryColor: v })} autoCapitalize="none" />
-            <Input label="Secondary color" value={values.secondaryColor} onChangeText={(v) => patch({ secondaryColor: v })} autoCapitalize="none" />
-            <ImagePickerButton
-              label="Logo"
-              variant="card"
-              valueUri={values.logoAsset?.uri || null}
-              onPicked={(asset: ImagePickerAsset) => patch({ logoAsset: asset, skipBranding: false })}
-              helperText="Optional. You can update this later in Settings."
-            />
-          </>
-        ) : null}
-
-        {error ? <FormAlert message={error} /> : null}
-
-        <View style={styles.actions}>
-          {step > 0 ? <Button label="Back" variant="outline" onPress={() => setStep((s) => s - 1)} /> : null}
-          {step < STEPS.length - 1 ? (
-            <Button
-              label="Continue"
-              fullWidth
-              onPress={() => {
-                const message = validateStep();
-                if (message) {
-                  setError(message);
-                  return;
-                }
-                setError(null);
-                setStep((s) => s + 1);
-              }}
-            />
-          ) : (
-            <>
-              <Button label="Create workspace" loading={submitting} fullWidth onPress={() => void finish(false)} />
-              <Button label="Skip branding & create" variant="ghost" loading={submitting} onPress={() => void finish(true)} />
-            </>
-          )}
-          <Button label="Already have an account?" variant="ghost" onPress={() => navigation.navigate('Login')} />
+      {isDesktop ? (
+        <View style={styles.desktopCanvas}>
+          <RefreshableScrollView contentContainerStyle={styles.desktopScroll}>
+            <View style={styles.desktopCard}>
+              <Text style={styles.desktopKicker}>New workspace</Text>
+              <Text style={styles.desktopTitle}>Register your business</Text>
+              <Text style={styles.desktopStep}>
+                Step {step + 1} of {STEPS.length}: {STEPS[step]}
+              </Text>
+              <View style={styles.desktopBody}>{stepFields}</View>
+            </View>
+          </RefreshableScrollView>
         </View>
-      </RefreshableScrollView>
+      ) : (
+        <>
+          <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+            <Text style={styles.kicker}>New workspace</Text>
+            <Text style={styles.title}>Register your business</Text>
+            <Text style={styles.stepLabel}>
+              Step {step + 1} of {STEPS.length}: {STEPS[step]}
+            </Text>
+          </View>
+          <RefreshableScrollView contentContainerStyle={styles.content}>{stepFields}</RefreshableScrollView>
+        </>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -211,10 +307,41 @@ export function RegisterWizardScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.lg, backgroundColor: brand.primary },
-  kicker: { ...typography.caption, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: 1 },
+  kicker: {
+    ...typography.caption,
+    color: 'rgba(255,255,255,0.8)',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
   title: { ...typography.heading, fontSize: 24, color: colors.primaryForeground, marginTop: spacing.sm },
   stepLabel: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginTop: spacing.sm },
   content: { padding: spacing.xxl, gap: spacing.md, paddingBottom: spacing.xxxl },
   hint: { ...typography.caption, color: colors.mutedForeground },
   actions: { gap: spacing.md, marginTop: spacing.lg },
+  desktopCanvas: { flex: 1, backgroundColor: colors.background },
+  desktopScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: layout.desktopGutter,
+  },
+  desktopCard: {
+    width: '100%',
+    maxWidth: 560,
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xxxl,
+    gap: spacing.md,
+  },
+  desktopKicker: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  desktopTitle: { ...typography.heading, fontSize: 24, color: colors.foreground },
+  desktopStep: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.sm },
+  desktopBody: { gap: spacing.md },
 });

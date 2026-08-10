@@ -18,6 +18,7 @@ import { useCustomers } from '../../hooks/useOpsData';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
 import { SelectField } from '../../components/SelectField';
+import { DesktopPage } from '../../components/DesktopPage';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useUpdateBusinessAddons } from '../../hooks/useOpsExtended';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
@@ -169,130 +170,132 @@ export function ShopPetsScreen() {
   const activeFilterCount = [speciesFilter, customerFilter, search.trim()].filter(Boolean).length;
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {message ? <Text style={styles.meta}>{message}</Text> : null}
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {message ? <Text style={styles.meta}>{message}</Text> : null}
 
-      {!petsSubscribed ? (
-        <RefreshableScrollView
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          contentContainerStyle={{ gap: 8, paddingBottom: insets.bottom + spacing.xl }}
-        >
-          <Text style={styles.title}>Pets pack</Text>
-          <Text style={styles.meta}>
-            Manage pet profiles, photos, birthdays, and owner alerts. Birthday reminders go out 5 days
-            ahead to the pet owner (in-app + email) and to business owners/managers.
-          </Text>
-          <Text style={styles.price}>₹{PETS_PACK_PRICE_INR}/month</Text>
-          <Pressable
-            style={[styles.button, subscribing && styles.buttonDisabled]}
-            onPress={() => void subscribePets()}
-            disabled={subscribing}
+        {!petsSubscribed ? (
+          <RefreshableScrollView
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            contentContainerStyle={{ gap: 8, paddingBottom: insets.bottom + spacing.xl }}
           >
-            <Text style={styles.buttonText}>
-              {subscribing ? 'Subscribing…' : `Subscribe · ₹${PETS_PACK_PRICE_INR}/mo`}
+            <Text style={styles.title}>Pets pack</Text>
+            <Text style={styles.meta}>
+              Manage pet profiles, photos, birthdays, and owner alerts. Birthday reminders go out 5 days
+              ahead to the pet owner (in-app + email) and to business owners/managers.
             </Text>
-          </Pressable>
-          <Pressable onPress={() => navigation.navigate('ProductSettings')}>
-            <Text style={styles.link}>Or manage from Product settings</Text>
-          </Pressable>
-        </RefreshableScrollView>
-      ) : (
-        <>
-          <SearchBar
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search pet, breed, owner…"
-            style={styles.search}
-          />
-          <View style={styles.filters}>
-            <View style={styles.filterHalf}>
-              <SelectField
-                label="Species"
-                value={speciesFilter}
-                options={speciesOptions}
-                onChange={setSpeciesFilter}
-              />
-            </View>
-            <View style={styles.filterHalf}>
-              <SelectField
-                label="Owner"
-                value={customerFilter}
-                options={customerOptions}
-                onChange={setCustomerFilter}
-                searchable
-              />
-            </View>
-          </View>
-          {activeFilterCount ? (
-            <View style={styles.filterMetaRow}>
-              <Text style={styles.meta}>
-                {filtered.length} pet{filtered.length === 1 ? '' : 's'}
-                {` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}`}
+            <Text style={styles.price}>₹{PETS_PACK_PRICE_INR}/month</Text>
+            <Pressable
+              style={[styles.button, subscribing && styles.buttonDisabled]}
+              onPress={() => void subscribePets()}
+              disabled={subscribing}
+            >
+              <Text style={styles.buttonText}>
+                {subscribing ? 'Subscribing…' : `Subscribe · ₹${PETS_PACK_PRICE_INR}/mo`}
               </Text>
-              <Pressable
-                onPress={() => {
-                  setSearch('');
-                  setSpeciesFilter('');
-                  setCustomerFilter('');
-                }}
-              >
-                <Text style={styles.clearFilters}>Clear filters</Text>
-              </Pressable>
+            </Pressable>
+            <Pressable onPress={() => navigation.navigate('ProductSettings')}>
+              <Text style={styles.link}>Or manage from Product settings</Text>
+            </Pressable>
+          </RefreshableScrollView>
+        ) : (
+          <>
+            <SearchBar
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search pet, breed, owner…"
+              style={styles.search}
+            />
+            <View style={styles.filters}>
+              <View style={styles.filterHalf}>
+                <SelectField
+                  label="Species"
+                  value={speciesFilter}
+                  options={speciesOptions}
+                  onChange={setSpeciesFilter}
+                />
+              </View>
+              <View style={styles.filterHalf}>
+                <SelectField
+                  label="Owner"
+                  value={customerFilter}
+                  options={customerOptions}
+                  onChange={setCustomerFilter}
+                  searchable
+                />
+              </View>
             </View>
-          ) : (
-            <Text style={[styles.meta, styles.countMeta]}>
-              {filtered.length} pet{filtered.length === 1 ? '' : 's'}
-            </Text>
-          )}
-
-          {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.id}
-            refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-            contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
-            renderItem={({ item }) => {
-              const photoUri = resolveMediaUrl(item.photo_url);
-              return (
-                <Pressable
-                  style={styles.row}
-                  onPress={() => navigation.navigate('ShopPetDetail', { petId: item.id })}
-                >
-                  {photoUri ? (
-                    <Image source={{ uri: photoUri }} style={styles.thumb} />
-                  ) : (
-                    <View style={[styles.thumb, styles.thumbPlaceholder]}>
-                      <Feather name="heart" size={18} color={colors.mutedForeground} />
-                    </View>
-                  )}
-                  <View style={styles.rowMain}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.meta}>
-                      {[item.species, item.breed].filter(Boolean).join(' · ') || '—'}
-                      {item.birthday ? ` · birthday ${item.birthday}` : ''}
-                    </Text>
-                    {item.customer_name ? (
-                      <Text style={styles.meta}>Owner: {item.customer_name}</Text>
-                    ) : null}
-                  </View>
-                  <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-                </Pressable>
-              );
-            }}
-            ListEmptyComponent={
-              !loading ? (
+            {activeFilterCount ? (
+              <View style={styles.filterMetaRow}>
                 <Text style={styles.meta}>
-                  {pets.length
-                    ? 'No pets match these filters.'
-                    : 'No pets yet. Tap + to add.'}
+                  {filtered.length} pet{filtered.length === 1 ? '' : 's'}
+                  {` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}`}
                 </Text>
-              ) : null
-            }
-          />
-        </>
-      )}
-    </View>
+                <Pressable
+                  onPress={() => {
+                    setSearch('');
+                    setSpeciesFilter('');
+                    setCustomerFilter('');
+                  }}
+                >
+                  <Text style={styles.clearFilters}>Clear filters</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={[styles.meta, styles.countMeta]}>
+                {filtered.length} pet{filtered.length === 1 ? '' : 's'}
+              </Text>
+            )}
+
+            {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => item.id}
+              refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+              contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+              renderItem={({ item }) => {
+                const photoUri = resolveMediaUrl(item.photo_url);
+                return (
+                  <Pressable
+                    style={styles.row}
+                    onPress={() => navigation.navigate('ShopPetDetail', { petId: item.id })}
+                  >
+                    {photoUri ? (
+                      <Image source={{ uri: photoUri }} style={styles.thumb} />
+                    ) : (
+                      <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                        <Feather name="heart" size={18} color={colors.mutedForeground} />
+                      </View>
+                    )}
+                    <View style={styles.rowMain}>
+                      <Text style={styles.name}>{item.name}</Text>
+                      <Text style={styles.meta}>
+                        {[item.species, item.breed].filter(Boolean).join(' · ') || '—'}
+                        {item.birthday ? ` · birthday ${item.birthday}` : ''}
+                      </Text>
+                      {item.customer_name ? (
+                        <Text style={styles.meta}>Owner: {item.customer_name}</Text>
+                      ) : null}
+                    </View>
+                    <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+                  </Pressable>
+                );
+              }}
+              ListEmptyComponent={
+                !loading ? (
+                  <Text style={styles.meta}>
+                    {pets.length
+                      ? 'No pets match these filters.'
+                      : 'No pets yet. Tap + to add.'}
+                  </Text>
+                ) : null
+              }
+            />
+          </>
+        )}
+      </View>
+    </DesktopPage>
   );
 }
 

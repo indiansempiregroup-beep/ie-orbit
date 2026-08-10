@@ -45,6 +45,7 @@ class ShopProductBarcodeSerializer(serializers.ModelSerializer):
 
 class ShopProductSerializer(serializers.ModelSerializer):
     barcodes = ShopProductBarcodeSerializer(many=True, read_only=True)
+    tax_inclusive = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopProduct
@@ -60,6 +61,7 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "tax_rate",
             "hsn_sac",
             "gst_rate",
+            "tax_inclusive",
             "batch_tracking_enabled",
             "currency",
             "stock_on_hand",
@@ -73,6 +75,10 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_tax_inclusive(self, obj: ShopProduct) -> bool:
+        meta = obj.metadata if isinstance(obj.metadata, dict) else {}
+        return bool(meta.get("tax_inclusive"))
 
 
 class ShopProductWriteSerializer(serializers.Serializer):
@@ -252,6 +258,9 @@ class ShopOrderSerializer(serializers.ModelSerializer):
 class ShopOrderCreateSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     customer_id = serializers.UUIDField(required=False, allow_null=True)
+    customer_gstin = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, max_length=20
+    )
     fulfillment_mode = serializers.ChoiceField(choices=FulfillmentMode.choices, required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
     delivery_address = serializers.CharField(required=False, allow_blank=True)
@@ -301,6 +310,7 @@ class ShopReturnSerializer(serializers.ModelSerializer):
             "currency",
             "credit_invoice",
             "line_items",
+            "metadata",
             "created_at",
             "updated_at",
         ]
@@ -602,6 +612,7 @@ class ShopBooksVoucherLineSerializer(serializers.Serializer):
     rate = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     discount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
     gst_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+    tax_inclusive = serializers.BooleanField(required=False)
 
 
 class ShopBooksVoucherSerializer(serializers.ModelSerializer):

@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
 import { Button } from '../../components/ui/Button';
@@ -12,7 +13,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useServices } from '../../hooks/useOpsData';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
 import { canWriteServices } from '../../utils/roles';
-import { colors, spacing } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
 import { formatServiceMeta, serviceImageUrl } from '../../utils/services';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -37,7 +38,7 @@ export function ServicesScreen() {
   }, [services, search]);
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <View style={styles.toolbar}>
         <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search services" />
         {canManageServices ? (
@@ -76,12 +77,11 @@ export function ServicesScreen() {
           />
         ))}
       </RefreshableScrollView>
-    </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   toolbar: {
     flexDirection: 'row',
     gap: spacing.sm,

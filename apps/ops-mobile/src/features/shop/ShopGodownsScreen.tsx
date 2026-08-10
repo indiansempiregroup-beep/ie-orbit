@@ -21,6 +21,7 @@ import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopGodown, ShopProduct, ShopStockTransfer } from '@ie-platform/sdk';
@@ -296,60 +297,62 @@ export function ShopGodownsScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={godowns}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        ListHeaderComponent={
-          transfers.length ? (
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionTitle}>Recent transfers</Text>
-              {transfers.map((transfer) => (
-                <View key={transfer.id} style={styles.transferRow}>
-                  <Text style={styles.name}>{transfer.transfer_number}</Text>
-                  <Text style={styles.meta}>
-                    {transfer.from_godown_name || 'From'} → {transfer.to_godown_name || 'To'}
-                    {transfer.transfer_date ? ` · ${transfer.transfer_date}` : ''}
-                  </Text>
-                  <Text style={styles.meta}>{transfer.status}</Text>
-                </View>
-              ))}
-              <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>Godowns</Text>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={godowns}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          ListHeaderComponent={
+            transfers.length ? (
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionTitle}>Recent transfers</Text>
+                {transfers.map((transfer) => (
+                  <View key={transfer.id} style={styles.transferRow}>
+                    <Text style={styles.name}>{transfer.transfer_number}</Text>
+                    <Text style={styles.meta}>
+                      {transfer.from_godown_name || 'From'} → {transfer.to_godown_name || 'To'}
+                      {transfer.transfer_date ? ` · ${transfer.transfer_date}` : ''}
+                    </Text>
+                    <Text style={styles.meta}>{transfer.status}</Text>
+                  </View>
+                ))}
+                <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>Godowns</Text>
+              </View>
+            ) : (
+              <Text style={[styles.sectionTitle, { marginBottom: spacing.sm }]}>Godowns</Text>
+            )
+          }
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <View style={styles.rowTop}>
+                <Text style={styles.name}>{item.name}</Text>
+                {item.is_default ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>Default</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.meta}>{item.code ? `Code ${item.code}` : 'No code'}</Text>
             </View>
-          ) : (
-            <Text style={[styles.sectionTitle, { marginBottom: spacing.sm }]}>Godowns</Text>
-          )
-        }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={styles.rowTop}>
-              <Text style={styles.name}>{item.name}</Text>
-              {item.is_default ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Default</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.meta}>{item.code ? `Code ${item.code}` : 'No code'}</Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="home"
-              title="No godowns yet"
-              message="Add a warehouse or godown, then transfer stock between locations."
-              actionLabel="New godown"
-              onAction={() => setMode('godown')}
-            />
-          ) : null
-        }
-      />
-    </View>
+          )}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="home"
+                title="No godowns yet"
+                message="Add a warehouse or godown, then transfer stock between locations."
+                actionLabel="New godown"
+                onAction={() => setMode('godown')}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

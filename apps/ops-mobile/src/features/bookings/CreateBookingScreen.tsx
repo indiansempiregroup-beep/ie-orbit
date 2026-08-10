@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { StaffServiceAssignment } from '@ie-platform/sdk';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { FormScreen } from '../../components/FormScreen';
 import { SelectField } from '../../components/SelectField';
@@ -11,6 +12,7 @@ import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useOpsClient } from '../../hooks/useOpsClient';
 import { useAvailability, useBookingMutations, useBranches, useEntityMaps } from '../../hooks/useOpsExtended';
 import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
@@ -31,6 +33,7 @@ export function CreateBookingScreen() {
   const { user } = useAuth();
   const showStaffPicker = canAccessStaffDirectory(user);
   const { businessId } = useWorkspace();
+  const client = useOpsClient();
   const { customers, services, staff, customerMap, serviceMap, staffMap } = useEntityMaps();
   const { branches } = useBranches();
   const mutations = useBookingMutations();
@@ -44,6 +47,7 @@ export function CreateBookingScreen() {
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [assignments, setAssignments] = useState<StaffServiceAssignment[]>([]);
 
   useEffect(() => {
     if (!branches.length) return;
@@ -57,10 +61,53 @@ export function CreateBookingScreen() {
     });
   }, [branches]);
 
+  useEffect(() => {
+    if (!client || !showStaffPicker) {
+      setAssignments([]);
+      return;
+    }
+    let cancelled = false;
+    void client.staff.assignments
+      .list({})
+      .then((response) => {
+        if (!cancelled) setAssignments(response.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setAssignments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, showStaffPicker]);
+
   const selectedService = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
   const durationMinutes = serviceDurationMinutes(selectedService, route.params?.durationMinutes ?? 30);
   const servicePriceLabel = formatServicePrice(selectedService);
   const serviceMetaLabel = formatServiceMeta(selectedService);
+
+  const eligibleStaff = useMemo(() => {
+    if (!serviceId) return staff;
+    const active = assignments.filter((row) => row.is_active_assignment !== false);
+    const assignedStaffIds = new Set(
+      active.filter((row) => String(row.service) === String(serviceId)).map((row) => String(row.staff)),
+    );
+    const staffWithAnyAssignment = new Set(active.map((row) => String(row.staff)));
+    // Mirror backend: staff with zero assignments stay eligible for every service;
+    // staff with any assignment only appear for their assigned services.
+    return staff.filter((member) => {
+      const id = String(member.id);
+      if (!staffWithAnyAssignment.has(id)) return true;
+      return assignedStaffIds.has(id);
+    });
+  }, [assignments, serviceId, staff]);
+
+  useEffect(() => {
+    if (!staffId) return;
+    if (!eligibleStaff.some((member) => member.id === staffId)) {
+      setStaffId('');
+      setSelectedSlot('');
+    }
+  }, [eligibleStaff, staffId]);
 
   const { slots, loading: slotsLoading } = useAvailability(
     date,
@@ -91,10 +138,15 @@ export function CreateBookingScreen() {
   );
   const staffOptions = useMemo(
     () => [
-      { value: '', label: 'Any available' },
-      ...staff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id })),
+      {
+        value: '',
+        label: serviceId
+          ? `Any available (${eligibleStaff.length} for this service)`
+          : 'Any available',
+      },
+      ...eligibleStaff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id })),
     ],
-    [staff, staffMap],
+    [eligibleStaff, serviceId, staffMap],
   );
   const branchOptions = useMemo(
     () =>
@@ -150,7 +202,10 @@ export function CreateBookingScreen() {
                 source: 'operations_dashboard',
                 channel: 'mobile',
               });
-              navigation.replace('BookingDetail', { bookingId: booking.id });
+              navigation.replace('BookingDetail', {
+                bookingId: booking.id,
+                initialBooking: booking,
+              });
             } catch (err) {
               setError(getApiErrorMessage(err, 'Unable to create booking.'));
             } finally {
@@ -181,6 +236,7 @@ export function CreateBookingScreen() {
           options={serviceOptions}
           onChange={(value) => {
             setServiceId(value);
+            setStaffId('');
             setSelectedSlot('');
           }}
         />
@@ -196,9 +252,16 @@ export function CreateBookingScreen() {
               setStaffId(value);
               setSelectedSlot('');
             }}
+            placeholder={serviceId ? 'Choose eligible staff' : 'Select a service first'}
           />
         ) : null}
         {selectedService ? <Text style={styles.hint}>{serviceMetaLabel}</Text> : null}
+        {showStaffPicker && serviceId && eligibleStaff.length === 0 ? (
+          <Text style={styles.error}>No staff is assigned to this service. Assign services on the staff profile.</Text>
+        ) : null}
+        {showStaffPicker && serviceId && !staffId ? (
+          <Text style={styles.hint}>Any available assigns only among staff who can perform this service.</Text>
+        ) : null}
       </FormSection>
 
       <FormSection step={2} title="Date & time" subtitle="Only open slots for the selected service are shown">

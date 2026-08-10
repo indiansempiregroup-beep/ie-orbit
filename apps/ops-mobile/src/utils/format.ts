@@ -206,6 +206,9 @@ export function getApiErrorMessage(
   if (error instanceof ApiClientError) {
     const details = formatErrorDetails(error.payload.error.details);
     const message = error.payload.error.message || error.message || fallback;
+    if (error.status === 429) {
+      return 'Too many requests — wait a moment and try again.';
+    }
     if (details) {
       return details;
     }

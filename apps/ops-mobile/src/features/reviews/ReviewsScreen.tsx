@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
 import { Card } from '../../components/ui/Card';
@@ -53,7 +54,7 @@ export function ReviewsScreen() {
     : 'When a customer rates a completed booking, it will show up here.';
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <View style={styles.toolbar}>
         <SearchBar
           value={search}
@@ -111,12 +112,11 @@ export function ReviewsScreen() {
           </Card>
         ))}
       </RefreshableScrollView>
-    </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   toolbar: {
     backgroundColor: colors.card,
     borderBottomWidth: StyleSheet.hairlineWidth,

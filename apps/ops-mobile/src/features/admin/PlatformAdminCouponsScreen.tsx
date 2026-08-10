@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -59,45 +60,47 @@ export function PlatformAdminCouponsScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={coupons}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={styles.rowTop}>
-              <Text style={styles.name}>{item.code}</Text>
-              <View
-                style={[
-                  styles.badge,
-                  { backgroundColor: item.is_active ? colors.successSoft : colors.muted },
-                ]}
-              >
-                <Text
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={coupons}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <View style={styles.rowTop}>
+                <Text style={styles.name}>{item.code}</Text>
+                <View
                   style={[
-                    styles.badgeText,
-                    { color: item.is_active ? '#047857' : colors.mutedForeground },
+                    styles.badge,
+                    { backgroundColor: item.is_active ? colors.successSoft : colors.muted },
                   ]}
                 >
-                  {item.is_active ? 'Active' : 'Inactive'}
-                </Text>
+                  <Text
+                    style={[
+                      styles.badgeText,
+                      { color: item.is_active ? '#047857' : colors.mutedForeground },
+                    ]}
+                  >
+                    {item.is_active ? 'Active' : 'Inactive'}
+                  </Text>
+                </View>
               </View>
+              <Text style={styles.meta}>{couponDiscountLabel(item)}</Text>
+              <Text style={styles.meta}>{item.redemption_count} redemption{item.redemption_count === 1 ? '' : 's'}</Text>
             </View>
-            <Text style={styles.meta}>{couponDiscountLabel(item)}</Text>
-            <Text style={styles.meta}>{item.redemption_count} redemption{item.redemption_count === 1 ? '' : 's'}</Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState icon="tag" title="No coupons" message="Platform coupons will appear here when configured." />
-          ) : null
-        }
-      />
-    </View>
+          )}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState icon="tag" title="No coupons" message="Platform coupons will appear here when configured." />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

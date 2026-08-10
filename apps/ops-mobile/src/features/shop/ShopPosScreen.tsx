@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -16,16 +16,18 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Customer, ShopProduct } from '@ie-platform/sdk';
+import type { Customer, ShopCashAccount, ShopProduct, ShopSupplier } from '@ie-platform/sdk';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { DesktopPage } from '../../components/DesktopPage';
 import { SelectField } from '../../components/SelectField';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import { shopListRefreshControl } from './shopRefreshControl';
-import { computePosTotals, type DiscountType } from './posPricing';
+import { computePosTotals, isProductTaxInclusive, type DiscountType } from './posPricing';
 import {
   clearPosBillKeepCustomer,
   readPosSession,
@@ -33,6 +35,8 @@ import {
   takePosPendingAddProductId,
   writePosSession,
 } from './posSession';
+import { normalizeGstin, validateGstin } from '../../utils/gstin';
+import { getApiErrorMessage } from '../../utils/format';
 
 type BasketLine = {
   product: ShopProduct;
@@ -43,19 +47,52 @@ type BasketLine = {
 };
 
 type PaymentMethod = 'cash' | 'upi' | 'card' | 'borrow';
+type PosMode = 'sale' | 'purchase' | 'quotation' | 'credit_note' | 'debit_note';
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopPos'>;
+
+function resolvePosMode(value?: string | null): PosMode {
+  if (
+    value === 'purchase' ||
+    value === 'quotation' ||
+    value === 'credit_note' ||
+    value === 'debit_note'
+  ) {
+    return value;
+  }
+  return 'sale';
+}
+
+function modeTitle(mode: PosMode) {
+  if (mode === 'purchase') return 'Purchase';
+  if (mode === 'quotation') return 'New quotation';
+  if (mode === 'credit_note') return 'Credit note';
+  if (mode === 'debit_note') return 'Debit note';
+  return 'Sale';
+}
 
 export function ShopPosScreen() {
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useBreakpoint();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
+  const mode = resolvePosMode(route.params?.mode);
+  const isPurchase = mode === 'purchase';
+  const isQuotation = mode === 'quotation';
+  const isCreditNote = mode === 'credit_note';
+  const isDebitNote = mode === 'debit_note';
+  const isNote = isCreditNote || isDebitNote;
+  const isDocument = isQuotation || isNote;
+  const usesSupplier = isPurchase || isDebitNote;
+  const skipSaleSession = isDocument || isPurchase;
   const initialSession = readPosSession();
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [basket, setBasket] = useState<BasketLine[]>(() => initialSession.basket);
+  const [suppliers, setSuppliers] = useState<ShopSupplier[]>([]);
+  const [cashAccounts, setCashAccounts] = useState<ShopCashAccount[]>([]);
+  const [basket, setBasket] = useState<BasketLine[]>(() => (skipSaleSession ? [] : initialSession.basket));
   const [customerId, setCustomerId] = useState(
     () =>
       initialSession.customerId ||
@@ -63,54 +100,107 @@ export function ShopPosScreen() {
       route.params?.selectCustomerId ||
       '',
   );
+  const [supplierId, setSupplierId] = useState('');
+  const [cashAccountId, setCashAccountId] = useState('');
   const [scan, setScan] = useState('');
   const [productQuery, setProductQuery] = useState('');
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>(
-    () => initialSession.billDiscountType,
+    () => (skipSaleSession ? '' : initialSession.billDiscountType),
   );
   const [billDiscountValue, setBillDiscountValue] = useState(
-    () => initialSession.billDiscountValue,
+    () => (skipSaleSession ? '0' : initialSession.billDiscountValue),
+  );
+  const [partyGstin, setPartyGstin] = useState(() =>
+    skipSaleSession ? '' : initialSession.partyGstin ?? '',
   );
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
-    () => initialSession.paymentMethod,
+    () => (isPurchase ? 'borrow' : initialSession.paymentMethod),
   );
+  const [validUntil, setValidUntil] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const catalogLoadedRef = React.useRef(false);
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: modeTitle(mode),
+    });
+  }, [navigation, mode]);
+
   const loadCatalog = useCallback(async () => {
     if (!businessId || !client) return;
     setLoading(true);
     try {
-      const [productsRes, customersRes] = await Promise.all([
+      const [productsRes, customersRes, suppliersRes, accountsRes] = await Promise.all([
         client.shop.listProducts({ business_id: businessId, status: 'active' }),
         client.customers.list({ business: businessId }),
+        usesSupplier
+          ? client.shop.listSuppliers({ business_id: businessId })
+          : Promise.resolve({ data: [] as ShopSupplier[] }),
+        isPurchase
+          ? client.shop.listCashAccounts({ business_id: businessId })
+          : Promise.resolve({ data: [] as ShopCashAccount[] }),
       ]);
       setProducts(productsRes.data);
       setCustomers(customersRes.data ?? []);
+      setSuppliers(suppliersRes.data ?? []);
+      const accounts = accountsRes.data ?? [];
+      setCashAccounts(accounts);
+      setCashAccountId((current) => current || accounts[0]?.id || '');
       catalogLoadedRef.current = true;
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to load POS catalog');
+      setMessage(err instanceof Error ? err.message : 'Failed to load catalog');
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, isPurchase, usesSupplier]);
 
-  const updateCustomerId = useCallback((id: string) => {
-    setCustomerId(id);
-    writePosSession({ customerId: id });
-  }, []);
+  const updateCustomerId = useCallback(
+    (id: string) => {
+      setCustomerId(id);
+      const customer = customers.find((row) => row.id === id);
+      const nextGstin = normalizeGstin(customer?.gstin || '');
+      setPartyGstin(nextGstin);
+      writePosSession({ customerId: id, partyGstin: nextGstin });
+    },
+    [customers],
+  );
 
-  const syncBasket = useCallback((next: BasketLine[] | ((current: BasketLine[]) => BasketLine[])) => {
-    setBasket((current) => {
-      const resolved = typeof next === 'function' ? next(current) : next;
-      writePosSession({ basket: resolved });
-      return resolved;
-    });
-  }, []);
+  const updateSupplierId = useCallback(
+    (id: string) => {
+      setSupplierId(id);
+      const supplier = suppliers.find((row) => row.id === id);
+      setPartyGstin(normalizeGstin(supplier?.gstin || ''));
+    },
+    [suppliers],
+  );
+
+  const updatePartyGstin = useCallback(
+    (value: string) => {
+      const next = normalizeGstin(value);
+      setPartyGstin(next);
+      if (!skipSaleSession) {
+        writePosSession({ partyGstin: next });
+      }
+    },
+    [skipSaleSession],
+  );
+
+  const syncBasket = useCallback(
+    (next: BasketLine[] | ((current: BasketLine[]) => BasketLine[])) => {
+      setBasket((current) => {
+        const resolved = typeof next === 'function' ? next(current) : next;
+        if (!skipSaleSession) {
+          writePosSession({ basket: resolved });
+        }
+        return resolved;
+      });
+    },
+    [skipSaleSession],
+  );
 
   const resolveCode = useCallback(
     async (code: string) => {
@@ -162,12 +252,15 @@ export function ShopPosScreen() {
   useFocusEffect(
     useCallback(() => {
       // Pull latest session written by scanner / add-product (do not write stale local state over it).
-      const session = readPosSession();
-      setCustomerId(session.customerId);
-      setBasket(session.basket);
-      setBillDiscountType(session.billDiscountType);
-      setBillDiscountValue(session.billDiscountValue);
-      setPaymentMethod(session.paymentMethod);
+      if (!skipSaleSession) {
+        const session = readPosSession();
+        setCustomerId(session.customerId);
+        setBasket(session.basket);
+        setBillDiscountType(session.billDiscountType);
+        setBillDiscountValue(session.billDiscountValue);
+        setPartyGstin(session.partyGstin ?? '');
+        setPaymentMethod(session.paymentMethod);
+      }
 
       if (!catalogLoadedRef.current) {
         void loadCatalog();
@@ -219,7 +312,7 @@ export function ShopPosScreen() {
       }
 
       const selectId = route.params?.selectCustomerId;
-      if (selectId) {
+      if (selectId && !usesSupplier) {
         updateCustomerId(selectId);
         navigation.setParams({ selectCustomerId: undefined });
         void loadCatalog();
@@ -232,8 +325,10 @@ export function ShopPosScreen() {
       route.params?.addCode,
       route.params?.addProductId,
       route.params?.selectCustomerId,
+      skipSaleSession,
       syncBasket,
       updateCustomerId,
+      usesSupplier,
     ]),
   );
 
@@ -241,7 +336,7 @@ export function ShopPosScreen() {
 
   const customerOptions = useMemo(() => {
     const options = [
-      { value: '', label: 'Walk-in customer' },
+      { value: '', label: isCreditNote ? 'Select customer' : 'Walk-in customer' },
       ...customers.map((customer) => ({
         value: customer.id,
         label:
@@ -257,7 +352,27 @@ export function ShopPosScreen() {
       options.push({ value: customerId, label: 'Selected customer' });
     }
     return options;
-  }, [customerId, customers]);
+  }, [customerId, customers, isCreditNote]);
+
+  const supplierOptions = useMemo(
+    () => [
+      { value: '', label: isPurchase ? 'No supplier' : 'Select supplier' },
+      ...suppliers.map((supplier) => ({
+        value: supplier.id,
+        label: supplier.name || supplier.phone || supplier.gstin || supplier.id,
+      })),
+    ],
+    [isPurchase, suppliers],
+  );
+
+  const cashAccountOptions = useMemo(
+    () =>
+      cashAccounts.map((account) => ({
+        value: account.id,
+        label: `${account.name} (${account.account_type})`,
+      })),
+    [cashAccounts],
+  );
 
   const filteredProducts = useMemo(() => {
     const term = productQuery.trim().toLowerCase();
@@ -272,6 +387,8 @@ export function ShopPosScreen() {
       .slice(0, 60);
   }, [productQuery, products]);
 
+  const billGstinCheck = useMemo(() => validateGstin(partyGstin), [partyGstin]);
+
   const totals = useMemo(
     () =>
       computePosTotals(
@@ -279,7 +396,8 @@ export function ShopPosScreen() {
           id: line.product.id,
           name: line.product.name,
           unitPrice: Number(line.product.price),
-          taxRate: Number(line.product.tax_rate ?? 0),
+          taxRate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+          taxInclusive: isProductTaxInclusive(line.product),
           quantity: line.quantity,
           discountType: line.discountType,
           discountValue: line.discountValue,
@@ -338,18 +456,134 @@ export function ShopPosScreen() {
 
   async function checkout() {
     if (!client || !businessId || !basket.length) return;
-    if (paymentMethod === 'borrow' && !customerId) {
+    if (mode === 'sale' && paymentMethod === 'borrow' && !customerId) {
       const text = 'Select a customer for borrow / credit bills.';
       setMessage(text);
       toast.push(text, 'error');
       return;
     }
+    if (isCreditNote && !customerId) {
+      const text = 'Select a customer for the credit note.';
+      setMessage(text);
+      toast.push(text, 'error');
+      return;
+    }
+    if (isDebitNote && !supplierId) {
+      const text = 'Select a supplier for the debit note.';
+      setMessage(text);
+      toast.push(text, 'error');
+      return;
+    }
+    if (isPurchase && paymentMethod !== 'borrow' && !cashAccountId) {
+      const text = 'Select a cash/bank account for the payment.';
+      setMessage(text);
+      toast.push(text, 'error');
+      return;
+    }
+    const gstinResult = validateGstin(partyGstin);
+    if (!gstinResult.ok) {
+      setMessage(gstinResult.message);
+      toast.push(gstinResult.message, 'error');
+      return;
+    }
+    const resolvedGstin = gstinResult.gstin;
+
     setBusy(true);
     setMessage(null);
     try {
+      const taxLines = basket.map((line) => ({
+        product_id: line.product.id,
+        name: line.product.name,
+        qty: line.quantity,
+        rate: line.product.price,
+        gst_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+        tax_inclusive: isProductTaxInclusive(line.product),
+      }));
+      const partyMeta = resolvedGstin
+        ? usesSupplier
+          ? { supplier_gstin: resolvedGstin }
+          : { customer_gstin: resolvedGstin }
+        : {};
+
+      if (isQuotation) {
+        const response = await client.shop.createQuotation({
+          business_id: businessId,
+          customer_id: customerId || null,
+          valid_until: validUntil.trim() || null,
+          notes: 'Quotation from Sale counter',
+          lines: basket.map((line) => ({
+            product_id: line.product.id,
+            quantity: line.quantity,
+            unit_price: line.product.price,
+            tax_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+          })),
+        });
+        setBasket([]);
+        setBillDiscountType('');
+        setBillDiscountValue('0');
+        setValidUntil('');
+        toast.push(
+          `Quotation ${response.data.quotation_number} created · ${totals.payable.toFixed(2)}`,
+          'success',
+        );
+        navigation.navigate('ShopBooksQuotations');
+        return;
+      }
+
+      if (isNote) {
+        const response = await client.shop.createVoucher({
+          voucher_type: mode,
+          business_id: businessId,
+          customer_id: isCreditNote ? customerId : null,
+          supplier_id: isDebitNote ? supplierId : null,
+          lines: taxLines,
+          notes: isCreditNote ? 'Credit note from Sale counter' : 'Debit note from Sale counter',
+          metadata: partyMeta,
+        });
+        setBasket([]);
+        setBillDiscountType('');
+        setBillDiscountValue('0');
+        setSupplierId('');
+        if (isDebitNote) setPartyGstin('');
+        toast.push(
+          `${isCreditNote ? 'Credit' : 'Debit'} note ${response.data.voucher_number} recorded · ${totals.payable.toFixed(2)}`,
+          'success',
+        );
+        navigation.navigate('ShopBooksNotes');
+        return;
+      }
+
+      if (isPurchase) {
+        const paidNow = paymentMethod !== 'borrow';
+        const response = await client.shop.createVoucher({
+          voucher_type: 'purchase',
+          business_id: businessId,
+          supplier_id: supplierId || null,
+          lines: taxLines,
+          amount_paid: paidNow ? totals.payable : 0,
+          cash_account_id: paidNow ? cashAccountId || undefined : undefined,
+          notes: paidNow
+            ? `Purchase · ${paymentMethod.toUpperCase()}`
+            : 'Purchase · Unpaid (due)',
+          metadata: partyMeta,
+        });
+        setBasket([]);
+        setBillDiscountType('');
+        setBillDiscountValue('0');
+        setSupplierId('');
+        setPartyGstin('');
+        toast.push(
+          `Purchase ${response.data.voucher_number} recorded${paidNow ? '' : ' · Due'} · ${totals.payable.toFixed(2)}`,
+          'success',
+        );
+        navigation.navigate('ShopBooksPurchase');
+        return;
+      }
+
       const response = await client.shop.createOrder({
         business_id: businessId,
         customer_id: customerId || null,
+        ...(resolvedGstin ? { customer_gstin: resolvedGstin } : {}),
         fulfillment_mode: 'pos',
         confirm: true,
         payment_method: paymentMethod,
@@ -357,13 +591,14 @@ export function ShopPosScreen() {
         bill_discount_value: Number(billDiscountValue) || 0,
         notes:
           paymentMethod === 'borrow'
-            ? 'POS · BORROW (due)'
-            : `POS · ${paymentMethod.toUpperCase()}`,
+            ? 'Sale · BORROW (due)'
+            : `Sale · ${paymentMethod.toUpperCase()}`,
         lines: basket.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
           unit_price: line.product.price,
-          tax_rate: line.product.tax_rate,
+          tax_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+          tax_inclusive: isProductTaxInclusive(line.product),
           barcode_scanned: line.barcode_scanned,
           discount_type: line.discountType,
           discount_value: line.discountValue,
@@ -373,22 +608,32 @@ export function ShopPosScreen() {
       setBillDiscountType('');
       setBillDiscountValue('0');
       clearPosBillKeepCustomer();
-      // keep customerId in local + session
       writePosSession({
         customerId,
         basket: [],
         billDiscountType: '',
         billDiscountValue: '0',
+        partyGstin: resolvedGstin,
         paymentMethod,
       });
       const dueLabel = paymentMethod === 'borrow' ? ' · Due' : '';
+      const gstLabel = resolvedGstin ? ' · B2B' : '';
       toast.push(
-        `Bill ${response.data.order_number} created${dueLabel} · ${totals.payable.toFixed(2)}`,
+        `Sale invoice ${response.data.order_number} posted to Books${dueLabel}${gstLabel} · ${totals.payable.toFixed(2)}`,
         'success',
       );
-      setMessage(`Bill ${response.data.order_number} created`);
+      setMessage(`Sale invoice ${response.data.order_number} posted to Books`);
+      navigation.navigate('ShopBooksSale');
     } catch (err) {
-      const text = err instanceof Error ? err.message : 'Unable to create bill';
+      const fallback =
+        isQuotation
+          ? 'Unable to create quotation'
+          : isNote
+            ? 'Unable to record note'
+            : isPurchase
+              ? 'Unable to record purchase'
+              : 'Unable to create bill';
+      const text = getApiErrorMessage(err, fallback);
       setMessage(text);
       toast.push(text, 'error');
     } finally {
@@ -397,30 +642,49 @@ export function ShopPosScreen() {
   }
 
   return (
+    <DesktopPage maxWidth={960}>
     <View style={[styles.screen, { paddingTop: spacing.md }]}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: spacing.xl }}
         keyboardShouldPersistTaps="handled"
         refreshControl={shopListRefreshControl(refreshing, onRefresh)}
       >
         <View style={styles.customerRow}>
-          <View style={styles.customerField}>
-            <SelectField
-              label="Customer"
-              value={customerId}
-              options={customerOptions}
-              onChange={updateCustomerId}
-              searchable
-              placeholder="Walk-in customer"
-            />
-          </View>
-          <Pressable
-            style={styles.sideAddBtn}
-            onPress={openAddCustomer}
-            accessibilityLabel="Add customer"
-          >
-            <Feather name="user-plus" size={20} color="#fff" />
-          </Pressable>
+          {usesSupplier ? (
+            <View style={styles.customerField}>
+              <SelectField
+                label="Supplier"
+                value={supplierId}
+                options={supplierOptions}
+                onChange={updateSupplierId}
+                searchable
+                placeholder={isPurchase ? 'No supplier' : 'Select supplier'}
+              />
+            </View>
+          ) : (
+            <>
+              <View style={styles.customerField}>
+                <SelectField
+                  label={isCreditNote ? 'Customer' : 'Customer'}
+                  value={customerId}
+                  options={customerOptions}
+                  onChange={updateCustomerId}
+                  searchable
+                  placeholder={isCreditNote ? 'Select customer' : 'Walk-in customer'}
+                />
+              </View>
+              {!isDocument || isQuotation || isCreditNote ? (
+                <Pressable
+                  style={styles.sideAddBtn}
+                  onPress={openAddCustomer}
+                  accessibilityLabel="Add customer"
+                >
+                  <Feather name="user-plus" size={20} color="#fff" />
+                </Pressable>
+              ) : null}
+            </>
+          )}
         </View>
 
         <Text style={styles.section}>Add products</Text>
@@ -469,10 +733,28 @@ export function ShopPosScreen() {
         {message ? <Text style={styles.message}>{message}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
 
-        <Text style={styles.section}>Bill ({basket.length} items)</Text>
+        <Text style={styles.section}>
+          {isQuotation
+            ? `Estimate (${basket.length} items)`
+            : isPurchase
+              ? `Purchase (${basket.length} items)`
+              : isCreditNote
+                ? `Credit note (${basket.length} items)`
+                : isDebitNote
+                  ? `Debit note (${basket.length} items)`
+                  : `Bill (${basket.length} items)`}
+        </Text>
         {!basket.length ? (
           <View style={styles.emptyBill}>
-            <Text style={styles.meta}>Scan or search products to start billing.</Text>
+            <Text style={styles.meta}>
+              {isQuotation
+                ? 'Scan or search products to build the quotation.'
+                : isPurchase
+                  ? 'Scan or search products from the supplier bill.'
+                  : isNote
+                    ? 'Scan or search products for this adjustment note.'
+                    : 'Scan or search products to start billing.'}
+            </Text>
           </View>
         ) : (
           basket.map((line) => {
@@ -483,7 +765,9 @@ export function ShopPosScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{line.product.name}</Text>
                     <Text style={styles.meta}>
-                      {Number(line.product.price).toFixed(2)} · tax {Number(line.product.tax_rate ?? 0)}%
+                      {Number(line.product.price).toFixed(2)} · GST{' '}
+                      {Number(line.product.gst_rate ?? line.product.tax_rate ?? 0)}%
+                      {isProductTaxInclusive(line.product) ? ' incl.' : ' excl.'}
                       {priced && priced.discountAmount > 0
                         ? ` · disc. -${priced.discountAmount.toFixed(2)}`
                         : ''}
@@ -597,37 +881,101 @@ export function ShopPosScreen() {
           ) : null}
         </View>
 
-        <Text style={styles.section}>Payment</Text>
-        <View style={styles.discountRow}>
-          {(
-            [
-              { value: 'cash', label: 'Cash' },
-              { value: 'upi', label: 'UPI' },
-              { value: 'card', label: 'Card' },
-              { value: 'borrow', label: 'Borrow' },
-            ] as const
-          ).map((method) => (
-            <Pressable
-              key={method.value}
-              style={[styles.chip, paymentMethod === method.value && styles.chipActive]}
-              onPress={() => {
-                setPaymentMethod(method.value);
-                writePosSession({ paymentMethod: method.value });
-              }}
-            >
-              <Text style={styles.chipText}>{method.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {paymentMethod === 'borrow' ? (
-          <Text style={styles.hint}>
-            Borrow / credit: customer takes goods now and pays later. A customer is required (not
-            Walk-in).
-          </Text>
-        ) : null}
+        <Text style={styles.section}>{usesSupplier ? 'Supplier GSTIN' : 'Customer GSTIN'}</Text>
+        <TextInput
+          style={[styles.input, partyGstin.length > 0 && !billGstinCheck.ok && styles.inputError]}
+          value={partyGstin}
+          onChangeText={updatePartyGstin}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={15}
+          placeholder="29AABCU9603R1ZJ (optional for B2C)"
+          placeholderTextColor={colors.mutedForeground}
+        />
+        <Text style={[styles.hint, partyGstin.length > 0 && !billGstinCheck.ok && styles.hintError]}>
+          {partyGstin.length === 0
+            ? 'Leave blank for B2C. Enter a valid 15-character GSTIN for a proper B2B GST invoice.'
+            : !billGstinCheck.ok
+              ? billGstinCheck.message
+              : 'Valid GSTIN — this bill will be posted as B2B for GSTR-1 / e-invoice.'}
+        </Text>
+
+        {isDocument ? (
+          isQuotation ? (
+            <>
+              <Text style={styles.section}>Valid until</Text>
+              <TextInput
+                style={styles.input}
+                value={validUntil}
+                onChangeText={setValidUntil}
+                placeholder="YYYY-MM-DD (optional)"
+                placeholderTextColor={colors.mutedForeground}
+              />
+            </>
+          ) : (
+            <Text style={styles.hint}>
+              {isCreditNote
+                ? 'Credit note reduces what the customer owes (returns / adjustments).'
+                : 'Debit note reduces what you owe the supplier (returns / adjustments).'}
+            </Text>
+          )
+        ) : (
+          <>
+            <Text style={styles.section}>Payment</Text>
+            <View style={styles.discountRow}>
+              {(
+                [
+                  { value: 'cash', label: 'Cash' },
+                  { value: 'upi', label: 'UPI' },
+                  { value: 'card', label: 'Card' },
+                  { value: 'borrow', label: isPurchase ? 'Unpaid' : 'Borrow' },
+                ] as const
+              ).map((method) => (
+                <Pressable
+                  key={method.value}
+                  style={[styles.chip, paymentMethod === method.value && styles.chipActive]}
+                  onPress={() => {
+                    setPaymentMethod(method.value);
+                    if (!isPurchase) {
+                      writePosSession({ paymentMethod: method.value });
+                    }
+                  }}
+                >
+                  <Text style={styles.chipText}>{method.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {isPurchase && paymentMethod !== 'borrow' ? (
+              <SelectField
+                label="Paid from"
+                value={cashAccountId}
+                options={cashAccountOptions}
+                onChange={setCashAccountId}
+                placeholder="Select account"
+              />
+            ) : null}
+            {paymentMethod === 'borrow' ? (
+              <Text style={styles.hint}>
+                {isPurchase
+                  ? 'Unpaid: record the supplier bill now and pay later from Cash / Parties.'
+                  : 'Borrow / credit: customer takes goods now and pays later. A customer is required (not Walk-in).'}
+              </Text>
+            ) : null}
+          </>
+        )}
 
         <View style={styles.totalsCard}>
-          <Text style={styles.summaryTitle}>Bill summary</Text>
+          <Text style={styles.summaryTitle}>
+            {isQuotation
+              ? 'Estimate summary'
+              : isPurchase
+                ? 'Purchase summary'
+                : isCreditNote
+                  ? 'Credit note summary'
+                  : isDebitNote
+                    ? 'Debit note summary'
+                    : 'Bill summary'}
+          </Text>
           <View style={styles.totalRow}>
             <Text style={styles.meta}>Items</Text>
             <Text style={styles.meta}>{totals.merchandiseGross.toFixed(2)}</Text>
@@ -641,12 +989,20 @@ export function ShopPosScreen() {
             <Text style={styles.meta}>-{totals.billDiscountAmount.toFixed(2)}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.meta}>Tax</Text>
+            <Text style={styles.meta}>
+              GST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
+            </Text>
             <Text style={styles.meta}>{totals.taxTotal.toFixed(2)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.payableLabel}>
-              {paymentMethod === 'borrow' ? 'Amount due' : 'Payable'}
+              {isQuotation || isNote
+                ? 'Total'
+                : paymentMethod === 'borrow'
+                  ? 'Amount due'
+                  : isPurchase
+                    ? 'Amount to pay'
+                    : 'Payable'}
             </Text>
             <Text style={styles.payableValue}>{totals.payable.toFixed(2)}</Text>
           </View>
@@ -661,10 +1017,26 @@ export function ShopPosScreen() {
         >
           <Text style={styles.checkoutText}>
             {busy
-              ? 'Creating bill…'
-              : paymentMethod === 'borrow'
-                ? `Save bill · Due ${totals.payable.toFixed(2)}`
-                : `Save & print · ${totals.payable.toFixed(2)}`}
+              ? isQuotation
+                ? 'Saving quotation…'
+                : isNote
+                  ? 'Saving note…'
+                  : isPurchase
+                    ? 'Recording purchase…'
+                    : 'Creating bill…'
+              : isQuotation
+                ? `Save quotation · ${totals.payable.toFixed(2)}`
+                : isCreditNote
+                  ? `Save credit note · ${totals.payable.toFixed(2)}`
+                  : isDebitNote
+                    ? `Save debit note · ${totals.payable.toFixed(2)}`
+                    : isPurchase
+                      ? paymentMethod === 'borrow'
+                        ? `Record purchase · Due ${totals.payable.toFixed(2)}`
+                        : `Record purchase · ${totals.payable.toFixed(2)}`
+                      : paymentMethod === 'borrow'
+                        ? `Save bill · Due ${totals.payable.toFixed(2)}`
+                        : `Save & print · ${totals.payable.toFixed(2)}`}
           </Text>
         </Pressable>
       </View>
@@ -675,7 +1047,7 @@ export function ShopPosScreen() {
         transparent
         onRequestClose={() => setProductPickerOpen(false)}
       >
-        <View style={styles.overlay}>
+        <View style={[styles.overlay, isDesktop && styles.overlayDesktop]}>
           <Pressable
             style={styles.backdrop}
             onPress={() => setProductPickerOpen(false)}
@@ -683,7 +1055,11 @@ export function ShopPosScreen() {
           />
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
+            style={[
+              styles.sheet,
+              isDesktop && styles.sheetDesktop,
+              { paddingBottom: Math.max(insets.bottom, spacing.lg) },
+            ]}
           >
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
@@ -749,13 +1125,14 @@ export function ShopPosScreen() {
         </View>
       </Modal>
     </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  customerRow: {
-    flexDirection: 'row',
+  scroll: { flex: 1 },
+  customerRow: {    flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
   },
@@ -787,6 +1164,9 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     backgroundColor: colors.card,
   },
+  inputError: {
+    borderColor: colors.destructive,
+  },
   iconBtn: {
     width: 44,
     height: 44,
@@ -801,6 +1181,9 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: 13,
     lineHeight: 18,
+  },
+  hintError: {
+    color: colors.destructive,
   },
   summaryTitle: {
     fontFamily: fonts.bodyMedium,
@@ -866,10 +1249,6 @@ const styles = StyleSheet.create({
   payableLabel: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.foreground },
   payableValue: { fontFamily: fonts.bodyBold, fontSize: 20, color: colors.primary },
   chargeBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     backgroundColor: colors.card,
@@ -885,6 +1264,7 @@ const styles = StyleSheet.create({
   checkoutDisabled: { opacity: 0.5 },
   checkoutText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   overlay: { flex: 1, justifyContent: 'flex-end' },
+  overlayDesktop: { justifyContent: 'center', alignItems: 'center', padding: spacing.xxl },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
   sheet: {
     backgroundColor: colors.sheet,
@@ -899,6 +1279,15 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: -8 },
     elevation: 16,
+  },
+  sheetDesktop: {
+    width: '100%',
+    maxWidth: 520,
+    height: 'auto' as unknown as number,
+    maxHeight: '80%',
+    borderRadius: radius.xl,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
   },
   handle: {
     alignSelf: 'center',

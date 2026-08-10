@@ -21,8 +21,10 @@ import type { ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime } from '../../utils/format';
+import { DesktopPage } from '../../components/DesktopPage';
 import {
   formatMoney,
+  formatShopOrderFulfillment,
   formatShopOrderPayment,
   getShopOrderPosMeta,
   isShopOrderBorrowDue,
@@ -105,9 +107,13 @@ export function ShopOrderDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: order?.order_number ? `Bill ${order.order_number}` : 'Order detail',
+      title: order?.order_number
+        ? String(order.fulfillment_mode || '').toLowerCase() === 'pos'
+          ? `Sale ${order.order_number}`
+          : `Order ${order.order_number}`
+        : 'Order detail',
     });
-  }, [navigation, order?.order_number]);
+  }, [navigation, order?.order_number, order?.fulfillment_mode]);
 
   const alreadyReturned = useMemo(() => returnedQtyByLine(returns), [returns]);
 
@@ -209,17 +215,21 @@ export function ShopOrderDetailScreen() {
 
   if (loading && !order) {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
+      <DesktopPage>
+        <View style={[styles.screen, styles.centered]}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </DesktopPage>
     );
   }
 
   if (!order) {
     return (
-      <View style={[styles.screen, styles.centered, { paddingHorizontal: spacing.lg }]}>
-        <Text style={styles.error}>{error || 'Order not found.'}</Text>
-      </View>
+      <DesktopPage>
+        <View style={[styles.screen, styles.centered, { paddingHorizontal: spacing.lg }]}>
+          <Text style={styles.error}>{error || 'Order not found.'}</Text>
+        </View>
+      </DesktopPage>
     );
   }
 
@@ -231,6 +241,22 @@ export function ShopOrderDetailScreen() {
   const customerName = order.customer_id
     ? entityLabel(buildNameMap(customers), order.customer_id, 'Customer')
     : 'Walk-in';
+  const customer = order.customer_id ? customers.find((row) => row.id === order.customer_id) : null;
+  const deliveryAddress =
+    String(order.delivery_address || '').trim() ||
+    customer?.full_address?.trim() ||
+    customer?.address?.full_address?.trim() ||
+    [
+      customer?.address?.line1,
+      customer?.address?.line2,
+      customer?.address?.city,
+      customer?.address?.state,
+      customer?.address?.postal_code,
+    ]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .join(', ');
+  const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
   const lineDiscountTotal = Number(pos.line_discount_total ?? 0);
   const billDiscountAmount = Number(pos.bill_discount_amount ?? 0);
   const merchandiseGross = (order.lines ?? []).reduce((sum, line) => {
@@ -242,284 +268,294 @@ export function ShopOrderDetailScreen() {
   const cashCreditPreview = Math.max(0, selectedRefund - borrowPreview);
 
   return (
-    <ScrollView
-      style={styles.screen}
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.md,
-        paddingBottom: insets.bottom + spacing.xl,
-        gap: 12,
-      }}
-    >
-      <View style={styles.headerCard}>
-        <Text style={styles.orderNumber}>{order.order_number}</Text>
-        <Text style={styles.meta}>
-          {order.status} · {order.fulfillment_mode}
-          {order.created_at ? ` · ${formatDateTime(order.created_at)}` : ''}
-        </Text>
-        <Text style={styles.customer}>{customerName}</Text>
-        {payment ? <Text style={[styles.payment, due && styles.due]}>{payment}</Text> : null}
-      </View>
-
-      {String(order.payment_status || pos.payment_status || '') === 'awaiting_confirmation' ? (
+    <DesktopPage>
+      <ScrollView
+        style={styles.screen}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
+          paddingBottom: insets.bottom + spacing.xl,
+          gap: 12,
+        }}
+      >
         <View style={styles.headerCard}>
-          <Text style={styles.section}>Customer UPI claim</Text>
-          <Text style={styles.meta}>UTR: {String(order.upi_utr || pos.upi_utr || '—')}</Text>
-          {order.payment_proof_url || pos.payment_proof_url ? (
-            <Text style={styles.meta}>Screenshot attached</Text>
-          ) : null}
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-            <Pressable
-              style={[styles.actionBtn, { backgroundColor: colors.success }]}
-              disabled={busy}
-              onPress={() => {
-                if (!client) return;
-                setBusy(true);
-                void client.shop
-                  .confirmOrderPayment(orderId, { action: 'confirm' })
-                  .then(() => {
-                    toast.push('Payment confirmed', 'success');
-                    return load();
-                  })
-                  .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              <Text style={styles.actionBtnText}>Confirm paid</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.actionBtn, { backgroundColor: colors.destructive }]}
-              disabled={busy}
-              onPress={() => {
-                if (!client) return;
-                setBusy(true);
-                void client.shop
-                  .confirmOrderPayment(orderId, { action: 'reject' })
-                  .then(() => {
-                    toast.push('Payment rejected', 'success');
-                    return load();
-                  })
-                  .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              <Text style={styles.actionBtnText}>Reject</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Text style={styles.section}>Bill ({(order.lines ?? []).length} items)</Text>
-      {(order.lines ?? []).length === 0 ? (
-        <View style={styles.emptyBill}>
-          <Text style={styles.meta}>No line items on this bill.</Text>
-        </View>
-      ) : (
-        (order.lines ?? []).map((line) => {
-          const disc = Number(line.discount_amount || 0);
-          const returned = alreadyReturned[line.id] || 0;
-          return (
-            <View key={line.id} style={styles.lineCard}>
-              <View style={styles.lineHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{line.product_name}</Text>
-                  <Text style={styles.meta}>
-                    {formatMoney(line.unit_price)} · tax {formatMoney(line.tax_rate)}%
-                    {disc > 0 ? ` · disc. -${formatMoney(disc)}` : ''}
-                  </Text>
-                  {returned > 0 ? (
-                    <Text style={styles.returnedHint}>Returned {formatQty(returned)}</Text>
-                  ) : null}
-                </View>
-                <Text style={styles.lineTotal}>{formatMoney(line.line_total)}</Text>
-              </View>
-              <Text style={styles.qty}>Qty {formatQty(Number(line.quantity || 0))}</Text>
-            </View>
-          );
-        })
-      )}
-
-      <View style={styles.totalsCard}>
-        <Text style={styles.summaryTitle}>Bill summary</Text>
-        <View style={styles.totalRow}>
-          <Text style={styles.meta}>Items</Text>
-          <Text style={styles.meta}>{formatMoney(merchandiseGross)}</Text>
-        </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.meta}>Product discounts</Text>
-          <Text style={styles.meta}>-{formatMoney(lineDiscountTotal)}</Text>
-        </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.meta}>Bill discount</Text>
-          <Text style={styles.meta}>-{formatMoney(billDiscountAmount)}</Text>
-        </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.meta}>Tax</Text>
-          <Text style={styles.meta}>{formatMoney(order.tax_total)}</Text>
-        </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.payableLabel}>{due ? 'Amount due' : 'Payable'}</Text>
-          <Text style={styles.payableValue}>
-            {formatMoney(due ? pos.amount_due ?? order.total : order.total)}
-          </Text>
-        </View>
-        <Text style={styles.currencyNote}>{order.currency || 'INR'}</Text>
-      </View>
-
-      {order.notes ? (
-        <View style={styles.notesCard}>
-          <Text style={styles.section}>Notes</Text>
-          <Text style={styles.meta}>{order.notes}</Text>
-        </View>
-      ) : null}
-
-      {order.delivery_address ? (
-        <View style={styles.notesCard}>
-          <Text style={styles.section}>Delivery</Text>
-          <Text style={styles.meta}>{order.delivery_address}</Text>
-        </View>
-      ) : null}
-
-      <View style={styles.returnCard}>
-        <View style={styles.returnHeader}>
-          <Text style={styles.summaryTitle}>Returns</Text>
-          {canReturn && !returnMode ? (
-            <Pressable style={styles.returnStartBtn} onPress={openReturnMode}>
-              <Feather name="rotate-ccw" size={16} color="#fff" />
-              <Text style={styles.returnStartText}>Return items</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {!canReturn ? (
+          <Text style={styles.orderNumber}>{order.order_number}</Text>
           <Text style={styles.meta}>
-            {RETURNABLE_STATUSES.has(order.status)
-              ? 'All items on this bill have already been returned.'
-              : 'Returns are available after the bill is confirmed.'}
+            {order.status} · {formatShopOrderFulfillment(order.fulfillment_mode)}
+            {order.created_at ? ` · ${formatDateTime(order.created_at)}` : ''}
           </Text>
-        ) : null}
-
-        {returnMode ? (
-          <View style={styles.returnForm}>
-            <Text style={styles.meta}>
-              Choose quantities to return. Stock is added back when restock is on.
-              {isBorrow
-                ? ' For borrow bills, unpaid due is reduced first; any paid portion becomes a credit note.'
-                : ' A credit note is created for the refund amount.'}
-            </Text>
-
-            {returnableLines.map((row) => {
-              const qty = qtyByLine[row.line.id] || 0;
-              return (
-                <View key={row.line.id} style={styles.returnLine}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>{row.line.product_name}</Text>
-                    <Text style={styles.meta}>
-                      Returnable {formatQty(row.remaining)} · ~{formatMoney(proportionalRefund(row.line, 1))} each
-                    </Text>
-                  </View>
-                  <View style={styles.qtyRow}>
-                    <Pressable
-                      style={styles.qtyBtn}
-                      onPress={() => setLineQty(row.line.id, row.remaining, qty - 1)}
-                    >
-                      <Text style={styles.qtyBtnText}>−</Text>
-                    </Pressable>
-                    <Text style={styles.qtyValue}>{formatQty(qty)}</Text>
-                    <Pressable
-                      style={styles.qtyBtn}
-                      onPress={() => setLineQty(row.line.id, row.remaining, qty + 1)}
-                    >
-                      <Text style={styles.qtyBtnText}>+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-
-            <Pressable style={styles.restockRow} onPress={() => setRestock((value) => !value)}>
-              <View style={[styles.checkbox, restock && styles.checkboxOn]}>
-                {restock ? <Feather name="check" size={14} color="#fff" /> : null}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>Add back to inventory</Text>
-                <Text style={styles.meta}>
-                  {restock
-                    ? 'Returned qty will increase stock on hand.'
-                    : 'Damaged / unsellable — no stock increase.'}
-                </Text>
-              </View>
-            </Pressable>
-
-            <TextInput
-              style={styles.input}
-              value={reason}
-              onChangeText={setReason}
-              placeholder="Reason (optional)"
-              placeholderTextColor={colors.mutedForeground}
-            />
-
-            <View style={styles.previewCard}>
-              <View style={styles.totalRow}>
-                <Text style={styles.meta}>Return value</Text>
-                <Text style={styles.meta}>{formatMoney(selectedRefund)}</Text>
-              </View>
-              {isBorrow ? (
-                <>
-                  <View style={styles.totalRow}>
-                    <Text style={styles.meta}>Reduce customer due</Text>
-                    <Text style={styles.meta}>-{formatMoney(borrowPreview)}</Text>
-                  </View>
-                  {cashCreditPreview > 0 ? (
-                    <View style={styles.totalRow}>
-                      <Text style={styles.meta}>Credit note (already paid)</Text>
-                      <Text style={styles.meta}>{formatMoney(cashCreditPreview)}</Text>
-                    </View>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={styles.meta}>Credit note will be created for this amount.</Text>
-              )}
+          <Text style={styles.customer}>{customerName}</Text>
+          {isOnlineOrder && deliveryAddress ? (
+            <View style={styles.addressBox}>
+              <Text style={styles.addressLabel}>
+                {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'Delivery address' : 'Customer address'}
+              </Text>
+              <Text style={styles.addressValue}>{deliveryAddress}</Text>
             </View>
+          ) : null}
+          {payment ? <Text style={[styles.payment, due && styles.due]}>{payment}</Text> : null}
+        </View>
 
-            <View style={styles.returnActions}>
-              <Pressable style={styles.secondaryBtn} onPress={closeReturnMode} disabled={busy}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
+        {String(order.payment_status || pos.payment_status || '') === 'awaiting_confirmation' ? (
+          <View style={styles.headerCard}>
+            <Text style={styles.section}>Customer UPI claim</Text>
+            <Text style={styles.meta}>UTR: {String(order.upi_utr || pos.upi_utr || '—')}</Text>
+            {order.payment_proof_url || pos.payment_proof_url ? (
+              <Text style={styles.meta}>Screenshot attached</Text>
+            ) : null}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: colors.success }]}
+                disabled={busy}
+                onPress={() => {
+                  if (!client) return;
+                  setBusy(true);
+                  void client.shop
+                    .confirmOrderPayment(orderId, { action: 'confirm' })
+                    .then(() => {
+                      toast.push('Payment confirmed', 'success');
+                      return load();
+                    })
+                    .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <Text style={styles.actionBtnText}>Confirm paid</Text>
               </Pressable>
               <Pressable
-                style={[styles.primaryBtn, (busy || selectedCount <= 0) && styles.btnDisabled]}
-                disabled={busy || selectedCount <= 0}
-                onPress={() => void submitReturn()}
+                style={[styles.actionBtn, { backgroundColor: colors.destructive }]}
+                disabled={busy}
+                onPress={() => {
+                  if (!client) return;
+                  setBusy(true);
+                  void client.shop
+                    .confirmOrderPayment(orderId, { action: 'reject' })
+                    .then(() => {
+                      toast.push('Payment rejected', 'success');
+                      return load();
+                    })
+                    .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
+                    .finally(() => setBusy(false));
+                }}
               >
-                <Text style={styles.primaryBtnText}>
-                  {busy ? 'Processing…' : `Confirm return · ${formatMoney(selectedRefund)}`}
-                </Text>
+                <Text style={styles.actionBtnText}>Reject</Text>
               </Pressable>
             </View>
           </View>
         ) : null}
 
-        {returns.length ? (
-          <View style={styles.priorReturns}>
-            <Text style={styles.meta}>Previous returns</Text>
-            {returns.map((item) => (
-              <View key={item.id} style={styles.priorRow}>
-                <Text style={styles.name}>{item.return_number}</Text>
-                <Text style={styles.meta}>
-                  {item.status} · {formatMoney(item.refund_total)}
-                  {item.restock ? ' · restocked' : ' · no restock'}
-                </Text>
-              </View>
-            ))}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Text style={styles.section}>Bill ({(order.lines ?? []).length} items)</Text>
+        {(order.lines ?? []).length === 0 ? (
+          <View style={styles.emptyBill}>
+            <Text style={styles.meta}>No line items on this bill.</Text>
           </View>
-        ) : !returnMode ? (
-          <Text style={styles.meta}>No returns yet on this bill.</Text>
+        ) : (
+          (order.lines ?? []).map((line) => {
+            const disc = Number(line.discount_amount || 0);
+            const returned = alreadyReturned[line.id] || 0;
+            return (
+              <View key={line.id} style={styles.lineCard}>
+                <View style={styles.lineHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{line.product_name}</Text>
+                    <Text style={styles.meta}>
+                      {formatMoney(line.unit_price)} · tax {formatMoney(line.tax_rate)}%
+                      {disc > 0 ? ` · disc. -${formatMoney(disc)}` : ''}
+                    </Text>
+                    {returned > 0 ? (
+                      <Text style={styles.returnedHint}>Returned {formatQty(returned)}</Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.lineTotal}>{formatMoney(line.line_total)}</Text>
+                </View>
+                <Text style={styles.qty}>Qty {formatQty(Number(line.quantity || 0))}</Text>
+              </View>
+            );
+          })
+        )}
+
+        <View style={styles.totalsCard}>
+          <Text style={styles.summaryTitle}>Bill summary</Text>
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Items</Text>
+            <Text style={styles.meta}>{formatMoney(merchandiseGross)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Product discounts</Text>
+            <Text style={styles.meta}>-{formatMoney(lineDiscountTotal)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Bill discount</Text>
+            <Text style={styles.meta}>-{formatMoney(billDiscountAmount)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Tax</Text>
+            <Text style={styles.meta}>{formatMoney(order.tax_total)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.payableLabel}>{due ? 'Amount due' : 'Payable'}</Text>
+            <Text style={styles.payableValue}>
+              {formatMoney(due ? pos.amount_due ?? order.total : order.total)}
+            </Text>
+          </View>
+          <Text style={styles.currencyNote}>{order.currency || 'INR'}</Text>
+        </View>
+
+        {order.notes ? (
+          <View style={styles.notesCard}>
+            <Text style={styles.section}>Notes</Text>
+            <Text style={styles.meta}>{order.notes}</Text>
+          </View>
         ) : null}
-      </View>
-    </ScrollView>
+
+        {order.delivery_address ? (
+          <View style={styles.notesCard}>
+            <Text style={styles.section}>Delivery</Text>
+            <Text style={styles.meta}>{order.delivery_address}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.returnCard}>
+          <View style={styles.returnHeader}>
+            <Text style={styles.summaryTitle}>Returns</Text>
+            {canReturn && !returnMode ? (
+              <Pressable style={styles.returnStartBtn} onPress={openReturnMode}>
+                <Feather name="rotate-ccw" size={16} color="#fff" />
+                <Text style={styles.returnStartText}>Return items</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {!canReturn ? (
+            <Text style={styles.meta}>
+              {RETURNABLE_STATUSES.has(order.status)
+                ? 'All items on this bill have already been returned.'
+                : 'Returns are available after the bill is confirmed.'}
+            </Text>
+          ) : null}
+
+          {returnMode ? (
+            <View style={styles.returnForm}>
+              <Text style={styles.meta}>
+                Choose quantities to return. Stock is added back when restock is on.
+                {isBorrow
+                  ? ' For borrow bills, unpaid due is reduced first; any paid portion becomes a credit note.'
+                  : ' A credit note is created for the refund amount.'}
+              </Text>
+
+              {returnableLines.map((row) => {
+                const qty = qtyByLine[row.line.id] || 0;
+                return (
+                  <View key={row.line.id} style={styles.returnLine}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.name}>{row.line.product_name}</Text>
+                      <Text style={styles.meta}>
+                        Returnable {formatQty(row.remaining)} · ~{formatMoney(proportionalRefund(row.line, 1))} each
+                      </Text>
+                    </View>
+                    <View style={styles.qtyRow}>
+                      <Pressable
+                        style={styles.qtyBtn}
+                        onPress={() => setLineQty(row.line.id, row.remaining, qty - 1)}
+                      >
+                        <Text style={styles.qtyBtnText}>−</Text>
+                      </Pressable>
+                      <Text style={styles.qtyValue}>{formatQty(qty)}</Text>
+                      <Pressable
+                        style={styles.qtyBtn}
+                        onPress={() => setLineQty(row.line.id, row.remaining, qty + 1)}
+                      >
+                        <Text style={styles.qtyBtnText}>+</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+
+              <Pressable style={styles.restockRow} onPress={() => setRestock((value) => !value)}>
+                <View style={[styles.checkbox, restock && styles.checkboxOn]}>
+                  {restock ? <Feather name="check" size={14} color="#fff" /> : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>Add back to inventory</Text>
+                  <Text style={styles.meta}>
+                    {restock
+                      ? 'Returned qty will increase stock on hand.'
+                      : 'Damaged / unsellable — no stock increase.'}
+                  </Text>
+                </View>
+              </Pressable>
+
+              <TextInput
+                style={styles.input}
+                value={reason}
+                onChangeText={setReason}
+                placeholder="Reason (optional)"
+                placeholderTextColor={colors.mutedForeground}
+              />
+
+              <View style={styles.previewCard}>
+                <View style={styles.totalRow}>
+                  <Text style={styles.meta}>Return value</Text>
+                  <Text style={styles.meta}>{formatMoney(selectedRefund)}</Text>
+                </View>
+                {isBorrow ? (
+                  <>
+                    <View style={styles.totalRow}>
+                      <Text style={styles.meta}>Reduce customer due</Text>
+                      <Text style={styles.meta}>-{formatMoney(borrowPreview)}</Text>
+                    </View>
+                    {cashCreditPreview > 0 ? (
+                      <View style={styles.totalRow}>
+                        <Text style={styles.meta}>Credit note (already paid)</Text>
+                        <Text style={styles.meta}>{formatMoney(cashCreditPreview)}</Text>
+                      </View>
+                    ) : null}
+                  </>
+                ) : (
+                  <Text style={styles.meta}>Credit note will be created for this amount.</Text>
+                )}
+              </View>
+
+              <View style={styles.returnActions}>
+                <Pressable style={styles.secondaryBtn} onPress={closeReturnMode} disabled={busy}>
+                  <Text style={styles.secondaryBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.primaryBtn, (busy || selectedCount <= 0) && styles.btnDisabled]}
+                  disabled={busy || selectedCount <= 0}
+                  onPress={() => void submitReturn()}
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {busy ? 'Processing…' : `Confirm return · ${formatMoney(selectedRefund)}`}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+
+          {returns.length ? (
+            <View style={styles.priorReturns}>
+              <Text style={styles.meta}>Previous returns</Text>
+              {returns.map((item) => (
+                <View key={item.id} style={styles.priorRow}>
+                  <Text style={styles.name}>{item.return_number}</Text>
+                  <Text style={styles.meta}>
+                    {item.status} · {formatMoney(item.refund_total)}
+                    {item.restock ? ' · restocked' : ' · no restock'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : !returnMode ? (
+            <Text style={styles.meta}>No returns yet on this bill.</Text>
+          ) : null}
+        </View>
+      </ScrollView>
+    </DesktopPage>
   );
 }
 
@@ -536,6 +572,17 @@ const styles = StyleSheet.create({
   },
   orderNumber: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground },
   customer: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground, marginTop: 4 },
+  addressBox: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  addressLabel: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, textTransform: 'uppercase' },
+  addressValue: { fontSize: 14, color: colors.foreground, lineHeight: 20 },
   payment: { fontSize: 14, fontWeight: '600', color: colors.foreground, marginTop: 4 },
   due: { color: colors.destructive },
   section: {

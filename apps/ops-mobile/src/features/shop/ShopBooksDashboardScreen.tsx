@@ -1,15 +1,17 @@
-import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
+import { Feather } from '@expo/vector-icons';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { DesktopContent } from '../../components/DesktopContent';
 import { MenuRow } from '../../components/ui/MenuRow';
 import { MenuSection } from '../../components/ui/MenuSection';
-import { StatTile } from '../../components/ui/StatTile';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksDashboard } from '@ie-platform/sdk';
@@ -20,72 +22,149 @@ export function ShopBooksDashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const { businessId } = useWorkspace();
+  const { isDesktop } = useBreakpoint();
   const [dashboard, setDashboard] = useState<ShopBooksDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
 
-  const load = useCallback(async () => {
-    if (!businessId || !client) return;
+  useEffect(() => {
+    hasLoadedRef.current = false;
+    setDashboard(null);
     setLoading(true);
+    scrollYRef.current = 0;
+  }, [businessId]);
+
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!businessId || !client) return;
+    const silent = opts?.silent ?? hasLoadedRef.current;
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const response = await client.shop.booksDashboard({ business_id: businessId });
       setDashboard(response.data);
+      hasLoadedRef.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load books dashboard');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [businessId, client]);
 
   useFocusEffect(
     useCallback(() => {
-      void load();
+      const y = scrollYRef.current;
+      const restoreScroll = () => {
+        if (y > 0) {
+          scrollRef.current?.scrollTo({ y, animated: false });
+        }
+      };
+      // Restore immediately (screen may remount at top) and again after data settles.
+      requestAnimationFrame(restoreScroll);
+      void load().then(() => {
+        requestAnimationFrame(restoreScroll);
+      });
     }, [load]),
   );
 
-  const { refreshing, onRefresh } = usePullToRefresh(load);
+  const { refreshing, onRefresh } = usePullToRefresh(() => load({ silent: true }));
 
   return (
     <RefreshableScrollView
-      refreshing={refreshing || loading}
+      ref={scrollRef}
+      // Never flip RefreshControl on while scrolled — it forces scrollY to 0.
+      refreshing={refreshing || (loading && !dashboard)}
       onRefresh={onRefresh}
-      contentContainerStyle={styles.content}
+      onScroll={(event) => {
+        scrollYRef.current = event.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={16}
+      contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
     >
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <DesktopContent>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.grid}>
-        <StatTile label="Cash in hand" value={formatMoney(dashboard?.cash)} />
-        <StatTile label="Bank balance" value={formatMoney(dashboard?.bank)} />
-        <StatTile label="To collect" value={formatMoney(dashboard?.to_collect)} tone="positive" hint="Receivable" />
-        <StatTile label="To pay" value={formatMoney(dashboard?.to_pay)} tone="negative" hint="Payable" />
-      </View>
-
-      {dashboard?.accounts?.length ? (
-        <View style={styles.accounts}>
-          <Text style={styles.sectionTitle}>Accounts</Text>
-          {dashboard.accounts.map((account) => (
-            <View key={account.id} style={styles.accountRow}>
-              <Text style={styles.accountName}>{account.name}</Text>
-              <Text style={styles.accountMeta}>{account.account_type}</Text>
-              <Text style={styles.accountBalance}>{formatMoney(account.current_balance)}</Text>
-            </View>
-          ))}
+        <View style={styles.counterCard}>
+          <Text style={styles.counterTitle}>Cash &amp; payables</Text>
+          <View style={styles.counterGrid}>
+            <CounterTile
+              icon="dollar-sign"
+              label="Cash in hand"
+              value={formatMoney(dashboard?.cash)}
+              onPress={() => navigation.navigate('ShopBooksCash')}
+            />
+            <CounterTile
+              icon="credit-card"
+              label="Bank balance"
+              value={formatMoney(dashboard?.bank)}
+              onPress={() => navigation.navigate('ShopBooksCash')}
+            />
+            <CounterTile
+              icon="trending-up"
+              label="To collect"
+              value={formatMoney(dashboard?.to_collect)}
+              tone="positive"
+              hint="Receivable"
+              onPress={() => navigation.navigate('ShopBooksParties')}
+            />
+            <CounterTile
+              icon="trending-down"
+              label="To pay"
+              value={formatMoney(dashboard?.to_pay)}
+              tone="negative"
+              hint="Payable"
+              onPress={() => navigation.navigate('ShopBooksParties')}
+            />
+          </View>
         </View>
-      ) : null}
 
-      <View style={styles.menu}>
-        <MenuSection title="Sale">
-          <MenuRow
-            icon="shopping-cart"
-            label="POS billing"
-            subtitle="Fast counter checkout"
-            onPress={() => navigation.navigate('ShopPos')}
-          />
+        {dashboard?.accounts?.length ? (
+          <View style={styles.accountsCard}>
+            <View style={styles.accountsHeader}>
+              <Text style={styles.sectionTitle}>Accounts</Text>
+              <Pressable onPress={() => navigation.navigate('ShopBooksCash')}>
+                <Text style={styles.link}>Manage</Text>
+              </Pressable>
+            </View>
+            {dashboard.accounts.map((account, index) => (
+              <Pressable
+                key={account.id}
+                style={[styles.accountRow, index === dashboard.accounts!.length - 1 && styles.accountRowLast]}
+                onPress={() => navigation.navigate('ShopBooksCash')}
+              >
+                <View style={styles.accountIcon}>
+                  <Feather
+                    name={String(account.account_type).toLowerCase().includes('bank') ? 'credit-card' : 'dollar-sign'}
+                    size={16}
+                    color={colors.primary}
+                  />
+                </View>
+                <View style={styles.accountCopy}>
+                  <Text style={styles.accountName}>{account.name}</Text>
+                  <Text style={styles.accountMeta}>{String(account.account_type || 'account').replace(/_/g, ' ')}</Text>
+                </View>
+                <Text style={styles.accountBalance}>{formatMoney(account.current_balance)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.accountsCard}>
+            <Text style={styles.sectionTitle}>Accounts</Text>
+            <Text style={styles.emptyAccounts}>No cash or bank accounts yet. Add one under Cash &amp; bank.</Text>
+            <Pressable style={styles.emptyCta} onPress={() => navigation.navigate('ShopBooksCash')}>
+              <Text style={styles.link}>Open Cash &amp; bank</Text>
+            </Pressable>
+          </View>
+        )}
+
+        <View style={styles.menu}>
+        <MenuSection title="Sales documents">
           <MenuRow
             icon="arrow-up-right"
             label={t('nav.shopSale')}
-            subtitle="Sale invoices & GST vouchers"
+            subtitle="Counter & GST sale bills (includes POS)"
             onPress={() => navigation.navigate('ShopBooksSale')}
           />
           <MenuRow
@@ -97,7 +176,7 @@ export function ShopBooksDashboardScreen() {
           <MenuRow
             icon="file-minus"
             label="Credit / Debit notes"
-            subtitle="Returns & adjustments"
+            subtitle="Returns & adjustments (POS-style)"
             last
             onPress={() => navigation.navigate('ShopBooksNotes')}
           />
@@ -170,12 +249,6 @@ export function ShopBooksDashboardScreen() {
           />
           <MenuRow
             icon="clipboard"
-            label="Sale Order"
-            subtitle="Confirmed orders before invoicing"
-            onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'sale_order' })}
-          />
-          <MenuRow
-            icon="clipboard"
             label="Purchase Order"
             subtitle="Supplier purchase orders"
             onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'purchase_order' })}
@@ -218,27 +291,128 @@ export function ShopBooksDashboardScreen() {
             onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'job_work' })}
           />
         </MenuSection>
-      </View>
+        </View>
+      </DesktopContent>
     </RefreshableScrollView>
+  );
+}
+
+function CounterTile({
+  icon,
+  label,
+  value,
+  hint,
+  tone = 'default',
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: 'default' | 'positive' | 'negative';
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable style={({ pressed }) => [styles.counterTile, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.counterTileTop}>
+        <View style={styles.counterIcon}>
+          <Feather name={icon} size={14} color={colors.primary} />
+        </View>
+        {hint ? <Text style={styles.counterHint}>{hint}</Text> : null}
+      </View>
+      <Text style={styles.counterLabel}>{label}</Text>
+      <Text
+        style={[
+          styles.counterValue,
+          tone === 'positive' && styles.positive,
+          tone === 'negative' && styles.negative,
+        ]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
+  contentDesktop: { paddingHorizontal: 0, gap: spacing.xl },
   error: { color: colors.destructive },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  accounts: {
+  counterCard: {
     backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  counterTitle: { ...typography.title, fontSize: 16, color: colors.foreground },
+  counterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  counterTile: {
+    width: '48%',
+    flexGrow: 1,
+    minWidth: '45%',
+    backgroundColor: colors.background,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 4,
+  },
+  counterTileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  counterIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterHint: { ...typography.tiny, color: colors.mutedForeground },
+  counterLabel: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
+  counterValue: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 18,
+    color: colors.foreground,
+    letterSpacing: -0.2,
+  },
+  positive: { color: colors.success },
+  negative: { color: colors.destructive },
+  accountsCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.sm,
   },
+  accountsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   sectionTitle: { ...typography.title, fontSize: 16, color: colors.foreground },
-  accountRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  accountName: { flex: 1, ...typography.body, color: colors.foreground, fontFamily: fonts.bodyMedium },
-  accountMeta: { ...typography.caption, color: colors.mutedForeground, textTransform: 'capitalize' },
-  accountBalance: { ...typography.label, color: colors.foreground },
+  link: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  accountRowLast: { borderBottomWidth: 0, paddingBottom: 0 },
+  accountIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountCopy: { flex: 1, minWidth: 0 },
+  accountName: { ...typography.body, color: colors.foreground, fontFamily: fonts.bodyMedium },
+  accountMeta: { ...typography.caption, color: colors.mutedForeground, textTransform: 'capitalize', marginTop: 2 },
+  accountBalance: { ...typography.label, fontFamily: fonts.bodySemi, color: colors.foreground },
+  emptyAccounts: { ...typography.body, color: colors.mutedForeground },
+  emptyCta: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  pressed: { opacity: 0.92 },
   menu: { gap: spacing.xl },
 });

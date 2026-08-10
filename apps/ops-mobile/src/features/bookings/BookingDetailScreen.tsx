@@ -25,7 +25,10 @@ import type { RootStackParamList } from '../../navigation/types';
 export function BookingDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BookingDetail'>>();
   const { user } = useAuth();
-  const { booking, loading, error, reload } = useBooking(route.params.bookingId);
+  const { booking, loading, error, reload } = useBooking(
+    route.params.bookingId,
+    route.params.initialBooking,
+  );
   const { services, customerMap, serviceMap, staffMap } = useEntityMaps();
   const mutations = useBookingMutations();
   const [reason, setReason] = useState('');
@@ -78,7 +81,16 @@ export function BookingDetailScreen() {
     }
   }
 
-  if (loading || error || !booking) return <ScreenState loading={loading} error={error} />;
+  if (loading || error || !booking) {
+    return (
+      <ScreenState
+        loading={loading}
+        error={error}
+        actionLabel={error ? 'Retry' : undefined}
+        onAction={error ? () => void reload() : undefined}
+      />
+    );
+  }
 
   return (
     <FormScreen>

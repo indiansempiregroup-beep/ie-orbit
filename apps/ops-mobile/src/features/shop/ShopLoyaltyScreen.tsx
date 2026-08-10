@@ -8,6 +8,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { SelectField } from '../../components/SelectField';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { Customer, ShopGrowSettings } from '@ie-platform/sdk';
 import { customerLabel, formatMoney } from './shopBooksHelpers';
@@ -130,9 +131,11 @@ export function ShopLoyaltyScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
+      <DesktopPage>
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </DesktopPage>
     );
   }
 
@@ -153,7 +156,7 @@ export function ShopLoyaltyScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.formTitle}>Loyalty program</Text>
       <Text style={styles.help}>
-        Earn and redeem rules are stored in shop settings. Points can be applied at POS once enabled for
+        Earn and redeem rules are stored in shop settings. Points can be applied at Sale once enabled for
         your store.
       </Text>
 

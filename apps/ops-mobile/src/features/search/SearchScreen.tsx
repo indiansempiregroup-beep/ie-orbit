@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { DesktopPage } from '../../components/DesktopPage';
 import { SearchBar } from '../../components/SearchBar';
 import { ListRow } from '../../components/ui/ListRow';
 import { SectionHeader } from '../../components/ui/SectionHeader';
@@ -25,7 +26,7 @@ export function SearchScreen() {
     (results?.customers?.length ?? 0) + staffResults.length + (results?.services?.length ?? 0) > 0;
 
   return (
-    <View style={styles.screen}>
+    <DesktopPage>
       <View style={styles.searchWrap}>
         <SearchBar
           value={term}
@@ -103,12 +104,11 @@ export function SearchScreen() {
           </Text>
         ) : null}
       </RefreshableScrollView>
-    </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
   searchWrap: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,

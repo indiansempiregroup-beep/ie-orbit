@@ -21,6 +21,7 @@ import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type {
@@ -404,61 +405,63 @@ export function ShopBooksDocumentsScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={documents}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        renderItem={({ item }) => {
-          const badge = voucherStatusStyle(item.status);
-          const party =
-            item.customer_name ||
-            item.supplier_name ||
-            (item.customer || item.supplier ? 'Party' : 'No party');
-          const converting = convertingId === item.id;
-          return (
-            <View style={styles.row}>
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.document_number}</Text>
-                <Text style={styles.total}>{formatMoney(item.total)}</Text>
-              </View>
-              <Text style={styles.metaText}>
-                {party}
-                {item.document_date ? ` · ${item.document_date}` : ''}
-              </Text>
-              <View style={styles.rowBottom}>
-                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                  <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={documents}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          renderItem={({ item }) => {
+            const badge = voucherStatusStyle(item.status);
+            const party =
+              item.customer_name ||
+              item.supplier_name ||
+              (item.customer || item.supplier ? 'Party' : 'No party');
+            const converting = convertingId === item.id;
+            return (
+              <View style={styles.row}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{item.document_number}</Text>
+                  <Text style={styles.total}>{formatMoney(item.total)}</Text>
                 </View>
-                {canConvert(item) ? (
-                  <Pressable onPress={() => void onConvert(item)} hitSlop={8} disabled={converting}>
-                    <Text style={[styles.convertText, converting && styles.convertDisabled]}>
-                      {converting ? 'Working…' : meta.convertLabel}
-                    </Text>
-                  </Pressable>
-                ) : item.converted_voucher || (item.status || '').toLowerCase() === 'converted' ? (
-                  <Text style={styles.convertedMeta}>Converted</Text>
-                ) : null}
+                <Text style={styles.metaText}>
+                  {party}
+                  {item.document_date ? ` · ${item.document_date}` : ''}
+                </Text>
+                <View style={styles.rowBottom}>
+                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+                  </View>
+                  {canConvert(item) ? (
+                    <Pressable onPress={() => void onConvert(item)} hitSlop={8} disabled={converting}>
+                      <Text style={[styles.convertText, converting && styles.convertDisabled]}>
+                        {converting ? 'Working…' : meta.convertLabel}
+                      </Text>
+                    </Pressable>
+                  ) : item.converted_voucher || (item.status || '').toLowerCase() === 'converted' ? (
+                    <Text style={styles.convertedMeta}>Converted</Text>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="file-text"
-              title={`No ${meta.title.toLowerCase()} yet`}
-              message={`Create a ${meta.singular} and convert it when ready.`}
-              actionLabel={`New ${meta.singular}`}
-              onAction={() => setShowForm(true)}
-            />
-          ) : null
-        }
-      />
-    </View>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="file-text"
+                title={`No ${meta.title.toLowerCase()} yet`}
+                message={`Create a ${meta.singular} and convert it when ready.`}
+                actionLabel={`New ${meta.singular}`}
+                onAction={() => setShowForm(true)}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

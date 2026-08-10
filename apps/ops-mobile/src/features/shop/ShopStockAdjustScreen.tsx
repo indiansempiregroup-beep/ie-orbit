@@ -19,6 +19,7 @@ import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { ShopProduct } from '@ie-platform/sdk';
 import { formatMoney } from './shopBooksHelpers';
@@ -175,50 +176,52 @@ export function ShopStockAdjustScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      <TextInput
-        value={search}
-        onChangeText={setSearch}
-        onSubmitEditing={() => void load()}
-        placeholder="Search products"
-        style={styles.search}
-        placeholderTextColor={colors.mutedForeground}
-        returnKeyType="search"
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => setSelected(item)}>
-            <View style={styles.rowTop}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.stock}>{item.stock_on_hand}</Text>
-            </View>
-            <Text style={styles.meta}>
-              {formatMoney(item.price)}
-              {item.sku ? ` · ${item.sku}` : ''}
-            </Text>
-            <View style={styles.rowHint}>
-              <Feather name="edit-3" size={13} color={colors.primary} />
-              <Text style={styles.hintText}>Tap to adjust</Text>
-            </View>
-          </Pressable>
-        )}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="package"
-              title="No products found"
-              message="Add products first, then adjust stock quantities here."
-            />
-          ) : null
-        }
-      />
-    </View>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          onSubmitEditing={() => void load()}
+          placeholder="Search products"
+          style={styles.search}
+          placeholderTextColor={colors.mutedForeground}
+          returnKeyType="search"
+        />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          renderItem={({ item }) => (
+            <Pressable style={styles.row} onPress={() => setSelected(item)}>
+              <View style={styles.rowTop}>
+                <Text style={styles.name}>{item.name}</Text>
+                <Text style={styles.stock}>{item.stock_on_hand}</Text>
+              </View>
+              <Text style={styles.meta}>
+                {formatMoney(item.price)}
+                {item.sku ? ` · ${item.sku}` : ''}
+              </Text>
+              <View style={styles.rowHint}>
+                <Feather name="edit-3" size={13} color={colors.primary} />
+                <Text style={styles.hintText}>Tap to adjust</Text>
+              </View>
+            </Pressable>
+          )}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="package"
+                title="No products found"
+                message="Add products first, then adjust stock quantities here."
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

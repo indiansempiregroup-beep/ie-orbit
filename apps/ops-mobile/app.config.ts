@@ -52,6 +52,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSFaceIDUsageDescription: FACE_ID_USAGE,
       NSCameraUsageDescription: CAMERA_USAGE,
       NSPhotoLibraryUsageDescription: PHOTOS_USAGE,
+      NSAppTransportSecurity: {
+        NSAllowsArbitraryLoads: true,
+        NSAllowsLocalNetworking: true,
+      },
     },
   },
   android: {
@@ -62,6 +66,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/icon.png',
       backgroundColor: '#0B1F3A',
     },
+    // Allow http:// LAN API calls from Android builds / Expo Go.
+    ...({ usesCleartextTraffic: true } as object),
   },
   web: {
     ...config.web,

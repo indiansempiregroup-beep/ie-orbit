@@ -1,12 +1,13 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Business, TenantSummary } from '@ie-platform/sdk';
 import { createScopedClient } from '../api/client';
+import { getApiBaseUrl } from '../config/apiBaseUrl';
 import { isPlatformAdminOnly } from '../utils/roles';
+import { getPersistentItem, setPersistentItem } from '../utils/persistentStore';
 import { useAuth } from './AuthContext';
 
-const TENANT_KEY = 'ie:ops:active-tenant-id';
-const BUSINESS_KEY = 'ie:ops:active-business-id';
+const TENANT_KEY = 'ie.ops.active-tenant-id';
+const BUSINESS_KEY = 'ie.ops.active-business-id';
 
 type WorkspaceState = {
   tenants: TenantSummary[];
@@ -16,6 +17,7 @@ type WorkspaceState = {
   activeBusiness: Business | null;
   loading: boolean;
   ready: boolean;
+  error: string | null;
   setTenantId: (tenantId: string) => Promise<void>;
   setBusinessId: (businessId: string) => Promise<void>;
   initializeWorkspace: (tenantId: string, businessId: string) => Promise<void>;
@@ -25,20 +27,44 @@ type WorkspaceState = {
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
 
 async function readKey(key: string) {
-  try {
-    return await SecureStore.getItemAsync(key);
-  } catch {
-    return null;
-  }
+  return getPersistentItem(key);
 }
 
 async function writeKey(key: string, value: string | null) {
-  try {
-    if (value) await SecureStore.setItemAsync(key, value);
-    else await SecureStore.deleteItemAsync(key);
-  } catch {
-    // ignore
+  await setPersistentItem(key, value);
+}
+
+function asList<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    if (Array.isArray(record.results)) return record.results as T[];
+    if (Array.isArray(record.items)) return record.items as T[];
+    if (Array.isArray(record.data)) return record.data as T[];
   }
+  return [];
+}
+
+function withApiHint(message: string): string {
+  return `${message} (API: ${getApiBaseUrl()})`;
+}
+
+function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
@@ -50,13 +76,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [activeBusiness, setActiveBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selectionRef = useRef({ tenantId: null as string | null, businessId: null as string | null });
+
+  useEffect(() => {
+    selectionRef.current = { tenantId, businessId };
+  }, [tenantId, businessId]);
 
   const loadBusinesses = useCallback(
     async (resolvedTenantId: string, preferredBusinessId?: string | null) => {
       if (!token) return null;
       const client = createScopedClient(token, resolvedTenantId);
-      const response = await client.businesses.list();
-      const list = response.data ?? [];
+      const response = await withDeadline(client.businesses.list(), 15000, 'Loading businesses');
+      const list = asList<Business>(response.data);
       setBusinesses(list);
 
       const stored = preferredBusinessId ?? (await readKey(BUSINESS_KEY));
@@ -65,8 +97,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       setActiveBusiness(resolved);
       setBusinessIdState(resolved?.id ?? null);
-      if (resolved?.id) await writeKey(BUSINESS_KEY, resolved.id);
-      else await writeKey(BUSINESS_KEY, null);
+      void writeKey(BUSINESS_KEY, resolved?.id ?? null);
 
       return resolved;
     },
@@ -80,38 +111,68 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setActiveBusiness(null);
       setTenantIdState(null);
       setBusinessIdState(null);
+      setError(null);
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setError(null);
     try {
       const client = createScopedClient(token);
-      const response = await client.tenants.list();
-      const nextTenants = response.data ?? [];
+      const response = await withDeadline(client.tenants.list(), 15000, 'Loading workspaces');
+      const nextTenants = asList<TenantSummary>(response.data);
       setTenants(nextTenants);
 
+      if (!nextTenants.length) {
+        setTenantIdState(null);
+        setBusinessIdState(null);
+        setBusinesses([]);
+        setActiveBusiness(null);
+        void writeKey(TENANT_KEY, null);
+        void writeKey(BUSINESS_KEY, null);
+        return;
+      }
+
       const storedTenantId = await readKey(TENANT_KEY);
-      const validStored = storedTenantId && nextTenants.some((t) => t.id === storedTenantId);
-      const resolvedTenantId = validStored ? storedTenantId : nextTenants[0]?.id ?? null;
+      const validStored = Boolean(
+        storedTenantId && nextTenants.some((tenant) => tenant.id === storedTenantId),
+      );
+      const resolvedTenantId = validStored ? storedTenantId! : nextTenants[0].id;
 
       setTenantIdState(resolvedTenantId);
-      if (resolvedTenantId) await writeKey(TENANT_KEY, resolvedTenantId);
-      else await writeKey(TENANT_KEY, null);
+      void writeKey(TENANT_KEY, resolvedTenantId);
 
-      if (resolvedTenantId) {
+      try {
         await loadBusinesses(resolvedTenantId);
-      } else {
+      } catch (businessErr) {
+        // Keep tenant selected; allow manual business pick / retry.
         setBusinesses([]);
         setActiveBusiness(null);
         setBusinessIdState(null);
+        setError(
+          withApiHint(
+            businessErr instanceof Error
+              ? businessErr.message
+              : 'Could not load businesses for this workspace.',
+          ),
+        );
       }
-    } catch {
-      setTenants([]);
-      setBusinesses([]);
-      setActiveBusiness(null);
-      setTenantIdState(null);
-      setBusinessIdState(null);
+    } catch (err) {
+      const hadSelection = Boolean(selectionRef.current.tenantId && selectionRef.current.businessId);
+      setError(
+        withApiHint(
+          err instanceof Error ? err.message : 'Could not load workspaces. Check your API connection.',
+        ),
+      );
+      // Don't wipe a working session on a flaky refresh — that bounced users back to the picker.
+      if (!hadSelection) {
+        setTenants([]);
+        setBusinesses([]);
+        setActiveBusiness(null);
+        setTenantIdState(null);
+        setBusinessIdState(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -124,9 +185,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const setTenantId = useCallback(
     async (nextTenantId: string) => {
       setTenantIdState(nextTenantId);
-      await writeKey(TENANT_KEY, nextTenantId);
-      await writeKey(BUSINESS_KEY, null);
-      await loadBusinesses(nextTenantId);
+      setBusinessIdState(null);
+      setActiveBusiness(null);
+      setBusinesses([]);
+      void writeKey(TENANT_KEY, nextTenantId);
+      void writeKey(BUSINESS_KEY, null);
+      try {
+        setError(null);
+        setLoading(true);
+        await loadBusinesses(nextTenantId);
+      } catch (businessErr) {
+        setBusinesses([]);
+        setActiveBusiness(null);
+        setBusinessIdState(null);
+        setError(
+          withApiHint(
+            businessErr instanceof Error
+              ? businessErr.message
+              : 'Could not load businesses for this workspace.',
+          ),
+        );
+      } finally {
+        setLoading(false);
+      }
     },
     [loadBusinesses],
   );
@@ -134,15 +215,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const setBusinessId = useCallback(
     async (nextBusinessId: string) => {
       if (!token || !tenantId) return;
+
+      const fromList = businesses.find((b) => b.id === nextBusinessId) ?? null;
       setBusinessIdState(nextBusinessId);
-      await writeKey(BUSINESS_KEY, nextBusinessId);
-      const client = createScopedClient(token, tenantId);
+      setActiveBusiness(
+        fromList ??
+          ({
+            id: nextBusinessId,
+            business_name: 'Selected business',
+            display_name: 'Selected business',
+          } as Business),
+      );
+      void writeKey(BUSINESS_KEY, nextBusinessId);
+
       try {
-        const response = await client.businesses.get(nextBusinessId);
+        const client = createScopedClient(token, tenantId);
+        const response = await withDeadline(
+          client.businesses.get(nextBusinessId),
+          8000,
+          'Loading business',
+        );
         setActiveBusiness(response.data);
       } catch {
-        const match = businesses.find((b) => b.id === nextBusinessId) ?? null;
-        setActiveBusiness(match);
+        // IDs are enough for scoped API calls.
       }
     },
     [token, tenantId, businesses],
@@ -151,13 +246,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const initializeWorkspace = useCallback(
     async (nextTenantId: string, nextBusinessId: string) => {
       setTenantIdState(nextTenantId);
-      await writeKey(TENANT_KEY, nextTenantId);
+      void writeKey(TENANT_KEY, nextTenantId);
       await loadBusinesses(nextTenantId, nextBusinessId);
     },
     [loadBusinesses],
   );
 
-  const ready = Boolean(token && tenantId && businessId && activeBusiness);
+  const resolvedBusiness =
+    activeBusiness ??
+    (businessId ? businesses.find((item) => item.id === businessId) ?? null : null);
+  const ready = Boolean(token && tenantId && businessId);
 
   const value = useMemo(
     () => ({
@@ -165,9 +263,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       tenantId,
       businessId,
       businesses,
-      activeBusiness,
+      activeBusiness: resolvedBusiness,
       loading,
       ready,
+      error,
       setTenantId,
       setBusinessId,
       initializeWorkspace,
@@ -178,9 +277,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       tenantId,
       businessId,
       businesses,
-      activeBusiness,
+      resolvedBusiness,
       loading,
       ready,
+      error,
       setTenantId,
       setBusinessId,
       initializeWorkspace,

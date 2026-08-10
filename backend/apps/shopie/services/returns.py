@@ -101,6 +101,11 @@ class ReturnService:
                     }
                 )
             line_total = self._line_refund_amount(order_line=order_line, qty=qty)
+            product_meta = (
+                order_line.product.metadata
+                if order_line.product_id and isinstance(getattr(order_line.product, "metadata", None), dict)
+                else {}
+            )
             serialized.append(
                 {
                     "order_line_id": line_id,
@@ -109,6 +114,7 @@ class ReturnService:
                     "quantity": str(qty),
                     "unit_price": str(order_line.unit_price),
                     "tax_rate": str(order_line.tax_rate),
+                    "tax_inclusive": bool(product_meta.get("tax_inclusive")),
                     "line_total": str(line_total),
                 }
             )
@@ -199,6 +205,20 @@ class ReturnService:
         shop_return.status = ReturnStatus.COMPLETED
         shop_return.save(update_fields=["credit_invoice", "status", "updated_at", "version"])
 
+        books_cn = self._post_books_credit_note_for_return(
+            tenant=tenant,
+            business=business,
+            order=order,
+            shop_return=shop_return,
+            order_lines=order_lines,
+        )
+        if books_cn is not None:
+            meta = dict(shop_return.metadata) if isinstance(shop_return.metadata, dict) else {}
+            meta["books_credit_note_id"] = str(books_cn.id)
+            meta["books_credit_note_number"] = books_cn.voucher_number
+            shop_return.metadata = meta
+            shop_return.save(update_fields=["metadata", "updated_at", "version"])
+
         borrow_applied = self._apply_borrow_credit_for_return(
             tenant=tenant,
             business=business,
@@ -209,8 +229,204 @@ class ReturnService:
             order=order,
             shop_return=shop_return,
             borrow_applied=borrow_applied,
+            books_credit_note=books_cn,
         )
         return shop_return
+
+    def _post_books_credit_note_for_return(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        shop_return: ShopReturn,
+        order_lines: dict[str, ShopOrderLine],
+    ):
+        """Post a GST credit note in Books so GSTR / ledger stay in sync with the return."""
+        from apps.shopie.models import ShopBooksVoucher, VoucherType
+        from apps.shopie.services.books import BooksService
+        from apps.shopie.services.gst import compute_voucher_totals
+
+        # Idempotent: skip if a CN for this return already exists.
+        existing = ShopBooksVoucher.objects.filter(
+            tenant=tenant,
+            business=business,
+            voucher_type=VoucherType.CREDIT_NOTE,
+            metadata__source_return_id=str(shop_return.id),
+        ).first()
+        if existing is not None:
+            return existing
+
+        sale_voucher = (
+            ShopBooksVoucher.objects.filter(
+                tenant=tenant,
+                business=business,
+                voucher_type=VoucherType.SALE,
+                linked_order=order,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+        cn_lines: list[dict[str, Any]] = []
+        for raw in shop_return.line_items or []:
+            order_line = order_lines.get(str(raw.get("order_line_id")))
+            qty = Decimal(str(raw.get("quantity") or "0"))
+            if qty <= 0 or order_line is None:
+                continue
+            sold_qty = Decimal(str(order_line.quantity or "0"))
+            if sold_qty <= 0:
+                continue
+            share = qty / sold_qty
+            unit = Decimal(str(order_line.unit_price or "0"))
+            gst_rate = Decimal(str(order_line.tax_rate or "0"))
+            line_subtotal = Decimal(str(order_line.line_subtotal or "0"))
+            line_total = Decimal(str(order_line.line_total or "0"))
+            inclusive = BooksService._product_tax_inclusive(order_line.product)
+            hsn = str(getattr(order_line.product, "hsn_sac", "") or "") if order_line.product_id else ""
+            if inclusive:
+                # Proportional inclusive total after discounts → extract GST.
+                returned_total = (line_total * share).quantize(Decimal("0.01"))
+                discount = (unit * qty - returned_total).quantize(Decimal("0.01"))
+                if discount < 0:
+                    discount = Decimal("0.00")
+                cn_lines.append(
+                    {
+                        "product_id": str(order_line.product_id) if order_line.product_id else None,
+                        "name": order_line.product_name,
+                        "qty": qty,
+                        "rate": unit,
+                        "discount": discount,
+                        "gst_rate": gst_rate,
+                        "tax_inclusive": True,
+                        "hsn_sac": hsn,
+                    }
+                )
+            else:
+                returned_taxable = (line_subtotal * share).quantize(Decimal("0.01"))
+                discount = (unit * qty - returned_taxable).quantize(Decimal("0.01"))
+                if discount < 0:
+                    discount = Decimal("0.00")
+                cn_lines.append(
+                    {
+                        "product_id": str(order_line.product_id) if order_line.product_id else None,
+                        "name": order_line.product_name,
+                        "qty": qty,
+                        "rate": unit,
+                        "discount": discount,
+                        "gst_rate": gst_rate,
+                        "tax_inclusive": False,
+                        "hsn_sac": hsn,
+                    }
+                )
+        if not cn_lines:
+            return None
+
+        metadata = order.metadata if isinstance(order.metadata, dict) else {}
+        pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
+        payment_method = str(pos.get("payment_method") or "").lower()
+        # Cash/UPI/card: refund till. Borrow: books ledger credit only (borrow balance handled separately).
+        refund_cash = payment_method in {"cash", "upi", "card"} or payment_method == ""
+
+        books = BooksService()
+        interstate = bool(sale_voucher.is_interstate) if sale_voucher else False
+        resolved = [
+            books._resolve_line(tenant=tenant, business=business, raw=row) for row in cn_lines
+        ]
+        totals = compute_voucher_totals(resolved, interstate=interstate)
+        amount_paid = totals["total"] if refund_cash else Decimal("0.00")
+        cash_account_id = None
+        if refund_cash and amount_paid > 0:
+            if sale_voucher and sale_voucher.cash_account_id:
+                cash_account_id = sale_voucher.cash_account_id
+            else:
+                cash_account_id = books._ensure_cash_account(tenant=tenant, business=business).id
+
+        cn_meta: dict[str, Any] = {
+            "source": "return",
+            "source_return_id": str(shop_return.id),
+            "source_return_number": shop_return.return_number,
+            "source_order_id": str(order.id),
+            "source_order_number": order.order_number,
+            "refund_mode": "cash" if refund_cash else "credit",
+        }
+        if sale_voucher is not None:
+            cn_meta["against_sale_voucher_id"] = str(sale_voucher.id)
+            cn_meta["against_sale_voucher_number"] = sale_voucher.voucher_number
+
+        try:
+            books_cn = books.create_credit_note(
+                tenant=tenant,
+                business=business,
+                data={
+                    "customer": order.customer,
+                    "lines": cn_lines,
+                    "notes": f"Return {shop_return.return_number} against {order.order_number}",
+                    "amount_paid": amount_paid,
+                    "cash_account_id": cash_account_id,
+                    "adjust_stock": False,  # restock already handled by ReturnService
+                    "is_interstate": interstate,
+                    "place_of_supply": str(sale_voucher.place_of_supply or "") if sale_voucher else "",
+                    "linked_order": order,
+                    "metadata": cn_meta,
+                },
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Failed to post books credit note for return %s", shop_return.return_number
+            )
+            return None
+
+        if sale_voucher is not None:
+            sale_meta = dict(sale_voucher.metadata) if isinstance(sale_voucher.metadata, dict) else {}
+            history = list(sale_meta.get("returns") if isinstance(sale_meta.get("returns"), list) else [])
+            history.append(
+                {
+                    "return_id": str(shop_return.id),
+                    "return_number": shop_return.return_number,
+                    "credit_note_id": str(books_cn.id),
+                    "credit_note_number": books_cn.voucher_number,
+                    "refund_total": str(books_cn.total),
+                    "tax_total": str(books_cn.tax_total),
+                    "subtotal": str(books_cn.subtotal),
+                    "at": timezone.now().isoformat(),
+                }
+            )
+            returned_total = sum(
+                (Decimal(str(row.get("refund_total") or "0")) for row in history),
+                Decimal("0.00"),
+            ).quantize(Decimal("0.01"))
+            returned_tax = sum(
+                (Decimal(str(row.get("tax_total") or "0")) for row in history),
+                Decimal("0.00"),
+            ).quantize(Decimal("0.01"))
+            sale_meta["returns"] = history
+            sale_meta["returned_total"] = str(returned_total)
+            sale_meta["returned_tax_total"] = str(returned_tax)
+            sale_meta["net_total"] = str(
+                (Decimal(str(sale_voucher.total or "0")) - returned_total).quantize(Decimal("0.01"))
+            )
+            sale_meta["net_tax_total"] = str(
+                (Decimal(str(sale_voucher.tax_total or "0")) - returned_tax).quantize(Decimal("0.01"))
+            )
+            # For cash/UPI/card, cash already left via credit note amount_paid.
+            # For borrow/due sales, reduce amount still collectible on the invoice.
+            if not refund_cash:
+                paid = Decimal(str(sale_voucher.amount_paid or "0"))
+                # Receivable after CN is original total - returned - already paid.
+                # Keep amount_paid as-is; net due is derived in UI from net_total - amount_paid.
+                sale_meta["net_amount_due"] = str(
+                    max(
+                        Decimal("0.00"),
+                        (Decimal(str(sale_voucher.total or "0")) - returned_total - paid),
+                    ).quantize(Decimal("0.01"))
+                )
+            sale_voucher.metadata = sale_meta
+            sale_voucher.save(update_fields=["metadata", "updated_at", "version"])
+
+        return books_cn
 
     def _apply_borrow_credit_for_return(
         self,
@@ -279,26 +495,35 @@ class ReturnService:
         order: ShopOrder,
         shop_return: ShopReturn,
         borrow_applied: Decimal,
+        books_credit_note=None,
     ) -> None:
         metadata = dict(order.metadata or {})
         pos = dict(metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {})
-        # Ensure non-borrow returns also leave an audit trail on the order.
-        if str(pos.get("payment_method") or "").lower() != "borrow":
-            returns = list(pos.get("returns") if isinstance(pos.get("returns"), list) else [])
-            if not any(str(row.get("return_id")) == str(shop_return.id) for row in returns):
-                returns.append(
-                    {
-                        "return_id": str(shop_return.id),
-                        "return_number": shop_return.return_number,
-                        "refund_total": str(shop_return.refund_total),
-                        "borrow_reduced": str(borrow_applied),
-                        "at": timezone.now().isoformat(),
-                    }
-                )
-                pos["returns"] = returns
-                metadata["pos"] = pos
-                order.metadata = metadata
-                order.save(update_fields=["metadata", "updated_at", "version"])
+        returns = list(pos.get("returns") if isinstance(pos.get("returns"), list) else [])
+        entry = {
+            "return_id": str(shop_return.id),
+            "return_number": shop_return.return_number,
+            "refund_total": str(shop_return.refund_total),
+            "borrow_reduced": str(borrow_applied),
+            "at": timezone.now().isoformat(),
+        }
+        if books_credit_note is not None:
+            entry["credit_note_id"] = str(books_credit_note.id)
+            entry["credit_note_number"] = books_credit_note.voucher_number
+            entry["tax_total"] = str(books_credit_note.tax_total)
+        # Update existing stub from borrow path, or append for cash/UPI returns.
+        updated = False
+        for idx, row in enumerate(returns):
+            if str(row.get("return_id")) == str(shop_return.id):
+                returns[idx] = {**row, **entry}
+                updated = True
+                break
+        if not updated:
+            returns.append(entry)
+        pos["returns"] = returns
+        metadata["pos"] = pos
+        order.metadata = metadata
+        order.save(update_fields=["metadata", "updated_at", "version"])
 
     def list_returns(
         self,

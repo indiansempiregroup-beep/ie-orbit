@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -45,36 +46,38 @@ export function PlatformAdminAuditScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={events}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <Text style={styles.name}>{item.action}</Text>
-            <Text style={styles.meta}>
-              {item.resource_type}
-              {item.resource_id ? ` · ${item.resource_id}` : ''}
-            </Text>
-            {item.tenant_name || item.tenant_id ? (
-              <Text style={styles.meta}>Tenant: {item.tenant_name || item.tenant_id}</Text>
-            ) : null}
-            {item.actor_email ? <Text style={styles.meta}>By {item.actor_email}</Text> : null}
-            {item.reason ? <Text style={styles.reason}>{item.reason}</Text> : null}
-            <Text style={styles.time}>{item.created_at}</Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState icon="shield" title="No audit events" message="Platform audit activity will show up here." />
-          ) : null
-        }
-      />
-    </View>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={events}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <Text style={styles.name}>{item.action}</Text>
+              <Text style={styles.meta}>
+                {item.resource_type}
+                {item.resource_id ? ` · ${item.resource_id}` : ''}
+              </Text>
+              {item.tenant_name || item.tenant_id ? (
+                <Text style={styles.meta}>Tenant: {item.tenant_name || item.tenant_id}</Text>
+              ) : null}
+              {item.actor_email ? <Text style={styles.meta}>By {item.actor_email}</Text> : null}
+              {item.reason ? <Text style={styles.reason}>{item.reason}</Text> : null}
+              <Text style={styles.time}>{item.created_at}</Text>
+            </View>
+          )}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState icon="shield" title="No audit events" message="Platform audit activity will show up here." />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

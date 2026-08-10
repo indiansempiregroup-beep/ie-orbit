@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBreakpoint } from '../hooks/useBreakpoint';
+import { layout } from '../theme/layout';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 
 export type OpsStackHeaderOptions = {
@@ -21,22 +23,36 @@ export function setStackSubtitle(
 /** Flat white stack header with navy back control. */
 export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useBreakpoint();
   const title = typeof options.headerTitle === 'string' ? options.headerTitle : options.title ?? '';
   const subtitle = (options as OpsStackHeaderOptions).subtitle;
   const canGoBack = Boolean(back) || navigation.canGoBack();
 
   return (
-    <View style={[styles.wrap, { paddingTop: insets.top + spacing.sm }]}>
-      <View style={styles.row}>
+    <View
+      style={[
+        styles.wrap,
+        {
+          paddingTop: isDesktop ? spacing.md : insets.top + spacing.sm,
+          paddingHorizontal: isDesktop ? layout.desktopGutter : spacing.lg,
+          paddingBottom: isDesktop ? spacing.sm : spacing.md,
+        },
+      ]}
+    >
+      <View style={[styles.row, isDesktop && styles.rowDesktop]}>
         {canGoBack ? (
           <Pressable
             onPress={() => navigation.goBack()}
-            style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+            style={({ pressed }) => [
+              styles.backBtn,
+              isDesktop && styles.backBtnDesktop,
+              pressed && styles.backBtnPressed,
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             hitSlop={8}
           >
-            <Feather name="chevron-left" size={22} color={colors.primary} />
+            <Feather name="chevron-left" size={isDesktop ? 20 : 22} color={colors.primary} />
           </Pressable>
         ) : (
           <View style={styles.backSpacer} />
@@ -76,14 +92,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.headerBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.headerBorder,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     minHeight: 44,
+  },
+  rowDesktop: {
+    width: '100%',
+    maxWidth: layout.pageMaxWidth,
+    alignSelf: 'center',
+    minHeight: 40,
   },
   backBtn: {
     width: 40,
@@ -92,6 +112,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.tint,
+  },
+  backBtnDesktop: {
+    width: 36,
+    height: 36,
   },
   backBtnPressed: {
     backgroundColor: colors.tintStrong,

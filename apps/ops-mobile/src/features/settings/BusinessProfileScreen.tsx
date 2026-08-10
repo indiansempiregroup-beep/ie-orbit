@@ -44,6 +44,10 @@ export function BusinessProfileScreen() {
         <DetailRow label="Product" value={activeBusiness?.selected_product ?? settings?.product_name ?? '—'} />
         <DetailRow label="Timezone" value={activeBusiness?.timezone ?? '—'} />
         <DetailRow label="Currency" value={activeBusiness?.currency ?? '—'} />
+        <DetailRow
+          label="GSTIN"
+          value={(activeBusiness as { gst_tax_number?: string } | null)?.gst_tax_number || '—'}
+        />
         <DetailRow label="Status" value={activeBusiness?.status ?? '—'} />
         <DetailRow label="Billing provider" value={billing?.provider ?? '—'} />
         <DetailRow label="Billing configured" value={billing?.configured ? 'Yes' : 'No'} />

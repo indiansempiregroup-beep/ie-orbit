@@ -16,6 +16,8 @@ export type PosSessionState = {
   basket: PosSessionBasketLine[];
   billDiscountType: DiscountType;
   billDiscountValue: string;
+  /** Buyer/seller GSTIN for this bill (B2B). Empty = B2C / no GSTIN on invoice. */
+  partyGstin: string;
   paymentMethod: PosPaymentMethod;
   pendingAddCode?: string;
   pendingAddProductId?: string;
@@ -27,6 +29,7 @@ function emptySession(): PosSessionState {
     basket: [],
     billDiscountType: '',
     billDiscountValue: '0',
+    partyGstin: '',
     paymentMethod: 'cash',
   };
 }
@@ -97,6 +100,7 @@ export function clearPosBillKeepCustomer() {
     basket: [],
     billDiscountType: '',
     billDiscountValue: '0',
+    // Keep partyGstin with the customer for the next bill.
   };
 }
 

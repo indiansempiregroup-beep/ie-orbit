@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
+import { DesktopPage } from '../../components/DesktopPage';
 import { getApiErrorMessage } from '../../utils/format';
 import { colors, spacing, typography } from '../../theme/tokens';
 import type { ShopComplianceSettings, ShopGstCompliance, ShopGstComplianceProvider } from '@ie-platform/sdk';
@@ -100,97 +101,99 @@ export function ShopBooksComplianceScreen() {
   const showCredentials = compliance.provider !== 'mock';
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+    <DesktopPage>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Text style={styles.intro}>
-        Turn on IRN (e-invoice) and e-way bill generation for your GST sale vouchers. Defaults to a mock
-        provider so you can try it without NIC/GSP credentials.
-      </Text>
+        <Text style={styles.intro}>
+          Turn on IRN (e-invoice) and e-way bill generation for your GST sale vouchers. Defaults to a mock
+          provider so you can try it without NIC/GSP credentials.
+        </Text>
 
-      <Card style={styles.card}>
-        <View style={styles.switchRow}>
-          <View style={styles.switchCopy}>
-            <Text style={styles.label}>E-invoice (IRN)</Text>
-            <Text style={styles.meta}>Generate IRN for GST sale vouchers</Text>
+        <Card style={styles.card}>
+          <View style={styles.switchRow}>
+            <View style={styles.switchCopy}>
+              <Text style={styles.label}>E-invoice (IRN)</Text>
+              <Text style={styles.meta}>Generate IRN for GST sale vouchers</Text>
+            </View>
+            <Switch value={einvoiceEnabled} onValueChange={setEinvoiceEnabled} disabled={loading} />
           </View>
-          <Switch value={einvoiceEnabled} onValueChange={setEinvoiceEnabled} disabled={loading} />
-        </View>
-        <View style={styles.switchRow}>
-          <View style={styles.switchCopy}>
-            <Text style={styles.label}>E-way bill</Text>
-            <Text style={styles.meta}>Generate e-way bills for movement of goods</Text>
+          <View style={styles.switchRow}>
+            <View style={styles.switchCopy}>
+              <Text style={styles.label}>E-way bill</Text>
+              <Text style={styles.meta}>Generate e-way bills for movement of goods</Text>
+            </View>
+            <Switch value={ewayEnabled} onValueChange={setEwayEnabled} disabled={loading} />
           </View>
-          <Switch value={ewayEnabled} onValueChange={setEwayEnabled} disabled={loading} />
-        </View>
-      </Card>
+        </Card>
 
-      <Card style={styles.card}>
-        <Text style={styles.sectionTitle}>GSP / portal provider</Text>
-        <SelectField
-          label="Provider"
-          value={compliance.provider ?? 'mock'}
-          options={PROVIDER_OPTIONS}
-          onChange={(value) => setField('provider', value as ShopGstComplianceProvider)}
-        />
-        {!showCredentials ? (
-          <Text style={styles.hint}>
-            Mock mode simulates IRN/e-way bill numbers so you can demo the flow. Switch providers when you have
-            live NIC/GSP credentials.
-          </Text>
-        ) : (
-          <>
-            <Input label="Username" value={compliance.username} onChangeText={(value) => setField('username', value)} autoCapitalize="none" />
-            <Input
-              label="Password"
-              value={compliance.password}
-              onChangeText={(value) => setField('password', value)}
-              secureTextEntry
-              autoCapitalize="none"
-            />
-            <Input label="Client ID" value={compliance.client_id} onChangeText={(value) => setField('client_id', value)} autoCapitalize="none" />
-            <Input
-              label="Client secret"
-              value={compliance.client_secret}
-              onChangeText={(value) => setField('client_secret', value)}
-              secureTextEntry
-              autoCapitalize="none"
-            />
-            <Input
-              label="Base URL"
-              value={compliance.base_url}
-              onChangeText={(value) => setField('base_url', value)}
-              autoCapitalize="none"
-              keyboardType="url"
-              placeholder="https://api.example-gsp.in"
-            />
-          </>
-        )}
-      </Card>
+        <Card style={styles.card}>
+          <Text style={styles.sectionTitle}>GSP / portal provider</Text>
+          <SelectField
+            label="Provider"
+            value={compliance.provider ?? 'mock'}
+            options={PROVIDER_OPTIONS}
+            onChange={(value) => setField('provider', value as ShopGstComplianceProvider)}
+          />
+          {!showCredentials ? (
+            <Text style={styles.hint}>
+              Mock mode simulates IRN/e-way bill numbers so you can demo the flow. Switch providers when you have
+              live NIC/GSP credentials.
+            </Text>
+          ) : (
+            <>
+              <Input label="Username" value={compliance.username} onChangeText={(value) => setField('username', value)} autoCapitalize="none" />
+              <Input
+                label="Password"
+                value={compliance.password}
+                onChangeText={(value) => setField('password', value)}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              <Input label="Client ID" value={compliance.client_id} onChangeText={(value) => setField('client_id', value)} autoCapitalize="none" />
+              <Input
+                label="Client secret"
+                value={compliance.client_secret}
+                onChangeText={(value) => setField('client_secret', value)}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              <Input
+                label="Base URL"
+                value={compliance.base_url}
+                onChangeText={(value) => setField('base_url', value)}
+                autoCapitalize="none"
+                keyboardType="url"
+                placeholder="https://api.example-gsp.in"
+              />
+            </>
+          )}
+        </Card>
 
-      <Card style={styles.card}>
-        <Text style={styles.sectionTitle}>Seller address (as per GST registration)</Text>
-        <Input label="Legal name" value={compliance.seller_legal_name} onChangeText={(value) => setField('seller_legal_name', value)} />
-        <Input label="Trade name" value={compliance.seller_trade_name} onChangeText={(value) => setField('seller_trade_name', value)} />
-        <Input label="Address line 1" value={compliance.seller_addr1} onChangeText={(value) => setField('seller_addr1', value)} />
-        <Input label="Address line 2" value={compliance.seller_addr2} onChangeText={(value) => setField('seller_addr2', value)} />
-        <Input label="City / locality" value={compliance.seller_loc} onChangeText={(value) => setField('seller_loc', value)} />
-        <Input label="PIN code" value={compliance.seller_pin} onChangeText={(value) => setField('seller_pin', value)} keyboardType="number-pad" />
-        <Input
-          label="State code (GST)"
-          value={compliance.seller_state_code}
-          onChangeText={(value) => setField('seller_state_code', value)}
-          placeholder="e.g. 27"
-          keyboardType="number-pad"
-        />
-      </Card>
+        <Card style={styles.card}>
+          <Text style={styles.sectionTitle}>Seller address (as per GST registration)</Text>
+          <Input label="Legal name" value={compliance.seller_legal_name} onChangeText={(value) => setField('seller_legal_name', value)} />
+          <Input label="Trade name" value={compliance.seller_trade_name} onChangeText={(value) => setField('seller_trade_name', value)} />
+          <Input label="Address line 1" value={compliance.seller_addr1} onChangeText={(value) => setField('seller_addr1', value)} />
+          <Input label="Address line 2" value={compliance.seller_addr2} onChangeText={(value) => setField('seller_addr2', value)} />
+          <Input label="City / locality" value={compliance.seller_loc} onChangeText={(value) => setField('seller_loc', value)} />
+          <Input label="PIN code" value={compliance.seller_pin} onChangeText={(value) => setField('seller_pin', value)} keyboardType="number-pad" />
+          <Input
+            label="State code (GST)"
+            value={compliance.seller_state_code}
+            onChangeText={(value) => setField('seller_state_code', value)}
+            placeholder="e.g. 27"
+            keyboardType="number-pad"
+          />
+        </Card>
 
-      <Button label={saving ? 'Saving…' : 'Save compliance settings'} loading={saving} fullWidth size="lg" onPress={() => void handleSave()} />
-    </ScrollView>
+        <Button label={saving ? 'Saving…' : 'Save compliance settings'} loading={saving} fullWidth size="lg" onPress={() => void handleSave()} />
+      </ScrollView>
+    </DesktopPage>
   );
 }
 

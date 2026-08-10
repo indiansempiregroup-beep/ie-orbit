@@ -18,6 +18,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopDeliveryZone } from '@ie-platform/sdk';
@@ -267,37 +268,39 @@ export function ShopDeliveryZonesScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {message ? <Text style={styles.meta}>{message}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={zones}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, marginTop: spacing.md }}
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => openEdit(item)}>
-            <View style={styles.rowMain}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.meta}>
-                {(item.cities ?? []).join(', ') || 'Any city'} · prefixes{' '}
-                {(item.postal_prefixes ?? []).join(', ') || 'any'} · fee {item.fee ?? 0}
-              </Text>
-              {item.notes ? <Text style={styles.meta}>{item.notes}</Text> : null}
-              <Text style={styles.hint}>Tap to edit</Text>
-            </View>
-            <Pressable
-              onPress={() => void toggleEnabled(item)}
-              hitSlop={8}
-              style={[styles.badge, item.enabled ? styles.badgeOn : styles.badgeOff]}
-            >
-              <Text style={styles.badgeText}>{item.enabled ? 'On' : 'Off'}</Text>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {message ? <Text style={styles.meta}>{message}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={zones}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, marginTop: spacing.md }}
+          renderItem={({ item }) => (
+            <Pressable style={styles.row} onPress={() => openEdit(item)}>
+              <View style={styles.rowMain}>
+                <Text style={styles.name}>{item.name}</Text>
+                <Text style={styles.meta}>
+                  {(item.cities ?? []).join(', ') || 'Any city'} · prefixes{' '}
+                  {(item.postal_prefixes ?? []).join(', ') || 'any'} · fee {item.fee ?? 0}
+                </Text>
+                {item.notes ? <Text style={styles.meta}>{item.notes}</Text> : null}
+                <Text style={styles.hint}>Tap to edit</Text>
+              </View>
+              <Pressable
+                onPress={() => void toggleEnabled(item)}
+                hitSlop={8}
+                style={[styles.badge, item.enabled ? styles.badgeOn : styles.badgeOff]}
+              >
+                <Text style={styles.badgeText}>{item.enabled ? 'On' : 'Off'}</Text>
+              </Pressable>
             </Pressable>
-          </Pressable>
-        )}
-        ListEmptyComponent={!loading ? <Text style={styles.meta}>No zones yet. Tap + to add.</Text> : null}
-      />
-    </View>
+          )}
+          ListEmptyComponent={!loading ? <Text style={styles.meta}>No zones yet. Tap + to add.</Text> : null}
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

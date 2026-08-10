@@ -72,6 +72,49 @@ def test_split_gst_interstate_uses_igst() -> None:
     assert result["igst"] == Decimal("180.00")
 
 
+def test_compute_line_tax_inclusive_extracts_gst() -> None:
+    from apps.shopie.services.gst import compute_line
+
+    # MRP 118 inclusive of 18% GST → taxable 100, tax 18, total 118
+    result = compute_line(
+        {"qty": "1", "rate": "118", "gst_rate": "18", "tax_inclusive": True},
+        interstate=False,
+    )
+    assert result["taxable"] == Decimal("100.00")
+    assert result["total"] == Decimal("118.00")
+    assert result["cgst"] + result["sgst"] == Decimal("18.00")
+
+
+@pytest.mark.django_db
+def test_sale_voucher_respects_product_tax_inclusive(
+    shop_business: Business, customer: Customer, cash_account: ShopCashAccount
+) -> None:
+    product = ShopProduct.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Inclusive Soap",
+        price=Decimal("118.00"),
+        tax_rate=Decimal("18"),
+        gst_rate=Decimal("18"),
+        stock_on_hand=Decimal("10"),
+        metadata={"tax_inclusive": True},
+    )
+    books = BooksService()
+    voucher = books.create_sale_voucher(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "customer": customer,
+            "lines": [{"product_id": product.id, "qty": "1", "rate": "118", "gst_rate": "18"}],
+            "amount_paid": "118",
+            "cash_account_id": cash_account.id,
+        },
+    )
+    assert voucher.tax_total == Decimal("18.00")
+    assert voucher.total == Decimal("118.00")
+    assert voucher.subtotal == Decimal("100.00")
+
+
 @pytest.mark.django_db
 def test_create_sale_voucher_updates_stock_ledger_and_cash(
     shop_business: Business, customer: Customer, cash_account: ShopCashAccount
@@ -276,3 +319,45 @@ def test_credit_note_returns_stock_and_reduces_receivable(
         party_id=customer.id,
     )
     assert statement["closing_balance"] == "100.00"
+
+
+@pytest.mark.django_db
+def test_confirmed_pos_order_creates_sale_invoice(
+    shop_business: Business, customer: Customer
+) -> None:
+    from apps.shopie.models import FulfillmentMode, ProductStatus, ShopBooksVoucher, VoucherType
+    from apps.shopie.services.catalog import CatalogService
+    from apps.shopie.services.orders import OrderService
+
+    catalog = CatalogService()
+    orders = OrderService()
+    product = catalog.create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "name": "Counter Item",
+            "price": "50.00",
+            "tax_rate": "0",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "20",
+        },
+    )
+    order = orders.create_order(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="cash",
+        confirm=True,
+        lines=[{"product_id": str(product.id), "quantity": 2}],
+    )
+    voucher = ShopBooksVoucher.objects.filter(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        linked_order=order,
+        voucher_type=VoucherType.SALE,
+    ).first()
+    assert voucher is not None
+    assert voucher.total == order.total
+    assert voucher.amount_paid == order.total
+    assert "Sale" in (voucher.notes or "")

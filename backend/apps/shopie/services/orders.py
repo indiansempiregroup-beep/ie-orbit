@@ -125,10 +125,11 @@ class OrderService:
             )
         bill_dtype = str(bill_discount_type or "").strip().lower()
         bill_dvalue = Decimal(str(bill_discount_value or "0"))
+        # Initial status before totals exist; finalized below once order.total is known.
         if payment == "borrow":
             payment_status = "due"
         elif payment in {"cash", "upi", "card"}:
-            payment_status = "due"
+            payment_status = "paid"
         else:
             payment_status = "due" if payment else ""
         metadata["pos"] = {
@@ -156,6 +157,7 @@ class OrderService:
         line_discount_total = Decimal("0.00")
         weighted_tax = Decimal("0.00")
         built_lines: list[ShopOrderLine] = []
+        line_tax_flags: list[bool] = []
 
         for raw in lines:
             product = ShopProduct.objects.select_for_update().get(
@@ -170,15 +172,28 @@ class OrderService:
             tax_rate = Decimal(
                 str(raw.get("tax_rate") if raw.get("tax_rate") is not None else product.tax_rate)
             )
+            product_meta = product.metadata if isinstance(product.metadata, dict) else {}
+            if "tax_inclusive" in raw and raw.get("tax_inclusive") is not None:
+                tax_inclusive = bool(raw.get("tax_inclusive"))
+            else:
+                tax_inclusive = bool(product_meta.get("tax_inclusive"))
             line_gross = (unit_price * qty).quantize(Decimal("0.01"))
             line_discount = self._apply_discount(
                 gross=line_gross,
                 discount_type=str(raw.get("discount_type") or ""),
                 discount_value=Decimal(str(raw.get("discount_value") or "0")),
             )
-            line_subtotal = (line_gross - line_discount).quantize(Decimal("0.01"))
-            line_tax = (line_subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
-            line_total = line_subtotal + line_tax
+            after_discount = (line_gross - line_discount).quantize(Decimal("0.01"))
+            if tax_inclusive and tax_rate > 0:
+                line_subtotal = (after_discount * Decimal("100") / (Decimal("100") + tax_rate)).quantize(
+                    Decimal("0.01")
+                )
+                line_tax = (after_discount - line_subtotal).quantize(Decimal("0.01"))
+                line_total = after_discount
+            else:
+                line_subtotal = after_discount
+                line_tax = (line_subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+                line_total = line_subtotal + line_tax
             built_lines.append(
                 ShopOrderLine(
                     tenant=tenant,
@@ -198,6 +213,7 @@ class OrderService:
                     line_total=line_total,
                 )
             )
+            line_tax_flags.append(tax_inclusive)
             merchandise_subtotal += line_subtotal
             line_discount_total += line_discount
             weighted_tax += line_tax
@@ -220,14 +236,27 @@ class OrderService:
                         Decimal("0.01")
                     )
                     remaining_discount -= share
-                line.line_subtotal = (line.line_subtotal - share).quantize(Decimal("0.01"))
-                remaining_base -= share
-                line.line_tax = (line.line_subtotal * line.tax_rate / Decimal("100")).quantize(
-                    Decimal("0.01")
-                )
-                line.line_total = line.line_subtotal + line.line_tax
+                inclusive = line_tax_flags[index] if index < len(line_tax_flags) else False
+                if inclusive and line.tax_rate > 0:
+                    inclusive_total = (line.line_subtotal + line.line_tax - share).quantize(Decimal("0.01"))
+                    if inclusive_total < 0:
+                        inclusive_total = Decimal("0.00")
+                    line.line_subtotal = (
+                        inclusive_total * Decimal("100") / (Decimal("100") + line.tax_rate)
+                    ).quantize(Decimal("0.01"))
+                    line.line_tax = (inclusive_total - line.line_subtotal).quantize(Decimal("0.01"))
+                    line.line_total = inclusive_total
+                else:
+                    line.line_subtotal = (line.line_subtotal - share).quantize(Decimal("0.01"))
+                    remaining_base -= share
+                    line.line_tax = (line.line_subtotal * line.tax_rate / Decimal("100")).quantize(
+                        Decimal("0.01")
+                    )
+                    line.line_total = line.line_subtotal + line.line_tax
                 tax_total += line.line_tax
-            subtotal = (merchandise_subtotal - bill_discount).quantize(Decimal("0.01"))
+            subtotal = sum((line.line_subtotal for line in built_lines), Decimal("0.00")).quantize(
+                Decimal("0.01")
+            )
         else:
             bill_discount = Decimal("0.00")
             subtotal = merchandise_subtotal
@@ -249,6 +278,11 @@ class OrderService:
             pos_meta["amount_paid"] = "0.00"
             pos_meta["amount_due"] = str(order.total)
             pos_meta["payment_status"] = "due"
+        elif mode == FulfillmentMode.POS and payment in {"cash", "upi", "card"}:
+            # Counter checkout is collected at the till — mark paid for books posting.
+            pos_meta["amount_paid"] = str(order.total)
+            pos_meta["amount_due"] = "0.00"
+            pos_meta["payment_status"] = "paid"
         order.metadata = {
             **metadata,
             "pos": pos_meta,
@@ -285,6 +319,11 @@ class OrderService:
                 order=order,
                 status=OrderStatus.CONFIRMED,
             )
+            if mode == FulfillmentMode.POS:
+                # Every confirmed Sale (POS) bill posts a Books sale invoice/voucher.
+                refreshed = self.get_order(tenant=tenant, business=business, order_id=order.id)
+                self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+                return refreshed
         return self.get_order(tenant=tenant, business=business, order_id=order.id)
 
     @transaction.atomic
@@ -524,7 +563,7 @@ class OrderService:
         order: ShopOrder,
         invoice: ShopInvoice | None = None,
     ) -> None:
-        """Best-effort post of a POS/order sale into ShopIE GST books."""
+        """Best-effort post of a Sale (POS) order into ShopIE GST books."""
         try:
             from apps.shopie.services.books import BooksService
 
@@ -535,7 +574,12 @@ class OrderService:
                 voucher.linked_invoice = invoice
                 voucher.save(update_fields=["linked_invoice", "updated_at", "version"])
         except Exception:
-            # Books posting must not block invoice issuance; ledger can be repaired later.
+            # Books posting must not block the counter sale; ledger can be repaired later.
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Failed to post order %s to books sale invoice", getattr(order, "order_number", order.id)
+            )
             return
 
     @transaction.atomic

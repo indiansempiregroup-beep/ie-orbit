@@ -1196,6 +1196,7 @@ export type Business = {
   logo?: string | null;
   upi_vpa?: string | null;
   payment_qr_url?: string | null;
+  gst_tax_number?: string | null;
   status?: string;
   currency?: string | null;
   timezone?: string | null;
@@ -1308,6 +1309,7 @@ export type ShopProduct = {
   price: string | number;
   tax_rate?: string | number;
   gst_rate?: string | number;
+  tax_inclusive?: boolean;
   hsn_sac?: string;
   currency?: string;
   stock_on_hand: string | number;
@@ -1425,6 +1427,8 @@ export type ShopOrder = {
 export type ShopOrderCreateInput = {
   business_id: string;
   customer_id?: string | null;
+  /** Buyer GSTIN for B2B GST invoices. Empty / omitted = B2C. */
+  customer_gstin?: string | null;
   fulfillment_mode?: string;
   notes?: string;
   delivery_address?: string;
@@ -1439,6 +1443,7 @@ export type ShopOrderCreateInput = {
     quantity?: string | number;
     unit_price?: string | number;
     tax_rate?: string | number;
+    tax_inclusive?: boolean;
     barcode_scanned?: string;
     discount_type?: '' | 'percent' | 'amount' | string;
     discount_value?: string | number;
@@ -1458,6 +1463,7 @@ export type ShopReturn = {
   currency?: string;
   credit_invoice?: string | null;
   line_items?: unknown[];
+  metadata?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
 };
@@ -1684,6 +1690,8 @@ export type ShopBooksVoucherLineInput = {
   rate?: string | number;
   discount?: string | number;
   gst_rate?: string | number;
+  /** When true, rate is GST-inclusive (product MRP / tax-included price). */
+  tax_inclusive?: boolean;
 };
 
 export type ShopBooksVoucher = {
@@ -2107,6 +2115,8 @@ export type Customer = {
   longitude?: number | null;
   address?: CustomerAddress | null;
   addresses?: Array<CustomerAddress & { is_default?: boolean; full_address?: string | null }>;
+  billing_state?: string;
+  gstin?: string;
   borrow_balance_due?: string | number;
   borrow_currency?: string;
   created_at?: string;
@@ -2166,6 +2176,8 @@ export type CustomerCreateInput = {
   source?: string;
   status?: string;
   tags?: string[];
+  billing_state?: string;
+  gstin?: string;
   metadata?: Record<string, unknown>;
   profile?: Record<string, unknown>;
   preferences?: Record<string, unknown>;

@@ -20,6 +20,7 @@ import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopProduct, ShopQuotation } from '@ie-platform/sdk';
@@ -91,17 +92,17 @@ export function ShopBooksQuotationsScreen() {
       title: 'Estimates / Proforma',
       headerRight: () => (
         <Pressable
-          onPress={() => (showForm ? closeForm() : setShowForm(true))}
+          onPress={() => navigation.navigate('ShopPos', { mode: 'quotation' })}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : 'New quotation'}
+          accessibilityLabel="New quotation"
           hitSlop={8}
           style={styles.headerBtn}
         >
-          <Feather name={showForm ? 'x' : 'plus'} size={20} color={colors.primary} />
+          <Feather name="plus" size={20} color={colors.primary} />
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm]);
+  }, [navigation]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -237,177 +238,73 @@ export function ShopBooksQuotationsScreen() {
     }
   }
 
-  if (showForm) {
-    return (
-      <FormScreen
-        footer={
-          <Button
-            label={busy ? 'Saving…' : `Create quotation · ${formatMoney(totals.total)}`}
-            loading={busy}
-            fullWidth
-            size="lg"
-            onPress={() => void submit()}
-          />
-        }
-      >
-        <Text style={styles.formTitle}>New quotation</Text>
-
-        <SelectField label="Customer" value={customerId} options={customerOptions} onChange={setCustomerId} searchable />
-
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Valid until</Text>
-          <TextInput
-            style={styles.input}
-            value={validUntil}
-            onChangeText={setValidUntil}
-            placeholder="YYYY-MM-DD (optional)"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-
-        <Text style={styles.section}>Items</Text>
-        {lines.map((line) => (
-          <View key={line.key} style={styles.lineCard}>
-            <SelectField
-              label="Product"
-              value={line.productId}
-              options={productOptions}
-              onChange={(value) => selectProductForLine(line.key, value)}
-              searchable
-              placeholder="Choose product"
-            />
-            <View style={styles.lineRow}>
-              <View style={styles.lineField}>
-                <Text style={styles.smallLabel}>Qty</Text>
-                <TextInput
-                  style={styles.input}
-                  value={line.qty}
-                  onChangeText={(value) => setLine(line.key, { qty: value.replace(/[^0-9.]/g, '') })}
-                  keyboardType="decimal-pad"
-                  placeholderTextColor={colors.mutedForeground}
-                />
-              </View>
-              <View style={styles.lineField}>
-                <Text style={styles.smallLabel}>Rate</Text>
-                <TextInput
-                  style={styles.input}
-                  value={line.rate}
-                  onChangeText={(value) => setLine(line.key, { rate: value.replace(/[^0-9.]/g, '') })}
-                  keyboardType="decimal-pad"
-                  placeholderTextColor={colors.mutedForeground}
-                />
-              </View>
-              <View style={styles.lineField}>
-                <Text style={styles.smallLabel}>GST %</Text>
-                <TextInput
-                  style={styles.input}
-                  value={line.gst}
-                  onChangeText={(value) => setLine(line.key, { gst: value.replace(/[^0-9.]/g, '') })}
-                  keyboardType="decimal-pad"
-                  placeholderTextColor={colors.mutedForeground}
-                />
-              </View>
-              <Pressable onPress={() => removeLine(line.key)} style={styles.removeBtn} hitSlop={8}>
-                <Feather name="trash-2" size={18} color={colors.destructive} />
-              </Pressable>
-            </View>
-          </View>
-        ))}
-        <Pressable style={styles.addLineBtn} onPress={addLine}>
-          <Feather name="plus" size={16} color={colors.primary} />
-          <Text style={styles.addLineText}>Add product line</Text>
-        </Pressable>
-
-        <View style={styles.totalsCard}>
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>Subtotal</Text>
-            <Text style={styles.meta}>{formatMoney(totals.subtotal)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>Tax</Text>
-            <Text style={styles.meta}>{formatMoney(totals.tax)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.payableLabel}>Total</Text>
-            <Text style={styles.payableValue}>{formatMoney(totals.total)}</Text>
-          </View>
-        </View>
-
-        <TextInput
-          style={[styles.input, styles.notes]}
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Notes (optional)"
-          multiline
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </FormScreen>
-    );
-  }
-
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={quotations}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        renderItem={({ item }) => {
-          const badge = voucherStatusStyle(item.status);
-          const customer =
-            item.customer && customerById.get(item.customer)
-              ? customerLabel(customerById.get(item.customer)!)
-              : item.customer
-                ? 'Customer'
-                : 'No customer';
-          const converting = convertingId === item.id;
-          return (
-            <View style={styles.row}>
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.quotation_number}</Text>
-                <Text style={styles.total}>{formatMoney(item.total)}</Text>
-              </View>
-              <Text style={styles.meta}>
-                {customer}
-                {item.valid_until ? ` · Valid till ${item.valid_until}` : ''}
-              </Text>
-              <View style={styles.rowBottom}>
-                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                  <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <Text style={styles.pageHint}>New quotations use the same Sale counter UI (scan/search products).</Text>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={quotations}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          renderItem={({ item }) => {
+            const badge = voucherStatusStyle(item.status);
+            const customer =
+              item.customer && customerById.get(item.customer)
+                ? customerLabel(customerById.get(item.customer)!)
+                : item.customer
+                  ? 'Customer'
+                  : 'No customer';
+            const converting = convertingId === item.id;
+            return (
+              <View style={styles.row}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{item.quotation_number}</Text>
+                  <Text style={styles.total}>{formatMoney(item.total)}</Text>
                 </View>
-                {canConvert(item) ? (
-                  <Pressable onPress={() => void onConvert(item)} hitSlop={8} disabled={converting}>
-                    <Text style={[styles.convertText, converting && styles.convertDisabled]}>
-                      {converting ? 'Converting…' : 'Convert to sale'}
-                    </Text>
-                  </Pressable>
-                ) : item.converted_order || (item.status || '').toLowerCase() === 'converted' ? (
-                  <Text style={styles.convertedMeta}>Converted</Text>
-                ) : null}
+                <Text style={styles.meta}>
+                  {customer}
+                  {item.valid_until ? ` · Valid till ${item.valid_until}` : ''}
+                </Text>
+                <View style={styles.rowBottom}>
+                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+                  </View>
+                  {canConvert(item) ? (
+                    <Pressable onPress={() => void onConvert(item)} hitSlop={8} disabled={converting}>
+                      <Text style={[styles.convertText, converting && styles.convertDisabled]}>
+                        {converting ? 'Converting…' : 'Convert to sale'}
+                      </Text>
+                    </Pressable>
+                  ) : item.converted_order || (item.status || '').toLowerCase() === 'converted' ? (
+                    <Text style={styles.convertedMeta}>Converted</Text>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="file-text"
-              title="No quotations yet"
-              message="Create a quotation and convert it to a sale when the customer confirms."
-              actionLabel="New quotation"
-              onAction={() => setShowForm(true)}
-            />
-          ) : null
-        }
-      />
-    </View>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="file-text"
+                title="No quotations yet"
+                message="Create a quotation and convert it to a sale when the customer confirms."
+                actionLabel="New quotation"
+                onAction={() => navigation.navigate('ShopPos', { mode: 'quotation' })}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  pageHint: { color: colors.mutedForeground, fontSize: 12, marginBottom: spacing.sm, lineHeight: 16 },
   headerBtn: {
     width: 40,
     height: 40,

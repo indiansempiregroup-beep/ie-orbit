@@ -2,6 +2,7 @@ import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -77,25 +78,31 @@ export function PlatformAdminTenantDetailScreen() {
 
   if (loading && !tenant) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
+      <DesktopPage>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </DesktopPage>
     );
   }
 
   if (error && !tenant) {
     return (
-      <View style={styles.center}>
-        <EmptyState icon="alert-circle" title="Unable to load tenant" message={error} actionLabel="Retry" onAction={() => void load()} />
-      </View>
+      <DesktopPage>
+        <View style={styles.center}>
+          <EmptyState icon="alert-circle" title="Unable to load tenant" message={error} actionLabel="Retry" onAction={() => void load()} />
+        </View>
+      </DesktopPage>
     );
   }
 
   if (!tenant) {
     return (
-      <View style={styles.center}>
-        <EmptyState icon="briefcase" title="Tenant not found" />
-      </View>
+      <DesktopPage>
+        <View style={styles.center}>
+          <EmptyState icon="briefcase" title="Tenant not found" />
+        </View>
+      </DesktopPage>
     );
   }
 
@@ -105,85 +112,87 @@ export function PlatformAdminTenantDetailScreen() {
   const canReactivate = status === 'suspended' || status === 'inactive';
 
   return (
-    <RefreshableScrollView
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      contentContainerStyle={styles.content}
-    >
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+    <DesktopPage>
+      <RefreshableScrollView
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        contentContainerStyle={styles.content}
+      >
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.card}>
-        <Text style={styles.name}>{tenant.display_name}</Text>
-        <Text style={styles.meta}>{tenant.slug}</Text>
-        <View style={[styles.badge, { backgroundColor: badge.bg, alignSelf: 'flex-start' }]}>
-          <Text style={[styles.badgeText, { color: badge.text }]}>{tenant.status}</Text>
+        <View style={styles.card}>
+          <Text style={styles.name}>{tenant.display_name}</Text>
+          <Text style={styles.meta}>{tenant.slug}</Text>
+          <View style={[styles.badge, { backgroundColor: badge.bg, alignSelf: 'flex-start' }]}>
+            <Text style={[styles.badgeText, { color: badge.text }]}>{tenant.status}</Text>
+          </View>
         </View>
-      </View>
 
-      <Text style={styles.section}>Businesses</Text>
-      {tenant.businesses?.length ? (
-        tenant.businesses.map((business) => (
-          <View key={business.id} style={styles.businessRow}>
-            <Text style={styles.businessName}>{business.display_name}</Text>
-            <Text style={styles.meta}>
-              {business.business_code}
-              {business.selected_product ? ` · ${business.selected_product}` : ''}
-              {` · ${business.status}`}
+        <Text style={styles.section}>Businesses</Text>
+        {tenant.businesses?.length ? (
+          tenant.businesses.map((business) => (
+            <View key={business.id} style={styles.businessRow}>
+              <Text style={styles.businessName}>{business.display_name}</Text>
+              <Text style={styles.meta}>
+                {business.business_code}
+                {business.selected_product ? ` · ${business.selected_product}` : ''}
+                {` · ${business.status}`}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.meta}>No businesses on this tenant.</Text>
+        )}
+
+        {pendingAction ? (
+          <View style={styles.actionCard}>
+            <Text style={styles.section}>
+              {pendingAction === 'suspend' ? 'Suspend tenant' : 'Reactivate tenant'}
             </Text>
+            <TextInput
+              style={[styles.input, styles.notes]}
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Reason (required)"
+              multiline
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <View style={styles.actions}>
+              <Button
+                label={busy ? 'Working…' : 'Confirm'}
+                variant={pendingAction === 'suspend' ? 'destructive' : 'primary'}
+                fullWidth
+                loading={busy}
+                onPress={() => void confirmAction()}
+              />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                fullWidth
+                onPress={() => {
+                  setPendingAction(null);
+                  setReason('');
+                }}
+              />
+            </View>
           </View>
-        ))
-      ) : (
-        <Text style={styles.meta}>No businesses on this tenant.</Text>
-      )}
-
-      {pendingAction ? (
-        <View style={styles.actionCard}>
-          <Text style={styles.section}>
-            {pendingAction === 'suspend' ? 'Suspend tenant' : 'Reactivate tenant'}
-          </Text>
-          <TextInput
-            style={[styles.input, styles.notes]}
-            value={reason}
-            onChangeText={setReason}
-            placeholder="Reason (required)"
-            multiline
-            placeholderTextColor={colors.mutedForeground}
-          />
+        ) : (
           <View style={styles.actions}>
-            <Button
-              label={busy ? 'Working…' : 'Confirm'}
-              variant={pendingAction === 'suspend' ? 'destructive' : 'primary'}
-              fullWidth
-              loading={busy}
-              onPress={() => void confirmAction()}
-            />
-            <Button
-              label="Cancel"
-              variant="ghost"
-              fullWidth
-              onPress={() => {
-                setPendingAction(null);
-                setReason('');
-              }}
-            />
+            {canSuspend ? (
+              <Button
+                label="Suspend tenant"
+                variant="destructive"
+                fullWidth
+                onPress={() => setPendingAction('suspend')}
+              />
+            ) : null}
+            {canReactivate ? (
+              <Button label="Reactivate tenant" fullWidth onPress={() => setPendingAction('reactivate')} />
+            ) : null}
           </View>
-        </View>
-      ) : (
-        <View style={styles.actions}>
-          {canSuspend ? (
-            <Button
-              label="Suspend tenant"
-              variant="destructive"
-              fullWidth
-              onPress={() => setPendingAction('suspend')}
-            />
-          ) : null}
-          {canReactivate ? (
-            <Button label="Reactivate tenant" fullWidth onPress={() => setPendingAction('reactivate')} />
-          ) : null}
-        </View>
-      )}
-    </RefreshableScrollView>
+        )}
+      </RefreshableScrollView>
+    </DesktopPage>
   );
 }
 

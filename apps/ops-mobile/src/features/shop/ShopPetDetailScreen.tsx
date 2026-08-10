@@ -19,6 +19,7 @@ import { colors, spacing } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopPet } from '@ie-platform/sdk';
+import { DesktopPage } from '../../components/DesktopPage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopPetDetail'>;
 
@@ -88,17 +89,21 @@ export function ShopPetDetailScreen() {
 
   if (loading && !pet) {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
+      <DesktopPage>
+        <View style={[styles.screen, styles.centered]}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </DesktopPage>
     );
   }
 
   if (!pet) {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <Text style={styles.meta}>{message || 'Pet not found.'}</Text>
-      </View>
+      <DesktopPage>
+        <View style={[styles.screen, styles.centered]}>
+          <Text style={styles.meta}>{message || 'Pet not found.'}</Text>
+        </View>
+      </DesktopPage>
     );
   }
 
@@ -108,89 +113,91 @@ export function ShopPetDetailScreen() {
   const photoUri = resolveMediaUrl(pet.photo_url);
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl, paddingTop: spacing.md }}
-    >
-      <View style={styles.hero}>
-        {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.photo} />
-        ) : (
-          <View style={[styles.photo, styles.photoPlaceholder]}>
-            <Feather name="heart" size={28} color={colors.mutedForeground} />
-          </View>
-        )}
-        <Text style={styles.title}>{pet.name}</Text>
-        <Text style={styles.meta}>
-          {[pet.species, pet.breed, pet.sex].filter(Boolean).join(' · ') || 'Pet profile'}
-        </Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>Owner</Text>
-        <Text style={styles.value}>{ownerLabel}</Text>
-        <Text style={styles.label}>Birthday</Text>
-        <Text style={styles.value}>{pet.birthday || 'Not set'}</Text>
-        {pet.birthday ? (
-          <Text style={styles.hint}>
-            Automatic reminder: customer + business owner/manager get alerts 5 days before birthday.
+    <DesktopPage>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl, paddingTop: spacing.md }}
+      >
+        <View style={styles.hero}>
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={styles.photo} />
+          ) : (
+            <View style={[styles.photo, styles.photoPlaceholder]}>
+              <Feather name="heart" size={28} color={colors.mutedForeground} />
+            </View>
+          )}
+          <Text style={styles.title}>{pet.name}</Text>
+          <Text style={styles.meta}>
+            {[pet.species, pet.breed, pet.sex].filter(Boolean).join(' · ') || 'Pet profile'}
           </Text>
-        ) : (
-          <Text style={styles.hint}>Add a birthday to enable automatic owner reminders.</Text>
-        )}
-        <Text style={styles.label}>Medical notes</Text>
-        <Text style={styles.value}>{pet.medical_notes?.trim() || '—'}</Text>
-      </View>
-
-      {message ? <Text style={styles.meta}>{message}</Text> : null}
-
-      <Pressable
-        style={styles.button}
-        onPress={() => navigation.navigate('ShopPetForm', { petId: pet.id })}
-      >
-        <Text style={styles.buttonText}>Edit pet</Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.secondaryButton}
-        onPress={() => setShowNotify((open) => !open)}
-      >
-        <Feather name="bell" size={16} color={colors.primary} />
-        <Text style={styles.secondaryText}>
-          {showNotify ? 'Hide notification' : 'Notify owner'}
-        </Text>
-      </Pressable>
-
-      {showNotify ? (
-        <View style={styles.notifyCard}>
-          <Text style={styles.label}>Subject</Text>
-          <TextInput
-            style={styles.input}
-            value={subject}
-            onChangeText={setSubject}
-            placeholder="Subject"
-            placeholderTextColor={colors.mutedForeground}
-          />
-          <Text style={styles.label}>Message</Text>
-          <TextInput
-            style={[styles.input, styles.notes]}
-            value={body}
-            onChangeText={setBody}
-            placeholder="Write a custom message for the pet owner…"
-            multiline
-            placeholderTextColor={colors.mutedForeground}
-          />
-          <Text style={styles.hint}>Sends in-app (if they have an account) and email.</Text>
-          <Pressable
-            style={[styles.button, sending && styles.buttonDisabled]}
-            onPress={() => void sendNotify()}
-            disabled={sending}
-          >
-            <Text style={styles.buttonText}>{sending ? 'Sending…' : 'Send notification'}</Text>
-          </Pressable>
         </View>
-      ) : null}
-    </ScrollView>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Owner</Text>
+          <Text style={styles.value}>{ownerLabel}</Text>
+          <Text style={styles.label}>Birthday</Text>
+          <Text style={styles.value}>{pet.birthday || 'Not set'}</Text>
+          {pet.birthday ? (
+            <Text style={styles.hint}>
+              Automatic reminder: customer + business owner/manager get alerts 5 days before birthday.
+            </Text>
+          ) : (
+            <Text style={styles.hint}>Add a birthday to enable automatic owner reminders.</Text>
+          )}
+          <Text style={styles.label}>Medical notes</Text>
+          <Text style={styles.value}>{pet.medical_notes?.trim() || '—'}</Text>
+        </View>
+
+        {message ? <Text style={styles.meta}>{message}</Text> : null}
+
+        <Pressable
+          style={styles.button}
+          onPress={() => navigation.navigate('ShopPetForm', { petId: pet.id })}
+        >
+          <Text style={styles.buttonText}>Edit pet</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => setShowNotify((open) => !open)}
+        >
+          <Feather name="bell" size={16} color={colors.primary} />
+          <Text style={styles.secondaryText}>
+            {showNotify ? 'Hide notification' : 'Notify owner'}
+          </Text>
+        </Pressable>
+
+        {showNotify ? (
+          <View style={styles.notifyCard}>
+            <Text style={styles.label}>Subject</Text>
+            <TextInput
+              style={styles.input}
+              value={subject}
+              onChangeText={setSubject}
+              placeholder="Subject"
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <Text style={styles.label}>Message</Text>
+            <TextInput
+              style={[styles.input, styles.notes]}
+              value={body}
+              onChangeText={setBody}
+              placeholder="Write a custom message for the pet owner…"
+              multiline
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <Text style={styles.hint}>Sends in-app (if they have an account) and email.</Text>
+            <Pressable
+              style={[styles.button, sending && styles.buttonDisabled]}
+              onPress={() => void sendNotify()}
+              disabled={sending}
+            >
+              <Text style={styles.buttonText}>{sending ? 'Sending…' : 'Send notification'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </ScrollView>
+    </DesktopPage>
   );
 }
 

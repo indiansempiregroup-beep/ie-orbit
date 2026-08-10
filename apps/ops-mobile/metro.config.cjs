@@ -39,6 +39,8 @@ config.resolver.blockList = [
   /[\\/]__tests__([\\/]|$)/,
   /[\\/]android[\\/]build([\\/]|$)/,
   /[\\/]\.cxx([\\/]|$)/,
+  // Accidental nested installs under workspace packages (e.g. packages/i18n/node_modules/react).
+  /[\\/]packages[\\/][^\\/]+[\\/]node_modules[\\/]/,
 ];
 
 module.exports = config;

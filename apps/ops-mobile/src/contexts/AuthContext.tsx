@@ -12,6 +12,7 @@ import {
   migrateLegacyBiometricKeys,
   storeBiometricSession,
 } from '../utils/biometrics';
+import { getSecureItem, setSecureItem } from '../utils/persistentStore';
 
 const ACCESS_KEY = 'ie.ops.access';
 const REFRESH_KEY = 'ie.ops.refresh';
@@ -73,29 +74,11 @@ type AuthState = {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 async function readToken(key: string) {
-  try {
-    return await SecureStore.getItemAsync(key, STORE_OPTIONS);
-  } catch {
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch {
-      return null;
-    }
-  }
+  return getSecureItem(key, STORE_OPTIONS);
 }
 
 async function writeToken(key: string, value: string | null) {
-  if (value == null) {
-    await SecureStore.deleteItemAsync(key, STORE_OPTIONS).catch(() => undefined);
-    await SecureStore.deleteItemAsync(key).catch(() => undefined);
-    return;
-  }
-  await SecureStore.setItemAsync(key, value, STORE_OPTIONS);
-  const verified = await readToken(key);
-  if (verified !== value) {
-    // Fallback without options (some Expo Go / keychain combinations).
-    await SecureStore.setItemAsync(key, value);
-  }
+  await setSecureItem(key, value, STORE_OPTIONS);
 }
 
 async function migrateLegacyAuthKeys() {
@@ -103,13 +86,11 @@ async function migrateLegacyAuthKeys() {
   const refresh = (await readToken(REFRESH_KEY)) || (await readToken(LEGACY_REFRESH_KEY));
   if (access) {
     await writeToken(ACCESS_KEY, access);
-    await SecureStore.deleteItemAsync(LEGACY_ACCESS_KEY).catch(() => undefined);
-    await SecureStore.deleteItemAsync(LEGACY_ACCESS_KEY, STORE_OPTIONS).catch(() => undefined);
+    await setSecureItem(LEGACY_ACCESS_KEY, null, STORE_OPTIONS);
   }
   if (refresh) {
     await writeToken(REFRESH_KEY, refresh);
-    await SecureStore.deleteItemAsync(LEGACY_REFRESH_KEY).catch(() => undefined);
-    await SecureStore.deleteItemAsync(LEGACY_REFRESH_KEY, STORE_OPTIONS).catch(() => undefined);
+    await setSecureItem(LEGACY_REFRESH_KEY, null, STORE_OPTIONS);
   }
   return { access, refresh };
 }

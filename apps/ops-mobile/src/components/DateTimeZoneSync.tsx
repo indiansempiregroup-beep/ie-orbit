@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { configureDateTimeZones } from '../utils/format';
@@ -17,10 +17,7 @@ export function DateTimeZoneSync({ children }: { children: React.ReactNode }) {
     });
   }, [userTimezone, businessTimezone]);
 
-  const zoneKey = useMemo(
-    () => `${userTimezone}|${businessTimezone}`,
-    [userTimezone, businessTimezone],
-  );
-
-  return <React.Fragment key={zoneKey}>{children}</React.Fragment>;
+  // Do not remount children when timezone hydrates — that remounted NavigationContainer
+  // and looked like an app load failure on Expo Go.
+  return <>{children}</>;
 }

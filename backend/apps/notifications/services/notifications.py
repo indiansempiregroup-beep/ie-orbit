@@ -331,6 +331,7 @@ class NotificationService:
             "{{status}}": booking.status,
             "{{rating}}": str(rating) if rating is not None else "",
             "{{comment}}": str(comment),
+            "{{business_name}}": booking.business.display_name or booking.business.business_name or "",
         }
         subject = template.subject
         body = template.body
@@ -338,6 +339,7 @@ class NotificationService:
             subject = subject.replace(key, value)
             body = body.replace(key, value)
 
+        business = booking.business
         return {
             "subject": subject,
             "body": body,
@@ -347,6 +349,8 @@ class NotificationService:
             "event_type": event.event_type,
             "user": user,
             "audience": audience,
+            "business_name": business.display_name or business.business_name or "",
+            "business_logo": business.logo or "",
         }
 
     def _channel_enabled_for_user(self, *, user: User, channel: str) -> bool:

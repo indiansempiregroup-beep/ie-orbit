@@ -187,7 +187,7 @@ export function BarcodeScannerScreen() {
         <View style={styles.statusPanel}>
           <Text style={styles.titleLight}>
             {forPos
-              ? 'Scan into POS basket'
+              ? 'Scan into sale basket'
               : forAddProduct
                 ? 'Scan barcode to add product'
                 : 'Scan barcode / RFID'}

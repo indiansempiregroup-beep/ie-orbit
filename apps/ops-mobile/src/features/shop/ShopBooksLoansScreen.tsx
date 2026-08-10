@@ -20,6 +20,7 @@ import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopLoan } from '@ie-platform/sdk';
@@ -238,86 +239,88 @@ export function ShopBooksLoansScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-      <FlatList
-        data={loans}
-        keyExtractor={(item) => item.id}
-        refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-        renderItem={({ item }) => {
-          const badge = voucherStatusStyle(item.status);
-          const expanded = expandedId === item.id;
-          const party = item.customer_name || 'Customer loan';
-          const balance = Number(item.balance ?? 0);
-          return (
-            <Pressable
-              style={styles.row}
-              onPress={() => {
-                setExpandedId(expanded ? null : item.id);
-                setRepayAmount('');
-                setRepayNotes('');
-              }}
-            >
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.title}</Text>
-                <Text style={styles.total}>{formatMoney(item.balance)}</Text>
-              </View>
-              <Text style={styles.meta}>
-                {party} · Principal {formatMoney(item.principal)}
-              </Text>
-              <View style={styles.rowBottom}>
-                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                  <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+    <DesktopPage>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={loans}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
+          renderItem={({ item }) => {
+            const badge = voucherStatusStyle(item.status);
+            const expanded = expandedId === item.id;
+            const party = item.customer_name || 'Customer loan';
+            const balance = Number(item.balance ?? 0);
+            return (
+              <Pressable
+                style={styles.row}
+                onPress={() => {
+                  setExpandedId(expanded ? null : item.id);
+                  setRepayAmount('');
+                  setRepayNotes('');
+                }}
+              >
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{item.title}</Text>
+                  <Text style={styles.total}>{formatMoney(item.balance)}</Text>
                 </View>
-                {balance > 0.009 ? (
-                  <Text style={styles.repayHint}>{expanded ? 'Hide repay' : 'Repay'}</Text>
-                ) : (
-                  <Text style={styles.meta}>Settled</Text>
-                )}
-              </View>
-              {expanded && balance > 0.009 ? (
-                <View style={styles.repayBox}>
-                  <TextInput
-                    style={styles.input}
-                    value={repayAmount}
-                    onChangeText={(value) => setRepayAmount(value.replace(/[^0-9.]/g, ''))}
-                    placeholder="Repayment amount"
-                    keyboardType="decimal-pad"
-                    placeholderTextColor={colors.mutedForeground}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={repayNotes}
-                    onChangeText={setRepayNotes}
-                    placeholder="Notes (optional)"
-                    placeholderTextColor={colors.mutedForeground}
-                  />
-                  <Button
-                    label={repayingId === item.id ? 'Saving…' : 'Record repayment'}
-                    loading={repayingId === item.id}
-                    fullWidth
-                    onPress={() => void onRepay(item)}
-                  />
+                <Text style={styles.meta}>
+                  {party} · Principal {formatMoney(item.principal)}
+                </Text>
+                <View style={styles.rowBottom}>
+                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
+                  </View>
+                  {balance > 0.009 ? (
+                    <Text style={styles.repayHint}>{expanded ? 'Hide repay' : 'Repay'}</Text>
+                  ) : (
+                    <Text style={styles.meta}>Settled</Text>
+                  )}
                 </View>
-              ) : null}
-            </Pressable>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon="percent"
-              title="No loans yet"
-              message="Track customer loans and record repayments against the outstanding balance."
-              actionLabel="New loan"
-              onAction={() => setShowForm(true)}
-            />
-          ) : null
-        }
-      />
-    </View>
+                {expanded && balance > 0.009 ? (
+                  <View style={styles.repayBox}>
+                    <TextInput
+                      style={styles.input}
+                      value={repayAmount}
+                      onChangeText={(value) => setRepayAmount(value.replace(/[^0-9.]/g, ''))}
+                      placeholder="Repayment amount"
+                      keyboardType="decimal-pad"
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      value={repayNotes}
+                      onChangeText={setRepayNotes}
+                      placeholder="Notes (optional)"
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                    <Button
+                      label={repayingId === item.id ? 'Saving…' : 'Record repayment'}
+                      loading={repayingId === item.id}
+                      fullWidth
+                      onPress={() => void onRepay(item)}
+                    />
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="percent"
+                title="No loans yet"
+                message="Track customer loans and record repayments against the outstanding balance."
+                actionLabel="New loan"
+                onAction={() => setShowForm(true)}
+              />
+            ) : null
+          }
+        />
+      </View>
+    </DesktopPage>
   );
 }
 

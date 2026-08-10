@@ -1,3 +1,6 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+import type { Booking } from '@ie-platform/sdk';
+
 export type AuthStackParamList = {
   Login: undefined;
   RegisterWizard: undefined;
@@ -10,8 +13,8 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Dashboard: undefined;
   Bookings: undefined;
+  Books: undefined;
   Calendar: undefined;
-  Alerts: undefined;
   More: undefined;
 };
 
@@ -25,8 +28,9 @@ export type RootStackParamList = {
   PlatformAdminAudit: undefined;
   PlatformAdminCoupons: undefined;
   WorkspacePicker: undefined;
-  Main: undefined;
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
   Search: undefined;
+  Alerts: undefined;
   VerifyEmail: undefined;
   CreateBooking: {
     startAt?: string;
@@ -35,7 +39,7 @@ export type RootStackParamList = {
     customerId?: string;
     durationMinutes?: number;
   };
-  BookingDetail: { bookingId: string };
+  BookingDetail: { bookingId: string; initialBooking?: Booking };
   Customers: undefined;
   CustomerForm: { customerId?: string; returnTo?: 'pos' | 'pets' };
   CustomerDetail: { customerId: string };
@@ -58,6 +62,7 @@ export type RootStackParamList = {
   ShopOrderDetail: { orderId: string };
   ShopPos:
     | {
+        mode?: 'sale' | 'purchase' | 'quotation' | 'credit_note' | 'debit_note';
         addCode?: string;
         addProductId?: string;
         selectCustomerId?: string;
@@ -90,7 +95,6 @@ export type RootStackParamList = {
   GrowWhatsApp: undefined;
   GrowAIPoster: undefined;
   GrowGoogleProfile: undefined;
-  GrowOnlineStore: undefined;
   GrowSyncShare: undefined;
   GrowUtilities: undefined;
   Branches: undefined;

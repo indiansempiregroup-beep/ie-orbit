@@ -12,7 +12,7 @@ export type ProductSubscriptionLike = {
 
 export const PRODUCT_CATALOG: ProductDefinition[] = [
   { id: 'appointie', name: 'AppointIE', description: 'Booking and scheduling for service businesses.' },
-  { id: 'shopie', name: 'ShopIE', description: 'Catalog, POS, inventory, and billing.' },
+  { id: 'shopie', name: 'ShopIE', description: 'Catalog, sale billing, inventory, and books.' },
   { id: 'crmie', name: 'CRMIE', description: 'Customer relationship management.' },
 ];
 
