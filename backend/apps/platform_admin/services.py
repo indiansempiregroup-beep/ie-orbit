@@ -17,11 +17,13 @@ from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.roles import RoleService
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.razorpay_client import RazorpayClient
+from apps.businesses.constants import VALID_PRODUCT_CODES
 from apps.businesses.models import Business, BusinessProductSubscription, BusinessProductSubscriptionStatus
 from apps.businesses.services.businesses import BusinessService
 from apps.businesses.services.entitlements import EntitlementService
 from apps.platform_admin.models import (
     HelpArticle,
+    PlatformAddonPricing,
     PlatformAnnouncement,
     PlatformAuditEvent,
     PlatformCoupon,
@@ -95,6 +97,30 @@ class PlatformAdminService:
             raise ValidationError({"business": "Tenant has no business."})
         return business
 
+    def resolve_business(self, tenant: Tenant, business_id: str | None) -> Business:
+        """Resolve the business targeted by a platform billing action.
+
+        When the tenant has multiple businesses, ``business_id`` is required so
+        support actions never silently mutate the primary (oldest) business.
+        """
+        queryset = Business.active_objects.filter(tenant=tenant)
+        count = queryset.count()
+        if count == 0:
+            raise ValidationError({"business": "Tenant has no business."})
+
+        raw_id = (business_id or "").strip()
+        if raw_id:
+            business = queryset.filter(id=raw_id).first()
+            if business is None:
+                raise ValidationError({"business_id": "Business not found for this tenant."})
+            return business
+
+        if count > 1:
+            raise ValidationError(
+                {"business_id": "Required when the tenant has multiple businesses."}
+            )
+        return queryset.order_by("created_at").first()
+
     # --- lifecycle -----------------------------------------------------------------
 
     @transaction.atomic
@@ -142,7 +168,7 @@ class PlatformAdminService:
         user_agent: str = "",
     ) -> dict[str, Any]:
         reason = self.require_reason(reason)
-        business = self.primary_business(tenant)
+        business = self.resolve_business(tenant, payload.get("business_id"))
         product_code = (payload.get("product_code") or business.selected_product or "appointie").strip().lower()
         subscription = business.product_subscriptions.filter(product_code=product_code).first()
         if subscription is None:
@@ -154,6 +180,17 @@ class PlatformAdminService:
             "extra_staff": subscription.extra_staff,
             "extra_offices": subscription.extra_offices,
             "trial_ends_at": subscription.trial_ends_at.isoformat() if subscription.trial_ends_at else None,
+            "current_period_starts_at": (
+                subscription.current_period_starts_at.isoformat()
+                if subscription.current_period_starts_at
+                else None
+            ),
+            "current_period_ends_at": (
+                subscription.current_period_ends_at.isoformat()
+                if subscription.current_period_ends_at
+                else None
+            ),
+            "business_id": str(business.id),
         }
 
         if action == "change_plan":
@@ -178,8 +215,21 @@ class PlatformAdminService:
                 actor=actor,
             )
         elif action == "clear_soft_lock":
+            days = int(payload.get("days") or 30)
+            if days < 1:
+                raise ValidationError({"days": "Must be >= 1."})
+            now = timezone.now()
             subscription.status = BusinessProductSubscriptionStatus.ACTIVE
-            subscription.save(update_fields=["status", "updated_at"])
+            subscription.current_period_starts_at = now
+            subscription.current_period_ends_at = now + timedelta(days=days)
+            subscription.save(
+                update_fields=[
+                    "status",
+                    "current_period_starts_at",
+                    "current_period_ends_at",
+                    "updated_at",
+                ]
+            )
         elif action == "force_soft_lock":
             subscription.status = BusinessProductSubscriptionStatus.SOFT_LOCKED
             subscription.save(update_fields=["status", "updated_at"])
@@ -187,19 +237,34 @@ class PlatformAdminService:
             days = int(payload.get("days") or 0)
             if days < 1:
                 raise ValidationError({"days": "Must be >= 1."})
-            base = subscription.trial_ends_at or timezone.now()
-            if base < timezone.now():
-                base = timezone.now()
+            now = timezone.now()
+            base = subscription.trial_ends_at or now
+            if base < now:
+                base = now
             subscription.trial_ends_at = base + timedelta(days=days)
             subscription.status = BusinessProductSubscriptionStatus.TRIALING
             subscription.save(update_fields=["trial_ends_at", "status", "updated_at"])
         elif action == "set_complimentary":
             days = int(payload.get("days") or 30)
+            if days < 1:
+                raise ValidationError({"days": "Must be >= 1."})
+            now = timezone.now()
+            period_end = now + timedelta(days=days)
             subscription.status = BusinessProductSubscriptionStatus.ACTIVE
-            subscription.trial_ends_at = timezone.now() + timedelta(days=days)
-            subscription.external_billing_reference = f"comp:{actor.id}:{timezone.now().date().isoformat()}"
+            subscription.current_period_starts_at = now
+            subscription.current_period_ends_at = period_end
+            # Keep trial_ends_at aligned for display; paid unlock uses period end.
+            subscription.trial_ends_at = period_end
+            subscription.external_billing_reference = f"comp:{actor.id}:{now.date().isoformat()}"
             subscription.save(
-                update_fields=["status", "trial_ends_at", "external_billing_reference", "updated_at"]
+                update_fields=[
+                    "status",
+                    "current_period_starts_at",
+                    "current_period_ends_at",
+                    "trial_ends_at",
+                    "external_billing_reference",
+                    "updated_at",
+                ]
             )
         else:
             raise ValidationError({"action": f"Unknown billing action '{action}'."})
@@ -211,6 +276,17 @@ class PlatformAdminService:
             "extra_staff": subscription.extra_staff,
             "extra_offices": subscription.extra_offices,
             "trial_ends_at": subscription.trial_ends_at.isoformat() if subscription.trial_ends_at else None,
+            "current_period_starts_at": (
+                subscription.current_period_starts_at.isoformat()
+                if subscription.current_period_starts_at
+                else None
+            ),
+            "current_period_ends_at": (
+                subscription.current_period_ends_at.isoformat()
+                if subscription.current_period_ends_at
+                else None
+            ),
+            "business_id": str(business.id),
         }
         self.audit(
             actor=actor,
@@ -364,7 +440,7 @@ class PlatformAdminService:
     # --- feature flags -------------------------------------------------------------
 
     def list_flags(self, *, tenant: Tenant) -> list[dict[str, Any]]:
-        defaults = ["appointie", "shopie", "crmie", "bi_full", "white_label"]
+        defaults = ["appointie", "shopie", "bi_full", "white_label"]
         existing = {f.key: f for f in PlatformFeatureFlag.objects.filter(tenant=tenant)}
         rows = []
         for key in defaults:
@@ -424,7 +500,8 @@ class PlatformAdminService:
         )
         rows = []
         for session in sessions:
-            payment_id = (session.metadata or {}).get("payment_id") or ""
+            meta = session.metadata or {}
+            payment_id = meta.get("payment_id") or ""
             invoice = (
                 PlatformLedgerInvoice.objects.filter(checkout_session=session).first()
                 or PlatformLedgerInvoice.objects.filter(
@@ -442,14 +519,99 @@ class PlatformAdminService:
                     "plan_code": session.plan_code,
                     "product_code": session.product_code,
                     "business_id": str(session.business_id),
+                    "business_name": session.business.display_name if session.business_id else "",
                     "paid_at": session.paid_at.isoformat() if session.paid_at else None,
                     "created_at": session.created_at.isoformat(),
                     "refunded_paise": invoice.refunded_paise if invoice else 0,
                     "invoice_id": str(invoice.id) if invoice else None,
                     "invoice_number": invoice.invoice_number if invoice else None,
+                    "payment_channel": meta.get("payment_channel") or "",
+                    "payment_status": meta.get("payment_status") or session.status,
+                    "upi_utr": meta.get("upi_utr") or "",
+                    "payment_proof_url": meta.get("payment_proof_url") or "",
+                    "claimed_at": meta.get("claimed_at"),
                 }
             )
         return rows
+
+    def list_pending_upi_claims(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        sessions = (
+            BillingCheckoutSession.objects.filter(metadata__payment_status="awaiting_confirmation")
+            .select_related("tenant", "business")
+            .order_by("-updated_at")[: max(1, min(int(limit), 200))]
+        )
+        rows = []
+        for session in sessions:
+            meta = session.metadata or {}
+            rows.append(
+                {
+                    "id": str(session.id),
+                    "tenant_id": str(session.tenant_id) if session.tenant_id else None,
+                    "tenant_name": session.tenant.display_name if session.tenant_id else "Tenant",
+                    "tenant_slug": session.tenant.slug if session.tenant_id else "",
+                    "order_id": session.razorpay_order_id,
+                    "payment_id": meta.get("payment_id") or "",
+                    "amount_paise": session.amount_paise,
+                    "currency": session.currency,
+                    "status": session.status,
+                    "plan_code": session.plan_code,
+                    "product_code": session.product_code,
+                    "business_id": str(session.business_id) if session.business_id else None,
+                    "business_name": session.business.display_name if session.business_id else "",
+                    "paid_at": session.paid_at.isoformat() if session.paid_at else None,
+                    "created_at": session.created_at.isoformat(),
+                    "payment_channel": meta.get("payment_channel") or "upi",
+                    "payment_status": meta.get("payment_status") or session.status,
+                    "upi_utr": meta.get("upi_utr") or "",
+                    "payment_proof_url": meta.get("payment_proof_url") or "",
+                    "claimed_at": meta.get("claimed_at"),
+                }
+            )
+        return rows
+
+    @transaction.atomic
+    def confirm_upi_claim(
+        self,
+        *,
+        tenant: Tenant,
+        session_id: str,
+        actor: User,
+        action: str,
+        reason: str,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> dict[str, Any]:
+        reason = self.require_reason(reason)
+        session = get_object_or_404(BillingCheckoutSession, id=session_id, tenant=tenant)
+        from apps.billing.services.checkout import CheckoutService
+
+        result = CheckoutService().confirm_upi_session(
+            session_id=str(session.id),
+            action=action,
+            note=reason,
+            actor_id=str(actor.id),
+        )
+        meta = result.metadata or {}
+        self.audit(
+            actor=actor,
+            action=f"upi_claim_{str(action).strip().lower()}",
+            resource_type="billing_checkout_session",
+            resource_id=str(result.id),
+            tenant=tenant,
+            reason=reason,
+            metadata={
+                "payment_status": meta.get("payment_status"),
+                "upi_utr": meta.get("upi_utr"),
+                "plan_code": result.plan_code,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return {
+            "session_id": str(result.id),
+            "status": result.status,
+            "payment_status": meta.get("payment_status"),
+        }
 
     @transaction.atomic
     def refund_payment(
@@ -718,6 +880,8 @@ class PlatformAdminService:
         normalized_product = (product_code or "").strip().lower()
         if not normalized_product:
             raise ValidationError({"product_code": "Required."})
+        if normalized_product not in VALID_PRODUCT_CODES:
+            raise ValidationError({"product_code": "Unknown product code."})
         if not (name or "").strip():
             raise ValidationError({"name": "Required."})
 
@@ -818,6 +982,71 @@ class PlatformAdminService:
                 metadata={"count": count},
             )
         return count
+
+    def get_addon_pricing(self) -> dict[str, Any]:
+        from apps.billing.services.addon_pricing import serialize_addon_prices
+
+        return serialize_addon_prices()
+
+    @transaction.atomic
+    def update_addon_pricing(
+        self,
+        *,
+        actor: User,
+        staff_price_paise: int,
+        office_price_paise: int,
+        pets_price_paise: int,
+        reason: str,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> dict[str, Any]:
+        from apps.billing.constants import (
+            ADDON_OFFICE_PRICE_PAISE,
+            ADDON_PETS_PRICE_PAISE,
+            ADDON_STAFF_PRICE_PAISE,
+        )
+        from apps.billing.services.addon_pricing import serialize_addon_prices
+
+        reason = self.require_reason(reason)
+        if staff_price_paise < 0 or office_price_paise < 0 or pets_price_paise < 0:
+            raise ValidationError({"amount": "Prices cannot be negative."})
+
+        row, _created = PlatformAddonPricing.objects.get_or_create(
+            key="default",
+            defaults={
+                "staff_price_paise": ADDON_STAFF_PRICE_PAISE,
+                "office_price_paise": ADDON_OFFICE_PRICE_PAISE,
+                "pets_price_paise": ADDON_PETS_PRICE_PAISE,
+            },
+        )
+        before = {
+            "staff_price_paise": row.staff_price_paise,
+            "office_price_paise": row.office_price_paise,
+            "pets_price_paise": row.pets_price_paise,
+        }
+        row.staff_price_paise = int(staff_price_paise)
+        row.office_price_paise = int(office_price_paise)
+        row.pets_price_paise = int(pets_price_paise)
+        row.save(
+            update_fields=[
+                "staff_price_paise",
+                "office_price_paise",
+                "pets_price_paise",
+                "updated_at",
+            ]
+        )
+        after = serialize_addon_prices()
+        self.audit(
+            actor=actor,
+            action="platform.addon_pricing.update",
+            resource_type="addon_pricing",
+            resource_id=str(row.id),
+            reason=reason,
+            metadata={"before": before, "after": after},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return after
 
     # --- tickets / announcements / help --------------------------------------------
 

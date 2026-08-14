@@ -34,8 +34,7 @@ The IE Platform **already implements most Platform Core responsibilities** in se
 |--------|----------|--------|
 | Bookings, availability, schedules | `bookings` | AppointIE operational |
 | Calendar connections | `calendar` | AppointIE integration |
-| Future invoices | `invoicing` (new) | InvoiceIE operational |
-| Future campaigns | `crm` (new) | CRMIE operational |
+| Invoices, quotations, payments | `shopie` | ShopIE Billing |
 
 ---
 

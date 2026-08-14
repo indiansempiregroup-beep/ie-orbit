@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { buildUpiPayUrl } from '../../utils/upi';
 import { useCart } from './CartContext';
@@ -139,11 +140,9 @@ export function CartScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 40 }}
-    >
-      <Text style={styles.title}>Cart</Text>
+    <View style={styles.screen}>
+      <ScreenHeader title="Cart" onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40 }}>
       {lines.map((line) => (
         <View key={line.product.id} style={styles.row}>
           <View style={{ flex: 1 }}>
@@ -253,12 +252,13 @@ export function CartScreen() {
       >
         <Text style={styles.buttonText}>{submitting ? 'Placing…' : 'Place order'}</Text>
       </Pressable>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  screen: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: 26, fontWeight: '700', marginBottom: spacing.md, color: colors.foreground },
   section: { marginTop: spacing.lg, marginBottom: spacing.sm, fontWeight: '700', color: colors.foreground },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.md },

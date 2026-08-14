@@ -2,20 +2,25 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function AboutPage() {
   usePageMeta({
-    title: 'About — AppointIE',
-    description: 'About Indians Empire Technologies and the AppointIE platform.',
+    title: 'About — IE Platform',
+    description: 'About Indians Empire Technologies and IE Platform — AppointIE and ShopIE.',
   });
 
   return (
     <div className="public-page public-page-narrow">
-      <h1>About AppointIE</h1>
+      <h1>About IE Platform</h1>
       <p>
-        AppointIE is part of the IE Platform by Indians Empire Technologies. We help service businesses manage
-        appointments, customers, staff, and daily operations from a single workspace.
+        IE Platform is built by Indians Empire Technologies. We help service and retail businesses run daily operations
+        from a single workspace — without stitching together separate tools for bookings, the counter, and books.
       </p>
       <p>
-        M11.7 introduces self-service onboarding so new customers can provision a tenant, business, owner account,
-        and workspace without administrator intervention.
+        <strong>AppointIE</strong> covers appointments, calendar, staff, customers, and reviews.{' '}
+        <strong>ShopIE</strong> covers POS, catalog, orders, GST books, and Grow tools. Subscribe to one product or both;
+        they share the same business, team, and billing.
+      </p>
+      <p>
+        New customers can create a workspace, pick a product, and start a 15-day trial without waiting for an
+        administrator.
       </p>
     </div>
   );

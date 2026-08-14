@@ -10,8 +10,6 @@ type Customer360TabsProps = {
 const tabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'appointments', label: 'Appointments', product: 'appointie' },
-  { id: 'invoices', label: 'Invoices', product: 'invoiceie', comingSoon: true },
-  { id: 'campaigns', label: 'Campaigns', product: 'crmie', comingSoon: true },
   { id: 'notes', label: 'Notes' },
   { id: 'activity', label: 'Activity' },
 ] as const;
@@ -29,18 +27,12 @@ export function Customer360Tabs({ customerId, activeTab, onTabChange }: Customer
             onClick={() => onTabChange(tab.id)}
           >
             {tab.label}
-            {'comingSoon' in tab && tab.comingSoon ? ' (soon)' : ''}
           </button>
         ))}
       </nav>
       {activeTab === 'appointments' ? (
         <p style={{ margin: '12px 0 0', color: 'var(--muted-foreground)' }}>
           <Link to={`/bookings?customer=${customerId}`}>View bookings for this customer</Link>
-        </p>
-      ) : null}
-      {activeTab === 'invoices' || activeTab === 'campaigns' ? (
-        <p style={{ margin: '12px 0 0', color: 'var(--muted-foreground)' }}>
-          This module will be contributed by the product application when {activeTab === 'invoices' ? 'InvoiceIE' : 'CRMIE'} is enabled.
         </p>
       ) : null}
       {activeTab === 'activity' ? (

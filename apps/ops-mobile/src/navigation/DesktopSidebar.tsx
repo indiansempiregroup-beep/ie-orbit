@@ -7,6 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import { hasShopie } from '../utils/products';
+import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../utils/planFeatures';
+import { usePlanFeatures } from '../hooks/useOpsExtended';
 import {
   canAccessReports,
   canAccessSettings,
@@ -47,6 +49,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
   const showSettings = canAccessSettings(user);
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
+  const { has, hasAny } = usePlanFeatures();
   const workspaceLabel =
     activeBusiness?.display_name ?? activeBusiness?.business_name ?? brand.appName;
 
@@ -79,20 +82,28 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
           match: ['Dashboard', 'Main'],
           onPress: () => goTab('Dashboard'),
         },
-        {
-          key: 'bookings',
-          label: t('nav.bookings'),
-          icon: 'book-open',
-          match: ['Bookings', 'CreateBooking', 'BookingDetail'],
-          onPress: () => goTab('Bookings'),
-        },
-        {
-          key: 'calendar',
-          label: t('nav.calendar'),
-          icon: 'calendar',
-          match: ['Calendar'],
-          onPress: () => goTab('Calendar'),
-        },
+        ...(has(PlanFeature.appointieBookings)
+          ? [
+              {
+                key: 'bookings',
+                label: t('nav.bookings'),
+                icon: 'book-open' as IconName,
+                match: ['Bookings', 'CreateBooking', 'BookingDetail'],
+                onPress: () => goTab('Bookings'),
+              },
+            ]
+          : []),
+        ...(has(PlanFeature.appointieCalendar)
+          ? [
+              {
+                key: 'calendar',
+                label: t('nav.calendar'),
+                icon: 'calendar' as IconName,
+                match: ['Calendar'],
+                onPress: () => goTab('Calendar'),
+              },
+            ]
+          : []),
         {
           key: 'alerts',
           label: t('nav.alerts'),
@@ -221,30 +232,71 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
         }
       : null;
 
+    const saleVisible = sale
+      ? {
+          ...sale,
+          items: sale.items.filter((item) => {
+            if (item.key === 'pos') return has(PlanFeature.shopiePos);
+            if (item.key === 'books') return hasAny(SHOPIE_BOOKS_FEATURES);
+            if (item.key === 'products') return has(PlanFeature.shopieProducts);
+            if (item.key === 'orders') return has(PlanFeature.shopieOrders);
+            if (item.key === 'returns') return has(PlanFeature.shopieReturns);
+            if (item.key === 'zones') return has(PlanFeature.shopieDeliveryZones);
+            return true;
+          }),
+        }
+      : null;
+
+    const growVisible = grow
+      ? {
+          ...grow,
+          items: grow.items.filter((item) => {
+            if (item.key === 'wa') return has(PlanFeature.shopieGrowWhatsapp);
+            if (item.key === 'poster') return has(PlanFeature.shopieGrowPoster);
+            if (item.key === 'gbp') return has(PlanFeature.shopieGrowGoogle);
+            if (item.key === 'sync') return has(PlanFeature.shopieGrowSync);
+            if (item.key === 'utils') return has(PlanFeature.shopieGrowUtilities);
+            return true;
+          }),
+        }
+      : null;
+
     const businessItems: NavItem[] = [
-      {
-        key: 'customers',
-        label: t('settings.customers'),
-        icon: 'users',
-        match: ['Customers', 'CustomerForm', 'CustomerDetail'],
-        onPress: () => go('Customers'),
-      },
-      {
-        key: 'reviews',
-        label: t('settings.reviews'),
-        icon: 'star',
-        match: ['Reviews'],
-        onPress: () => go('Reviews'),
-      },
-      {
-        key: 'services',
-        label: t('settings.services'),
-        icon: 'package',
-        match: ['Services', 'ServiceForm', 'ServiceDetail'],
-        onPress: () => go('Services'),
-      },
+      ...(has(PlanFeature.appointieCustomers) || showShop
+        ? [
+            {
+              key: 'customers',
+              label: t('settings.customers'),
+              icon: 'users' as IconName,
+              match: ['Customers', 'CustomerForm', 'CustomerDetail'],
+              onPress: () => go('Customers'),
+            },
+          ]
+        : []),
+      ...(has(PlanFeature.appointieReviews)
+        ? [
+            {
+              key: 'reviews',
+              label: t('settings.reviews'),
+              icon: 'star' as IconName,
+              match: ['Reviews'],
+              onPress: () => go('Reviews'),
+            },
+          ]
+        : []),
+      ...(has(PlanFeature.appointieServices)
+        ? [
+            {
+              key: 'services',
+              label: t('settings.services'),
+              icon: 'package' as IconName,
+              match: ['Services', 'ServiceForm', 'ServiceDetail'],
+              onPress: () => go('Services'),
+            },
+          ]
+        : []),
     ];
-    if (showStaff) {
+    if (showStaff && has(PlanFeature.appointieStaff)) {
       businessItems.push({
         key: 'staff',
         label: t('bookings.staff'),
@@ -295,8 +347,8 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
 
     return [
       primary,
-      ...(sale ? [sale] : []),
-      ...(grow ? [grow] : []),
+      ...(saleVisible && saleVisible.items.length ? [saleVisible] : []),
+      ...(growVisible && growVisible.items.length ? [growVisible] : []),
       { title: t('settings.business'), items: businessItems },
       account,
     ];
@@ -307,6 +359,8 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
     showStaff,
     showReports,
     showSettings,
+    has,
+    hasAny,
     logout,
   ]);
 

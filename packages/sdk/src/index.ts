@@ -293,6 +293,7 @@ export type BillingPlanCatalogItem = {
   addon_staff_price_paise?: number;
   addon_office_price_paise?: number;
   addon_pets_price_paise?: number;
+  is_public?: boolean;
   currency: string;
 };
 
@@ -325,6 +326,7 @@ export type BusinessBillingSnapshot = {
   used_offices: number;
   bi_features: string[];
   features?: string[];
+  entitled_features?: string[];
   pricing: {
     currency: string;
     base_amount_paise: number;
@@ -339,6 +341,8 @@ export type BusinessBillingSnapshot = {
 export type BillingWebhookEvent = {
   id: string;
   tenant_id?: string | null;
+  tenant_name?: string | null;
+  tenant_slug?: string | null;
   provider: string;
   external_event_id: string;
   event_type: string;
@@ -520,6 +524,54 @@ export type BillingPlatformSubscriptions = {
   total_subscriptions: number;
   by_status: Array<{ status: string; count: number }>;
   by_product: Array<{ product_code: string; count: number }>;
+};
+
+export type BillingPlatformRevenue = {
+  currency: string;
+  collected_all_time_paise: number;
+  refunded_all_time_paise: number;
+  net_collected_paise: number;
+  collected_month_paise: number;
+  collected_last_30d_paise: number;
+  pending_claims_paise: number;
+  pending_claims_count: number;
+  open_checkouts_paise: number;
+  open_checkouts_count: number;
+  paid_payment_count: number;
+  mrr_paise: number;
+  arr_paise: number;
+  paying_subscriptions: number;
+  complimentary_subscriptions: number;
+  trial_subscriptions: number;
+  soft_locked_subscriptions: number;
+  canceled_subscriptions: number;
+  by_product: Array<{
+    product_code: string;
+    collected_paise: number;
+    mrr_paise: number;
+    paying_count: number;
+  }>;
+  by_plan: Array<{ plan_code: string; mrr_paise: number; count: number }>;
+  daily: Array<{ day: string; collected_paise: number; count: number }>;
+  top_tenants: Array<{
+    tenant_id?: string | null;
+    tenant_name: string;
+    tenant_slug?: string;
+    collected_paise: number;
+    payment_count: number;
+  }>;
+  recent_payments: Array<{
+    id: string;
+    tenant_id?: string | null;
+    tenant_name: string;
+    business_name?: string;
+    product_code: string;
+    plan_code: string;
+    amount_paise: number;
+    currency: string;
+    paid_at: string;
+    payment_channel?: string;
+  }>;
 };
 
 export type BillingPlatformMonitoring = {
@@ -754,6 +806,7 @@ export type MobileBootstrapResponse = {
   bundle_id_ios?: string;
   bundle_id_android?: string;
   white_label_enabled: boolean;
+  tenant_id?: string;
   tenant_slug: string;
   business_code: string;
   business: {
@@ -815,6 +868,12 @@ export type PlatformTenantSummary = {
   business_count: number;
   primary_color: string;
   created_at: string;
+  billing_state?: string;
+  plan_code?: string | null;
+  product_code?: string | null;
+  last_paid_at?: string | null;
+  last_paid_paise?: number | null;
+  pending_claims?: number;
 };
 
 export type PlatformTenantDetail = {
@@ -849,6 +908,9 @@ export type PlatformAuditEvent = {
 
 export type PlatformPaymentRow = {
   id: string;
+  tenant_id?: string | null;
+  tenant_name?: string;
+  tenant_slug?: string;
   order_id?: string;
   payment_id?: string;
   amount_paise: number;
@@ -857,11 +919,17 @@ export type PlatformPaymentRow = {
   plan_code?: string;
   product_code?: string;
   business_id?: string;
+  business_name?: string;
   paid_at?: string | null;
   created_at: string;
   refunded_paise?: number;
   invoice_id?: string | null;
   invoice_number?: string | null;
+  payment_channel?: string;
+  payment_status?: string;
+  upi_utr?: string;
+  payment_proof_url?: string;
+  claimed_at?: string | null;
 };
 
 export type PlatformPlanPackage = {
@@ -908,6 +976,15 @@ export type PlatformPlanPackageUpsertInput = {
   reason: string;
 };
 
+export type PlatformAddonPricing = {
+  staff_price_paise: number;
+  office_price_paise: number;
+  pets_price_paise: number;
+  staff_price_inr: number;
+  office_price_inr: number;
+  pets_price_inr: number;
+};
+
 export type PlatformFeatureFlag = {
   key: string;
   enabled: boolean;
@@ -921,15 +998,38 @@ export type PlatformUserRow = {
   roles?: string[];
   is_active: boolean;
   relation?: string;
+  owned_tenants?: Array<{
+    id: string;
+    slug: string;
+    display_name: string;
+    status: string;
+  }>;
+};
+
+export type SupportTicketNote = {
+  id: string;
+  body: string;
+  is_internal: boolean;
+  author_email?: string | null;
+  created_at: string;
 };
 
 export type SupportTicketSummary = {
   id: string;
   subject: string;
   status: string;
-  tenant_id?: string;
+  tenant_id?: string | null;
+  tenant_name?: string | null;
+  tenant_slug?: string | null;
   requester_email?: string | null;
+  assignee_id?: string | null;
+  assignee_email?: string | null;
   created_at: string;
+  updated_at?: string | null;
+};
+
+export type SupportTicketDetail = SupportTicketSummary & {
+  notes: SupportTicketNote[];
 };
 
 export type HelpArticleSummary = {
@@ -939,6 +1039,7 @@ export type HelpArticleSummary = {
   category?: string;
   is_published?: boolean;
   body?: string;
+  keywords?: string;
 };
 
 export type PlatformAnnouncement = {
@@ -3035,7 +3136,7 @@ class ApiClient {
     }) => this.request<{ tenant_id: string; slug: string; business_id: string }>('/platform/tenants/create', { method: 'POST', body }),
     tenantAction: (tenantId: string, action: 'suspend' | 'reactivate' | 'archive', body: { reason: string }) =>
       this.request<{ id: string; status: string }>(`/platform/tenants/${tenantId}/actions/${action}`, { method: 'POST', body }),
-    tenantBilling: (tenantId: string, query?: { product_code?: string }) =>
+    tenantBilling: (tenantId: string, query?: { product_code?: string; business_id?: string }) =>
       this.request<{ tenant_id: string; business_id: string; billing: Record<string, unknown> }>(
         `/platform/tenants/${tenantId}/billing`,
         { method: 'GET', query },
@@ -3052,6 +3153,7 @@ class ApiClient {
           | 'set_complimentary'
           | string;
         reason: string;
+        business_id?: string;
         days?: number;
         plan_code?: string;
         product_code?: string;
@@ -3069,11 +3171,22 @@ class ApiClient {
       this.request<{ flags: PlatformFeatureFlag[] }>(`/platform/tenants/${tenantId}/flags`, { method: 'PATCH', body }),
     tenantPayments: (tenantId: string) =>
       this.request<{ payments: PlatformPaymentRow[] }>(`/platform/tenants/${tenantId}/payments`, { method: 'GET' }),
+    upiClaims: (query?: { limit?: number }) =>
+      this.request<{ claims: PlatformPaymentRow[] }>('/platform/upi-claims', { method: 'GET', query }),
     refundPayment: (tenantId: string, paymentId: string, body: { reason: string; amount_paise?: number }) =>
       this.request<Record<string, unknown>>(`/platform/tenants/${tenantId}/payments/${paymentId}/refund`, {
         method: 'POST',
         body,
       }),
+    confirmTenantUpiClaim: (
+      tenantId: string,
+      paymentId: string,
+      body: { action: 'confirm' | 'reject'; reason: string },
+    ) =>
+      this.request<{ session_id: string; status: string; payment_status?: string }>(
+        `/platform/tenants/${tenantId}/payments/${paymentId}/confirm`,
+        { method: 'POST', body },
+      ),
     tenantCredits: (tenantId: string) =>
       this.request<{ balance_paise: number }>(`/platform/tenants/${tenantId}/credits`, { method: 'GET' }),
     grantCredit: (tenantId: string, body: { amount_paise: number; reason: string }) =>
@@ -3111,6 +3224,8 @@ class ApiClient {
       this.request<Record<string, unknown>>(`/platform/users/${userId}/actions/${action}`, { method: 'POST', body }),
     audit: (query?: { tenant_id?: string; action?: string; limit?: number }) =>
       this.request<{ events: PlatformAuditEvent[] }>('/platform/audit', { method: 'GET', query }),
+    exportCsv: (exportType: 'tenants' | 'audit' | 'payments', query?: { tenant_id?: string; action?: string }) =>
+      this.request<string>(`/platform/exports/${exportType}`, { method: 'GET', query }),
     coupons: () =>
       this.request<{
         coupons: Array<{
@@ -3139,12 +3254,26 @@ class ApiClient {
         method: 'POST',
         body,
       }),
+    addonPricing: () =>
+      this.request<PlatformAddonPricing>('/platform/addon-pricing', { method: 'GET' }),
+    updateAddonPricing: (body: {
+      staff_price_paise: number;
+      office_price_paise: number;
+      pets_price_paise: number;
+      reason: string;
+    }) => this.request<PlatformAddonPricing>('/platform/addon-pricing', { method: 'PUT', body }),
     tickets: (query?: { tenant_id?: string }) =>
       this.request<{ tickets: SupportTicketSummary[] }>('/platform/tickets', { method: 'GET', query }),
+    ticket: (ticketId: string) =>
+      this.request<SupportTicketDetail>(`/platform/tickets/${ticketId}`, { method: 'GET' }),
+    updateTicket: (
+      ticketId: string,
+      body: { status?: string; assignee_id?: string | null; assign_to_me?: boolean; reason?: string },
+    ) => this.request<SupportTicketSummary>(`/platform/tickets/${ticketId}`, { method: 'PATCH', body }),
     createTicket: (body: { tenant_id: string; subject: string; body?: string }) =>
       this.request<{ id: string }>('/platform/tickets', { method: 'POST', body }),
     addTicketNote: (ticketId: string, body: { body: string; is_internal?: boolean; status?: string }) =>
-      this.request<{ id: string }>(`/platform/tickets/${ticketId}/notes`, { method: 'POST', body }),
+      this.request<{ id: string; status?: string }>(`/platform/tickets/${ticketId}/notes`, { method: 'POST', body }),
     announcements: () => this.request<{ announcements: PlatformAnnouncement[] }>('/platform/announcements', { method: 'GET' }),
     createAnnouncement: (body: {
       title: string;
@@ -3155,13 +3284,14 @@ class ApiClient {
     }) => this.request<{ id: string }>('/platform/announcements', { method: 'POST', body }),
     helpArticlesAdmin: () => this.request<{ articles: HelpArticleSummary[] }>('/platform/help/articles', { method: 'GET' }),
     upsertHelpArticle: (body: {
+      id?: string;
       title: string;
       slug?: string;
       category?: string;
       body?: string;
       is_published?: boolean;
       keywords?: string;
-    }) => this.request<{ id: string; slug: string }>('/platform/help/articles', { method: 'POST', body }),
+    }) => this.request<{ id: string; slug: string; is_published?: boolean }>('/platform/help/articles', { method: 'POST', body }),
     whiteLabelProfiles: () => this.request<WhiteLabelProfile[]>('/platform/white-label', { method: 'GET' }),
     whiteLabelProfile: (businessId: string) =>
       this.request<MobileBootstrapResponse>(`/platform/white-label/${businessId}`, { method: 'GET' }),
@@ -3188,6 +3318,14 @@ class ApiClient {
   billing = {
     status: () => this.request<BillingStatus>('/billing/status', { method: 'GET' }),
     plans: () => this.request<BillingPlanCatalogItem[]>('/billing/plans', { method: 'GET' }),
+    publicPlans: (query?: { product_code?: string }) =>
+      this.request<{
+        trial_days: number;
+        addon_staff_price_paise: number;
+        addon_office_price_paise: number;
+        addon_pets_price_paise: number;
+        plans: BillingPlanCatalogItem[];
+      }>('/billing/public-plans', { method: 'GET', query, auth: false }),
     goLiveCheck: () => this.request<BillingGoLiveReport>('/billing/go-live-check', { method: 'GET' }),
     observability: (query?: { window_hours?: number }) =>
       this.request<BillingObservabilitySignals>('/billing/observability', { method: 'GET', query }),
@@ -3199,8 +3337,24 @@ class ApiClient {
       this.request<BillingPlatformOpsSummary>('/billing/platform-ops-summary', { method: 'GET', query }),
     platformSubscriptions: () =>
       this.request<BillingPlatformSubscriptions>('/billing/platform-subscriptions', { method: 'GET' }),
+    platformRevenue: () =>
+      this.request<BillingPlatformRevenue>('/billing/platform-revenue', { method: 'GET' }),
     platformMonitoring: (query?: { window_hours?: number }) =>
       this.request<BillingPlatformMonitoring>('/billing/platform-monitoring', { method: 'GET', query }),
+    platformWebhookEvents: (query?: { window_hours?: number; status?: string; limit?: number }) =>
+      this.request<{ window_hours: number; count: number; events: BillingWebhookEvent[] }>(
+        '/billing/platform-webhook-events',
+        { method: 'GET', query },
+      ),
+    platformReprocessWebhookEvent: (eventId: string) =>
+      this.request<BillingWebhookReprocessResult>(`/billing/platform-webhook-events/${eventId}/reprocess`, {
+        method: 'POST',
+      }),
+    platformReprocessWebhookEventsBulk: (body: BillingWebhookBulkReprocessInput) =>
+      this.request<BillingWebhookBulkReprocessResult>('/billing/platform-webhook-events/reprocess-bulk', {
+        method: 'POST',
+        body,
+      }),
     platformAuditFeed: (query?: { limit?: number }) =>
       this.request<BillingPlatformAuditFeed>('/billing/platform-audit-feed', { method: 'GET', query }),
     releaseGate: () => this.request<BillingReleaseGateReport>('/billing/release-gate', { method: 'GET' }),

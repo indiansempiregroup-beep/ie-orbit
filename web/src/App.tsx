@@ -86,6 +86,12 @@ const PlatformTenantDetailPage = lazy(() =>
 const PlatformSubscriptionsPage = lazy(() =>
   import('./features/admin/PlatformSubscriptionsPage').then((m) => ({ default: m.PlatformSubscriptionsPage })),
 );
+const PlatformRevenuePage = lazy(() =>
+  import('./features/admin/PlatformRevenuePage').then((m) => ({ default: m.PlatformRevenuePage })),
+);
+const PlatformClaimsPage = lazy(() =>
+  import('./features/admin/PlatformClaimsPage').then((m) => ({ default: m.PlatformClaimsPage })),
+);
 const PlatformPackagesPage = lazy(() =>
   import('./features/admin/PlatformPackagesPage').then((m) => ({ default: m.PlatformPackagesPage })),
 );
@@ -109,6 +115,9 @@ const PlatformAnnouncementsPage = lazy(() =>
 );
 const PlatformHelpCmsPage = lazy(() =>
   import('./features/admin/PlatformHelpCmsPage').then((m) => ({ default: m.PlatformHelpCmsPage })),
+);
+const PlatformUsersPage = lazy(() =>
+  import('./features/admin/PlatformUsersPage').then((m) => ({ default: m.PlatformUsersPage })),
 );
 const HelpCenterPage = lazy(() =>
   import('./features/help/HelpCenterPage').then((m) => ({ default: m.HelpCenterPage })),
@@ -170,9 +179,12 @@ function App() {
                 <Route path="tenants" element={<PlatformTenantsPage />} />
                 <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
                 <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
+                <Route path="revenue" element={<PlatformRevenuePage />} />
+                <Route path="claims" element={<PlatformClaimsPage />} />
                 <Route path="packages" element={<PlatformPackagesPage />} />
                 <Route path="coupons" element={<PlatformCouponsPage />} />
                 <Route path="tickets" element={<PlatformTicketsPage />} />
+                <Route path="users" element={<PlatformUsersPage />} />
                 <Route path="announcements" element={<PlatformAnnouncementsPage />} />
                 <Route path="help" element={<PlatformHelpCmsPage />} />
                 <Route path="branding" element={<PlatformBrandingPage />} />

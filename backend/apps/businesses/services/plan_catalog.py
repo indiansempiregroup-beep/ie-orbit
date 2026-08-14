@@ -22,6 +22,7 @@ def _fallback_definitions(product_code: str) -> list[dict[str, Any]]:
             "max_branches": int(plan.get("max_branches", 1) or 1),
             "bi_features": list(plan.get("bi_features") or []),
             "features": list(plan.get("features") or []),
+            "is_public": True,
         }
         for plan in plans
     ]
@@ -43,6 +44,7 @@ def _serialize_row(row: Any) -> dict[str, Any]:
         "features": list(row.features or []),
         "amount_paise": row.amount_paise,
         "yearly_amount_paise": row.yearly_amount_paise,
+        "is_public": bool(row.is_public),
     }
 
 

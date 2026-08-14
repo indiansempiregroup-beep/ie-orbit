@@ -25,12 +25,16 @@ class BillingCheckoutResponseSerializer(serializers.Serializer):
 
 class BillingWebhookEventSerializer(serializers.ModelSerializer):
     tenant_id = serializers.UUIDField(allow_null=True)
+    tenant_name = serializers.SerializerMethodField()
+    tenant_slug = serializers.SerializerMethodField()
 
     class Meta:
         model = BillingWebhookEvent
         fields = [
             "id",
             "tenant_id",
+            "tenant_name",
+            "tenant_slug",
             "provider",
             "external_event_id",
             "event_type",
@@ -41,6 +45,12 @@ class BillingWebhookEventSerializer(serializers.ModelSerializer):
             "error_message",
             "created_at",
         ]
+
+    def get_tenant_name(self, obj: BillingWebhookEvent) -> str | None:
+        return obj.tenant.display_name if getattr(obj, "tenant_id", None) else None
+
+    def get_tenant_slug(self, obj: BillingWebhookEvent) -> str | None:
+        return obj.tenant.slug if getattr(obj, "tenant_id", None) else None
 
 
 class BillingWebhookBulkReprocessSerializer(serializers.Serializer):

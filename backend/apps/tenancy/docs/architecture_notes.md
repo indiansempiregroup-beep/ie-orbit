@@ -3,7 +3,7 @@
 ## Purpose
 
 The tenancy app is the multi-tenant foundation for current and future IE products. AppointIE,
-InvoiceIE, InventoryIE, CRMIE, and future products should depend on this layer for tenant identity,
+ShopIE, InventoryIE, and future products should depend on this layer for tenant identity,
 organization metadata, branding, subscription readiness, and request context.
 
 ## Domain Boundaries

@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { StatTile } from '../../components/ui/StatTile';
+import { TileGrid } from '../../components/ui/TileGrid';
 import { spacing } from '../../theme/tokens';
 import { formatMoney, type VoucherListSummary } from './shopBooksHelpers';
 
@@ -17,7 +18,7 @@ export function VoucherSummaryCards({ summary, mode = 'sale' }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.grid}>
+      <TileGrid>
         <StatTile
           label={mode === 'expense' ? 'Total expenses' : 'Total'}
           value={formatMoney(summary.totalAmount)}
@@ -41,12 +42,11 @@ export function VoucherSummaryCards({ summary, mode = 'sale' }: Props) {
             />
           </>
         )}
-      </View>
+      </TileGrid>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

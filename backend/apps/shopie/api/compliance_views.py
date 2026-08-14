@@ -8,9 +8,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.businesses.models import Business
+from apps.businesses.constants import FEATURE_SHOPIE_EINVOICE, FEATURE_SHOPIE_EWAY
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
+from apps.shopie.api.access import require_business as _business, require_shopie_feature
 from apps.shopie.api.permissions import ShopAccessPermission
 from apps.shopie.api.serializers import (
     ShopComplianceSettingsPatchSerializer,
@@ -24,10 +25,6 @@ from apps.shopie.api.serializers import (
 )
 from apps.shopie.models import ShopBooksVoucher, ShopEWayBill
 from apps.shopie.services.einvoice.service import GstComplianceService
-
-
-def _business(request: Request, business_id) -> Business:
-    return get_object_or_404(Business, tenant=request.current_tenant, id=business_id)
 
 
 def _validation_error(exc: DjangoValidationError) -> ValidationError:
@@ -48,7 +45,9 @@ class ShopComplianceSettingsView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(
+            request, business_id, features=(FEATURE_SHOPIE_EINVOICE, FEATURE_SHOPIE_EWAY)
+        )
         settings = self.compliance.get_or_create_settings(
             tenant=request.current_tenant, business=business
         )
@@ -58,7 +57,9 @@ class ShopComplianceSettingsView(APIView):
         serializer = ShopComplianceSettingsPatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
-        business = _business(request, data.pop("business_id"))
+        business = _business(
+            request, data.pop("business_id"), features=(FEATURE_SHOPIE_EINVOICE, FEATURE_SHOPIE_EWAY)
+        )
         try:
             settings = self.compliance.update_compliance_settings(
                 tenant=request.current_tenant, business=business, data=data
@@ -74,6 +75,7 @@ class ShopVoucherEInvoiceView(APIView):
 
     def get(self, request: Request, voucher_id) -> Response:
         voucher = _voucher(request, voucher_id)
+        require_shopie_feature(voucher.business, FEATURE_SHOPIE_EINVOICE)
         einvoice = self.compliance.get_einvoice_for_voucher(
             tenant=request.current_tenant, business=voucher.business, voucher_id=voucher.id
         )
@@ -83,6 +85,7 @@ class ShopVoucherEInvoiceView(APIView):
 
     def post(self, request: Request, voucher_id) -> Response:
         voucher = _voucher(request, voucher_id)
+        require_shopie_feature(voucher.business, FEATURE_SHOPIE_EINVOICE)
         serializer = ShopEInvoiceGenerateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -105,6 +108,7 @@ class ShopVoucherEInvoiceCancelView(APIView):
 
     def post(self, request: Request, voucher_id) -> Response:
         voucher = _voucher(request, voucher_id)
+        require_shopie_feature(voucher.business, FEATURE_SHOPIE_EINVOICE)
         serializer = ShopEInvoiceCancelSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -125,6 +129,7 @@ class ShopVoucherEWayView(APIView):
 
     def post(self, request: Request, voucher_id) -> Response:
         voucher = _voucher(request, voucher_id)
+        require_shopie_feature(voucher.business, FEATURE_SHOPIE_EWAY)
         serializer = ShopEWayGenerateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -147,6 +152,7 @@ class ShopEWayCancelView(APIView):
 
     def post(self, request: Request, eway_id) -> Response:
         eway = get_object_or_404(ShopEWayBill, tenant=request.current_tenant, id=eway_id)
+        require_shopie_feature(eway.business, FEATURE_SHOPIE_EWAY)
         serializer = ShopEWayCancelSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -169,7 +175,7 @@ class ShopEWayListView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_EWAY)
         qs = self.compliance.list_eway_bills(
             tenant=request.current_tenant,
             business=business,

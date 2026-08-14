@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { createApiClient, type LoginResponse, type UserProfile } from '@ie-platform/sdk';
+import {
+  clearImpersonationMarkers,
+  getImpersonationTenantId,
+  impersonationReturnPath,
+  isImpersonating as readIsImpersonating,
+  restoreAdminTokenBackup,
+  writeAuthTokens,
+} from '../lib/impersonation';
 
 const STORAGE_KEY = 'ie:auth:access';
 const STORAGE_REFRESH = 'ie:auth:refresh';
@@ -10,9 +18,11 @@ type AuthState = {
   token: string | null;
   user: UserProfile | null;
   loading: boolean;
+  isImpersonating: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<string>;
   logout: (allSessions?: boolean) => Promise<void>;
   restore: () => Promise<void>;
+  endImpersonation: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -35,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   });
+  const [isImpersonating, setIsImpersonating] = useState(() => readIsImpersonating());
   const refreshRef = React.useRef<number | null>(null);
   const retryRef = React.useRef<{ attempts: number; timer: number | null }>({ attempts: 0, timer: null });
 
@@ -61,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function login(email: string, password: string, remember = false) {
     setLoading(true);
     try {
+      clearImpersonationMarkers();
+      setIsImpersonating(false);
       const res = await client.auth.login({ email, password, remember_me: remember });
       const payload = res.data;
       setToken(payload.access);
@@ -89,6 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setToken(null);
       setUser(null);
+      setIsImpersonating(false);
+      clearImpersonationMarkers();
       try {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_REFRESH);
@@ -108,9 +123,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function endImpersonation() {
+    const returnTenantId = getImpersonationTenantId();
+    const returnPath = impersonationReturnPath(returnTenantId);
+    setLoading(true);
+    try {
+      try {
+        const result = await client.platform.endImpersonation();
+        writeAuthTokens(result.data.access, result.data.refresh);
+        setToken(result.data.access);
+        client.setToken(result.data.access);
+        if (result.data.user) {
+          setUser(result.data.user);
+        }
+        scheduleRefresh(result.data.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, result.data.refresh);
+      } catch {
+        const backup = restoreAdminTokenBackup();
+        if (!backup?.access) {
+          throw new Error('Unable to end impersonation session.');
+        }
+        setToken(backup.access);
+        client.setToken(backup.access);
+        try {
+          await hydrateUser();
+        } catch {
+          // reload will rehydrate
+        }
+      }
+      clearImpersonationMarkers();
+      setIsImpersonating(false);
+      window.location.href = returnPath;
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function restore() {
     setLoading(true);
     try {
+      setIsImpersonating(readIsImpersonating());
       if (!token) return;
       try {
         await hydrateUser();
@@ -211,8 +262,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const value = useMemo(
-    () => ({ token, user, loading, login, logout, restore }),
-    [token, user, loading],
+    () => ({ token, user, loading, isImpersonating, login, logout, restore, endImpersonation }),
+    [token, user, loading, isImpersonating],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

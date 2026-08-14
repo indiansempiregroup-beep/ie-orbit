@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing } from '../../theme/tokens';
 import type { ShopReturn } from '@ie-platform/sdk';
@@ -38,12 +39,13 @@ export function MyReturnsScreen() {
   );
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-      <Text style={[styles.title, { color: primary }]}>Returns</Text>
-      {loading ? <ActivityIndicator color={primary} /> : null}
+    <View style={styles.screen}>
+      <ScreenHeader title="Returns" onBack={() => navigation.goBack()} />
+      {loading ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, flexGrow: 1 }}
         renderItem={({ item }) => (
           <Pressable style={styles.card} onPress={() => navigation.navigate('ReturnDetail', { returnId: item.id })}>
             <Text style={styles.name}>{item.return_number}</Text>
@@ -52,15 +54,23 @@ export function MyReturnsScreen() {
             </Text>
           </Pressable>
         )}
-        ListEmptyComponent={!loading ? <Text style={styles.meta}>No returns yet.</Text> : null}
+        ListEmptyComponent={
+          !loading ? (
+            <EmptyState
+              icon="rotate-ccw"
+              title="No returns yet"
+              description="If you send something back, the status will appear here."
+            />
+          ) : null
+        }
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: spacing.md },
+  screen: { flex: 1, backgroundColor: colors.background },
+  loader: { marginTop: spacing.md },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,

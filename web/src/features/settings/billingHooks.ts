@@ -119,11 +119,42 @@ export function useBillingPlatformSubscriptionsQuery(enabled = false) {
   });
 }
 
+export function useBillingPlatformRevenueQuery(enabled = false) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'platform-revenue'],
+    queryFn: async () => (await client.billing.platformRevenue()).data,
+    enabled,
+    retry: false,
+  });
+}
+
 export function useBillingPlatformMonitoringQuery(windowHours = 24, enabled = false) {
   const client = useApiClient();
   return useQuery({
     queryKey: ['billing', 'platform-monitoring', windowHours],
     queryFn: async () => (await client.billing.platformMonitoring({ window_hours: windowHours })).data,
+    enabled,
+    retry: false,
+  });
+}
+
+export function useBillingPlatformWebhookEventsQuery(
+  windowHours = 24,
+  status?: string,
+  enabled = false,
+) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['billing', 'platform-webhook-events', windowHours, status ?? 'problem'],
+    queryFn: async () =>
+      (
+        await client.billing.platformWebhookEvents({
+          window_hours: windowHours,
+          status: status || undefined,
+          limit: 100,
+        })
+      ).data,
     enabled,
     retry: false,
   });

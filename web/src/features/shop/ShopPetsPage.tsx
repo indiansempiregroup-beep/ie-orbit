@@ -12,7 +12,7 @@ import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
 import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../config/products';
-import { useUpdateBusinessAddonsMutation } from '../settings/billingHooks';
+import { useBusinessBillingSnapshotQuery, useUpdateBusinessAddonsMutation } from '../settings/billingHooks';
 import { getApiErrorMessage } from '../../lib/apiClient';
 
 export function ShopPetsPage() {
@@ -25,6 +25,10 @@ export function ShopPetsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const updateAddons = useUpdateBusinessAddonsMutation(workspace.businessId ?? undefined);
+  const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
+  const petsPriceInr = Math.round(
+    (billingQuery.data?.pricing?.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100) / 100,
+  );
   const petsSubscribed = hasPetsPack(workspace.activeBusiness?.product_subscriptions);
   const customers = useQuery({
     queryKey: ['customers', workspace.businessId],
@@ -112,7 +116,7 @@ export function ShopPetsPage() {
       });
       await workspace.refreshWorkspace();
       await queryClient.invalidateQueries({ queryKey: ['shop'] });
-      setMessage(`Pets pack subscribed · ₹${PETS_PACK_PRICE_INR}/month`);
+      setMessage(`Pets pack subscribed · ₹${petsPriceInr}/month`);
     } catch (error) {
       setMessage(getApiErrorMessage(error, 'Unable to subscribe to Pets pack.'));
     }
@@ -192,7 +196,7 @@ export function ShopPetsPage() {
       {!petsSubscribed ? (
         <Card>
           <p>
-            Pets pack manages pet profiles, birthdays, and owner alerts for ₹{PETS_PACK_PRICE_INR}/month.
+            Pets pack manages pet profiles, birthdays, and owner alerts for ₹{petsPriceInr}/month.
           </p>
           <Button
             type="button"
@@ -200,7 +204,7 @@ export function ShopPetsPage() {
             onClick={() => void subscribePets()}
             disabled={updateAddons.isPending}
           >
-            {updateAddons.isPending ? 'Subscribing…' : `Subscribe · ₹${PETS_PACK_PRICE_INR}/mo`}
+            {updateAddons.isPending ? 'Subscribing…' : `Subscribe · ₹${petsPriceInr}/mo`}
           </Button>
           {message ? <p role="status">{message}</p> : null}
         </Card>

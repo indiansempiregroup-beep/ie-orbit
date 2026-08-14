@@ -12,7 +12,17 @@ import {
   migrateLegacyBiometricKeys,
   storeBiometricSession,
 } from '../utils/biometrics';
-import { getSecureItem, setSecureItem } from '../utils/persistentStore';
+import { getSecureItem, setSecureItem, getPersistentItem } from '../utils/persistentStore';
+import {
+  clearImpersonationHandoff,
+  consumeImpersonationHandoff,
+  defaultAdminReturnUrl,
+  IMPERSONATION_RETURN_KEY,
+  IMPERSONATOR_KEY,
+  jwtIsImpersonation,
+  persistImpersonationHandoff,
+  redirectToAdminWeb,
+} from '../utils/impersonationHandoff';
 
 const ACCESS_KEY = 'ie.ops.access';
 const REFRESH_KEY = 'ie.ops.refresh';
@@ -69,6 +79,8 @@ type AuthState = {
   refreshProfile: () => Promise<void>;
   /** Refresh the access token if needed; call before long uploads / analysis. */
   ensureFreshAccess: () => Promise<string | null>;
+  isImpersonating: boolean;
+  endImpersonation: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -99,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isImpersonating, setIsImpersonating] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
@@ -201,9 +214,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       await refreshBiometricState();
+      const handoff = consumeImpersonationHandoff();
+      if (handoff) {
+        await persistImpersonationHandoff(handoff);
+        setIsImpersonating(true);
+        opsClient.setToken(handoff.access);
+        const me = await opsClient.auth.me();
+        setToken(handoff.access);
+        setUser(me.data);
+        refreshTokenRef.current = handoff.refresh;
+        accessIssuedAtRef.current = Date.now();
+        await writeToken(ACCESS_KEY, handoff.access);
+        await writeToken(REFRESH_KEY, handoff.refresh);
+        scheduleRefresh(remainingAccessSeconds(handoff.access) || ACCESS_TTL_SECONDS);
+        return;
+      }
+
+      const storedImpersonator = await getPersistentItem(IMPERSONATOR_KEY);
       const migrated = await migrateLegacyAuthKeys();
       const access = migrated.access;
       refreshTokenRef.current = migrated.refresh;
+      setIsImpersonating(Boolean(storedImpersonator) || jwtIsImpersonation(access));
       if (!access && !migrated.refresh) {
         setToken(null);
         setUser(null);
@@ -304,6 +335,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string, rememberMe = true) => {
     setLoading(true);
     try {
+      await clearImpersonationHandoff();
+      setIsImpersonating(false);
       const response = await opsClient.auth.login({
         email,
         password,
@@ -411,6 +444,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [scheduleRefresh]);
 
+  const endImpersonation = useCallback(async () => {
+    const storedReturn = await getPersistentItem(IMPERSONATION_RETURN_KEY);
+    const tenantId = await getPersistentItem('ie.ops.active-tenant-id');
+    const returnTo = storedReturn || defaultAdminReturnUrl(tenantId);
+    setLoading(true);
+    try {
+      try {
+        await opsClient.platform.endImpersonation();
+      } catch {
+        // Admin web still has the original session; continue the hand-back.
+      }
+      clearRefreshTimer();
+      await clearImpersonationHandoff();
+      await writeToken(ACCESS_KEY, null);
+      await writeToken(REFRESH_KEY, null);
+      refreshTokenRef.current = null;
+      setToken(null);
+      setUser(null);
+      setIsImpersonating(false);
+      redirectToAdminWeb(returnTo);
+    } finally {
+      setLoading(false);
+    }
+  }, [clearRefreshTimer]);
+
   const logout = useCallback(async () => {
     setLoading(true);
     try {
@@ -434,6 +492,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (refresh) {
         await opsClient.auth.logout({ refresh, all_sessions: false });
       }
+      await clearImpersonationHandoff();
+      setIsImpersonating(false);
       await writeToken(ACCESS_KEY, null);
       await writeToken(REFRESH_KEY, null);
       refreshTokenRef.current = null;
@@ -477,6 +537,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       refreshProfile,
       ensureFreshAccess,
+      isImpersonating,
+      endImpersonation,
     }),
     [
       user,
@@ -494,6 +556,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       refreshProfile,
       ensureFreshAccess,
+      isImpersonating,
+      endImpersonation,
     ],
   );
 

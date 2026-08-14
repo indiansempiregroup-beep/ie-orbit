@@ -8,10 +8,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.businesses.models import Business
+from apps.businesses.constants import (
+    FEATURE_SHOPIE_BOOKS_CHEQUES,
+    FEATURE_SHOPIE_BOOKS_GODOWNS,
+    FEATURE_SHOPIE_BOOKS_LOANS,
+)
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
 from apps.customers.models import Customer
+from apps.shopie.api.access import (
+    require_any_shopie_feature,
+    require_business as _business,
+    require_document_feature,
+)
 from apps.shopie.api.permissions import ShopAccessPermission
 from apps.shopie.api.serializers import (
     ShopBooksDocumentConvertSerializer,
@@ -43,10 +52,6 @@ from apps.shopie.services.godowns import GodownsService
 from apps.shopie.services.loans import LoansService
 
 
-def _business(request: Request, business_id) -> Business:
-    return get_object_or_404(Business, tenant=request.current_tenant, id=business_id)
-
-
 def _validation_error(exc: DjangoValidationError) -> ValidationError:
     if hasattr(exc, "message_dict"):
         return ValidationError(exc.message_dict)
@@ -64,6 +69,7 @@ class ShopBooksDocumentListCreateView(APIView):
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id)
+        require_document_feature(business, request.query_params.get("doc_type"))
         qs = self.documents.list_documents(
             tenant=request.current_tenant,
             business=business,
@@ -76,6 +82,7 @@ class ShopBooksDocumentListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         business = _business(request, data["business_id"])
+        require_document_feature(business, data.get("doc_type"))
         customer = None
         supplier = None
         if data.get("customer_id"):
@@ -110,6 +117,7 @@ class ShopBooksDocumentConvertView(APIView):
 
     def post(self, request: Request, document_id) -> Response:
         document = get_object_or_404(ShopBooksDocument, tenant=request.current_tenant, id=document_id)
+        require_document_feature(document.business, document.doc_type)
         serializer = ShopBooksDocumentConvertSerializer(data=request.data or {})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -136,7 +144,7 @@ class ShopGodownListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
         qs = self.godowns.list_godowns(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopGodownSerializer)
 
@@ -144,7 +152,7 @@ class ShopGodownListCreateView(APIView):
         serializer = ShopGodownCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
         try:
             godown = self.godowns.create_godown(
                 tenant=request.current_tenant,
@@ -166,7 +174,7 @@ class ShopStockTransferListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
         qs = self.godowns.list_transfers(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopStockTransferSerializer)
 
@@ -174,7 +182,7 @@ class ShopStockTransferListCreateView(APIView):
         serializer = ShopStockTransferCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
         try:
             transfer = self.godowns.transfer_stock(
                 tenant=request.current_tenant,
@@ -200,7 +208,7 @@ class ShopChequeListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_CHEQUES)
         qs = self.cheques.list_cheques(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopChequeSerializer)
 
@@ -208,7 +216,7 @@ class ShopChequeListCreateView(APIView):
         serializer = ShopChequeCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_CHEQUES)
         customer = None
         supplier = None
         cash_account = None
@@ -252,6 +260,7 @@ class ShopChequeClearView(APIView):
 
     def post(self, request: Request, cheque_id) -> Response:
         cheque = get_object_or_404(ShopCheque, tenant=request.current_tenant, id=cheque_id)
+        require_any_shopie_feature(cheque.business, (FEATURE_SHOPIE_BOOKS_CHEQUES,))
         serializer = ShopChequeClearSerializer(data=request.data or {})
         serializer.is_valid(raise_exception=True)
         try:
@@ -272,6 +281,7 @@ class ShopChequeBounceView(APIView):
 
     def post(self, request: Request, cheque_id) -> Response:
         cheque = get_object_or_404(ShopCheque, tenant=request.current_tenant, id=cheque_id)
+        require_any_shopie_feature(cheque.business, (FEATURE_SHOPIE_BOOKS_CHEQUES,))
         try:
             cheque = self.cheques.bounce_cheque(
                 tenant=request.current_tenant, business=cheque.business, cheque=cheque
@@ -289,7 +299,7 @@ class ShopLoanListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_LOANS)
         qs = self.loans.list_loans(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopLoanSerializer)
 
@@ -297,7 +307,7 @@ class ShopLoanListCreateView(APIView):
         serializer = ShopLoanCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_LOANS)
         customer = None
         supplier = None
         if data.get("customer_id"):
@@ -332,6 +342,7 @@ class ShopLoanRepaymentView(APIView):
 
     def post(self, request: Request, loan_id) -> Response:
         loan = get_object_or_404(ShopLoan, tenant=request.current_tenant, id=loan_id)
+        require_any_shopie_feature(loan.business, (FEATURE_SHOPIE_BOOKS_LOANS,))
         serializer = ShopLoanRepaymentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data

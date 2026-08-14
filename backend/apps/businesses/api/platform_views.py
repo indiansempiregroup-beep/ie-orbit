@@ -1,23 +1,78 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
-from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.authentication.permissions import IsPlatformAdmin
+from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.businesses.api.white_label_serializers import (
     WhiteLabelProfileSerializer,
     WhiteLabelProfileUpsertSerializer,
 )
-from apps.businesses.models import Business, WhiteLabelProfile
+from apps.businesses.models import (
+    Business,
+    BusinessProductSubscription,
+    BusinessProductSubscriptionStatus,
+    WhiteLabelProfile,
+)
 from apps.businesses.services.entitlements import EntitlementService
-from apps.businesses.services.white_label import ensure_white_label_profile, serialize_white_label_profile
+from apps.businesses.services.white_label import (
+    ensure_white_label_profile,
+    serialize_white_label_profile,
+)
 from apps.common.api.responses import success_response
 from apps.tenancy.models import Tenant
+
+_COMPLIMENTARY_PREFIX = "comp:"
+
+
+def _subscription_billing_state(subscription: BusinessProductSubscription | None) -> str:
+    if subscription is None:
+        return "none"
+    if subscription.status == BusinessProductSubscriptionStatus.SOFT_LOCKED:
+        return "soft_locked"
+    if str(subscription.external_billing_reference or "").startswith(_COMPLIMENTARY_PREFIX):
+        return "complimentary"
+    if subscription.status == BusinessProductSubscriptionStatus.TRIALING:
+        return "trialing"
+    if subscription.status == BusinessProductSubscriptionStatus.ACTIVE:
+        return "paying"
+    if subscription.status == BusinessProductSubscriptionStatus.CANCELED:
+        return "canceled"
+    return str(subscription.status or "none")
+
+
+def _summarize_tenant_billing(
+    subscriptions: list[BusinessProductSubscription],
+) -> tuple[str, str | None, str | None]:
+    if not subscriptions:
+        return "none", None, None
+    states = [_subscription_billing_state(item) for item in subscriptions]
+    if "soft_locked" in states:
+        chosen_state = "soft_locked"
+    elif "paying" in states:
+        chosen_state = "paying"
+    elif "complimentary" in states:
+        chosen_state = "complimentary"
+    elif "trialing" in states:
+        chosen_state = "trialing"
+    elif "canceled" in states:
+        chosen_state = "canceled"
+    else:
+        chosen_state = states[0]
+    chosen = next(
+        (item for item in subscriptions if _subscription_billing_state(item) == chosen_state),
+        subscriptions[0],
+    )
+    plan_code = chosen.plan.code if chosen.plan_id else None
+    return chosen_state, plan_code, chosen.product_code
 
 
 class PlatformWhiteLabelListView(APIView):
@@ -69,19 +124,65 @@ class PlatformTenantAdminListView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request) -> Response:
-        tenants = Tenant.objects.order_by("display_name")
+        tenants = list(Tenant.objects.order_by("display_name"))
+        tenant_ids = [tenant.id for tenant in tenants]
+        business_counts = {
+            row["tenant_id"]: row["count"]
+            for row in Business.active_objects.filter(tenant_id__in=tenant_ids)
+            .values("tenant_id")
+            .annotate(count=Count("id"))
+        }
+        subscriptions_by_tenant: dict = defaultdict(list)
+        for subscription in BusinessProductSubscription.objects.filter(
+            tenant_id__in=tenant_ids
+        ).select_related("plan"):
+            subscriptions_by_tenant[subscription.tenant_id].append(subscription)
+
+        last_paid: dict = {}
+        paid_rows = (
+            BillingCheckoutSession.objects.filter(
+                tenant_id__in=tenant_ids,
+                status=CheckoutSessionStatus.PAID,
+            )
+            .order_by("tenant_id", "-paid_at", "-created_at")
+            .values("tenant_id", "amount_paise", "paid_at", "created_at")
+        )
+        for row in paid_rows:
+            if row["tenant_id"] not in last_paid:
+                last_paid[row["tenant_id"]] = row
+
+        pending_claims = {
+            row["tenant_id"]: row["count"]
+            for row in BillingCheckoutSession.objects.filter(
+                tenant_id__in=tenant_ids,
+                metadata__payment_status="awaiting_confirmation",
+            )
+            .values("tenant_id")
+            .annotate(count=Count("id"))
+        }
+
         rows = []
         for tenant in tenants:
-            business_count = Business.active_objects.filter(tenant=tenant).count()
+            billing_state, plan_code, product_code = _summarize_tenant_billing(
+                subscriptions_by_tenant.get(tenant.id, [])
+            )
+            payment = last_paid.get(tenant.id)
+            paid_at = payment.get("paid_at") or payment.get("created_at") if payment else None
             rows.append(
                 {
                     "id": str(tenant.id),
                     "slug": tenant.slug,
                     "display_name": tenant.display_name,
                     "status": tenant.status,
-                    "business_count": business_count,
+                    "business_count": business_counts.get(tenant.id, 0),
                     "primary_color": tenant.primary_color,
                     "created_at": tenant.created_at.isoformat(),
+                    "billing_state": billing_state,
+                    "plan_code": plan_code,
+                    "product_code": product_code,
+                    "last_paid_at": paid_at.isoformat() if paid_at else None,
+                    "last_paid_paise": payment["amount_paise"] if payment else None,
+                    "pending_claims": int(pending_claims.get(tenant.id, 0)),
                 }
             )
         return success_response({"tenants": rows}, request_id=getattr(request, "request_id", None))

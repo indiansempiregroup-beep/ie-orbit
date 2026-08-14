@@ -22,7 +22,7 @@ docker compose up -d
 
 
 
-# curl http://172.20.10.14:8000/api/v1/health/
+# curl http://192.168.1.11:8000/api/v1/health/
 
 
 
@@ -96,8 +96,8 @@ To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not
 # corepack pnpm install --filter @ie-platform/ops-mobile...
 
 cd "D:\Indians Empire\IE Platform\ie-platform\apps\ops-mobile"
-$env:REACT_NATIVE_PACKAGER_HOSTNAME="172.20.10.14"
-$env:EXPO_PUBLIC_API_BASE_URL="http://172.20.10.14:8000/api/v1"
+$env:REACT_NATIVE_PACKAGER_HOSTNAME="192.168.1.11"
+$env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.11:8000/api/v1"
 $env:EXPO_NO_METRO_WORKSPACE_ROOT="1"
 pnpm.cmd start -- --clear --lan
 
@@ -107,7 +107,7 @@ pnpm.cmd start -- --clear --lan
 
 
 
-# QR should show exp://172.20.10.14:8082 (NOT 127.0.0.1)
+# QR should show exp://192.168.1.11:8082 (NOT 127.0.0.1)
 
 
 
@@ -124,8 +124,8 @@ To run the Customer-Mobile (phone on same Wi-Fi / hotspot)
 
 
 cd "D:\Indians Empire\IE Platform\ie-platform\mobile"
-$env:REACT_NATIVE_PACKAGER_HOSTNAME="172.20.10.14"
-$env:EXPO_PUBLIC_API_BASE_URL="http://172.20.10.14:8000/api/v1"
+$env:REACT_NATIVE_PACKAGER_HOSTNAME="192.168.1.11"
+$env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.11:8000/api/v1"
 $env:EXPO_PUBLIC_FLAVOR_KEY="enjoy-pet-hub-and-kennels-enjoy-pet-hub-and-kennels"
 $env:EXPO_PUBLIC_APP_NAME="Enjoy pet hub and kennels"
 pnpm.cmd exec expo start --port 8083 --clear --lan
@@ -136,7 +136,7 @@ pnpm.cmd exec expo start --port 8083 --clear --lan
 
 
 
-# QR should show exp://172.20.10.14:8083 (NOT 127.0.0.1)
+# QR should show exp://192.168.1.11:8083 (NOT 127.0.0.1)
 
 
 
@@ -148,7 +148,7 @@ pnpm.cmd exec expo start --port 8083 --clear --lan
 
 
 
-# 1) On your iPhone Safari open: http://172.20.10.14:8000/api/v1/health/
+# 1) On your iPhone Safari open: http://192.168.1.11:8000/api/v1/health/
 
 
 
@@ -210,3 +210,20 @@ git commit -m "Your descriptive commit message"
 
 git push origin main
 
+
+
+Superuser is ready.
+
+Email
+platform-admin@ieplatform.local
+Password
+PlatformAdmin123!
+Role
+platform_admin (auto-assigned)
+
+
+cd apps/ops-mobile
+export REACT_NATIVE_PACKAGER_HOSTNAME="$(ipconfig getifaddr en0)"
+export EXPO_PUBLIC_API_BASE_URL="http://${REACT_NATIVE_PACKAGER_HOSTNAME}:8000/api/v1"
+export EXPO_NO_METRO_WORKSPACE_ROOT="1"
+corepack pnpm start -- --clear --lan

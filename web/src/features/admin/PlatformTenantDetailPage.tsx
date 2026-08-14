@@ -1,15 +1,21 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import type { PlatformPaymentRow } from '@ie-platform/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { formatDate } from '../../lib/datetime';
+import { buildOpsMobileImpersonationUrl } from '../../lib/impersonation';
+import { formatDate, formatTimestamp } from '../../lib/datetime';
 import {
+  AdminDrawer,
   AdminEmpty,
+  AdminField,
   AdminKpi,
-  AdminListRow,
+  AdminPage,
   AdminPageHeader,
   AdminSection,
   AdminStatus,
+  AdminTable,
+  productLabel,
 } from './AdminChrome';
 import {
   useInvalidatePlatform,
@@ -21,9 +27,24 @@ import {
   usePlatformTenantUsersQuery,
 } from './adminHooks';
 
+type TabKey = 'overview' | 'billing' | 'users' | 'payments';
+
 function formatInrFromPaise(paise?: number | null) {
   if (paise == null) return '—';
-  return `₹${(paise / 100).toFixed(0)}`;
+  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
+function isAwaitingClaim(payment: PlatformPaymentRow) {
+  return (payment.payment_status || '').toLowerCase() === 'awaiting_confirmation';
+}
+
+function BillingFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span style={{ color: 'var(--muted-foreground)' }}>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 export function PlatformTenantDetailPage() {
@@ -36,6 +57,7 @@ export function PlatformTenantDetailPage() {
   const paymentsQuery = usePlatformTenantPaymentsQuery(tenantId);
   const creditsQuery = usePlatformTenantCreditsQuery(tenantId);
   const packagesQuery = usePlatformPlanPackagesQuery();
+  const [tab, setTab] = useState<TabKey>('overview');
   const [reason, setReason] = useState('Platform admin action');
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -45,7 +67,11 @@ export function PlatformTenantDetailPage() {
   const [addonInputs, setAddonInputs] = useState<
     Record<string, { extra_staff: string; extra_offices: string; pets_pack_enabled: boolean }>
   >({});
-  usePageMeta({ title: 'Tenant Detail — Platform Admin' });
+  usePageMeta({ title: `${detailQuery.data?.display_name ?? 'Tenant'} — Platform Admin` });
+
+  const payments = paymentsQuery.data ?? [];
+  const pendingClaims = useMemo(() => payments.filter(isAwaitingClaim), [payments]);
+  const historyPayments = useMemo(() => payments.filter((payment) => !isAwaitingClaim(payment)), [payments]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
     if (!tenantId) return;
@@ -62,295 +88,260 @@ export function PlatformTenantDetailPage() {
     }
   }
 
+  const tenant = detailQuery.data;
+
   return (
-    <div className="admin-main">
+    <AdminPage>
       <AdminPageHeader
         eyebrow="Tenant"
-        title={detailQuery.data?.display_name ?? 'Tenant detail'}
-        description={`${detailQuery.data?.slug ?? '…'} · manage lifecycle, billing, users, and payments`}
+        title={tenant?.display_name ?? 'Tenant detail'}
+        description={`${tenant?.slug ?? '…'} · ${tenant?.businesses?.length ?? 0} businesses · Impersonate opens Expo ops web`}
         actions={
           <>
-            <AdminStatus status={detailQuery.data?.status} />
+            <AdminStatus status={tenant?.status} />
             <Link className="admin-btn admin-btn--ghost" to="/admin/tenants">
-              ← Tenants
+              All tenants
             </Link>
+            <button
+              type="button"
+              className="admin-btn admin-btn--primary"
+              disabled={Boolean(busy) || !tenantId}
+              onClick={() =>
+                run('Impersonate owner', async () => {
+                  const result = await client.platform.impersonate(tenantId!, { reason });
+                  window.location.assign(
+                    buildOpsMobileImpersonationUrl({
+                      access: result.data.access,
+                      refresh: result.data.refresh,
+                      impersonatorId: result.data.impersonator_id,
+                      tenantId: tenantId!,
+                    }),
+                  );
+                })
+              }
+            >
+              Impersonate
+            </button>
           </>
         }
       />
 
-      <AdminSection title="Actions" description="Every privileged action requires a short reason for audit.">
-        <label className="admin-reason">
-          <span>Reason</span>
-          <input
-            className="admin-inline-input"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
-        <div className="admin-action-bar">
-          <button
-            type="button"
-            className="admin-btn admin-btn--danger"
-            disabled={Boolean(busy)}
-            onClick={() =>
-              run('Suspend', () => client.platform.tenantAction(tenantId!, 'suspend', { reason }))
-            }
-          >
-            Suspend
-          </button>
-          <button
-            type="button"
-            className="admin-btn admin-btn--secondary"
-            disabled={Boolean(busy)}
-            onClick={() =>
-              run('Reactivate', () => client.platform.tenantAction(tenantId!, 'reactivate', { reason }))
-            }
-          >
-            Reactivate
-          </button>
-          <button
-            type="button"
-            className="admin-btn admin-btn--ghost"
-            disabled={Boolean(busy)}
-            onClick={() =>
-              run('Archive', () => client.platform.tenantAction(tenantId!, 'archive', { reason }))
-            }
-          >
-            Archive
-          </button>
-          <button
-            type="button"
-            className="admin-btn admin-btn--secondary"
-            disabled={Boolean(busy)}
-            onClick={() =>
-              run('Extend trial 15d', () =>
-                client.platform.tenantBillingAction(tenantId!, {
-                  action: 'extend_trial',
-                  days: 15,
-                  reason,
-                }),
-              )
-            }
-          >
-            Extend trial 15d
-          </button>
-          <button
-            type="button"
-            className="admin-btn admin-btn--primary"
-            disabled={Boolean(busy)}
-            onClick={() =>
-              run('Set complimentary', () =>
-                client.platform.tenantBillingAction(tenantId!, {
-                  action: 'set_complimentary',
-                  days: 30,
-                  reason,
-                }),
-              )
-            }
-          >
-            Complimentary 30d
-          </button>
-          <button
-            type="button"
-            className="admin-btn admin-btn--secondary"
-            disabled={Boolean(busy)}
-            onClick={() =>
-              run('Impersonate owner', async () => {
-                const result = await client.platform.impersonate(tenantId!, { reason });
-                sessionStorage.setItem(
-                  'ie_admin_tokens_backup',
-                  JSON.stringify({
-                    access: localStorage.getItem('ie:auth:access'),
-                    refresh: localStorage.getItem('ie:auth:refresh'),
-                  }),
-                );
-                localStorage.setItem('ie:auth:access', result.data.access);
-                localStorage.setItem('ie:auth:refresh', result.data.refresh);
-                localStorage.setItem('ie:auth:impersonator_id', result.data.impersonator_id);
-                window.location.href = '/';
-              })
-            }
-          >
-            Impersonate owner
-          </button>
-          <button
-            type="button"
-            className="admin-btn admin-btn--danger"
-            disabled={Boolean(busy)}
-            onClick={() => {
-              setPurgeSlug('');
-              setPurgeOpen(true);
-              setMessage(null);
-            }}
-          >
-            GDPR purge
-          </button>
-        </div>
-
-        {purgeOpen ? (
-          <div
-            style={{
-              marginTop: 16,
-              padding: 14,
-              borderRadius: 14,
-              border: '1px solid rgba(244, 63, 94, 0.35)',
-              background: 'rgba(244, 63, 94, 0.06)',
-              display: 'grid',
-              gap: 10,
-              maxWidth: 520,
-            }}
-          >
-            <strong>Confirm GDPR purge</strong>
-            <p className="admin-message" style={{ margin: 0 }}>
-              This archives and deactivates the workspace. Type the tenant slug{' '}
-              <code>{detailQuery.data?.slug}</code> to continue.
-            </p>
-            <input
-              className="admin-inline-input"
-              placeholder="Type tenant slug to confirm"
-              value={purgeSlug}
-              onChange={(e) => setPurgeSlug(e.target.value)}
-              autoFocus
-            />
-            <div className="admin-action-bar" style={{ marginTop: 0 }}>
-              <button
-                type="button"
-                className="admin-btn admin-btn--ghost"
-                disabled={Boolean(busy)}
-                onClick={() => {
-                  setPurgeOpen(false);
-                  setPurgeSlug('');
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="admin-btn admin-btn--danger"
-                disabled={Boolean(busy) || purgeSlug.trim() !== (detailQuery.data?.slug || '')}
-                onClick={() =>
-                  run('Purge', async () => {
-                    await client.platform.purgeTenant(tenantId!, {
-                      confirm_slug: purgeSlug.trim(),
-                      reason,
-                    });
-                    setPurgeOpen(false);
-                    setPurgeSlug('');
-                  })
-                }
-              >
-                Confirm purge
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {message ? <p className="admin-message admin-message--ok">{message}</p> : null}
-        {busy ? <p className="admin-message">Running: {busy}…</p> : null}
-      </AdminSection>
-
       <div className="admin-kpi-grid">
-        <AdminKpi label="Businesses" value={detailQuery.data?.businesses?.length ?? '…'} />
+        <AdminKpi label="Businesses" value={tenant?.businesses?.length ?? '…'} />
         <AdminKpi label="Users" value={usersQuery.data?.length ?? '…'} />
         <AdminKpi label="Credits" value={formatInrFromPaise(creditsQuery.data ?? 0)} tone="good" />
-        <AdminKpi label="Payments" value={paymentsQuery.data?.length ?? '…'} />
+        <AdminKpi
+          label="Pending UPI"
+          value={paymentsQuery.isLoading ? '…' : pendingClaims.length}
+          hint="Awaiting confirmation"
+          tone={pendingClaims.length ? 'warn' : 'good'}
+        />
       </div>
 
-      <AdminSection title="Businesses & billing">
-        <div className="admin-list">
-          {(detailQuery.data?.businesses ?? []).map((business) => {
-            const billing = business.billing;
-            const productCode = business.selected_product || '';
-            const availablePlans = (packagesQuery.data ?? []).filter(
-              (pkg) => pkg.product_code === productCode && pkg.is_active,
-            );
-            const currentPlanCode = String(billing?.plan_code ?? '');
-            const selectedPlan = planSelection[business.id] ?? currentPlanCode ?? '';
-            const addonState = addonInputs[business.id] ?? {
-              extra_staff: String(billing?.extra_staff ?? 0),
-              extra_offices: String(billing?.extra_offices ?? 0),
-              pets_pack_enabled: Boolean(billing?.pets_pack_enabled),
-            };
-            const isSoftLocked = String(billing?.status ?? '').includes('soft_locked');
-            return (
-              <div key={business.id} className="admin-list-row admin-list-row--static">
-                <div className="admin-list-row__main" style={{ width: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+      {pendingClaims.length > 0 && tab !== 'payments' ? (
+        <div className="admin-banner">
+          <div>
+            <strong>
+              {pendingClaims.length} UPI payment{pendingClaims.length === 1 ? '' : 's'} awaiting confirmation
+            </strong>
+            <p>The tenant submitted UTR / screenshot details. Review them on the Payments tab.</p>
+          </div>
+          <button type="button" className="admin-btn admin-btn--primary" onClick={() => setTab('payments')}>
+            Review payments
+          </button>
+        </div>
+      ) : null}
+
+      <div className="admin-reason-bar">
+        <AdminField label="Audit reason" hint="Required for every privileged action.">
+          <input value={reason} onChange={(e) => setReason(e.target.value)} />
+        </AdminField>
+        {message ? (
+          <p className={`admin-message ${message.includes('succeeded') ? 'admin-message--ok' : ''}`} style={{ margin: 0 }}>
+            {message}
+          </p>
+        ) : null}
+        {busy ? <p className="admin-message" style={{ margin: 0 }}>Running: {busy}…</p> : null}
+      </div>
+
+      <div className="admin-editor-tabs" role="tablist">
+        {(
+          [
+            ['overview', 'Overview'],
+            ['billing', 'Billing'],
+            ['users', 'Users'],
+            ['payments', 'Payments'],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`admin-editor-tab${tab === key ? ' is-active' : ''}`}
+            onClick={() => setTab(key)}
+          >
+            {label}
+            {key === 'payments' && pendingClaims.length ? (
+              <span className="admin-tab-badge">{pendingClaims.length}</span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' ? (
+        <>
+          <AdminSection title="Businesses" description="Open Billing to change plans, trials, and add-ons.">
+            <div className="admin-list">
+              {(tenant?.businesses ?? []).map((business) => (
+                <div key={business.id} className="admin-business-card">
+                  <div className="admin-business-card__head">
                     <div>
-                      <div className="admin-list-row__title">{business.display_name}</div>
+                      <strong>{business.display_name}</strong>
                       <div className="admin-list-row__meta">
-                        {business.business_code} · {business.selected_product || 'no product'}
+                        {business.business_code} · {business.selected_product ? productLabel(business.selected_product) : 'no product'}
                       </div>
                     </div>
                     <AdminStatus status={business.status} />
                   </div>
+                  {business.billing ? (
+                    <div className="admin-billing-grid">
+                      <BillingFact label="Plan" value={String(business.billing.plan_code ?? '—')} />
+                      <BillingFact label="Status" value={String(business.billing.status ?? '—')} />
+                      <BillingFact
+                        label="Period end"
+                        value={formatDate(business.billing.current_period_ends_at as string | null | undefined)}
+                      />
+                    </div>
+                  ) : (
+                    <AdminEmpty>No billing snapshot yet.</AdminEmpty>
+                  )}
+                </div>
+              ))}
+              {(tenant?.businesses ?? []).length === 0 ? <AdminEmpty>No businesses on this tenant.</AdminEmpty> : null}
+            </div>
+          </AdminSection>
+
+          <AdminSection title="Lifecycle" description="Suspend, restore, or permanently purge this workspace.">
+            <div className="admin-action-bar">
+              <button
+                type="button"
+                className="admin-btn admin-btn--danger"
+                disabled={Boolean(busy)}
+                onClick={() => run('Suspend', () => client.platform.tenantAction(tenantId!, 'suspend', { reason }))}
+              >
+                Suspend
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--secondary"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  run('Reactivate', () => client.platform.tenantAction(tenantId!, 'reactivate', { reason }))
+                }
+              >
+                Reactivate
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--ghost"
+                disabled={Boolean(busy)}
+                onClick={() => run('Archive', () => client.platform.tenantAction(tenantId!, 'archive', { reason }))}
+              >
+                Archive
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--danger"
+                disabled={Boolean(busy)}
+                onClick={() => {
+                  setPurgeSlug('');
+                  setPurgeOpen(true);
+                  setMessage(null);
+                }}
+              >
+                GDPR purge
+              </button>
+            </div>
+          </AdminSection>
+        </>
+      ) : null}
+
+      {tab === 'billing' ? (
+        <AdminSection title="Plans & entitlements" description="Change plan, extend trial, or update add-ons per business.">
+          <div className="admin-list">
+            {(tenant?.businesses ?? []).map((business) => {
+              const billing = business.billing;
+              const productCode = business.selected_product || '';
+              const availablePlans = (packagesQuery.data ?? []).filter(
+                (pkg) => pkg.product_code === productCode && pkg.is_active,
+              );
+              const currentPlanCode = String(billing?.plan_code ?? '');
+              const selectedPlan = planSelection[business.id] ?? currentPlanCode ?? '';
+              const addonState = addonInputs[business.id] ?? {
+                extra_staff: String(billing?.extra_staff ?? 0),
+                extra_offices: String(billing?.extra_offices ?? 0),
+                pets_pack_enabled: Boolean(billing?.pets_pack_enabled),
+              };
+              const isSoftLocked =
+                Boolean(billing?.soft_locked) || String(billing?.status ?? '').includes('soft_locked');
+              return (
+                <div key={business.id} className="admin-business-card">
+                  <div className="admin-business-card__head">
+                    <div>
+                      <strong>{business.display_name}</strong>
+                      <div className="admin-list-row__meta">
+                        {business.business_code} · {productCode ? productLabel(productCode) : 'no product'}
+                      </div>
+                    </div>
+                    <AdminStatus status={String(billing?.status ?? business.status)} />
+                  </div>
                   {billing ? (
                     <div className="admin-billing-grid">
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Plan</span>
-                        <strong>{String(billing.plan_code ?? '—')}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Status</span>
-                        <strong style={{ textTransform: 'capitalize' }}>{String(billing.status ?? '—')}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Staff</span>
-                        <strong>
-                          {String(billing.used_staff ?? 0)} / {String(billing.effective_max_staff ?? 0)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Offices</span>
-                        <strong>
-                          {String(billing.used_offices ?? 0)} / {String(billing.effective_max_branches ?? 0)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Monthly</span>
-                        <strong>
-                          {formatInrFromPaise(
-                            (billing.pricing as { total_amount_paise?: number } | undefined)?.total_amount_paise,
-                          )}
-                        </strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Started</span>
-                        <strong>{formatDate(billing.subscribed_at as string | null | undefined)}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>
-                          {String(billing.status || '').includes('trial') ? 'Trial ends' : 'Trial ended'}
-                        </span>
-                        <strong>{formatDate(billing.trial_ends_at as string | null | undefined)}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Period start</span>
-                        <strong>
-                          {formatDate(billing.current_period_starts_at as string | null | undefined)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Period end</span>
-                        <strong>
-                          {formatDate(billing.current_period_ends_at as string | null | undefined)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--muted-foreground)' }}>Renews on</span>
-                        <strong>{formatDate(billing.renews_at as string | null | undefined)}</strong>
-                      </div>
+                      <BillingFact label="Plan" value={currentPlanCode || '—'} />
+                      <BillingFact
+                        label="Staff"
+                        value={`${String(billing.used_staff ?? 0)} / ${String(billing.effective_max_staff ?? 0)}`}
+                      />
+                      <BillingFact
+                        label="Offices"
+                        value={`${String(billing.used_offices ?? 0)} / ${String(billing.effective_max_branches ?? 0)}`}
+                      />
+                      <BillingFact
+                        label="Monthly"
+                        value={formatInrFromPaise(
+                          (billing.pricing as { total_amount_paise?: number } | undefined)?.total_amount_paise,
+                        )}
+                      />
+                      <BillingFact
+                        label="Started"
+                        value={formatDate(billing.subscribed_at as string | null | undefined)}
+                      />
+                      <BillingFact
+                        label={String(billing.status || '').includes('trial') ? 'Trial ends' : 'Trial ended'}
+                        value={formatDate(billing.trial_ends_at as string | null | undefined)}
+                      />
+                      <BillingFact
+                        label="Period"
+                        value={`${formatDate(billing.current_period_starts_at as string | null | undefined)} → ${formatDate(billing.current_period_ends_at as string | null | undefined)}`}
+                      />
+                      <BillingFact
+                        label="Renews"
+                        value={formatDate(billing.renews_at as string | null | undefined)}
+                      />
                       {billing.canceled_at ? (
-                        <div>
-                          <span style={{ color: 'var(--muted-foreground)' }}>Canceled</span>
-                          <strong>{formatDate(billing.canceled_at as string | null | undefined)}</strong>
-                        </div>
+                        <BillingFact
+                          label="Canceled"
+                          value={formatDate(billing.canceled_at as string | null | undefined)}
+                        />
                       ) : null}
                     </div>
-                  ) : null}
+                  ) : (
+                    <AdminEmpty>No billing snapshot yet.</AdminEmpty>
+                  )}
 
                   {billing && productCode ? (
-                    <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                    <div style={{ display: 'grid', gap: 10 }}>
                       <div className="admin-action-bar" style={{ marginTop: 0, alignItems: 'center' }}>
                         <select
                           value={selectedPlan}
@@ -371,15 +362,12 @@ export function PlatformTenantDetailPage() {
                         <button
                           type="button"
                           className="admin-btn admin-btn--secondary"
-                          disabled={
-                            Boolean(busy) ||
-                            !selectedPlan ||
-                            selectedPlan === currentPlanCode
-                          }
+                          disabled={Boolean(busy) || !selectedPlan || selectedPlan === currentPlanCode}
                           onClick={() =>
                             run(`Change plan (${business.business_code})`, () =>
                               client.platform.tenantBillingAction(tenantId!, {
                                 action: 'change_plan',
+                                business_id: business.id,
                                 plan_code: selectedPlan,
                                 product_code: productCode,
                                 reason,
@@ -389,7 +377,42 @@ export function PlatformTenantDetailPage() {
                         >
                           Change plan
                         </button>
-
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--secondary"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            run(`Extend trial 15d (${business.business_code})`, () =>
+                              client.platform.tenantBillingAction(tenantId!, {
+                                action: 'extend_trial',
+                                business_id: business.id,
+                                product_code: productCode,
+                                days: 15,
+                                reason,
+                              }),
+                            )
+                          }
+                        >
+                          Extend trial 15d
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--primary"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            run(`Complimentary 30d (${business.business_code})`, () =>
+                              client.platform.tenantBillingAction(tenantId!, {
+                                action: 'set_complimentary',
+                                business_id: business.id,
+                                product_code: productCode,
+                                days: 30,
+                                reason,
+                              }),
+                            )
+                          }
+                        >
+                          Complimentary 30d
+                        </button>
                         {isSoftLocked ? (
                           <button
                             type="button"
@@ -399,13 +422,15 @@ export function PlatformTenantDetailPage() {
                               run(`Clear soft-lock (${business.business_code})`, () =>
                                 client.platform.tenantBillingAction(tenantId!, {
                                   action: 'clear_soft_lock',
+                                  business_id: business.id,
                                   product_code: productCode,
+                                  days: 30,
                                   reason,
                                 }),
                               )
                             }
                           >
-                            Clear soft-lock
+                            Clear soft-lock 30d
                           </button>
                         ) : (
                           <button
@@ -416,6 +441,7 @@ export function PlatformTenantDetailPage() {
                               run(`Force soft-lock (${business.business_code})`, () =>
                                 client.platform.tenantBillingAction(tenantId!, {
                                   action: 'force_soft_lock',
+                                  business_id: business.id,
                                   product_code: productCode,
                                   reason,
                                 }),
@@ -426,13 +452,10 @@ export function PlatformTenantDetailPage() {
                           </button>
                         )}
                       </div>
-
                       <div className="admin-action-bar" style={{ marginTop: 0, alignItems: 'center' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>Extra staff</span>
+                        <label className="admin-field" style={{ minWidth: 120 }}>
+                          <span className="admin-field__label">Extra staff</span>
                           <input
-                            className="admin-inline-input"
-                            style={{ width: 72 }}
                             type="number"
                             min={0}
                             value={addonState.extra_staff}
@@ -444,11 +467,9 @@ export function PlatformTenantDetailPage() {
                             }
                           />
                         </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>Extra branches</span>
+                        <label className="admin-field" style={{ minWidth: 120 }}>
+                          <span className="admin-field__label">Extra branches</span>
                           <input
-                            className="admin-inline-input"
-                            style={{ width: 72 }}
                             type="number"
                             min={0}
                             value={addonState.extra_offices}
@@ -460,7 +481,7 @@ export function PlatformTenantDetailPage() {
                             }
                           />
                         </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <label className="admin-feature-option">
                           <input
                             type="checkbox"
                             checked={addonState.pets_pack_enabled}
@@ -471,7 +492,7 @@ export function PlatformTenantDetailPage() {
                               }))
                             }
                           />
-                          <span style={{ fontSize: 12 }}>Pets pack</span>
+                          Pets pack
                         </label>
                         <button
                           type="button"
@@ -481,6 +502,7 @@ export function PlatformTenantDetailPage() {
                             run(`Update addons (${business.business_code})`, () =>
                               client.platform.tenantBillingAction(tenantId!, {
                                 action: 'update_addons',
+                                business_id: business.id,
                                 product_code: productCode,
                                 extra_staff: Number(addonState.extra_staff) || 0,
                                 extra_offices: Number(addonState.extra_offices) || 0,
@@ -496,135 +518,273 @@ export function PlatformTenantDetailPage() {
                     </div>
                   ) : null}
                 </div>
-              </div>
-            );
-          })}
-          {(detailQuery.data?.businesses ?? []).length === 0 ? (
-            <AdminEmpty>No businesses on this tenant.</AdminEmpty>
-          ) : null}
-        </div>
-      </AdminSection>
+              );
+            })}
+            {(tenant?.businesses ?? []).length === 0 ? <AdminEmpty>No businesses on this tenant.</AdminEmpty> : null}
+          </div>
+        </AdminSection>
+      ) : null}
 
-      <div className="admin-split">
-        <AdminSection title="Users">
-          <div className="admin-list">
-            {(usersQuery.data ?? []).map((user) => (
-              <AdminListRow
-                key={user.id}
-                title={user.email}
-                meta={`${(user.roles ?? []).join(', ') || user.relation || 'user'} · ${
-                  user.is_active ? 'active' : 'disabled'
-                }`}
-                trailing={
-                  <div className="admin-action-bar" style={{ marginTop: 0 }}>
-                    <button
-                      type="button"
-                      className="admin-btn admin-btn--ghost"
+      {tab === 'users' ? (
+        <div className="admin-split">
+          <AdminSection title="People">
+            {(usersQuery.data ?? []).length === 0 ? (
+              <AdminEmpty>No users found.</AdminEmpty>
+            ) : (
+              <AdminTable columns={['User', 'Role', 'Status', '']}>
+                {(usersQuery.data ?? []).map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <strong>{user.full_name || user.email}</strong>
+                      {user.full_name ? <div className="admin-table__muted">{user.email}</div> : null}
+                    </td>
+                    <td className="admin-table__muted">
+                      {(user.roles ?? []).join(', ') || user.relation || 'user'}
+                    </td>
+                    <td>
+                      <AdminStatus status={user.is_active ? 'active' : 'disabled'} />
+                    </td>
+                    <td className="admin-table__actions">
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn--ghost"
+                        disabled={Boolean(busy)}
+                        onClick={() =>
+                          run(user.is_active ? 'Disable user' : 'Enable user', () =>
+                            client.platform.userAction(user.id, user.is_active ? 'disable' : 'enable', {
+                              reason,
+                            }),
+                          )
+                        }
+                      >
+                        {user.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn--secondary"
+                        disabled={Boolean(busy)}
+                        onClick={() =>
+                          run('Reset password', () =>
+                            client.platform.userAction(user.id, 'reset_password', { reason }),
+                          )
+                        }
+                      >
+                        Reset
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </AdminTable>
+            )}
+          </AdminSection>
+          <div style={{ display: 'grid', gap: 16 }}>
+            <AdminSection title="Feature flags" description="Toggle product modules for this tenant.">
+              <div className="admin-list">
+                {(flagsQuery.data ?? []).map((flag) => (
+                  <label key={flag.key} className="admin-list-row admin-list-row--static">
+                    <span className="admin-list-row__title">{flag.key}</span>
+                    <input
+                      type="checkbox"
+                      checked={flag.enabled}
                       disabled={Boolean(busy)}
-                      onClick={() =>
-                        run(user.is_active ? 'Disable user' : 'Enable user', () =>
-                          client.platform.userAction(user.id, user.is_active ? 'disable' : 'enable', {
+                      onChange={(e) =>
+                        run(`Flag ${flag.key}`, () =>
+                          client.platform.updateTenantFlags(tenantId!, {
+                            flags: { [flag.key]: e.target.checked },
                             reason,
                           }),
                         )
                       }
-                    >
-                      {user.is_active ? 'Disable' : 'Enable'}
-                    </button>
-                    <button
-                      type="button"
-                      className="admin-btn admin-btn--secondary"
-                      disabled={Boolean(busy)}
-                      onClick={() =>
-                        run('Reset password', () =>
-                          client.platform.userAction(user.id, 'reset_password', { reason }),
-                        )
-                      }
-                    >
-                      Reset
-                    </button>
-                  </div>
+                    />
+                  </label>
+                ))}
+                {(flagsQuery.data ?? []).length === 0 ? <AdminEmpty>No flags configured.</AdminEmpty> : null}
+              </div>
+            </AdminSection>
+            <AdminSection title="Credits" description={`Balance ${formatInrFromPaise(creditsQuery.data ?? 0)}`}>
+              <button
+                type="button"
+                className="admin-btn admin-btn--primary"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  run('Grant ₹500 credit', () =>
+                    client.platform.grantCredit(tenantId!, { amount_paise: 50000, reason }),
+                  )
                 }
-              />
-            ))}
-            {(usersQuery.data ?? []).length === 0 ? <AdminEmpty>No users found.</AdminEmpty> : null}
+              >
+                Grant ₹500 credit
+              </button>
+            </AdminSection>
           </div>
-        </AdminSection>
+        </div>
+      ) : null}
 
-        <AdminSection
-          title="Feature flags"
-          description="Toggle product modules for this tenant."
-        >
-          <div className="admin-list">
-            {(flagsQuery.data ?? []).map((flag) => (
-              <label key={flag.key} className="admin-list-row admin-list-row--static">
-                <span className="admin-list-row__title">{flag.key}</span>
-                <input
-                  type="checkbox"
-                  checked={flag.enabled}
-                  disabled={Boolean(busy)}
-                  onChange={(e) =>
-                    run(`Flag ${flag.key}`, () =>
-                      client.platform.updateTenantFlags(tenantId!, {
-                        flags: { [flag.key]: e.target.checked },
-                        reason,
-                      }),
-                    )
-                  }
-                />
-              </label>
-            ))}
-          </div>
+      {tab === 'payments' ? (
+        <>
+          <AdminSection
+            title="Awaiting confirmation"
+            description="When a tenant pays by UPI and submits UTR / screenshot, confirm it here to activate the plan."
+          >
+            {paymentsQuery.isLoading ? (
+              <AdminEmpty>Loading claims…</AdminEmpty>
+            ) : pendingClaims.length === 0 ? (
+              <AdminEmpty>No UPI claims waiting. Confirmed payments appear in history below.</AdminEmpty>
+            ) : (
+              <div className="admin-claim-grid">
+                {pendingClaims.map((payment) => (
+                  <article key={payment.id} className="admin-claim-card">
+                    <div className="admin-claim-card__meta">
+                      <strong>
+                        {formatInrFromPaise(payment.amount_paise)} · {productLabel(payment.product_code)}{' '}
+                        {payment.plan_code}
+                      </strong>
+                      <p>{payment.business_name || 'Business'} · UTR {payment.upi_utr || 'not provided'}</p>
+                      <p>Submitted {formatTimestamp(payment.claimed_at || payment.created_at)}</p>
+                    </div>
+                    <div className="admin-claim-card__proof">
+                      {payment.payment_proof_url ? (
+                        <a href={payment.payment_proof_url} target="_blank" rel="noreferrer">
+                          <img src={payment.payment_proof_url} alt="Payment proof" />
+                        </a>
+                      ) : (
+                        <p>No screenshot</p>
+                      )}
+                      <div className="admin-action-bar" style={{ marginTop: 0 }}>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--danger"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            run('Reject UPI claim', () =>
+                              client.platform.confirmTenantUpiClaim(tenantId!, payment.id, {
+                                action: 'reject',
+                                reason,
+                              }),
+                            )
+                          }
+                        >
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--primary"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            run('Confirm UPI payment', () =>
+                              client.platform.confirmTenantUpiClaim(tenantId!, payment.id, {
+                                action: 'confirm',
+                                reason,
+                              }),
+                            )
+                          }
+                        >
+                          Confirm paid
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </AdminSection>
+
+          <AdminSection title="Payment history">
+            {historyPayments.length === 0 ? (
+              <AdminEmpty>No confirmed payments yet.</AdminEmpty>
+            ) : (
+              <AdminTable columns={['Amount', 'Plan', 'Status', 'When', '']}>
+                {historyPayments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td>
+                      <strong>{formatInrFromPaise(payment.amount_paise)}</strong>
+                      {payment.invoice_number ? (
+                        <div className="admin-table__muted">{payment.invoice_number}</div>
+                      ) : null}
+                    </td>
+                    <td className="admin-table__muted">
+                      {productLabel(payment.product_code)} · {payment.plan_code || '—'}
+                    </td>
+                    <td>
+                      <AdminStatus status={payment.payment_status || payment.status} />
+                    </td>
+                    <td className="admin-table__muted">
+                      {formatTimestamp(payment.paid_at || payment.created_at)}
+                    </td>
+                    <td className="admin-table__actions">
+                      {payment.status === 'paid' ? (
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--danger"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            run('Refund', () => client.platform.refundPayment(tenantId!, payment.id, { reason }))
+                          }
+                        >
+                          Refund
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </AdminTable>
+            )}
+          </AdminSection>
+        </>
+      ) : null}
+
+      <AdminDrawer
+        open={purgeOpen}
+        title="Confirm GDPR purge"
+        description="This archives and deactivates the workspace. Type the tenant slug to continue."
+        onClose={() => {
+          setPurgeOpen(false);
+          setPurgeSlug('');
+        }}
+      >
+        <div className="admin-form-grid" style={{ maxWidth: 'none' }}>
+          <p className="admin-message" style={{ margin: 0 }}>
+            Type <code>{tenant?.slug}</code> to confirm.
+          </p>
+          <AdminField label="Tenant slug">
+            <input
+              value={purgeSlug}
+              placeholder="Type tenant slug to confirm"
+              onChange={(e) => setPurgeSlug(e.target.value)}
+              autoFocus
+            />
+          </AdminField>
           <div className="admin-action-bar">
             <button
               type="button"
-              className="admin-btn admin-btn--primary"
-              disabled={Boolean(busy)}
+              className="admin-btn admin-btn--ghost"
+              onClick={() => {
+                setPurgeOpen(false);
+                setPurgeSlug('');
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="admin-btn admin-btn--danger"
+              disabled={Boolean(busy) || purgeSlug.trim() !== (tenant?.slug || '')}
               onClick={() =>
-                run('Grant ₹500 credit', () =>
-                  client.platform.grantCredit(tenantId!, { amount_paise: 50000, reason }),
-                )
+                run('Purge', async () => {
+                  await client.platform.purgeTenant(tenantId!, {
+                    confirm_slug: purgeSlug.trim(),
+                    reason,
+                  });
+                  setPurgeOpen(false);
+                  setPurgeSlug('');
+                })
               }
             >
-              Grant ₹500 credit
+              Confirm purge
             </button>
           </div>
-        </AdminSection>
-      </div>
-
-      <AdminSection title="Payments">
-        <div className="admin-list">
-          {(paymentsQuery.data ?? []).map((payment) => (
-            <AdminListRow
-              key={payment.id}
-              title={`${formatInrFromPaise(payment.amount_paise)} · ${payment.status}`}
-              meta={`${payment.plan_code || '—'} · ${payment.order_id || payment.id}${
-                payment.invoice_number ? ` · ${payment.invoice_number}` : ''
-              }`}
-              trailing={
-                payment.status === 'paid' ? (
-                  <button
-                    type="button"
-                    className="admin-btn admin-btn--danger"
-                    disabled={Boolean(busy)}
-                    onClick={() =>
-                      run('Refund', () =>
-                        client.platform.refundPayment(tenantId!, payment.id, { reason }),
-                      )
-                    }
-                  >
-                    Refund
-                  </button>
-                ) : (
-                  <AdminStatus status={payment.status} />
-                )
-              }
-            />
-          ))}
-          {(paymentsQuery.data ?? []).length === 0 ? <AdminEmpty>No payments yet.</AdminEmpty> : null}
         </div>
-      </AdminSection>
-    </div>
+      </AdminDrawer>
+    </AdminPage>
   );
 }
 

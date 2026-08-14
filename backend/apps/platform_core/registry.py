@@ -118,26 +118,6 @@ APPLICATION_DOMAINS: dict[str, tuple[DomainEntry, ...]] = {
             consumes=("customer", "business", "media"),
         ),
     ),
-    "invoiceie": (
-        DomainEntry(
-            id="invoicing",
-            label="Invoicing (legacy → ShopIE Billing)",
-            layer="application",
-            django_apps=(),
-            owns=("invoice", "payment", "tax", "refund"),
-            consumes=("customer", "staff", "service_catalog", "business"),
-        ),
-    ),
-    "crmie": (
-        DomainEntry(
-            id="crm",
-            label="CRM",
-            layer="application",
-            django_apps=(),
-            owns=("campaign", "loyalty", "automation"),
-            consumes=("customer", "staff", "business"),
-        ),
-    ),
 }
 
 FUTURE_PLATFORM_CORE: tuple[str, ...] = (

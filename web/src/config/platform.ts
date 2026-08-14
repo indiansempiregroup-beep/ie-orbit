@@ -104,15 +104,6 @@ export const APPLICATION_DOMAINS: Record<string, PlatformDomain[]> = {
       consumes: ['customer', 'business', 'media'],
     },
   ],
-  crmie: [
-    {
-      id: 'crm',
-      label: 'CRM',
-      layer: 'application',
-      owns: ['campaigns', 'membership', 'loyalty', 'automation'],
-      consumes: ['customer', 'staff', 'business'],
-    },
-  ],
   hrie: [
     {
       id: 'hr',
@@ -124,7 +115,7 @@ export const APPLICATION_DOMAINS: Record<string, PlatformDomain[]> = {
   ],
 };
 
-export const PRODUCT_CODES = ['appointie', 'shopie', 'crmie', 'hrie'] as const;
+export const PRODUCT_CODES = ['appointie', 'shopie', 'hrie'] as const;
 export type ProductCode = (typeof PRODUCT_CODES)[number];
 
 export function getApplicationDomains(productCode: string): PlatformDomain[] {

@@ -22,6 +22,7 @@ import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
 import { getApiErrorMessage } from '../../utils/format';
+import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
@@ -38,8 +39,16 @@ export function LoginScreen({ navigation }: Props) {
     biometricLabel,
     refreshBiometricState,
   } = useAuth();
-  const { branding } = useBootstrap();
+  const { branding, bootstrap } = useBootstrap();
   const primary = branding?.primaryColor ?? colors.primary;
+  const secondary = branding?.secondaryColor ?? '#2563EB';
+  const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
+  const appName = branding?.appName ?? 'us';
+  const heroQuote = showBooking && showShop
+    ? `Book, shop, and stay connected with ${appName}.`
+    : showShop
+      ? `Shop ${appName} and keep your orders in one place.`
+      : `Book with ${appName} and manage your visits in one place.`;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,12 +127,10 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={[primary, '#2563EB', colors.accent]} style={styles.hero}>
+      <LinearGradient colors={[primary, secondary]} style={styles.hero}>
         <View style={styles.heroContent}>
           <BrandMark />
-          <Text style={styles.heroQuote}>
-            Book appointments effortlessly and stay connected with your favorite salon.
-          </Text>
+          <Text style={styles.heroQuote}>{heroQuote}</Text>
         </View>
       </LinearGradient>
 

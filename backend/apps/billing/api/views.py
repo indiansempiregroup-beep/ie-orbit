@@ -31,6 +31,7 @@ from apps.billing.constants import BULK_REPROCESS_COOLDOWN_SECONDS
 from apps.billing.models import BillingWebhookEvent, WebhookEventStatus
 from apps.billing.services.checkout import CheckoutService
 from apps.billing.services.ops_digest import build_ops_digest
+from apps.billing.services.platform_revenue import build_platform_revenue_insights
 from apps.billing.services.reconciliation import BillingReconciliationService
 from apps.billing.services.webhooks import WebhookService
 from apps.authentication.permissions import HasPlatformPermission
@@ -38,6 +39,17 @@ from apps.businesses.api.permissions import BusinessAccessPermission
 from apps.businesses.models import Business, BusinessProductSubscription
 from apps.common.api.responses import success_response
 from apps.tenancy.models import Tenant
+
+
+def _ensure_platform_admin(user) -> None:
+    is_platform_admin = bool(
+        getattr(user, "is_superuser", False)
+        or user.user_roles.filter(
+            role__code__in={"platform_admin", "super_admin"}, role__is_active=True
+        ).exists()
+    )
+    if not is_platform_admin:
+        raise PermissionDenied("Platform admin role is required.")
 
 
 class BillingStatusView(APIView):
@@ -58,6 +70,18 @@ class BillingPlanCatalogView(APIView):
     def get(self, request: Request) -> Response:
         return success_response(
             CheckoutService().list_plan_catalog(),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingPublicPlanCatalogView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @extend_schema(tags=["Billing"], description="Public plan catalog for marketing pages.")
+    def get(self, request: Request) -> Response:
+        return success_response(
+            CheckoutService().list_public_plan_catalog(product_code=request.query_params.get("product_code")),
             request_id=getattr(request, "request_id", None),
         )
 
@@ -848,6 +872,29 @@ class BillingPlatformSubscriptionsView(APIView):
         )
 
 
+class BillingPlatformRevenueView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Billing"],
+        description="Platform-level collected revenue and MRR insights (platform admins only).",
+    )
+    def get(self, request: Request) -> Response:
+        user = request.user
+        is_platform_admin = bool(
+            getattr(user, "is_superuser", False)
+            or user.user_roles.filter(
+                role__code__in={"platform_admin", "super_admin"}, role__is_active=True
+            ).exists()
+        )
+        if not is_platform_admin:
+            raise PermissionDenied("Platform admin role is required.")
+        return success_response(
+            build_platform_revenue_insights(),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
 class BillingPlatformMonitoringView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -903,6 +950,90 @@ class BillingPlatformMonitoringView(APIView):
             },
             request_id=getattr(request, "request_id", None),
         )
+
+
+class BillingPlatformWebhookEventsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Billing"],
+        description="Platform-wide webhook events for ops investigation (platform admins only).",
+    )
+    def get(self, request: Request) -> Response:
+        _ensure_platform_admin(request.user)
+        window_hours = max(1, min(int(request.query_params.get("window_hours") or 24), 24 * 30))
+        since = timezone.now() - timedelta(hours=window_hours)
+        status_filter = (request.query_params.get("status") or "").strip().lower()
+        queryset = BillingWebhookEvent.objects.select_related("tenant").filter(created_at__gte=since)
+        if status_filter in {choice.value for choice in WebhookEventStatus}:
+            queryset = queryset.filter(status=status_filter)
+        else:
+            queryset = queryset.filter(
+                status__in=[WebhookEventStatus.FAILED, WebhookEventStatus.DEAD_LETTER]
+            )
+        limit = max(1, min(int(request.query_params.get("limit") or 100), 200))
+        events = queryset.order_by("-created_at")[:limit]
+        return success_response(
+            {
+                "window_hours": window_hours,
+                "count": len(events),
+                "events": BillingWebhookEventSerializer(events, many=True).data,
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingPlatformWebhookReprocessView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Billing"], description="Reprocess a webhook event across tenants.")
+    def post(self, request: Request, event_id: str) -> Response:
+        _ensure_platform_admin(request.user)
+        webhook_event = get_object_or_404(BillingWebhookEvent, id=event_id)
+        result = WebhookService().reprocess_webhook_event(webhook_event=webhook_event)
+        return success_response(result, request_id=getattr(request, "request_id", None))
+
+
+class BillingPlatformWebhookBulkReprocessView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Billing"], request=BillingWebhookBulkReprocessSerializer)
+    def post(self, request: Request) -> Response:
+        _ensure_platform_admin(request.user)
+        serializer = BillingWebhookBulkReprocessSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not serializer.validated_data["confirm"]:
+            raise ValidationError({"confirm": "Explicit confirmation is required for bulk reprocess."})
+        scope = serializer.validated_data["scope"]
+        limit = serializer.validated_data["limit"]
+        cache_key = f"billing:bulk-reprocess:platform:{request.user.id}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(
+                {
+                    "error": {
+                        "code": "BULK_REPROCESS_COOLDOWN",
+                        "message": "Bulk reprocess is cooling down. Try again shortly.",
+                        "details": {"retry_after_seconds": int(cached)},
+                    }
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        target_status = (
+            WebhookEventStatus.FAILED if scope == "failed" else WebhookEventStatus.DEAD_LETTER
+        )
+        queryset = BillingWebhookEvent.objects.filter(status=target_status).order_by("created_at")
+        result = WebhookService().reprocess_webhook_events_bulk(queryset=queryset, limit=limit)
+        cache.set(cache_key, BULK_REPROCESS_COOLDOWN_SECONDS, timeout=BULK_REPROCESS_COOLDOWN_SECONDS)
+        record_audit(
+            tenant=None,
+            action="billing.webhook.bulk_reprocess",
+            resource_type="billing_webhook_event",
+            resource_id="platform",
+            actor_id=str(request.user.id),
+            metadata={"scope": scope, "limit": limit, **result},
+        )
+        return success_response(result, request_id=getattr(request, "request_id", None))
 
 
 class BillingPlatformAuditFeedView(APIView):

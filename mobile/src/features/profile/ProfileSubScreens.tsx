@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import type { MobileReview } from '@ie-platform/sdk';
+import type { HelpArticleSummary, MobileReview } from '@ie-platform/sdk';
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -11,6 +12,7 @@ import { Input } from '../../components/ui/Input';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { RootStackParamList } from '../../navigation/types';
 import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 
@@ -212,18 +214,22 @@ export function PrivacySecurityScreen() {
 
 export function PaymentMethodsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { branding } = useBootstrap();
+  const { branding, bootstrap } = useBootstrap();
+  const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
+  const appName = branding?.appName ?? 'this business';
+  const settlement = showBooking && showShop
+    ? 'When you book or order in the app, you can pay at the venue unless a digital payment is offered at checkout.'
+    : showShop
+      ? 'Pay at pickup or on delivery unless a digital payment is offered at checkout.'
+      : 'When you book in the app, your appointment is confirmed and you settle payment when you visit.';
   return (
     <ProfileMenuScreen title="Payment Methods" onBack={() => navigation.goBack()}>
       <View style={styles.paymentCard}>
         <Text style={styles.comingTitle}>Pay at venue</Text>
         <Text style={styles.body}>
-          Your default payment method for {branding?.appName ?? 'this salon'} is pay at the venue. Online cards and UPI
-          checkout will arrive in a later release.
+          Your default payment method for {appName} is pay at the venue. Online cards and UPI checkout will arrive in a later release.
         </Text>
-        <Text style={styles.body}>
-          When you book in the app, your appointment is confirmed and you settle payment when you visit.
-        </Text>
+        <Text style={styles.body}>{settlement}</Text>
       </View>
     </ProfileMenuScreen>
   );
@@ -289,16 +295,14 @@ export function ReviewsScreen() {
 export function HelpSupportScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { user } = useAuth();
   const { bootstrap, branding } = useBootstrap();
+  const { tenantId } = useBusinessContext();
   const business = bootstrap?.business;
-  const [articles, setArticles] = useState<Array<{ id: string; slug: string; title: string; category?: string }>>([]);
+  const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
+  const [articles, setArticles] = useState<HelpArticleSummary[]>([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [status, setStatus] = useState<string | null>(null);
-  const isPlatformAdmin = (user?.roles ?? []).some((role) =>
-    ['platform_admin', 'super_admin'].includes(role),
-  );
 
   useEffect(() => {
     void mobileClient.help
@@ -313,38 +317,48 @@ export function HelpSupportScreen() {
       return;
     }
     try {
-      await mobileClient.support.createTicket({ subject, body });
+      await mobileClient.support.createTicket({
+        subject,
+        body,
+        tenant_id: tenantId || undefined,
+      });
       setSubject('');
       setBody('');
-      setStatus('Ticket submitted. Our team will follow up by email.');
+      setStatus(t('help.ticketSubmitted'));
     } catch (err) {
       Alert.alert('Could not submit', getApiErrorMessage(err, 'Please try again.'));
     }
   }
 
+  const intro = showBooking && showShop
+    ? `Need help with a booking or order? Contact ${branding?.appName ?? 'us'} directly.`
+    : showShop
+      ? `Need help with an order? Contact ${branding?.appName ?? 'us'} directly.`
+      : `Need help with your booking? Contact ${branding?.appName ?? 'us'} directly.`;
+
   return (
     <ProfileMenuScreen title={t('help.title')} onBack={() => navigation.goBack()}>
-      <Text style={styles.body}>Need help with your booking? Contact {branding?.appName ?? 'us'} directly.</Text>
+      <Text style={styles.body}>{intro}</Text>
       {business?.phone ? <Text style={styles.contact}>Phone: {business.phone}</Text> : null}
       {business?.email ? <Text style={styles.contact}>Email: {business.email}</Text> : null}
       {business?.formatted_address ? <Text style={styles.contact}>Address: {business.formatted_address}</Text> : null}
 
-      {isPlatformAdmin ? (
-        <Button
-          label="Open platform admin tools"
-          onPress={() => navigation.navigate('PlatformAdmin')}
-        />
-      ) : null}
-
       <Text style={styles.faqTitle}>{t('help.articles')}</Text>
       {articles.length === 0 ? (
-        <Text style={styles.body}>No published articles yet.</Text>
+        <Text style={styles.body}>{t('help.noArticles')}</Text>
       ) : (
         articles.map((article) => (
-          <Text key={article.id} style={styles.body}>
-            • {article.title}
-            {article.category ? ` (${article.category})` : ''}
-          </Text>
+          <Pressable
+            key={article.id}
+            style={styles.articleRow}
+            onPress={() => navigation.navigate('HelpArticle', { slug: article.slug })}
+          >
+            <View style={styles.articleCopy}>
+              <Text style={styles.articleTitle}>{article.title}</Text>
+              {article.category ? <Text style={styles.meta}>{article.category}</Text> : null}
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+          </Pressable>
         ))
       )}
 
@@ -354,41 +368,55 @@ export function HelpSupportScreen() {
       <Button label={t('help.submitTicket')} onPress={() => void submitTicket()} />
       {status ? <Text style={styles.body}>{status}</Text> : null}
 
-      <Text style={styles.faqTitle}>FAQs</Text>
-      <Text style={styles.body}>• How do I reschedule? Open your appointment from Home or My Appointments.</Text>
-      <Text style={styles.body}>• Can I cancel? Yes, up to 24 hours before your visit where policy allows.</Text>
+      <Text style={styles.faqTitle}>{t('help.faqs')}</Text>
+      {showBooking ? (
+        <>
+          <Text style={styles.body}>• How do I reschedule? Open your appointment from Home or My Appointments.</Text>
+          <Text style={styles.body}>• Can I cancel? Yes, up to 24 hours before your visit where policy allows.</Text>
+        </>
+      ) : null}
+      {showShop ? (
+        <Text style={styles.body}>• Where is my order? Open Profile → My Orders to track status and returns.</Text>
+      ) : null}
       <Text style={styles.body}>• How do I update my phone number? Go to Profile → Personal Information.</Text>
     </ProfileMenuScreen>
   );
 }
 
-export function PlatformAdminScreen() {
+export function HelpArticleScreen({ route }: NativeStackScreenProps<RootStackParamList, 'HelpArticle'>) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [tenants, setTenants] = useState<Array<{ id: string; display_name: string; status: string }>>([]);
+  const [article, setArticle] = useState<HelpArticleSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void mobileClient.platform
-      .tenants()
-      .then((res) => setTenants(res.data.tenants ?? []))
-      .catch((err) => setError(getApiErrorMessage(err, 'Unable to load platform tenants')))
+    void mobileClient.help
+      .articles({ slug: route.params.slug })
+      .then((res) => {
+        const data = res.data;
+        if (!data.title) {
+          setArticle(null);
+          return;
+        }
+        setArticle({
+          id: data.id ?? route.params.slug,
+          slug: data.slug ?? route.params.slug,
+          title: data.title,
+          category: data.category,
+          body: data.body,
+        });
+      })
+      .catch(() => setArticle(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [route.params.slug]);
 
   return (
-    <ProfileMenuScreen title="Platform admin" onBack={() => navigation.goBack()}>
-      <Text style={styles.body}>
-        Platform admin tools in the customer app. Use web /admin or ops-mobile for full management.
-      </Text>
+    <ProfileMenuScreen title={article?.title || 'Article'} onBack={() => navigation.goBack()}>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.body}>{error}</Text> : null}
-      {tenants.map((tenant) => (
-        <View key={tenant.id} style={styles.prefRow}>
-          <Text style={styles.biometricTitle}>{tenant.display_name}</Text>
-          <Text style={styles.biometricHint}>{tenant.status}</Text>
-        </View>
-      ))}
+      {!loading && !article?.title ? (
+        <Text style={styles.body}>This article is no longer available.</Text>
+      ) : null}
+      {article?.category ? <Text style={styles.meta}>{article.category}</Text> : null}
+      {article?.body ? <Text style={styles.articleBody}>{article.body}</Text> : null}
     </ProfileMenuScreen>
   );
 }
@@ -442,4 +470,18 @@ const styles = StyleSheet.create({
   rating: { ...typography.label, fontWeight: '700', letterSpacing: 1 },
   meta: { ...typography.caption, color: colors.mutedForeground },
   faqTitle: { ...typography.title, color: colors.foreground, marginTop: spacing.md },
+  articleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  articleCopy: { flex: 1, gap: 2 },
+  articleTitle: { ...typography.label, color: colors.foreground, fontWeight: '600' },
+  articleBody: { ...typography.body, color: colors.foreground, lineHeight: 24 },
 });

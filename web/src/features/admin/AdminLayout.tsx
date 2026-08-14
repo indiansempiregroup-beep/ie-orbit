@@ -1,35 +1,71 @@
-import { useEffect } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import {
+  Activity,
+  Banknote,
+  Building2,
+  CreditCard,
+  HelpCircle,
+  Inbox,
+  LayoutDashboard,
+  LifeBuoy,
+  Megaphone,
+  Moon,
+  Package,
+  Palette,
+  ScrollText,
+  Sun,
+  TicketPercent,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { hasTenantOpsRole } from '../../utils/roles';
 
-const navGroups = [
+const ADMIN_THEME_KEY = 'ie:admin:theme';
+
+function readAdminTheme(): 'light' | 'dark' {
+  try {
+    const stored = localStorage.getItem(ADMIN_THEME_KEY);
+    if (stored === 'dark' || stored === 'light') return stored;
+  } catch {
+    /* ignore */
+  }
+  return 'light';
+}
+
+const navGroups: Array<{
+  label: string;
+  items: Array<{ to: string; label: string; icon: ReactNode; end?: boolean }>;
+}> = [
   {
     label: 'Overview',
     items: [
-      { to: '/admin', label: 'Dashboard', icon: '◆', end: true },
-      { to: '/admin/tenants', label: 'Tenants', icon: '▦' },
-      { to: '/admin/subscriptions', label: 'Subscriptions', icon: '◉' },
-      { to: '/admin/packages', label: 'Packages', icon: '◫' },
-      { to: '/admin/coupons', label: 'Coupons', icon: '%' },
+      { to: '/admin', label: 'Dashboard', icon: <LayoutDashboard size={16} />, end: true },
+      { to: '/admin/revenue', label: 'Revenue', icon: <Banknote size={16} /> },
+      { to: '/admin/claims', label: 'Claims', icon: <Inbox size={16} /> },
+      { to: '/admin/tenants', label: 'Tenants', icon: <Building2 size={16} /> },
+      { to: '/admin/subscriptions', label: 'Subscriptions', icon: <CreditCard size={16} /> },
+      { to: '/admin/packages', label: 'Packages', icon: <Package size={16} /> },
+      { to: '/admin/coupons', label: 'Coupons', icon: <TicketPercent size={16} /> },
     ],
   },
   {
     label: 'Support',
     items: [
-      { to: '/admin/tickets', label: 'Tickets', icon: '☎' },
-      { to: '/admin/announcements', label: 'Announcements', icon: '✦' },
-      { to: '/admin/help', label: 'Help CMS', icon: '?' },
+      { to: '/admin/tickets', label: 'Tickets', icon: <LifeBuoy size={16} /> },
+      { to: '/admin/users', label: 'Users', icon: <Users size={16} /> },
+      { to: '/admin/announcements', label: 'Announcements', icon: <Megaphone size={16} /> },
+      { to: '/admin/help', label: 'Help CMS', icon: <HelpCircle size={16} /> },
     ],
   },
   {
     label: 'Platform',
     items: [
-      { to: '/admin/branding', label: 'Branding', icon: '◈' },
-      { to: '/admin/monitoring', label: 'Monitoring', icon: '◎' },
-      { to: '/admin/audit', label: 'Audit', icon: '☰' },
+      { to: '/admin/branding', label: 'Branding', icon: <Palette size={16} /> },
+      { to: '/admin/monitoring', label: 'Monitoring', icon: <Activity size={16} /> },
+      { to: '/admin/audit', label: 'Audit', icon: <ScrollText size={16} /> },
     ],
   },
 ];
@@ -40,10 +76,23 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const { enterWorkspaceMode, exitWorkspaceMode, loading } = useWorkspace();
   const canOpenWorkspace = hasTenantOpsRole(auth.user);
+  const [adminTheme, setAdminTheme] = useState<'light' | 'dark'>(readAdminTheme);
 
   useEffect(() => {
     exitWorkspaceMode();
   }, [exitWorkspaceMode]);
+
+  function toggleAdminTheme() {
+    setAdminTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem(ADMIN_THEME_KEY, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   async function handleOpenWorkspace() {
     await enterWorkspaceMode();
@@ -56,7 +105,7 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="admin-shell">
+    <div className={`admin-shell${adminTheme === 'dark' ? ' admin-shell--dark' : ''}`}>
       <aside className="admin-sidebar">
         <div className="admin-brand">
           <div className="admin-brand__mark" aria-hidden>
@@ -102,6 +151,15 @@ export function AdminLayout() {
                 {loading ? 'Opening…' : 'Open workspace'}
               </button>
             ) : null}
+            <button
+              type="button"
+              className="admin-btn admin-btn--ghost"
+              onClick={toggleAdminTheme}
+              aria-pressed={adminTheme === 'dark'}
+            >
+              {adminTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {adminTheme === 'dark' ? 'Light theme' : 'Dark theme'}
+            </button>
             <Link className="admin-btn admin-btn--ghost" to="/admin/profile">
               Profile
             </Link>

@@ -1289,10 +1289,11 @@ class BooksService:
         pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
         payment_method = str(pos.get("payment_method") or "").strip().lower()
         payment_status = str(pos.get("payment_status") or "").lower()
-        if payment_status in {"paid", "settled"}:
-            return _q(order.total)
+        # Prefer explicit amount_paid (kept in sync after returns / settlements).
         if pos.get("amount_paid") not in (None, ""):
             return _q(pos.get("amount_paid") or "0")
+        if payment_status in {"paid", "settled"}:
+            return _q(order.total)
         if payment_method == "borrow":
             return Decimal("0.00")
         if (

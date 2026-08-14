@@ -21,11 +21,6 @@ export const PRODUCT_CATALOG: ProductDefinition[] = [
     name: 'ShopIE',
     description: 'Catalog, POS, inventory, and billing for retail businesses.',
   },
-  {
-    id: 'crmie',
-    name: 'CRMIE',
-    description: 'Customer relationship management for multi-location operations.',
-  },
 ];
 
 export const PETS_PACK_PRICE_INR = 500;
@@ -38,7 +33,7 @@ export function getProductName(productId: string | null | undefined): string {
   return getProductById(productId)?.name ?? productId?.replace(/-/g, ' ') ?? 'AppointIE';
 }
 
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['trialing', 'active']);
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['trialing', 'active', 'soft_locked']);
 
 export function getSubscribedProducts(
   subscriptions?: ProductSubscriptionLike[] | null,

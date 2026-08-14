@@ -10,20 +10,27 @@ import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
-const perks = [
-  'Book appointments in seconds',
-  'Manage your visit history',
-  'Get reminders before each visit',
-];
-
 export function RegisterScreen({ navigation }: Props) {
   const { register } = useAuth();
-  const { branding } = useBootstrap();
+  const { branding, bootstrap } = useBootstrap();
   const primary = branding?.primaryColor ?? colors.primary;
+  const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
+  const appName = branding?.appName ?? 'us';
+  const perks = showBooking && showShop
+    ? ['Book appointments in seconds', 'Shop products and track orders', 'Get reminders before each visit']
+    : showShop
+      ? ['Browse products and order in seconds', 'Track deliveries and returns', 'Save addresses for faster checkout']
+      : ['Book appointments in seconds', 'Manage your visit history', 'Get reminders before each visit'];
+  const subtitle = showBooking && showShop
+    ? `Join ${appName} to book, shop, and stay connected.`
+    : showShop
+      ? `Join ${appName} to shop and track your orders.`
+      : `Join ${appName} to book and manage appointments.`;
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -66,7 +73,7 @@ export function RegisterScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <BrandMark />
         <Text style={styles.title}>Create your account</Text>
-        <Text style={styles.subtitle}>Join {branding?.appName ?? 'us'} to book and manage appointments.</Text>
+        <Text style={styles.subtitle}>{subtitle}</Text>
 
         <View style={styles.form}>
           <View style={styles.nameRow}>

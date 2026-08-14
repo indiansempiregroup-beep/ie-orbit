@@ -13,10 +13,12 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Avatar } from '../../components/ui/Avatar';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { RootStackParamList } from '../../navigation/types';
+import type { ShopOrder } from '@ie-platform/sdk';
 
 const menuItems = [
-  { icon: 'calendar', labelKey: 'bookings.myAppointments', route: 'BookingHistory' as const, feature: null },
+  { icon: 'calendar', labelKey: 'bookings.myAppointments', route: 'BookingHistory' as const, feature: 'mobile_booking' as const },
   { icon: 'shopping-bag', labelKey: 'shop.myOrders', route: 'ShopOrderHistory' as const, feature: 'mobile_shop' as const },
   { icon: 'rotate-ccw', labelKey: 'shop.returns', route: 'MyReturns' as const, feature: 'mobile_shop' as const },
   { icon: 'heart', labelKey: 'shop.myPets', route: 'MyPets' as const, feature: 'mobile_pets' as const },
@@ -25,7 +27,7 @@ const menuItems = [
   { icon: 'bell', labelKey: 'profile.notificationPreferences', route: 'NotificationPreferences' as const, feature: null },
   { icon: 'credit-card', labelKey: 'profile.paymentMethods', route: 'PaymentMethods' as const, feature: null },
   { icon: 'shield', labelKey: 'profile.privacySecurity', route: 'PrivacySecurity' as const, feature: null },
-  { icon: 'star', labelKey: 'profile.myReviews', route: 'Reviews' as const, feature: null },
+  { icon: 'star', labelKey: 'profile.myReviews', route: 'Reviews' as const, feature: 'mobile_booking' as const },
   { icon: 'phone', labelKey: 'help.title', route: 'HelpSupport' as const, feature: null },
 ] as const;
 
@@ -38,9 +40,16 @@ export function ProfileScreen() {
   const { bookings, loading, reload } = useMobileBookings();
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+  const [orders, setOrders] = useState<ShopOrder[]>([]);
   const primary = branding?.primaryColor ?? colors.primary;
-  const features = bootstrap?.features ?? {};
-  const visibleMenuItems = menuItems.filter((item) => !item.feature || Boolean(features[item.feature]));
+  const { showBooking, showShop, showPets } = customerAppFeatures(bootstrap?.features);
+  const visibleMenuItems = menuItems.filter((item) => {
+    if (!item.feature) return true;
+    if (item.feature === 'mobile_booking') return showBooking;
+    if (item.feature === 'mobile_shop') return showShop;
+    if (item.feature === 'mobile_pets') return showPets;
+    return false;
+  });
 
   const loadLoyalty = useCallback(async () => {
     if (!tenantSlug || !businessCode) return;
@@ -57,23 +66,51 @@ export function ProfileScreen() {
     }
   }, [tenantSlug, businessCode]);
 
+  const loadOrders = useCallback(async () => {
+    if (!showShop || !tenantSlug || !businessCode) {
+      setOrders([]);
+      return;
+    }
+    try {
+      const res = await mobileClient.mobile.listShopOrders({
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+      });
+      setOrders(res.data);
+    } catch {
+      setOrders([]);
+    }
+  }, [showShop, tenantSlug, businessCode]);
+
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await Promise.all([reload(), loadLoyalty()]);
+    await Promise.all([reload(), loadLoyalty(), loadOrders()]);
   });
   const isRefreshing = refreshing || loading;
 
   useFocusEffect(
     useCallback(() => {
       void loadLoyalty();
-    }, [loadLoyalty]),
+      void loadOrders();
+    }, [loadLoyalty, loadOrders]),
   );
 
   useEffect(() => {
     void loadLoyalty();
-  }, [loadLoyalty]);
+    void loadOrders();
+  }, [loadLoyalty, loadOrders]);
 
   const displayName = user?.full_name || [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Guest';
   const completedBookings = bookings.filter((booking) => booking.status === 'completed').length;
+  const stats = [
+    ...(showBooking
+      ? [
+          { label: t('nav.bookings'), value: String(bookings.length) },
+          { label: t('profile.completed'), value: String(completedBookings) },
+        ]
+      : []),
+    ...(showShop ? [{ label: t('shop.myOrders'), value: String(orders.length) }] : []),
+    ...(loyaltyEnabled ? [{ label: t('profile.loyaltyPts'), value: String(loyaltyPoints) }] : []),
+  ];
 
   async function onSignOut() {
     Alert.alert(
@@ -111,11 +148,7 @@ export function ProfileScreen() {
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         <View style={styles.stats}>
-          {[
-            { label: t('nav.bookings'), value: String(bookings.length) },
-            { label: t('profile.completed'), value: String(completedBookings) },
-            ...(loyaltyEnabled ? [{ label: t('profile.loyaltyPts'), value: String(loyaltyPoints) }] : []),
-          ].map((stat) => (
+          {stats.map((stat) => (
             <View key={stat.label} style={styles.stat}>
               <Text style={styles.statValue}>{stat.value}</Text>
               <Text style={styles.statLabel}>{stat.label}</Text>

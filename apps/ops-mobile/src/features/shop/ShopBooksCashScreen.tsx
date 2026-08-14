@@ -12,6 +12,7 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { StatTile } from '../../components/ui/StatTile';
+import { TileGrid } from '../../components/ui/TileGrid';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
@@ -233,12 +234,12 @@ export function ShopBooksCashScreen() {
       >
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <View style={styles.grid}>
+        <TileGrid>
           <StatTile label="Cash in hand" value={formatMoney(cashTotal)} />
           <StatTile label="Bank balance" value={formatMoney(bankTotal)} />
           <StatTile label="Payment in" value={formatMoney(paymentInTotal)} tone="positive" hint="Collected" />
           <StatTile label="Payment out" value={formatMoney(paymentOutTotal)} tone="negative" hint="Paid out" />
-        </View>
+        </TileGrid>
 
         {showAccountForm ? (
           <View style={styles.card}>
@@ -389,7 +390,6 @@ export function ShopBooksCashScreen() {
 const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.sm, paddingBottom: spacing.xxxl },
   error: { color: colors.destructive, marginBottom: spacing.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
   sectionTitle: { ...typography.title, fontSize: 16, color: colors.foreground, marginTop: spacing.md },
   headerBtn: {
     width: 40,

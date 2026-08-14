@@ -19,6 +19,8 @@ import {
   formatUserRole,
 } from '../../utils/roles';
 import { hasShopie } from '../../utils/products';
+import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
+import { usePlanFeatures } from '../../hooks/useOpsExtended';
 import { confirmAction } from '../../utils/confirmAction';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -40,6 +42,8 @@ export function MoreScreen() {
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const showShop = hasShopie(activeBusiness?.product_subscriptions);
+  const { has, hasAny } = usePlanFeatures();
+  const showBooks = showShop && hasAny(SHOPIE_BOOKS_FEATURES);
   const workspaceLabel = activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace');
 
   async function onSignOut() {
@@ -76,39 +80,51 @@ export function MoreScreen() {
         <View style={styles.menu}>
         {showShop ? (
           <MenuSection title="Sale">
-            <MenuRow
-              icon="shopping-cart"
-              label={t('nav.pos')}
-              subtitle="Counter GST bill → Books"
-              onPress={() => navigation.navigate('ShopPos')}
-            />
-            <MenuRow
-              icon="book-open"
-              label={t('nav.shopBooks')}
-              subtitle="Sale invoices, purchase, cash & reports"
-              onPress={() => navigation.navigate('ShopBooks')}
-            />
-            <MenuRow
-              icon="shopping-bag"
-              label={t('nav.shopProducts')}
-              onPress={() => navigation.navigate('ShopProducts')}
-            />
-            <MenuRow
-              icon="list"
-              label={t('nav.shopOrders')}
-              subtitle="Pickup & delivery shopping"
-              onPress={() => navigation.navigate('ShopOrders')}
-            />
-            <MenuRow
-              icon="rotate-ccw"
-              label={t('nav.shopReturns')}
-              onPress={() => navigation.navigate('ShopReturns')}
-            />
-            <MenuRow
-              icon="map-pin"
-              label={t('nav.shopDeliveryZones')}
-              onPress={() => navigation.navigate('ShopDeliveryZones')}
-            />
+            {has(PlanFeature.shopiePos) ? (
+              <MenuRow
+                icon="shopping-cart"
+                label={t('nav.pos')}
+                subtitle="Counter GST bill → Books"
+                onPress={() => navigation.navigate('ShopPos')}
+              />
+            ) : null}
+            {showBooks ? (
+              <MenuRow
+                icon="book-open"
+                label={t('nav.shopBooks')}
+                subtitle="Sale invoices, purchase, cash & reports"
+                onPress={() => navigation.navigate('ShopBooks')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieProducts) ? (
+              <MenuRow
+                icon="shopping-bag"
+                label={t('nav.shopProducts')}
+                onPress={() => navigation.navigate('ShopProducts')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieOrders) ? (
+              <MenuRow
+                icon="list"
+                label={t('nav.shopOrders')}
+                subtitle="Pickup & delivery shopping"
+                onPress={() => navigation.navigate('ShopOrders')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieReturns) ? (
+              <MenuRow
+                icon="rotate-ccw"
+                label={t('nav.shopReturns')}
+                onPress={() => navigation.navigate('ShopReturns')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieDeliveryZones) ? (
+              <MenuRow
+                icon="map-pin"
+                label={t('nav.shopDeliveryZones')}
+                onPress={() => navigation.navigate('ShopDeliveryZones')}
+              />
+            ) : null}
             <MenuRow
               icon="heart"
               label={t('nav.shopPets')}
@@ -118,52 +134,75 @@ export function MoreScreen() {
           </MenuSection>
         ) : null}
 
-        {showShop ? (
+        {showShop &&
+        hasAny([
+          PlanFeature.shopieGrowWhatsapp,
+          PlanFeature.shopieGrowPoster,
+          PlanFeature.shopieGrowGoogle,
+          PlanFeature.shopieGrowSync,
+          PlanFeature.shopieGrowUtilities,
+        ]) ? (
           <MenuSection title="Grow">
-            <MenuRow
-              icon="message-circle"
-              label="WhatsApp"
-              subtitle="Default message & wa.me chat"
-              onPress={() => navigation.navigate('GrowWhatsApp')}
-            />
-            <MenuRow
-              icon="image"
-              label="AI Poster"
-              subtitle="Local promo poster & share"
-              onPress={() => navigation.navigate('GrowAIPoster')}
-            />
-            <MenuRow
-              icon="globe"
-              label="Google Profile"
-              subtitle="Listing URL & place ID"
-              onPress={() => navigation.navigate('GrowGoogleProfile')}
-            />
-            <MenuRow
-              icon="share-2"
-              label="Sync & share"
-              subtitle="Export voucher & product counts"
-              onPress={() => navigation.navigate('GrowSyncShare')}
-            />
-            <MenuRow
-              icon="tool"
-              label="Utilities"
-              subtitle="GST, margin, discount & EMI"
-              last
-              onPress={() => navigation.navigate('GrowUtilities')}
-            />
+            {has(PlanFeature.shopieGrowWhatsapp) ? (
+              <MenuRow
+                icon="message-circle"
+                label="WhatsApp"
+                subtitle="Default message & wa.me chat"
+                onPress={() => navigation.navigate('GrowWhatsApp')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieGrowPoster) ? (
+              <MenuRow
+                icon="image"
+                label="AI Poster"
+                subtitle="Local promo poster & share"
+                onPress={() => navigation.navigate('GrowAIPoster')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieGrowGoogle) ? (
+              <MenuRow
+                icon="globe"
+                label="Google Profile"
+                subtitle="Listing URL & place ID"
+                onPress={() => navigation.navigate('GrowGoogleProfile')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieGrowSync) ? (
+              <MenuRow
+                icon="share-2"
+                label="Sync & share"
+                subtitle="Export voucher & product counts"
+                onPress={() => navigation.navigate('GrowSyncShare')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieGrowUtilities) ? (
+              <MenuRow
+                icon="tool"
+                label="Utilities"
+                subtitle="GST, margin, discount & EMI"
+                last
+                onPress={() => navigation.navigate('GrowUtilities')}
+              />
+            ) : null}
           </MenuSection>
         ) : null}
 
         <MenuSection title={t('settings.business')}>
-          <MenuRow icon="users" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
-          <MenuRow icon="star" label={t('settings.reviews')} onPress={() => navigation.navigate('Reviews')} />
-          <MenuRow
-            icon="package"
-            label={t('settings.services')}
-            last={!showStaff && !showReports && !showSettings}
-            onPress={() => navigation.navigate('Services')}
-          />
-          {showStaff ? (
+          {has(PlanFeature.appointieCustomers) || showShop ? (
+            <MenuRow icon="users" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
+          ) : null}
+          {has(PlanFeature.appointieReviews) ? (
+            <MenuRow icon="star" label={t('settings.reviews')} onPress={() => navigation.navigate('Reviews')} />
+          ) : null}
+          {has(PlanFeature.appointieServices) ? (
+            <MenuRow
+              icon="package"
+              label={t('settings.services')}
+              last={!showStaff && !showReports && !showSettings}
+              onPress={() => navigation.navigate('Services')}
+            />
+          ) : null}
+          {showStaff && has(PlanFeature.appointieStaff) ? (
             <MenuRow
               icon="user-check"
               label={t('bookings.staff')}

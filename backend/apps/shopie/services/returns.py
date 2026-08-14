@@ -219,6 +219,15 @@ class ReturnService:
             shop_return.metadata = meta
             shop_return.save(update_fields=["metadata", "updated_at", "version"])
 
+        # Always refresh sale invoice net/paid amounts (even if CN posting failed).
+        self._apply_return_amounts_to_sale_voucher(
+            tenant=tenant,
+            business=business,
+            order=order,
+            shop_return=shop_return,
+            books_cn=books_cn,
+        )
+
         borrow_applied = self._apply_borrow_credit_for_return(
             tenant=tenant,
             business=business,
@@ -379,54 +388,153 @@ class ReturnService:
             )
             return None
 
-        if sale_voucher is not None:
-            sale_meta = dict(sale_voucher.metadata) if isinstance(sale_voucher.metadata, dict) else {}
-            history = list(sale_meta.get("returns") if isinstance(sale_meta.get("returns"), list) else [])
-            history.append(
-                {
-                    "return_id": str(shop_return.id),
-                    "return_number": shop_return.return_number,
-                    "credit_note_id": str(books_cn.id),
-                    "credit_note_number": books_cn.voucher_number,
-                    "refund_total": str(books_cn.total),
-                    "tax_total": str(books_cn.tax_total),
-                    "subtotal": str(books_cn.subtotal),
-                    "at": timezone.now().isoformat(),
-                }
-            )
-            returned_total = sum(
-                (Decimal(str(row.get("refund_total") or "0")) for row in history),
-                Decimal("0.00"),
-            ).quantize(Decimal("0.01"))
-            returned_tax = sum(
-                (Decimal(str(row.get("tax_total") or "0")) for row in history),
-                Decimal("0.00"),
-            ).quantize(Decimal("0.01"))
-            sale_meta["returns"] = history
-            sale_meta["returned_total"] = str(returned_total)
-            sale_meta["returned_tax_total"] = str(returned_tax)
-            sale_meta["net_total"] = str(
-                (Decimal(str(sale_voucher.total or "0")) - returned_total).quantize(Decimal("0.01"))
-            )
-            sale_meta["net_tax_total"] = str(
-                (Decimal(str(sale_voucher.tax_total or "0")) - returned_tax).quantize(Decimal("0.01"))
-            )
-            # For cash/UPI/card, cash already left via credit note amount_paid.
-            # For borrow/due sales, reduce amount still collectible on the invoice.
-            if not refund_cash:
-                paid = Decimal(str(sale_voucher.amount_paid or "0"))
-                # Receivable after CN is original total - returned - already paid.
-                # Keep amount_paid as-is; net due is derived in UI from net_total - amount_paid.
-                sale_meta["net_amount_due"] = str(
-                    max(
-                        Decimal("0.00"),
-                        (Decimal(str(sale_voucher.total or "0")) - returned_total - paid),
-                    ).quantize(Decimal("0.01"))
-                )
-            sale_voucher.metadata = sale_meta
-            sale_voucher.save(update_fields=["metadata", "updated_at", "version"])
-
         return books_cn
+
+    def _apply_return_amounts_to_sale_voucher(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        shop_return: ShopReturn,
+        books_cn=None,
+    ):
+        """Update linked sale invoice net totals / paid after a completed return.
+
+        Original GST sale header totals stay immutable for audit. Net figures and
+        cash amount_paid are adjusted so the invoice UI reflects the return.
+        """
+        from apps.shopie.models import ShopBooksVoucher, VoucherType
+
+        sale_voucher = (
+            ShopBooksVoucher.objects.filter(
+                tenant=tenant,
+                business=business,
+                voucher_type=VoucherType.SALE,
+                linked_order=order,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if sale_voucher is None:
+            return None
+
+        refund_total = Decimal(
+            str(books_cn.total if books_cn is not None else shop_return.refund_total or "0")
+        ).quantize(Decimal("0.01"))
+        refund_tax = Decimal(str(books_cn.tax_total if books_cn is not None else "0")).quantize(
+            Decimal("0.01")
+        )
+        refund_subtotal = Decimal(
+            str(books_cn.subtotal if books_cn is not None else "0")
+        ).quantize(Decimal("0.01"))
+        cash_refunded = Decimal(
+            str(books_cn.amount_paid if books_cn is not None else "0")
+        ).quantize(Decimal("0.01"))
+
+        sale_meta = dict(sale_voucher.metadata) if isinstance(sale_voucher.metadata, dict) else {}
+        history = list(sale_meta.get("returns") if isinstance(sale_meta.get("returns"), list) else [])
+        entry = {
+            "return_id": str(shop_return.id),
+            "return_number": shop_return.return_number,
+            "refund_total": str(refund_total),
+            "tax_total": str(refund_tax),
+            "subtotal": str(refund_subtotal),
+            "cash_refunded": str(cash_refunded),
+            "at": timezone.now().isoformat(),
+        }
+        if books_cn is not None:
+            entry["credit_note_id"] = str(books_cn.id)
+            entry["credit_note_number"] = books_cn.voucher_number
+
+        updated = False
+        for idx, row in enumerate(history):
+            if str(row.get("return_id")) == str(shop_return.id):
+                history[idx] = {**row, **entry}
+                updated = True
+                break
+        if not updated:
+            history.append(entry)
+
+        returned_total = sum(
+            (Decimal(str(row.get("refund_total") or "0")) for row in history),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        returned_tax = sum(
+            (Decimal(str(row.get("tax_total") or "0")) for row in history),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        refunded_cash_total = sum(
+            (Decimal(str(row.get("cash_refunded") or "0")) for row in history),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+        original_total = Decimal(str(sale_voucher.total or "0")).quantize(Decimal("0.01"))
+        original_tax = Decimal(str(sale_voucher.tax_total or "0")).quantize(Decimal("0.01"))
+        net_total = max(Decimal("0.00"), original_total - returned_total).quantize(Decimal("0.01"))
+        net_tax = max(Decimal("0.00"), original_tax - returned_tax).quantize(Decimal("0.01"))
+
+        sale_meta["returns"] = history
+        sale_meta["returned_total"] = str(returned_total)
+        sale_meta["returned_tax_total"] = str(returned_tax)
+        sale_meta["refunded_cash_total"] = str(refunded_cash_total)
+        sale_meta["net_total"] = str(net_total)
+        sale_meta["net_tax_total"] = str(net_tax)
+
+        update_fields = ["metadata", "updated_at", "version"]
+        paid = Decimal(str(sale_voucher.amount_paid or "0")).quantize(Decimal("0.01"))
+        # Cash/UPI/card: till already refunded via CN — reduce invoice amount_paid.
+        if cash_refunded > 0:
+            new_paid = max(Decimal("0.00"), paid - cash_refunded).quantize(Decimal("0.01"))
+            new_paid = min(new_paid, net_total)
+            if new_paid != paid:
+                sale_voucher.amount_paid = new_paid
+                paid = new_paid
+                update_fields = ["metadata", "amount_paid", "updated_at", "version"]
+            self._reduce_order_cash_paid_for_return(
+                order=order,
+                cash_refunded=cash_refunded,
+                net_invoice_total=net_total,
+            )
+
+        sale_meta["net_amount_paid"] = str(paid)
+        sale_meta["net_amount_due"] = str(max(Decimal("0.00"), net_total - paid).quantize(Decimal("0.01")))
+        sale_voucher.metadata = sale_meta
+        sale_voucher.save(update_fields=update_fields)
+        return sale_voucher
+
+    @staticmethod
+    def _reduce_order_cash_paid_for_return(
+        *,
+        order: ShopOrder,
+        cash_refunded: Decimal,
+        net_invoice_total: Decimal,
+    ) -> None:
+        """Keep POS order amount_paid in sync after a cash/UPI/card refund."""
+        if cash_refunded <= 0:
+            return
+        metadata = dict(order.metadata or {})
+        pos = dict(metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {})
+        method = str(pos.get("payment_method") or "").lower()
+        if method not in {"cash", "upi", "card", ""}:
+            return
+        try:
+            if pos.get("amount_paid") not in (None, ""):
+                paid = Decimal(str(pos.get("amount_paid") or "0"))
+            else:
+                paid = Decimal(str(order.total or "0"))
+        except Exception:
+            paid = Decimal(str(order.total or "0"))
+        paid = paid.quantize(Decimal("0.01"))
+        new_paid = max(Decimal("0.00"), paid - cash_refunded).quantize(Decimal("0.01"))
+        new_paid = min(new_paid, net_invoice_total)
+        due = max(Decimal("0.00"), net_invoice_total - new_paid).quantize(Decimal("0.01"))
+        pos["amount_paid"] = str(new_paid)
+        pos["amount_due"] = str(due)
+        pos["payment_status"] = "due" if due > 0 else "settled"
+        metadata["pos"] = pos
+        order.metadata = metadata
+        order.save(update_fields=["metadata", "updated_at", "version"])
 
     def _apply_borrow_credit_for_return(
         self,

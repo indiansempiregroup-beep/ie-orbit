@@ -8,7 +8,7 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
 
 export function HelpCenterPage() {
-  usePageMeta({ title: 'Help Center — AppointIE' });
+  usePageMeta({ title: 'Help Center — IE Platform' });
   const [q, setQ] = useState('');
   const [slug, setSlug] = useState<string | null>(null);
   const listQuery = useQuery({

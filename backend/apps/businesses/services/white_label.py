@@ -19,6 +19,7 @@ def active_product_codes(business: Business) -> list[str]:
             status__in={
                 BusinessProductSubscriptionStatus.ACTIVE,
                 BusinessProductSubscriptionStatus.TRIALING,
+                BusinessProductSubscriptionStatus.SOFT_LOCKED,
             },
         ).values_list("product_code", flat=True)
     )
@@ -73,6 +74,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         "bundle_id_ios": profile.bundle_id_ios,
         "bundle_id_android": profile.bundle_id_android,
         "white_label_enabled": profile.white_label_enabled,
+        "tenant_id": str(tenant.id),
         "tenant_slug": tenant.slug,
         "business_code": business.business_code,
         "business": {

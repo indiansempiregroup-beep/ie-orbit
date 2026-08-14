@@ -169,6 +169,21 @@ def test_return_restock_and_credit(shop_ctx: tuple[Tenant, Business, Customer]) 
     assert Decimal(str(books_cn.total)) == Decimal("50.00")
     assert shop_return.metadata.get("books_credit_note_number") == books_cn.voucher_number
 
+    sale = ShopBooksVoucher.objects.filter(
+        tenant=tenant,
+        business=business,
+        voucher_type=VoucherType.SALE,
+        linked_order=order,
+    ).first()
+    assert sale is not None
+    sale.refresh_from_db()
+    assert Decimal(str(sale.metadata.get("returned_total"))) == Decimal("50.00")
+    assert Decimal(str(sale.metadata.get("net_total"))) == Decimal("50.00")
+    # Cash POS sale: amount_paid reduced by cash refund on the credit note.
+    assert Decimal(str(sale.amount_paid)) == Decimal("50.00")
+    assert Decimal(str(sale.metadata.get("net_amount_paid"))) == Decimal("50.00")
+    assert Decimal(str(sale.metadata.get("net_amount_due"))) == Decimal("0.00")
+
 
 @pytest.mark.django_db
 def test_return_cannot_exceed_remaining_qty(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
@@ -266,6 +281,21 @@ def test_borrow_return_reduces_due_and_balance(shop_ctx: tuple[Tenant, Business,
     assert product.stock_on_hand == stock_after_sale + Decimal("1")
     assert Decimal(str(order.metadata["pos"]["amount_due"])) == Decimal("100.00")
     assert Decimal(balance_after["balance_due"]) == Decimal("100.00")
+
+    from apps.shopie.models import ShopBooksVoucher, VoucherType
+
+    sale = ShopBooksVoucher.objects.filter(
+        tenant=tenant,
+        business=business,
+        voucher_type=VoucherType.SALE,
+        linked_order=order,
+    ).first()
+    assert sale is not None
+    sale.refresh_from_db()
+    assert Decimal(str(sale.metadata.get("returned_total"))) == Decimal("100.00")
+    assert Decimal(str(sale.metadata.get("net_total"))) == Decimal("100.00")
+    assert Decimal(str(sale.amount_paid or "0")) == Decimal("0.00")
+    assert Decimal(str(sale.metadata.get("net_amount_due"))) == Decimal("100.00")
 
 
 @pytest.mark.django_db

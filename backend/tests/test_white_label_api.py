@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserRole, UserStatus
-from apps.businesses.models import Business, WhiteLabelProfile
+from apps.businesses.models import Business, BusinessProductSubscription, BusinessProductSubscriptionStatus, WhiteLabelProfile
 from apps.tenancy.models import Organization, Tenant
 
 
@@ -57,6 +57,7 @@ def white_label_context() -> dict[str, str]:
         secondary_color="#654321",
     )
     return {
+        "tenant_id": str(tenant.id),
         "tenant_slug": tenant.slug,
         "business_code": business.business_code,
         "flavor_key": profile.flavor_key,
@@ -74,6 +75,7 @@ def test_mobile_bootstrap_by_flavor_key(api_client: APIClient, white_label_conte
     payload = response.json()["data"]
     assert payload["app_name"] == "Empire Salon"
     assert payload["business_code"] == white_label_context["business_code"]
+    assert payload["tenant_id"] == white_label_context["tenant_id"]
     assert payload["features"]["mobile_booking"] is True
 
 
@@ -89,6 +91,28 @@ def test_mobile_bootstrap_by_tenant_business(api_client: APIClient, white_label_
     assert response.status_code == 200
     payload = response.json()["data"]
     assert payload["flavor_key"] == white_label_context["flavor_key"]
+
+
+@pytest.mark.django_db
+def test_bootstrap_includes_soft_locked_products(
+    api_client: APIClient, white_label_context: dict[str, str]
+) -> None:
+    business = Business.objects.get(business_code=white_label_context["business_code"])
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.SOFT_LOCKED,
+    )
+    response = api_client.get(
+        reverse("mobile-bootstrap"),
+        {"flavor_key": white_label_context["flavor_key"]},
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "shopie" in payload["enabled_products"]
+    assert payload["features"]["mobile_shop"] is True
+    assert payload["tenant_id"] == white_label_context["tenant_id"]
 
 
 @pytest.mark.django_db

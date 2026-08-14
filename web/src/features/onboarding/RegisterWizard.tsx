@@ -41,8 +41,8 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function RegisterWizard() {
   usePageMeta({
-    title: 'Create workspace — AppointIE',
-    description: 'Self-service business onboarding wizard for AppointIE.',
+    title: 'Create workspace — IE Platform',
+    description: 'Self-service business onboarding wizard for AppointIE and ShopIE.',
   });
 
   const navigate = useNavigate();
@@ -381,7 +381,7 @@ export function RegisterWizard() {
   return (
     <WizardShell
       title="Create your workspace"
-      subtitle="Complete each step to provision your AppointIE business."
+      subtitle="Complete each step to provision your IE Platform workspace."
       currentStep={currentStep}
     >
       {stepContent[currentStep]()}

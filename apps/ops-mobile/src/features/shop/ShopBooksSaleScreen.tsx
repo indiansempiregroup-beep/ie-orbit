@@ -49,6 +49,8 @@ import {
   todayIso,
   voucherAmount,
   voucherBalanceDue,
+  voucherDisplayPaid,
+  voucherDisplayTotal,
   voucherPartyLabel,
   voucherStatusStyle,
   type VoucherInvoiceTypeFilter,
@@ -416,6 +418,12 @@ function SaleInvoiceDetailModal({
     setReturns([]);
   }, [voucher?.id, visible]);
 
+  // Keep amounts in sync when parent refreshes the same invoice after a return.
+  useEffect(() => {
+    if (!visible || !voucher) return;
+    setLocalVoucher(voucher);
+  }, [visible, voucher]);
+
   const loadExtra = useCallback(async () => {
     if (!client || !businessId || !voucher?.linked_order) return;
     setLoadingExtra(true);
@@ -457,6 +465,23 @@ function SaleInvoiceDetailModal({
     return map;
   }, [returns]);
 
+  const returnedByProductKey = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const shopReturn of returns) {
+      const status = String(shopReturn.status || '').toLowerCase();
+      if (status === 'rejected' || status === 'cancelled') continue;
+      const items = Array.isArray(shopReturn.line_items) ? shopReturn.line_items : [];
+      for (const raw of items) {
+        if (!raw || typeof raw !== 'object') continue;
+        const row = raw as Record<string, unknown>;
+        const key = String(row.product_id || row.name || '').trim().toLowerCase();
+        if (!key) continue;
+        map[key] = (map[key] || 0) + Number(row.quantity || 0);
+      }
+    }
+    return map;
+  }, [returns]);
+
   const returnableLines = useMemo(() => {
     const lines = order?.lines ?? [];
     return lines
@@ -464,10 +489,19 @@ function SaleInvoiceDetailModal({
         const sold = Number(line.quantity || 0);
         const already = returnedQty[line.id] || 0;
         const remaining = Math.max(0, sold - already);
-        return { line, sold, already, remaining };
+        const unitRefund =
+          sold > 0 ? voucherAmount(line.line_total) / sold : voucherAmount(line.unit_price);
+        return { line, sold, already, remaining, unitRefund };
       })
       .filter((row) => row.remaining > 0);
   }, [order?.lines, returnedQty]);
+
+  const pendingReturnTotal = useMemo(() => {
+    return returnableLines.reduce((sum, row) => {
+      const qty = qtyByLine[row.line.id] || 0;
+      return sum + qty * row.unitRefund;
+    }, 0);
+  }, [returnableLines, qtyByLine]);
 
   const canReturn =
     Boolean(voucher?.linked_order) &&
@@ -534,6 +568,8 @@ function SaleInvoiceDetailModal({
 
   const paid = isVoucherFullyPaid(localVoucher);
   const balance = voucherBalanceDue(localVoucher);
+  const displayPaid = voucherDisplayPaid(localVoucher);
+  const displayTotal = voucherDisplayTotal(localVoucher);
   const lines = Array.isArray(localVoucher.line_items) ? localVoucher.line_items : [];
   const meta =
     localVoucher.metadata && typeof localVoucher.metadata === 'object' ? localVoucher.metadata : {};
@@ -603,11 +639,18 @@ function SaleInvoiceDetailModal({
               lines.map((raw, index) => {
                 const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
                 const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                const productKey = String(line.product_id || name)
+                  .trim()
+                  .toLowerCase();
                 const qty = Number(line.qty ?? line.quantity ?? 0);
                 const rate = Number(line.rate ?? line.unit_price ?? 0);
                 const gst = Number(line.gst_rate ?? line.tax_rate ?? 0);
                 const inclusive = Boolean(line.tax_inclusive);
                 const lineTotal = Number(line.total ?? qty * rate);
+                const alreadyReturned = returnedByProductKey[productKey] || 0;
+                const netQty = Math.max(0, qty - alreadyReturned);
+                const netLineTotal =
+                  qty > 0 ? (lineTotal * netQty) / qty : lineTotal;
                 return (
                   <View key={`${name}-${index}`} style={detailStyles.lineRow}>
                     <View style={{ flex: 1 }}>
@@ -615,9 +658,17 @@ function SaleInvoiceDetailModal({
                       <Text style={detailStyles.meta}>
                         {qty} × {formatMoney(rate)}
                         {gst ? ` · GST ${gst}%${inclusive ? ' incl.' : ''}` : ''}
+                        {alreadyReturned > 0 ? ` · returned ${alreadyReturned}` : ''}
                       </Text>
                     </View>
-                    <Text style={detailStyles.lineTotal}>{formatMoney(lineTotal)}</Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={detailStyles.lineTotal}>
+                        {formatMoney(alreadyReturned > 0 ? netLineTotal : lineTotal)}
+                      </Text>
+                      {alreadyReturned > 0 && netQty !== qty ? (
+                        <Text style={detailStyles.metaStrike}>{formatMoney(lineTotal)}</Text>
+                      ) : null}
+                    </View>
                   </View>
                 );
               })
@@ -638,20 +689,24 @@ function SaleInvoiceDetailModal({
                 <Text style={detailStyles.meta}>GST</Text>
                 <Text style={detailStyles.meta}>{formatMoney(localVoucher.tax_total)}</Text>
               </View>
-              <View style={detailStyles.totalRow}>
-                <Text style={detailStyles.payableLabel}>Invoice total</Text>
-                <Text style={detailStyles.payableValue}>{formatMoney(localVoucher.total)}</Text>
-              </View>
               {returnedTotal > 0 ? (
                 <>
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>Returned</Text>
-                    <Text style={detailStyles.meta}>-{formatMoney(returnedTotal)}</Text>
+                    <Text style={detailStyles.meta}>Original invoice</Text>
+                    <Text style={detailStyles.meta}>{formatMoney(localVoucher.total)}</Text>
                   </View>
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>Returned GST</Text>
-                    <Text style={detailStyles.meta}>-{formatMoney(returnedTax)}</Text>
+                    <Text style={detailStyles.meta}>Returned</Text>
+                    <Text style={[detailStyles.meta, { color: colors.destructive }]}>
+                      -{formatMoney(returnedTotal)}
+                    </Text>
                   </View>
+                  {returnedTax > 0 ? (
+                    <View style={detailStyles.totalRow}>
+                      <Text style={detailStyles.meta}>Returned GST</Text>
+                      <Text style={detailStyles.meta}>-{formatMoney(returnedTax)}</Text>
+                    </View>
+                  ) : null}
                   <View style={detailStyles.totalRow}>
                     <Text style={detailStyles.payableLabel}>Net total</Text>
                     <Text style={detailStyles.payableValue}>{formatMoney(netTotal)}</Text>
@@ -661,15 +716,26 @@ function SaleInvoiceDetailModal({
                     <Text style={detailStyles.meta}>{formatMoney(netTax)}</Text>
                   </View>
                 </>
-              ) : null}
+              ) : (
+                <View style={detailStyles.totalRow}>
+                  <Text style={detailStyles.payableLabel}>Invoice total</Text>
+                  <Text style={detailStyles.payableValue}>{formatMoney(displayTotal)}</Text>
+                </View>
+              )}
               <View style={detailStyles.totalRow}>
                 <Text style={detailStyles.meta}>Amount paid</Text>
-                <Text style={detailStyles.meta}>{formatMoney(localVoucher.amount_paid ?? 0)}</Text>
+                <Text style={detailStyles.meta}>{formatMoney(displayPaid)}</Text>
               </View>
               {balance > 0 ? (
                 <View style={detailStyles.totalRow}>
                   <Text style={detailStyles.dueLabel}>Balance due</Text>
                   <Text style={detailStyles.dueValue}>{formatMoney(balance)}</Text>
+                </View>
+              ) : null}
+              {returnMode && pendingReturnTotal > 0 ? (
+                <View style={detailStyles.totalRow}>
+                  <Text style={detailStyles.dueLabel}>This return</Text>
+                  <Text style={detailStyles.dueValue}>-{formatMoney(pendingReturnTotal)}</Text>
                 </View>
               ) : null}
             </View>
@@ -735,13 +801,16 @@ function SaleInvoiceDetailModal({
                   Select quantities to return. A GST credit note is posted automatically so tax
                   reports stay correct.
                 </Text>
-                {returnableLines.map(({ line, remaining, already }) => (
+                {returnableLines.map(({ line, remaining, already, unitRefund }) => (
                   <View key={line.id} style={detailStyles.returnLine}>
                     <View style={{ flex: 1 }}>
                       <Text style={detailStyles.lineName}>{line.product_name}</Text>
                       <Text style={detailStyles.meta}>
                         Sold {Number(line.quantity)} · returned {already} · left {remaining}
                         {Number(line.tax_rate) ? ` · GST ${line.tax_rate}%` : ''}
+                      </Text>
+                      <Text style={detailStyles.meta}>
+                        ~{formatMoney(unitRefund)} each
                       </Text>
                     </View>
                     <TextInput
@@ -754,6 +823,12 @@ function SaleInvoiceDetailModal({
                     />
                   </View>
                 ))}
+                {pendingReturnTotal > 0 ? (
+                  <View style={detailStyles.pendingReturn}>
+                    <Text style={detailStyles.payableLabel}>Return amount</Text>
+                    <Text style={detailStyles.payableValue}>{formatMoney(pendingReturnTotal)}</Text>
+                  </View>
+                ) : null}
                 <Input
                   label="Reason (optional)"
                   value={reason}
@@ -1167,6 +1242,13 @@ export function ShopBooksSaleScreen() {
             const canVoid = !isVoidedVoucher(item.status);
             const paid = isVoucherFullyPaid(item);
             const balance = voucherBalanceDue(item);
+            const listTotal = voucherDisplayTotal(item);
+            const listPaid = voucherDisplayPaid(item);
+            const returnedHint = voucherAmount(
+              item.metadata && typeof item.metadata === 'object'
+                ? (item.metadata as { returned_total?: string | number }).returned_total
+                : 0,
+            );
             return (
               <Pressable
                 style={styles.row}
@@ -1176,16 +1258,17 @@ export function ShopBooksSaleScreen() {
               >
                 <View style={styles.rowTop}>
                   <Text style={styles.name}>{item.voucher_number}</Text>
-                  <Text style={styles.total}>{formatMoney(item.total)}</Text>
+                  <Text style={styles.total}>{formatMoney(listTotal)}</Text>
                 </View>
                 <Text style={styles.meta}>
                   {voucherPartyLabel(item)}
                   {item.voucher_date ? ` · ${item.voucher_date}` : ''}
+                  {returnedHint > 0 ? ` · returned ${formatMoney(returnedHint)}` : ''}
                 </Text>
                 {!paid && balance > 0 ? (
                   <Text style={styles.dueMeta}>Due {formatMoney(balance)}</Text>
                 ) : paid && !isVoidedVoucher(item.status) ? (
-                  <Text style={styles.paidMeta}>Paid {formatMoney(item.amount_paid ?? item.total)}</Text>
+                  <Text style={styles.paidMeta}>Paid {formatMoney(listPaid)}</Text>
                 ) : null}
                 <View style={styles.rowBottom}>
                   <View style={styles.badgeRow}>
@@ -1572,6 +1655,12 @@ const detailStyles = StyleSheet.create({
   },
   lineName: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.foreground },
   lineTotal: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.foreground },
+  metaStrike: {
+    ...typography.tiny,
+    color: colors.mutedForeground,
+    textDecorationLine: 'line-through',
+    marginTop: 2,
+  },
   totals: {
     marginTop: spacing.sm,
     padding: spacing.md,
@@ -1601,6 +1690,14 @@ const detailStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primary,
     backgroundColor: colors.tint,
+  },
+  pendingReturn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   returnLine: {
     flexDirection: 'row',

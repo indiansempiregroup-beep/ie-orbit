@@ -6,8 +6,8 @@ import { Button } from '../../components/Button';
 
 export function ContactPage() {
   usePageMeta({
-    title: 'Contact — AppointIE',
-    description: 'Contact the AppointIE team for support and sales inquiries.',
+    title: 'Contact — IE Platform',
+    description: 'Contact the IE Platform team for support and sales inquiries.',
   });
 
   const [submitted, setSubmitted] = useState(false);
@@ -15,7 +15,7 @@ export function ContactPage() {
   return (
     <div className="public-page public-page-narrow">
       <h1>Contact us</h1>
-      <p>Reach out for demos, support, or partnership inquiries.</p>
+      <p>Reach out for demos, support, or partnership inquiries about AppointIE and ShopIE.</p>
       <Card>
         {submitted ? (
           <p role="status">Thank you. We will respond within two business days.</p>

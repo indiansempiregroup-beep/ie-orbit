@@ -7,20 +7,21 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.billing.constants import (
-    ADDON_OFFICE_PRICE_PAISE,
-    ADDON_PETS_PRICE_PAISE,
-    ADDON_STAFF_PRICE_PAISE,
     PLAN_PRICE_PAISE,
     YEARLY_PRICE_MULTIPLIER,
 )
+from apps.billing.services.addon_pricing import get_addon_prices
 from apps.businesses.constants import (
     BI_FEATURES_FULL,
     BI_FEATURES_LIMITED,
     DEFAULT_PRODUCT_CODE,
+    FEATURE_APPOINTIE_BOOKINGS,
     FEATURE_REWARD_POINTS,
     PLAN_FEATURES_FULL,
     PLAN_FEATURES_LIMITED,
+    get_default_plan_code,
     get_plan_definition,
+    product_code_for_feature,
 )
 from apps.businesses.models import (
     Branch,
@@ -72,9 +73,10 @@ class PlanEntitlements:
 
     @property
     def addon_amount_paise(self) -> int:
-        staff_unit = ADDON_STAFF_PRICE_PAISE
-        office_unit = ADDON_OFFICE_PRICE_PAISE
-        pets_unit = ADDON_PETS_PRICE_PAISE
+        prices = get_addon_prices()
+        staff_unit = prices["staff_price_paise"]
+        office_unit = prices["office_price_paise"]
+        pets_unit = prices["pets_price_paise"]
         if self.billing_interval == "yearly":
             staff_unit *= YEARLY_PRICE_MULTIPLIER
             office_unit *= YEARLY_PRICE_MULTIPLIER
@@ -95,9 +97,10 @@ class PlanEntitlements:
         used_branches: int = 0,
         pending: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        staff_unit = ADDON_STAFF_PRICE_PAISE
-        office_unit = ADDON_OFFICE_PRICE_PAISE
-        pets_unit = ADDON_PETS_PRICE_PAISE
+        prices = get_addon_prices()
+        staff_unit = prices["staff_price_paise"]
+        office_unit = prices["office_price_paise"]
+        pets_unit = prices["pets_price_paise"]
         if self.billing_interval == "yearly":
             staff_unit *= YEARLY_PRICE_MULTIPLIER
             office_unit *= YEARLY_PRICE_MULTIPLIER
@@ -184,8 +187,9 @@ class EntitlementService:
         business: Business,
         product_code: str = DEFAULT_PRODUCT_CODE,
     ) -> PlanEntitlements:
-        subscription = self.get_subscription(business=business, product_code=product_code)
-        plan_code = "appointie-starter"
+        normalized_product = product_code.strip().lower() or DEFAULT_PRODUCT_CODE
+        subscription = self.get_subscription(business=business, product_code=normalized_product)
+        plan_code = get_default_plan_code(normalized_product) or f"{normalized_product}-starter"
         billing_interval = "monthly"
         status = BusinessProductSubscriptionStatus.TRIALING
         trial_ends_at = None
@@ -212,17 +216,20 @@ class EntitlementService:
             pets_pack_enabled = bool(getattr(subscription, "pets_pack_enabled", False))
             soft_locked = self.is_soft_locked(subscription)
 
-        definition = get_plan_definition(product_code.strip().lower(), plan_code) or {}
-        # Trialing (and not soft-locked) gets Pro-level included limits.
+        definition = get_plan_definition(normalized_product, plan_code) or {}
+        # Trialing (and not soft-locked) gets Pro-level included limits and functions.
         if (
             subscription is not None
             and subscription.status == BusinessProductSubscriptionStatus.TRIALING
             and not soft_locked
         ):
+            pro_definition = get_plan_definition(normalized_product, f"{normalized_product}-pro") or definition
             max_staff = 5
             max_branches = 5
-            bi_features = BI_FEATURES_FULL
-            features = PLAN_FEATURES_FULL
+            raw_bi = pro_definition.get("bi_features") or list(BI_FEATURES_FULL)
+            bi_features = tuple(str(item) for item in raw_bi)
+            raw_features = pro_definition.get("features") or list(PLAN_FEATURES_FULL)
+            features = tuple(str(item) for item in raw_features)
         else:
             max_staff = int(definition.get("max_staff", 1) or 1)
             max_branches = int(definition.get("max_branches", 1) or 1)
@@ -349,6 +356,75 @@ class EntitlementService:
 
     def ensure_can_create_booking(self, *, business: Business) -> None:
         self.ensure_not_soft_locked(business=business)
+        self.ensure_feature(
+            business=business,
+            feature=FEATURE_APPOINTIE_BOOKINGS,
+            product_code=DEFAULT_PRODUCT_CODE,
+        )
+
+    def has_feature(
+        self,
+        *,
+        business: Business,
+        feature: str,
+        product_code: str | None = None,
+    ) -> bool:
+        code = product_code or product_code_for_feature(feature)
+        subscription = self.get_subscription(business=business, product_code=code)
+        if subscription is None and business.product_subscriptions.exists():
+            return False
+        entitlements = self.resolve(business=business, product_code=code)
+        return feature in entitlements.features
+
+    def ensure_feature(
+        self,
+        *,
+        business: Business,
+        feature: str,
+        product_code: str | None = None,
+    ) -> None:
+        if not self.has_feature(business=business, feature=feature, product_code=product_code):
+            raise PermissionDenied(
+                "This function is not included in the current plan. "
+                "Ask your platform admin to enable it on the plan package."
+            )
+
+    def ensure_any_feature(
+        self,
+        *,
+        business: Business,
+        features: list[str] | tuple[str, ...],
+        product_code: str | None = None,
+    ) -> None:
+        keys = [str(item) for item in features if item]
+        if not keys:
+            return
+        for feature in keys:
+            if self.has_feature(business=business, feature=feature, product_code=product_code):
+                return
+        raise PermissionDenied(
+            "This function is not included in the current plan. "
+            "Ask your platform admin to enable it on the plan package."
+        )
+
+    def entitled_features(self, *, business: Business) -> list[str]:
+        collected: list[str] = []
+        seen: set[str] = set()
+        subscriptions = list(business.product_subscriptions.all())
+        if not subscriptions:
+            return list(self.resolve(business=business).features)
+        skip_statuses = {
+            BusinessProductSubscriptionStatus.CANCELED,
+        }
+        for subscription in subscriptions:
+            if subscription.status in skip_statuses:
+                continue
+            entitlements = self.resolve(business=business, product_code=subscription.product_code)
+            for feature in entitlements.features:
+                if feature not in seen:
+                    seen.add(feature)
+                    collected.append(feature)
+        return collected
 
     def ensure_bi_feature(self, *, business: Business, feature: str) -> None:
         entitlements = self.resolve(business=business)
@@ -445,8 +521,10 @@ class EntitlementService:
                     else None
                 ),
             }
-        return entitlements.to_dict(
+        payload = entitlements.to_dict(
             used_staff=self.count_bookable_staff(business=business),
             used_branches=self.count_active_branches(business=business),
             pending=pending,
         )
+        payload["entitled_features"] = self.entitled_features(business=business)
+        return payload

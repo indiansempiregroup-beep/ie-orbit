@@ -35,5 +35,5 @@ export type RootStackParamList = {
   PaymentMethods: undefined;
   Reviews: undefined;
   HelpSupport: undefined;
-  PlatformAdmin: undefined;
+  HelpArticle: { slug: string };
 };

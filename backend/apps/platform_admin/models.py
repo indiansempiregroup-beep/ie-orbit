@@ -87,6 +87,21 @@ class PlatformPlanPackage(BaseModel):
         return self.code
 
 
+class PlatformAddonPricing(BaseModel):
+    """Singleton platform add-on unit prices (staff, office, pets pack)."""
+
+    key = models.SlugField(max_length=20, unique=True, default="default")
+    staff_price_paise = models.PositiveIntegerField(default=19900)
+    office_price_paise = models.PositiveIntegerField(default=29900)
+    pets_price_paise = models.PositiveIntegerField(default=50000)
+
+    class Meta:
+        db_table = "platform_addon_pricing"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return self.key
+
+
 class PlatformCouponRedemption(TenantModel):
     coupon = models.ForeignKey(PlatformCoupon, on_delete=models.CASCADE, related_name="redemptions")
     business = models.ForeignKey(

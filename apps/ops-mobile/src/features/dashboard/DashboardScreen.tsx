@@ -11,6 +11,7 @@ import { DesktopContent } from '../../components/DesktopContent';
 import { ScreenState } from '../../components/ScreenState';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { StatTile } from '../../components/ui/StatTile';
+import { TileGrid } from '../../components/ui/TileGrid';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -18,10 +19,11 @@ import { useNotifications } from '../../contexts/NotificationsContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
-import { useBIOverview, useEntityMaps } from '../../hooks/useOpsExtended';
+import { useBIOverview, useEntityMaps, usePlanFeatures } from '../../hooks/useOpsExtended';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { entityLabel } from '../../utils/entities';
 import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/products';
+import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
 import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
@@ -45,6 +47,7 @@ export function DashboardScreen() {
   const { isDesktop } = useBreakpoint();
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
+  const { has, hasAny } = usePlanFeatures();
   const today = formatDateKey(new Date());
   const { summary, todayCount, reload: reloadSummary } = useDashboardSummary();
   const { bookings, loading, reload: reloadBookings } = useBookings(today);
@@ -61,23 +64,30 @@ export function DashboardScreen() {
     [activeBusiness?.product_subscriptions],
   );
   const hasAppointie =
-    Boolean(summary?.appointie) ||
-    (summary?.products?.includes('appointie') ??
-      (subscribedIds.includes('appointie') || subscribedIds.length === 0));
+    (Boolean(summary?.appointie) ||
+      (summary?.products?.includes('appointie') ??
+        (subscribedIds.includes('appointie') || subscribedIds.length === 0))) &&
+    has(PlanFeature.appointieBookings);
   const shopieEnabled =
     Boolean(summary?.shopie) ||
     (summary?.products?.includes('shopie') ?? hasShopie(activeBusiness?.product_subscriptions));
   const petsEnabled = Boolean(summary?.pets) || hasPetsPack(activeBusiness?.product_subscriptions);
+  const showPos = shopieEnabled && has(PlanFeature.shopiePos);
+  const showBooksHub = shopieEnabled && hasAny(SHOPIE_BOOKS_FEATURES);
+  const showOrders = shopieEnabled && has(PlanFeature.shopieOrders);
+  const showReturns = shopieEnabled && has(PlanFeature.shopieReturns);
+  const showCashTiles = shopieEnabled && has(PlanFeature.shopieBooksCash);
+  const showPartyTiles = shopieEnabled && has(PlanFeature.shopieBooksParties);
 
   const loadBooks = useCallback(async () => {
-    if (!shopieEnabled || !businessId || !client) return;
+    if (!showBooksHub || !businessId || !client) return;
     try {
       const response = await client.shop.booksDashboard({ business_id: businessId });
       setBooks(response.data);
     } catch {
       /* optional KPIs */
     }
-  }, [shopieEnabled, businessId, client]);
+  }, [showBooksHub, businessId, client]);
 
   useFocusEffect(
     useCallback(() => {
@@ -179,8 +189,8 @@ export function DashboardScreen() {
     pets,
   ]);
 
-  const showFab = hasAppointie || shopieEnabled;
-  const fabNeedsMenu = hasAppointie && shopieEnabled;
+  const showFab = hasAppointie || showPos;
+  const fabNeedsMenu = hasAppointie && showPos;
 
   function openCreateBooking() {
     setFabOpen(false);
@@ -270,7 +280,13 @@ export function DashboardScreen() {
               <Text style={styles.nextHint}>
                 {shopie?.pending_returns ?? 0} pending returns · {shopie?.open_orders ?? 0} open
               </Text>
-              <Button label="Open online orders" size="sm" variant="soft" style={styles.nextBtn} onPress={() => navigation.navigate('ShopOrders')} />
+              <Button
+                label={showOrders ? 'Open online orders' : 'Open shop'}
+                size="sm"
+                variant="soft"
+                style={styles.nextBtn}
+                onPress={() => navigation.navigate(showOrders ? 'ShopOrders' : showPos ? 'ShopPos' : 'ShopBooks')}
+              />
             </View>
           ) : (
             <View style={styles.nextCard}>
@@ -300,29 +316,37 @@ export function DashboardScreen() {
                 </View>
               ) : null}
 
-              {shopieEnabled && books ? (
-                <View style={styles.kpiGrid}>
-                  <StatTile
-                    label="To collect"
-                    value={formatMoney(books.to_collect)}
-                    tone="positive"
-                    hint="Receivable"
-                    onPress={() => navigation.navigate('ShopBooks')}
-                  />
-                  <StatTile
-                    label="To pay"
-                    value={formatMoney(books.to_pay)}
-                    tone="negative"
-                    hint="Payable"
-                    onPress={() => navigation.navigate('ShopBooks')}
-                  />
-                  <StatTile label="Cash in hand" value={formatMoney(books.cash)} onPress={() => navigation.navigate('ShopBooksCash')} />
-                  <StatTile label="Bank balance" value={formatMoney(books.bank)} onPress={() => navigation.navigate('ShopBooksCash')} />
-                </View>
+              {shopieEnabled && books && (showCashTiles || showPartyTiles) ? (
+                <TileGrid gap={spacing.md}>
+                  {showPartyTiles ? (
+                    <StatTile
+                      label="To collect"
+                      value={formatMoney(books.to_collect)}
+                      tone="positive"
+                      hint="Receivable"
+                      onPress={() => navigation.navigate('ShopBooks')}
+                    />
+                  ) : null}
+                  {showPartyTiles ? (
+                    <StatTile
+                      label="To pay"
+                      value={formatMoney(books.to_pay)}
+                      tone="negative"
+                      hint="Payable"
+                      onPress={() => navigation.navigate('ShopBooks')}
+                    />
+                  ) : null}
+                  {showCashTiles ? (
+                    <StatTile label="Cash in hand" value={formatMoney(books.cash)} onPress={() => navigation.navigate('ShopBooksCash')} />
+                  ) : null}
+                  {showCashTiles ? (
+                    <StatTile label="Bank balance" value={formatMoney(books.bank)} onPress={() => navigation.navigate('ShopBooksCash')} />
+                  ) : null}
+                </TileGrid>
               ) : null}
 
               {hasAppointie ? (
-                <View style={styles.statsRow}>
+                <TileGrid>
                   <StatTile label="Today" value={String(appointie?.today_bookings ?? todayCount)} hint="Bookings" />
                   <StatTile label="Left today" value={String(upcoming.length)} hint="Upcoming" />
                   <StatTile label="Customers" value={String(appointie?.active_customers ?? customers.length)} />
@@ -331,25 +355,27 @@ export function DashboardScreen() {
                   ) : (
                     <StatTile label="Services" value={String(services.length)} />
                   )}
-                </View>
+                </TileGrid>
               ) : null}
 
-              {shopieEnabled ? (
-                <View style={styles.statsRow}>
-                  <StatTile label="Orders today" value={String(shopie?.orders_today ?? 0)} />
-                  <StatTile label="Open" value={String(shopie?.open_orders ?? 0)} />
-                  <StatTile label="Returns" value={String(shopie?.pending_returns ?? 0)} tone="warning" />
-                  <StatTile label="Month" value={String(shopie?.orders_month ?? 0)} />
-                </View>
+              {shopieEnabled && (showOrders || showReturns) ? (
+                <TileGrid>
+                  {showOrders ? <StatTile label="Orders today" value={String(shopie?.orders_today ?? 0)} /> : null}
+                  {showOrders ? <StatTile label="Open" value={String(shopie?.open_orders ?? 0)} /> : null}
+                  {showReturns ? (
+                    <StatTile label="Returns" value={String(shopie?.pending_returns ?? 0)} tone="warning" />
+                  ) : null}
+                  {showOrders ? <StatTile label="Month" value={String(shopie?.orders_month ?? 0)} /> : null}
+                </TileGrid>
               ) : null}
 
               {petsEnabled ? (
-                <View style={styles.statsRow}>
+                <TileGrid>
                   <StatTile label="Pets" value={String(pets?.total ?? 0)} />
                   <StatTile label="Bdays 7d" value={String(pets?.birthdays_next_7d ?? 0)} />
                   <StatTile label="Bdays 30d" value={String(pets?.birthdays_next_30d ?? 0)} />
                   <StatTile label="Photos" value={String(pets?.with_photo ?? 0)} />
-                </View>
+                </TileGrid>
               ) : null}
 
               {showReports && revenueTeaser != null ? (
@@ -370,37 +396,39 @@ export function DashboardScreen() {
               <View style={isDesktop ? styles.desktopSplit : undefined}>
                 <View style={isDesktop ? styles.desktopCol : undefined}>
                   <Text style={styles.sectionLabel}>Quick actions</Text>
-                  <View style={styles.quickActions}>
+                  <TileGrid columns={isDesktop ? 4 : 2} gap={spacing.md}>
                     {hasAppointie ? (
                       <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
                     ) : null}
-                    {shopieEnabled ? (
+                    {showPos ? (
                       <QuickAction icon="shopping-cart" label="Sale" onPress={() => navigation.navigate('ShopPos')} />
                     ) : null}
-                    <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
-                    {hasAppointie ? (
+                    {has(PlanFeature.appointieCustomers) || shopieEnabled ? (
+                      <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
+                    ) : null}
+                    {hasAppointie && has(PlanFeature.appointieServices) ? (
                       <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
                     ) : null}
-                    {shopieEnabled ? (
+                    {showBooksHub ? (
                       <QuickAction icon="layers" label="Books" onPress={() => navigation.navigate('ShopBooks')} />
                     ) : null}
                     {petsEnabled ? (
                       <QuickAction icon="heart" label="Pets" onPress={() => navigation.navigate('ShopPets', undefined)} />
                     ) : null}
-                    {showStaff && hasAppointie ? (
+                    {showStaff && hasAppointie && has(PlanFeature.appointieStaff) ? (
                       <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
                     ) : null}
-                  </View>
+                  </TileGrid>
 
-                  {(shopieEnabled || showReports) && (
+                  {(showBooksHub || showPos || showReports) && (
                     <>
                       <Text style={styles.sectionLabel}>Reports</Text>
                       <View style={styles.reportRow}>
-                        {shopieEnabled ? (
-                          <>
-                            <ReportLink label="Sale report" onPress={() => navigation.navigate('ShopBooksReports')} />
-                            <ReportLink label="Sale (POS)" onPress={() => navigation.navigate('ShopPos')} />
-                          </>
+                        {has(PlanFeature.shopieGstReports) ? (
+                          <ReportLink label="Sale report" onPress={() => navigation.navigate('ShopBooksReports')} />
+                        ) : null}
+                        {showPos ? (
+                          <ReportLink label="Sale (POS)" onPress={() => navigation.navigate('ShopPos')} />
                         ) : null}
                         {showReports ? (
                           <ReportLink label="Business intelligence" onPress={() => navigation.navigate('BI', { tab: 'overview' })} />
@@ -464,24 +492,28 @@ export function DashboardScreen() {
         <Pressable style={styles.fabBackdrop} onPress={() => setFabOpen(false)}>
           <View style={styles.fabSheet}>
             <Text style={styles.fabSheetTitle}>Create</Text>
-            <Pressable style={styles.fabOption} onPress={openCreateBooking}>
-              <View style={styles.fabOptionIcon}>
-                <Feather name="calendar" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.fabOptionCopy}>
-                <Text style={styles.fabOptionLabel}>Booking</Text>
-                <Text style={styles.fabOptionHint}>New appointment</Text>
-              </View>
-            </Pressable>
-            <Pressable style={styles.fabOption} onPress={openSale}>
-              <View style={styles.fabOptionIcon}>
-                <Feather name="shopping-cart" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.fabOptionCopy}>
-                <Text style={styles.fabOptionLabel}>Sale</Text>
-                <Text style={styles.fabOptionHint}>POS checkout</Text>
-              </View>
-            </Pressable>
+            {hasAppointie ? (
+              <Pressable style={styles.fabOption} onPress={openCreateBooking}>
+                <View style={styles.fabOptionIcon}>
+                  <Feather name="calendar" size={18} color={colors.primary} />
+                </View>
+                <View style={styles.fabOptionCopy}>
+                  <Text style={styles.fabOptionLabel}>Booking</Text>
+                  <Text style={styles.fabOptionHint}>New appointment</Text>
+                </View>
+              </Pressable>
+            ) : null}
+            {showPos ? (
+              <Pressable style={styles.fabOption} onPress={openSale}>
+                <View style={styles.fabOptionIcon}>
+                  <Feather name="shopping-cart" size={18} color={colors.primary} />
+                </View>
+                <View style={styles.fabOptionCopy}>
+                  <Text style={styles.fabOptionLabel}>Sale</Text>
+                  <Text style={styles.fabOptionHint}>POS checkout</Text>
+                </View>
+              </Pressable>
+            ) : null}
             <Button label="Cancel" variant="outline" fullWidth onPress={() => setFabOpen(false)} />
           </View>
         </Pressable>
@@ -513,7 +545,9 @@ function QuickAction({
       <View style={styles.quickIcon}>
         <Feather name={icon} size={18} color={colors.primary} />
       </View>
-      <Text style={styles.quickLabel}>{label}</Text>
+      <Text style={styles.quickLabel} numberOfLines={1}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -567,8 +601,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   insightText: { ...typography.body, color: colors.foreground, flex: 1, lineHeight: 20 },
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   revenueCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -593,7 +625,6 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...typography.label,
     color: colors.mutedForeground,
-    marginBottom: -spacing.sm,
   },
   reportRow: { gap: spacing.sm },
   reportLink: {
@@ -608,10 +639,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   reportLinkText: { ...typography.body, fontFamily: fonts.bodyMedium, color: colors.foreground },
-  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   quickCard: {
-    minWidth: '22%',
-    flexGrow: 1,
+    flex: 1,
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.card,
@@ -619,6 +648,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
   },
   pressed: { opacity: 0.92 },
   quickIcon: {
@@ -631,7 +661,7 @@ const styles = StyleSheet.create({
   },
   quickLabel: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground },
   link: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
-  list: { gap: spacing.md, marginTop: -spacing.sm },
+  list: { gap: spacing.md },
   fab: {
     position: 'absolute',
     right: spacing.xl,
@@ -642,6 +672,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0B1F3A',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   fabDesktop: {
     display: 'none',

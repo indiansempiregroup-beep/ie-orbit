@@ -10,17 +10,15 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.billing.constants import (
-    ADDON_OFFICE_PRICE_PAISE,
-    ADDON_PETS_PRICE_PAISE,
-    ADDON_STAFF_PRICE_PAISE,
     CHECKOUT_SESSION_TTL_HOURS,
     DEFAULT_CHECKOUT_CURRENCY,
     PLAN_PRICE_PAISE,
     YEARLY_PRICE_MULTIPLIER,
 )
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
+from apps.billing.services.addon_pricing import get_addon_prices
 from apps.billing.services.razorpay_client import RazorpayClient, get_razorpay_config
-from apps.businesses.constants import VALID_PRODUCT_CODES, get_plan_definition
+from apps.businesses.constants import DEFAULT_TRIAL_DAYS, VALID_PRODUCT_CODES, get_plan_definition
 from apps.businesses.models import Business
 from apps.tenancy.models import Tenant
 
@@ -121,6 +119,7 @@ class CheckoutService:
         from apps.businesses.services.plan_catalog import list_plan_definitions
 
         plans: list[dict[str, Any]] = []
+        addon_prices = get_addon_prices()
         for definition in list_plan_definitions():
             plan_code = str(definition["code"])
             product_code = str(definition.get("product_code", ""))
@@ -151,13 +150,30 @@ class CheckoutService:
                     "features": list(definition.get("features") or []),
                     "amount_paise": amount_paise,
                     "yearly_amount_paise": yearly_amount,
-                    "addon_staff_price_paise": ADDON_STAFF_PRICE_PAISE,
-                    "addon_office_price_paise": ADDON_OFFICE_PRICE_PAISE,
-                    "addon_pets_price_paise": ADDON_PETS_PRICE_PAISE,
+                    "addon_staff_price_paise": addon_prices["staff_price_paise"],
+                    "addon_office_price_paise": addon_prices["office_price_paise"],
+                    "addon_pets_price_paise": addon_prices["pets_price_paise"],
+                    "is_public": bool(definition.get("is_public", True)),
                     "currency": DEFAULT_CHECKOUT_CURRENCY,
                 }
             )
         return plans
+
+    def list_public_plan_catalog(self, *, product_code: str | None = None) -> dict[str, Any]:
+        plans = self.list_plan_catalog()
+        normalized = (product_code or "").strip().lower()
+        if normalized:
+            plans = [plan for plan in plans if plan.get("product_code") == normalized]
+        plans = [plan for plan in plans if plan.get("is_public", True)]
+        addon_prices = get_addon_prices()
+        trial_days = max((int(plan.get("trial_days") or 0) for plan in plans), default=DEFAULT_TRIAL_DAYS)
+        return {
+            "trial_days": trial_days or DEFAULT_TRIAL_DAYS,
+            "addon_staff_price_paise": addon_prices["staff_price_paise"],
+            "addon_office_price_paise": addon_prices["office_price_paise"],
+            "addon_pets_price_paise": addon_prices["pets_price_paise"],
+            "plans": plans,
+        }
 
     def _resolve_plan_price_paise(self, plan_code: str, billing_interval: str = "monthly") -> int | None:
         overrides = getattr(settings, "BILLING_PLAN_PRICE_OVERRIDES", {}) or {}
@@ -236,11 +252,12 @@ class CheckoutService:
         base = self._resolve_plan_price_paise(normalized_plan)
         if base is None:
             raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
+        addon_prices = get_addon_prices()
         total = amount_paise if amount_paise is not None else (
             base
-            + max(0, int(extra_staff)) * ADDON_STAFF_PRICE_PAISE
-            + max(0, int(extra_offices)) * ADDON_OFFICE_PRICE_PAISE
-            + (ADDON_PETS_PRICE_PAISE if pets_pack_enabled else 0)
+            + max(0, int(extra_staff)) * addon_prices["staff_price_paise"]
+            + max(0, int(extra_offices)) * addon_prices["office_price_paise"]
+            + (addon_prices["pets_price_paise"] if pets_pack_enabled else 0)
         )
         if total <= 0:
             raise ValidationError({"amount": "Checkout amount must be positive."})

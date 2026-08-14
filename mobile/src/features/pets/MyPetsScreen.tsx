@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing } from '../../theme/tokens';
 import type { ShopPet } from '@ie-platform/sdk';
@@ -38,33 +39,43 @@ export function MyPetsScreen() {
   );
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-      <Text style={[styles.title, { color: primary }]}>My Pets</Text>
-      {loading ? <ActivityIndicator color={primary} /> : null}
+    <View style={styles.screen}>
+      <ScreenHeader title="My Pets" onBack={() => navigation.goBack()} />
+      {loading ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
       <FlatList
         data={pets}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, flexGrow: 1 }}
         renderItem={({ item }) => (
           <Pressable style={styles.card} onPress={() => navigation.navigate('PetDetail', { petId: item.id })}>
-            {item.photo_url ? <Image source={{ uri: item.photo_url }} style={styles.photo} /> : <View style={[styles.photo, styles.photoEmpty]} />}
+            {item.photo_url ? (
+              <Image source={{ uri: item.photo_url }} style={styles.photo} />
+            ) : (
+              <View style={[styles.photo, styles.photoEmpty]} />
+            )}
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.meta}>
-                {[item.species, item.breed].filter(Boolean).join(' · ') || 'Pet'}
-              </Text>
+              <Text style={styles.meta}>{[item.species, item.breed].filter(Boolean).join(' · ') || 'Pet'}</Text>
             </View>
           </Pressable>
         )}
-        ListEmptyComponent={!loading ? <Text style={styles.meta}>No pets on file yet.</Text> : null}
+        ListEmptyComponent={
+          !loading ? (
+            <EmptyState
+              icon="heart"
+              title="No pets on file"
+              description="When this shop saves a pet profile for you, it will appear here."
+            />
+          ) : null
+        }
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: spacing.md },
+  screen: { flex: 1, backgroundColor: colors.background },
+  loader: { marginTop: spacing.md },
   card: {
     flexDirection: 'row',
     gap: 12,

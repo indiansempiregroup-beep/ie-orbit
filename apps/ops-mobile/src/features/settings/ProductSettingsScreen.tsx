@@ -464,7 +464,13 @@ export function ProductSettingsScreen() {
                 <View style={styles.switchRow}>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={styles.label}>Pets pack</Text>
-                    <Text style={styles.meta}>₹{PETS_PACK_PRICE_INR}/month · profiles, birthdays, owner alerts</Text>
+                    <Text style={styles.meta}>
+                      ₹
+                      {Math.round(
+                        (snapshot.pricing.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100) / 100,
+                      )}
+                      /month · profiles, birthdays, owner alerts
+                    </Text>
                   </View>
                   <Switch value={petsPackEnabled} onValueChange={setPetsPackEnabled} />
                 </View>

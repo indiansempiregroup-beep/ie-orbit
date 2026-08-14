@@ -10,10 +10,21 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.businesses.models import Business
+from apps.businesses.constants import (
+    FEATURE_SHOPIE_BOOKS_CASH,
+    FEATURE_SHOPIE_BOOKS_PARTIES,
+    FEATURE_SHOPIE_BOOKS_QUOTATIONS,
+    FEATURE_SHOPIE_GST_REPORTS,
+    SHOPIE_BOOKS_FEATURES,
+)
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
 from apps.customers.models import Customer
+from apps.shopie.api.access import (
+    require_any_shopie_feature,
+    require_business as _business,
+    require_voucher_feature,
+)
 from apps.shopie.api.permissions import ShopAccessPermission
 from apps.shopie.api.serializers import (
     ShopBooksVoucherSerializer,
@@ -46,10 +57,6 @@ from apps.shopie.services.books import BooksService
 from apps.shopie.services.suppliers import SupplierService
 
 
-def _business(request: Request, business_id) -> Business:
-    return get_object_or_404(Business, tenant=request.current_tenant, id=business_id)
-
-
 def _validation_error(exc: DjangoValidationError) -> ValidationError:
     if hasattr(exc, "message_dict"):
         return ValidationError(exc.message_dict)
@@ -76,7 +83,7 @@ class ShopBooksDashboardView(APIView):
         return business_id
 
     def get(self, request: Request) -> Response:
-        business = _business(request, self._business_id(request))
+        business = _business(request, self._business_id(request), features=SHOPIE_BOOKS_FEATURES)
         metrics = self.books.get_dashboard_metrics(tenant=request.current_tenant, business=business)
         return success_response(metrics)
 
@@ -92,7 +99,7 @@ class ShopSupplierListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_PARTIES)
         qs = self.suppliers.list_suppliers(
             tenant=request.current_tenant,
             business=business,
@@ -104,7 +111,7 @@ class ShopSupplierListCreateView(APIView):
         serializer = ShopSupplierWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data.pop("business_id"))
+        business = _business(request, data.pop("business_id"), feature=FEATURE_SHOPIE_BOOKS_PARTIES)
         try:
             supplier = self.suppliers.create_supplier(
                 tenant=request.current_tenant, business=business, data=data
@@ -126,6 +133,7 @@ class ShopSupplierDetailView(APIView):
         ).first()
         if not supplier:
             raise NotFound("Supplier not found.")
+        require_any_shopie_feature(supplier.business, (FEATURE_SHOPIE_BOOKS_PARTIES,))
         return supplier
 
     def get(self, request: Request, supplier_id) -> Response:
@@ -156,7 +164,7 @@ class ShopCashAccountListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_CASH)
         qs = ShopCashAccount.objects.filter(
             tenant=request.current_tenant, business=business
         ).order_by("name")
@@ -166,7 +174,7 @@ class ShopCashAccountListCreateView(APIView):
         serializer = ShopCashAccountWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data.pop("business_id"))
+        business = _business(request, data.pop("business_id"), feature=FEATURE_SHOPIE_BOOKS_CASH)
         opening = data.get("opening_balance") or 0
         account = ShopCashAccount.objects.create(
             tenant=request.current_tenant,
@@ -192,6 +200,7 @@ class ShopCashAccountDetailView(APIView):
         ).first()
         if not account:
             raise NotFound("Account not found.")
+        require_any_shopie_feature(account.business, (FEATURE_SHOPIE_BOOKS_CASH,))
         return account
 
     def get(self, request: Request, account_id) -> Response:
@@ -234,6 +243,7 @@ class ShopBooksVoucherListCreateView(APIView):
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id)
+        require_voucher_feature(business, request.query_params.get("type"))
         qs = self.books.list_vouchers(
             tenant=request.current_tenant,
             business=business,
@@ -277,6 +287,7 @@ class ShopBooksVoucherListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         business = _business(request, data.pop("business_id"))
+        require_voucher_feature(business, voucher_type)
 
         if data.get("customer_id"):
             customer_id = data.pop("customer_id")
@@ -319,6 +330,7 @@ class ShopBooksVoucherDetailView(APIView):
 
     def get(self, request: Request, voucher_id) -> Response:
         voucher = get_object_or_404(ShopBooksVoucher, tenant=request.current_tenant, id=voucher_id)
+        require_voucher_feature(voucher.business, voucher.voucher_type)
         voucher = self.books.get_voucher(
             tenant=request.current_tenant, business=voucher.business, voucher_id=voucher.id
         )
@@ -331,6 +343,7 @@ class ShopBooksVoucherVoidView(APIView):
 
     def post(self, request: Request, voucher_id) -> Response:
         voucher = get_object_or_404(ShopBooksVoucher, tenant=request.current_tenant, id=voucher_id)
+        require_voucher_feature(voucher.business, voucher.voucher_type)
         try:
             voucher = self.books.void_voucher(
                 tenant=request.current_tenant, business=voucher.business, voucher=voucher
@@ -354,7 +367,7 @@ class ShopPartyStatementView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_PARTIES)
         try:
             statement = self.books.party_statement(
                 tenant=request.current_tenant,
@@ -382,7 +395,7 @@ class ShopBooksReportView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_GST_REPORTS)
         date_from = _parse_date(request.query_params.get("date_from"))
         date_to = _parse_date(request.query_params.get("date_to"))
 
@@ -406,6 +419,7 @@ class ShopQuotationConvertToSaleView(APIView):
 
     def post(self, request: Request, quotation_id) -> Response:
         quotation = get_object_or_404(ShopQuotation, tenant=request.current_tenant, id=quotation_id)
+        require_any_shopie_feature(quotation.business, (FEATURE_SHOPIE_BOOKS_QUOTATIONS,))
         serializer = ShopQuotationConvertSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data

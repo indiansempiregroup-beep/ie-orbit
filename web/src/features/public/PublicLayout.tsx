@@ -10,6 +10,15 @@ const navLinks = [
   { to: '/faq', label: 'FAQ' },
 ];
 
+const footerLinks = [
+  { to: '/features', label: 'Features' },
+  { to: '/pricing', label: 'Pricing' },
+  { to: '/help', label: 'Help' },
+  { to: '/privacy', label: 'Privacy' },
+  { to: '/terms', label: 'Terms' },
+  { to: '/contact', label: 'Contact' },
+];
+
 export function PublicLayout() {
   const location = useLocation();
 
@@ -17,10 +26,10 @@ export function PublicLayout() {
     <div className="public-layout">
       <header className="public-header">
         <div className="public-header-inner">
-          <Link to="/" className="public-brand" aria-label="AppointIE home">
-            <span className="public-brand-mark" aria-hidden="true">A</span>
+          <Link to="/" className="public-brand" aria-label="IE Platform home">
+            <span className="public-brand-mark" aria-hidden="true">IE</span>
             <span>
-              <strong>AppointIE</strong>
+              <strong>IE Platform</strong>
               <small>by Indians Empire</small>
             </span>
           </Link>
@@ -52,13 +61,15 @@ export function PublicLayout() {
       <footer className="public-footer">
         <div className="public-footer-inner">
           <div>
-            <strong>AppointIE</strong>
-            <p>Modern appointment scheduling for service businesses.</p>
+            <strong>IE Platform</strong>
+            <p>One workspace for appointments and retail — AppointIE and ShopIE.</p>
           </div>
           <nav aria-label="Footer navigation">
-            <Link to="/privacy">Privacy</Link>
-            <Link to="/terms">Terms</Link>
-            <Link to="/contact">Contact</Link>
+            {footerLinks.map((link) => (
+              <Link key={link.to} to={link.to}>
+                {link.label}
+              </Link>
+            ))}
           </nav>
           <p className="public-footer-copy">© {new Date().getFullYear()} Indians Empire Technologies</p>
         </div>

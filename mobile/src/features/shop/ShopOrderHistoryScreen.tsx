@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing } from '../../theme/tokens';
 import type { ShopOrder } from '@ie-platform/sdk';
@@ -38,13 +39,13 @@ export function ShopOrderHistoryScreen() {
   );
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-      <Text style={[styles.title, { color: primary }]}>My Orders</Text>
-      {loading ? <ActivityIndicator color={primary} /> : null}
+    <View style={styles.screen}>
+      <ScreenHeader title="My Orders" onBack={() => navigation.goBack()} />
+      {loading ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
       <FlatList
         data={orders}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, flexGrow: 1 }}
         renderItem={({ item }) => (
           <Pressable
             style={styles.card}
@@ -57,15 +58,23 @@ export function ShopOrderHistoryScreen() {
             </Text>
           </Pressable>
         )}
-        ListEmptyComponent={!loading ? <Text style={styles.meta}>No orders yet.</Text> : null}
+        ListEmptyComponent={
+          !loading ? (
+            <EmptyState
+              icon="package"
+              title="No orders yet"
+              description="When you place an order in the shop, it will show up here."
+            />
+          ) : null
+        }
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: spacing.md },
+  screen: { flex: 1, backgroundColor: colors.background },
+  loader: { marginTop: spacing.md },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,

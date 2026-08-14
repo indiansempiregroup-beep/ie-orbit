@@ -77,6 +77,34 @@ def test_billing_plan_catalog_endpoint(api_client: APIClient, user: User) -> Non
 
 
 @pytest.mark.django_db
+def test_public_plan_catalog_unauthenticated(api_client: APIClient) -> None:
+    response = api_client.get(reverse("billing-public-plan-catalog"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    codes = [plan["plan_code"] for plan in payload["plans"]]
+    assert "appointie-starter" in codes
+    assert payload["trial_days"] >= 1
+    assert payload["addon_staff_price_paise"] > 0
+    assert payload["addon_office_price_paise"] > 0
+
+
+@pytest.mark.django_db
+def test_public_plan_catalog_hides_private_packages(api_client: APIClient) -> None:
+    from apps.platform_admin.models import PlatformPlanPackage
+
+    hidden = PlatformPlanPackage.objects.filter(code="appointie-pro").first()
+    if hidden is None:
+        pytest.skip("appointie-pro package not seeded")
+    hidden.is_public = False
+    hidden.save(update_fields=["is_public", "updated_at"])
+
+    public = api_client.get(reverse("billing-public-plan-catalog"))
+    public_codes = [plan["plan_code"] for plan in public.json()["data"]["plans"]]
+    assert "appointie-pro" not in public_codes
+    assert "appointie-starter" in public_codes
+
+
+@pytest.mark.django_db
 def test_billing_plan_catalog_honors_price_override(api_client: APIClient, user: User, settings) -> None:
     settings.BILLING_PLAN_PRICE_OVERRIDES = {"appointie-starter": 123400}
     authenticate(api_client, user)
@@ -575,6 +603,280 @@ def test_billing_platform_monitoring_and_audit_feed_for_platform_admin(api_clien
     assert feed_response.status_code == 200
     feed_payload = feed_response.json()["data"]
     assert "rows" in feed_payload
+
+
+@pytest.mark.django_db
+def test_platform_addon_pricing_get_and_update(api_client: APIClient) -> None:
+    user = User.objects.create_user(
+        email="platform-addon-admin@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    authenticate(api_client, user)
+
+    get_response = api_client.get(reverse("platform-addon-pricing"))
+    assert get_response.status_code == 200
+    current = get_response.json()["data"]
+    assert current["staff_price_paise"] >= 0
+    assert current["office_price_paise"] >= 0
+    assert current["pets_price_paise"] >= 0
+
+    put_response = api_client.put(
+        reverse("platform-addon-pricing"),
+        {
+            "staff_price_paise": 25000,
+            "office_price_paise": 35000,
+            "pets_price_paise": 60000,
+            "reason": "Adjust add-on prices",
+        },
+        format="json",
+    )
+    assert put_response.status_code == 200
+    updated = put_response.json()["data"]
+    assert updated["staff_price_paise"] == 25000
+    assert updated["office_price_paise"] == 35000
+    assert updated["pets_price_paise"] == 60000
+    assert updated["staff_price_inr"] == 250
+
+
+@pytest.mark.django_db
+def test_platform_revenue_requires_platform_role(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    response = api_client.get(reverse("billing-platform-revenue"))
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_platform_revenue_insights_for_platform_admin(api_client: APIClient) -> None:
+    from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
+    from apps.billing.services.platform_revenue import build_platform_revenue_insights
+    from apps.businesses.models import (
+        Business,
+        BusinessProductSubscription,
+        BusinessProductSubscriptionStatus,
+    )
+    from apps.tenancy.models import Organization, SubscriptionPlan, Tenant
+    from django.utils import timezone
+
+    user = User.objects.create_user(
+        email="platform-revenue-admin@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    authenticate(api_client, user)
+
+    owner = User.objects.create_user(
+        email="revenue-tenant-owner@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    tenant = Tenant.objects.create(slug="revenue-tenant", display_name="Revenue Tenant", owner=owner)
+    organization = Organization.objects.create(tenant=tenant, name="Revenue Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="revenue-biz",
+        business_name="Revenue Biz",
+        display_name="Revenue Biz",
+    )
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "AppointIE Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+        billing_interval="monthly",
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+        billing_interval="monthly",
+        extra_staff=0,
+        extra_offices=0,
+        external_billing_reference="comp:admin:2026-08-14",
+    )
+    BillingCheckoutSession.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="appointie",
+        plan_code="appointie-starter",
+        razorpay_order_id="order_revenue_1",
+        amount_paise=99900,
+        currency="INR",
+        status=CheckoutSessionStatus.PAID,
+        paid_at=timezone.now(),
+    )
+
+    insights = build_platform_revenue_insights()
+    assert insights["collected_all_time_paise"] >= 99900
+    assert insights["paying_subscriptions"] >= 1
+    assert insights["complimentary_subscriptions"] >= 1
+    assert insights["mrr_paise"] >= 99900
+
+    response = api_client.get(reverse("billing-platform-revenue"))
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["currency"] == "INR"
+    assert "mrr_paise" in payload
+    assert "collected_month_paise" in payload
+
+
+@pytest.mark.django_db
+def test_platform_upi_claims_list_for_platform_admin(api_client: APIClient) -> None:
+    from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
+    from apps.businesses.models import Business
+    from apps.tenancy.models import Organization, Tenant
+
+    user = User.objects.create_user(
+        email="platform-claims-admin@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    authenticate(api_client, user)
+    owner = User.objects.create_user(
+        email="claims-owner@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    tenant = Tenant.objects.create(slug="claims-tenant", display_name="Claims Tenant", owner=owner)
+    organization = Organization.objects.create(tenant=tenant, name="Claims Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="claims-biz",
+        business_name="Claims Biz",
+        display_name="Claims Biz",
+    )
+    BillingCheckoutSession.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="appointie",
+        plan_code="appointie-starter",
+        razorpay_order_id="order_claim_1",
+        amount_paise=99900,
+        currency="INR",
+        status=CheckoutSessionStatus.CREATED,
+        metadata={"payment_status": "awaiting_confirmation", "upi_utr": "123456789012"},
+    )
+    response = api_client.get(reverse("platform-upi-claims"))
+    assert response.status_code == 200
+    claims = response.json()["data"]["claims"]
+    assert len(claims) == 1
+    assert claims[0]["upi_utr"] == "123456789012"
+    assert claims[0]["tenant_name"] == "Claims Tenant"
+
+
+@pytest.mark.django_db
+def test_platform_tenant_directory_includes_billing_state(api_client: APIClient) -> None:
+    from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
+    from apps.businesses.models import (
+        Business,
+        BusinessProductSubscription,
+        BusinessProductSubscriptionStatus,
+    )
+    from apps.tenancy.models import Organization, SubscriptionPlan, Tenant
+    from django.utils import timezone
+
+    user = User.objects.create_user(
+        email="platform-tenants-admin@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    authenticate(api_client, user)
+    owner = User.objects.create_user(
+        email="dir-owner@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    tenant = Tenant.objects.create(slug="dir-tenant", display_name="Dir Tenant", owner=owner)
+    organization = Organization.objects.create(tenant=tenant, name="Dir Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="dir-biz",
+        business_name="Dir Biz",
+        display_name="Dir Biz",
+        selected_product="appointie",
+    )
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-pro",
+        defaults={"name": "AppointIE Pro", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+    )
+    BillingCheckoutSession.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="appointie",
+        plan_code="appointie-pro",
+        razorpay_order_id="order_dir_1",
+        amount_paise=199900,
+        currency="INR",
+        status=CheckoutSessionStatus.PAID,
+        paid_at=timezone.now(),
+    )
+    response = api_client.get(reverse("platform-tenant-admin-list"))
+    assert response.status_code == 200
+    rows = response.json()["data"]["tenants"]
+    match = next(row for row in rows if row["slug"] == "dir-tenant")
+    assert match["billing_state"] == "paying"
+    assert match["plan_code"] == "appointie-pro"
+    assert match["last_paid_paise"] == 199900
+
+
+@pytest.mark.django_db
+def test_platform_webhook_events_for_platform_admin(api_client: APIClient) -> None:
+    from apps.tenancy.models import Tenant
+
+    user = User.objects.create_user(
+        email="platform-monitor-admin@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    authenticate(api_client, user)
+    owner = User.objects.create_user(
+        email="monitor-owner@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    tenant = Tenant.objects.create(slug="monitor-tenant", display_name="Monitor Tenant", owner=owner)
+    event = BillingWebhookEvent.objects.create(
+        tenant=tenant,
+        external_event_id="evt_platform_failed_1",
+        event_type="payment.failed",
+        status=WebhookEventStatus.FAILED,
+        payload={},
+        error_message="boom",
+    )
+    list_response = api_client.get(reverse("billing-platform-webhook-events"), {"window_hours": 24})
+    assert list_response.status_code == 200
+    payload = list_response.json()["data"]
+    assert payload["count"] >= 1
+    assert payload["events"][0]["external_event_id"] == event.external_event_id
+    reprocess = api_client.post(
+        reverse("billing-platform-webhook-reprocess", kwargs={"event_id": event.id})
+    )
+    assert reprocess.status_code == 200
+    assert "reprocessed" in reprocess.json()["data"]
 
 
 @pytest.mark.django_db

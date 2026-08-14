@@ -6,10 +6,6 @@ PLAN_PRICE_PAISE: dict[str, int] = {
     "appointie-pro": 199900,
     "shopie-starter": 99900,
     "shopie-pro": 199900,
-    "invoiceie-starter": 79900,
-    "invoiceie-pro": 149900,
-    "crmie-starter": 59900,
-    "crmie-pro": 129900,
 }
 
 # Yearly = 10 × monthly (2 months free).

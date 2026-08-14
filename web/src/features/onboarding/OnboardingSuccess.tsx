@@ -4,7 +4,7 @@ import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function OnboardingSuccess() {
-  usePageMeta({ title: 'Workspace created — AppointIE' });
+  usePageMeta({ title: 'Workspace created — IE Platform' });
   const navigate = useNavigate();
 
   return (

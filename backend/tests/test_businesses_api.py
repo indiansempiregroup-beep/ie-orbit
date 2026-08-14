@@ -115,20 +115,20 @@ def test_business_product_selection(api_client: APIClient, user: User) -> None:
             "business_code": "product-salon",
             "business_name": "Product Salon",
             "display_name": "Product Salon",
-            "selected_product": "invoiceie",
+            "selected_product": "shopie",
         },
         format="json",
     )
 
     assert response.status_code == 201
     payload = response.json()["data"]
-    assert payload["selected_product"] == "invoiceie"
+    assert payload["selected_product"] == "shopie"
     assert len(payload["product_subscriptions"]) == 1
-    assert payload["product_subscriptions"][0]["product_code"] == "invoiceie"
+    assert payload["product_subscriptions"][0]["product_code"] == "shopie"
     business_id = payload["id"]
     assert BusinessProductSubscription.objects.filter(
         business_id=business_id,
-        product_code="invoiceie",
+        product_code="shopie",
     ).exists()
 
 
@@ -152,15 +152,15 @@ def test_subscribe_product_endpoint(api_client: APIClient, user: User) -> None:
 
     response = api_client.post(
         reverse("business-subscribe-product", kwargs={"pk": business_id}),
-        {"product_code": "crmie", "set_active": True},
+        {"product_code": "shopie", "set_active": True},
         format="json",
     )
 
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["selected_product"] == "crmie"
+    assert payload["selected_product"] == "shopie"
     subscribed_codes = {item["product_code"] for item in payload["product_subscriptions"]}
-    assert subscribed_codes == {"appointie", "crmie"}
+    assert subscribed_codes == {"appointie", "shopie"}
 
 
 @pytest.mark.django_db
@@ -183,7 +183,7 @@ def test_cannot_activate_unsubscribed_product(api_client: APIClient, user: User)
 
     response = api_client.patch(
         reverse("business-detail", kwargs={"pk": business_id}),
-        {"selected_product": "invoiceie"},
+        {"selected_product": "shopie"},
         format="json",
     )
 
@@ -210,13 +210,13 @@ def test_unsubscribe_product_endpoint(api_client: APIClient, user: User) -> None
 
     subscribe_response = api_client.post(
         reverse("business-subscribe-product", kwargs={"pk": business_id}),
-        {"product_code": "crmie", "plan_code": "crmie-starter", "set_active": False},
+        {"product_code": "shopie", "plan_code": "shopie-starter", "set_active": False},
         format="json",
     )
     assert subscribe_response.status_code == 200
 
     response = api_client.delete(
-        reverse("business-unsubscribe-product", kwargs={"pk": business_id, "product_code": "crmie"}),
+        reverse("business-unsubscribe-product", kwargs={"pk": business_id, "product_code": "shopie"}),
     )
 
     assert response.status_code == 200
@@ -228,6 +228,33 @@ def test_unsubscribe_product_endpoint(api_client: APIClient, user: User) -> None
     }
     assert active_codes == {"appointie"}
     assert payload["selected_product"] == "appointie"
+
+
+@pytest.mark.django_db
+def test_subscribe_removed_product_is_rejected(api_client: APIClient, user: User) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+
+    create_response = api_client.post(
+        reverse("business-list-create"),
+        {
+            "business_code": "legacy-salon",
+            "business_name": "Legacy Salon",
+            "display_name": "Legacy Salon",
+            "selected_product": "appointie",
+        },
+        format="json",
+    )
+    business_id = create_response.json()["data"]["id"]
+
+    for product_code in ("crmie", "invoiceie"):
+        response = api_client.post(
+            reverse("business-subscribe-product", kwargs={"pk": business_id}),
+            {"product_code": product_code, "set_active": True},
+            format="json",
+        )
+        assert response.status_code in {400, 422}
 
 
 @pytest.mark.django_db

@@ -1,7 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 
 type Tone = 'default' | 'positive' | 'negative' | 'warning';
@@ -15,10 +14,10 @@ type Props = {
   style?: ViewStyle;
 };
 
+/** Visual KPI card. Parent (e.g. TileGrid) owns width — do not use % minWidth here. */
 export function StatTile({ label, value, hint, tone = 'default', onPress, style }: Props) {
-  const { isDesktop } = useBreakpoint();
   const content = (
-    <View style={[styles.tile, isDesktop && styles.tileDesktop, style]}>
+    <View style={[styles.tile, style]}>
       <Text style={styles.label}>{label}</Text>
       <Text
         style={[
@@ -28,6 +27,8 @@ export function StatTile({ label, value, hint, tone = 'default', onPress, style 
           tone === 'warning' && styles.warning,
         ]}
         numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
       >
         {value}
       </Text>
@@ -36,7 +37,9 @@ export function StatTile({ label, value, hint, tone = 'default', onPress, style 
           {tone === 'negative' ? <Feather name="arrow-down" size={12} color={colors.destructive} /> : null}
           {tone === 'positive' ? <Feather name="arrow-up" size={12} color={colors.success} /> : null}
           {tone === 'warning' ? <Feather name="alert-circle" size={12} color={colors.warning} /> : null}
-          <Text style={styles.hint}>{hint}</Text>
+          <Text style={styles.hint} numberOfLines={1}>
+            {hint}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -44,37 +47,25 @@ export function StatTile({ label, value, hint, tone = 'default', onPress, style 
 
   if (onPress) {
     return (
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [isDesktop && styles.pressableDesktop, pressed && styles.pressed]}
-      >
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.fill, pressed && styles.pressed]}>
         {content}
       </Pressable>
     );
   }
+
   return content;
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
   tile: {
     flex: 1,
-    minWidth: '45%',
     backgroundColor: colors.card,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
     gap: 4,
-  },
-  tileDesktop: {
-    minWidth: '22%',
-    flexBasis: '22%',
-    flexGrow: 1,
-  },
-  pressableDesktop: {
-    flexGrow: 1,
-    flexBasis: '22%',
-    minWidth: '22%',
   },
   label: { ...typography.caption, color: colors.mutedForeground },
   value: {
@@ -87,6 +78,6 @@ const styles = StyleSheet.create({
   negative: { color: colors.destructive },
   warning: { color: colors.warning },
   hintRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  hint: { ...typography.tiny, color: colors.mutedForeground },
+  hint: { ...typography.tiny, color: colors.mutedForeground, flexShrink: 1 },
   pressed: { opacity: 0.92 },
 });

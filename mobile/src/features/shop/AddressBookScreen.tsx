@@ -1,14 +1,18 @@
 import React, { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing } from '../../theme/tokens';
 import type { CustomerAddress } from '@ie-platform/sdk';
+import type { RootStackParamList } from '../../navigation/types';
 
 export function AddressBookScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -57,12 +61,12 @@ export function AddressBookScreen() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-      <Text style={[styles.title, { color: primary }]}>Addresses</Text>
+    <View style={styles.screen}>
+      <ScreenHeader title="Addresses" onBack={() => navigation.goBack()} />
       <FlatList
         data={addresses}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: 180 }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: 180, flexGrow: 1 }}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.name}>
@@ -85,7 +89,9 @@ export function AddressBookScreen() {
             </Pressable>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.meta}>No saved addresses.</Text>}
+        ListEmptyComponent={
+          <EmptyState icon="map-pin" title="No saved addresses" description="Add a delivery address below for faster checkout." />
+        }
       />
       <View style={[styles.form, { paddingBottom: insets.bottom + spacing.md }]}>
         <TextInput style={styles.input} placeholder="Address line" value={line1} onChangeText={setLine1} />
@@ -106,7 +112,7 @@ export function AddressBookScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  screen: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: 26, fontWeight: '700', marginBottom: spacing.md },
   card: {
     backgroundColor: colors.card,
@@ -118,7 +124,13 @@ const styles = StyleSheet.create({
   },
   name: { fontWeight: '700', color: colors.foreground },
   meta: { marginTop: 4, color: colors.mutedForeground },
-  form: { gap: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
+  form: {
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

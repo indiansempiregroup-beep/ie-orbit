@@ -35,6 +35,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useOpsClient } from './useOpsClient';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { buildNameMap } from '../utils/entities';
+import { entitledFeatureList, hasAnyPlanFeature, hasPlanFeature } from '../utils/planFeatures';
 import { useCustomers, useServices, useStaffMembers } from './useOpsData';
 
 export function useEntityMaps() {
@@ -320,6 +321,28 @@ export function useBusinessBillingSnapshot() {
   }, [reload]);
 
   return { billing, loading, reload };
+}
+
+export function usePlanFeatures() {
+  const { billing, loading, reload } = useBusinessBillingSnapshot();
+  const features = useMemo(() => entitledFeatureList(billing), [billing]);
+  const has = useCallback(
+    (feature: string) => (loading ? true : hasPlanFeature(features, feature)),
+    [loading, features],
+  );
+  const hasAny = useCallback(
+    (keys: string[]) => (loading ? true : hasAnyPlanFeature(features, keys)),
+    [loading, features],
+  );
+
+  return {
+    billing,
+    loading,
+    reload,
+    features,
+    has,
+    hasAny,
+  };
 }
 
 export function useUpdateBusinessAddons() {

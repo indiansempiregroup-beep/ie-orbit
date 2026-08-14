@@ -36,7 +36,7 @@ export function ProfilePage() {
       style={{
         minHeight: routes.embeddedInAdmin ? undefined : '100%',
         padding: routes.embeddedInAdmin ? 0 : 8,
-        color: theme.resolved === 'dark' ? '#f8fafc' : '#111827',
+        color: routes.embeddedInAdmin ? undefined : theme.resolved === 'dark' ? '#f8fafc' : '#111827',
       }}
     >
       <div style={{ maxWidth: 960, margin: '0 auto', display: 'grid', gap: 24, width: '100%' }}>

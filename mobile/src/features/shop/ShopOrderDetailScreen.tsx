@@ -16,6 +16,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { getApiBaseUrl } from '../../config/apiBaseUrl';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
@@ -65,8 +66,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
   if (!order) {
     return (
-      <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-        <ActivityIndicator color={primary} />
+      <View style={styles.screen}>
+        <ScreenHeader title="Order" onBack={() => navigation.goBack()} />
+        <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} />
       </View>
     );
   }
@@ -134,10 +136,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 40 }}
-    >
+    <View style={styles.screen}>
+      <ScreenHeader title={order.order_number} onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40 }}>
       <Text style={styles.title}>{order.order_number}</Text>
       <Text style={styles.meta}>
         {order.status} · {order.fulfillment_mode}
@@ -221,12 +222,13 @@ export function ShopOrderDetailScreen({ route }: Props) {
       ) : null}
 
       {message ? <Text style={styles.meta}>{message}</Text> : null}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  screen: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: 24, fontWeight: '700', color: colors.foreground },
   meta: { marginTop: 6, color: colors.mutedForeground },
   chip: { alignSelf: 'flex-start', marginTop: spacing.sm, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },

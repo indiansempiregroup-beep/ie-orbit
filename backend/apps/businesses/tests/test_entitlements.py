@@ -66,6 +66,26 @@ def test_trial_uses_pro_limits(business: Business) -> None:
     assert entitlements.effective_max_branches == 5
     assert "forecast" in entitlements.bi_features
     assert "reward_points" in entitlements.features
+    assert "appointie_bookings" in entitlements.features
+
+
+@pytest.mark.django_db
+def test_missing_plan_feature_is_blocked(business: Business) -> None:
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "AppointIE Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+    )
+    service = EntitlementService()
+    service.ensure_feature(business=business, feature="appointie_bookings")
+    with pytest.raises(PermissionDenied):
+        service.ensure_feature(business=business, feature="shopie_pos")
 
 
 @pytest.mark.django_db
@@ -146,6 +166,38 @@ def test_addon_increases_effective_limits(business: Business) -> None:
     assert entitlements.effective_max_staff == 7
     assert entitlements.effective_max_branches == 8
     assert entitlements.total_amount_paise == 199900 + (2 * 19900) + (3 * 29900)
+
+
+@pytest.mark.django_db
+def test_addon_prices_follow_platform_admin_settings(business: Business) -> None:
+    from apps.platform_admin.models import PlatformAddonPricing
+
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-pro",
+        defaults={"name": "AppointIE Pro", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+        extra_staff=1,
+        extra_offices=1,
+    )
+    PlatformAddonPricing.objects.update_or_create(
+        key="default",
+        defaults={
+            "staff_price_paise": 25000,
+            "office_price_paise": 35000,
+            "pets_price_paise": 60000,
+        },
+    )
+    entitlements = EntitlementService().resolve(business=business)
+    snapshot = entitlements.to_dict()
+    assert snapshot["pricing"]["addon_staff_unit_paise"] == 25000
+    assert snapshot["pricing"]["addon_office_unit_paise"] == 35000
+    assert entitlements.addon_amount_paise == 25000 + 35000
 
 
 @pytest.mark.django_db

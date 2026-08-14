@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.platform_admin.api import (
+    PlatformAddonPricingView,
     PlatformAnnouncementPublicView,
     PlatformAnnouncementsView,
     PlatformAuditFeedView,
@@ -15,12 +16,15 @@ from apps.platform_admin.api import (
     PlatformPaymentRefundView,
     PlatformPlanPackagesView,
     PlatformPurgeTenantView,
+    PlatformUpiClaimActionView,
+    PlatformUpiClaimsView,
     PlatformTenantActionView,
     PlatformTenantBillingActionView,
     PlatformTenantBillingView,
     PlatformTenantFlagsView,
     PlatformTenantPaymentsView,
     PlatformTenantUsersView,
+    PlatformTicketDetailView,
     PlatformTicketNoteView,
     PlatformTicketsView,
     PlatformTransferOwnershipView,
@@ -68,6 +72,11 @@ urlpatterns = [
         name="platform-payment-refund",
     ),
     path(
+        "platform/tenants/<uuid:tenant_id>/payments/<uuid:payment_id>/confirm",
+        PlatformUpiClaimActionView.as_view(),
+        name="platform-payment-confirm",
+    ),
+    path(
         "platform/tenants/<uuid:tenant_id>/credits",
         PlatformCreditsView.as_view(),
         name="platform-tenant-credits",
@@ -99,14 +108,29 @@ urlpatterns = [
         name="platform-user-action",
     ),
     path("platform/impersonation/end", PlatformImpersonationEndView.as_view(), name="platform-impersonation-end"),
+    path(
+        "platform/upi-claims",
+        PlatformUpiClaimsView.as_view(),
+        name="platform-upi-claims",
+    ),
     path("platform/coupons", PlatformCouponsView.as_view(), name="platform-coupons"),
     path("platform/plan-packages", PlatformPlanPackagesView.as_view(), name="platform-plan-packages"),
+    path(
+        "platform/addon-pricing",
+        PlatformAddonPricingView.as_view(),
+        name="platform-addon-pricing",
+    ),
     path("platform/audit", PlatformAuditFeedView.as_view(), name="platform-audit-feed"),
     path("platform/tickets", PlatformTicketsView.as_view(), name="platform-tickets"),
     path(
         "platform/tickets/<uuid:ticket_id>/notes",
         PlatformTicketNoteView.as_view(),
         name="platform-ticket-notes",
+    ),
+    path(
+        "platform/tickets/<uuid:ticket_id>",
+        PlatformTicketDetailView.as_view(),
+        name="platform-ticket-detail",
     ),
     path("platform/announcements", PlatformAnnouncementsView.as_view(), name="platform-announcements"),
     path(

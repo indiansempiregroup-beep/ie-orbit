@@ -26,19 +26,46 @@ export function voucherAmount(value: string | number | undefined | null): number
   return Number.isFinite(n) ? n : 0;
 }
 
+function voucherMeta(voucher: ShopBooksVoucher): Record<string, unknown> {
+  return voucher.metadata && typeof voucher.metadata === 'object'
+    ? (voucher.metadata as Record<string, unknown>)
+    : {};
+}
+
+/** Invoice total after completed returns (falls back to original total). */
+export function voucherDisplayTotal(voucher: ShopBooksVoucher): number {
+  const meta = voucherMeta(voucher);
+  if (meta.net_total != null) return voucherAmount(meta.net_total as string | number);
+  const returned = voucherAmount(meta.returned_total as string | number | undefined);
+  return Math.max(0, voucherAmount(voucher.total) - returned);
+}
+
+/** Amount still considered paid after cash refunds from returns. */
+export function voucherDisplayPaid(voucher: ShopBooksVoucher): number {
+  const meta = voucherMeta(voucher);
+  if (meta.net_amount_paid != null) return voucherAmount(meta.net_amount_paid as string | number);
+  const paid = voucherAmount(voucher.amount_paid);
+  const total = voucherDisplayTotal(voucher);
+  // Legacy vouchers: cash refund may not have reduced amount_paid yet.
+  if (voucherAmount(meta.returned_total as string | number | undefined) > 0 && paid > total) {
+    return total;
+  }
+  return paid;
+}
+
 /** Remaining balance on a sale/purchase voucher (0 if fully paid / voided). */
 export function voucherBalanceDue(voucher: ShopBooksVoucher): number {
   if (isVoidedVoucher(voucher.status)) return 0;
-  const meta =
-    voucher.metadata && typeof voucher.metadata === 'object' ? voucher.metadata : {};
-  // After returns, net_total is original invoice total minus credit notes.
-  const total =
-    meta.net_total != null
-      ? voucherAmount(meta.net_total as string | number)
-      : voucherAmount(voucher.total);
-  const paid = voucherAmount(voucher.amount_paid);
+  const meta = voucherMeta(voucher);
+  if (meta.net_amount_due != null) {
+    return Math.max(0, voucherAmount(meta.net_amount_due as string | number));
+  }
+  const total = voucherDisplayTotal(voucher);
+  const paid = voucherDisplayPaid(voucher);
   const status = (voucher.status || '').toLowerCase();
-  if (status === 'paid') return 0;
+  if (status === 'paid' && voucherAmount(meta.returned_total as string | number | undefined) <= 0) {
+    return 0;
+  }
   return Math.max(0, total - paid);
 }
 
@@ -60,12 +87,12 @@ export function summarizeVouchers(vouchers: ShopBooksVoucher[]): VoucherListSumm
   return vouchers.reduce<VoucherListSummary>(
     (acc, voucher) => {
       if (isVoidedVoucher(voucher.status)) return acc;
-      const total = voucherAmount(voucher.total);
+      const total = voucherDisplayTotal(voucher);
+      const paid = voucherDisplayPaid(voucher);
       const balance = voucherBalanceDue(voucher);
-      const paid = Math.max(0, total - balance);
       acc.count += 1;
       acc.totalAmount += total;
-      acc.paidAmount += paid;
+      acc.paidAmount += Math.min(paid, total);
       acc.unpaidAmount += balance;
       if (balance <= 0.009) acc.paidCount += 1;
       else acc.unpaidCount += 1;

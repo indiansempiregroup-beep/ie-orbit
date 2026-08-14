@@ -1,8 +1,29 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RefreshableScrollView } from './RefreshableScrollView';
 import { colors, spacing, typography } from '../theme/tokens';
+
+type HeaderProps = {
+  title: string;
+  onBack: () => void;
+};
+
+export function ScreenHeader({ title, onBack }: HeaderProps) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+      <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
+        <Feather name="arrow-left" size={22} color={colors.foreground} />
+      </Pressable>
+      <Text style={styles.title} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={{ width: 22 }} />
+    </View>
+  );
+}
 
 type Props = {
   title: string;
@@ -23,13 +44,7 @@ export function ProfileMenuScreen({
 }: Props) {
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={8}>
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
-        </Pressable>
-        <Text style={styles.title}>{title}</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <ScreenHeader title={title} onBack={onBack} />
       {onRefresh ? (
         <RefreshableScrollView
           style={styles.scroll}
@@ -59,10 +74,27 @@ export function ComingSoonCard({ title, description }: { title: string; descript
   );
 }
 
+export function EmptyState({
+  icon,
+  title,
+  description,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  title: string;
+  description: string;
+}) {
+  return (
+    <View style={styles.comingSoon}>
+      <Feather name={icon} size={28} color={colors.mutedForeground} />
+      <Text style={styles.comingTitle}>{title}</Text>
+      <Text style={styles.comingBody}>{description}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingTop: 56,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
     flexDirection: 'row',
@@ -71,8 +103,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.card,
+    gap: spacing.md,
   },
-  title: { ...typography.title, color: colors.foreground },
+  title: { ...typography.title, color: colors.foreground, flex: 1, textAlign: 'center' },
   scroll: { flex: 1 },
   content: { padding: spacing.xl, gap: spacing.lg, flexGrow: 1 },
   comingSoon: {

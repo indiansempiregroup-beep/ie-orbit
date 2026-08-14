@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useCart } from './CartContext';
 import { colors, radius, spacing } from '../../theme/tokens';
@@ -37,16 +38,18 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
 
   if (!product && !error) {
     return (
-      <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-        <ActivityIndicator color={primary} />
+      <View style={styles.screen}>
+        <ScreenHeader title="Product" onBack={() => navigation.goBack()} />
+        <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} />
       </View>
     );
   }
 
   if (!product) {
     return (
-      <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.error}>{error}</Text>
+      <View style={styles.screen}>
+        <ScreenHeader title="Product" onBack={() => navigation.goBack()} />
+        <Text style={[styles.error, { padding: spacing.lg }]}>{error}</Text>
       </View>
     );
   }
@@ -54,10 +57,9 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   const outOfStock = product.stock_on_hand != null && Number(product.stock_on_hand) <= 0;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 40 }}
-    >
+    <View style={styles.screen}>
+      <ScreenHeader title={product.name} onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40 }}>
       {product.image_url ? (
         <Image source={{ uri: product.image_url }} style={styles.hero} />
       ) : (
@@ -96,12 +98,13 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
       >
         <Text style={styles.buttonText}>{outOfStock ? 'Out of stock' : 'Add to cart'}</Text>
       </Pressable>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  screen: { flex: 1, backgroundColor: colors.background },
   hero: { width: '100%', height: 260, borderRadius: radius.lg, marginBottom: spacing.md },
   heroPlaceholder: { backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 26, fontWeight: '700', color: colors.foreground },

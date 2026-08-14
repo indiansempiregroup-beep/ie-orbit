@@ -18,6 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { I18nextProvider } from 'react-i18next';
 import { AppErrorBoundary } from './src/components/AppErrorBoundary';
 import { BrandSplash } from './src/components/BrandSplash';
+import { ImpersonationBanner } from './src/components/ImpersonationBanner';
 import { DateTimeZoneSync } from './src/components/DateTimeZoneSync';
 import { LanguageSync } from './src/components/LanguageSync';
 import { AuthProvider } from './src/contexts/AuthContext';
@@ -25,8 +26,11 @@ import { NotificationsProvider } from './src/contexts/NotificationsContext';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { WorkspaceProvider } from './src/contexts/WorkspaceContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { captureImpersonationHandoff } from './src/utils/impersonationHandoff';
 import { i18n } from './src/i18n';
 import { brand } from './src/theme/tokens';
+
+captureImpersonationHandoff();
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // Expo Go may reject if splash is already controlled.
@@ -71,7 +75,10 @@ export default function App() {
                       <DateTimeZoneSync>
                         <StatusBar style="dark" />
                         <View style={{ flex: 1 }}>
-                          <RootNavigator />
+                          <ImpersonationBanner />
+                          <View style={{ flex: 1 }}>
+                            <RootNavigator />
+                          </View>
                         </View>
                       </DateTimeZoneSync>
                     </ToastProvider>

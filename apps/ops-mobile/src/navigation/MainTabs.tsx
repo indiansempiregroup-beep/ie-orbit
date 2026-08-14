@@ -9,6 +9,8 @@ import { colors, fonts } from '../theme/tokens';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { hasShopie } from '../utils/products';
+import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../utils/planFeatures';
+import { usePlanFeatures } from '../hooks/useOpsExtended';
 import type { MainTabParamList } from './types';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { BookingsScreen } from '../features/bookings/BookingsScreen';
@@ -40,7 +42,10 @@ export function MainTabs() {
   const { isDesktop } = useBreakpoint();
   const insets = useSafeAreaInsets();
   const { activeBusiness } = useWorkspace();
-  const showBooks = hasShopie(activeBusiness?.product_subscriptions);
+  const { has, hasAny } = usePlanFeatures();
+  const showBooks = hasShopie(activeBusiness?.product_subscriptions) && hasAny(SHOPIE_BOOKS_FEATURES);
+  const showBookings = has(PlanFeature.appointieBookings);
+  const showCalendar = has(PlanFeature.appointieCalendar);
 
   const tabBarHeight = useMemo(() => 52 + Math.max(insets.bottom, 8), [insets.bottom]);
 
@@ -76,7 +81,9 @@ export function MainTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: t('nav.home') }} />
-      <Tab.Screen name="Bookings" component={BookingsScreen} options={{ title: t('nav.bookings') }} />
+      {showBookings ? (
+        <Tab.Screen name="Bookings" component={BookingsScreen} options={{ title: t('nav.bookings') }} />
+      ) : null}
       {showBooks ? (
         <Tab.Screen
           name="Books"
@@ -84,7 +91,9 @@ export function MainTabs() {
           options={{ title: t('nav.shopBooks') }}
         />
       ) : null}
-      <Tab.Screen name="Calendar" component={CalendarScreen} options={{ title: t('nav.calendar') }} />
+      {showCalendar ? (
+        <Tab.Screen name="Calendar" component={CalendarScreen} options={{ title: t('nav.calendar') }} />
+      ) : null}
       <Tab.Screen
         name="More"
         component={MoreScreen}

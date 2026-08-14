@@ -9,10 +9,22 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.businesses.models import Business
+from apps.businesses.constants import (
+    FEATURE_SHOPIE_BOOKS_QUOTATIONS,
+    FEATURE_SHOPIE_ORDERS,
+    FEATURE_SHOPIE_PRODUCTS,
+)
+from apps.customers.models import Customer
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
-from apps.customers.models import Customer
+from apps.shopie.api.access import (
+    CATALOG_FEATURES,
+    INVOICE_FEATURES,
+    POS_SCAN_FEATURES,
+    STOCK_FEATURES,
+    require_any_shopie_feature,
+    require_business as _business,
+)
 from apps.shopie.api.permissions import ShopAccessPermission
 from apps.shopie.api.serializers import (
     BarcodeLookupSerializer,
@@ -37,10 +49,6 @@ from apps.shopie.services.packaging_analysis import PackagingAnalysisService
 from apps.shopie.tasks import analyze_packaging_images_task
 
 
-def _business(request: Request, business_id) -> Business:
-    return get_object_or_404(Business, tenant=request.current_tenant, id=business_id)
-
-
 def _validation_error(exc: DjangoValidationError) -> ValidationError:
     if hasattr(exc, "message_dict"):
         return ValidationError(exc.message_dict)
@@ -56,7 +64,7 @@ class ShopProductListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, features=CATALOG_FEATURES)
         qs = self.catalog.list_products(
             tenant=request.current_tenant,
             business=business,
@@ -71,7 +79,7 @@ class ShopProductListCreateView(APIView):
         serializer = ShopProductWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data.pop("business_id"))
+        business = _business(request, data.pop("business_id"), features=CATALOG_FEATURES)
         barcodes = data.pop("barcodes", None)
         try:
             product = self.catalog.create_product(
@@ -97,6 +105,7 @@ class ShopProductDetailView(APIView):
         )
         if not product:
             raise NotFound("Product not found.")
+        require_any_shopie_feature(product.business, CATALOG_FEATURES)
         return product
 
     @extend_schema(responses=ShopProductSerializer)
@@ -132,7 +141,7 @@ class ShopBarcodeLookupView(APIView):
     def post(self, request: Request) -> Response:
         serializer = BarcodeLookupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        business = _business(request, serializer.validated_data["business_id"])
+        business = _business(request, serializer.validated_data["business_id"], features=POS_SCAN_FEATURES)
         product = self.catalog.lookup_by_barcode(
             tenant=request.current_tenant,
             business=business,
@@ -177,7 +186,7 @@ class ShopPackagingAnalyzeView(APIView):
         serializer = PackagingAnalyzeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        _business(request, data["business_id"])
+        _business(request, data["business_id"], feature=FEATURE_SHOPIE_PRODUCTS)
         front = (data.get("front_image_url") or "").strip()
         back = (data.get("back_image_url") or "").strip()
         hint = (data.get("hint") or "").strip()
@@ -249,6 +258,7 @@ class ShopStockAdjustView(APIView):
     @extend_schema(request=StockAdjustSerializer, responses=ShopProductSerializer)
     def post(self, request: Request, product_id) -> Response:
         product = get_object_or_404(ShopProduct, tenant=request.current_tenant, id=product_id)
+        require_any_shopie_feature(product.business, STOCK_FEATURES)
         serializer = StockAdjustSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -276,7 +286,7 @@ class ShopStockMovementListView(APIView):
         product_id = request.query_params.get("product_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, features=STOCK_FEATURES)
         qs = ShopStockMovement.objects.filter(tenant=request.current_tenant, business=business)
         if product_id:
             qs = qs.filter(product_id=product_id)
@@ -291,7 +301,7 @@ class ShopOrderListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_ORDERS)
         customer_id = request.query_params.get("customer_id")
         qs = self.orders.list_orders(
             tenant=request.current_tenant,
@@ -305,7 +315,7 @@ class ShopOrderListCreateView(APIView):
         serializer = ShopOrderCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_ORDERS)
         customer = None
         if data.get("customer_id"):
             customer = get_object_or_404(
@@ -353,6 +363,7 @@ class ShopOrderDetailView(APIView):
 
     def get(self, request: Request, order_id) -> Response:
         order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
         order = self.orders.get_order(
             tenant=request.current_tenant, business=order.business, order_id=order.id
         )
@@ -365,6 +376,7 @@ class ShopOrderStatusView(APIView):
 
     def post(self, request: Request, order_id) -> Response:
         order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
         serializer = ShopOrderStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -385,6 +397,7 @@ class ShopOrderSettlePaymentView(APIView):
 
     def post(self, request: Request, order_id) -> Response:
         order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
         serializer = ShopOrderSettlePaymentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -405,6 +418,7 @@ class ShopOrderConfirmPaymentView(APIView):
 
     def post(self, request: Request, order_id) -> Response:
         order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
         action = str(request.data.get("action") or "").strip().lower()
         note = str(request.data.get("note") or "")
         try:
@@ -426,6 +440,7 @@ class ShopInvoiceFromOrderView(APIView):
 
     def post(self, request: Request, order_id) -> Response:
         order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, INVOICE_FEATURES)
         invoice = self.orders.create_invoice_from_order(
             tenant=request.current_tenant, business=order.business, order=order
         )
@@ -439,7 +454,7 @@ class ShopInvoiceListView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, features=INVOICE_FEATURES)
         qs = ShopInvoice.objects.filter(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopInvoiceSerializer)
 
@@ -452,7 +467,7 @@ class ShopQuotationListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_QUOTATIONS)
         qs = ShopQuotation.objects.filter(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopQuotationSerializer)
 
@@ -460,7 +475,7 @@ class ShopQuotationListCreateView(APIView):
         serializer = ShopQuotationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_QUOTATIONS)
         customer = None
         if data.get("customer_id"):
             customer = get_object_or_404(

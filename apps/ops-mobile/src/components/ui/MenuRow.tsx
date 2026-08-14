@@ -22,8 +22,14 @@ export function MenuRow({ icon, label, onPress, destructive, subtitle, last }: P
         <Feather name={icon} size={16} color={destructive ? colors.destructive : colors.primary} />
       </View>
       <View style={styles.copy}>
-        <Text style={[styles.label, destructive && styles.destructive]}>{label}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        <Text style={[styles.label, destructive && styles.destructive]} numberOfLines={1}>
+          {label}
+        </Text>
+        {subtitle ? (
+          <Text style={styles.subtitle} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        ) : null}
       </View>
       <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
     </Pressable>
@@ -52,7 +58,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconDestructive: { backgroundColor: colors.destructiveSoft },
-  copy: { flex: 1 },
+  copy: { flex: 1, minWidth: 0 },
   label: { ...typography.body, color: colors.foreground, fontFamily: typography.label.fontFamily, fontWeight: '600' },
   subtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   destructive: { color: colors.destructive },

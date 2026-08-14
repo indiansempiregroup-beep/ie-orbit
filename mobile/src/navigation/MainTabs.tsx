@@ -14,6 +14,7 @@ import { BookingScreen } from '../features/booking/BookingScreen';
 import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
 import { ShopScreen } from '../features/shop/ShopScreen';
+import { customerAppFeatures } from '../utils/customerFeatures';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -23,9 +24,7 @@ export function MainTabs() {
   const { unreadCount, reload } = useMobileNotifications();
   useNotificationStream({ onNotification: reload });
   const primary = branding?.primaryColor ?? colors.primary;
-  const features = bootstrap?.features ?? {};
-  const showShop = Boolean(features.mobile_shop);
-  const showBooking = Boolean(features.mobile_booking ?? features.mobile_discover ?? true);
+  const { showShop, showBooking } = customerAppFeatures(bootstrap?.features);
 
   return (
     <Tab.Navigator

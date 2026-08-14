@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppShellHeader } from './AppShellHeader';
 import { EmailVerificationBanner } from './EmailVerificationBanner';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { SoftLockBanner } from './SoftLockBanner';
 import { useAuth } from '../hooks/useAuth';
 import { useProductNavigation } from '../hooks/useProductNavigation';
@@ -108,6 +109,7 @@ export function Layout() {
         <AppShellHeader />
         <main className="app-shell-main" role="main">
           <div className="app-shell-banners">
+            <ImpersonationBanner />
             <EmailVerificationBanner />
             <SoftLockBanner />
           </div>

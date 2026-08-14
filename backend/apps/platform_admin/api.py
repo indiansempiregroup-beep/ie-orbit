@@ -44,6 +44,53 @@ def _svc() -> PlatformAdminService:
     return PlatformAdminService()
 
 
+def _serialize_ticket(ticket: SupportTicket, *, include_notes: bool = False) -> dict:
+    row = {
+        "id": str(ticket.id),
+        "subject": ticket.subject,
+        "status": ticket.status,
+        "tenant_id": str(ticket.tenant_id) if ticket.tenant_id else None,
+        "tenant_name": ticket.tenant.display_name if ticket.tenant_id else None,
+        "tenant_slug": ticket.tenant.slug if ticket.tenant_id else None,
+        "requester_email": ticket.requester.email if ticket.requester else None,
+        "assignee_id": str(ticket.assignee_id) if ticket.assignee_id else None,
+        "assignee_email": ticket.assignee.email if ticket.assignee else None,
+        "created_at": ticket.created_at.isoformat(),
+        "updated_at": ticket.updated_at.isoformat() if ticket.updated_at else None,
+    }
+    if include_notes:
+        row["notes"] = [
+            {
+                "id": str(note.id),
+                "body": note.body,
+                "is_internal": note.is_internal,
+                "author_email": note.author.email if note.author else None,
+                "created_at": note.created_at.isoformat(),
+            }
+            for note in ticket.notes.select_related("author").all()
+        ]
+    return row
+
+
+def _apply_ticket_updates(ticket: SupportTicket, data: dict, actor: User) -> SupportTicket:
+    status_value = data.get("status")
+    if status_value:
+        valid = {choice[0] for choice in SupportTicket.Status.choices}
+        if status_value not in valid:
+            raise ValueError("Invalid ticket status")
+        ticket.status = status_value
+    if "assignee_id" in data:
+        assignee_id = data.get("assignee_id")
+        if assignee_id:
+            ticket.assignee = get_object_or_404(User.objects.all(), id=assignee_id)
+        else:
+            ticket.assignee = None
+    elif data.get("assign_to_me"):
+        ticket.assignee = actor
+    ticket.save(update_fields=["status", "assignee", "updated_at"])
+    return ticket
+
+
 class PlatformTenantActionView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 
@@ -77,7 +124,7 @@ class PlatformTenantBillingView(APIView):
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request, tenant_id: str) -> Response:
         tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
-        business = _svc().primary_business(tenant)
+        business = _svc().resolve_business(tenant, request.query_params.get("business_id"))
         product_code = request.query_params.get("product_code") or business.selected_product or "appointie"
         snapshot = EntitlementService().billing_snapshot(business=business, product_code=product_code)
         return success_response(
@@ -284,6 +331,18 @@ class PlatformTenantPaymentsView(APIView):
         return success_response({"payments": _svc().list_payments(tenant=tenant)})
 
 
+class PlatformUpiClaimsView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(
+        tags=["Platform Admin"],
+        description="List UPI subscription claims awaiting confirmation.",
+    )
+    def get(self, request: Request) -> Response:
+        limit = max(1, min(int(request.query_params.get("limit") or 100), 200))
+        return success_response({"claims": _svc().list_pending_upi_claims(limit=limit)})
+
+
 class PlatformPaymentRefundView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 
@@ -296,6 +355,24 @@ class PlatformPaymentRefundView(APIView):
             actor=request.user,
             reason=request.data.get("reason", ""),
             amount_paise=request.data.get("amount_paise"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(result)
+
+
+class PlatformUpiClaimActionView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"], description="Confirm or reject a tenant UPI subscription claim.")
+    def post(self, request: Request, tenant_id: str, payment_id: str) -> Response:
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        result = _svc().confirm_upi_claim(
+            tenant=tenant,
+            session_id=payment_id,
+            actor=request.user,
+            action=str(request.data.get("action") or ""),
+            reason=request.data.get("reason") or request.data.get("note") or "",
             ip_address=client_ip(request),
             user_agent=user_agent(request),
         )
@@ -409,6 +486,31 @@ class PlatformPlanPackagesView(APIView):
         )
 
 
+class PlatformAddonPricingView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request) -> Response:
+        return success_response(
+            _svc().get_addon_pricing(),
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Platform Admin"])
+    def put(self, request: Request) -> Response:
+        data = request.data
+        pricing = _svc().update_addon_pricing(
+            actor=request.user,
+            staff_price_paise=int(data.get("staff_price_paise") or 0),
+            office_price_paise=int(data.get("office_price_paise") or 0),
+            pets_price_paise=int(data.get("pets_price_paise") or 0),
+            reason=data.get("reason", "addon pricing update"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(pricing, request_id=getattr(request, "request_id", None))
+
+
 class PlatformAuditFeedView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 
@@ -448,21 +550,7 @@ class PlatformTicketsView(APIView):
         tenant_id = request.query_params.get("tenant_id")
         tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id) if tenant_id else None
         tickets = _svc().list_tickets(tenant=tenant)
-        return success_response(
-            {
-                "tickets": [
-                    {
-                        "id": str(t.id),
-                        "subject": t.subject,
-                        "status": t.status,
-                        "tenant_id": str(t.tenant_id),
-                        "requester_email": t.requester.email if t.requester else None,
-                        "created_at": t.created_at.isoformat(),
-                    }
-                    for t in tickets
-                ]
-            }
-        )
+        return success_response({"tickets": [_serialize_ticket(t) for t in tickets]})
 
     @extend_schema(tags=["Platform Admin"])
     def post(self, request: Request) -> Response:
@@ -474,6 +562,38 @@ class PlatformTicketsView(APIView):
             body=request.data.get("body", ""),
         )
         return success_response({"id": str(ticket.id)}, status_code=201)
+
+
+class PlatformTicketDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request, ticket_id: str) -> Response:
+        ticket = get_object_or_404(
+            SupportTicket.objects.select_related("requester", "assignee", "tenant"),
+            id=ticket_id,
+        )
+        return success_response(_serialize_ticket(ticket, include_notes=True))
+
+    @extend_schema(tags=["Platform Admin"])
+    def patch(self, request: Request, ticket_id: str) -> Response:
+        ticket = get_object_or_404(
+            SupportTicket.objects.select_related("requester", "assignee", "tenant"),
+            id=ticket_id,
+        )
+        try:
+            ticket = _apply_ticket_updates(ticket, request.data, request.user)
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=400)
+        _svc().audit(
+            actor=request.user,
+            tenant=ticket.tenant,
+            action="platform.ticket.update",
+            resource_type="ticket",
+            resource_id=str(ticket.id),
+            reason=request.data.get("reason", "") or f"status={ticket.status}",
+        )
+        return success_response(_serialize_ticket(ticket))
 
 
 class SupportTicketsView(APIView):
@@ -523,16 +643,21 @@ class PlatformTicketNoteView(APIView):
     @extend_schema(tags=["Platform Admin"])
     def post(self, request: Request, ticket_id: str) -> Response:
         ticket = get_object_or_404(SupportTicket.objects.all(), id=ticket_id)
+        body = (request.data.get("body") or "").strip()
+        if not body:
+            return Response({"error": {"message": "Note body is required"}}, status=400)
         note = SupportTicketNote.objects.create(
             ticket=ticket,
             author=request.user,
-            body=request.data.get("body", ""),
+            body=body,
             is_internal=bool(request.data.get("is_internal", True)),
         )
-        if request.data.get("status"):
-            ticket.status = request.data["status"]
-            ticket.save(update_fields=["status", "updated_at"])
-        return success_response({"id": str(note.id)}, status_code=201)
+        if request.data.get("status") or request.data.get("assign_to_me") or "assignee_id" in request.data:
+            try:
+                _apply_ticket_updates(ticket, request.data, request.user)
+            except ValueError as exc:
+                return Response({"error": {"message": str(exc)}}, status=400)
+        return success_response({"id": str(note.id), "status": ticket.status}, status_code=201)
 
 
 class PlatformAnnouncementsView(APIView):
@@ -601,6 +726,8 @@ class PlatformHelpArticlesAdminView(APIView):
                 "slug": a.slug,
                 "title": a.title,
                 "category": a.category,
+                "body": a.body,
+                "keywords": a.keywords,
                 "is_published": a.is_published,
             }
             for a in HelpArticle.objects.all()[:200]
@@ -611,17 +738,28 @@ class PlatformHelpArticlesAdminView(APIView):
     def post(self, request: Request) -> Response:
         title = request.data.get("title", "Untitled")
         slug = slugify(request.data.get("slug") or title)[:160]
-        article, _ = HelpArticle.objects.update_or_create(
-            slug=slug,
-            defaults={
-                "title": title,
-                "category": request.data.get("category", ""),
-                "body": request.data.get("body", ""),
-                "is_published": bool(request.data.get("is_published", False)),
-                "keywords": request.data.get("keywords", ""),
-            },
+        defaults = {
+            "title": title,
+            "slug": slug,
+            "category": request.data.get("category", "") or "",
+            "body": request.data.get("body", "") or "",
+            "is_published": bool(request.data.get("is_published", False)),
+            "keywords": request.data.get("keywords", "") or "",
+        }
+        article_id = request.data.get("id")
+        if article_id:
+            article = get_object_or_404(HelpArticle.objects.all(), id=article_id)
+            if HelpArticle.objects.exclude(id=article.id).filter(slug=slug).exists():
+                return Response({"error": {"message": "Another article already uses this slug"}}, status=400)
+            for field, value in defaults.items():
+                setattr(article, field, value)
+            article.save()
+        else:
+            article, _ = HelpArticle.objects.update_or_create(slug=slug, defaults=defaults)
+        return success_response(
+            {"id": str(article.id), "slug": article.slug, "is_published": article.is_published},
+            status_code=201,
         )
-        return success_response({"id": str(article.id), "slug": article.slug}, status_code=201)
 
 
 class PlatformHelpPublicView(APIView):
@@ -671,7 +809,14 @@ class PlatformExportView(APIView):
                 writer.writerow([t.id, t.slug, t.display_name, t.status, t.created_at.isoformat()])
         elif export_type == "audit":
             writer.writerow(["id", "action", "actor", "tenant", "reason", "created_at"])
-            for e in PlatformAuditEvent.objects.select_related("actor", "tenant")[:1000]:
+            qs = PlatformAuditEvent.objects.select_related("actor", "tenant").all()
+            tenant_id = request.query_params.get("tenant_id")
+            action = request.query_params.get("action")
+            if tenant_id:
+                qs = qs.filter(tenant_id=tenant_id)
+            if action:
+                qs = qs.filter(action__icontains=action)
+            for e in qs[:1000]:
                 writer.writerow(
                     [
                         e.id,

@@ -178,6 +178,9 @@
     "articles": "Help articles",
     "submitTicket": "Submit ticket",
     "subject": "Subject",
-    "details": "Details"
+    "details": "Details",
+    "noArticles": "No published articles yet.",
+    "ticketSubmitted": "Ticket submitted. Our team will follow up by email.",
+    "faqs": "FAQs"
   }
 }

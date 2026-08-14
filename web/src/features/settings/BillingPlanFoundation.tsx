@@ -186,7 +186,7 @@ export function BillingPlanFoundation() {
                     checked={petsPackEnabled}
                     onChange={(event) => setPetsPackEnabled(event.target.checked)}
                   />
-                  Pets pack (₹500/mo)
+                  Pets pack (₹{((billing.pricing.addon_pets_unit_paise ?? 50000) / 100).toFixed(0)}/mo)
                 </label>
               ) : null}
               <Button

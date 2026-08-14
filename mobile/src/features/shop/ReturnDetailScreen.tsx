@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, spacing } from '../../theme/tokens';
 import type { ShopReturn } from '@ie-platform/sdk';
@@ -10,7 +11,7 @@ import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReturnDetail'>;
 
-export function ReturnDetailScreen({ route }: Props) {
+export function ReturnDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
@@ -29,17 +30,17 @@ export function ReturnDetailScreen({ route }: Props) {
 
   if (!item) {
     return (
-      <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-        <ActivityIndicator color={primary} />
+      <View style={styles.screen}>
+        <ScreenHeader title="Return" onBack={() => navigation.goBack()} />
+        <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} />
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 40 }}
-    >
+    <View style={styles.screen}>
+      <ScreenHeader title={item.return_number} onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40 }}>
       <Text style={styles.title}>{item.return_number}</Text>
       <Text style={styles.meta}>Status: {item.status}</Text>
       <Text style={styles.meta}>
@@ -52,12 +53,13 @@ export function ReturnDetailScreen({ route }: Props) {
           {String((line as { quantity?: string | number }).quantity || '')}
         </Text>
       ))}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  screen: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: 24, fontWeight: '700', color: colors.foreground },
   meta: { marginTop: 8, color: colors.mutedForeground },
   body: { marginTop: spacing.sm, color: colors.foreground },

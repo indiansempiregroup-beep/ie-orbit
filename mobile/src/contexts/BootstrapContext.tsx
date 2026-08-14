@@ -37,6 +37,7 @@ export function useBootstrap() {
 export function useBusinessContext() {
   const { bootstrap, branding } = useBootstrap();
   return {
+    tenantId: bootstrap?.tenant_id ?? '',
     tenantSlug: bootstrap?.tenant_slug ?? branding?.tenantSlug ?? '',
     businessCode: bootstrap?.business_code ?? branding?.businessCode ?? '',
   };

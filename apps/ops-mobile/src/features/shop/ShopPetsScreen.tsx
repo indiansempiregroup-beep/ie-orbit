@@ -20,7 +20,7 @@ import { SearchBar } from '../../components/SearchBar';
 import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { useUpdateBusinessAddons } from '../../hooks/useOpsExtended';
+import { useUpdateBusinessAddons, useBusinessBillingSnapshot } from '../../hooks/useOpsExtended';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -35,6 +35,10 @@ export function ShopPetsScreen() {
   const { businessId, activeBusiness, refreshWorkspace } = useWorkspace();
   const { customers } = useCustomers();
   const addons = useUpdateBusinessAddons();
+  const { billing } = useBusinessBillingSnapshot();
+  const petsPriceInr = Math.round(
+    (billing?.pricing?.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100) / 100,
+  );
   const petsSubscribed = hasPetsPack(activeBusiness?.product_subscriptions);
   const [pets, setPets] = useState<ShopPet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,13 +84,13 @@ export function ShopPetsScreen() {
         pets_pack_enabled: true,
       });
       await refreshWorkspace();
-      setMessage(`Pets pack subscribed · ₹${PETS_PACK_PRICE_INR}/month`);
+      setMessage(`Pets pack subscribed · ₹${petsPriceInr}/month`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Unable to subscribe to Pets pack');
     } finally {
       setSubscribing(false);
     }
-  }, [activeBusiness?.product_subscriptions, addons, refreshWorkspace]);
+  }, [activeBusiness?.product_subscriptions, addons, petsPriceInr, refreshWorkspace]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -185,14 +189,14 @@ export function ShopPetsScreen() {
               Manage pet profiles, photos, birthdays, and owner alerts. Birthday reminders go out 5 days
               ahead to the pet owner (in-app + email) and to business owners/managers.
             </Text>
-            <Text style={styles.price}>₹{PETS_PACK_PRICE_INR}/month</Text>
+            <Text style={styles.price}>₹{petsPriceInr}/month</Text>
             <Pressable
               style={[styles.button, subscribing && styles.buttonDisabled]}
               onPress={() => void subscribePets()}
               disabled={subscribing}
             >
               <Text style={styles.buttonText}>
-                {subscribing ? 'Subscribing…' : `Subscribe · ₹${PETS_PACK_PRICE_INR}/mo`}
+                {subscribing ? 'Subscribing…' : `Subscribe · ₹${petsPriceInr}/mo`}
               </Text>
             </Pressable>
             <Pressable onPress={() => navigation.navigate('ProductSettings')}>

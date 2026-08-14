@@ -10,10 +10,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.businesses.models import Business
+from apps.businesses.constants import (
+    FEATURE_SHOPIE_DELIVERY_ZONES,
+    FEATURE_SHOPIE_ORDERS,
+    FEATURE_SHOPIE_RETURNS,
+)
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
 from apps.customers.models import Customer
+from apps.shopie.api.access import (
+    POS_SCAN_FEATURES,
+    require_any_shopie_feature,
+    require_business as _business,
+)
 from apps.shopie.api.permissions import ShopAccessPermission
 from apps.shopie.api.serializers import (
     BarcodeBulkLookupSerializer,
@@ -36,10 +45,6 @@ from apps.shopie.services.returns import ReturnService
 from apps.shopie.services.zones import DeliveryZoneService
 
 
-def _business(request: Request, business_id) -> Business:
-    return get_object_or_404(Business, tenant=request.current_tenant, id=business_id)
-
-
 def _validation_error(exc: DjangoValidationError) -> ValidationError:
     if hasattr(exc, "message_dict"):
         return ValidationError(exc.message_dict)
@@ -55,7 +60,7 @@ class ShopBarcodeBulkLookupView(APIView):
     def post(self, request: Request) -> Response:
         serializer = BarcodeBulkLookupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        business = _business(request, serializer.validated_data["business_id"])
+        business = _business(request, serializer.validated_data["business_id"], features=POS_SCAN_FEATURES)
         rows = self.catalog.lookup_many(
             tenant=request.current_tenant,
             business=business,
@@ -78,7 +83,7 @@ class ShopReturnListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_RETURNS)
         order_id_raw = request.query_params.get("order_id")
         order_id = UUID(order_id_raw) if order_id_raw else None
         qs = self.returns.list_returns(
@@ -90,7 +95,7 @@ class ShopReturnListCreateView(APIView):
         serializer = ShopReturnCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"])
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_RETURNS)
         order = get_object_or_404(
             ShopOrder, tenant=request.current_tenant, business=business, id=data["order_id"]
         )
@@ -117,7 +122,7 @@ class ShopDeliveryZoneListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id)
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_DELIVERY_ZONES)
         qs = self.zones.list_zones(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopDeliveryZoneSerializer)
 
@@ -125,7 +130,7 @@ class ShopDeliveryZoneListCreateView(APIView):
         serializer = ShopDeliveryZoneWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data.pop("business_id"))
+        business = _business(request, data.pop("business_id"), feature=FEATURE_SHOPIE_DELIVERY_ZONES)
         try:
             zone = self.zones.create_zone(
                 tenant=request.current_tenant, business=business, data=data
@@ -141,6 +146,7 @@ class ShopDeliveryZoneDetailView(APIView):
 
     def patch(self, request: Request, zone_id) -> Response:
         zone = get_object_or_404(ShopDeliveryZone, tenant=request.current_tenant, id=zone_id)
+        require_any_shopie_feature(zone.business, (FEATURE_SHOPIE_DELIVERY_ZONES,))
         serializer = ShopDeliveryZoneWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -156,7 +162,11 @@ class ShopDeliveryMatchView(APIView):
     def post(self, request: Request) -> Response:
         serializer = ShopDeliveryMatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        business = _business(request, serializer.validated_data["business_id"])
+        business = _business(
+            request,
+            serializer.validated_data["business_id"],
+            features=(FEATURE_SHOPIE_DELIVERY_ZONES, FEATURE_SHOPIE_ORDERS),
+        )
         zone = self.zones.match_zone(
             tenant=request.current_tenant,
             business=business,
