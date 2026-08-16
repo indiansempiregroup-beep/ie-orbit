@@ -10,7 +10,9 @@ from apps.customers.models import Customer, CustomerTag
 
 class CustomerRepository:
     def list_for_request(self, *, tenant: Any, user: Any) -> QuerySet[Customer]:
-        queryset = Customer.objects.require_tenant(tenant).select_related("business")
+        queryset = Customer.objects.require_tenant(tenant).select_related(
+            "business", "borrow_account", "loyalty_account"
+        )
         if getattr(user, "is_superuser", False):
             return queryset
         return queryset.filter(tenant__owner=user) if not self._has_access(user) else queryset

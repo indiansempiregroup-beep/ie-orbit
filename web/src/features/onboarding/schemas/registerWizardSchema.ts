@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { TIMEZONES } from '../../../config/onboarding';
+import {
+  createDefaultWeeklyHours,
+  weeklyHoursAreValid,
+  type WeeklyHours,
+} from '../../../lib/businessHours';
 
 function normalizeWebsiteInput(value: string): string {
   const trimmed = value.trim();
@@ -24,6 +29,12 @@ const passwordSchema = z
   .refine((value) => !/^(password|qwerty|12345678)/i.test(value), {
     message: 'Choose a less common password',
   });
+
+const dayHoursSchema = z.object({
+  open: z.boolean(),
+  start: z.string().min(1),
+  end: z.string().min(1),
+});
 
 export const registerWizardSchema = z
   .object({
@@ -51,22 +62,45 @@ export const registerWizardSchema = z
     timezone: z.string().refine((value) => TIMEZONES.includes(value as (typeof TIMEZONES)[number]), 'Select a timezone'),
     language: z.string().min(2, 'Select a language'),
     weekStartDay: z.enum(['monday', 'sunday']),
-    businessHoursStart: z.string().min(1),
-    businessHoursEnd: z.string().min(1),
-    appointmentInterval: z.number().min(5),
-    defaultDuration: z.number().min(5),
-    bufferTime: z.number().min(0),
+    skipHours: z.boolean(),
+    businessHours: z.object({
+      monday: dayHoursSchema,
+      tuesday: dayHoursSchema,
+      wednesday: dayHoursSchema,
+      thursday: dayHoursSchema,
+      friday: dayHoursSchema,
+      saturday: dayHoursSchema,
+      sunday: dayHoursSchema,
+    }),
     dateFormat: z.string().min(1),
     timeFormat: z.enum(['12h', '24h']),
-    selectedProduct: z.string().min(1),
+    selectedProducts: z.array(z.enum(['appointie', 'shopie'])).min(1, 'Select at least one product'),
+    planCodes: z.record(z.string(), z.string()),
     primaryColor: z.string().min(4),
     secondaryColor: z.string().min(4),
     theme: z.enum(['system', 'light', 'dark']),
-    skipBranding: z.boolean().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Passwords do not match',
     path: ['confirmPassword'],
+  })
+  .superRefine((data, ctx) => {
+    if (!data.skipHours && !weeklyHoursAreValid(data.businessHours as WeeklyHours)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['businessHours'],
+        message: 'Open at least one day and make sure closing time is after opening time.',
+      });
+    }
+    for (const product of data.selectedProducts) {
+      if (!data.planCodes[product]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['planCodes'],
+          message: `Select a package for ${product === 'shopie' ? 'ShopIE' : 'AppointIE'}.`,
+        });
+      }
+    }
   });
 
 export type RegisterWizardFormValues = z.infer<typeof registerWizardSchema>;
@@ -101,16 +135,14 @@ export const stepFieldMap = {
     'timezone',
     'language',
     'weekStartDay',
-    'businessHoursStart',
-    'businessHoursEnd',
-    'appointmentInterval',
-    'defaultDuration',
-    'bufferTime',
+    'skipHours',
+    'businessHours',
     'dateFormat',
     'timeFormat',
-    'selectedProduct',
+    'selectedProducts',
+    'planCodes',
   ],
-  branding: ['primaryColor', 'secondaryColor', 'theme', 'skipBranding'],
+  branding: ['primaryColor', 'secondaryColor', 'theme'],
   review: [],
   provision: [],
 } as const;
@@ -141,17 +173,14 @@ export function getDefaultRegisterValues(): RegisterWizardFormValues {
     timezone: 'UTC',
     language: 'en',
     weekStartDay: 'monday',
-    businessHoursStart: '09:00',
-    businessHoursEnd: '18:00',
-    appointmentInterval: 15,
-    defaultDuration: 30,
-    bufferTime: 0,
+    skipHours: false,
+    businessHours: createDefaultWeeklyHours(),
     dateFormat: 'DD/MM/YYYY',
     timeFormat: '12h',
-    selectedProduct: 'appointie',
+    selectedProducts: ['appointie'],
+    planCodes: { appointie: 'appointie-starter' },
     primaryColor: '#1A56DB',
     secondaryColor: '#111827',
     theme: 'system',
-    skipBranding: false,
   };
 }

@@ -16,6 +16,7 @@ import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, spacing } from '../../theme/tokens';
@@ -30,6 +31,9 @@ import {
   formatShopOrderPayment,
   getShopOrderPosMeta,
   isShopOrderBorrowDue,
+  nextShopOrderAction,
+  SHOP_ORDER_STATUS_OPTIONS,
+  shopOrderStatusStyle,
 } from './posPayment';
 
 /** Online shopping only — counter Sale (POS) lives in Books as GST invoices. */
@@ -80,6 +84,7 @@ export function ShopOrdersScreen() {
   const client = useOpsClient();
   const { businessId } = useWorkspace();
   const { customers } = useCustomers();
+  const toast = useToast();
   const customerMap = useMemo(() => buildNameMap(customers), [customers]);
   const customersById = useMemo(() => {
     const map = new Map<string, Customer>();
@@ -91,8 +96,10 @@ export function ShopOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
   const [fulfillment, setFulfillment] = useState('');
   const [payment, setPayment] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -124,6 +131,7 @@ export function ShopOrdersScreen() {
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return onlineOrders.filter((order) => {
+      if (status && String(order.status || '').toLowerCase() !== status) return false;
       if (fulfillment && order.fulfillment_mode !== fulfillment) return false;
       if (payment) {
         const method = String(getShopOrderPosMeta(order).payment_method || order.payment_method || '').toLowerCase();
@@ -155,14 +163,30 @@ export function ShopOrdersScreen() {
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [onlineOrders, search, fulfillment, payment, customerMap, customersById]);
+  }, [onlineOrders, search, status, fulfillment, payment, customerMap, customersById]);
 
-  const activeFilterCount = Number(Boolean(fulfillment)) + Number(Boolean(payment));
+  const activeFilterCount = Number(Boolean(status)) + Number(Boolean(fulfillment)) + Number(Boolean(payment));
 
   function clearFilters() {
     setSearch('');
+    setStatus('');
     setFulfillment('');
     setPayment('');
+  }
+
+  async function advanceOrder(order: ShopOrder) {
+    const next = nextShopOrderAction(order.status, order.fulfillment_mode);
+    if (!client || !next) return;
+    setBusyId(order.id);
+    try {
+      const response = await client.shop.setOrderStatus(order.id, { status: next.status });
+      setItems((current) => current.map((item) => (item.id === order.id ? response.data : item)));
+      toast.push(`${order.order_number} · ${next.label}`, 'success');
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Unable to update order', 'error');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   return (
@@ -179,6 +203,15 @@ export function ShopOrdersScreen() {
         />
 
         <View style={styles.filterRow}>
+          <View style={styles.filterField}>
+            <SelectField
+              label="Status"
+              value={status}
+              options={SHOP_ORDER_STATUS_OPTIONS}
+              onChange={setStatus}
+              searchable={false}
+            />
+          </View>
           <View style={styles.filterField}>
             <SelectField
               label="Fulfillment"
@@ -231,6 +264,8 @@ export function ShopOrdersScreen() {
               .slice(0, 2)
               .map((line) => `${line.product_name} × ${line.quantity}`)
               .join(', ');
+            const next = nextShopOrderAction(item.status, item.fulfillment_mode);
+            const badge = shopOrderStatusStyle(item.status);
             return (
               <Pressable
                 style={styles.row}
@@ -242,9 +277,14 @@ export function ShopOrdersScreen() {
                     {item.currency || 'INR'} {formatMoney(item.total)}
                   </Text>
                 </View>
-                <Text style={styles.meta}>
-                  {formatShopOrderFulfillment(item.fulfillment_mode)} · {customer} · {item.status}
-                </Text>
+                <View style={styles.statusRow}>
+                  <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: badge.text }]}>{badge.label}</Text>
+                  </View>
+                  <Text style={styles.meta}>
+                    {formatShopOrderFulfillment(item.fulfillment_mode)} · {customer}
+                  </Text>
+                </View>
                 {address ? <Text style={styles.address}>{address}</Text> : null}
                 {item.created_at ? (
                   <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
@@ -253,7 +293,22 @@ export function ShopOrdersScreen() {
                   <Text style={[styles.meta, due && styles.due]}>{paymentLabel}</Text>
                 ) : null}
                 {preview ? <Text style={styles.preview}>{preview}</Text> : null}
-                <Text style={styles.openHint}>Tap for order detail</Text>
+                {next ? (
+                  <Pressable
+                    style={[styles.nextBtn, busyId === item.id && styles.nextBtnBusy]}
+                    disabled={busyId === item.id}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      void advanceOrder(item);
+                    }}
+                  >
+                    <Text style={styles.nextBtnText}>
+                      {busyId === item.id ? 'Updating…' : next.label}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.openHint}>Tap for order detail</Text>
+                )}
               </Pressable>
             );
           }}
@@ -276,8 +331,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   pageHint: { color: colors.mutedForeground, fontSize: 12, marginBottom: spacing.sm, lineHeight: 16 },
   search: { marginBottom: spacing.sm },
-  filterRow: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },
-  filterField: { flex: 1 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: spacing.sm },
+  filterField: { flexGrow: 1, minWidth: 140, flexBasis: '30%' },
   toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -301,6 +356,18 @@ const styles = StyleSheet.create({
   meta: { color: colors.mutedForeground, fontSize: 13 },
   address: { color: colors.foreground, fontSize: 13, lineHeight: 18 },
   preview: { color: colors.foreground, fontSize: 13, marginTop: 2 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  statusBadgeText: { fontSize: 11, fontWeight: '800' },
+  nextBtn: {
+    marginTop: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  nextBtnBusy: { opacity: 0.55 },
+  nextBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   openHint: { color: colors.primary, fontSize: 12, fontWeight: '600', marginTop: 4 },
   due: { color: colors.destructive, fontWeight: '600' },
   error: { color: colors.destructive, marginBottom: spacing.sm },

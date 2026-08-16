@@ -7,6 +7,7 @@ import { useBootstrap } from '../../contexts/BootstrapContext';
 import { Button } from '../../components/ui/Button';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -15,6 +16,7 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
 export function ForgotPasswordScreen({ navigation }: Props) {
   const { branding } = useBootstrap();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
@@ -45,7 +47,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: headerPaddingTop }]}>
       <Pressable style={styles.back} onPress={() => navigation.navigate('Login')}>
         <Feather name="arrow-left" size={16} color={colors.mutedForeground} />
         <Text style={styles.backText}>Back to sign in</Text>
@@ -89,7 +91,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background, padding: spacing.xxl, paddingTop: 56 },
+  root: { flex: 1, backgroundColor: colors.background, padding: spacing.xxl },
   back: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xxxl },
   backText: { ...typography.body, color: colors.mutedForeground },
   iconWrap: {

@@ -1,7 +1,8 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
+import React, { useMemo } from 'react';
+import { Platform, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useBootstrap } from '../contexts/BootstrapContext';
 import { useMobileNotifications } from '../hooks/useMobileNotifications';
@@ -20,11 +21,13 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export function MainTabs() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { branding, bootstrap } = useBootstrap();
   const { unreadCount, reload } = useMobileNotifications();
   useNotificationStream({ onNotification: reload });
   const primary = branding?.primaryColor ?? colors.primary;
   const { showShop, showBooking } = customerAppFeatures(bootstrap?.features);
+  const tabBarHeight = useMemo(() => 52 + Math.max(insets.bottom, 8), [insets.bottom]);
 
   return (
     <Tab.Navigator
@@ -32,9 +35,18 @@ export function MainTabs() {
         headerShown: false,
         tabBarActiveTintColor: primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarStyle: styles.tabBar,
+        tabBarHideOnKeyboard: true,
+        tabBarAllowFontScaling: false,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: tabBarHeight,
+            paddingBottom: Math.max(insets.bottom, 6),
+          },
+        ],
+        tabBarItemStyle: styles.tabItem,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarIcon: ({ color, size, focused }) => {
+        tabBarIcon: ({ color, focused }) => {
           const icons: Record<string, keyof typeof Feather.glyphMap> = {
             Home: 'home',
             Discover: 'search',
@@ -46,7 +58,7 @@ export function MainTabs() {
           return (
             <Feather
               name={icons[route.name] ?? 'circle'}
-              size={size}
+              size={20}
               color={color}
               style={focused ? styles.activeIcon : undefined}
             />
@@ -78,10 +90,20 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.card,
     borderTopColor: colors.border,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 4,
-    height: 64,
+    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: -2 },
+      },
+      default: {},
+    }),
   },
-  tabLabel: { fontSize: 10, fontWeight: '500', marginBottom: 4 },
+  tabItem: { paddingTop: 2 },
+  tabLabel: { fontSize: 10, fontWeight: '500', lineHeight: 12, marginTop: 2 },
   activeIcon: { transform: [{ scale: 1.05 }] },
 });

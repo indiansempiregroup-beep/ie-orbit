@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { SelectField } from '../../components/SelectField';
+import { DateField } from '../../components/DateField';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { DesktopPage } from '../../components/DesktopPage';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
@@ -80,28 +81,8 @@ export function ShopBooksReportsScreen() {
         <SelectField label="Report" value={slug} options={options} onChange={(value) => setSlug(value as ShopBooksReportSlug)} />
         {activeOption ? <Text style={styles.hint}>{activeOption.hint}</Text> : null}
 
-        <View style={styles.dateRow}>
-          <View style={styles.dateField}>
-            <Text style={styles.label}>From</Text>
-            <TextInput
-              style={styles.input}
-              value={dateFrom}
-              onChangeText={setDateFrom}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.mutedForeground}
-            />
-          </View>
-          <View style={styles.dateField}>
-            <Text style={styles.label}>To</Text>
-            <TextInput
-              style={styles.input}
-              value={dateTo}
-              onChangeText={setDateTo}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.mutedForeground}
-            />
-          </View>
-        </View>
+        <DateField label="From" value={dateFrom} onChange={setDateFrom} />
+        <DateField label="To" value={dateTo} onChange={setDateTo} />
 
         <Pressable style={[styles.runBtn, loading && styles.runBtnDisabled]} onPress={() => void runReport()} disabled={loading}>
           {loading ? (
@@ -152,18 +133,6 @@ const styles = StyleSheet.create({
   title: { ...typography.title, fontSize: 20, color: colors.foreground },
   subtitle: { ...typography.body, color: colors.mutedForeground },
   hint: { ...typography.caption, color: colors.mutedForeground, marginTop: -spacing.sm },
-  dateRow: { flexDirection: 'row', gap: spacing.sm },
-  dateField: { flex: 1, gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.foreground,
-    backgroundColor: colors.card,
-  },
   runBtn: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { PasswordStrengthIndicator } from './components/PasswordStrengthIndicator';
+import { PostAuthRedirect } from '../../components/PostAuthRedirect';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function ResetPasswordPage() {
-  usePageMeta({ title: 'Reset password — AppointIE' });
+  usePageMeta({ title: 'Reset password — IE Platform' });
   const auth = useAuthContext();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
@@ -20,7 +21,7 @@ export function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
 
   if (auth.token && auth.user) {
-    return <Navigate to="/dashboard" replace />;
+    return <PostAuthRedirect />;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

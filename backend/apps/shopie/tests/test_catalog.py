@@ -63,6 +63,23 @@ def test_create_product_with_multiple_barcodes(shop_business: Business) -> None:
 
 
 @pytest.mark.django_db
+def test_create_product_sanitizes_details_html(shop_business: Business) -> None:
+    service = CatalogService()
+    product = service.create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "name": "Rich Pack",
+            "price": "99.00",
+            "details_html": '<p>Safe</p><script>alert(1)</script><a href="https://example.com">link</a>',
+        },
+    )
+    assert "<script>" not in product.details_html
+    assert "Safe" in product.details_html
+    assert "https://example.com" in product.details_html
+
+
+@pytest.mark.django_db
 def test_duplicate_barcode_rejected(shop_business: Business) -> None:
     service = CatalogService()
     service.create_product(

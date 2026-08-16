@@ -16,6 +16,7 @@ import { LanguagePicker } from '../../components/LanguagePicker';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { persistLanguagePreference } from '../../i18n';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 
@@ -30,6 +31,7 @@ export function ProfileEditScreen() {
   const { user, token, refreshProfile } = useAuth();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { headerPaddingTop } = useScreenInsets();
   const { profile, reload: reloadCustomerProfile } = useMobileCustomerProfile(Boolean(user));
   const primary = branding?.primaryColor ?? colors.primary;
 
@@ -111,7 +113,7 @@ export function ProfileEditScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
           <Feather name="x" size={22} color={colors.foreground} />
         </Pressable>
@@ -186,7 +188,6 @@ export function ProfileEditScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingTop: 56,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
     flexDirection: 'row',

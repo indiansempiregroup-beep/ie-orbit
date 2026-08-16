@@ -6,6 +6,10 @@ import type {
   StaffServiceAssignmentInput,
   StaffSpecialAvailability,
   StaffSpecialAvailabilityInput,
+  StaffSlotBlock,
+  StaffSlotBlockInput,
+  StaffEmergencySlot,
+  StaffEmergencySlotInput,
 } from '@ie-platform/sdk';
 import { businessQueryParam } from '../../lib/workspace';
 
@@ -72,6 +76,48 @@ export async function deleteStaffSpecialAvailability(client: IEPlatformClient, s
   await client.bookings.staffSpecialAvailability.delete(specialId);
 }
 
+export async function listStaffSlotBlocks(
+  client: IEPlatformClient,
+  staffId: string,
+  businessId?: string | null,
+) {
+  const response = await client.bookings.staffSlotBlocks.list({
+    staff_id: staffId,
+    ...businessQueryParam(businessId),
+  });
+  return response.data;
+}
+
+export async function createStaffSlotBlock(client: IEPlatformClient, input: StaffSlotBlockInput) {
+  const response = await client.bookings.staffSlotBlocks.create(input);
+  return response.data;
+}
+
+export async function deleteStaffSlotBlock(client: IEPlatformClient, blockId: string) {
+  await client.bookings.staffSlotBlocks.delete(blockId);
+}
+
+export async function listStaffEmergencySlots(
+  client: IEPlatformClient,
+  staffId: string,
+  businessId?: string | null,
+) {
+  const response = await client.bookings.staffEmergencySlots.list({
+    staff_id: staffId,
+    ...businessQueryParam(businessId),
+  });
+  return response.data;
+}
+
+export async function createStaffEmergencySlot(client: IEPlatformClient, input: StaffEmergencySlotInput) {
+  const response = await client.bookings.staffEmergencySlots.create(input);
+  return response.data;
+}
+
+export async function deleteStaffEmergencySlot(client: IEPlatformClient, slotId: string) {
+  await client.bookings.staffEmergencySlots.delete(slotId);
+}
+
 export async function listStaffAssignments(client: IEPlatformClient, staffId: string) {
   const response = await client.staff.assignments.list({ staff: staffId });
   return response.data;
@@ -105,4 +151,8 @@ export type {
   StaffServiceAssignmentInput,
   StaffSpecialAvailability,
   StaffSpecialAvailabilityInput,
+  StaffSlotBlock,
+  StaffSlotBlockInput,
+  StaffEmergencySlot,
+  StaffEmergencySlotInput,
 };

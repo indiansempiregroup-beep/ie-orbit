@@ -2,7 +2,6 @@ import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -19,6 +18,7 @@ import { SelectField } from '../../components/SelectField';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
+import { RemoteImage } from '../../components/RemoteImage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-platform/sdk';
@@ -164,7 +164,7 @@ export function ShopProductsScreen() {
               >
                 <View style={styles.rowInner}>
                   {uri ? (
-                    <Image source={{ uri }} style={styles.thumb} />
+                    <RemoteImage uri={uri} style={styles.thumb} />
                   ) : (
                     <View style={[styles.thumb, styles.thumbEmpty]}>
                       <Feather name="package" size={18} color={colors.mutedForeground} />

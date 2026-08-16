@@ -7,6 +7,7 @@ type Props = {
   value: string;
   onChange: (isoDate: string) => void;
   primaryColor?: string;
+  allowPast?: boolean;
 };
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -23,7 +24,7 @@ function parseIso(value: string) {
   return new Date(year, month - 1, day);
 }
 
-export function CalendarPicker({ value, onChange, primaryColor = colors.primary }: Props) {
+export function CalendarPicker({ value, onChange, primaryColor = colors.primary, allowPast = false }: Props) {
   const selectedDate = value ? parseIso(value) : new Date();
   const [month, setMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
 
@@ -87,7 +88,7 @@ export function CalendarPicker({ value, onChange, primaryColor = colors.primary 
             }
             const isSelected = cell.iso === value;
             const isToday = cell.iso === todayIso;
-            const isPast = cell.iso < todayIso;
+            const isPast = !allowPast && cell.iso < todayIso;
             return (
               <Pressable
                 key={cell.iso}

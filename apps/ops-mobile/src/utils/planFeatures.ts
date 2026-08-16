@@ -10,6 +10,7 @@ export const PlanFeature = {
   shopieOrders: 'shopie_orders',
   shopieReturns: 'shopie_returns',
   shopieDeliveryZones: 'shopie_delivery_zones',
+  shopieCoupons: 'shopie_coupons',
   shopieLoyalty: 'shopie_loyalty',
   shopieBooksSale: 'shopie_books_sale',
   shopieBooksPurchase: 'shopie_books_purchase',
@@ -30,10 +31,11 @@ export const PlanFeature = {
   shopieEinvoice: 'shopie_einvoice',
   shopieEway: 'shopie_eway',
   shopieGrowWhatsapp: 'shopie_grow_whatsapp',
-  shopieGrowPoster: 'shopie_grow_poster',
   shopieGrowGoogle: 'shopie_grow_google',
   shopieGrowSync: 'shopie_grow_sync',
   shopieGrowUtilities: 'shopie_grow_utilities',
+  shopieGrowAds: 'shopie_grow_ads',
+  shopieCustomerReferral: 'shopie_customer_referral',
   rewardPoints: 'reward_points',
 } as const;
 
@@ -52,7 +54,6 @@ export const SHOPIE_BOOKS_FEATURES = [
   PlanFeature.shopieBooksGodowns,
   PlanFeature.shopieBooksCheques,
   PlanFeature.shopieBooksLoans,
-  PlanFeature.shopieBooksJobWork,
   PlanFeature.shopieGstReports,
   PlanFeature.shopieEinvoice,
   PlanFeature.shopieEway,

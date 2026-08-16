@@ -1,5 +1,37 @@
+import { Platform } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
+
+type PickerAssetWithFile = ImagePickerAsset & { file?: Blob };
+
+async function appendPickerFile(formData: FormData, asset: ImagePickerAsset, field = 'file') {
+  const fileName = asset.fileName ?? `upload-${Date.now()}.jpg`;
+  const mimeType = asset.mimeType ?? 'image/jpeg';
+  const webFile = (asset as PickerAssetWithFile).file;
+
+  // Browser FormData only accepts Blob/File. The RN `{ uri, name, type }` shape is ignored on web.
+  if (typeof Blob !== 'undefined' && webFile instanceof Blob) {
+    formData.append(field, webFile, fileName);
+    return;
+  }
+
+  if (Platform.OS === 'web' || asset.uri.startsWith('blob:') || asset.uri.startsWith('data:')) {
+    const response = await fetch(asset.uri);
+    const blob = await response.blob();
+    const typed =
+      blob.type && blob.type !== 'application/octet-stream'
+        ? blob
+        : new Blob([blob], { type: mimeType });
+    formData.append(field, typed, fileName);
+    return;
+  }
+
+  formData.append(field, {
+    uri: asset.uri,
+    name: fileName,
+    type: mimeType,
+  } as unknown as Blob);
+}
 
 export type MediaUploadResult = {
   id: string;
@@ -27,14 +59,7 @@ export async function uploadMedia({
   displayName,
 }: UploadMediaArgs): Promise<MediaUploadResult> {
   const formData = new FormData();
-  const fileName = asset.fileName ?? `upload-${Date.now()}.jpg`;
-  const mimeType = asset.mimeType ?? 'image/jpeg';
-
-  formData.append('file', {
-    uri: asset.uri,
-    name: fileName,
-    type: mimeType,
-  } as unknown as Blob);
+  await appendPickerFile(formData, asset);
   formData.append('business', businessId);
   formData.append('folder_type', folderType);
   formData.append('visibility', 'public');
@@ -118,14 +143,7 @@ export async function uploadProfilePhoto({
   asset,
 }: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { userName?: string }): Promise<MediaUploadResult> {
   const formData = new FormData();
-  const fileName = asset.fileName ?? `upload-${Date.now()}.jpg`;
-  const mimeType = asset.mimeType ?? 'image/jpeg';
-
-  formData.append('file', {
-    uri: asset.uri,
-    name: fileName,
-    type: mimeType,
-  } as unknown as Blob);
+  await appendPickerFile(formData, asset);
 
   const response = await fetch(`${getApiBaseUrl()}/auth/me/photo`, {
     method: 'POST',

@@ -99,6 +99,7 @@ def test_booking_event_creates_notification_and_read_endpoint(
     customer_notification = Notification.objects.get(
         tenant=tenant,
         booking=booking,
+        channel="in_app",
         metadata__audience=AUDIENCE_CUSTOMER,
     )
     assert customer_notification.status == "sent"

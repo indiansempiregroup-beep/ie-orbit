@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { createApiClient, type LoginResponse, type UserProfile } from '@ie-platform/sdk';
+import { createApiClient, type LoginResponse, type UserProfile, type WorkspaceProvisionResponse } from '@ie-platform/sdk';
 import {
   clearImpersonationMarkers,
   getImpersonationTenantId,
@@ -20,6 +20,7 @@ type AuthState = {
   loading: boolean;
   isImpersonating: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<string>;
+  bootstrapSession: (payload: WorkspaceProvisionResponse) => Promise<void>;
   logout: (allSessions?: boolean) => Promise<void>;
   restore: () => Promise<void>;
   endImpersonation: () => Promise<void>;
@@ -87,6 +88,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
       return payload.access;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function bootstrapSession(payload: WorkspaceProvisionResponse) {
+    setLoading(true);
+    try {
+      clearImpersonationMarkers();
+      setIsImpersonating(false);
+      client.setToken(payload.access);
+      setToken(payload.access);
+      if (payload.user) {
+        setUser(payload.user);
+      } else {
+        await hydrateUser();
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY, payload.access);
+        localStorage.setItem(STORAGE_REFRESH, payload.refresh);
+        localStorage.setItem(STORAGE_STARTED, new Date().toISOString());
+      } catch {
+        // ignore storage failures
+      }
+      scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
     } finally {
       setLoading(false);
     }
@@ -262,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const value = useMemo(
-    () => ({ token, user, loading, isImpersonating, login, logout, restore, endImpersonation }),
+    () => ({ token, user, loading, isImpersonating, login, bootstrapSession, logout, restore, endImpersonation }),
     [token, user, loading, isImpersonating],
   );
 

@@ -8,6 +8,7 @@ import type { MobileDiscoverServiceDetail } from '@ie-platform/sdk';
 import { mobileClient } from '../../api/client';
 import { Button } from '../../components/ui/Button';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { RootStackParamList } from '../../navigation/types';
@@ -17,6 +18,7 @@ export function ServiceDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ServiceDetail'>>();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
   const [service, setService] = useState<MobileDiscoverServiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,7 @@ export function ServiceDetailScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={colors.foreground} />
         </Pressable>
@@ -55,7 +57,7 @@ export function ServiceDetailScreen() {
             <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.hero} />
           ) : (
             <View style={[styles.heroFallback, { backgroundColor: `${primary}14` }]}>
-              <Feather name="scissors" size={36} color={primary} />
+              <Feather name="calendar" size={36} color={primary} />
             </View>
           )}
           <Text style={styles.title}>{service.name}</Text>
@@ -67,7 +69,7 @@ export function ServiceDetailScreen() {
 
           {service.staff?.length ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Available stylists</Text>
+              <Text style={styles.sectionTitle}>Available staff</Text>
               {service.staff.map((member) => (
                 <View key={member.id} style={styles.staffRow}>
                   <View style={[styles.staffIcon, { backgroundColor: `${primary}14` }]}>
@@ -98,7 +100,6 @@ export function ServiceDetailScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingTop: 56,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
     flexDirection: 'row',

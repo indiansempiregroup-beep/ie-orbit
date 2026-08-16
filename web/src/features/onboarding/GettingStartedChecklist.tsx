@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { GETTING_STARTED_ITEMS } from '../../config/onboarding';
+import { weeklyHoursConfigured } from '../../lib/businessHours';
 import { useBusinessProfileQuery } from '../settings/businessSettingsHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
 import { useBookingList } from '../bookings/bookingsHooks';
@@ -26,6 +27,7 @@ export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistPr
         (settings.address_line1 || settings.city || settings.primary_contact || business.email),
     );
     const hasLogo = Boolean(business?.logo);
+    const hasHours = weeklyHoursConfigured(settings.business_hours);
     const services = servicesQuery.data ?? [];
     const staff = staffQuery.data ?? [];
     const customers = customersQuery.data ?? [];
@@ -33,6 +35,7 @@ export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistPr
 
     return {
       profile: hasProfile,
+      hours: hasHours,
       logo: hasLogo,
       service: services.length > 0,
       staff: staff.length > 0,

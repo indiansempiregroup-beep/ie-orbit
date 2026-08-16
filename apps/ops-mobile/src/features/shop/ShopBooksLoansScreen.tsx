@@ -17,6 +17,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
+import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -216,16 +217,7 @@ export function ShopBooksLoansScreen() {
             placeholderTextColor={colors.mutedForeground}
           />
         </View>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Start date</Text>
-          <TextInput
-            style={styles.input}
-            value={startDate}
-            onChangeText={setStartDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <DateField label="Start date" value={startDate} onChange={setStartDate} allowClear={false} />
         <TextInput
           style={[styles.input, styles.notes]}
           value={notes}

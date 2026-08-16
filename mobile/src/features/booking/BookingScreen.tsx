@@ -15,6 +15,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { filterFutureSlots, formatDateKey, formatMoney, formatTime } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
@@ -25,6 +26,7 @@ export function BookingScreen() {
   const { user } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
 
   const [step, setStep] = useState(0);
@@ -41,17 +43,17 @@ export function BookingScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [bookingRef, setBookingRef] = useState('');
-  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
-  const [pointsPerCurrency, setPointsPerCurrency] = useState(10);
-  const [maxRedeemPercent, setMaxRedeemPercent] = useState(50);
-  const [minRedeemPoints, setMinRedeemPoints] = useState(10);
+  const [pointsPerCurrency, setPointsPerCurrency] = useState(bootstrap?.loyalty?.points_per_currency_unit ?? 10);
+  const [maxRedeemPercent, setMaxRedeemPercent] = useState(bootstrap?.loyalty?.max_redeem_percent ?? 50);
+  const [minRedeemPoints, setMinRedeemPoints] = useState(bootstrap?.loyalty?.min_redeem_points ?? 10);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
   const needsLocation = offices.length > 1;
   const steps = needsLocation
-    ? ['Location', 'Service', 'Stylist', 'Date & Time', 'Review', 'Confirmed']
-    : ['Service', 'Stylist', 'Date & Time', 'Review', 'Confirmed'];
+    ? ['Location', 'Service', 'Staff', 'Date & Time', 'Review', 'Confirmed']
+    : ['Service', 'Staff', 'Date & Time', 'Review', 'Confirmed'];
   const serviceStep = needsLocation ? 1 : 0;
   const stylistStep = needsLocation ? 2 : 1;
   const scheduleStep = needsLocation ? 3 : 2;
@@ -145,7 +147,7 @@ export function BookingScreen() {
         response.data.message ||
           (openSlots.length
             ? ''
-            : 'No timeslot available for this date. Try another day or stylist.'),
+            : 'No timeslot available for this date. Try another day or staff member.'),
       );
       setSelectedSlot('');
     } catch (err) {
@@ -170,6 +172,9 @@ export function BookingScreen() {
     if (pointsToRedeem <= 0) return 0;
     return pointsToRedeem / Math.max(1, pointsPerCurrency);
   }, [pointsToRedeem, pointsPerCurrency]);
+  const bookingEarnPoints = loyaltyEnabled
+    ? Math.max(0, Number(selectedService?.loyalty_points_earn) || 0)
+    : 0;
 
   async function loadLoyalty() {
     if (!tenantSlug || !businessCode) return;
@@ -178,7 +183,7 @@ export function BookingScreen() {
         tenant_slug: tenantSlug,
         business_code: businessCode,
       });
-      const enabled = Boolean(res.data.enabled);
+      const enabled = Boolean(res.data.enabled || bootstrap?.loyalty?.enabled);
       setLoyaltyEnabled(enabled);
       setLoyaltyBalance(res.data.points_balance ?? 0);
       setPointsPerCurrency(res.data.program?.points_per_currency_unit ?? 10);
@@ -186,7 +191,7 @@ export function BookingScreen() {
       setMinRedeemPoints(res.data.program?.min_redeem_points ?? 10);
       if (!enabled) setPointsToRedeem(0);
     } catch {
-      setLoyaltyEnabled(false);
+      setLoyaltyEnabled(Boolean(bootstrap?.loyalty?.enabled));
       setLoyaltyBalance(0);
       setPointsToRedeem(0);
     }
@@ -247,7 +252,7 @@ export function BookingScreen() {
       return;
     }
     if (step === stylistStep && selectedStaffId === null) {
-      setError('Select a stylist or Any available to continue.');
+      setError('Select a staff member or Any available to continue.');
       return;
     }
     if (step === scheduleStep && !selectedSlot) {
@@ -297,7 +302,7 @@ export function BookingScreen() {
               />
             ) : (
               <View style={[styles.confirmThumb, { backgroundColor: `${primary}12` }]}>
-                <Feather name="scissors" size={20} color={primary} />
+                <Feather name="calendar" size={20} color={primary} />
               </View>
             )}
             <View style={styles.confirmServiceCopy}>
@@ -318,9 +323,17 @@ export function BookingScreen() {
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={[styles.totalValue, { color: primary }]}>
-              {formatMoney(selectedService?.price, selectedService?.currency)}
+              {formatMoney(
+                Math.max(0, (Number(selectedService?.price) || 0) - redeemDiscount),
+                selectedService?.currency,
+              )}
             </Text>
           </View>
+          {bookingEarnPoints > 0 ? (
+            <Text style={styles.earnHint}>
+              You'll earn {bookingEarnPoints} pts after this visit is completed.
+            </Text>
+          ) : null}
         </Card>
         <Button label="Done" primaryColor={primary} onPress={() => setStep(0)} />
       </View>
@@ -331,7 +344,7 @@ export function BookingScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
         <View style={styles.stepHeader}>
           {step > 0 ? (
             <Pressable style={styles.backBtn} onPress={() => setStep((s) => Math.max(0, s - 1))}>
@@ -354,7 +367,7 @@ export function BookingScreen() {
         <Text style={styles.title}>
           {needsLocation && step === 0 && 'Choose a location'}
           {step === serviceStep && 'Select a service'}
-          {step === stylistStep && 'Choose your stylist'}
+          {step === stylistStep && 'Choose staff'}
           {step === scheduleStep && 'Pick a date & time'}
           {step === reviewStep && 'Review & confirm'}
         </Text>
@@ -415,7 +428,7 @@ export function BookingScreen() {
                       <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.thumb} />
                     ) : (
                       <View style={[styles.thumb, { backgroundColor: `${primary}12` }]}>
-                        <Feather name="scissors" size={18} color={primary} />
+                        <Feather name="calendar" size={18} color={primary} />
                       </View>
                     )}
                     <View style={styles.optionBody}>
@@ -448,7 +461,7 @@ export function BookingScreen() {
               <Avatar name="Any" size="md" />
               <View style={styles.optionBody}>
                 <Text style={styles.optionTitle}>Any available</Text>
-                <Text style={styles.optionMeta}>We’ll assign the next free stylist</Text>
+                <Text style={styles.optionMeta}>We’ll assign the next available staff member</Text>
               </View>
               <View style={[styles.radio, selectedStaffId === '' && { borderColor: primary, backgroundColor: primary }]}>
                 {selectedStaffId === '' ? <Feather name="check" size={12} color="#fff" /> : null}
@@ -499,7 +512,7 @@ export function BookingScreen() {
               })}
               {!loading && !slots.length ? (
                 <Text style={styles.optionMeta}>
-                  {availabilityMessage || 'No timeslot available for this date. Try another day or stylist.'}
+                  {availabilityMessage || 'No timeslot available for this date. Try another day or staff member.'}
                 </Text>
               ) : null}
               {loading ? <Text style={styles.optionMeta}>Loading available times...</Text> : null}
@@ -512,7 +525,7 @@ export function BookingScreen() {
             <Card>
               <Text style={styles.sectionLabel}>Booking Summary</Text>
               <SummaryRow label="Service" value={selectedService.name} />
-              <SummaryRow label="Stylist" value={stylistLabel} />
+              <SummaryRow label="Staff" value={stylistLabel} />
               <SummaryRow label="Date" value={new Date(selectedSlot).toLocaleDateString()} />
               <SummaryRow label="Time" value={formatTime(selectedSlot)} />
               <SummaryRow label="Duration" value={`${selectedService.duration_minutes} minutes`} />
@@ -531,45 +544,58 @@ export function BookingScreen() {
                   )}
                 </Text>
               </View>
+              {bookingEarnPoints > 0 ? (
+                <Text style={styles.earnHint}>
+                  You'll earn {bookingEarnPoints} pts after this visit is completed.
+                </Text>
+              ) : null}
             </Card>
-            {loyaltyEnabled && maxRedeemablePoints >= minRedeemPoints ? (
+            {loyaltyEnabled ? (
               <Card>
                 <Text style={styles.sectionLabel}>Use reward points</Text>
                 <Text style={styles.optionMeta}>
                   Balance {loyaltyBalance} pts · {pointsPerCurrency} pts = {formatMoney(1, selectedService.currency)}
                 </Text>
-                <View style={styles.redeemRow}>
-                  <Pressable
-                    style={styles.redeemBtn}
-                    onPress={() =>
-                      setPointsToRedeem((current) => {
-                        if (current <= 0) return 0;
-                        const next = current - Math.max(1, minRedeemPoints);
-                        return next < minRedeemPoints ? 0 : next;
-                      })
-                    }
-                  >
-                    <Feather name="minus" size={16} color={colors.foreground} />
-                  </Pressable>
-                  <Text style={styles.redeemValue}>{pointsToRedeem} pts</Text>
-                  <Pressable
-                    style={styles.redeemBtn}
-                    onPress={() =>
-                      setPointsToRedeem((current) => {
-                        const stepAmount = Math.max(1, minRedeemPoints);
-                        if (current <= 0) return Math.min(maxRedeemablePoints, stepAmount);
-                        return Math.min(maxRedeemablePoints, current + stepAmount);
-                      })
-                    }
-                  >
-                    <Feather name="plus" size={16} color={colors.foreground} />
-                  </Pressable>
-                </View>
-                {pointsToRedeem > 0 ? (
+                {maxRedeemablePoints >= minRedeemPoints ? (
+                  <>
+                    <View style={styles.redeemRow}>
+                      <Pressable
+                        style={styles.redeemBtn}
+                        onPress={() =>
+                          setPointsToRedeem((current) => {
+                            if (current <= 0) return 0;
+                            const next = current - Math.max(1, minRedeemPoints);
+                            return next < minRedeemPoints ? 0 : next;
+                          })
+                        }
+                      >
+                        <Feather name="minus" size={16} color={colors.foreground} />
+                      </Pressable>
+                      <Text style={styles.redeemValue}>{pointsToRedeem} pts</Text>
+                      <Pressable
+                        style={styles.redeemBtn}
+                        onPress={() =>
+                          setPointsToRedeem((current) => {
+                            const stepAmount = Math.max(1, minRedeemPoints);
+                            if (current <= 0) return Math.min(maxRedeemablePoints, stepAmount);
+                            return Math.min(maxRedeemablePoints, current + stepAmount);
+                          })
+                        }
+                      >
+                        <Feather name="plus" size={16} color={colors.foreground} />
+                      </Pressable>
+                    </View>
+                    {pointsToRedeem > 0 ? (
+                      <Text style={styles.optionMeta}>
+                        Saves {formatMoney(redeemDiscount, selectedService.currency)}
+                      </Text>
+                    ) : null}
+                  </>
+                ) : (
                   <Text style={styles.optionMeta}>
-                    Saves {formatMoney(redeemDiscount, selectedService.currency)}
+                    Earn points on completed visits. You need at least {minRedeemPoints} pts to redeem.
                   </Text>
-                ) : null}
+                )}
               </Card>
             ) : null}
             <Card>
@@ -605,7 +631,7 @@ export function BookingScreen() {
 
       <View style={styles.footer}>
         <Button
-          label={step === 3 ? 'Confirm Booking' : 'Continue'}
+          label={step === reviewStep ? 'Confirm Booking' : 'Continue'}
           size="lg"
           fullWidth
           loading={loading}
@@ -629,7 +655,6 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingTop: 56,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
     backgroundColor: colors.card,
@@ -740,6 +765,12 @@ const styles = StyleSheet.create({
   },
   totalLabel: { ...typography.label, fontWeight: '700', color: colors.foreground },
   totalValue: { ...typography.label, fontWeight: '700' },
+  earnHint: {
+    ...typography.caption,
+    color: colors.success,
+    fontWeight: '600',
+    marginTop: spacing.sm,
+  },
   redeemRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -5,6 +5,9 @@ from rest_framework import serializers
 from apps.shopie.models import (
     BarcodeType,
     CashAccountType,
+    CustomerReferral,
+    CustomerReferralCode,
+    DiscountType,
     EWaySupplyType,
     FulfillmentMode,
     OrderStatus,
@@ -16,10 +19,13 @@ from apps.shopie.models import (
     ShopBusinessSettings,
     ShopCashAccount,
     ShopCheque,
+    ShopCoupon,
+    ShopDashboardAd,
     ShopDeliveryZone,
     ShopEInvoice,
     ShopEWayBill,
     ShopGodown,
+    ShopGodownStock,
     ShopInvoice,
     ShopLoan,
     ShopOrder,
@@ -28,6 +34,7 @@ from apps.shopie.models import (
     ShopPet,
     ShopProduct,
     ShopProductBarcode,
+    ShopProductReview,
     ShopQuotation,
     ShopReturn,
     ShopStockMovement,
@@ -46,6 +53,8 @@ class ShopProductBarcodeSerializer(serializers.ModelSerializer):
 class ShopProductSerializer(serializers.ModelSerializer):
     barcodes = ShopProductBarcodeSerializer(many=True, read_only=True)
     tax_inclusive = serializers.SerializerMethodField()
+    rating_avg = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopProduct
@@ -56,6 +65,7 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "name",
             "brand",
             "description",
+            "details_html",
             "status",
             "price",
             "tax_rate",
@@ -71,14 +81,39 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "category",
             "metadata",
             "barcodes",
+            "rating_avg",
+            "rating_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at", "rating_avg", "rating_count"]
 
     def get_tax_inclusive(self, obj: ShopProduct) -> bool:
         meta = obj.metadata if isinstance(obj.metadata, dict) else {}
         return bool(meta.get("tax_inclusive"))
+
+    def get_rating_avg(self, obj: ShopProduct) -> float | None:
+        value = getattr(obj, "rating_avg", None)
+        if value is None:
+            return None
+        return round(float(value), 1)
+
+    def get_rating_count(self, obj: ShopProduct) -> int:
+        return int(getattr(obj, "rating_count", 0) or 0)
+
+
+class ShopProductReviewSerializer(serializers.ModelSerializer):
+    reviewer_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopProductReview
+        fields = ["id", "rating", "title", "comment", "reviewer_name", "verified_purchase", "created_at"]
+        read_only_fields = fields
+
+    def get_reviewer_name(self, obj: ShopProductReview) -> str:
+        from apps.shopie.services.product_reviews import reviewer_label
+
+        return reviewer_label(obj.customer)
 
 
 class ShopProductWriteSerializer(serializers.Serializer):
@@ -87,6 +122,7 @@ class ShopProductWriteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=200)
     brand = serializers.CharField(required=False, allow_blank=True, max_length=120)
     description = serializers.CharField(required=False, allow_blank=True)
+    details_html = serializers.CharField(required=False, allow_blank=True)
     status = serializers.ChoiceField(choices=ProductStatus.choices, required=False)
     price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     tax_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
@@ -95,6 +131,7 @@ class ShopProductWriteSerializer(serializers.Serializer):
     batch_tracking_enabled = serializers.BooleanField(required=False)
     currency = serializers.CharField(required=False, allow_blank=True, max_length=3)
     stock_on_hand = serializers.DecimalField(max_digits=12, decimal_places=3, required=False)
+    godown_id = serializers.UUIDField(required=False, allow_null=True)
     low_stock_threshold = serializers.DecimalField(max_digits=12, decimal_places=3, required=False)
     pack_size = serializers.CharField(required=False, allow_blank=True, max_length=80)
     # Relative /media/... paths from local uploads are valid product images.
@@ -153,15 +190,19 @@ class StockAdjustSerializer(serializers.Serializer):
     quantity_delta = serializers.DecimalField(max_digits=12, decimal_places=3)
     reason = serializers.CharField(required=False, allow_blank=True, max_length=255)
     movement_type = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    godown_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class ShopOrderLineSerializer(serializers.ModelSerializer):
+    product_image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ShopOrderLine
         fields = [
             "id",
             "product",
             "product_name",
+            "product_image_url",
             "barcode_scanned",
             "quantity",
             "unit_price",
@@ -174,6 +215,10 @@ class ShopOrderLineSerializer(serializers.ModelSerializer):
             "line_total",
         ]
 
+    def get_product_image_url(self, obj: ShopOrderLine) -> str:
+        product = getattr(obj, "product", None)
+        return str(getattr(product, "image_url", "") or "")
+
 
 class ShopOrderSerializer(serializers.ModelSerializer):
     lines = ShopOrderLineSerializer(many=True, read_only=True)
@@ -184,6 +229,9 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     payment_proof_url = serializers.SerializerMethodField()
     upi_pay_url = serializers.SerializerMethodField()
     delivery_fee = serializers.SerializerMethodField()
+    coupon_code = serializers.SerializerMethodField()
+    coupon_name = serializers.SerializerMethodField()
+    coupon_discount = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopOrder
@@ -208,6 +256,9 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "payment_proof_url",
             "upi_pay_url",
             "delivery_fee",
+            "coupon_code",
+            "coupon_name",
+            "coupon_discount",
             "lines",
             "created_at",
             "updated_at",
@@ -233,6 +284,20 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     def get_delivery_fee(self, obj: ShopOrder) -> str:
         metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
         return str(metadata.get("delivery_fee") or "0")
+
+    def _coupon(self, obj: ShopOrder) -> dict:
+        metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
+        coupon = metadata.get("coupon") if isinstance(metadata.get("coupon"), dict) else {}
+        return coupon
+
+    def get_coupon_code(self, obj: ShopOrder) -> str:
+        return str(self._coupon(obj).get("code") or "")
+
+    def get_coupon_name(self, obj: ShopOrder) -> str:
+        return str(self._coupon(obj).get("name") or "")
+
+    def get_coupon_discount(self, obj: ShopOrder) -> str:
+        return str(self._coupon(obj).get("discount_amount") or "0")
 
     def get_upi_pay_url(self, obj: ShopOrder) -> str:
         from apps.common.upi import build_upi_pay_url
@@ -286,6 +351,8 @@ class ShopOrderCreateSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
     )
+    coupon_code = serializers.CharField(required=False, allow_blank=True, max_length=40)
+    points_to_redeem = serializers.IntegerField(required=False, min_value=0, default=0)
     lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 
 
@@ -295,6 +362,9 @@ class BarcodeBulkLookupSerializer(serializers.Serializer):
 
 
 class ShopReturnSerializer(serializers.ModelSerializer):
+    refund_mode = serializers.SerializerMethodField()
+    refund_instruction = serializers.SerializerMethodField()
+
     class Meta:
         model = ShopReturn
         fields = [
@@ -311,9 +381,20 @@ class ShopReturnSerializer(serializers.ModelSerializer):
             "credit_invoice",
             "line_items",
             "metadata",
+            "refund_mode",
+            "refund_instruction",
             "created_at",
             "updated_at",
         ]
+
+    def _meta(self, obj: ShopReturn) -> dict:
+        return obj.metadata if isinstance(obj.metadata, dict) else {}
+
+    def get_refund_mode(self, obj: ShopReturn) -> str:
+        return str(self._meta(obj).get("refund_mode") or "")
+
+    def get_refund_instruction(self, obj: ShopReturn) -> str:
+        return str(self._meta(obj).get("refund_instruction") or "")
 
 
 class ShopReturnCreateSerializer(serializers.Serializer):
@@ -406,6 +487,16 @@ class ShopPetWriteSerializer(serializers.Serializer):
     medical_notes = serializers.CharField(required=False, allow_blank=True)
     medical_records = serializers.ListField(child=serializers.DictField(), required=False)
     metadata = serializers.DictField(required=False)
+
+
+class MobileShopPetWriteSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=120, required=False)
+    species = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    breed = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    sex = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    birthday = serializers.DateField(required=False, allow_null=True)
+    photo_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)
+    medical_notes = serializers.CharField(required=False, allow_blank=True)
 
 
 class ShopPetNotifySerializer(serializers.Serializer):
@@ -689,6 +780,7 @@ class ShopSaleVoucherCreateSerializer(serializers.Serializer):
     cash_account_id = serializers.UUIDField(required=False, allow_null=True)
     currency = serializers.CharField(required=False, allow_blank=True, max_length=3)
     metadata = serializers.DictField(required=False)
+    points_to_redeem = serializers.IntegerField(required=False, min_value=0, default=0)
 
 
 class ShopPurchaseVoucherCreateSerializer(serializers.Serializer):
@@ -876,7 +968,35 @@ class ShopBooksDocumentConvertSerializer(serializers.Serializer):
     cash_account_id = serializers.UUIDField(required=False, allow_null=True)
 
 
+class ShopGodownStockLineSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    sku = serializers.CharField(source="product.sku", read_only=True)
+    price = serializers.DecimalField(
+        source="product.price", max_digits=12, decimal_places=2, read_only=True
+    )
+    low_stock_threshold = serializers.DecimalField(
+        source="product.low_stock_threshold", max_digits=12, decimal_places=3, read_only=True
+    )
+    catalog_stock = serializers.DecimalField(
+        source="product.stock_on_hand", max_digits=12, decimal_places=3, read_only=True
+    )
+
+    class Meta:
+        model = ShopGodownStock
+        fields = [
+            "product",
+            "product_name",
+            "sku",
+            "quantity",
+            "price",
+            "low_stock_threshold",
+            "catalog_stock",
+        ]
+
+
 class ShopGodownSerializer(serializers.ModelSerializer):
+    stocks = serializers.SerializerMethodField()
+
     class Meta:
         model = ShopGodown
         fields = [
@@ -887,8 +1007,13 @@ class ShopGodownSerializer(serializers.ModelSerializer):
             "is_default",
             "is_active",
             "metadata",
+            "stocks",
             "created_at",
         ]
+
+    def get_stocks(self, obj: ShopGodown) -> list[dict]:
+        rows = [row for row in obj.stocks.all() if row.quantity]
+        return ShopGodownStockLineSerializer(rows, many=True).data
 
 
 class ShopGodownCreateSerializer(serializers.Serializer):
@@ -1165,3 +1290,153 @@ class ShopEWayGenerateSerializer(serializers.Serializer):
 
 class ShopEWayCancelSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=255)
+
+
+class ShopDashboardAdSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopDashboardAd
+        fields = [
+            "id",
+            "business",
+            "title",
+            "body",
+            "media",
+            "image_url",
+            "link_url",
+            "sort_order",
+            "is_active",
+            "starts_at",
+            "ends_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_image_url(self, obj: ShopDashboardAd) -> str:
+        url = (obj.image_url or "").strip()
+        transient = ("blob:", "data:", "file:", "content:", "ph:", "assets-library:")
+        if url and not url.startswith(transient):
+            return url
+        media = getattr(obj, "media", None)
+        if media is None:
+            return ""
+        return str(media.metadata.get("public_url") or media.metadata.get("private_url") or "")
+
+
+class ShopDashboardAdWriteSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    title = serializers.CharField(max_length=200)
+    body = serializers.CharField(required=False, allow_blank=True)
+    media_id = serializers.UUIDField(required=False, allow_null=True)
+    image_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)
+    link_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)
+    sort_order = serializers.IntegerField(required=False, min_value=0, default=0)
+    is_active = serializers.BooleanField(required=False, default=True)
+    starts_at = serializers.DateTimeField(required=False, allow_null=True)
+    ends_at = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class ShopDashboardAdPatchSerializer(ShopDashboardAdWriteSerializer):
+    business_id = serializers.UUIDField(required=False)
+    title = serializers.CharField(max_length=200, required=False)
+
+
+class CustomerReferralCodeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomerReferralCode
+        fields = [
+            "id",
+            "business",
+            "customer",
+            "code",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "code", "created_at", "updated_at"]
+
+
+class CustomerReferralSerializer(serializers.ModelSerializer):
+    referrer_name = serializers.SerializerMethodField()
+    referred_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomerReferral
+        fields = [
+            "id",
+            "business",
+            "referrer",
+            "referrer_name",
+            "referred",
+            "referred_name",
+            "status",
+            "rewarded_at",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_referrer_name(self, obj: CustomerReferral) -> str:
+        return getattr(obj.referrer, "display_name", "") or ""
+
+    def get_referred_name(self, obj: CustomerReferral) -> str:
+        return getattr(obj.referred, "display_name", "") or ""
+
+
+class ShopCouponSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopCoupon
+        fields = [
+            "id",
+            "business",
+            "code",
+            "name",
+            "description",
+            "discount_type",
+            "discount_value",
+            "min_order_total",
+            "max_discount_amount",
+            "starts_at",
+            "ends_at",
+            "max_redemptions",
+            "max_redemptions_per_customer",
+            "first_order_only",
+            "redemption_count",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "redemption_count", "created_at", "updated_at"]
+
+
+class ShopCouponWriteSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    code = serializers.CharField(max_length=40)
+    name = serializers.CharField(max_length=120)
+    description = serializers.CharField(required=False, allow_blank=True)
+    discount_type = serializers.ChoiceField(choices=DiscountType.choices)
+    discount_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    min_order_total = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, default=0
+    )
+    max_discount_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    starts_at = serializers.DateTimeField(required=False, allow_null=True)
+    ends_at = serializers.DateTimeField(required=False, allow_null=True)
+    max_redemptions = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    max_redemptions_per_customer = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1
+    )
+    first_order_only = serializers.BooleanField(required=False, default=False)
+    is_active = serializers.BooleanField(required=False, default=True)
+
+
+class ShopCouponPatchSerializer(ShopCouponWriteSerializer):
+    business_id = serializers.UUIDField(required=False)
+    code = serializers.CharField(max_length=40, required=False)
+    name = serializers.CharField(max_length=120, required=False)
+    discount_type = serializers.ChoiceField(choices=DiscountType.choices, required=False)
+    discount_value = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)

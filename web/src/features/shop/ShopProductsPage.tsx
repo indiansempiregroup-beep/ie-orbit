@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
-import type { ShopBarcodeEnrichment, ShopProduct } from '@ie-platform/sdk';
+import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-platform/sdk';
 import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-platform/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
+import { HtmlEditorField } from '../../components/HtmlEditorField';
 import { useDialog } from '../../hooks/useDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useShopProductMutations, useShopProducts } from './shopHooks';
+import { useShopGodowns, useShopProductMutations, useShopProducts } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
 import { uploadProductImage } from './uploadProductImage';
 import { currencySelectOptions, ensureSelectOption } from '../../config/onboarding';
@@ -31,12 +32,14 @@ const emptyForm = {
   name: '',
   brand: '',
   description: '',
+  details_html: '',
   price: '0',
   tax_rate: '0',
   gst_rate: '0',
   hsn_sac: '',
   currency: 'INR',
   stock_on_hand: '0',
+  godown_id: '',
   low_stock_threshold: '0',
   pack_size: '',
   images: emptyProductImageSlots(),
@@ -80,12 +83,14 @@ function formFromProduct(product: ShopProduct): FormState {
     name: product.name || '',
     brand: product.brand || '',
     description: product.description || '',
+    details_html: product.details_html || '',
     price: String(product.price ?? '0'),
     tax_rate: String(product.tax_rate ?? '0'),
     gst_rate: String(product.gst_rate ?? product.tax_rate ?? '0'),
     hsn_sac: product.hsn_sac || '',
     currency: product.currency || 'INR',
     stock_on_hand: String(product.stock_on_hand ?? '0'),
+    godown_id: '',
     low_stock_threshold: String(product.low_stock_threshold ?? '0'),
     pack_size: product.pack_size || '',
     images: galleryFromProduct(product),
@@ -94,6 +99,16 @@ function formFromProduct(product: ShopProduct): FormState {
     status: product.status || 'active',
     category: product.category || '',
   };
+}
+
+function pickGodownId(godowns: ShopGodown[], productId?: string) {
+  if (productId) {
+    const holding = godowns.find((godown) =>
+      (godown.stocks ?? []).some((row) => row.product === productId && Number(row.quantity) > 0),
+    );
+    if (holding) return holding.id;
+  }
+  return godowns.find((godown) => godown.is_default)?.id || godowns[0]?.id || '';
 }
 
 export function ShopProductsPage() {
@@ -109,6 +124,8 @@ export function ShopProductsPage() {
   const workspace = useWorkspace();
   const scanInputRef = useRef<HTMLInputElement | null>(null);
   const products = useShopProducts(search, status, category);
+  const godownsQuery = useShopGodowns();
+  const godowns = godownsQuery.data ?? [];
   const { create, update, enrich, analyzePackaging, getPackagingAnalysis, businessId } =
     useShopProductMutations();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -140,7 +157,7 @@ export function ShopProductsPage() {
 
   function openAddDialog() {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, godown_id: pickGodownId(godowns) });
     setBarcodeLookup('');
     setNameLookup('');
     setMessage(null);
@@ -149,7 +166,7 @@ export function ShopProductsPage() {
 
   function openEditDialog(product: ShopProduct) {
     setEditingId(product.id);
-    setForm(formFromProduct(product));
+    setForm({ ...formFromProduct(product), godown_id: pickGodownId(godowns, product.id) });
     setBarcodeLookup('');
     setNameLookup('');
     setMessage(null);
@@ -281,12 +298,14 @@ export function ShopProductsPage() {
       name: form.name.trim(),
       brand: form.brand,
       description: form.description,
+      details_html: form.details_html,
       price: form.price,
       tax_rate: form.tax_rate,
       gst_rate: form.gst_rate,
       hsn_sac: form.hsn_sac,
       currency: form.currency,
       stock_on_hand: form.stock_on_hand,
+      ...(form.godown_id ? { godown_id: form.godown_id } : {}),
       low_stock_threshold: form.low_stock_threshold,
       pack_size: form.pack_size,
       ...(gallery[0] ? { image_url: gallery[0] } : { image_url: '' }),
@@ -500,7 +519,6 @@ export function ShopProductsPage() {
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   onChange={(event) => void uploadAt(index, event.target.files?.[0] ?? null)}
                 />
                 {url ? (
@@ -614,6 +632,24 @@ export function ShopProductsPage() {
                 />
               </label>
             ))}
+            {godowns.length ? (
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                  {editingId ? 'Godown for stock changes' : 'Stock godown'}
+                </span>
+                <select
+                  value={form.godown_id}
+                  onChange={(e) => setForm({ ...form, godown_id: e.target.value })}
+                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                >
+                  {godowns.map((godown) => (
+                    <option key={godown.id} value={godown.id}>
+                      {godown.is_default ? `${godown.name} (default)` : godown.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Currency</span>
               <select
@@ -676,6 +712,10 @@ export function ShopProductsPage() {
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               />
             </label>
+            <HtmlEditorField
+              value={form.details_html}
+              onChange={(details_html) => setForm({ ...form, details_html })}
+            />
           </div>
 
           <div style={{ display: 'grid', gap: 12 }}>

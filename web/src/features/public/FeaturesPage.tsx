@@ -34,7 +34,7 @@ const featureGroups = [
       'Sales, purchases, cash and bank, expenses',
       'Parties, quotations, stock, godowns, and challans',
       'GST reports, e-invoice (IRN), and e-way bill',
-      'Cheques, loans, and job work when you need them',
+      'Cheques and loans when you need them',
     ],
   },
   {

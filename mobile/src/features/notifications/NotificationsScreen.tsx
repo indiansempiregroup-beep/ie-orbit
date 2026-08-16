@@ -8,6 +8,7 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { useMobileNotifications } from '../../hooks/useMobileNotifications';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatRelativeTime } from '../../utils/format';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -18,6 +19,9 @@ const iconMap = {
   review: 'star',
   cancel: 'x',
   payment: 'credit-card',
+  order: 'package',
+  return: 'rotate-ccw',
+  pet: 'gift',
 } as const;
 
 type Nav = CompositeNavigationProp<
@@ -28,6 +32,7 @@ type Nav = CompositeNavigationProp<
 export function NotificationsScreen() {
   const navigation = useNavigation<Nav>();
   const { branding } = useBootstrap();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
   const { notifications, loading, error, reload, markAllRead, markRead } = useMobileNotifications();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
@@ -40,7 +45,7 @@ export function NotificationsScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
         <Text style={styles.title}>Notifications</Text>
         <Pressable onPress={() => void markAllRead()} disabled={!notifications.some((item) => !item.is_read)}>
           <Text style={[styles.markRead, { color: primary }]}>Mark all read</Text>
@@ -59,7 +64,7 @@ export function NotificationsScreen() {
         {!loading && !notifications.length ? (
           <View style={styles.empty}>
             <Feather name="bell" size={24} color={colors.mutedForeground} />
-            <Text style={styles.emptyText}>No notifications yet. Updates about your bookings will appear here.</Text>
+            <Text style={styles.emptyText}>No notifications yet. Order, appointment, and shop updates will appear here.</Text>
           </View>
         ) : null}
 
@@ -72,16 +77,37 @@ export function NotificationsScreen() {
               style={[styles.row, !item.is_read && styles.unread]}
               onPress={() => {
                 if (!item.is_read) void markRead(item.id);
-                if (item.booking_id) navigation.navigate('BookingDetail', { bookingId: item.booking_id });
-                const petId = String((item as { pet_id?: string }).pet_id || '');
+                if (item.return_id) {
+                  navigation.navigate('ReturnDetail', { returnId: String(item.return_id) });
+                  return;
+                }
+                if (item.order_id) {
+                  navigation.navigate('ShopOrderDetail', { orderId: String(item.order_id) });
+                  return;
+                }
+                if (item.booking_id) {
+                  navigation.navigate('BookingDetail', { bookingId: item.booking_id });
+                  return;
+                }
+                const petId = String(item.pet_id || '');
                 if (petId) navigation.navigate('PetDetail', { petId });
               }}
             >
-              <View style={[styles.iconWrap, type === 'review' ? styles.iconAmber : type === 'cancel' ? styles.iconRed : styles.iconBlue]}>
+              <View style={[styles.iconWrap, type === 'review' ? styles.iconAmber : type === 'cancel' ? styles.iconRed : type === 'order' || type === 'return' ? styles.iconGreen : type === 'pet' ? styles.iconPink : styles.iconBlue]}>
                 <Feather
                   name={icon}
                   size={16}
-                  color={type === 'review' ? colors.warning : type === 'cancel' ? colors.destructive : primary}
+                  color={
+                    type === 'review'
+                      ? colors.warning
+                      : type === 'cancel'
+                        ? colors.destructive
+                        : type === 'order' || type === 'return'
+                          ? colors.success
+                          : type === 'pet'
+                            ? '#DB2777'
+                          : primary
+                  }
                 />
               </View>
               <View style={styles.body}>
@@ -103,7 +129,6 @@ export function NotificationsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingTop: 56,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
     backgroundColor: colors.card,
@@ -139,6 +164,8 @@ const styles = StyleSheet.create({
   iconBlue: { backgroundColor: '#DBEAFE' },
   iconAmber: { backgroundColor: '#FEF3C7' },
   iconRed: { backgroundColor: '#FEE2E2' },
+  iconGreen: { backgroundColor: '#D1FAE5' },
+  iconPink: { backgroundColor: '#FCE7F3' },
   body: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   rowTitle: { ...typography.label, color: colors.foreground, fontWeight: '600', flex: 1 },

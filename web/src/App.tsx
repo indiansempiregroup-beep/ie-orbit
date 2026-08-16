@@ -43,6 +43,9 @@ const ShopReturnsPage = lazy(() => import('./features/shop/ShopReturnsPage').the
 const ShopDeliveryZonesPage = lazy(() =>
   import('./features/shop/ShopDeliveryZonesPage').then((m) => ({ default: m.ShopDeliveryZonesPage })),
 );
+const ShopCouponsPage = lazy(() =>
+  import('./features/shop/ShopCouponsPage').then((m) => ({ default: m.ShopCouponsPage })),
+);
 const ShopPetsPage = lazy(() => import('./features/shop/ShopPetsPage').then((m) => ({ default: m.ShopPetsPage })));
 const ShopBillingPage = lazy(() => import('./features/shop/ShopBillingPage').then((m) => ({ default: m.ShopBillingPage })));
 const ShopBooksDashboardPage = lazy(() =>
@@ -97,6 +100,9 @@ const PlatformPackagesPage = lazy(() =>
 );
 const PlatformCouponsPage = lazy(() =>
   import('./features/admin/PlatformCouponsPage').then((m) => ({ default: m.PlatformCouponsPage })),
+);
+const PlatformAffiliatesPage = lazy(() =>
+  import('./features/admin/PlatformAffiliatesPage').then((m) => ({ default: m.PlatformAffiliatesPage })),
 );
 const PlatformMonitoringPage = lazy(() =>
   import('./features/admin/PlatformMonitoringPage').then((m) => ({ default: m.PlatformMonitoringPage })),
@@ -182,6 +188,7 @@ function App() {
                 <Route path="revenue" element={<PlatformRevenuePage />} />
                 <Route path="claims" element={<PlatformClaimsPage />} />
                 <Route path="packages" element={<PlatformPackagesPage />} />
+                <Route path="affiliates" element={<PlatformAffiliatesPage />} />
                 <Route path="coupons" element={<PlatformCouponsPage />} />
                 <Route path="tickets" element={<PlatformTicketsPage />} />
                 <Route path="users" element={<PlatformUsersPage />} />
@@ -244,6 +251,7 @@ function App() {
                     <Route path="/shop/books/reports" element={<ShopBooksReportsPage />} />
                     <Route path="/shop/books/compliance" element={<ShopComplianceSettingsPage />} />
                     <Route path="/shop/delivery-zones" element={<ShopDeliveryZonesPage />} />
+                    <Route path="/shop/coupons" element={<ShopCouponsPage />} />
                     <Route path="/shop/pets" element={<ShopPetsPage />} />
                   </Route>
                 </Route>

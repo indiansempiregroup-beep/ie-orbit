@@ -45,6 +45,23 @@ def enabled_features(product_codes: list[str], *, business: Business | None = No
     return features
 
 
+def _loyalty_program_summary(business: Business) -> dict[str, Any]:
+    try:
+        from apps.customers.services.loyalty import LoyaltyService
+
+        return LoyaltyService().get_program_summary(business=business)
+    except Exception:
+        return {
+            "enabled": False,
+            "plan_entitled": False,
+            "points_per_currency_unit": 10,
+            "max_redeem_percent": 50,
+            "min_redeem_points": 10,
+            "earn_points_per_100": 1,
+            "currency": getattr(business, "currency", None) or "INR",
+        }
+
+
 def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
     business = profile.business
     tenant = business.tenant
@@ -111,6 +128,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         },
         "enabled_products": product_codes,
         "features": enabled_features(product_codes, business=business),
+        "loyalty": _loyalty_program_summary(business),
         "build_metadata": profile.build_metadata,
     }
 

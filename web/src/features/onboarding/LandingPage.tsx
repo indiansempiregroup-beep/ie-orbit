@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { captureAffiliateCodeFromLocation, registerStartPath } from './affiliateCode';
+import { getOpsMobileWebOrigin } from '../../lib/impersonation';
 
 export function LandingPage() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    captureAffiliateCodeFromLocation();
+  }, []);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#f5f7fb' }}>
@@ -15,7 +21,7 @@ export function LandingPage() {
             Create your workspace and start AppointIE bookings, ShopIE retail, or both in minutes.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
-            <Button variant="primary" onClick={() => navigate('/auth/register/start')}>Start Free Trial</Button>
+            <Button variant="primary" onClick={() => navigate(registerStartPath())}>Start Free Trial</Button>
             <Button variant="ghost" onClick={() => navigate('/auth/register')}>Get Started</Button>
             <Button variant="neutral" onClick={() => alert('Request demo placeholder')}>Request Demo</Button>
           </div>
@@ -24,7 +30,7 @@ export function LandingPage() {
         <Card style={{ padding: 24 }}>
           <h3 style={{ margin: 0 }}>Already have an account?</h3>
           <div style={{ marginTop: 12 }}>
-            <Button variant="ghost" onClick={() => navigate('/auth')}>Sign in</Button>
+            <Button variant="ghost" onClick={() => { window.location.assign(`${getOpsMobileWebOrigin()}/`); }}>Sign in</Button>
           </div>
         </Card>
       </div>

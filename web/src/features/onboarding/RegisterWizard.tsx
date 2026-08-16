@@ -1,16 +1,25 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
+import type { BillingPlanCatalogItem } from '@ie-platform/sdk';
+import { Check, CalendarDays, ShoppingBag } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { Select } from '../../components/Select';
 import { ColorInput } from '../../components/ColorInput';
 import { LogoUploadField } from '../../components/LogoUploadField';
+import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
 import { WizardShell } from './components/WizardShell';
 import { PasswordStrengthIndicator } from '../auth/components/PasswordStrengthIndicator';
 import { useOnboardingDraft } from './hooks/useOnboardingDraft';
 import { provisionWorkspace } from './provisionWorkspace';
+import {
+  captureAffiliateCodeFromLocation,
+  clearStoredAffiliateCode,
+  persistAffiliateCode,
+} from './affiliateCode';
 import {
   getDefaultRegisterValues,
   registerWizardSchema,
@@ -18,12 +27,9 @@ import {
   type RegisterWizardFormValues,
 } from './schemas/registerWizardSchema';
 import {
-  APPOINTMENT_INTERVALS,
-  BUFFER_TIMES,
   BUSINESS_CATEGORIES,
   CURRENCIES,
   DATE_FORMATS,
-  DEFAULT_DURATIONS,
   detectDefaultCurrency,
   detectDefaultTimezone,
   INDUSTRIES,
@@ -36,8 +42,74 @@ import {
 } from '../../config/onboarding';
 import { PRODUCT_CATALOG, getProductName } from '../../config/products';
 import { useAuthContext } from '../../contexts/AuthContext';
-import { getApiErrorMessage } from '../../lib/apiClient';
+import { createAuthenticatedClient, getApiErrorMessage } from '../../lib/apiClient';
+import { summarizeWeeklyHours } from '../../lib/businessHours';
 import { usePageMeta } from '../../hooks/usePageMeta';
+
+const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
+  appointie: [
+    {
+      product_code: 'appointie',
+      plan_code: 'appointie-starter',
+      name: 'AppointIE Starter',
+      description: 'Scheduling and bookings for a single location.',
+      billing_interval: 'monthly',
+      trial_days: 15,
+      is_default: true,
+      max_staff: 1,
+      max_branches: 1,
+      currency: 'INR',
+    },
+    {
+      product_code: 'appointie',
+      plan_code: 'appointie-pro',
+      name: 'AppointIE Pro',
+      description: 'Multi-location scheduling with full business intelligence.',
+      billing_interval: 'monthly',
+      trial_days: 15,
+      is_default: false,
+      max_staff: 5,
+      max_branches: 5,
+      currency: 'INR',
+    },
+  ],
+  shopie: [
+    {
+      product_code: 'shopie',
+      plan_code: 'shopie-starter',
+      name: 'ShopIE Starter',
+      description: 'Catalog, POS, inventory, and billing for a single location.',
+      billing_interval: 'monthly',
+      trial_days: 15,
+      is_default: true,
+      max_staff: 2,
+      max_branches: 1,
+      currency: 'INR',
+    },
+    {
+      product_code: 'shopie',
+      plan_code: 'shopie-pro',
+      name: 'ShopIE Pro',
+      description: 'Multi-location commerce with advanced inventory and billing.',
+      billing_interval: 'monthly',
+      trial_days: 15,
+      is_default: false,
+      max_staff: 5,
+      max_branches: 5,
+      currency: 'INR',
+    },
+  ],
+};
+
+function formatInr(paise?: number | null) {
+  if (paise == null) return null;
+  return `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
+}
+
+function planTitle(plan: Pick<BillingPlanCatalogItem, 'name'> | string) {
+  const name = typeof plan === 'string' ? plan : plan.name;
+  return name.replace(/^(AppointIE|ShopIE)\s+/i, '') || name;
+}
 
 export function RegisterWizard() {
   usePageMeta({
@@ -46,6 +118,7 @@ export function RegisterWizard() {
   });
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const auth = useAuthContext();
   const { hydrated, loadDraft, saveDraft, clearDraft } = useOnboardingDraft();
   const [stepIndex, setStepIndex] = useState(0);
@@ -53,6 +126,7 @@ export function RegisterWizard() {
   const [provisioning, setProvisioning] = useState(false);
   const [brandingLogoFile, setBrandingLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [affiliateCode, setAffiliateCode] = useState(() => captureAffiliateCodeFromLocation());
   const draftLoadedRef = useRef(false);
 
   const currentStep = REGISTER_WIZARD_STEPS[stepIndex]?.id ?? 'business';
@@ -65,6 +139,18 @@ export function RegisterWizard() {
 
   const { register, watch, setValue, trigger, formState: { errors } } = form;
   const values = watch();
+  const publicClient = useMemo(() => createAuthenticatedClient(), []);
+  const catalogQuery = useQuery({
+    queryKey: ['public', 'plans'],
+    queryFn: async () => (await publicClient.billing.publicPlans()).data,
+    retry: false,
+  });
+  const catalogPlans = catalogQuery.data?.plans ?? [];
+
+  function plansForProduct(productId: string) {
+    const fromCatalog = catalogPlans.filter((plan) => plan.product_code === productId);
+    return fromCatalog.length > 0 ? fromCatalog : FALLBACK_PACKAGES[productId] ?? [];
+  }
 
   useEffect(() => {
     if (!brandingLogoFile) {
@@ -75,6 +161,11 @@ export function RegisterWizard() {
     setLogoPreviewUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [brandingLogoFile]);
+
+  useEffect(() => {
+    const fromUrl = captureAffiliateCodeFromLocation(searchParams.toString());
+    if (fromUrl) setAffiliateCode(fromUrl);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!hydrated || draftLoadedRef.current) return;
@@ -98,6 +189,22 @@ export function RegisterWizard() {
     const timer = window.setTimeout(() => saveDraft(values), 400);
     return () => window.clearTimeout(timer);
   }, [values, hydrated, saveDraft]);
+
+  useEffect(() => {
+    const next = { ...values.planCodes };
+    let changed = false;
+    for (const productId of values.selectedProducts) {
+      const plans = plansForProduct(productId);
+      if (!plans.length) continue;
+      if (plans.some((plan) => plan.plan_code === next[productId])) continue;
+      const fallback = plans.find((plan) => plan.is_default) ?? plans[0];
+      if (fallback) {
+        next[productId] = fallback.plan_code;
+        changed = true;
+      }
+    }
+    if (changed) setValue('planCodes', next, { shouldValidate: true });
+  }, [catalogPlans, values.selectedProducts, values.planCodes, setValue]);
 
   async function goNext() {
     const fields = [...(stepFieldMap[currentStep as keyof typeof stepFieldMap] ?? [])] as (keyof RegisterWizardFormValues)[];
@@ -125,7 +232,13 @@ export function RegisterWizard() {
     setStepIndex(REGISTER_WIZARD_STEPS.findIndex((step) => step.id === 'provision'));
     try {
       const parsed = registerWizardSchema.parse(values);
-      await provisionWorkspace({ values: parsed, login: auth.login, logoFile: brandingLogoFile });
+      const payload = await provisionWorkspace({
+        values: parsed,
+        logoFile: brandingLogoFile,
+        affiliateCode,
+      });
+      await auth.bootstrapSession(payload);
+      clearStoredAffiliateCode();
       clearDraft();
       navigate('/onboarding/success');
     } catch (err) {
@@ -184,19 +297,38 @@ export function RegisterWizard() {
         <label className="auth-checkbox">
           <input type="checkbox" {...register('acceptTerms')} />
           <span>
-            I accept the <Link to="/terms">Terms &amp; Conditions</Link>
+            I accept the <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link>
           </span>
         </label>
         {errors.acceptTerms ? <span className="field-error">{errors.acceptTerms.message}</span> : null}
         <label className="auth-checkbox">
           <input type="checkbox" {...register('acceptPrivacy')} />
           <span>
-            I accept the <Link to="/privacy">Privacy Policy</Link>
+            I accept the <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link>
           </span>
         </label>
         {errors.acceptPrivacy ? <span className="field-error">{errors.acceptPrivacy.message}</span> : null}
+        <Input
+          label="Affiliate code (optional)"
+          value={affiliateCode}
+          onChange={(event) => {
+            const next = event.target.value.toUpperCase();
+            setAffiliateCode(next);
+            persistAffiliateCode(next);
+          }}
+          autoComplete="off"
+        />
       </div>
     );
+  }
+
+  function toggleProduct(productId: RegisterWizardFormValues['selectedProducts'][number]) {
+    const selected = values.selectedProducts.includes(productId);
+    if (selected && values.selectedProducts.length === 1) return;
+    const next = selected
+      ? values.selectedProducts.filter((id) => id !== productId)
+      : [...values.selectedProducts, productId];
+    setValue('selectedProducts', next, { shouldValidate: true, shouldDirty: true });
   }
 
   function renderPreferencesStep() {
@@ -225,26 +357,6 @@ export function RegisterWizard() {
           options={WEEK_START_DAYS.map((d) => ({ value: d.value, label: d.label }))}
           {...register('weekStartDay')}
         />
-        <Input label="Business hours start" type="time" {...register('businessHoursStart')} />
-        <Input label="Business hours end" type="time" {...register('businessHoursEnd')} />
-        <Select
-          label="Appointment interval (minutes)"
-          options={APPOINTMENT_INTERVALS.map((v) => ({ value: String(v), label: String(v) }))}
-          value={String(values.appointmentInterval)}
-          onChange={(e) => setValue('appointmentInterval', Number(e.target.value), { shouldValidate: true })}
-        />
-        <Select
-          label="Default appointment duration"
-          options={DEFAULT_DURATIONS.map((v) => ({ value: String(v), label: `${v} minutes` }))}
-          value={String(values.defaultDuration)}
-          onChange={(e) => setValue('defaultDuration', Number(e.target.value), { shouldValidate: true })}
-        />
-        <Select
-          label="Buffer time"
-          options={BUFFER_TIMES.map((v) => ({ value: String(v), label: `${v} minutes` }))}
-          value={String(values.bufferTime)}
-          onChange={(e) => setValue('bufferTime', Number(e.target.value), { shouldValidate: true })}
-        />
         <Select
           label="Date format"
           options={DATE_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
@@ -255,20 +367,132 @@ export function RegisterWizard() {
           options={TIME_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
           {...register('timeFormat')}
         />
-        <div className="wizard-product-picker">
-          <span className="wizard-section-label">Product</span>
-          {PRODUCT_CATALOG.map((product) => (
-            <button
-              key={product.id}
-              type="button"
-              className={`wizard-product-option${values.selectedProduct === product.id ? ' is-selected' : ''}`}
-              onClick={() => setValue('selectedProduct', product.id, { shouldValidate: true })}
-              aria-pressed={values.selectedProduct === product.id}
-            >
-              <strong>{product.name}</strong>
-              <p>{product.description}</p>
-            </button>
-          ))}
+        <div className="wizard-hours">
+          <span className="wizard-section-label">Business hours</span>
+          <p className="wizard-hours-hint">
+            Set hours for each day now, or skip and complete this later in Settings.
+          </p>
+          <label className="auth-checkbox">
+            <input type="checkbox" {...register('skipHours')} />
+            <span>Skip business hours for now</span>
+          </label>
+          {values.skipHours ? (
+            <p className="wizard-hours-hint">You can add weekly hours after your workspace is created.</p>
+          ) : (
+            <>
+              <BusinessHoursEditor
+                value={values.businessHours}
+                onChange={(next) => setValue('businessHours', next, { shouldValidate: true, shouldDirty: true })}
+              />
+              {typeof errors.businessHours?.message === 'string' ? (
+                <span className="field-error">{errors.businessHours.message}</span>
+              ) : null}
+            </>
+          )}
+        </div>
+        <div className="wizard-choice-block">
+          <div className="wizard-choice-header">
+            <span className="wizard-section-label">Products</span>
+            <p className="wizard-section-hint">
+              Select one or both. Packages for that product stay in the same card.
+            </p>
+          </div>
+          <div className="wizard-product-stack">
+            {PRODUCT_CATALOG.map((product) => {
+              const productId = product.id as RegisterWizardFormValues['selectedProducts'][number];
+              const selected = values.selectedProducts.includes(productId);
+              const selectedPlan = values.planCodes[productId];
+              const Icon = product.id === 'shopie' ? ShoppingBag : CalendarDays;
+              return (
+                <article
+                  key={product.id}
+                  className={`wizard-product-card${selected ? ' is-selected' : ''}`}
+                >
+                  <button
+                    type="button"
+                    className="wizard-product-card-header"
+                    onClick={() => toggleProduct(productId)}
+                    aria-pressed={selected}
+                  >
+                    <span className="wizard-choice-icon" aria-hidden="true">
+                      <Icon size={20} />
+                    </span>
+                    <div className="wizard-product-card-copy">
+                      <strong className="wizard-choice-name">{product.name}</strong>
+                      <p>{product.description}</p>
+                    </div>
+                    <span className={`wizard-choice-check${selected ? ' is-on' : ''}`} aria-hidden="true">
+                      <Check size={14} strokeWidth={3} />
+                    </span>
+                  </button>
+                  {product.highlights?.length ? (
+                    <ul className="wizard-choice-features">
+                      {product.highlights.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="wizard-product-card-packages">
+                    <p className="wizard-package-label">Choose a package</p>
+                    <div className="wizard-package-grid">
+                      {plansForProduct(productId).map((plan) => {
+                        const price = formatInr(plan.amount_paise);
+                        const isSelected = selected && selectedPlan === plan.plan_code;
+                        return (
+                          <button
+                            key={plan.plan_code}
+                            type="button"
+                            className={`wizard-package-option${isSelected ? ' is-selected' : ''}`}
+                            onClick={() => {
+                              const nextProducts = selected
+                                ? values.selectedProducts
+                                : [...values.selectedProducts, productId];
+                              setValue('selectedProducts', nextProducts, { shouldValidate: true, shouldDirty: true });
+                              setValue(
+                                'planCodes',
+                                { ...values.planCodes, [productId]: plan.plan_code },
+                                { shouldValidate: true, shouldDirty: true },
+                              );
+                            }}
+                            aria-pressed={isSelected}
+                          >
+                            <div className="wizard-choice-card-top">
+                              <span className="wizard-recommended">{plan.is_default ? 'Recommended' : 'Upgrade'}</span>
+                              <span className={`wizard-choice-check${isSelected ? ' is-on' : ''}`} aria-hidden="true">
+                                <Check size={14} strokeWidth={3} />
+                              </span>
+                            </div>
+                            <strong className="wizard-choice-name">{planTitle(plan)}</strong>
+                            {price ? (
+                              <p className="wizard-package-price">
+                                {price}
+                                <span>/month</span>
+                              </p>
+                            ) : (
+                              <p className="wizard-package-price">Trial first</p>
+                            )}
+                            <p>{plan.description}</p>
+                            <div className="wizard-package-meta">
+                              <span>{plan.max_staff ?? 1} staff</span>
+                              <span>
+                                {plan.max_branches ?? 1} office{(plan.max_branches ?? 1) === 1 ? '' : 's'}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          {typeof errors.selectedProducts?.message === 'string' ? (
+            <span className="field-error">{errors.selectedProducts.message}</span>
+          ) : null}
+          {typeof errors.planCodes?.message === 'string' ? (
+            <span className="field-error">{errors.planCodes.message}</span>
+          ) : null}
         </div>
       </div>
     );
@@ -277,38 +501,30 @@ export function RegisterWizard() {
   function renderBrandingStep() {
     return (
       <div className="wizard-form-grid">
-        <label className="auth-checkbox">
-          <input type="checkbox" {...register('skipBranding')} />
-          <span>Skip branding for now</span>
-        </label>
-        {!values.skipBranding ? (
-          <>
-            <ColorInput
-              label="Primary color"
-              value={values.primaryColor}
-              onChange={(color) => setValue('primaryColor', color, { shouldValidate: true, shouldDirty: true })}
-            />
-            <ColorInput
-              label="Secondary color"
-              value={values.secondaryColor}
-              onChange={(color) => setValue('secondaryColor', color, { shouldValidate: true, shouldDirty: true })}
-            />
-            <Select
-              label="Theme"
-              options={[
-                { value: 'system', label: 'System' },
-                { value: 'light', label: 'Light' },
-                { value: 'dark', label: 'Dark' },
-              ]}
-              {...register('theme')}
-            />
-            <LogoUploadField
-              value={brandingLogoFile}
-              onChange={setBrandingLogoFile}
-              accentColor={values.primaryColor}
-            />
-          </>
-        ) : null}
+        <ColorInput
+          label="Primary color"
+          value={values.primaryColor}
+          onChange={(color) => setValue('primaryColor', color, { shouldValidate: true, shouldDirty: true })}
+        />
+        <ColorInput
+          label="Secondary color"
+          value={values.secondaryColor}
+          onChange={(color) => setValue('secondaryColor', color, { shouldValidate: true, shouldDirty: true })}
+        />
+        <Select
+          label="Theme"
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          {...register('theme')}
+        />
+        <LogoUploadField
+          value={brandingLogoFile}
+          onChange={setBrandingLogoFile}
+          accentColor={values.primaryColor}
+        />
       </div>
     );
   }
@@ -333,6 +549,7 @@ export function RegisterWizard() {
           </div>
           <p>{values.firstName} {values.lastName} ({values.displayName})</p>
           <p>{values.email} · {values.mobile}</p>
+          {affiliateCode ? <p>Affiliate code: {affiliateCode}</p> : null}
         </section>
         <section>
           <div className="wizard-review-header">
@@ -340,15 +557,23 @@ export function RegisterWizard() {
             <Button type="button" variant="ghost" onClick={() => jumpToStep('preferences')}>Edit</Button>
           </div>
           <p>{values.currency} · {values.timezone} · {values.language}</p>
-          <p>Product: {getProductName(values.selectedProduct)}</p>
+          {values.selectedProducts.map((productId) => {
+            const plan = plansForProduct(productId).find((item) => item.plan_code === values.planCodes[productId]);
+            return (
+              <p key={productId}>
+                {getProductName(productId)} · {planTitle(plan ?? values.planCodes[productId] ?? 'Package')}
+              </p>
+            );
+          })}
+          <p>Hours: {values.skipHours ? 'Skipped for now' : summarizeWeeklyHours(values.businessHours)}</p>
         </section>
         <section>
           <div className="wizard-review-header">
             <h2>Branding</h2>
             <Button type="button" variant="ghost" onClick={() => jumpToStep('branding')}>Edit</Button>
           </div>
-          <p>{values.skipBranding ? 'Skipped' : `${values.primaryColor} / ${values.secondaryColor} (${values.theme})`}</p>
-          {!values.skipBranding && brandingLogoFile && logoPreviewUrl ? (
+          <p>{values.primaryColor} / {values.secondaryColor} ({values.theme})</p>
+          {brandingLogoFile && logoPreviewUrl ? (
             <div className="wizard-review-logo">
               <img src={logoPreviewUrl} alt={`${brandingLogoFile.name} preview`} />
               <span>{brandingLogoFile.name}</span>

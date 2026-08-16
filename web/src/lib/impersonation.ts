@@ -118,6 +118,42 @@ export function getOpsMobileWebOrigin(): string {
   return `${window.location.protocol}//${window.location.hostname}:${OPS_MOBILE_WEB_PORT}`;
 }
 
+export function buildOpsMobileSessionUrl(params: {
+  access: string;
+  refresh: string;
+  tenantId?: string | null;
+}): string {
+  const encoded = toBase64Url(
+    JSON.stringify({
+      access: params.access,
+      refresh: params.refresh,
+      ...(params.tenantId ? { tenantId: params.tenantId } : {}),
+    }),
+  );
+  return `${getOpsMobileWebOrigin()}/?ie-session=${encodeURIComponent(encoded)}`;
+}
+
+export function redirectToOpsMobileWeb(options?: {
+  access?: string | null;
+  refresh?: string | null;
+  tenantId?: string | null;
+}) {
+  if (typeof window === 'undefined') return;
+  let access = options?.access ?? undefined;
+  let refresh = options?.refresh ?? undefined;
+  try {
+    access = access || localStorage.getItem(ACCESS_KEY) || undefined;
+    refresh = refresh || localStorage.getItem(REFRESH_KEY) || undefined;
+  } catch {
+    // ignore storage failures
+  }
+  if (access && refresh) {
+    window.location.assign(buildOpsMobileSessionUrl({ access, refresh, tenantId: options?.tenantId }));
+    return;
+  }
+  window.location.assign(`${getOpsMobileWebOrigin()}/`);
+}
+
 export function buildOpsMobileImpersonationUrl(params: {
   access: string;
   refresh: string;

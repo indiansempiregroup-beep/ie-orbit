@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getPostLoginPath } from '../../utils/roles';
+import { PostAuthRedirect } from '../../components/PostAuthRedirect';
 
 export function ForgotPasswordPage() {
-  usePageMeta({ title: 'Forgot password — AppointIE' });
+  usePageMeta({ title: 'Forgot password — IE Platform' });
   const auth = useAuthContext();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -17,7 +17,7 @@ export function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
 
   if (auth.token && auth.user) {
-    return <Navigate to={getPostLoginPath(auth.user)} replace />;
+    return <PostAuthRedirect />;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

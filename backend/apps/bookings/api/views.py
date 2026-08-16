@@ -19,7 +19,9 @@ from apps.bookings.api.serializers import (
     BookingRescheduleSerializer,
     BookingReviewSerializer,
     BookingSerializer,
+    StaffEmergencySlotSerializer,
     StaffLeaveSerializer,
+    StaffSlotBlockSerializer,
     StaffSpecialAvailabilitySerializer,
     StaffWeeklyScheduleBulkSerializer,
     StaffWeeklyScheduleSerializer,
@@ -28,7 +30,9 @@ from apps.bookings.models import (
     Booking,
     BookingReview,
     BookingStatus,
+    StaffEmergencySlot,
     StaffLeave,
+    StaffSlotBlock,
     StaffSpecialAvailability,
     StaffWeeklySchedule,
 )
@@ -724,5 +728,223 @@ class StaffSpecialAvailabilityDetailView(APIView):
     )
     def delete(self, request: Request, special_id: str) -> Response:
         row = self._get(request, special_id)
+        row.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StaffSlotBlockListCreateView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    @extend_schema(
+        tags=["Staff Slot Blocks"],
+        parameters=[
+            OpenApiParameter("staff_id", str, required=True, description="Staff UUID."),
+            OpenApiParameter("business", str, description="Business UUID."),
+            OpenApiParameter("date_from", str, description="Filter blocks on/after this date."),
+            OpenApiParameter("date_to", str, description="Filter blocks on/before this date."),
+        ],
+        responses={200: StaffSlotBlockSerializer(many=True)},
+    )
+    def get(self, request: Request) -> Response:
+        staff_id = request.query_params.get("staff_id")
+        if not staff_id:
+            raise ValidationError({"staff_id": "This query parameter is required."})
+        _ensure_staff_record_access(request, staff_id)
+        business = AvailabilityView()._business(request, request.query_params.get("business"))
+        rows = StaffSlotBlock.objects.for_tenant(request.current_tenant).filter(
+            business=business, staff_id=staff_id
+        )
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        if date_from:
+            rows = rows.filter(date__gte=date_from)
+        if date_to:
+            rows = rows.filter(date__lte=date_to)
+        return success_response(
+            StaffSlotBlockSerializer(rows.order_by("-date", "-start_time"), many=True).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Slot Blocks"],
+        request=StaffSlotBlockSerializer,
+        responses={201: StaffSlotBlockSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        serializer = StaffSlotBlockSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        _ensure_staff_record_access(request, str(serializer.validated_data["staff_id"]))
+        business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
+        if serializer.validated_data["start_time"] >= serializer.validated_data["end_time"]:
+            raise ValidationError({"end_time": "end_time must be after start_time."})
+        row = StaffSlotBlock.objects.create(
+            tenant=request.current_tenant,
+            business=business,
+            staff_id=serializer.validated_data["staff_id"],
+            date=serializer.validated_data["date"],
+            start_time=serializer.validated_data["start_time"],
+            end_time=serializer.validated_data["end_time"],
+            reason=serializer.validated_data.get("reason", ""),
+        )
+        return success_response(
+            StaffSlotBlockSerializer(row).data,
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class StaffSlotBlockDetailView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    def _get(self, request: Request, block_id: str) -> StaffSlotBlock:
+        row = get_object_or_404(
+            StaffSlotBlock.objects.for_tenant(request.current_tenant), id=block_id
+        )
+        _ensure_staff_record_access(request, str(row.staff_id))
+        return row
+
+    @extend_schema(tags=["Staff Slot Blocks"], responses={200: StaffSlotBlockSerializer})
+    def get(self, request: Request, block_id: str) -> Response:
+        row = self._get(request, block_id)
+        return success_response(
+            StaffSlotBlockSerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Slot Blocks"],
+        request=StaffSlotBlockSerializer,
+        responses={200: StaffSlotBlockSerializer},
+    )
+    def patch(self, request: Request, block_id: str) -> Response:
+        row = self._get(request, block_id)
+        serializer = StaffSlotBlockSerializer(row, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            if field == "business":
+                continue
+            setattr(row, field, value)
+        if row.start_time >= row.end_time:
+            raise ValidationError({"end_time": "end_time must be after start_time."})
+        row.save()
+        return success_response(
+            StaffSlotBlockSerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Staff Slot Blocks"], responses={204: OpenApiResponse(description="Deleted")})
+    def delete(self, request: Request, block_id: str) -> Response:
+        row = self._get(request, block_id)
+        row.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StaffEmergencySlotListCreateView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    @extend_schema(
+        tags=["Staff Emergency Slots"],
+        parameters=[
+            OpenApiParameter("staff_id", str, required=True, description="Staff UUID."),
+            OpenApiParameter("business", str, description="Business UUID."),
+            OpenApiParameter("date_from", str, description="Filter slots on/after this date."),
+            OpenApiParameter("date_to", str, description="Filter slots on/before this date."),
+        ],
+        responses={200: StaffEmergencySlotSerializer(many=True)},
+    )
+    def get(self, request: Request) -> Response:
+        staff_id = request.query_params.get("staff_id")
+        if not staff_id:
+            raise ValidationError({"staff_id": "This query parameter is required."})
+        _ensure_staff_record_access(request, staff_id)
+        business = AvailabilityView()._business(request, request.query_params.get("business"))
+        rows = StaffEmergencySlot.objects.for_tenant(request.current_tenant).filter(
+            business=business, staff_id=staff_id
+        )
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        if date_from:
+            rows = rows.filter(date__gte=date_from)
+        if date_to:
+            rows = rows.filter(date__lte=date_to)
+        return success_response(
+            StaffEmergencySlotSerializer(rows.order_by("-date", "-start_time"), many=True).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Emergency Slots"],
+        request=StaffEmergencySlotSerializer,
+        responses={201: StaffEmergencySlotSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        serializer = StaffEmergencySlotSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        _ensure_staff_record_access(request, str(serializer.validated_data["staff_id"]))
+        business = AvailabilityView()._business(request, serializer.validated_data.get("business"))
+        if serializer.validated_data["start_time"] >= serializer.validated_data["end_time"]:
+            raise ValidationError({"end_time": "end_time must be after start_time."})
+        row = StaffEmergencySlot.objects.create(
+            tenant=request.current_tenant,
+            business=business,
+            staff_id=serializer.validated_data["staff_id"],
+            date=serializer.validated_data["date"],
+            start_time=serializer.validated_data["start_time"],
+            end_time=serializer.validated_data["end_time"],
+            capacity=serializer.validated_data.get("capacity", 1),
+            reason=serializer.validated_data.get("reason", ""),
+        )
+        return success_response(
+            StaffEmergencySlotSerializer(row).data,
+            status_code=status.HTTP_201_CREATED,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class StaffEmergencySlotDetailView(APIView):
+    permission_classes = [BookingAccessPermission]
+
+    def _get(self, request: Request, slot_id: str) -> StaffEmergencySlot:
+        row = get_object_or_404(
+            StaffEmergencySlot.objects.for_tenant(request.current_tenant), id=slot_id
+        )
+        _ensure_staff_record_access(request, str(row.staff_id))
+        return row
+
+    @extend_schema(tags=["Staff Emergency Slots"], responses={200: StaffEmergencySlotSerializer})
+    def get(self, request: Request, slot_id: str) -> Response:
+        row = self._get(request, slot_id)
+        return success_response(
+            StaffEmergencySlotSerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Emergency Slots"],
+        request=StaffEmergencySlotSerializer,
+        responses={200: StaffEmergencySlotSerializer},
+    )
+    def patch(self, request: Request, slot_id: str) -> Response:
+        row = self._get(request, slot_id)
+        serializer = StaffEmergencySlotSerializer(row, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            if field == "business":
+                continue
+            setattr(row, field, value)
+        if row.start_time >= row.end_time:
+            raise ValidationError({"end_time": "end_time must be after start_time."})
+        row.save()
+        return success_response(
+            StaffEmergencySlotSerializer(row).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Staff Emergency Slots"],
+        responses={204: OpenApiResponse(description="Deleted")},
+    )
+    def delete(self, request: Request, slot_id: str) -> Response:
+        row = self._get(request, slot_id)
         row.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

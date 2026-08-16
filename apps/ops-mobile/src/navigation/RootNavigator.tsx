@@ -21,6 +21,7 @@ import { PlatformAdminTenantsScreen } from '../features/admin/PlatformAdminTenan
 import { PlatformAdminTenantDetailScreen } from '../features/admin/PlatformAdminTenantDetailScreen';
 import { PlatformAdminAuditScreen } from '../features/admin/PlatformAdminAuditScreen';
 import { PlatformAdminCouponsScreen } from '../features/admin/PlatformAdminCouponsScreen';
+import { PlatformAdminAffiliatesScreen } from '../features/admin/PlatformAdminAffiliatesScreen';
 import { SearchScreen } from '../features/search/SearchScreen';
 import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
 import { CreateBookingScreen } from '../features/bookings/CreateBookingScreen';
@@ -48,6 +49,7 @@ import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopPosScreen } from '../features/shop/ShopPosScreen';
 import { ShopReturnsScreen } from '../features/shop/ShopReturnsScreen';
 import { ShopDeliveryZonesScreen } from '../features/shop/ShopDeliveryZonesScreen';
+import { ShopCouponsScreen } from '../features/shop/ShopCouponsScreen';
 import { ShopPetsScreen } from '../features/shop/ShopPetsScreen';
 import { ShopPetFormScreen } from '../features/shop/ShopPetFormScreen';
 import { ShopPetDetailScreen } from '../features/shop/ShopPetDetailScreen';
@@ -68,10 +70,11 @@ import { ShopBooksLoansScreen } from '../features/shop/ShopBooksLoansScreen';
 import { ShopLoyaltyScreen } from '../features/shop/ShopLoyaltyScreen';
 import { ShopStockAdjustScreen } from '../features/shop/ShopStockAdjustScreen';
 import { WhatsAppScreen } from '../features/grow/WhatsAppScreen';
-import { AIPosterScreen } from '../features/grow/AIPosterScreen';
 import { GoogleProfileScreen } from '../features/grow/GoogleProfileScreen';
 import { SyncShareScreen } from '../features/grow/SyncShareScreen';
 import { UtilitiesScreen } from '../features/grow/UtilitiesScreen';
+import { GrowAdsScreen } from '../features/grow/GrowAdsScreen';
+import { GrowReferralScreen } from '../features/grow/GrowReferralScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
 import { BIScreen } from '../features/bi/BIScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
@@ -184,6 +187,7 @@ export function RootNavigator() {
           {stackScreen('PlatformAdminTenantDetail', PlatformAdminTenantDetailScreen, 'Tenant')}
           {stackScreen('PlatformAdminAudit', PlatformAdminAuditScreen, 'Audit')}
           {stackScreen('PlatformAdminCoupons', PlatformAdminCouponsScreen, 'Coupons')}
+          {stackScreen('PlatformAdminAffiliates', PlatformAdminAffiliatesScreen, 'Affiliates')}
         </Stack.Navigator>
       ) : !opsAccess ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -225,6 +229,7 @@ export function RootNavigator() {
             {stackScreen('BarcodeScanner', LazyBarcodeScanner, t('nav.scanBarcode'))}
             {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
             {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
+            {stackScreen('ShopCoupons', ShopCouponsScreen, t('nav.shopCoupons'))}
             {stackScreen('ShopPets', ShopPetsScreen, t('nav.shopPets'))}
             {stackScreen('ShopPetForm', ShopPetFormScreen, 'Pet')}
             {stackScreen('ShopPetDetail', ShopPetDetailScreen, 'Pet details')}
@@ -242,13 +247,14 @@ export function RootNavigator() {
             {stackScreen('ShopGodowns', ShopGodownsScreen, 'Godowns')}
             {stackScreen('ShopBooksCheques', ShopBooksChequesScreen, 'Cheques')}
             {stackScreen('ShopBooksLoans', ShopBooksLoansScreen, 'Loans')}
-            {stackScreen('ShopLoyalty', ShopLoyaltyScreen, 'Loyalty')}
+            {stackScreen('ShopLoyalty', ShopLoyaltyScreen, 'Reward points')}
             {stackScreen('ShopStockAdjust', ShopStockAdjustScreen, 'Stock adjust')}
             {stackScreen('GrowWhatsApp', WhatsAppScreen, 'WhatsApp')}
-            {stackScreen('GrowAIPoster', AIPosterScreen, 'AI Poster')}
             {stackScreen('GrowGoogleProfile', GoogleProfileScreen, 'Google Profile')}
             {stackScreen('GrowSyncShare', SyncShareScreen, 'Sync & share')}
             {stackScreen('GrowUtilities', UtilitiesScreen, 'Utilities')}
+            {stackScreen('GrowAds', GrowAdsScreen, 'Ads')}
+            {stackScreen('GrowReferral', GrowReferralScreen, 'Referrals')}
             {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
             {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
             {stackScreen('Reports', ReportsScreen, t('nav.reports'))}

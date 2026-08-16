@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +20,7 @@ import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
 import { getApiErrorMessage } from '../../utils/format';
@@ -40,6 +42,7 @@ export function LoginScreen({ navigation }: Props) {
     refreshBiometricState,
   } = useAuth();
   const { branding, bootstrap } = useBootstrap();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
   const secondary = branding?.secondaryColor ?? '#2563EB';
   const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
@@ -127,7 +130,8 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={[primary, secondary]} style={styles.hero}>
+      <StatusBar style="light" />
+      <LinearGradient colors={[primary, secondary]} style={[styles.hero, { paddingTop: headerPaddingTop }]}>
         <View style={styles.heroContent}>
           <BrandMark />
           <Text style={styles.heroQuote}>{heroQuote}</Text>
@@ -213,7 +217,7 @@ export function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  hero: { paddingTop: 56, paddingHorizontal: spacing.xxl, paddingBottom: spacing.xxxl },
+  hero: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.xxxl },
   heroContent: { gap: spacing.lg },
   heroQuote: { ...typography.body, color: 'rgba(255,255,255,0.85)', lineHeight: 22, marginTop: spacing.md },
   formWrap: { flexGrow: 1, padding: spacing.xxl, paddingTop: spacing.xxxl },

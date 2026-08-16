@@ -179,6 +179,13 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               onPress: () => go('ShopDeliveryZones'),
             },
             {
+              key: 'coupons',
+              label: t('nav.shopCoupons'),
+              icon: 'tag',
+              match: ['ShopCoupons'],
+              onPress: () => go('ShopCoupons'),
+            },
+            {
               key: 'pets',
               label: t('nav.shopPets'),
               icon: 'heart',
@@ -189,48 +196,53 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
         }
       : null;
 
-    const grow: NavGroup | null = showShop
-      ? {
-          title: 'Grow',
-          items: [
-            {
-              key: 'wa',
-              label: 'WhatsApp',
-              icon: 'message-circle',
-              match: ['GrowWhatsApp'],
-              onPress: () => go('GrowWhatsApp'),
-            },
-            {
-              key: 'poster',
-              label: 'AI Poster',
-              icon: 'image',
-              match: ['GrowAIPoster'],
-              onPress: () => go('GrowAIPoster'),
-            },
-            {
-              key: 'gbp',
-              label: 'Google Profile',
-              icon: 'globe',
-              match: ['GrowGoogleProfile'],
-              onPress: () => go('GrowGoogleProfile'),
-            },
-            {
-              key: 'sync',
-              label: 'Sync & share',
-              icon: 'share-2',
-              match: ['GrowSyncShare'],
-              onPress: () => go('GrowSyncShare'),
-            },
-            {
-              key: 'utils',
-              label: 'Utilities',
-              icon: 'tool',
-              match: ['GrowUtilities'],
-              onPress: () => go('GrowUtilities'),
-            },
-          ],
-        }
-      : null;
+    const grow: NavGroup = {
+      title: 'Grow',
+      items: [
+        {
+          key: 'wa',
+          label: 'WhatsApp',
+          icon: 'message-circle',
+          match: ['GrowWhatsApp'],
+          onPress: () => go('GrowWhatsApp'),
+        },
+        {
+          key: 'gbp',
+          label: 'Google Profile',
+          icon: 'globe',
+          match: ['GrowGoogleProfile'],
+          onPress: () => go('GrowGoogleProfile'),
+        },
+        {
+          key: 'sync',
+          label: 'Sync & share',
+          icon: 'share-2',
+          match: ['GrowSyncShare'],
+          onPress: () => go('GrowSyncShare'),
+        },
+        {
+          key: 'utils',
+          label: 'Utilities',
+          icon: 'tool',
+          match: ['GrowUtilities'],
+          onPress: () => go('GrowUtilities'),
+        },
+        {
+          key: 'ads',
+          label: 'Ads',
+          icon: 'image',
+          match: ['GrowAds'],
+          onPress: () => go('GrowAds'),
+        },
+        {
+          key: 'referral',
+          label: 'Referrals',
+          icon: 'gift',
+          match: ['GrowReferral'],
+          onPress: () => go('GrowReferral'),
+        },
+      ],
+    };
 
     const saleVisible = sale
       ? {
@@ -242,24 +254,24 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
             if (item.key === 'orders') return has(PlanFeature.shopieOrders);
             if (item.key === 'returns') return has(PlanFeature.shopieReturns);
             if (item.key === 'zones') return has(PlanFeature.shopieDeliveryZones);
+            if (item.key === 'coupons') return has(PlanFeature.shopieCoupons);
             return true;
           }),
         }
       : null;
 
-    const growVisible = grow
-      ? {
-          ...grow,
-          items: grow.items.filter((item) => {
-            if (item.key === 'wa') return has(PlanFeature.shopieGrowWhatsapp);
-            if (item.key === 'poster') return has(PlanFeature.shopieGrowPoster);
-            if (item.key === 'gbp') return has(PlanFeature.shopieGrowGoogle);
-            if (item.key === 'sync') return has(PlanFeature.shopieGrowSync);
-            if (item.key === 'utils') return has(PlanFeature.shopieGrowUtilities);
-            return true;
-          }),
-        }
-      : null;
+    const growVisible = {
+      ...grow,
+      items: grow.items.filter((item) => {
+        if (item.key === 'wa') return showShop && has(PlanFeature.shopieGrowWhatsapp);
+        if (item.key === 'gbp') return showShop && has(PlanFeature.shopieGrowGoogle);
+        if (item.key === 'sync') return showShop && has(PlanFeature.shopieGrowSync);
+        if (item.key === 'utils') return showShop && has(PlanFeature.shopieGrowUtilities);
+        if (item.key === 'ads') return has(PlanFeature.shopieGrowAds);
+        if (item.key === 'referral') return has(PlanFeature.shopieCustomerReferral);
+        return true;
+      }),
+    };
 
     const businessItems: NavItem[] = [
       ...(has(PlanFeature.appointieCustomers) || showShop

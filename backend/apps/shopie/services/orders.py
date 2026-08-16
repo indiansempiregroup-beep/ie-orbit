@@ -12,6 +12,7 @@ from django.utils import timezone
 from apps.businesses.models import Business
 from apps.customers.models import Customer
 from apps.shopie.models import (
+    DiscountType,
     FulfillmentMode,
     InvoiceStatus,
     OrderStatus,
@@ -24,6 +25,7 @@ from apps.shopie.models import (
     StockMovementType,
 )
 from apps.shopie.services.catalog import CatalogService
+from apps.shopie.services.coupons import CouponService
 from apps.shopie.services.zones import DeliveryZoneService
 from apps.tenancy.models import Tenant
 
@@ -43,7 +45,7 @@ class OrderService:
         qs = (
             ShopOrder.objects.filter(tenant=tenant, business=business)
             .select_related("customer", "business")
-            .prefetch_related("lines")
+            .prefetch_related("lines__product")
             .order_by("-created_at")
         )
         if status:
@@ -93,6 +95,8 @@ class OrderService:
         bill_discount_type: str = "",
         bill_discount_value: Decimal | str | int | float = "0",
         payment_method: str = "",
+        coupon_code: str = "",
+        points_to_redeem: int = 0,
         metadata_extra: dict[str, Any] | None = None,
     ) -> ShopOrder:
         if not lines:
@@ -125,6 +129,11 @@ class OrderService:
             )
         bill_dtype = str(bill_discount_type or "").strip().lower()
         bill_dvalue = Decimal(str(bill_discount_value or "0"))
+        coupon_code = str(coupon_code or "").strip()
+        if coupon_code and bill_dtype:
+            raise ValidationError(
+                {"coupon_code": "Cannot combine a coupon with a bill discount."}
+            )
         # Initial status before totals exist; finalized below once order.total is known.
         if payment == "borrow":
             payment_status = "due"
@@ -157,7 +166,6 @@ class OrderService:
         line_discount_total = Decimal("0.00")
         weighted_tax = Decimal("0.00")
         built_lines: list[ShopOrderLine] = []
-        line_tax_flags: list[bool] = []
 
         for raw in lines:
             product = ShopProduct.objects.select_for_update().get(
@@ -213,16 +221,52 @@ class OrderService:
                     line_total=line_total,
                 )
             )
-            line_tax_flags.append(tax_inclusive)
             merchandise_subtotal += line_subtotal
             line_discount_total += line_discount
             weighted_tax += line_tax
+
+        quoted_coupon: dict[str, Any] | None = None
+        payable_total = sum((line.line_total for line in built_lines), Decimal("0.00")).quantize(
+            Decimal("0.01")
+        )
+        if coupon_code:
+            quoted_coupon = CouponService().quote(
+                tenant=tenant,
+                business=business,
+                code=coupon_code,
+                merchandise_subtotal=merchandise_subtotal,
+                payable_total=payable_total,
+                fulfillment_mode=mode,
+                customer=customer,
+                exclude_order_id=order.id,
+            )
+            bill_dtype = DiscountType.AMOUNT
+            savings = quoted_coupon["discount_amount"]
+            if payable_total > 0 and merchandise_subtotal > 0:
+                bill_dvalue = (savings * merchandise_subtotal / payable_total).quantize(
+                    Decimal("0.01")
+                )
+            else:
+                bill_dvalue = savings
+            quoted_coupon["taxable_discount_amount"] = bill_dvalue
 
         bill_discount = self._apply_discount(
             gross=merchandise_subtotal,
             discount_type=bill_dtype,
             discount_value=bill_dvalue,
         )
+        loyalty_snapshot = self._redeem_loyalty_on_create(
+            tenant=tenant,
+            business=business,
+            order=order,
+            customer=customer,
+            eligible_amount=(merchandise_subtotal - bill_discount).quantize(Decimal("0.01")),
+            points_to_redeem=points_to_redeem,
+        )
+        if loyalty_snapshot is not None:
+            bill_discount = (
+                bill_discount + Decimal(str(loyalty_snapshot["discount_amount"]))
+            ).quantize(Decimal("0.01"))
         # Allocate bill discount across lines proportionally and recompute tax on discounted base.
         if bill_discount > 0 and merchandise_subtotal > 0:
             remaining_discount = bill_discount
@@ -236,23 +280,14 @@ class OrderService:
                         Decimal("0.01")
                     )
                     remaining_discount -= share
-                inclusive = line_tax_flags[index] if index < len(line_tax_flags) else False
-                if inclusive and line.tax_rate > 0:
-                    inclusive_total = (line.line_subtotal + line.line_tax - share).quantize(Decimal("0.01"))
-                    if inclusive_total < 0:
-                        inclusive_total = Decimal("0.00")
-                    line.line_subtotal = (
-                        inclusive_total * Decimal("100") / (Decimal("100") + line.tax_rate)
-                    ).quantize(Decimal("0.01"))
-                    line.line_tax = (inclusive_total - line.line_subtotal).quantize(Decimal("0.01"))
-                    line.line_total = inclusive_total
-                else:
-                    line.line_subtotal = (line.line_subtotal - share).quantize(Decimal("0.01"))
-                    remaining_base -= share
-                    line.line_tax = (line.line_subtotal * line.tax_rate / Decimal("100")).quantize(
-                        Decimal("0.01")
-                    )
-                    line.line_total = line.line_subtotal + line.line_tax
+                line.line_subtotal = (line.line_subtotal - share).quantize(Decimal("0.01"))
+                if line.line_subtotal < 0:
+                    line.line_subtotal = Decimal("0.00")
+                remaining_base -= share
+                line.line_tax = (line.line_subtotal * line.tax_rate / Decimal("100")).quantize(
+                    Decimal("0.01")
+                )
+                line.line_total = line.line_subtotal + line.line_tax
                 tax_total += line.line_tax
             subtotal = sum((line.line_subtotal for line in built_lines), Decimal("0.00")).quantize(
                 Decimal("0.01")
@@ -272,8 +307,22 @@ class OrderService:
         pos_meta = {
             **metadata.get("pos", {}),
             "line_discount_total": str(line_discount_total),
+            "bill_discount_type": bill_dtype,
+            "bill_discount_value": str(bill_dvalue),
             "bill_discount_amount": str(bill_discount),
         }
+        if quoted_coupon is not None:
+            coupon = quoted_coupon["coupon"]
+            metadata["coupon"] = {
+                "id": str(coupon.id),
+                "code": coupon.code,
+                "name": coupon.name,
+                "discount_type": coupon.discount_type,
+                "discount_value": str(coupon.discount_value),
+                "discount_amount": str(quoted_coupon["discount_amount"]),
+            }
+        if loyalty_snapshot is not None:
+            metadata["loyalty"] = loyalty_snapshot
         if payment == "borrow":
             pos_meta["amount_paid"] = "0.00"
             pos_meta["amount_due"] = str(order.total)
@@ -299,6 +348,17 @@ class OrderService:
             ]
         )
 
+        if quoted_coupon is not None:
+            CouponService().redeem(
+                tenant=tenant,
+                business=business,
+                order=order,
+                code=coupon_code,
+                merchandise_subtotal=merchandise_subtotal,
+                payable_total=payable_total,
+                customer=customer,
+            )
+
         if payment == "borrow" and customer is not None:
             from apps.customers.services.borrow import BorrowService
 
@@ -323,8 +383,15 @@ class OrderService:
                 # Every confirmed Sale (POS) bill posts a Books sale invoice/voucher.
                 refreshed = self.get_order(tenant=tenant, business=business, order_id=order.id)
                 self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+                self._maybe_award_referral_on_paid(order=refreshed)
+                self._maybe_award_loyalty_on_paid(order=refreshed)
                 return refreshed
-        return self.get_order(tenant=tenant, business=business, order_id=order.id)
+        order = self.get_order(tenant=tenant, business=business, order_id=order.id)
+        self._maybe_award_referral_on_paid(order=order)
+        self._maybe_award_loyalty_on_paid(order=order)
+        if not confirm:
+            self._notify_online(order, OrderStatus.PENDING)
+        return order
 
     @transaction.atomic
     def transition(
@@ -348,6 +415,10 @@ class OrderService:
         previous = order.status
         order.status = status
         order.save(update_fields=["status", "updated_at", "version"])
+
+        if status == OrderStatus.CANCELLED:
+            CouponService().release_for_order(order=order)
+            self._refund_loyalty_on_cancel(order=order)
 
         if status == OrderStatus.CONFIRMED and previous == OrderStatus.PENDING:
             for line in order.lines.select_related("product"):
@@ -374,7 +445,16 @@ class OrderService:
                     reason=f"Cancel {order.order_number}",
                     order=order,
                 )
-        return self.get_order(tenant=tenant, business=business, order_id=order.id)
+        refreshed = self.get_order(tenant=tenant, business=business, order_id=order.id)
+        if status in {OrderStatus.CONFIRMED, OrderStatus.COMPLETED}:
+            self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+        self._notify_online(refreshed, status)
+        return refreshed
+
+    def _notify_online(self, order: ShopOrder, status: str) -> None:
+        from apps.shopie.services.order_notify import notify_online_order
+
+        notify_online_order(order=order, status=status)
 
     @transaction.atomic
     def settle_payment(
@@ -501,8 +581,101 @@ class OrderService:
         if act == "confirm":
             refreshed = self.get_order(tenant=tenant, business=business, order_id=locked.id)
             self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+            self._maybe_award_referral_on_paid(order=refreshed)
+            self._maybe_award_loyalty_on_paid(order=refreshed)
             return refreshed
         return self.get_order(tenant=tenant, business=business, order_id=locked.id)
+
+    def _redeem_loyalty_on_create(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        customer: Customer | None,
+        eligible_amount: Decimal,
+        points_to_redeem: int,
+    ) -> dict[str, Any] | None:
+        points = int(points_to_redeem or 0)
+        if points <= 0:
+            return None
+        if customer is None:
+            raise ValidationError(
+                {"points_to_redeem": "Select a customer to redeem reward points."}
+            )
+        if eligible_amount < 0:
+            eligible_amount = Decimal("0.00")
+        from apps.customers.services.loyalty import LoyaltyService
+
+        return LoyaltyService().redeem_for_order(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            order_id=order.id,
+            amount=eligible_amount,
+            points_to_redeem=points,
+        )
+
+    def _maybe_award_loyalty_on_paid(self, *, order: ShopOrder) -> None:
+        if order.customer_id is None:
+            return
+        pos = (order.metadata or {}).get("pos") if isinstance(order.metadata, dict) else {}
+        status_value = str((pos or {}).get("payment_status") or "").strip().lower()
+        if status_value not in {"paid", "settled"}:
+            return
+        try:
+            from apps.customers.services.loyalty import LoyaltyService
+
+            LoyaltyService().award_for_paid_order(
+                tenant=order.tenant,
+                business=order.business,
+                customer=order.customer,
+                order_id=order.id,
+                amount=order.total,
+                order_number=order.order_number,
+            )
+        except Exception:
+            return
+
+    def _refund_loyalty_on_cancel(self, *, order: ShopOrder) -> None:
+        if order.customer_id is None:
+            return
+        loyalty_meta = (
+            (order.metadata or {}).get("loyalty") if isinstance(order.metadata, dict) else {}
+        )
+        points_redeemed = int((loyalty_meta or {}).get("points_redeemed") or 0)
+        try:
+            from apps.customers.services.loyalty import LoyaltyService
+
+            LoyaltyService().refund_for_order(
+                tenant=order.tenant,
+                business=order.business,
+                customer=order.customer,
+                order_id=order.id,
+                points_redeemed=points_redeemed,
+            )
+        except Exception:
+            return
+
+    def _maybe_award_referral_on_paid(self, *, order: ShopOrder) -> None:
+        if order.customer_id is None:
+            return
+        pos = (order.metadata or {}).get("pos") if isinstance(order.metadata, dict) else {}
+        status_value = str((pos or {}).get("payment_status") or "").strip().lower()
+        if status_value not in {"paid", "settled"}:
+            return
+        try:
+            from apps.shopie.services.referrals import CustomerReferralService
+
+            CustomerReferralService().maybe_award_for_event(
+                tenant=order.tenant,
+                business=order.business,
+                referred=order.customer,
+                event="first_paid_order",
+            )
+        except Exception:
+            # Referral rewards must not break checkout.
+            return
 
     def cancel_customer_order(
         self,

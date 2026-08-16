@@ -1,6 +1,9 @@
 import type { RegisterWizardFormValues } from './schemas/registerWizardSchema';
+import type { WorkspaceProvisionResponse } from '@ie-platform/sdk';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { uploadBrandingLogo } from './uploadBrandingLogo';
+import { normalizeAffiliateCode } from './affiliateCode';
+import { serializeWeeklyHours } from '../../lib/businessHours';
 import {
   ACTIVE_BUSINESS_STORAGE_KEY,
   ACTIVE_TENANT_STORAGE_KEY,
@@ -23,11 +26,15 @@ function normalizeWebsite(value: string | undefined): string | undefined {
 
 type ProvisionArgs = {
   values: RegisterWizardFormValues;
-  login: (email: string, password: string, remember?: boolean) => Promise<string>;
   logoFile?: File | null;
+  affiliateCode?: string;
 };
 
-export async function provisionWorkspace({ values, logoFile }: ProvisionArgs) {
+export async function provisionWorkspace({
+  values,
+  logoFile,
+  affiliateCode,
+}: ProvisionArgs): Promise<WorkspaceProvisionResponse> {
   const slug = slugify(values.businessName);
   if (!slug) {
     throw new Error('Business name must contain valid characters for a workspace code.');
@@ -62,21 +69,19 @@ export async function provisionWorkspace({ values, logoFile }: ProvisionArgs) {
     timezone: values.timezone,
     currency: values.currency,
     language: values.language,
-    selected_product: values.selectedProduct,
-    primary_color: values.skipBranding ? undefined : values.primaryColor,
-    secondary_color: values.skipBranding ? undefined : values.secondaryColor,
+    selected_product: values.selectedProducts.includes('appointie') ? 'appointie' : values.selectedProducts[0],
+    selected_products: values.selectedProducts,
+    plan_code: values.planCodes[values.selectedProducts.includes('appointie') ? 'appointie' : values.selectedProducts[0]],
+    plan_codes: Object.fromEntries(
+      values.selectedProducts.map((product) => [product, values.planCodes[product]]).filter((entry) => entry[1]),
+    ),
+    primary_color: values.primaryColor,
+    secondary_color: values.secondaryColor,
+    affiliate_code: normalizeAffiliateCode(affiliateCode) || undefined,
     settings: {
-      business_category: values.businessCategory,
-      time_slot_interval: values.appointmentInterval,
-      buffer_time: values.bufferTime,
-      business_hours: {
-        week_start_day: values.weekStartDay,
-        start: values.businessHoursStart,
-        end: values.businessHoursEnd,
-      },
-      appointment_duration_defaults: {
-        default_minutes: values.defaultDuration,
-      },
+      business_hours: values.skipHours
+        ? { week_start_day: values.weekStartDay }
+        : serializeWeeklyHours(values.businessHours, values.weekStartDay),
       localization: {
         timezone: values.timezone,
         currency: values.currency,
@@ -87,6 +92,11 @@ export async function provisionWorkspace({ values, logoFile }: ProvisionArgs) {
       notification_preferences: {
         email: true,
         sms: false,
+      },
+      theme_overrides: {
+        primary_color: values.primaryColor,
+        secondary_color: values.secondaryColor,
+        theme_mode: values.theme,
       },
     },
   });
@@ -104,15 +114,19 @@ export async function provisionWorkspace({ values, logoFile }: ProvisionArgs) {
   localStorage.setItem(ACTIVE_BUSINESS_STORAGE_KEY, businessId);
   localStorage.setItem('ie:onboarding:show-welcome', 'true');
 
-  if (!values.skipBranding && logoFile) {
-    await uploadBrandingLogo({
-      accessToken: payload.access,
-      tenantId,
-      businessId,
-      logoFile,
-      displayName: values.displayName || values.businessName,
-    });
+  if (logoFile) {
+    try {
+      await uploadBrandingLogo({
+        accessToken: payload.access,
+        tenantId,
+        businessId,
+        logoFile,
+        displayName: values.displayName || values.businessName,
+      });
+    } catch {
+      // Workspace already exists; branding can be updated later in settings.
+    }
   }
 
-  return { tenantId, businessId, slug };
+  return payload;
 }

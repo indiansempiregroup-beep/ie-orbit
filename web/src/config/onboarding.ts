@@ -83,6 +83,7 @@ export type RegisterWizardStepId = (typeof REGISTER_WIZARD_STEPS)[number]['id'];
 
 export const GETTING_STARTED_ITEMS = [
   { id: 'profile', label: 'Complete business profile', path: '/settings/business' },
+  { id: 'hours', label: 'Set weekly business hours', path: '/settings/business' },
   { id: 'logo', label: 'Upload logo', path: '/settings/business' },
   { id: 'service', label: 'Add first service', path: '/services' },
   { id: 'staff', label: 'Add first staff member', path: '/staff' },

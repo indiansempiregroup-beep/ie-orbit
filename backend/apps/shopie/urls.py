@@ -43,6 +43,13 @@ from apps.shopie.api.extended_views import (
     ShopReturnListCreateView,
     ShopSettingsView,
 )
+from apps.shopie.api.coupon_views import ShopCouponDetailView, ShopCouponListCreateView
+from apps.shopie.api.grow_views import (
+    ShopCustomerReferralCodeMineView,
+    ShopCustomerReferralListView,
+    ShopDashboardAdDetailView,
+    ShopDashboardAdListCreateView,
+)
 from apps.shopie.api.views import (
     ShopBarcodeEnrichView,
     ShopBarcodeLookupView,
@@ -115,6 +122,32 @@ urlpatterns = [
         name="shop-delivery-zone-detail",
     ),
     path("shop/settings", ShopSettingsView.as_view(), name="shop-settings"),
+    path("shop/coupons", ShopCouponListCreateView.as_view(), name="shop-coupon-list-create"),
+    path(
+        "shop/coupons/<uuid:coupon_id>",
+        ShopCouponDetailView.as_view(),
+        name="shop-coupon-detail",
+    ),
+    path(
+        "shop/dashboard-ads",
+        ShopDashboardAdListCreateView.as_view(),
+        name="shop-dashboard-ad-list-create",
+    ),
+    path(
+        "shop/dashboard-ads/<uuid:ad_id>",
+        ShopDashboardAdDetailView.as_view(),
+        name="shop-dashboard-ad-detail",
+    ),
+    path(
+        "shop/customer-referrals",
+        ShopCustomerReferralListView.as_view(),
+        name="shop-customer-referral-list",
+    ),
+    path(
+        "shop/customer-referral-codes/mine",
+        ShopCustomerReferralCodeMineView.as_view(),
+        name="shop-customer-referral-code-mine",
+    ),
     path("shop/pets", ShopPetListCreateView.as_view(), name="shop-pet-list-create"),
     path("shop/pets/<uuid:pet_id>", ShopPetDetailView.as_view(), name="shop-pet-detail"),
     path("shop/pets/<uuid:pet_id>/notify", ShopPetNotifyView.as_view(), name="shop-pet-notify"),

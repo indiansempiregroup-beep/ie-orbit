@@ -301,8 +301,7 @@ export function ShopBooksDashboardScreen() {
               has(PlanFeature.shopieBooksGodowns) ||
               has(PlanFeature.shopieBooksCheques) ||
               has(PlanFeature.shopieBooksLoans) ||
-              has(PlanFeature.shopieLoyalty) ||
-              has(PlanFeature.shopieBooksJobWork) ? (
+              has(PlanFeature.shopieLoyalty) ? (
                 <MenuSection title="More documents">
                   {has(PlanFeature.shopieBooksQuotations) ? (
                     <MenuRow
@@ -363,18 +362,10 @@ export function ShopBooksDashboardScreen() {
                   {has(PlanFeature.shopieLoyalty) ? (
                     <MenuRow
                       icon="award"
-                      label="Loyalty"
+                      label="Reward points"
                       subtitle="Earn & redeem rules"
-                      onPress={() => navigation.navigate('ShopLoyalty')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksJobWork) ? (
-                    <MenuRow
-                      icon="tool"
-                      label="Job Work"
-                      subtitle="Job work documents"
                       last
-                      onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'job_work' })}
+                      onPress={() => navigation.navigate('ShopLoyalty')}
                     />
                   ) : null}
                 </MenuSection>

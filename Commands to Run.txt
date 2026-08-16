@@ -227,3 +227,11 @@ export REACT_NATIVE_PACKAGER_HOSTNAME="$(ipconfig getifaddr en0)"
 export EXPO_PUBLIC_API_BASE_URL="http://${REACT_NATIVE_PACKAGER_HOSTNAME}:8000/api/v1"
 export EXPO_NO_METRO_WORKSPACE_ROOT="1"
 corepack pnpm start -- --clear --lan
+
+cd mobile
+export REACT_NATIVE_PACKAGER_HOSTNAME="$(ipconfig getifaddr en0)"
+export EXPO_PUBLIC_API_BASE_URL="http://${REACT_NATIVE_PACKAGER_HOSTNAME}:8000/api/v1"
+export EXPO_PUBLIC_FLAVOR_KEY="rupali-s-business-rupali-s-business"
+export EXPO_PUBLIC_APP_NAME="Rupali Sirsat"
+export EXPO_NO_METRO_WORKSPACE_ROOT="1"
+corepack pnpm exec expo start --port 8083 --clear --lan

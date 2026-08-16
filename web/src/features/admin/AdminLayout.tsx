@@ -17,11 +17,13 @@ import {
   Sun,
   TicketPercent,
   Users,
+  Handshake,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { hasTenantOpsRole } from '../../utils/roles';
+import { redirectToOpsMobileWeb } from '../../lib/impersonation';
 
 const ADMIN_THEME_KEY = 'ie:admin:theme';
 
@@ -48,6 +50,7 @@ const navGroups: Array<{
       { to: '/admin/tenants', label: 'Tenants', icon: <Building2 size={16} /> },
       { to: '/admin/subscriptions', label: 'Subscriptions', icon: <CreditCard size={16} /> },
       { to: '/admin/packages', label: 'Packages', icon: <Package size={16} /> },
+      { to: '/admin/affiliates', label: 'Affiliates', icon: <Handshake size={16} /> },
       { to: '/admin/coupons', label: 'Coupons', icon: <TicketPercent size={16} /> },
     ],
   },
@@ -74,7 +77,7 @@ export function AdminLayout() {
   usePageMeta({ title: 'Platform Admin — AppointIE' });
   const auth = useAuth();
   const navigate = useNavigate();
-  const { enterWorkspaceMode, exitWorkspaceMode, loading } = useWorkspace();
+  const { exitWorkspaceMode, loading } = useWorkspace();
   const canOpenWorkspace = hasTenantOpsRole(auth.user);
   const [adminTheme, setAdminTheme] = useState<'light' | 'dark'>(readAdminTheme);
 
@@ -95,8 +98,7 @@ export function AdminLayout() {
   }
 
   async function handleOpenWorkspace() {
-    await enterWorkspaceMode();
-    navigate('/dashboard');
+    redirectToOpsMobileWeb();
   }
 
   async function handleSignOut() {

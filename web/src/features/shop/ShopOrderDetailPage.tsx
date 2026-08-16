@@ -110,6 +110,13 @@ export function ShopOrderDetailPage() {
         <p>
           Total: {data.currency} {data.total}
         </p>
+        {data.coupon_code ? (
+          <p>
+            Coupon {data.coupon_code}
+            {data.coupon_name ? ` · ${data.coupon_name}` : ''}
+            {Number(data.coupon_discount || 0) > 0 ? ` − ${data.currency} ${data.coupon_discount}` : ''}
+          </p>
+        ) : null}
         <ul>
           {(data.lines ?? []).map((line) => (
             <li key={line.id}>

@@ -5,12 +5,17 @@ export const OPS_TENANT_KEY = 'ie.ops.active-tenant-id';
 export const IMPERSONATOR_KEY = 'ie.ops.impersonator-id';
 export const IMPERSONATION_RETURN_KEY = 'ie.ops.impersonation-return';
 
-export type ImpersonationHandoff = {
+export type SessionHandoff = {
   access: string;
   refresh: string;
+  tenantId?: string;
+  impersonatorId?: string;
+  returnTo?: string;
+};
+
+export type ImpersonationHandoff = SessionHandoff & {
   tenantId: string;
   impersonatorId: string;
-  returnTo?: string;
 };
 
 function fromBase64Url(value: string): string {
@@ -23,10 +28,14 @@ function fromBase64Url(value: string): string {
 function readHandoffPayload(): string | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
   const hash = window.location.hash || '';
-  const hashMatch = hash.match(/ie-impersonate=([^&]+)/);
-  if (hashMatch?.[1]) return decodeURIComponent(hashMatch[1]);
-  const queryMatch = window.location.search.match(/[?&]ie-impersonate=([^&]+)/);
-  if (queryMatch?.[1]) return decodeURIComponent(queryMatch[1]);
+  const search = window.location.search || '';
+  const sources = [hash, search];
+  for (const source of sources) {
+    const impersonate = source.match(/ie-impersonate=([^&]+)/);
+    if (impersonate?.[1]) return decodeURIComponent(impersonate[1]);
+    const session = source.match(/ie-session=([^&]+)/);
+    if (session?.[1]) return decodeURIComponent(session[1]);
+  }
   return null;
 }
 
@@ -39,15 +48,15 @@ function clearHandoffFromUrl() {
   }
 }
 
-let capturedHandoff: ImpersonationHandoff | null = null;
+let capturedHandoff: SessionHandoff | null = null;
 let handoffRead = false;
 
-function parseHandoffFromUrl(): ImpersonationHandoff | null {
+function parseHandoffFromUrl(): SessionHandoff | null {
   const encoded = readHandoffPayload();
   if (!encoded) return null;
   try {
-    const parsed = JSON.parse(fromBase64Url(encoded)) as Partial<ImpersonationHandoff>;
-    if (!parsed.access || !parsed.refresh || !parsed.tenantId || !parsed.impersonatorId) {
+    const parsed = JSON.parse(fromBase64Url(encoded)) as Partial<SessionHandoff>;
+    if (!parsed.access || !parsed.refresh) {
       return null;
     }
     return {
@@ -70,7 +79,7 @@ export function captureImpersonationHandoff() {
   if (capturedHandoff) clearHandoffFromUrl();
 }
 
-export function consumeImpersonationHandoff(): ImpersonationHandoff | null {
+export function consumeImpersonationHandoff(): SessionHandoff | null {
   captureImpersonationHandoff();
   const value = capturedHandoff;
   capturedHandoff = null;
@@ -81,6 +90,12 @@ export async function persistImpersonationHandoff(handoff: ImpersonationHandoff)
   await setPersistentItem(OPS_TENANT_KEY, handoff.tenantId);
   await setPersistentItem(IMPERSONATOR_KEY, handoff.impersonatorId);
   await setPersistentItem(IMPERSONATION_RETURN_KEY, handoff.returnTo ?? null);
+}
+
+export async function persistSessionHandoff(handoff: SessionHandoff): Promise<void> {
+  if (handoff.tenantId) {
+    await setPersistentItem(OPS_TENANT_KEY, handoff.tenantId);
+  }
 }
 
 export async function clearImpersonationHandoff(): Promise<void> {

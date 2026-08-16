@@ -10,6 +10,7 @@ import { colors, radius, spacing, typography } from '../theme/tokens';
 type SplashScreenProps = {
   branding: BrandTheme;
   businessName?: string | null;
+  tagline?: string | null;
 };
 
 export function SplashBackdrop({ branding }: { branding: BrandTheme }) {
@@ -23,7 +24,7 @@ export function SplashBackdrop({ branding }: { branding: BrandTheme }) {
   return <LinearGradient colors={gradientColors} style={styles.backdrop} />;
 }
 
-export function SplashScreen({ branding, businessName }: SplashScreenProps) {
+export function SplashScreen({ branding, businessName, tagline }: SplashScreenProps) {
   const primary = branding.primaryColor ?? colors.primary;
   const secondary = branding.secondaryColor ?? colors.secondaryForeground;
   const gradientColors = useMemo(
@@ -98,7 +99,7 @@ export function SplashScreen({ branding, businessName }: SplashScreenProps) {
       </Animated.View>
       <Animated.View style={{ opacity: nameOpacity, transform: [{ translateY: nameTranslate }], alignItems: 'center' }}>
         <Text style={[styles.businessName, { color: primary }]}>{title}</Text>
-        <Text style={styles.tagline}>Your appointments, beautifully managed</Text>
+        <Text style={styles.tagline}>{tagline || 'Your appointments, beautifully managed'}</Text>
       </Animated.View>
     </LinearGradient>
   );

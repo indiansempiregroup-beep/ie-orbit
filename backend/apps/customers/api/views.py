@@ -81,6 +81,19 @@ class CustomerViewSet(viewsets.ViewSet):
             actor=request.user,
             send_registration_invite=send_registration_invite,
         )
+        referral_code = str(request.data.get("referral_code") or "").strip()
+        if referral_code:
+            from apps.shopie.services.referrals import CustomerReferralService
+
+            try:
+                CustomerReferralService().apply_code_on_customer_create(
+                    tenant=request.current_tenant,
+                    business=customer.business,
+                    referred=customer,
+                    code=referral_code,
+                )
+            except DjangoValidationError as exc:
+                raise _validation_error(exc) from exc
         return success_response(
             CustomerSerializer(customer).data,
             status_code=status.HTTP_201_CREATED,
@@ -92,7 +105,7 @@ class CustomerViewSet(viewsets.ViewSet):
         customer = self.get_object(request=request, customer_id=pk)
         self.service.ensure_foundation_records(customer)
         customer = (
-            Customer.objects.select_related("borrow_account", "business")
+            Customer.objects.select_related("borrow_account", "loyalty_account", "business")
             .filter(id=customer.id)
             .first()
             or customer

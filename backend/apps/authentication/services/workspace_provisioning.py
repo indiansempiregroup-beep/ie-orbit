@@ -50,6 +50,8 @@ class WorkspaceProvisioningService:
         if Tenant.objects.filter(slug=slug).exists():
             raise ValidationError({"slug": "This workspace code is already taken."})
 
+        affiliate_code = str(data.get("affiliate_code") or "").strip()
+
         user = self.auth_service.register(
             email=data["email"],
             password=data["password"],
@@ -98,6 +100,9 @@ class WorkspaceProvisioningService:
                 "primary_contact": data.get("primary_contact", ""),
                 "website": data.get("website", ""),
                 "selected_product": data.get("selected_product", ""),
+                "selected_products": data.get("selected_products") or [],
+                "plan_code": data.get("plan_code") or None,
+                "plan_codes": data.get("plan_codes") or {},
                 "settings": business_settings,
             },
         )
@@ -114,6 +119,14 @@ class WorkspaceProvisioningService:
         if data.get("phone_number"):
             user.phone_number = data["phone_number"]
             user.save(update_fields=["phone_number", "updated_at"])
+
+        if affiliate_code:
+            from apps.platform_admin.affiliate_service import AffiliateService
+
+            AffiliateService().attribute_signup(
+                referred_tenant=tenant,
+                code=affiliate_code,
+            )
 
         login_result = self.auth_service.login(
             email=data["email"],

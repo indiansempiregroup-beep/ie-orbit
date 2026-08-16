@@ -46,6 +46,7 @@ FEATURE_SHOPIE_PRODUCTS = "shopie_products"
 FEATURE_SHOPIE_ORDERS = "shopie_orders"
 FEATURE_SHOPIE_RETURNS = "shopie_returns"
 FEATURE_SHOPIE_DELIVERY_ZONES = "shopie_delivery_zones"
+FEATURE_SHOPIE_COUPONS = "shopie_coupons"
 FEATURE_SHOPIE_LOYALTY = "shopie_loyalty"
 
 FEATURE_SHOPIE_BOOKS_SALE = "shopie_books_sale"
@@ -68,10 +69,13 @@ FEATURE_SHOPIE_EINVOICE = "shopie_einvoice"
 FEATURE_SHOPIE_EWAY = "shopie_eway"
 
 FEATURE_SHOPIE_GROW_WHATSAPP = "shopie_grow_whatsapp"
-FEATURE_SHOPIE_GROW_POSTER = "shopie_grow_poster"
 FEATURE_SHOPIE_GROW_GOOGLE = "shopie_grow_google"
 FEATURE_SHOPIE_GROW_SYNC = "shopie_grow_sync"
 FEATURE_SHOPIE_GROW_UTILITIES = "shopie_grow_utilities"
+FEATURE_SHOPIE_GROW_ADS = "shopie_grow_ads"
+FEATURE_SHOPIE_CUSTOMER_REFERRAL = "shopie_customer_referral"
+# Legacy key retained for package backfill cleanup only.
+FEATURE_SHOPIE_GROW_POSTER = "shopie_grow_poster"
 
 APPOINTIE_FUNCTION_FEATURES: tuple[str, ...] = (
     FEATURE_APPOINTIE_BOOKINGS,
@@ -88,6 +92,7 @@ SHOPIE_COMMERCE_FEATURES: tuple[str, ...] = (
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_RETURNS,
     FEATURE_SHOPIE_DELIVERY_ZONES,
+    FEATURE_SHOPIE_COUPONS,
 )
 
 SHOPIE_BOOKS_FEATURES: tuple[str, ...] = (
@@ -113,10 +118,10 @@ SHOPIE_BOOKS_FEATURES: tuple[str, ...] = (
 
 SHOPIE_GROW_FEATURES: tuple[str, ...] = (
     FEATURE_SHOPIE_GROW_WHATSAPP,
-    FEATURE_SHOPIE_GROW_POSTER,
     FEATURE_SHOPIE_GROW_GOOGLE,
     FEATURE_SHOPIE_GROW_SYNC,
     FEATURE_SHOPIE_GROW_UTILITIES,
+    FEATURE_SHOPIE_GROW_ADS,
 )
 
 SHOPIE_ALL_FUNCTION_FEATURES: tuple[str, ...] = (
@@ -124,6 +129,7 @@ SHOPIE_ALL_FUNCTION_FEATURES: tuple[str, ...] = (
     *SHOPIE_BOOKS_FEATURES,
     *SHOPIE_GROW_FEATURES,
     FEATURE_SHOPIE_LOYALTY,
+    FEATURE_SHOPIE_CUSTOMER_REFERRAL,
 )
 
 PLAN_FEATURES_LIMITED: tuple[str, ...] = APPOINTIE_FUNCTION_FEATURES
@@ -161,6 +167,7 @@ DEFAULT_LOYALTY_PREFERENCES: dict[str, object] = {
     "points_per_currency_unit": 10,
     "max_redeem_percent": 50,
     "min_redeem_points": 10,
+    "earn_points_per_100": 1,
 }
 
 PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {

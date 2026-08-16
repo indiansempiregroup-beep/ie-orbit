@@ -29,6 +29,7 @@ import {
 } from '../../hooks/useOpsExtended';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDate, getApiErrorMessage } from '../../utils/format';
+import { isLoyaltyEntitled, readLoyaltyPrefs as parseLoyaltyPrefs } from '../../utils/loyalty';
 import { getAvailableProducts, getProductName, getSubscribedProducts, PETS_PACK_PRICE_INR, PRODUCT_CATALOG } from '../../utils/products';
 
 function getDefaultPlanCode(plans: { code?: string; is_default?: boolean }[]) {
@@ -60,13 +61,13 @@ function subscriptionTone(status?: string | null): 'muted' | 'success' | 'warnin
 }
 
 function readLoyaltyPrefs(business: { settings?: Record<string, unknown> | null } | null | undefined) {
-  const raw = business?.settings?.loyalty_preferences;
-  const prefs = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const prefs = parseLoyaltyPrefs(business?.settings as Record<string, unknown> | undefined);
   return {
-    enabled: Boolean(prefs.enabled),
-    points_per_currency_unit: String(Math.max(1, Number(prefs.points_per_currency_unit ?? 10) || 10)),
-    max_redeem_percent: String(Math.min(100, Math.max(0, Number(prefs.max_redeem_percent ?? 50) || 50))),
-    min_redeem_points: String(Math.max(0, Number(prefs.min_redeem_points ?? 10) || 10)),
+    enabled: prefs.enabled,
+    points_per_currency_unit: String(prefs.points_per_currency_unit),
+    max_redeem_percent: String(prefs.max_redeem_percent),
+    min_redeem_points: String(prefs.min_redeem_points),
+    earn_points_per_100: String(prefs.earn_points_per_100),
   };
 }
 
@@ -87,6 +88,7 @@ export function ProductSettingsScreen() {
   const [pointsPerUnit, setPointsPerUnit] = useState('10');
   const [maxRedeemPercent, setMaxRedeemPercent] = useState('50');
   const [minRedeemPoints, setMinRedeemPoints] = useState('10');
+  const [earnPointsPer100, setEarnPointsPer100] = useState('1');
   const [loyaltyBusy, setLoyaltyBusy] = useState(false);
 
   const subscribedProducts = useMemo(
@@ -136,9 +138,13 @@ export function ProductSettingsScreen() {
     setPointsPerUnit(prefs.points_per_currency_unit);
     setMaxRedeemPercent(prefs.max_redeem_percent);
     setMinRedeemPoints(prefs.min_redeem_points);
+    setEarnPointsPer100(prefs.earn_points_per_100);
   }, [activeBusiness]);
 
-  const rewardPointsEntitled = Boolean(snapshot?.features?.includes('reward_points'));
+  const rewardPointsEntitled = isLoyaltyEntitled([
+    ...((snapshot?.entitled_features as string[] | undefined) ?? []),
+    ...((snapshot?.features as string[] | undefined) ?? []),
+  ]);
   const canConfigureLoyalty = rewardPointsEntitled && !snapshot?.soft_locked;
 
   useEffect(() => {
@@ -538,7 +544,7 @@ export function ProductSettingsScreen() {
           <View style={styles.loyaltyHeaderCopy}>
             <Text style={styles.loyaltyTitle}>Reward points</Text>
             <Text style={styles.meta}>
-              Customers earn points per completed service and redeem them for booking discounts.
+              One customer balance for bookings, online orders, POS, and Books sales.
             </Text>
           </View>
           {rewardPointsEntitled ? (
@@ -550,7 +556,7 @@ export function ProductSettingsScreen() {
 
         {!rewardPointsEntitled ? (
           <View style={styles.loyaltyNotice}>
-            <Text style={styles.loyaltyNoticeTitle}>AppointIE Pro required</Text>
+            <Text style={styles.loyaltyNoticeTitle}>Plan upgrade required</Text>
             <Text style={styles.meta}>Upgrade your plan above to unlock customer reward points.</Text>
           </View>
         ) : (
@@ -575,8 +581,8 @@ export function ProductSettingsScreen() {
             <View style={styles.loyaltyExample}>
               <Text style={styles.loyaltyExampleLabel}>Example</Text>
               <Text style={styles.loyaltyExampleText}>
-                {Math.max(1, Number(pointsPerUnit) || 10)} points = ₹1 · max {Math.min(100, Math.max(0, Number(maxRedeemPercent) || 0))}% of
-                service price · min {Math.max(0, Number(minRedeemPoints) || 0)} pts to redeem
+                {Math.max(1, Number(pointsPerUnit) || 10)} points = ₹1 · max {Math.min(100, Math.max(0, Number(maxRedeemPercent) || 0))}% off
+                · min {Math.max(0, Number(minRedeemPoints) || 0)} pts · {Math.max(0, Number(earnPointsPer100) || 0)} pts per ₹100 spent
               </Text>
             </View>
 
@@ -591,7 +597,7 @@ export function ProductSettingsScreen() {
               />
               <LoyaltyMetricRow
                 label="Max redeem"
-                hint="Share of service price customers can cover"
+                hint="Share of price customers can cover"
                 value={maxRedeemPercent}
                 onChangeText={setMaxRedeemPercent}
                 unit="%"
@@ -602,6 +608,14 @@ export function ProductSettingsScreen() {
                 hint="Smallest redeem amount allowed"
                 value={minRedeemPoints}
                 onChangeText={setMinRedeemPoints}
+                unit="pts"
+                editable={canConfigureLoyalty && !loyaltyBusy}
+              />
+              <LoyaltyMetricRow
+                label="Points per ₹100"
+                hint="Earned on shop orders, POS, and Books sales"
+                value={earnPointsPer100}
+                onChangeText={setEarnPointsPer100}
                 unit="pts"
                 editable={canConfigureLoyalty && !loyaltyBusy}
                 last
@@ -625,6 +639,7 @@ export function ProductSettingsScreen() {
                         points_per_currency_unit: Math.max(1, Number(pointsPerUnit) || 10),
                         max_redeem_percent: Math.min(100, Math.max(0, Number(maxRedeemPercent) || 0)),
                         min_redeem_points: Math.max(0, Number(minRedeemPoints) || 0),
+                        earn_points_per_100: Math.max(0, Number(earnPointsPer100) || 0),
                       },
                     },
                   });

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from apps.customers.models import (
     Customer,
     CustomerAddress,
@@ -90,6 +92,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     notes = CustomerNoteSerializer(many=True, read_only=True)
     borrow_balance_due = serializers.SerializerMethodField()
     borrow_currency = serializers.SerializerMethodField()
+    loyalty_points = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
@@ -123,6 +126,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "notes",
             "borrow_balance_due",
             "borrow_currency",
+            "loyalty_points",
             "created_at",
             "updated_at",
             "is_active",
@@ -137,6 +141,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "notes",
             "borrow_balance_due",
             "borrow_currency",
+            "loyalty_points",
             "created_at",
             "updated_at",
             "is_active",
@@ -154,6 +159,17 @@ class CustomerSerializer(serializers.ModelSerializer):
             return account.currency
         business = getattr(obj, "business", None)
         return getattr(business, "currency", None) or "INR"
+
+    def get_loyalty_points(self, obj: Customer) -> int:
+        try:
+            account = obj.loyalty_account
+        except ObjectDoesNotExist:
+            return 0
+        except Exception:
+            account = getattr(obj, "loyalty_account", None)
+            if account is None:
+                return 0
+        return int(getattr(account, "points_balance", 0) or 0)
 
     def validate_tags(self, value: list[str]) -> list[str]:
         return [tag.strip().lower() for tag in value if tag.strip()]

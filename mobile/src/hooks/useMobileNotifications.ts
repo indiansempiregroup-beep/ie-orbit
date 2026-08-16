@@ -22,7 +22,23 @@ export function useMobileNotifications() {
         tenant_slug: tenantSlug,
         business_code: businessCode,
       });
-      setNotifications(response.data);
+      const seen = new Set<string>();
+      setNotifications(
+        response.data.filter((item) => {
+          if (item.channel && item.channel !== 'in_app') return false;
+          const key = [
+            item.notification_type || '',
+            item.order_id || '',
+            item.booking_id || '',
+            item.return_id || '',
+            item.pet_id || '',
+            item.subject || '',
+          ].join(':');
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load notifications.');
       setNotifications([]);

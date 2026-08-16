@@ -210,7 +210,7 @@ export function BookingDetailScreen() {
           value={formatTime(booking.start_at)}
         />
         <DetailRow label="Duration" value={`${booking.duration_minutes} minutes`} />
-        {booking.staff_name ? <DetailRow label="Stylist" value={booking.staff_name} /> : null}
+        {booking.staff_name ? <DetailRow label="Staff" value={booking.staff_name} /> : null}
         {booking.branch?.display_name ? (
           <DetailRow label="Office" value={booking.branch.display_name} />
         ) : null}
@@ -257,28 +257,34 @@ export function BookingDetailScreen() {
       {booking.status === 'completed' && !review ? (
         <Card>
           <Text style={styles.section}>Leave a review</Text>
-          <View style={styles.stars}>
-            {[1, 2, 3, 4, 5].map((value) => (
-              <Pressable key={value} onPress={() => setRating(value)} hitSlop={6}>
-                <Text style={[styles.star, { color: value <= rating ? primary : colors.mutedForeground }]}>
-                  {value <= rating ? '★' : '☆'}
-                </Text>
-              </Pressable>
-            ))}
+          <View style={styles.reviewForm}>
+            <View style={styles.stars}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <Pressable key={value} onPress={() => setRating(value)} hitSlop={6}>
+                  <Text style={[styles.star, { color: value <= rating ? primary : colors.mutedForeground }]}>
+                    {value <= rating ? '★' : '☆'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Input
+              label="Comment (optional)"
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              placeholder="How was your visit?"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              style={styles.reviewInput}
+            />
+            <Button
+              label="Submit review"
+              fullWidth
+              loading={actionLoading}
+              primaryColor={primary}
+              onPress={() => void onSubmitReview()}
+            />
           </View>
-          <Input
-            label="Comment (optional)"
-            value={reviewComment}
-            onChangeText={setReviewComment}
-            placeholder="How was your visit?"
-          />
-          <Button
-            label="Submit review"
-            fullWidth
-            loading={actionLoading}
-            primaryColor={primary}
-            onPress={() => void onSubmitReview()}
-          />
         </Card>
       ) : null}
 
@@ -335,8 +341,10 @@ const styles = StyleSheet.create({
   detailValue: { ...typography.body, color: colors.foreground, fontWeight: '600' },
   empty: { ...typography.body, color: colors.mutedForeground },
   section: { ...typography.label, color: colors.foreground, fontWeight: '700', marginBottom: spacing.md },
-  stars: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  reviewForm: { gap: spacing.lg },
+  stars: { flexDirection: 'row', gap: spacing.sm },
   star: { fontSize: 28 },
+  reviewInput: { minHeight: 88, paddingTop: spacing.sm },
   ratingStars: { ...typography.title, fontSize: 22, letterSpacing: 1, marginBottom: spacing.sm },
   reviewComment: { ...typography.body, color: colors.mutedForeground, lineHeight: 20 },
   reviewMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },

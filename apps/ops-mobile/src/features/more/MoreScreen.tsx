@@ -125,6 +125,14 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('ShopDeliveryZones')}
               />
             ) : null}
+            {has(PlanFeature.shopieCoupons) ? (
+              <MenuRow
+                icon="tag"
+                label={t('nav.shopCoupons')}
+                subtitle="Codes for online checkout"
+                onPress={() => navigation.navigate('ShopCoupons')}
+              />
+            ) : null}
             <MenuRow
               icon="heart"
               label={t('nav.shopPets')}
@@ -134,32 +142,24 @@ export function MoreScreen() {
           </MenuSection>
         ) : null}
 
-        {showShop &&
-        hasAny([
+        {hasAny([
           PlanFeature.shopieGrowWhatsapp,
-          PlanFeature.shopieGrowPoster,
           PlanFeature.shopieGrowGoogle,
           PlanFeature.shopieGrowSync,
           PlanFeature.shopieGrowUtilities,
+          PlanFeature.shopieGrowAds,
+          PlanFeature.shopieCustomerReferral,
         ]) ? (
           <MenuSection title="Grow">
-            {has(PlanFeature.shopieGrowWhatsapp) ? (
+            {showShop && has(PlanFeature.shopieGrowWhatsapp) ? (
               <MenuRow
                 icon="message-circle"
                 label="WhatsApp"
-                subtitle="Default message & wa.me chat"
+                subtitle="Party picker, message & attachment"
                 onPress={() => navigation.navigate('GrowWhatsApp')}
               />
             ) : null}
-            {has(PlanFeature.shopieGrowPoster) ? (
-              <MenuRow
-                icon="image"
-                label="AI Poster"
-                subtitle="Local promo poster & share"
-                onPress={() => navigation.navigate('GrowAIPoster')}
-              />
-            ) : null}
-            {has(PlanFeature.shopieGrowGoogle) ? (
+            {showShop && has(PlanFeature.shopieGrowGoogle) ? (
               <MenuRow
                 icon="globe"
                 label="Google Profile"
@@ -167,21 +167,37 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('GrowGoogleProfile')}
               />
             ) : null}
-            {has(PlanFeature.shopieGrowSync) ? (
+            {showShop && has(PlanFeature.shopieGrowSync) ? (
               <MenuRow
                 icon="share-2"
                 label="Sync & share"
-                subtitle="Export voucher & product counts"
+                subtitle="Export business snapshot"
                 onPress={() => navigation.navigate('GrowSyncShare')}
               />
             ) : null}
-            {has(PlanFeature.shopieGrowUtilities) ? (
+            {showShop && has(PlanFeature.shopieGrowUtilities) ? (
               <MenuRow
                 icon="tool"
                 label="Utilities"
                 subtitle="GST, margin, discount & EMI"
-                last
                 onPress={() => navigation.navigate('GrowUtilities')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieGrowAds) ? (
+              <MenuRow
+                icon="image"
+                label="Ads"
+                subtitle="Customer app banners (max 5)"
+                onPress={() => navigation.navigate('GrowAds')}
+              />
+            ) : null}
+            {has(PlanFeature.shopieCustomerReferral) ? (
+              <MenuRow
+                icon="gift"
+                label="Referrals"
+                subtitle="Loyalty points for invites"
+                last
+                onPress={() => navigation.navigate('GrowReferral')}
               />
             ) : null}
           </MenuSection>

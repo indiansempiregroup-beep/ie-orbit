@@ -381,3 +381,143 @@ def test_pet_birthday_reminder_marks_year(shop_ctx: tuple[Tenant, Business, Cust
     result2 = pets.send_birthday_reminders(lead_days=5)
     assert result2["sent"] == 0
 
+
+@pytest.mark.django_db
+def test_online_order_notifies_and_pos_does_not(
+    shop_ctx: tuple[Tenant, Business, Customer], monkeypatch
+) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    calls: list[dict] = []
+
+    def fake_notify(self, **kwargs):
+        calls.append(kwargs)
+        return {"sent_channels": ["in_app"], "notification_ids": [], "user_id": None}
+
+    monkeypatch.setattr(
+        "apps.notifications.services.customer_direct.CustomerDirectNotifier.notify_customer",
+        fake_notify,
+    )
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={"name": "Soap", "price": "20.00", "status": ProductStatus.ACTIVE, "stock_on_hand": "8"},
+        barcodes=[{"code": "890222", "barcode_type": BarcodeType.MANUFACTURER}],
+    )
+    online = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=False,
+    )
+    assert any(call.get("event_type") == "ShopOrderPending" for call in calls)
+    orders.transition(tenant=tenant, business=business, order=online, status=OrderStatus.CONFIRMED)
+    confirmed = next(call for call in calls if call.get("event_type") == "ShopOrderConfirmed")
+    assert online.order_number in (confirmed.get("extra_html") or "")
+    assert "We've received your order" in calls[0].get("subject", "") or any(
+        "confirmed" in str(call.get("subject") or "").lower() for call in calls
+    )
+
+    before = len(calls)
+    orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+    )
+    assert len(calls) == before
+
+
+@pytest.mark.django_db
+def test_online_return_restocks_and_notifies(
+    shop_ctx: tuple[Tenant, Business, Customer], monkeypatch
+) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "apps.notifications.services.customer_direct.CustomerDirectNotifier.notify_customer",
+        lambda self, **kwargs: calls.append(kwargs) or {"sent_channels": ["in_app"]},
+    )
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={"name": "Oil", "price": "80.00", "status": ProductStatus.ACTIVE, "stock_on_hand": "4"},
+        barcodes=[{"code": "890333", "barcode_type": BarcodeType.MANUFACTURER}],
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        lines=[{"product_id": str(product.id), "quantity": 2}],
+        confirm=True,
+    )
+    product.refresh_from_db()
+    after_sale = product.stock_on_hand
+    shop_return = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        reason="Wrong size",
+        restock=True,
+        complete=True,
+    )
+    product.refresh_from_db()
+    assert shop_return.status == "completed"
+    assert product.stock_on_hand == after_sale + Decimal("1")
+    assert any(call.get("event_type") == "ShopReturnCompleted" for call in calls)
+
+
+@pytest.mark.django_db
+def test_customer_return_requires_delivered(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={"name": "Treats", "price": "40.00", "status": ProductStatus.ACTIVE, "stock_on_hand": "6"},
+        barcodes=[{"code": "890444", "barcode_type": BarcodeType.MANUFACTURER}],
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+        payment_method="upi",
+    )
+    assert order.status == OrderStatus.CONFIRMED
+    with pytest.raises(ValidationError):
+        returns.create_return(
+            tenant=tenant,
+            business=business,
+            order=order,
+            lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+            require_delivered=True,
+        )
+    orders.transition(tenant=tenant, business=business, order=order, status=OrderStatus.COMPLETED)
+    order.refresh_from_db()
+    shop_return = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        require_delivered=True,
+    )
+    assert shop_return.status == "completed"
+    assert shop_return.metadata.get("refund_mode") == "original_payment"
+    assert "UPI" in str(shop_return.metadata.get("refund_instruction") or "")
+
+

@@ -66,7 +66,9 @@
     "privacySecurity": "गोपनीयता और सुरक्षा",
     "myReviews": "मेरी समीक्षाएँ",
     "completed": "पूर्ण",
-    "loyaltyPts": "लॉयल्टी अंक"
+    "loyaltyPts": "रिवॉर्ड अंक",
+    "rewardPoints": "रिवॉर्ड अंक",
+    "rewardPointsHint": "सेवा बुक करते समय या शॉप चेकआउट पर इनका उपयोग करें।"
   },
   "nav": {
     "home": "होम",
@@ -92,6 +94,7 @@
     "shopBilling": "बिलिंग",
     "shopReturns": "रिटर्न",
     "shopDeliveryZones": "डिलीवरी ज़ोन",
+    "shopCoupons": "कूपन",
     "shopPets": "पालतू",
     "shopBooks": "बहीखाता",
     "shopSale": "बिक्री चालान",

@@ -31,7 +31,7 @@ export function PlatformAdminHomeScreen() {
       <RefreshableScrollView style={styles.screen} contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Text style={styles.meta}>{user?.email ?? 'Platform console'}</Text>
-          <Text style={styles.hint}>Manage tenants, coupons, and audit activity.</Text>
+          <Text style={styles.hint}>Manage tenants, coupons, affiliates, and audit activity.</Text>
         </View>
 
         <View style={styles.menu}>
@@ -47,6 +47,12 @@ export function PlatformAdminHomeScreen() {
               label="Coupons"
               subtitle="Promotional codes"
               onPress={() => navigation.navigate('PlatformAdminCoupons')}
+            />
+            <MenuRow
+              icon="gift"
+              label="Affiliates"
+              subtitle="Credits, payouts & referrals"
+              onPress={() => navigation.navigate('PlatformAdminAffiliates')}
             />
             <MenuRow
               icon="shield"

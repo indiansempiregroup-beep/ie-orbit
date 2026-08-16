@@ -12,6 +12,7 @@ import { useMobileBookings } from '../../hooks/useMobileBookings';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Avatar } from '../../components/ui/Avatar';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { RootStackParamList } from '../../navigation/types';
@@ -37,9 +38,10 @@ export function ProfileScreen() {
   const { user, logout, biometricEnabled, biometricLabel } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { headerPaddingTop } = useScreenInsets();
   const { bookings, loading, reload } = useMobileBookings();
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
-  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
   const [orders, setOrders] = useState<ShopOrder[]>([]);
   const primary = branding?.primaryColor ?? colors.primary;
   const { showBooking, showShop, showPets } = customerAppFeatures(bootstrap?.features);
@@ -58,13 +60,17 @@ export function ProfileScreen() {
         tenant_slug: tenantSlug,
         business_code: businessCode,
       });
-      setLoyaltyEnabled(Boolean(res.data.enabled));
+      setLoyaltyEnabled(Boolean(res.data.enabled || bootstrap?.loyalty?.enabled));
       setLoyaltyPoints(res.data.enabled ? res.data.points_balance ?? 0 : 0);
     } catch {
-      setLoyaltyEnabled(false);
+      setLoyaltyEnabled(Boolean(bootstrap?.loyalty?.enabled));
       setLoyaltyPoints(0);
     }
-  }, [tenantSlug, businessCode]);
+  }, [tenantSlug, businessCode, bootstrap?.loyalty?.enabled]);
+
+  useEffect(() => {
+    if (bootstrap?.loyalty?.enabled) setLoyaltyEnabled(true);
+  }, [bootstrap?.loyalty?.enabled]);
 
   const loadOrders = useCallback(async () => {
     if (!showShop || !tenantSlug || !businessCode) {
@@ -109,7 +115,6 @@ export function ProfileScreen() {
         ]
       : []),
     ...(showShop ? [{ label: t('shop.myOrders'), value: String(orders.length) }] : []),
-    ...(loyaltyEnabled ? [{ label: t('profile.loyaltyPts'), value: String(loyaltyPoints) }] : []),
   ];
 
   async function onSignOut() {
@@ -138,7 +143,7 @@ export function ProfileScreen() {
       primaryColor={primary}
       refreshTintColor={primary}
     >
-      <LinearGradient colors={[`${primary}22`, colors.background]} style={styles.hero}>
+      <LinearGradient colors={[`${primary}22`, colors.background]} style={[styles.hero, { paddingTop: headerPaddingTop }]}>
         <View style={styles.avatarWrap}>
           <Avatar name={displayName} size="xl" src={user?.profile_photo} />
           <Pressable style={[styles.editBadge, { backgroundColor: primary }]} onPress={() => navigation.navigate('ProfileEdit')}>
@@ -156,6 +161,19 @@ export function ProfileScreen() {
           ))}
         </View>
       </LinearGradient>
+
+      {loyaltyEnabled ? (
+        <View style={styles.pointsCard}>
+          <View style={[styles.pointsIcon, { backgroundColor: `${primary}18` }]}>
+            <Feather name="award" size={18} color={primary} />
+          </View>
+          <View style={styles.pointsBody}>
+            <Text style={styles.pointsLabel}>{t('profile.rewardPoints')}</Text>
+            <Text style={styles.pointsValue}>{loyaltyPoints} pts</Text>
+            <Text style={styles.pointsHint}>{t('profile.rewardPointsHint')}</Text>
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.menu}>
         {visibleMenuItems.map((item) => (
@@ -186,7 +204,7 @@ export function ProfileScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },
-  hero: { alignItems: 'center', paddingTop: 56, paddingBottom: spacing.xxl, paddingHorizontal: spacing.xl },
+  hero: { alignItems: 'center', paddingBottom: spacing.xxl, paddingHorizontal: spacing.xl },
   avatarWrap: { position: 'relative', marginBottom: spacing.md },
   editBadge: {
     position: 'absolute',
@@ -202,10 +220,39 @@ const styles = StyleSheet.create({
   },
   name: { ...typography.heading, fontSize: 20, color: colors.foreground },
   email: { ...typography.body, color: colors.mutedForeground, marginTop: 2 },
-  stats: { flexDirection: 'row', gap: spacing.xxxl, marginTop: spacing.xl },
-  stat: { alignItems: 'center' },
+  stats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  stat: { alignItems: 'center', minWidth: 72 },
   statValue: { ...typography.heading, fontSize: 18, color: colors.foreground },
   statLabel: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
+  pointsCard: {
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  pointsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pointsBody: { flex: 1 },
+  pointsLabel: { ...typography.caption, color: colors.mutedForeground, fontWeight: '600' },
+  pointsValue: { ...typography.heading, fontSize: 20, color: colors.foreground, marginTop: 2 },
+  pointsHint: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
   menu: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   menuRow: {
     flexDirection: 'row',

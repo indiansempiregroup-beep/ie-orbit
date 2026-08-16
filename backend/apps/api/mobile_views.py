@@ -53,7 +53,12 @@ from apps.common.api.responses import success_response
 from apps.customers.models import Customer
 from apps.customers.services import CustomerService
 from apps.customers.services.loyalty import LoyaltyService
-from apps.notifications.models import MobileDevice, Notification, NotificationStatus
+from apps.notifications.models import (
+    MobileDevice,
+    Notification,
+    NotificationChannel,
+    NotificationStatus,
+)
 from apps.notifications.constants import AUDIENCE_CUSTOMER
 from apps.notifications.repositories.notifications import audience_filter
 from apps.notifications.services.notifications import NotificationService
@@ -262,6 +267,8 @@ def _serialize_mobile_notification(notification: Notification) -> dict:
         "updated_at": notification.updated_at,
         "booking_id": notification.booking_id,
         "pet_id": (notification.metadata or {}).get("pet_id") or None,
+        "order_id": (notification.metadata or {}).get("order_id") or None,
+        "return_id": (notification.metadata or {}).get("return_id") or None,
         "notification_type": notification_type_from_metadata(notification.metadata),
     }
 
@@ -691,7 +698,11 @@ class MobileNotificationListView(APIView):
 
         queryset = (
             Notification.objects.require_tenant(tenant)
-            .filter(business=business, user=request.user)
+            .filter(
+                business=business,
+                user=request.user,
+                channel=NotificationChannel.IN_APP,
+            )
             .filter(audience_filter(audience=AUDIENCE_CUSTOMER))
             .order_by("-created_at")
         )
@@ -1247,7 +1258,8 @@ class MobileLoyaltyQuoteView(APIView):
         try:
             quote = self.loyalty_service.quote_redemption(
                 business=business,
-                service_id=serializer.validated_data["service_id"],
+                service_id=serializer.validated_data.get("service_id"),
+                amount=serializer.validated_data.get("amount"),
                 points_to_redeem=serializer.validated_data["points_to_redeem"],
                 points_balance=account.points_balance,
             )

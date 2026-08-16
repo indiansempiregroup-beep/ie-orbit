@@ -5,10 +5,11 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import F
 from django.utils import timezone
 
+from apps.businesses.constants import FEATURE_SHOPIE_BOOKS_GODOWNS, PRODUCT_SHOPIE
 from apps.businesses.models import Business
+from apps.businesses.services.entitlements import EntitlementService
 from apps.shopie.models import (
     ShopGodown,
     ShopGodownStock,
@@ -23,8 +24,75 @@ def _q3(value: Any) -> Decimal:
 
 
 class GodownsService:
+    entitlements = EntitlementService()
+
     def list_godowns(self, *, tenant: Tenant, business: Business):
-        return ShopGodown.objects.filter(tenant=tenant, business=business, is_active=True)
+        return (
+            ShopGodown.objects.filter(tenant=tenant, business=business, is_active=True)
+            .prefetch_related("stocks__product")
+        )
+
+    def get_default_godown(self, *, tenant: Tenant, business: Business) -> ShopGodown | None:
+        qs = ShopGodown.objects.filter(tenant=tenant, business=business, is_active=True)
+        return qs.filter(is_default=True).first() or qs.order_by("created_at").first()
+
+    def ensure_default_godown(self, *, tenant: Tenant, business: Business) -> ShopGodown:
+        existing = self.get_default_godown(tenant=tenant, business=business)
+        if existing:
+            return existing
+        return self.create_godown(tenant=tenant, business=business, name="Main", is_default=True)
+
+    def resolve_catalog_godown(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        godown_id=None,
+    ) -> ShopGodown | None:
+        if godown_id:
+            try:
+                return ShopGodown.objects.get(
+                    tenant=tenant, business=business, id=godown_id, is_active=True
+                )
+            except ShopGodown.DoesNotExist as exc:
+                raise ValidationError({"godown_id": "Godown not found."}) from exc
+        existing = self.get_default_godown(tenant=tenant, business=business)
+        if existing:
+            return existing
+        if self.entitlements.has_feature(
+            business=business,
+            feature=FEATURE_SHOPIE_BOOKS_GODOWNS,
+            product_code=PRODUCT_SHOPIE,
+        ):
+            return self.ensure_default_godown(tenant=tenant, business=business)
+        return None
+
+    def apply_catalog_delta(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        product: ShopProduct,
+        delta: Decimal,
+        godown_id=None,
+        quantity_after: Decimal | None = None,
+    ) -> ShopGodownStock | None:
+        """Keep location stock in sync with product-level stock movements."""
+        qty_delta = _q3(delta)
+        if qty_delta == 0:
+            return None
+        godown = self.resolve_catalog_godown(tenant=tenant, business=business, godown_id=godown_id)
+        if godown is None:
+            return None
+        after = _q3(quantity_after if quantity_after is not None else product.stock_on_hand)
+        return self._adjust_godown_stock(
+            tenant=tenant,
+            business=business,
+            godown=godown,
+            product=product,
+            delta=qty_delta,
+            seed_quantity=_q3(after - qty_delta),
+        )
 
     @transaction.atomic
     def create_godown(
@@ -61,14 +129,23 @@ class GodownsService:
         godown: ShopGodown,
         product: ShopProduct,
         delta: Decimal,
+        seed_quantity: Decimal | None = None,
     ) -> ShopGodownStock:
-        row, _ = ShopGodownStock.objects.select_for_update().get_or_create(
+        row, created = ShopGodownStock.objects.select_for_update().get_or_create(
             tenant=tenant,
             business=business,
             godown=godown,
             product=product,
             defaults={"quantity": Decimal("0.000")},
         )
+        if created and seed_quantity is not None:
+            other_exists = (
+                ShopGodownStock.objects.filter(tenant=tenant, business=business, product=product)
+                .exclude(id=row.id)
+                .exists()
+            )
+            if not other_exists and _q3(seed_quantity) > 0:
+                row.quantity = _q3(seed_quantity)
         new_qty = _q3(row.quantity) + _q3(delta)
         if new_qty < 0:
             raise ValidationError(

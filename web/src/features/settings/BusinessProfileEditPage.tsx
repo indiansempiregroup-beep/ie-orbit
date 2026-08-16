@@ -6,6 +6,7 @@ import { Input } from '../../components/Input';
 import { Select } from '../../components/Select';
 import { ColorInput } from '../../components/ColorInput';
 import { LogoUploadField } from '../../components/LogoUploadField';
+import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
 import { PRODUCT_CATALOG } from '../../config/products';
 import {
   APPOINTMENT_INTERVALS,
@@ -222,12 +223,24 @@ export function BusinessProfileEditPage() {
           <Section title="Operations">
             <div style={fieldGridStyle}>
               <Select label="Week starts on" options={WEEK_START_DAYS.map((d) => ({ value: d.value, label: d.label }))} value={formState.week_start_day} onChange={(e) => updateField('week_start_day', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Business hours start" type="time" value={formState.business_hours_start} onChange={(e) => updateField('business_hours_start', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Business hours end" type="time" value={formState.business_hours_end} onChange={(e) => updateField('business_hours_end', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Appointment interval (minutes)" options={APPOINTMENT_INTERVALS.map((v) => ({ value: String(v), label: String(v) }))} value={String(formState.appointment_interval)} onChange={(e) => updateField('appointment_interval', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Default appointment duration" options={DEFAULT_DURATIONS.map((v) => ({ value: String(v), label: `${v} minutes` }))} value={String(formState.default_duration)} onChange={(e) => updateField('default_duration', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Buffer time" options={BUFFER_TIMES.map((v) => ({ value: String(v), label: `${v} minutes` }))} value={String(formState.buffer_time)} onChange={(e) => updateField('buffer_time', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
             </div>
+            <BusinessHoursEditor
+              value={formState.business_hours}
+              onChange={(next) => updateField('business_hours', next)}
+              disabled={saving}
+            />
+            {formState.selected_product === 'appointie' ? (
+              <>
+                <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
+                  AppointIE booking defaults. Set these after you pick a package; they are not used by ShopIE.
+                </p>
+                <div style={fieldGridStyle}>
+                  <Select label="Appointment interval (minutes)" options={APPOINTMENT_INTERVALS.map((v) => ({ value: String(v), label: String(v) }))} value={String(formState.appointment_interval)} onChange={(e) => updateField('appointment_interval', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
+                  <Select label="Default appointment duration" options={DEFAULT_DURATIONS.map((v) => ({ value: String(v), label: `${v} minutes` }))} value={String(formState.default_duration)} onChange={(e) => updateField('default_duration', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
+                  <Select label="Buffer time" options={BUFFER_TIMES.map((v) => ({ value: String(v), label: `${v} minutes` }))} value={String(formState.buffer_time)} onChange={(e) => updateField('buffer_time', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
+                </div>
+              </>
+            ) : null}
           </Section>
 
           <Section title="Product">

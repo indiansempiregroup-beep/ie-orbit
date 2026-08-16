@@ -67,8 +67,16 @@ class MobileBookingRequestSerializer(serializers.Serializer):
 class MobileLoyaltyQuoteSerializer(serializers.Serializer):
     tenant_slug = serializers.SlugField()
     business_code = serializers.SlugField()
-    service_id = serializers.UUIDField()
+    service_id = serializers.UUIDField(required=False, allow_null=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
     points_to_redeem = serializers.IntegerField(min_value=1)
+
+    def validate(self, attrs: dict) -> dict:
+        if not attrs.get("service_id") and attrs.get("amount") is None:
+            raise serializers.ValidationError("Provide service_id or amount.")
+        return attrs
 
 
 class MobileBookingRescheduleSerializer(serializers.Serializer):
@@ -94,6 +102,9 @@ class MobileNotificationSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
     booking_id = serializers.UUIDField(allow_null=True)
+    pet_id = serializers.CharField(allow_null=True, required=False)
+    order_id = serializers.CharField(allow_null=True, required=False)
+    return_id = serializers.CharField(allow_null=True, required=False)
     notification_type = serializers.CharField()
 
 
@@ -191,6 +202,7 @@ class MobileReviewCreateSerializer(serializers.Serializer):
     tenant_slug = serializers.SlugField()
     business_code = serializers.SlugField()
     rating = serializers.IntegerField(min_value=1, max_value=5)
+    title = serializers.CharField(required=False, allow_blank=True, default="", max_length=200)
     comment = serializers.CharField(required=False, allow_blank=True, default="")
 
 

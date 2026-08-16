@@ -9,7 +9,7 @@ import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { getSubscribedProducts } from '../config/products';
 import { useAppShellTitle } from '../hooks/useAppShellTitle';
 import { buildWorkspaceSnapshot, formatWorkspaceLabel } from '../lib/workspaceModel';
-import { canManageBusinessSettings, hasPermission, isPlatformAdmin } from '../utils/roles';
+import { canManageBusinessSettings, hasPermission, isPlatformAdminOnly } from '../utils/roles';
 
 export function AppShellHeader() {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export function AppShellHeader() {
   const theme = useTheme();
   const canSearchStaff = hasPermission(user, 'staff:read') || hasPermission(user, 'staff:write') || hasPermission(user, 'staff:manage');
   const canManageWorkspace = canManageBusinessSettings(user);
-  const showPlatformAdminLink = isPlatformAdmin(user);
+  const showPlatformAdminLink = isPlatformAdminOnly(user);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);

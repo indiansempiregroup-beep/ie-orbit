@@ -19,10 +19,13 @@ from apps.businesses.api.white_label_serializers import (
 from apps.businesses.models import (
     Business,
     BusinessProductSubscription,
-    BusinessProductSubscriptionStatus,
     WhiteLabelProfile,
 )
-from apps.businesses.services.entitlements import EntitlementService
+from apps.businesses.services.entitlements import (
+    EntitlementService,
+    ordered_product_subscriptions,
+    subscription_billing_state,
+)
 from apps.businesses.services.white_label import (
     ensure_white_label_profile,
     serialize_white_label_profile,
@@ -30,31 +33,13 @@ from apps.businesses.services.white_label import (
 from apps.common.api.responses import success_response
 from apps.tenancy.models import Tenant
 
-_COMPLIMENTARY_PREFIX = "comp:"
-
-
-def _subscription_billing_state(subscription: BusinessProductSubscription | None) -> str:
-    if subscription is None:
-        return "none"
-    if subscription.status == BusinessProductSubscriptionStatus.SOFT_LOCKED:
-        return "soft_locked"
-    if str(subscription.external_billing_reference or "").startswith(_COMPLIMENTARY_PREFIX):
-        return "complimentary"
-    if subscription.status == BusinessProductSubscriptionStatus.TRIALING:
-        return "trialing"
-    if subscription.status == BusinessProductSubscriptionStatus.ACTIVE:
-        return "paying"
-    if subscription.status == BusinessProductSubscriptionStatus.CANCELED:
-        return "canceled"
-    return str(subscription.status or "none")
-
 
 def _summarize_tenant_billing(
     subscriptions: list[BusinessProductSubscription],
 ) -> tuple[str, str | None, str | None]:
     if not subscriptions:
         return "none", None, None
-    states = [_subscription_billing_state(item) for item in subscriptions]
+    states = [subscription_billing_state(item) for item in subscriptions]
     if "soft_locked" in states:
         chosen_state = "soft_locked"
     elif "paying" in states:
@@ -68,11 +53,36 @@ def _summarize_tenant_billing(
     else:
         chosen_state = states[0]
     chosen = next(
-        (item for item in subscriptions if _subscription_billing_state(item) == chosen_state),
+        (item for item in subscriptions if subscription_billing_state(item) == chosen_state),
         subscriptions[0],
     )
     plan_code = chosen.plan.code if chosen.plan_id else None
     return chosen_state, plan_code, chosen.product_code
+
+
+def _product_summaries(subscriptions: list[BusinessProductSubscription]) -> list[dict]:
+    rows = []
+    for subscription in ordered_product_subscriptions(subscriptions):
+        rows.append(
+            {
+                "product_code": subscription.product_code,
+                "plan_code": subscription.plan.code if subscription.plan_id else None,
+                "billing_state": subscription_billing_state(subscription),
+            }
+        )
+    return rows
+
+
+def _business_admin_billing(business: Business, entitlements: EntitlementService) -> tuple[dict, list[dict]]:
+    billings = entitlements.billing_snapshots(business=business)
+    selected = (business.selected_product or "").strip().lower()
+    billing = next((row for row in billings if row.get("product_code") == selected), None)
+    if billing is None and billings:
+        billing = billings[0]
+    if billing is None:
+        product_code = selected or "appointie"
+        billing = entitlements.billing_snapshot(business=business, product_code=product_code)
+    return billing, billings
 
 
 class PlatformWhiteLabelListView(APIView):
@@ -124,7 +134,7 @@ class PlatformTenantAdminListView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request) -> Response:
-        tenants = list(Tenant.objects.order_by("display_name"))
+        tenants = list(Tenant.objects.select_related("owner").order_by("display_name"))
         tenant_ids = [tenant.id for tenant in tenants]
         business_counts = {
             row["tenant_id"]: row["count"]
@@ -163,9 +173,8 @@ class PlatformTenantAdminListView(APIView):
 
         rows = []
         for tenant in tenants:
-            billing_state, plan_code, product_code = _summarize_tenant_billing(
-                subscriptions_by_tenant.get(tenant.id, [])
-            )
+            tenant_subscriptions = subscriptions_by_tenant.get(tenant.id, [])
+            billing_state, plan_code, product_code = _summarize_tenant_billing(tenant_subscriptions)
             payment = last_paid.get(tenant.id)
             paid_at = payment.get("paid_at") or payment.get("created_at") if payment else None
             rows.append(
@@ -174,12 +183,14 @@ class PlatformTenantAdminListView(APIView):
                     "slug": tenant.slug,
                     "display_name": tenant.display_name,
                     "status": tenant.status,
+                    "owner_email": tenant.owner.email if tenant.owner_id else None,
                     "business_count": business_counts.get(tenant.id, 0),
                     "primary_color": tenant.primary_color,
                     "created_at": tenant.created_at.isoformat(),
                     "billing_state": billing_state,
                     "plan_code": plan_code,
                     "product_code": product_code,
+                    "products": _product_summaries(tenant_subscriptions),
                     "last_paid_at": paid_at.isoformat() if paid_at else None,
                     "last_paid_paise": payment["amount_paise"] if payment else None,
                     "pending_claims": int(pending_claims.get(tenant.id, 0)),
@@ -204,10 +215,7 @@ class PlatformTenantAdminDetailView(APIView):
         business_rows = []
         for business in businesses:
             profile = getattr(business, "white_label_profile", None)
-            billing = entitlements.billing_snapshot(
-                business=business,
-                product_code=business.selected_product or "appointie",
-            )
+            billing, billings = _business_admin_billing(business, entitlements)
             business_rows.append(
                 {
                     "id": str(business.id),
@@ -218,6 +226,7 @@ class PlatformTenantAdminDetailView(APIView):
                     "has_white_label_profile": profile is not None,
                     "flavor_key": profile.flavor_key if profile else None,
                     "billing": billing,
+                    "billings": billings,
                 }
             )
         return success_response(

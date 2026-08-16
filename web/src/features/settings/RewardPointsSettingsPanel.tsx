@@ -6,6 +6,7 @@ import { Card } from '../../components/Card';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { isLoyaltyEntitled } from '../../lib/loyalty';
 import { useBusinessBillingSnapshotQuery } from './billingHooks';
 import { useBusinessProfileQuery, useBusinessProfileUpdate } from './businessSettingsHooks';
 
@@ -14,6 +15,7 @@ type LoyaltyForm = {
   points_per_currency_unit: number;
   max_redeem_percent: number;
   min_redeem_points: number;
+  earn_points_per_100: number;
 };
 
 function readLoyaltyPrefs(business?: Business | null): LoyaltyForm {
@@ -24,6 +26,7 @@ function readLoyaltyPrefs(business?: Business | null): LoyaltyForm {
     points_per_currency_unit: Math.max(1, Number(prefs.points_per_currency_unit ?? 10) || 10),
     max_redeem_percent: Math.min(100, Math.max(0, Number(prefs.max_redeem_percent ?? 50) || 50)),
     min_redeem_points: Math.max(0, Number(prefs.min_redeem_points ?? 10) || 10),
+    earn_points_per_100: Math.max(0, Number(prefs.earn_points_per_100 ?? 1) || 0),
   };
 }
 
@@ -38,6 +41,7 @@ export function RewardPointsSettingsPanel() {
     points_per_currency_unit: 10,
     max_redeem_percent: 50,
     min_redeem_points: 10,
+    earn_points_per_100: 1,
   });
 
   useEffect(() => {
@@ -47,9 +51,11 @@ export function RewardPointsSettingsPanel() {
   }, [businessQuery.data]);
 
   const planEntitled = useMemo(() => {
-    const features = billingQuery.data?.features ?? [];
-    return features.includes('reward_points');
-  }, [billingQuery.data?.features]);
+    return isLoyaltyEntitled([
+      ...(billingQuery.data?.entitled_features ?? []),
+      ...(billingQuery.data?.features ?? []),
+    ]);
+  }, [billingQuery.data?.entitled_features, billingQuery.data?.features]);
 
   const softLocked = Boolean(billingQuery.data?.soft_locked);
   const canConfigure = planEntitled && !softLocked;
@@ -62,7 +68,8 @@ export function RewardPointsSettingsPanel() {
             <p className="product-settings-kicker">Loyalty</p>
             <h2 className="product-settings-title">Reward points</h2>
             <p className="product-settings-lead">
-              Customers earn points per completed service and redeem them as a booking discount.
+              One customer balance for bookings, online orders, POS, and Books sales. Customers earn
+              points on completed services and shop spend, then redeem them as a discount.
             </p>
           </div>
           {planEntitled ? (
@@ -80,7 +87,7 @@ export function RewardPointsSettingsPanel() {
 
         {!planEntitled ? (
           <div className="reward-points-notice reward-points-notice--warn">
-            <strong>AppointIE Pro required.</strong>{' '}
+            <strong>Plan upgrade required.</strong>{' '}
             <Link to="/settings/billing">Upgrade in billing</Link> to unlock reward points.
           </div>
         ) : null}
@@ -112,8 +119,9 @@ export function RewardPointsSettingsPanel() {
             <div className="reward-points-example">
               <span>Example</span>
               <p>
-                {form.points_per_currency_unit} points = ₹1 · max {form.max_redeem_percent}% of service
-                price · min {form.min_redeem_points} pts to redeem
+                {form.points_per_currency_unit} points = ₹1 · max {form.max_redeem_percent}% off · min{' '}
+                {form.min_redeem_points} pts to redeem · {form.earn_points_per_100} pts per ₹100 spent
+                in shop
               </p>
             </div>
 
@@ -139,7 +147,7 @@ export function RewardPointsSettingsPanel() {
               <label className="product-settings-plan-field">
                 <span>
                   Max redeem %
-                  <small className="reward-points-field-hint">Share of service price customers can cover</small>
+                  <small className="reward-points-field-hint">Share of price customers can cover</small>
                 </span>
                 <input
                   type="number"
@@ -169,6 +177,24 @@ export function RewardPointsSettingsPanel() {
                     setForm((prev) => ({
                       ...prev,
                       min_redeem_points: Math.max(0, Number(event.target.value) || 0),
+                    }))
+                  }
+                />
+              </label>
+              <label className="product-settings-plan-field">
+                <span>
+                  Points per ₹100 spent
+                  <small className="reward-points-field-hint">Shop orders, POS, and Books sales</small>
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.earn_points_per_100}
+                  disabled={!canConfigure || updateBusiness.isPending}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      earn_points_per_100: Math.max(0, Number(event.target.value) || 0),
                     }))
                   }
                 />

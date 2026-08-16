@@ -46,8 +46,15 @@ export function VerifyEmailScreen() {
             onPress={async () => {
               setError(null);
               try {
-                await opsClient.auth.resendVerification();
-                setMessage('Verification email sent.');
+                const response = await opsClient.auth.resendVerification(
+                  user?.email ? { email: user.email } : undefined,
+                );
+                const debugToken = response.data.debug_token;
+                setMessage(
+                  debugToken
+                    ? `Verification email sent. Local code: ${debugToken}`
+                    : 'Verification email sent.',
+                );
               } catch (err) {
                 setError(getApiErrorMessage(err, 'Unable to resend.'));
               }

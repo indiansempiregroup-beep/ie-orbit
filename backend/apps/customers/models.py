@@ -422,6 +422,8 @@ class CustomerLoyaltyLedger(TenantModel):
     points_delta = models.IntegerField()
     reason = models.CharField(max_length=160)
     booking_id = models.UUIDField(null=True, blank=True, db_index=True)
+    order_id = models.UUIDField(null=True, blank=True, db_index=True)
+    voucher_id = models.UUIDField(null=True, blank=True, db_index=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):

@@ -11,8 +11,16 @@ export type ProductSubscriptionLike = {
 };
 
 export const PRODUCT_CATALOG: ProductDefinition[] = [
-  { id: 'appointie', name: 'AppointIE', description: 'Booking and scheduling for service businesses.' },
-  { id: 'shopie', name: 'ShopIE', description: 'Catalog, sale billing, inventory, and books.' },
+  {
+    id: 'appointie',
+    name: 'AppointIE',
+    description: 'Booking, scheduling, and customer operations for service businesses.',
+  },
+  {
+    id: 'shopie',
+    name: 'ShopIE',
+    description: 'Catalog, POS, inventory, and billing for retail businesses.',
+  },
 ];
 
 export const PETS_PACK_PRICE_INR = 500;

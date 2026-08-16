@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -21,10 +22,21 @@ from apps.notifications.models import (
     NotificationTemplate,
 )
 from apps.notifications.repositories.notifications import NotificationRepository
+from apps.notifications.services.branding import absolute_public_url
 from apps.notifications.services.providers import EmailProvider, FirebasePushProvider, NotificationProvider
 from apps.notifications.services.realtime import publish_notification_created
 
 logger = logging.getLogger("ie_platform.notifications")
+
+
+def _escape_html(value: object) -> str:
+    return (
+        str(value or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 CUSTOMER_TEMPLATE_SUFFIX = ""
 ADMIN_TEMPLATE_SUFFIX = "_admin"
@@ -143,6 +155,8 @@ class NotificationService:
             notification.status = NotificationStatus.SENT
             notification.external_id = "in_app"
             notification.save(update_fields=["status", "external_id", "updated_at"])
+            if audience == "customer":
+                self._send_branded_customer_email(event=event, user=user, context=context)
         elif user.email:
             result = self.provider.send(template=template, recipient=user.email, context=context)
             notification.status = NotificationStatus.SENT
@@ -340,6 +354,14 @@ class NotificationService:
             body = body.replace(key, value)
 
         business = booking.business
+        extra_html = (
+            "<div style='margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;'>"
+            "<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;font-weight:700;'>Appointment</div>"
+            f"<div style='margin-top:4px;font-size:16px;font-weight:800;color:#0f172a;'>{_escape_html(service_name or 'Booking')}</div>"
+            f"<p style='margin:8px 0 0;font-size:14px;color:#334155;'>{_escape_html(start_label)}</p>"
+            f"<p style='margin:4px 0 0;font-size:13px;color:#64748b;'>#{_escape_html(booking.booking_number)} · {_escape_html(booking.status)}</p>"
+            "</div>"
+        )
         return {
             "subject": subject,
             "body": body,
@@ -350,7 +372,9 @@ class NotificationService:
             "user": user,
             "audience": audience,
             "business_name": business.display_name or business.business_name or "",
-            "business_logo": business.logo or "",
+            "business_logo": absolute_public_url(business.logo or ""),
+            "accent_color": "#1A56DB",
+            "extra_html": extra_html,
         }
 
     def _channel_enabled_for_user(self, *, user: User, channel: str) -> bool:
@@ -374,6 +398,45 @@ class NotificationService:
         if channel == NotificationChannel.IN_APP:
             return prefs.get("in_app", True) is not False
         return True
+
+    def _send_branded_customer_email(self, *, event: BookingEvent, user: User, context: dict[str, Any]) -> None:
+        if not user.email or not self._channel_enabled_for_user(user=user, channel=NotificationChannel.EMAIL):
+            return
+        notification = Notification.objects.create(
+            tenant=event.tenant,
+            business=event.booking.business,
+            user=user,
+            booking=event.booking,
+            channel=NotificationChannel.EMAIL,
+            subject=str(context.get("subject") or ""),
+            body=str(context.get("body") or ""),
+            status=NotificationStatus.PENDING,
+            metadata={"event_type": event.event_type, "audience": "customer"},
+        )
+        try:
+            result = EmailProvider().send(
+                template=SimpleNamespace(subject=notification.subject, body=notification.body),
+                recipient=user.email,
+                context=context,
+            )
+            notification.status = NotificationStatus.SENT
+            notification.external_id = str(result.get("provider") or "email")
+            notification.save(update_fields=["status", "external_id", "updated_at"])
+            NotificationLog.objects.create(
+                tenant=event.tenant,
+                notification=notification,
+                provider=str(result.get("provider") or "email"),
+                response_code="200",
+                response_body=result,
+            )
+        except Exception:
+            logger.exception(
+                "Booking customer email failed",
+                extra={"notification_id": str(notification.id), "user_id": str(user.id)},
+            )
+            notification.status = NotificationStatus.FAILED
+            notification.external_id = "email_failed"
+            notification.save(update_fields=["status", "external_id", "updated_at"])
 
     def _template_code_for_event(self, event_type: str, *, audience: str) -> str:
         base_mapping = {

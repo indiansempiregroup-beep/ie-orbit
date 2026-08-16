@@ -33,6 +33,18 @@ from apps.platform_admin.api import (
     PlatformInvoicePdfView,
     SupportTicketsView,
 )
+from apps.platform_admin.affiliate_api import (
+    PlatformAffiliateAccrualCreditView,
+    PlatformAffiliateAccrualPayoutView,
+    PlatformAffiliateAccrualsView,
+    PlatformAffiliateCodeDetailView,
+    PlatformAffiliateCodesView,
+    PlatformAffiliateDetailView,
+    PlatformAffiliatePayoutMarkPaidView,
+    PlatformAffiliatePayoutsView,
+    PlatformAffiliateReferralsView,
+    PlatformAffiliatesView,
+)
 
 urlpatterns = [
     path("platform/tenants/create", PlatformCreateTenantView.as_view(), name="platform-tenant-create"),
@@ -114,6 +126,52 @@ urlpatterns = [
         name="platform-upi-claims",
     ),
     path("platform/coupons", PlatformCouponsView.as_view(), name="platform-coupons"),
+    path("platform/affiliates", PlatformAffiliatesView.as_view(), name="platform-affiliates"),
+    path(
+        "platform/affiliates/<uuid:affiliate_id>",
+        PlatformAffiliateDetailView.as_view(),
+        name="platform-affiliate-detail",
+    ),
+    path(
+        "platform/affiliate-codes",
+        PlatformAffiliateCodesView.as_view(),
+        name="platform-affiliate-codes",
+    ),
+    path(
+        "platform/affiliate-codes/<uuid:code_id>",
+        PlatformAffiliateCodeDetailView.as_view(),
+        name="platform-affiliate-code-detail",
+    ),
+    path(
+        "platform/affiliate-referrals",
+        PlatformAffiliateReferralsView.as_view(),
+        name="platform-affiliate-referrals",
+    ),
+    path(
+        "platform/affiliate-accruals",
+        PlatformAffiliateAccrualsView.as_view(),
+        name="platform-affiliate-accruals",
+    ),
+    path(
+        "platform/affiliate-accruals/<uuid:accrual_id>/credit",
+        PlatformAffiliateAccrualCreditView.as_view(),
+        name="platform-affiliate-accrual-credit",
+    ),
+    path(
+        "platform/affiliate-accruals/<uuid:accrual_id>/payout",
+        PlatformAffiliateAccrualPayoutView.as_view(),
+        name="platform-affiliate-accrual-payout",
+    ),
+    path(
+        "platform/affiliate-payouts",
+        PlatformAffiliatePayoutsView.as_view(),
+        name="platform-affiliate-payouts",
+    ),
+    path(
+        "platform/affiliate-payouts/<uuid:payout_id>/mark-paid",
+        PlatformAffiliatePayoutMarkPaidView.as_view(),
+        name="platform-affiliate-payout-mark-paid",
+    ),
     path("platform/plan-packages", PlatformPlanPackagesView.as_view(), name="platform-plan-packages"),
     path(
         "platform/addon-pricing",

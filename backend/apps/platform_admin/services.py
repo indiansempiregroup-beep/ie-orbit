@@ -12,7 +12,7 @@ from django.utils.text import slugify
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.audit.services.audit import record_audit
-from apps.authentication.models import User
+from apps.authentication.models import RefreshTokenRecord, User, UserSession, UserStatus
 from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.roles import RoleService
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
@@ -392,7 +392,26 @@ class PlatformAdminService:
             raise PermissionDenied("Cannot disable platform administrators.")
         before = user.is_active
         user.is_active = active
-        user.save(update_fields=["is_active", "updated_at"])
+        update_fields = ["is_active", "updated_at"]
+        if not active:
+            user.status = UserStatus.SUSPENDED
+            update_fields.append("status")
+            now = timezone.now()
+            UserSession.objects.filter(user=user, revoked_at__isnull=True).update(
+                revoked_at=now,
+                revoked_reason="platform_disable",
+                updated_at=now,
+            )
+            RefreshTokenRecord.objects.filter(user=user, revoked_at__isnull=True).update(
+                revoked_at=now,
+                updated_at=now,
+            )
+        elif user.status == UserStatus.SUSPENDED:
+            user.status = (
+                UserStatus.ACTIVE if user.email_verified_at else UserStatus.PENDING_VERIFICATION
+            )
+            update_fields.append("status")
+        user.save(update_fields=update_fields)
         tenant = Tenant.active_objects.filter(owner=user).first()
         self.audit(
             actor=actor,
@@ -418,8 +437,8 @@ class PlatformAdminService:
         user_agent: str = "",
     ) -> dict[str, Any]:
         reason = self.require_reason(reason)
-        reset = self.passwords.request_reset(
-            email=user.email,
+        reset = self.passwords.issue_reset(
+            user=user,
             ip_address=ip_address,
             user_agent=user_agent,
         )

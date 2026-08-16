@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { resolveMediaUrl } from '../utils/mediaUrl';
+import { RemoteImage } from './RemoteImage';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 
 type Variant = 'avatar' | 'card';
@@ -39,17 +40,20 @@ export function ImagePickerButton({
   }
 
   async function pickFromLibrary() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow photo library access to choose a photo.');
-      return;
+    if (Platform.OS !== 'web') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to choose a photo.');
+        return;
+      }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: variant === 'avatar' ? [1, 1] : [4, 3],
       quality: 0.85,
+      ...(Platform.OS === 'web'
+        ? {}
+        : { allowsEditing: true, aspect: variant === 'avatar' ? [1, 1] : [4, 3] }),
     });
 
     if (result.canceled || !result.assets[0]) return;
@@ -57,17 +61,20 @@ export function ImagePickerButton({
   }
 
   async function takePhoto() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow camera access to take a photo.');
-      return;
+    if (Platform.OS !== 'web') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Allow camera access to take a photo.');
+        return;
+      }
     }
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: variant === 'avatar' ? [1, 1] : [4, 3],
       quality: 0.85,
+      ...(Platform.OS === 'web'
+        ? {}
+        : { allowsEditing: true, aspect: variant === 'avatar' ? [1, 1] : [4, 3] }),
     });
 
     if (result.canceled || !result.assets[0]) return;
@@ -75,6 +82,11 @@ export function ImagePickerButton({
   }
 
   function openPicker() {
+    // RN Alert.alert buttons never fire on web; open the file picker from this click.
+    if (Platform.OS === 'web') {
+      void pickFromLibrary();
+      return;
+    }
     Alert.alert(label || 'Photo', 'Choose a source', [
       { text: 'Camera', onPress: () => void takePhoto() },
       { text: Platform.OS === 'ios' ? 'Photo Library' : 'Gallery', onPress: () => void pickFromLibrary() },
@@ -89,7 +101,7 @@ export function ImagePickerButton({
         <View style={styles.avatarRow}>
           <Pressable style={styles.avatarHit} onPress={openPicker}>
             {preview ? (
-              <Image source={{ uri: preview }} style={styles.avatarImage} />
+              <RemoteImage uri={preview} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatarFallback}>
                 <Feather name="user" size={28} color={colors.primary} />
@@ -118,7 +130,7 @@ export function ImagePickerButton({
       <Pressable style={styles.card} onPress={openPicker}>
         {preview ? (
           <>
-            <Image source={{ uri: preview }} style={styles.cardPreview} />
+            <RemoteImage uri={preview} style={styles.cardPreview} />
             <View style={styles.cardOverlay}>
               <View style={styles.cardAction}>
                 <Feather name="camera" size={14} color="#fff" />
@@ -189,7 +201,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inputBackground,
     overflow: 'hidden',
   },
-  cardPreview: { width: '100%', height: '100%' },
+  cardPreview: { ...StyleSheet.absoluteFillObject },
   cardOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(15,22,35,0.35)',

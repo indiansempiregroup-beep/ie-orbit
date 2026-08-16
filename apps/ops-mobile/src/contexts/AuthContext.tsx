@@ -21,6 +21,7 @@ import {
   IMPERSONATOR_KEY,
   jwtIsImpersonation,
   persistImpersonationHandoff,
+  persistSessionHandoff,
   redirectToAdminWeb,
 } from '../utils/impersonationHandoff';
 
@@ -216,8 +217,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await refreshBiometricState();
       const handoff = consumeImpersonationHandoff();
       if (handoff) {
-        await persistImpersonationHandoff(handoff);
-        setIsImpersonating(true);
+        if (handoff.impersonatorId && handoff.tenantId) {
+          await persistImpersonationHandoff({
+            access: handoff.access,
+            refresh: handoff.refresh,
+            tenantId: handoff.tenantId,
+            impersonatorId: handoff.impersonatorId,
+            returnTo: handoff.returnTo,
+          });
+          setIsImpersonating(true);
+        } else {
+          await persistSessionHandoff(handoff);
+          setIsImpersonating(false);
+        }
         opsClient.setToken(handoff.access);
         const me = await opsClient.auth.me();
         setToken(handoff.access);

@@ -11,6 +11,7 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Chip } from '../../components/ui/Chip';
 import { Input } from '../../components/ui/Input';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -24,6 +25,7 @@ export function DiscoverScreen() {
   >();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
 
   const [query, setQuery] = useState('');
@@ -71,7 +73,7 @@ export function DiscoverScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
         <Text style={styles.title}>Discover</Text>
         <Input placeholder="Search services..." leftIcon="search" value={query} onChangeText={setQuery} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -99,7 +101,7 @@ export function DiscoverScreen() {
               <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.thumbImage} />
             ) : (
               <View style={[styles.thumb, { backgroundColor: `${primary}14` }]}>
-                <Feather name="scissors" size={22} color={primary} />
+                <Feather name="calendar" size={22} color={primary} />
               </View>
             )}
             <View style={styles.cardBody}>
@@ -128,7 +130,6 @@ export function DiscoverScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingTop: 56,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
     backgroundColor: colors.card,

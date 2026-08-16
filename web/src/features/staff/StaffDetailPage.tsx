@@ -6,6 +6,8 @@ import { useStaffDetail, useStaffUpdate } from '../management/managementHooks';
 import { StaffWeeklyScheduleSection } from './StaffWeeklyScheduleSection';
 import { StaffLeaveSection } from './StaffLeaveSection';
 import { StaffSpecialAvailabilitySection } from './StaffSpecialAvailabilitySection';
+import { StaffSlotBlocksSection } from './StaffSlotBlocksSection';
+import { StaffEmergencySlotsSection } from './StaffEmergencySlotsSection';
 import { StaffServiceAssignmentsSection } from './StaffServiceAssignmentsSection';
 import type { StaffMember, StaffUpdateInput } from '@ie-platform/sdk';
 import { Card } from '../../components/Card';
@@ -130,6 +132,8 @@ export function StaffDetailPage() {
             <StaffWeeklyScheduleSection staffId={staffQuery.data.id} />
             <StaffLeaveSection staffId={staffQuery.data.id} />
             <StaffSpecialAvailabilitySection staffId={staffQuery.data.id} />
+            <StaffSlotBlocksSection staffId={staffQuery.data.id} />
+            <StaffEmergencySlotsSection staffId={staffQuery.data.id} />
             <StaffServiceAssignmentsSection staffId={staffQuery.data.id} />
           </>
         ) : null}

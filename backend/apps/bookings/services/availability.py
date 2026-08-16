@@ -14,7 +14,9 @@ from apps.bookings.models import (
     BookingStatus,
     BusinessHoliday,
     EmergencyClosure,
+    StaffEmergencySlot,
     StaffLeave,
+    StaffSlotBlock,
     StaffSpecialAvailability,
     StaffWeeklySchedule,
 )
@@ -196,14 +198,24 @@ class AvailabilityService:
             staff_id=staff_id,
             target_date=target_date,
         )
+        windows = self._union_emergency_windows(
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            target_date=target_date,
+            windows=windows,
+        )
         leave_intervals = self._staff_leave_intervals(
+            tenant=tenant, business=business, staff_id=staff_id, target_date=target_date
+        )
+        block_intervals = self._staff_slot_block_intervals(
             tenant=tenant, business=business, staff_id=staff_id, target_date=target_date
         )
         windows = self._subtract_intervals_from_windows(
             business=business,
             target_date=target_date,
             windows=windows,
-            blocked=leave_intervals,
+            blocked=leave_intervals + block_intervals,
         )
         return self._slots_from_windows(
             tenant=tenant,
@@ -396,7 +408,11 @@ class AvailabilityService:
         leave_intervals = self._staff_leave_intervals(
             tenant=tenant, business=business, staff_id=staff_id, target_date=target_date
         )
-        if self._interval_blocked(start_at=start_at, end_at=end_at, blocked=leave_intervals):
+        block_intervals = self._staff_slot_block_intervals(
+            tenant=tenant, business=business, staff_id=staff_id, target_date=target_date
+        )
+        blocked = leave_intervals + block_intervals
+        if self._interval_blocked(start_at=start_at, end_at=end_at, blocked=blocked):
             return False
 
         windows = self._staff_windows(
@@ -405,11 +421,18 @@ class AvailabilityService:
             staff_id=staff_id,
             target_date=target_date,
         )
+        windows = self._union_emergency_windows(
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            target_date=target_date,
+            windows=windows,
+        )
         windows = self._subtract_intervals_from_windows(
             business=business,
             target_date=target_date,
             windows=windows,
-            blocked=leave_intervals,
+            blocked=blocked,
         )
         capacity = self._window_capacity(
             business=business, windows=windows, start_at=start_at, end_at=end_at
@@ -608,6 +631,31 @@ class AvailabilityService:
                 windows.append((row.shift_start, row.shift_end, row.capacity))
         return windows
 
+    def _union_emergency_windows(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        staff_id: Any,
+        target_date: date,
+        windows: list[tuple[time, time, int]],
+    ) -> list[tuple[time, time, int]]:
+        """Emergency slots ADD windows for the day; they never replace weekly/special."""
+        rows = list(
+            StaffEmergencySlot.objects.for_tenant(tenant).filter(
+                business=business,
+                staff_id=staff_id,
+                date=target_date,
+            )
+        )
+        if not rows:
+            return windows
+        merged = list(windows)
+        for row in rows:
+            if row.start_time < row.end_time:
+                merged.append((row.start_time, row.end_time, int(row.capacity or 1)))
+        return merged
+
     def _parse_break_periods(self, break_periods: Any) -> list[tuple[time, time]]:
         parsed: list[tuple[time, time]] = []
         for period in break_periods or []:
@@ -650,6 +698,30 @@ class AvailabilityService:
             approved=True,
         )
         return [(row.starts_at, row.ends_at) for row in rows]
+
+    def _staff_slot_block_intervals(
+        self, *, tenant: Any, business: Any, staff_id: Any, target_date: date
+    ) -> list[tuple[datetime, datetime]]:
+        rows = StaffSlotBlock.objects.for_tenant(tenant).filter(
+            business=business,
+            staff_id=staff_id,
+            date=target_date,
+        )
+        intervals: list[tuple[datetime, datetime]] = []
+        for row in rows:
+            if row.start_time >= row.end_time:
+                continue
+            intervals.append(
+                (
+                    self._combine_local(
+                        business=business, target_date=target_date, clock=row.start_time
+                    ),
+                    self._combine_local(
+                        business=business, target_date=target_date, clock=row.end_time
+                    ),
+                )
+            )
+        return intervals
 
     def _interval_blocked(
         self,

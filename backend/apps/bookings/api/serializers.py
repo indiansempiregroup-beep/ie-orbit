@@ -12,7 +12,9 @@ from apps.bookings.models import (
     BookingSource,
     BookingTimeline,
     RecurrenceFrequency,
+    StaffEmergencySlot,
     StaffLeave,
+    StaffSlotBlock,
     StaffSpecialAvailability,
     StaffWeeklySchedule,
 )
@@ -277,6 +279,43 @@ class StaffSpecialAvailabilitySerializer(serializers.ModelSerializer):
             "staff_id",
             "starts_at",
             "ends_at",
+            "capacity",
+            "reason",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {"business": {"required": False}}
+
+
+class StaffSlotBlockSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffSlotBlock
+        fields = [
+            "id",
+            "business",
+            "staff_id",
+            "date",
+            "start_time",
+            "end_time",
+            "reason",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {"business": {"required": False}}
+
+
+class StaffEmergencySlotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffEmergencySlot
+        fields = [
+            "id",
+            "business",
+            "staff_id",
+            "date",
+            "start_time",
+            "end_time",
             "capacity",
             "reason",
             "created_at",

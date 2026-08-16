@@ -21,6 +21,7 @@ import type { ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime } from '../../utils/format';
+import { confirmAction } from '../../utils/confirmAction';
 import { DesktopPage } from '../../components/DesktopPage';
 import {
   formatMoney,
@@ -28,6 +29,9 @@ import {
   formatShopOrderPayment,
   getShopOrderPosMeta,
   isShopOrderBorrowDue,
+  canCancelShopOrder,
+  nextShopOrderAction,
+  shopOrderStatusStyle,
 } from './posPayment';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
@@ -168,6 +172,53 @@ export function ShopOrderDetailScreen() {
     setRestock(true);
   }
 
+  async function setOrderStatus(status: string) {
+    if (!client || !order) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await client.shop.setOrderStatus(order.id, { status });
+      setOrder(response.data);
+      const messages: Record<string, string> = {
+        confirmed: 'Order confirmed',
+        ready: 'Order marked ready',
+        completed: 'Order completed',
+        cancelled: 'Order cancelled',
+      };
+      toast.push(messages[status] || 'Order updated', 'success');
+    } catch (err) {
+      const text = err instanceof Error ? err.message : 'Unable to update order';
+      setError(text);
+      toast.push(text, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmAdvance(next: { status: string; label: string }) {
+    const ok = await confirmAction({
+      title: next.status === 'confirmed' ? 'Confirm this order?' : next.label,
+      message:
+        next.status === 'confirmed'
+          ? 'Stock will be deducted from inventory. The customer will see the order as confirmed.'
+          : `Update status to “${next.label}”? The customer sees this in My Orders.`,
+      confirmLabel: next.label,
+      cancelLabel: 'Not now',
+    });
+    if (ok) await setOrderStatus(next.status);
+  }
+
+  async function confirmCancelOrder() {
+    const ok = await confirmAction({
+      title: 'Cancel order?',
+      message: 'This cannot be undone. Confirmed stock will be added back.',
+      confirmLabel: 'Cancel order',
+      cancelLabel: 'Keep order',
+      destructive: true,
+    });
+    if (ok) await setOrderStatus('cancelled');
+  }
+
   async function submitReturn() {
     if (!client || !businessId || !order) return;
     const lines = returnableLines
@@ -257,6 +308,9 @@ export function ShopOrderDetailScreen() {
       .filter(Boolean)
       .join(', ');
   const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
+  const nextAction = nextShopOrderAction(order.status, order.fulfillment_mode);
+  const statusStyle = shopOrderStatusStyle(order.status);
+  const canCancel = canCancelShopOrder(order.status);
   const lineDiscountTotal = Number(pos.line_discount_total ?? 0);
   const billDiscountAmount = Number(pos.bill_discount_amount ?? 0);
   const merchandiseGross = (order.lines ?? []).reduce((sum, line) => {
@@ -280,9 +334,14 @@ export function ShopOrderDetailScreen() {
         }}
       >
         <View style={styles.headerCard}>
-          <Text style={styles.orderNumber}>{order.order_number}</Text>
+          <View style={styles.headerTop}>
+            <Text style={styles.orderNumber}>{order.order_number}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+              <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{statusStyle.label}</Text>
+            </View>
+          </View>
           <Text style={styles.meta}>
-            {order.status} · {formatShopOrderFulfillment(order.fulfillment_mode)}
+            {formatShopOrderFulfillment(order.fulfillment_mode)}
             {order.created_at ? ` · ${formatDateTime(order.created_at)}` : ''}
           </Text>
           <Text style={styles.customer}>{customerName}</Text>
@@ -296,6 +355,27 @@ export function ShopOrderDetailScreen() {
           ) : null}
           {payment ? <Text style={[styles.payment, due && styles.due]}>{payment}</Text> : null}
         </View>
+
+        {isOnlineOrder && (nextAction || canCancel) ? (
+          <View style={styles.headerCard}>
+            <Text style={styles.section}>Fulfillment</Text>
+            {nextAction ? <Text style={styles.meta}>{nextAction.hint}</Text> : null}
+            {nextAction ? (
+              <Pressable
+                style={[styles.primaryBtn, busy && styles.btnDisabled]}
+                disabled={busy}
+                onPress={() => void confirmAdvance(nextAction)}
+              >
+                <Text style={styles.primaryBtnText}>{busy ? 'Updating…' : nextAction.label}</Text>
+              </Pressable>
+            ) : null}
+            {canCancel ? (
+              <Pressable style={styles.cancelOrderBtn} disabled={busy} onPress={() => void confirmCancelOrder()}>
+                <Text style={styles.cancelOrderText}>Cancel order</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         {String(order.payment_status || pos.payment_status || '') === 'awaiting_confirmation' ? (
           <View style={styles.headerCard}>
@@ -388,7 +468,9 @@ export function ShopOrderDetailScreen() {
             <Text style={styles.meta}>-{formatMoney(lineDiscountTotal)}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.meta}>Bill discount</Text>
+            <Text style={styles.meta}>
+              {order.coupon_code ? `Coupon ${order.coupon_code}` : 'Bill discount'}
+            </Text>
             <Text style={styles.meta}>-{formatMoney(billDiscountAmount)}</Text>
           </View>
           <View style={styles.totalRow}>
@@ -570,7 +652,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     gap: 4,
   },
-  orderNumber: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground },
+  orderNumber: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground, flex: 1 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  statusBadgeText: { fontSize: 12, fontWeight: '800' },
+  cancelOrderBtn: {
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  cancelOrderText: { color: colors.destructive, fontWeight: '700', fontSize: 14 },
   customer: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground, marginTop: 4 },
   addressBox: {
     marginTop: 8,

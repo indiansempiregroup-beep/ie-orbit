@@ -17,6 +17,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
+import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
@@ -29,7 +30,6 @@ import {
   customerLabel,
   formatMoney,
   supplierLabel,
-  todayIso,
   voucherStatusStyle,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
@@ -273,16 +273,7 @@ export function ShopBooksChequesScreen() {
             placeholderTextColor={colors.mutedForeground}
           />
         </View>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Due date</Text>
-          <TextInput
-            style={styles.input}
-            value={dueDate}
-            onChangeText={setDueDate}
-            placeholder={`${todayIso()} (optional)`}
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <DateField label="Due date" value={dueDate} onChange={setDueDate} helperText="Optional" />
         <SelectField
           label="Cash / bank account"
           value={cashAccountId}

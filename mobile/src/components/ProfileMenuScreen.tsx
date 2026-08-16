@@ -8,9 +8,10 @@ import { colors, spacing, typography } from '../theme/tokens';
 type HeaderProps = {
   title: string;
   onBack: () => void;
+  right?: React.ReactNode;
 };
 
-export function ScreenHeader({ title, onBack }: HeaderProps) {
+export function ScreenHeader({ title, onBack, right }: HeaderProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
@@ -20,7 +21,7 @@ export function ScreenHeader({ title, onBack }: HeaderProps) {
       <Text style={styles.title} numberOfLines={1}>
         {title}
       </Text>
-      <View style={{ width: 22 }} />
+      {right ? <View style={{ minWidth: 22, alignItems: 'flex-end' }}>{right}</View> : <View style={{ width: 22 }} />}
     </View>
   );
 }

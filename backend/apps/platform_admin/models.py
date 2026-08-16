@@ -257,3 +257,188 @@ class PlatformAuditEvent(BaseModel):
             models.Index(fields=["action", "created_at"]),
             models.Index(fields=["tenant", "created_at"]),
         ]
+
+
+class PlatformAffiliateType(models.TextChoices):
+    TENANT = "tenant", "Tenant"
+    PARTNER = "partner", "Partner"
+
+
+class PlatformAffiliateStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    PAUSED = "paused", "Paused"
+    DISABLED = "disabled", "Disabled"
+
+
+class PlatformReferralStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    EXPIRED = "expired", "Expired"
+    VOID = "void", "Void"
+
+
+class PlatformAccrualBenefitType(models.TextChoices):
+    CREDIT = "credit", "Credit"
+    PAYOUT = "payout", "Payout"
+
+
+class PlatformAccrualStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    CREDITED = "credited", "Credited"
+    PAID = "paid", "Paid"
+    VOID = "void", "Void"
+
+
+class PlatformPayoutStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PAID = "paid", "Paid"
+    VOID = "void", "Void"
+
+
+class PlatformAffiliate(BaseModel):
+    affiliate_type = models.CharField(
+        max_length=16,
+        choices=PlatformAffiliateType.choices,
+        default=PlatformAffiliateType.PARTNER,
+        db_index=True,
+    )
+    tenant = models.ForeignKey(
+        "tenancy.Tenant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="platform_affiliates",
+    )
+    name = models.CharField(max_length=160)
+    email = models.EmailField(db_index=True)
+    status = models.CharField(
+        max_length=16,
+        choices=PlatformAffiliateStatus.choices,
+        default=PlatformAffiliateStatus.ACTIVE,
+        db_index=True,
+    )
+    payout_method = models.CharField(max_length=16, blank=True, default="")
+    upi_vpa = models.CharField(max_length=120, blank=True, default="")
+    bank_account_name = models.CharField(max_length=160, blank=True, default="")
+    bank_account_number = models.CharField(max_length=64, blank=True, default="")
+    bank_ifsc = models.CharField(max_length=32, blank=True, default="")
+    payout_notes = models.TextField(blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_affiliates"
+        ordering = ["name"]
+
+
+class PlatformAffiliateCode(BaseModel):
+    affiliate = models.ForeignKey(
+        PlatformAffiliate,
+        on_delete=models.CASCADE,
+        related_name="codes",
+    )
+    code = models.SlugField(max_length=40, unique=True)
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_affiliate_codes"
+        ordering = ["code"]
+
+
+class PlatformReferral(BaseModel):
+    affiliate = models.ForeignKey(
+        PlatformAffiliate,
+        on_delete=models.CASCADE,
+        related_name="referrals",
+    )
+    referred_tenant = models.ForeignKey(
+        "tenancy.Tenant",
+        on_delete=models.CASCADE,
+        related_name="platform_referrals_received",
+    )
+    affiliate_code = models.ForeignKey(
+        PlatformAffiliateCode,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="referrals",
+    )
+    starts_at = models.DateTimeField(db_index=True)
+    months = models.PositiveSmallIntegerField(default=12)
+    status = models.CharField(
+        max_length=16,
+        choices=PlatformReferralStatus.choices,
+        default=PlatformReferralStatus.ACTIVE,
+        db_index=True,
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_referrals"
+        ordering = ["-starts_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["referred_tenant"],
+                name="uq_platform_referral_referred_tenant",
+            ),
+        ]
+
+
+class PlatformReferralAccrual(BaseModel):
+    referral = models.ForeignKey(
+        PlatformReferral,
+        on_delete=models.CASCADE,
+        related_name="accruals",
+    )
+    period_yyyy_mm = models.CharField(max_length=7, db_index=True)
+    amount_paise = models.PositiveIntegerField()
+    benefit_type = models.CharField(
+        max_length=16,
+        choices=PlatformAccrualBenefitType.choices,
+        default=PlatformAccrualBenefitType.CREDIT,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=PlatformAccrualStatus.choices,
+        default=PlatformAccrualStatus.PENDING,
+        db_index=True,
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_referral_accruals"
+        ordering = ["-period_yyyy_mm", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["referral", "period_yyyy_mm"],
+                name="uq_platform_referral_accrual_period",
+            ),
+        ]
+
+
+class PlatformPayout(BaseModel):
+    affiliate = models.ForeignKey(
+        PlatformAffiliate,
+        on_delete=models.CASCADE,
+        related_name="payouts",
+    )
+    amount_paise = models.PositiveIntegerField()
+    status = models.CharField(
+        max_length=16,
+        choices=PlatformPayoutStatus.choices,
+        default=PlatformPayoutStatus.PENDING,
+        db_index=True,
+    )
+    payment_ref = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True)
+    accrual = models.ForeignKey(
+        PlatformReferralAccrual,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payouts",
+    )
+
+    class Meta:
+        db_table = "platform_payouts"
+        ordering = ["-created_at"]

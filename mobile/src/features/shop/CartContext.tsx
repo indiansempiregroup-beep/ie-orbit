@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import type { ShopProduct } from '@ie-platform/sdk';
+import { shopLinePayable } from './shopHelpers';
 
 export type CartLine = {
   product: ShopProduct;
@@ -10,8 +10,10 @@ type CartContextValue = {
   lines: CartLine[];
   addItem: (product: ShopProduct, quantity?: number) => void;
   setQuantity: (productId: string, quantity: number) => void;
+  quantityFor: (productId: string) => number;
   clear: () => void;
   total: number;
+  itemCount: number;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -44,8 +46,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               ),
         );
       },
+      quantityFor: (productId) => lines.find((line) => line.product.id === productId)?.quantity ?? 0,
       clear: () => setLines([]),
-      total: lines.reduce((sum, line) => sum + Number(line.product.price) * line.quantity, 0),
+      total: lines.reduce((sum, line) => sum + shopLinePayable(line.product, line.quantity), 0),
+      itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
     };
   }, [lines]);
 

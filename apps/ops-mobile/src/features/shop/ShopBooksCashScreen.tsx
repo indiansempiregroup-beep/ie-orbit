@@ -8,6 +8,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
+import { DateField } from '../../components/DateField';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
@@ -328,13 +329,7 @@ export function ShopBooksCashScreen() {
             keyboardType="decimal-pad"
             placeholderTextColor={colors.mutedForeground}
           />
-          <TextInput
-            style={styles.input}
-            value={paymentDate}
-            onChangeText={setPaymentDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.mutedForeground}
-          />
+          <DateField label="Date" value={paymentDate} onChange={setPaymentDate} allowClear={false} />
           <TextInput
             style={[styles.input, styles.notes]}
             value={paymentNotes}

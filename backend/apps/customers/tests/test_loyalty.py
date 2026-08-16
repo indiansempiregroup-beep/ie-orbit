@@ -236,3 +236,43 @@ def test_trial_entitles_reward_points(loyalty_setup):
     subscription.trial_ends_at = timezone.now() + timedelta(days=10)
     subscription.save()
     assert LoyaltyService().has_plan_entitlement(business=setup["business"])
+
+
+@pytest.mark.django_db
+def test_shopie_starter_entitles_reward_points_without_appointie_pro(db):
+    owner = User.objects.create_user(
+        email="shopie-loyalty-owner@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    tenant = Tenant.objects.create(
+        slug="shopie-loyalty-tenant",
+        display_name="ShopIE Loyalty Tenant",
+        owner=owner,
+    )
+    organization = Organization.objects.create(tenant=tenant, name="ShopIE Loyalty Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="shopie-loyalty-biz",
+        business_name="ShopIE Loyalty Biz",
+        display_name="ShopIE Loyalty Biz",
+        selected_product="shopie",
+        currency="INR",
+    )
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="shopie-starter",
+        defaults={"name": "ShopIE Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+        current_period_starts_at=timezone.now() - timedelta(days=1),
+        current_period_ends_at=timezone.now() + timedelta(days=30),
+    )
+    assert LoyaltyService().has_plan_entitlement(business=business)
+    LoyaltyService().entitlements.ensure_loyalty_program(business=business)
+

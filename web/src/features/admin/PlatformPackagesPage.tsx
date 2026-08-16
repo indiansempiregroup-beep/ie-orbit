@@ -55,6 +55,7 @@ const FEATURE_GROUPS: Array<{
       { value: 'shopie_orders', label: 'Online orders' },
       { value: 'shopie_returns', label: 'Returns' },
       { value: 'shopie_delivery_zones', label: 'Delivery zones' },
+      { value: 'shopie_coupons', label: 'Online order coupons' },
       { value: 'shopie_loyalty', label: 'Shop loyalty rules' },
     ],
   },
@@ -76,7 +77,6 @@ const FEATURE_GROUPS: Array<{
       { value: 'shopie_books_godowns', label: 'Godowns / transfers' },
       { value: 'shopie_books_cheques', label: 'Cheques' },
       { value: 'shopie_books_loans', label: 'Loans' },
-      { value: 'shopie_books_job_work', label: 'Job work' },
       { value: 'shopie_gst_reports', label: 'GST reports' },
       { value: 'shopie_einvoice', label: 'GST e-invoice (IRN)' },
       { value: 'shopie_eway', label: 'GST e-way bill' },
@@ -87,16 +87,25 @@ const FEATURE_GROUPS: Array<{
     products: ['shopie'],
     options: [
       { value: 'shopie_grow_whatsapp', label: 'WhatsApp' },
-      { value: 'shopie_grow_poster', label: 'AI poster' },
       { value: 'shopie_grow_google', label: 'Google Profile' },
       { value: 'shopie_grow_sync', label: 'Sync & share' },
       { value: 'shopie_grow_utilities', label: 'Utilities' },
     ],
   },
   {
+    title: 'Marketing',
+    products: ['appointie', 'shopie'],
+    options: [
+      { value: 'shopie_grow_ads', label: 'Customer app ads (max 5)' },
+    ],
+  },
+  {
     title: 'Loyalty',
     products: ['appointie', 'shopie'],
-    options: [{ value: 'reward_points', label: 'Reward points' }],
+    options: [
+      { value: 'reward_points', label: 'Reward points' },
+      { value: 'shopie_customer_referral', label: 'Customer referral points' },
+    ],
   },
 ];
 
@@ -479,7 +488,7 @@ export function PlatformPackagesPage() {
                     <span className="admin-package-card__meta"> /mo</span>
                   </div>
                   <div className="admin-package-card__meta">
-                    {pkg.code} · {pkg.trial_days} day trial · staff {pkg.max_staff} · branches {pkg.max_branches}
+                    {pkg.code} · {pkg.trial_days} day trial · staff {pkg.max_staff} · offices {pkg.max_branches}
                   </div>
                 </button>
               ))}
@@ -626,7 +635,7 @@ export function PlatformPackagesPage() {
                         onChange={(e) => setForm({ ...form, max_staff: Number(e.target.value) })}
                       />
                     </AdminField>
-                    <AdminField label="Max branches">
+                    <AdminField label="Max offices">
                       <input
                         type="number"
                         min={1}

@@ -89,9 +89,13 @@ class RegisterBusinessSerializer(serializers.Serializer):
     currency = serializers.CharField(required=False, allow_blank=True, default="USD")
     language = serializers.CharField(required=False, allow_blank=True, default="en")
     selected_product = serializers.CharField(required=False, allow_blank=True)
+    selected_products = serializers.ListField(child=serializers.CharField(), required=False)
+    plan_code = serializers.CharField(required=False, allow_blank=True)
+    plan_codes = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False)
     primary_color = serializers.CharField(required=False, allow_blank=True)
     secondary_color = serializers.CharField(required=False, allow_blank=True)
     settings = serializers.DictField(required=False)
+    affiliate_code = serializers.CharField(required=False, allow_blank=True, max_length=40)
 
     def validate_password(self, value: str) -> str:
         validate_password(value)
@@ -105,6 +109,72 @@ class RegisterBusinessSerializer(serializers.Serializer):
             trimmed = f"https://{trimmed}"
         serializer = serializers.URLField()
         return serializer.run_validation(trimmed)
+
+    def validate(self, attrs: dict) -> dict:
+        from apps.businesses.constants import VALID_PRODUCT_CODES
+        from apps.businesses.services.plan_catalog import get_plan_definition_resolved
+
+        products: list[str] = []
+        for code in attrs.get("selected_products") or []:
+            normalized = str(code or "").strip().lower()
+            if normalized:
+                products.append(normalized)
+        primary = str(attrs.get("selected_product") or "").strip().lower()
+        if primary and primary not in products:
+            products.insert(0, primary)
+
+        unique_products: list[str] = []
+        seen: set[str] = set()
+        for product in products:
+            if product in seen:
+                continue
+            seen.add(product)
+            unique_products.append(product)
+
+        if not unique_products:
+            attrs["selected_product"] = ""
+            attrs["selected_products"] = []
+            attrs["plan_code"] = ""
+            attrs["plan_codes"] = {}
+            return attrs
+
+        unknown = [product for product in unique_products if product not in VALID_PRODUCT_CODES]
+        if unknown:
+            raise serializers.ValidationError({"selected_products": "Unknown product."})
+
+        plan_codes: dict[str, str] = {}
+        for key, value in (attrs.get("plan_codes") or {}).items():
+            product = str(key or "").strip().lower()
+            plan = str(value or "").strip().lower()
+            if product and plan:
+                plan_codes[product] = plan
+        single_plan = str(attrs.get("plan_code") or "").strip().lower()
+        if single_plan:
+            target = primary if primary in unique_products else unique_products[0]
+            plan_codes.setdefault(target, single_plan)
+
+        errors: dict[str, dict[str, str]] = {}
+        for product in unique_products:
+            plan = plan_codes.get(product)
+            if not plan:
+                continue
+            if get_plan_definition_resolved(product, plan) is None:
+                errors.setdefault("plan_codes", {})[product] = "Unknown package for this product."
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        if "appointie" in unique_products:
+            primary = "appointie"
+        elif primary not in unique_products:
+            primary = unique_products[0]
+
+        attrs["selected_products"] = unique_products
+        attrs["selected_product"] = primary
+        attrs["plan_codes"] = {
+            product: plan_codes[product] for product in unique_products if product in plan_codes
+        }
+        attrs["plan_code"] = plan_codes.get(primary, "")
+        return attrs
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

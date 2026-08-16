@@ -5,6 +5,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
+import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import {
   useShopCashAccounts,
@@ -73,6 +74,7 @@ export function ShopVoucherForm({
   const [cashAccountId, setCashAccountId] = useState('');
   const [lines, setLines] = useState<LineState[]>([newLine()]);
   const [message, setMessage] = useState<string | null>(null);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
   const partyOptions = useMemo(() => {
     if (isSale) {
@@ -96,6 +98,23 @@ export function ShopVoucherForm({
       { taxable: 0, gst: 0, total: 0 },
     );
   }, [lines]);
+
+  const loyaltyPrefs = useMemo(
+    () => readLoyaltyPrefs((workspace.activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined),
+    [workspace.activeBusiness?.settings],
+  );
+  const selectedSaleCustomer = useMemo(
+    () => (customers.data ?? []).find((row) => row.id === partyId) ?? null,
+    [customers.data, partyId],
+  );
+  const loyaltyMaxPoints = useMemo(
+    () =>
+      isSale
+        ? maxRedeemablePoints(totals.taxable, loyaltyPrefs, Number(selectedSaleCustomer?.loyalty_points ?? 0))
+        : 0,
+    [isSale, totals.taxable, loyaltyPrefs, selectedSaleCustomer?.loyalty_points],
+  );
+  const loyaltyDiscount = isSale ? redeemDiscountAmount(pointsToRedeem, loyaltyPrefs) : 0;
 
   function updateLine(key: string, patch: Partial<LineState>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
@@ -151,6 +170,7 @@ export function ShopVoucherForm({
         notes: notes || undefined,
         amount_paid: amountPaid || undefined,
         cash_account_id: cashAccountId || undefined,
+        points_to_redeem: isSale && partyId && pointsToRedeem > 0 ? pointsToRedeem : undefined,
       });
       navigate(`${backTo}?created=${encodeURIComponent(voucher.voucher_number)}`);
     } catch (error) {
@@ -179,7 +199,14 @@ export function ShopVoucherForm({
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{partyLabel}</span>
-              <select value={partyId} onChange={(event) => setPartyId(event.target.value)} style={fieldStyle}>
+              <select
+                value={partyId}
+                onChange={(event) => {
+                  setPartyId(event.target.value);
+                  setPointsToRedeem(0);
+                }}
+                style={fieldStyle}
+              >
                 <option value="">Cash {isSale ? 'sale' : 'purchase'} (no {partyLabel.toLowerCase()})</option>
                 {partyOptions.map((party) => (
                   <option key={party.id} value={party.id}>
@@ -221,6 +248,28 @@ export function ShopVoucherForm({
               />
             </label>
           </div>
+
+          {isSale && partyId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+            <label style={{ display: 'grid', gap: 6, maxWidth: 280 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                Reward points (balance {selectedSaleCustomer?.loyalty_points ?? 0})
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={loyaltyMaxPoints}
+                value={pointsToRedeem || ''}
+                onChange={(event) =>
+                  setPointsToRedeem(Math.max(0, Math.min(loyaltyMaxPoints, Number(event.target.value) || 0)))
+                }
+                placeholder={`Up to ${loyaltyMaxPoints}`}
+                style={fieldStyle}
+              />
+              {loyaltyDiscount > 0 ? (
+                <span style={{ fontSize: 13, color: '#6b7280' }}>Saves {formatMoney(loyaltyDiscount, currency)}</span>
+              ) : null}
+            </label>
+          ) : null}
 
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14 }}>

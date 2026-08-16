@@ -40,6 +40,15 @@ class PasswordService:
         user = self.user_repository.get_active_by_email(email)
         if not user:
             return None
+        return self.issue_reset(user=user, ip_address=ip_address, user_agent=user_agent)
+
+    def issue_reset(
+        self,
+        *,
+        user: User,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> PasswordResetRequest:
         token = generate_plain_token()
         PasswordResetToken.objects.create(
             user=user,
@@ -48,9 +57,16 @@ class PasswordService:
             + timedelta(minutes=settings.IAM_SETTINGS["PASSWORD_RESET_TOKEN_MINUTES"]),
             ip_address=ip_address,
         )
+        frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+        reset_url = f"{frontend_base}/auth/reset-password?token={token}"
+        minutes = settings.IAM_SETTINGS["PASSWORD_RESET_TOKEN_MINUTES"]
         send_mail(
             subject="Reset your IE Platform password",
-            message=f"Use this token to reset your password: {token}",
+            message=(
+                f"Use this link to reset your password:\n{reset_url}\n\n"
+                f"This link expires in {minutes} minutes.\n\n"
+                f"If the link does not work, use this token: {token}"
+            ),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             fail_silently=True,

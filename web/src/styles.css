@@ -1339,6 +1339,228 @@ h6 {
   font-size: 13px;
 }
 
+.wizard-choice-block {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+}
+
+.wizard-choice-header {
+  display: grid;
+  gap: 4px;
+}
+
+.wizard-product-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.wizard-product-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  background: var(--card);
+  display: grid;
+  gap: 14px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.wizard-product-card.is-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+}
+
+.wizard-product-card-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.wizard-product-card-copy p {
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.wizard-choice-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  color: var(--primary);
+}
+
+.wizard-choice-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: transparent;
+  background: var(--card);
+}
+
+.wizard-choice-check.is-on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.wizard-choice-name {
+  font-size: 16px;
+}
+
+.wizard-choice-features {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  display: grid;
+  gap: 4px;
+}
+
+.wizard-product-card-packages {
+  display: grid;
+  gap: 8px;
+}
+
+.wizard-package-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wizard-package-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.wizard-package-option {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--card);
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  color: inherit;
+  min-height: 100%;
+}
+
+.wizard-package-option:hover {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+}
+
+.wizard-package-option.is-selected {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--card));
+}
+
+.wizard-choice-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wizard-package-option p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.wizard-recommended {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.wizard-package-price {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.wizard-package-price span {
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.wizard-hours {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+}
+
+.wizard-hours-hint,
+.wizard-section-hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.wizard-package-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.business-hours-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.business-hours-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.1fr) 1fr 1fr;
+  gap: 8px 12px;
+  align-items: end;
+}
+
+.business-hours-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .business-hours-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .business-hours-day {
+    grid-column: 1 / -1;
+    min-height: auto;
+  }
+}
+
 .wizard-review {
   display: grid;
   gap: 16px;
@@ -3557,6 +3779,20 @@ h6 {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+}
+
+.admin-product-billing-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-product-billing {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--muted) 22%, var(--card));
 }
 
 @media (max-width: 720px) {

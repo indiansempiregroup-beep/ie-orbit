@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getPostLoginPath } from '../../utils/roles';
+import { PostAuthRedirect } from '../../components/PostAuthRedirect';
+import { registerStartPath } from '../onboarding/affiliateCode';
 
 export function AuthPage() {
   const { t } = useTranslation();
-  usePageMeta({ title: 'Sign in — AppointIE' });
+  usePageMeta({ title: 'Sign in — IE Platform' });
   const auth = useAuthContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +23,7 @@ export function AuthPage() {
   }
 
   if (auth.token && auth.user) {
-    return <Navigate to={getPostLoginPath(auth.user)} replace />;
+    return <PostAuthRedirect />;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -39,7 +40,7 @@ export function AuthPage() {
 
   return (
     <>
-      <h1>{t('auth.signIn')} — AppointIE</h1>
+      <h1>{t('auth.signIn')} — IE Platform</h1>
       <p className="auth-lead">{t('auth.welcomeBack')}</p>
       <form onSubmit={handleSubmit}>
         <Input
@@ -72,7 +73,7 @@ export function AuthPage() {
       <p className="auth-links">
         <Link to="/auth/forgot-password">{t('auth.forgotPassword')}</Link>
         <span aria-hidden="true"> · </span>
-        <Link to="/auth/register/start">{t('auth.createAccount')}</Link>
+        <Link to={registerStartPath()}>{t('auth.createAccount')}</Link>
       </p>
     </>
   );

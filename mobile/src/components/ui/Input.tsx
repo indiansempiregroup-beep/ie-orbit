@@ -10,21 +10,22 @@ type Props = TextInputProps & {
   leftIcon?: keyof typeof Feather.glyphMap;
 };
 
-export function Input({ label, error, hint, leftIcon, secureTextEntry, style, ...rest }: Props) {
+export function Input({ label, error, hint, leftIcon, secureTextEntry, style, multiline, ...rest }: Props) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
   const isPassword = Boolean(secureTextEntry);
 
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={[styles.field, error ? styles.fieldError : null]}>
+      <View style={[styles.field, error ? styles.fieldError : null, multiline ? styles.fieldMultiline : null]}>
         {leftIcon ? (
           <Feather name={leftIcon} size={16} color={colors.mutedForeground} style={styles.leftIcon} />
         ) : null}
         <TextInput
           placeholderTextColor={colors.mutedForeground}
           secureTextEntry={isPassword ? hidden : false}
-          style={[styles.input, leftIcon ? styles.inputWithIcon : null, style]}
+          multiline={multiline}
+          style={[styles.input, leftIcon ? styles.inputWithIcon : null, multiline ? styles.inputMultiline : null, style]}
           {...rest}
         />
         {isPassword ? (
@@ -53,6 +54,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   fieldError: { borderColor: colors.destructive },
+  fieldMultiline: { alignItems: 'flex-start', minHeight: 88, paddingVertical: spacing.sm },
   leftIcon: { marginRight: spacing.sm },
   input: {
     flex: 1,
@@ -60,6 +62,7 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     paddingVertical: spacing.sm,
   },
+  inputMultiline: { minHeight: 72, paddingTop: 0 },
   inputWithIcon: { paddingLeft: 0 },
   eye: { marginLeft: spacing.sm },
   error: { ...typography.caption, color: colors.destructive },

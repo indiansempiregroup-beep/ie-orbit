@@ -27,6 +27,7 @@ export type RootStackParamList = {
   PlatformAdminTenantDetail: { tenantId: string };
   PlatformAdminAudit: undefined;
   PlatformAdminCoupons: undefined;
+  PlatformAdminAffiliates: undefined;
   WorkspacePicker: undefined;
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
   Search: undefined;
@@ -73,6 +74,7 @@ export type RootStackParamList = {
   BarcodeScanner: { target?: 'pos' | 'addProduct'; productId?: string } | undefined;
   ShopReturns: undefined;
   ShopDeliveryZones: undefined;
+  ShopCoupons: undefined;
   ShopPets: { selectCustomerId?: string; openAdd?: boolean } | undefined;
   ShopPetForm: { petId?: string; selectCustomerId?: string } | undefined;
   ShopPetDetail: { petId: string; openNotify?: boolean };
@@ -93,10 +95,11 @@ export type RootStackParamList = {
   ShopLoyalty: undefined;
   ShopStockAdjust: undefined;
   GrowWhatsApp: undefined;
-  GrowAIPoster: undefined;
   GrowGoogleProfile: undefined;
   GrowSyncShare: undefined;
   GrowUtilities: undefined;
+  GrowAds: undefined;
+  GrowReferral: undefined;
   Branches: undefined;
   BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };
   Reports: undefined;

@@ -21,9 +21,11 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
-import type { ShopProduct } from '@ie-platform/sdk';
+import type { ShopGodown, ShopProduct } from '@ie-platform/sdk';
 import { formatMoney } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { usePlanFeatures } from '../../hooks/useOpsExtended';
+import { PlanFeature } from '../../utils/planFeatures';
 
 const MOVEMENT_OPTIONS = [
   { value: 'adjust', label: 'Adjust' },
@@ -36,8 +38,12 @@ export function ShopStockAdjustScreen() {
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
+  const { has } = usePlanFeatures();
+  const showGodowns = has(PlanFeature.shopieBooksGodowns);
 
   const [products, setProducts] = useState<ShopProduct[]>([]);
+  const [godowns, setGodowns] = useState<ShopGodown[]>([]);
+  const [godownId, setGodownId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -60,17 +66,25 @@ export function ShopStockAdjustScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listProducts({
-        business_id: businessId,
-        search: search.trim() || undefined,
-      });
-      setProducts(response.data ?? []);
+      const [productsRes, godownsRes] = await Promise.all([
+        client.shop.listProducts({
+          business_id: businessId,
+          search: search.trim() || undefined,
+        }),
+        showGodowns
+          ? client.shop.listGodowns({ business_id: businessId }).catch(() => ({ data: [] as ShopGodown[] }))
+          : Promise.resolve({ data: [] as ShopGodown[] }),
+      ]);
+      setProducts(productsRes.data ?? []);
+      const rows = godownsRes.data ?? [];
+      setGodowns(rows);
+      setGodownId((current) => current || rows.find((row) => row.is_default)?.id || rows[0]?.id || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load products');
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, search]);
+  }, [businessId, client, search, showGodowns]);
 
   useFocusEffect(
     useCallback(() => {
@@ -104,6 +118,7 @@ export function ShopStockAdjustScreen() {
         quantity_delta: delta,
         reason: reason.trim() || undefined,
         movement_type: movementType || undefined,
+        ...(godownId ? { godown_id: godownId } : {}),
       });
       toast.push(
         `Stock updated · ${response.data.name} now ${response.data.stock_on_hand}`,
@@ -140,6 +155,19 @@ export function ShopStockAdjustScreen() {
           On hand: {selected.stock_on_hand}
           {selected.sku ? ` · SKU ${selected.sku}` : ''}
         </Text>
+
+        {showGodowns && godowns.length ? (
+          <SelectField
+            label="Godown"
+            value={godownId}
+            options={godowns.map((godown) => ({
+              value: godown.id,
+              label: godown.is_default ? `${godown.name} (default)` : godown.name,
+            }))}
+            onChange={setGodownId}
+            placeholder="Select godown"
+          />
+        ) : null}
 
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Quantity change (+/-)</Text>

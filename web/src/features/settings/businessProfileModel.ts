@@ -1,5 +1,12 @@
 import type { Business, BusinessUpdateInput } from '@ie-platform/sdk';
 import { getProductName } from '../../config/products';
+import {
+  createDefaultWeeklyHours,
+  serializeWeeklyHours,
+  summarizeWeeklyHours,
+  weeklyHoursFromSettings,
+  type WeeklyHours,
+} from '../../lib/businessHours';
 
 export type BusinessProfileFormState = {
   business_name: string;
@@ -18,8 +25,7 @@ export type BusinessProfileFormState = {
   timezone: string;
   language: string;
   week_start_day: string;
-  business_hours_start: string;
-  business_hours_end: string;
+  business_hours: WeeklyHours;
   appointment_interval: number;
   default_duration: number;
   buffer_time: number;
@@ -82,8 +88,7 @@ export function createEmptyBusinessProfileFormState(): BusinessProfileFormState 
     timezone: 'UTC',
     language: 'en',
     week_start_day: 'monday',
-    business_hours_start: '09:00',
-    business_hours_end: '18:00',
+    business_hours: createDefaultWeeklyHours(),
     appointment_interval: 15,
     default_duration: 30,
     buffer_time: 0,
@@ -135,8 +140,7 @@ export function businessToFormState(
     timezone: business.timezone ?? 'UTC',
     language: business.language ?? localization.language?.toString() ?? 'en',
     week_start_day: asString(businessHours.week_start_day, 'monday'),
-    business_hours_start: asString(businessHours.start, '09:00'),
-    business_hours_end: asString(businessHours.end, '18:00'),
+    business_hours: weeklyHoursFromSettings(businessHours),
     appointment_interval: asNumber(settings.time_slot_interval, 15),
     default_duration: asNumber(durationDefaults.default_minutes, 30),
     buffer_time: asNumber(settings.buffer_time, 0),
@@ -161,11 +165,7 @@ export function formStateToBusinessUpdate(
     business_category: formState.business_type,
     time_slot_interval: formState.appointment_interval,
     buffer_time: formState.buffer_time,
-    business_hours: {
-      week_start_day: formState.week_start_day,
-      start: formState.business_hours_start,
-      end: formState.business_hours_end,
-    },
+    business_hours: serializeWeeklyHours(formState.business_hours, formState.week_start_day),
     appointment_duration_defaults: {
       default_minutes: formState.default_duration,
     },
@@ -249,10 +249,14 @@ export function buildBusinessProfileSections(formState: BusinessProfileFormState
       title: 'Operations',
       items: [
         { label: 'Week starts on', value: formState.week_start_day || 'Not provided' },
-        { label: 'Business hours', value: `${formState.business_hours_start} – ${formState.business_hours_end}` },
-        { label: 'Appointment interval', value: `${formState.appointment_interval} minutes` },
-        { label: 'Default duration', value: `${formState.default_duration} minutes` },
-        { label: 'Buffer time', value: `${formState.buffer_time} minutes` },
+        { label: 'Business hours', value: summarizeWeeklyHours(formState.business_hours) },
+        ...(formState.selected_product === 'appointie'
+          ? [
+              { label: 'Appointment interval', value: `${formState.appointment_interval} minutes` },
+              { label: 'Default duration', value: `${formState.default_duration} minutes` },
+              { label: 'Buffer time', value: `${formState.buffer_time} minutes` },
+            ]
+          : []),
       ],
     },
     {

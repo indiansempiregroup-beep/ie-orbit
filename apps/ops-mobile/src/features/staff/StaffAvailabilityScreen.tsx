@@ -5,11 +5,15 @@ import type {
   StaffLeave,
   StaffServiceAssignment,
   StaffSpecialAvailability,
+  StaffSlotBlock,
+  StaffEmergencySlot,
 } from '@ie-platform/sdk';
 import { CalendarPicker } from '../../components/CalendarPicker';
+import { DateField } from '../../components/DateField';
 import { DateTimeField } from '../../components/DateTimeField';
 import { FormScreen } from '../../components/FormScreen';
 import { SelectField } from '../../components/SelectField';
+import { TimeField } from '../../components/TimeField';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
@@ -24,7 +28,7 @@ import { getApiErrorMessage } from '../../utils/format';
 import { formatLeaveKind, leaveWindowForDay, type LeaveDayKind } from '../../utils/leaveWindows';
 import type { RootStackParamList } from '../../navigation/types';
 
-type TabKey = 'leave' | 'extra' | 'services';
+type TabKey = 'leave' | 'extra' | 'block' | 'emergency' | 'services';
 
 function hoursFromNow(hours: number) {
   const next = new Date();
@@ -80,16 +84,24 @@ export function StaffAvailabilityScreen() {
   const [tab, setTab] = useState<TabKey>('leave');
   const [leaves, setLeaves] = useState<StaffLeave[]>([]);
   const [special, setSpecial] = useState<StaffSpecialAvailability[]>([]);
+  const [blocks, setBlocks] = useState<StaffSlotBlock[]>([]);
+  const [emergencies, setEmergencies] = useState<StaffEmergencySlot[]>([]);
   const [assignments, setAssignments] = useState<StaffServiceAssignment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [showSpecialForm, setShowSpecialForm] = useState(false);
+  const [showBlockForm, setShowBlockForm] = useState(false);
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [leaveDays, setLeaveDays] = useState<string[]>(() => [todayIso()]);
   const [leaveKind, setLeaveKind] = useState<LeaveDayKind>('full_day');
   const [leaveReason, setLeaveReason] = useState('');
   const [specialStart, setSpecialStart] = useState(() => hoursFromNow(1));
   const [specialEnd, setSpecialEnd] = useState(() => hoursFromNow(4));
+  const [slotDate, setSlotDate] = useState(todayIso());
+  const [slotStart, setSlotStart] = useState('09:00');
+  const [slotEnd, setSlotEnd] = useState('09:30');
+  const [slotReason, setSlotReason] = useState('');
   const [serviceId, setServiceId] = useState('');
 
   const serviceName = useMemo(() => {
@@ -99,16 +111,20 @@ export function StaffAvailabilityScreen() {
 
   const reload = useCallback(async () => {
     if (!client || !ready || !staffId) return;
-    const [leaveRes, specialRes, assignmentRes] = await Promise.all([
+    const [leaveRes, specialRes, blockRes, emergencyRes, assignmentRes] = await Promise.all([
       client.bookings.staffLeaves.list({ staff_id: staffId, business: businessId ?? undefined }),
       client.bookings.staffSpecialAvailability.list({
         staff_id: staffId,
         business: businessId ?? undefined,
       }),
+      client.bookings.staffSlotBlocks.list({ staff_id: staffId, business: businessId ?? undefined }),
+      client.bookings.staffEmergencySlots.list({ staff_id: staffId, business: businessId ?? undefined }),
       client.staff.assignments.list({ staff: staffId }),
     ]);
     setLeaves(leaveRes.data ?? []);
     setSpecial(specialRes.data ?? []);
+    setBlocks(blockRes.data ?? []);
+    setEmergencies(emergencyRes.data ?? []);
     setAssignments(assignmentRes.data ?? []);
   }, [client, ready, staffId, businessId]);
 
@@ -176,6 +192,12 @@ export function StaffAvailabilityScreen() {
         <View style={styles.tabs}>
           <Chip label={`Leave (${upcomingLeaves.length})`} active={tab === 'leave'} onPress={() => setTab('leave')} />
           <Chip label={`Extra hours (${special.length})`} active={tab === 'extra'} onPress={() => setTab('extra')} />
+          <Chip label={`Blocked (${blocks.length})`} active={tab === 'block'} onPress={() => setTab('block')} />
+          <Chip
+            label={`Emergency (${emergencies.length})`}
+            active={tab === 'emergency'}
+            onPress={() => setTab('emergency')}
+          />
           <Chip
             label={`Services (${assignments.length})`}
             active={tab === 'services'}
@@ -399,6 +421,187 @@ export function StaffAvailabilityScreen() {
                       await reload();
                     } catch (err) {
                       setError(getApiErrorMessage(err, 'Unable to add special availability.'));
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              />
+            </FormSection>
+          ) : null}
+        </>
+      ) : null}
+
+      {tab === 'block' ? (
+        <>
+          <Card elevated>
+            <View style={styles.sectionHeader}>
+              <View style={styles.flex}>
+                <Text style={styles.section}>Blocked slots</Text>
+                <Text style={styles.help}>Remove a specific available window so customers cannot book it.</Text>
+              </View>
+              <Button
+                label={showBlockForm ? 'Close' : 'Block'}
+                variant="outline"
+                onPress={() => setShowBlockForm((value) => !value)}
+              />
+            </View>
+            {blocks.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyTitle}>No blocked slots</Text>
+                <Text style={styles.help}>Weekly schedule slots remain bookable unless blocked here.</Text>
+              </View>
+            ) : (
+              blocks.map((block) => (
+                <View key={block.id} style={styles.leaveCard}>
+                  <Text style={styles.leaveRange}>
+                    {block.date} · {block.start_time} – {block.end_time}
+                  </Text>
+                  {block.reason ? <Text style={styles.leaveReason}>{block.reason}</Text> : null}
+                  <View style={styles.leaveActions}>
+                    <Text style={styles.meta}>Blocked</Text>
+                    <Button
+                      label="Remove"
+                      variant="outline"
+                      onPress={() => {
+                        void (async () => {
+                          if (!client) return;
+                          setBusy(true);
+                          try {
+                            await client.bookings.staffSlotBlocks.delete(block.id);
+                            await reload();
+                          } catch (err) {
+                            setError(getApiErrorMessage(err, 'Unable to remove block.'));
+                          } finally {
+                            setBusy(false);
+                          }
+                        })();
+                      }}
+                    />
+                  </View>
+                </View>
+              ))
+            )}
+          </Card>
+          {showBlockForm ? (
+            <FormSection title="Block a slot" subtitle="Customers cannot book this exact window.">
+              <DateField label="Date" value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
+              <TimeField label="Start" value={slotStart} onChange={setSlotStart} />
+              <TimeField label="End" value={slotEnd} onChange={setSlotEnd} />
+              <Input label="Reason (optional)" value={slotReason} onChangeText={setSlotReason} />
+              <Button
+                label="Save block"
+                fullWidth
+                loading={busy}
+                onPress={() => {
+                  void (async () => {
+                    if (!client || !businessId) return;
+                    setBusy(true);
+                    try {
+                      await client.bookings.staffSlotBlocks.create({
+                        business: businessId,
+                        staff_id: staffId,
+                        date: slotDate,
+                        start_time: slotStart,
+                        end_time: slotEnd,
+                        reason: slotReason || undefined,
+                      });
+                      setShowBlockForm(false);
+                      setSlotReason('');
+                      await reload();
+                    } catch (err) {
+                      setError(getApiErrorMessage(err, 'Unable to block slot.'));
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              />
+            </FormSection>
+          ) : null}
+        </>
+      ) : null}
+
+      {tab === 'emergency' ? (
+        <>
+          <Card elevated>
+            <View style={styles.sectionHeader}>
+              <View style={styles.flex}>
+                <Text style={styles.section}>Emergency open slots</Text>
+                <Text style={styles.help}>Add a one-off open window on top of the weekly schedule.</Text>
+              </View>
+              <Button
+                label={showEmergencyForm ? 'Close' : 'Add'}
+                variant="outline"
+                onPress={() => setShowEmergencyForm((value) => !value)}
+              />
+            </View>
+            {emergencies.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyTitle}>No emergency slots</Text>
+                <Text style={styles.help}>Use this when you need an extra open window without replacing the day.</Text>
+              </View>
+            ) : (
+              emergencies.map((slot) => (
+                <View key={slot.id} style={styles.leaveCard}>
+                  <Text style={styles.leaveRange}>
+                    {slot.date} · {slot.start_time} – {slot.end_time}
+                  </Text>
+                  {slot.reason ? <Text style={styles.leaveReason}>{slot.reason}</Text> : null}
+                  <View style={styles.leaveActions}>
+                    <Text style={styles.meta}>Open</Text>
+                    <Button
+                      label="Remove"
+                      variant="outline"
+                      onPress={() => {
+                        void (async () => {
+                          if (!client) return;
+                          setBusy(true);
+                          try {
+                            await client.bookings.staffEmergencySlots.delete(slot.id);
+                            await reload();
+                          } catch (err) {
+                            setError(getApiErrorMessage(err, 'Unable to remove emergency slot.'));
+                          } finally {
+                            setBusy(false);
+                          }
+                        })();
+                      }}
+                    />
+                  </View>
+                </View>
+              ))
+            )}
+          </Card>
+          {showEmergencyForm ? (
+            <FormSection title="Add emergency open" subtitle="Adds bookable time without replacing the weekly day.">
+              <DateField label="Date" value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
+              <TimeField label="Start" value={slotStart} onChange={setSlotStart} />
+              <TimeField label="End" value={slotEnd} onChange={setSlotEnd} />
+              <Input label="Reason (optional)" value={slotReason} onChangeText={setSlotReason} />
+              <Button
+                label="Save emergency slot"
+                fullWidth
+                loading={busy}
+                onPress={() => {
+                  void (async () => {
+                    if (!client || !businessId) return;
+                    setBusy(true);
+                    try {
+                      await client.bookings.staffEmergencySlots.create({
+                        business: businessId,
+                        staff_id: staffId,
+                        date: slotDate,
+                        start_time: slotStart,
+                        end_time: slotEnd,
+                        capacity: 1,
+                        reason: slotReason || undefined,
+                      });
+                      setShowEmergencyForm(false);
+                      setSlotReason('');
+                      await reload();
+                    } catch (err) {
+                      setError(getApiErrorMessage(err, 'Unable to add emergency slot.'));
                     } finally {
                       setBusy(false);
                     }

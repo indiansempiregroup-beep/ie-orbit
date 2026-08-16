@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { CommonActions, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { ShopBarcodeEnrichment, ShopProduct } from '@ie-platform/sdk';
+import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-platform/sdk';
 import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-platform/sdk';
 import type { IEPlatformClient } from '@ie-platform/sdk';
 import { createScopedClient } from '../../api/client';
@@ -24,6 +24,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadProductImage } from '../../api/media';
 import { FormScreen } from '../../components/FormScreen';
+import { HtmlEditorField } from '../../components/HtmlEditorField';
+import { RemoteImage } from '../../components/RemoteImage';
 import { Button } from '../../components/ui/Button';
 import { SelectField } from '../../components/SelectField';
 import { CURRENCIES } from '../../constants/options';
@@ -41,6 +43,8 @@ import {
   toStoredProductImageUrl,
 } from './productImages';
 import { queuePosAddProductId } from './posSession';
+import { usePlanFeatures } from '../../hooks/useOpsExtended';
+import { PlanFeature } from '../../utils/planFeatures';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopProductAdd'>;
 
@@ -49,6 +53,7 @@ const emptyForm = {
   name: '',
   brand: '',
   description: '',
+  details_html: '',
   price: '0',
   tax_rate: '0',
   tax_inclusive: 'excluded' as 'included' | 'excluded',
@@ -105,6 +110,16 @@ function applyEnrichment(
   };
 }
 
+function pickGodownId(godowns: ShopGodown[], productId?: string) {
+  if (productId) {
+    const holding = godowns.find((godown) =>
+      (godown.stocks ?? []).some((row) => row.product === productId && Number(row.quantity) > 0),
+    );
+    if (holding) return holding.id;
+  }
+  return godowns.find((godown) => godown.is_default)?.id || godowns[0]?.id || '';
+}
+
 function formFromProduct(product: ShopProduct): FormState {
   const primaryBarcode = product.barcodes?.find((row) => row.is_primary) || product.barcodes?.[0];
   const meta = product.metadata && typeof product.metadata === 'object' ? product.metadata : {};
@@ -117,6 +132,7 @@ function formFromProduct(product: ShopProduct): FormState {
     name: product.name || '',
     brand: product.brand || '',
     description: product.description || '',
+    details_html: product.details_html || '',
     price: String(product.price ?? '0'),
     tax_rate: String(product.tax_rate ?? product.gst_rate ?? '0'),
     tax_inclusive: taxInclusive ? 'included' : 'excluded',
@@ -139,9 +155,13 @@ export function ShopProductAddScreen() {
   const toast = useToast();
   const { businessId, tenantId } = useWorkspace();
   const { token, ensureFreshAccess } = useAuth();
+  const { has } = usePlanFeatures();
+  const showGodowns = has(PlanFeature.shopieBooksGodowns);
   const productId = route.params?.productId;
   const isEditing = Boolean(productId);
   const [form, setForm] = useState(emptyForm);
+  const [godowns, setGodowns] = useState<ShopGodown[]>([]);
+  const [godownId, setGodownId] = useState('');
   const [nameLookup, setNameLookup] = useState('');
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -181,6 +201,23 @@ export function ShopProductAddScreen() {
       }
     })();
   }, [client, productId]);
+
+  useEffect(() => {
+    if (!client || !businessId || !showGodowns) {
+      setGodowns([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const response = await client.shop.listGodowns({ business_id: businessId });
+        const rows = response.data ?? [];
+        setGodowns(rows);
+        setGodownId((current) => current || pickGodownId(rows, productId));
+      } catch {
+        setGodowns([]);
+      }
+    })();
+  }, [client, businessId, showGodowns, productId]);
 
   useEffect(() => {
     const code = route.params?.enrichCode;
@@ -247,6 +284,12 @@ export function ShopProductAddScreen() {
   }
 
   async function captureAt(index: number) {
+    // RN Alert.alert buttons never fire on web, and a delayed picker call is
+    // blocked by the browser (file inputs must open from a user gesture).
+    if (Platform.OS === 'web') {
+      await pickAt(index, 'library');
+      return;
+    }
     Alert.alert(productImageSlotLabel(index), 'Choose a source', [
       {
         text: 'Camera',
@@ -261,34 +304,31 @@ export function ShopProductAddScreen() {
   }
 
   async function pickAt(index: number, source: 'camera' | 'library') {
-    if (source === 'camera') {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        setMessage('Camera permission is required to photograph the product.');
-        return;
-      }
-    } else {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        setMessage('Photo library permission is required.');
-        return;
+    if (Platform.OS !== 'web') {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setMessage('Camera permission is required to photograph the product.');
+          return;
+        }
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          setMessage('Photo library permission is required.');
+          return;
+        }
       }
     }
 
+    const pickerOptions = {
+      mediaTypes: ['images'] as const,
+      quality: 0.85,
+      ...(Platform.OS === 'web' ? {} : { allowsEditing: true as const, aspect: [3, 4] as [number, number] }),
+    };
     const result =
       source === 'camera'
-        ? await ImagePicker.launchCameraAsync({
-            mediaTypes: ['images'],
-            quality: 0.85,
-            allowsEditing: true,
-            aspect: [3, 4],
-          })
-        : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            quality: 0.85,
-            allowsEditing: true,
-            aspect: [3, 4],
-          });
+        ? await ImagePicker.launchCameraAsync(pickerOptions)
+        : await ImagePicker.launchImageLibraryAsync(pickerOptions);
     if (result.canceled || !result.assets[0]) return;
 
     const asset = result.assets[0];
@@ -466,11 +506,13 @@ export function ShopProductAddScreen() {
       name: form.name.trim(),
       brand: form.brand,
       description: form.description,
+      details_html: form.details_html,
       price: form.price,
       tax_rate: form.tax_rate,
       gst_rate: form.tax_rate,
       currency: form.currency,
       stock_on_hand: form.stock_on_hand,
+      ...(godownId ? { godown_id: godownId } : {}),
       low_stock_threshold: form.low_stock_threshold,
       pack_size: form.pack_size,
       ...(gallery[0] ? { image_url: gallery[0] } : { image_url: '' }),
@@ -548,7 +590,7 @@ export function ShopProductAddScreen() {
             <View key={index} style={styles.photoCard}>
               <Pressable onPress={() => void captureAt(index)} disabled={busy}>
                 {preview ? (
-                  <Image source={{ uri: resolveMediaUrl(preview) || preview }} style={styles.photo} />
+                  <RemoteImage uri={resolveMediaUrl(preview) || preview} style={styles.photo} />
                 ) : (
                   <View style={styles.photoPlaceholder}>
                     <Feather name="camera" size={20} color={colors.mutedForeground} />
@@ -642,6 +684,19 @@ export function ShopProductAddScreen() {
         </View>
       ))}
 
+      {showGodowns && godowns.length ? (
+        <SelectField
+          label={isEditing ? 'Godown for stock changes' : 'Stock godown'}
+          value={godownId}
+          options={godowns.map((godown) => ({
+            value: godown.id,
+            label: godown.is_default ? `${godown.name} (default)` : godown.name,
+          }))}
+          onChange={setGodownId}
+          placeholder="Select godown"
+        />
+      ) : null}
+
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>GST on price</Text>
         <View style={styles.chips}>
@@ -701,6 +756,12 @@ export function ShopProductAddScreen() {
           multiline
         />
       </View>
+
+      <HtmlEditorField
+        label="Product details"
+        value={form.details_html}
+        onChange={(value) => setField('details_html', value)}
+      />
 
       <Text style={styles.fieldLabel}>Barcode type</Text>
       <View style={styles.chips}>

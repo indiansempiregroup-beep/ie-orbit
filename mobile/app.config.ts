@@ -46,6 +46,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: selectedFlavor?.bundleIdAndroid ?? 'com.ieplatform.mobile.dev',
+    softwareKeyboardLayoutMode: 'resize',
   },
   extra: {
     flavorKey,

@@ -23,6 +23,7 @@ import { MyReturnsScreen } from '../features/shop/MyReturnsScreen';
 import { ReturnDetailScreen } from '../features/shop/ReturnDetailScreen';
 import { MyPetsScreen } from '../features/pets/MyPetsScreen';
 import { PetDetailScreen } from '../features/pets/PetDetailScreen';
+import { PetFormScreen } from '../features/pets/PetFormScreen';
 import {
   ChangePasswordScreen,
   HelpArticleScreen,
@@ -90,6 +91,7 @@ export function RootNavigator() {
             <Stack.Screen name="ReturnDetail" component={ReturnDetailScreen} />
             <Stack.Screen name="MyPets" component={MyPetsScreen} />
             <Stack.Screen name="PetDetail" component={PetDetailScreen} />
+            <Stack.Screen name="PetForm" component={PetFormScreen} />
             <Stack.Screen
               name="ProfileEdit"
               component={ProfileEditScreen}

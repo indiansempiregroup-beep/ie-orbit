@@ -74,7 +74,9 @@ def test_password_reset_flow(api_client: APIClient, user: User) -> None:
 
     assert forgot_response.status_code == 200
     assert mail.outbox
-    token = mail.outbox[-1].body.rsplit(" ", maxsplit=1)[-1]
+    message = mail.outbox[-1].body
+    assert "/auth/reset-password?token=" in message
+    token = message.rsplit(" ", maxsplit=1)[-1]
 
     reset_response = api_client.post(
         reverse("auth-reset-password"),
@@ -151,6 +153,21 @@ def test_resend_verification_by_email_without_auth(api_client: APIClient, user: 
     assert response.json()["data"]["sent"] is True
     assert mail.outbox
     assert re.search(r"Verification code: \d{6}", mail.outbox[-1].body)
+
+
+@pytest.mark.django_db
+def test_resend_verification_invalid_jwt_falls_back_to_email(api_client: APIClient, user: User) -> None:
+    api_client.credentials(HTTP_AUTHORIZATION="Bearer not-a-valid-token")
+    response = api_client.post(
+        reverse("auth-resend-verification"),
+        {"email": user.email},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["sent"] is True
+    assert mail.outbox
+    assert "IE Platform" in mail.outbox[-1].subject
 
 
 @pytest.mark.django_db

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -12,6 +13,8 @@ from apps.authentication.emails.verification_email import build_verification_ema
 from apps.authentication.models import EmailVerificationToken, User
 from apps.authentication.security.tokens import generate_otp_code, hash_token
 from apps.authentication.services.audit import SecurityAuditService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -33,14 +36,19 @@ class EmailVerificationService:
             + timedelta(minutes=settings.IAM_SETTINGS["EMAIL_VERIFICATION_TOKEN_MINUTES"]),
         )
         email_content = build_verification_email(user=user, token=token)
-        send_mail(
-            subject=email_content.subject,
-            message=email_content.plain_text,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=email_content.html,
-            fail_silently=True,
-        )
+        try:
+            send_mail(
+                subject=email_content.subject,
+                message=email_content.plain_text,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                html_message=email_content.html,
+                fail_silently=False,
+            )
+        except Exception:
+            logger.exception("Failed to send verification email to %s", user.email)
+            if not settings.DEBUG:
+                raise
         return VerificationRequest(token=token, user=user)
 
     def verify(self, *, token: str) -> User:

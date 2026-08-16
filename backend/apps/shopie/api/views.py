@@ -269,6 +269,7 @@ class ShopStockAdjustView(APIView):
                 quantity_delta=serializer.validated_data["quantity_delta"],
                 movement_type=serializer.validated_data.get("movement_type") or "adjust",
                 reason=serializer.validated_data.get("reason") or "",
+                godown_id=serializer.validated_data.get("godown_id"),
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
@@ -348,6 +349,8 @@ class ShopOrderListCreateView(APIView):
                 bill_discount_type=data.get("bill_discount_type") or "",
                 bill_discount_value=data.get("bill_discount_value") or 0,
                 payment_method=data.get("payment_method") or "",
+                coupon_code=data.get("coupon_code") or "",
+                points_to_redeem=int(data.get("points_to_redeem") or 0),
                 metadata_extra=metadata_extra or None,
             )
         except DjangoValidationError as exc:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, time as dt_time
 from typing import Any
 
 from django.db import transaction
@@ -27,6 +28,30 @@ ACTIVE_SUBSCRIPTION_STATUSES = {
     BusinessProductSubscriptionStatus.ACTIVE,
     BusinessProductSubscriptionStatus.SOFT_LOCKED,
 }
+
+WEEKDAY_NAMES = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
+
+
+def _parse_clock(value: object, fallback: dt_time) -> dt_time:
+    if isinstance(value, dt_time):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    return fallback
 
 
 def _actor_can_force_immediate_plan_change(actor: Any) -> bool:
@@ -68,6 +93,15 @@ class BusinessService:
     ) -> Business:
         profile_data = data.pop("profile", None)
         settings_data = data.pop("settings", None)
+        plan_code = data.pop("plan_code", None)
+        plan_codes = data.pop("plan_codes", None) or {}
+        selected_products = data.pop("selected_products", None) or []
+        if isinstance(plan_code, str):
+            plan_code = plan_code.strip() or None
+        else:
+            plan_code = None
+        if not isinstance(plan_codes, dict):
+            plan_codes = {}
         business = Business(
             tenant=tenant,
             organization=data.pop("organization", None) or organization,
@@ -85,12 +119,26 @@ class BusinessService:
             self.update_profile(business=business, data=profile_data)
         if isinstance(settings_data, dict):
             self.update_settings(business=business, data=settings_data)
-        if business.selected_product:
+        products = [
+            str(code).strip().lower()
+            for code in selected_products
+            if str(code).strip()
+        ]
+        if business.selected_product and business.selected_product not in products:
+            products.insert(0, business.selected_product)
+        primary = business.selected_product or (products[0] if products else "")
+        for product_code in products:
+            resolved_plan = None
+            if isinstance(plan_codes.get(product_code), str):
+                resolved_plan = str(plan_codes.get(product_code) or "").strip() or None
+            if not resolved_plan and product_code == primary:
+                resolved_plan = plan_code
             self.subscribe_to_product(
                 business=business,
-                product_code=business.selected_product,
+                product_code=product_code,
                 actor=actor,
-                set_active=True,
+                set_active=product_code == primary,
+                plan_code=resolved_plan,
             )
         logger.info(
             "Business created",
@@ -179,7 +227,45 @@ class BusinessService:
             setattr(settings, field, value)
         settings.full_clean()
         settings.save()
+        self._sync_weekly_hours_from_settings(business=business, settings=settings)
         return settings
+
+    def _sync_weekly_hours_from_settings(self, *, business: Business, settings: BusinessSettings) -> None:
+        hours = settings.business_hours if isinstance(settings.business_hours, dict) else {}
+        days = hours.get("days")
+        if not isinstance(days, dict) or not days:
+            return
+
+        from apps.bookings.models import BusinessSchedule, BusinessWeeklySchedule
+
+        schedule = (
+            BusinessSchedule.objects.filter(tenant=business.tenant, business=business, is_default=True)
+            .order_by("created_at")
+            .first()
+        )
+        if schedule is None:
+            schedule = BusinessSchedule.objects.create(
+                tenant=business.tenant,
+                business=business,
+                name="Default",
+                timezone=business.timezone or "UTC",
+                is_default=True,
+            )
+        for weekday, name in enumerate(WEEKDAY_NAMES):
+            day = days.get(name)
+            if not isinstance(day, dict):
+                continue
+            BusinessWeeklySchedule.objects.update_or_create(
+                tenant=business.tenant,
+                schedule=schedule,
+                weekday=weekday,
+                defaults={
+                    "business": business,
+                    "is_open": bool(day.get("open")),
+                    "opening_time": _parse_clock(day.get("start"), dt_time(9, 0)),
+                    "closing_time": _parse_clock(day.get("end"), dt_time(18, 0)),
+                },
+            )
 
     def has_active_subscription(self, *, business: Business, product_code: str) -> bool:
         return business.product_subscriptions.filter(

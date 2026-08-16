@@ -9,6 +9,11 @@ const FIELD_LABELS: Record<string, string> = {
   business_email: 'Business email',
   business_name: 'Business name',
   phone_number: 'Mobile',
+  affiliate_code: 'Affiliate code',
+  selected_product: 'Product',
+  selected_products: 'Products',
+  plan_code: 'Package',
+  plan_codes: 'Packages',
   primary_color: 'Primary color',
   secondary_color: 'Secondary color',
 };

@@ -19,6 +19,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { PlatformTenantSummary } from '@ie-platform/sdk';
 import { voucherStatusStyle } from '../shop/shopBooksHelpers';
 import { shopListRefreshControl } from '../shop/shopRefreshControl';
+import { getProductName } from '../../utils/products';
 
 export function PlatformAdminTenantsScreen() {
   const insets = useSafeAreaInsets();
@@ -62,6 +63,13 @@ export function PlatformAdminTenantsScreen() {
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
             const badge = voucherStatusStyle(item.status);
+            const products = item.products?.length
+              ? item.products
+                  .map((product) => `${getProductName(product.product_code)} ${product.plan_code || ''}`.trim())
+                  .join(' · ')
+              : item.plan_code
+                ? `${item.product_code ? getProductName(item.product_code) : ''} ${item.plan_code}`.trim()
+                : '';
             return (
               <Pressable
                 style={styles.row}
@@ -76,6 +84,7 @@ export function PlatformAdminTenantsScreen() {
                 <Text style={styles.meta}>
                   {item.slug} · {item.business_count} business{item.business_count === 1 ? '' : 'es'}
                 </Text>
+                {products ? <Text style={styles.meta}>{products}</Text> : null}
               </Pressable>
             );
           }}

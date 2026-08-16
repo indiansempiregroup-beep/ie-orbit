@@ -6,6 +6,7 @@ import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { Button } from '../../components/ui/Button';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import type { AuthStackParamList } from '../../navigation/types';
 
@@ -13,6 +14,7 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'VerifyEmail'>;
 
 export function VerifyEmailScreen({ navigation, route }: Props) {
   const { branding } = useBootstrap();
+  const { headerPaddingTop } = useScreenInsets();
   const { user, refreshProfile, logout } = useAuth();
   const primary = branding?.primaryColor ?? colors.primary;
   const email = route.params?.email || user?.email || '';
@@ -54,8 +56,13 @@ export function VerifyEmailScreen({ navigation, route }: Props) {
     if (resendCooldown > 0) return;
     setError('');
     try {
-      await mobileClient.auth.resendVerification({ email });
-      setResendMessage('A new verification code was sent to your email.');
+      const response = await mobileClient.auth.resendVerification({ email });
+      const debugToken = response.data.debug_token;
+      setResendMessage(
+        debugToken
+          ? `A new verification code was sent. Local code: ${debugToken}`
+          : 'A new verification code was sent to your email.',
+      );
       setResendCooldown(30);
       const timer = setInterval(() => {
         setResendCooldown((value) => {
@@ -72,7 +79,7 @@ export function VerifyEmailScreen({ navigation, route }: Props) {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: headerPaddingTop }]}>
       <View style={styles.iconWrap}>
         <Feather name="smartphone" size={28} color={primary} />
       </View>
@@ -132,7 +139,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     padding: spacing.xxl,
-    paddingTop: 72,
     alignItems: 'center',
   },
   iconWrap: {

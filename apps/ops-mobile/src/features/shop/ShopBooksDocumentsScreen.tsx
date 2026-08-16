@@ -18,6 +18,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
+import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -313,16 +314,7 @@ export function ShopBooksDocumentsScreen() {
           searchable
         />
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Date</Text>
-          <TextInput
-            style={styles.input}
-            value={documentDate}
-            onChangeText={setDocumentDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <DateField label="Date" value={documentDate} onChange={setDocumentDate} allowClear={false} />
 
         <Text style={styles.section}>Items</Text>
         {lines.map((line) => (
@@ -476,7 +468,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.tint,
   },
   formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
-  fieldBlock: { gap: 6 },
   row: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -497,7 +488,6 @@ const styles = StyleSheet.create({
   convertText: { color: colors.primary, fontSize: 13, fontWeight: '700' },
   convertDisabled: { opacity: 0.5 },
   error: { color: colors.destructive, marginBottom: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
   smallLabel: { ...typography.caption, color: colors.mutedForeground, marginBottom: 4 },
   section: {
     fontFamily: fonts.bodyMedium,

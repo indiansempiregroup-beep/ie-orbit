@@ -17,6 +17,7 @@ from apps.businesses.constants import (
     DEFAULT_PRODUCT_CODE,
     FEATURE_APPOINTIE_BOOKINGS,
     FEATURE_REWARD_POINTS,
+    FEATURE_SHOPIE_LOYALTY,
     PLAN_FEATURES_FULL,
     PLAN_FEATURES_LIMITED,
     get_default_plan_code,
@@ -31,6 +32,34 @@ from apps.businesses.models import (
     BusinessProductSubscriptionStatus,
 )
 from apps.staff.models import EmploymentStatus, Staff
+
+_COMPLIMENTARY_PREFIX = "comp:"
+_PRODUCT_SORT_ORDER = {"appointie": 0, "shopie": 1}
+
+
+def subscription_billing_state(subscription: BusinessProductSubscription | None) -> str:
+    if subscription is None:
+        return "none"
+    if subscription.status == BusinessProductSubscriptionStatus.SOFT_LOCKED:
+        return "soft_locked"
+    if str(subscription.external_billing_reference or "").startswith(_COMPLIMENTARY_PREFIX):
+        return "complimentary"
+    if subscription.status == BusinessProductSubscriptionStatus.TRIALING:
+        return "trialing"
+    if subscription.status == BusinessProductSubscriptionStatus.ACTIVE:
+        return "paying"
+    if subscription.status == BusinessProductSubscriptionStatus.CANCELED:
+        return "canceled"
+    return str(subscription.status or "none")
+
+
+def ordered_product_subscriptions(
+    subscriptions: list[BusinessProductSubscription],
+) -> list[BusinessProductSubscription]:
+    return sorted(
+        subscriptions,
+        key=lambda item: (_PRODUCT_SORT_ORDER.get(item.product_code, 9), item.product_code),
+    )
 
 
 @dataclass(frozen=True)
@@ -55,6 +84,10 @@ class PlanEntitlements:
     @property
     def has_reward_points(self) -> bool:
         return FEATURE_REWARD_POINTS in self.features
+
+    @property
+    def has_loyalty_program(self) -> bool:
+        return FEATURE_REWARD_POINTS in self.features or FEATURE_SHOPIE_LOYALTY in self.features
 
     @property
     def effective_max_staff(self) -> int:
@@ -433,17 +466,49 @@ class EntitlementService:
                 f"'{feature}' analytics require AppointIE Pro. Upgrade to unlock full BI."
             )
 
-    def ensure_reward_points(self, *, business: Business) -> None:
-        entitlements = self.resolve(business=business)
-        if not entitlements.has_reward_points:
-            raise PermissionDenied(
-                "Reward points require AppointIE Pro. Upgrade to unlock this feature."
-            )
-        if entitlements.soft_locked:
+    def loyalty_program_access(self, *, business: Business) -> tuple[bool, bool]:
+        """Return (entitled_and_unlocked, soft_locked) across product subscriptions."""
+        subscriptions = [
+            item
+            for item in business.product_subscriptions.all()
+            if item.status != BusinessProductSubscriptionStatus.CANCELED
+        ]
+        if not subscriptions:
+            entitlements = self.resolve(business=business)
+            locked = entitlements.soft_locked
+            return entitlements.has_loyalty_program and not locked, locked
+
+        unlocked = False
+        locked = False
+        for subscription in subscriptions:
+            entitlements = self.resolve(business=business, product_code=subscription.product_code)
+            if not entitlements.has_loyalty_program:
+                continue
+            if entitlements.soft_locked:
+                locked = True
+            else:
+                unlocked = True
+        if unlocked:
+            return True, False
+        if locked:
+            return False, True
+        return False, False
+
+    def ensure_loyalty_program(self, *, business: Business) -> None:
+        entitled, locked = self.loyalty_program_access(business=business)
+        if locked:
             raise PermissionDenied(
                 "Your plan period has ended or your trial expired. "
                 "Renew or upgrade from billing settings to use reward points."
             )
+        if not entitled:
+            raise PermissionDenied(
+                "Reward points are not included in the current plan. "
+                "Upgrade or ask your platform admin to enable them."
+            )
+
+    def ensure_reward_points(self, *, business: Business) -> None:
+        self.ensure_loyalty_program(business=business)
 
     def ensure_can_downgrade(
         self,
@@ -526,5 +591,14 @@ class EntitlementService:
             used_branches=self.count_active_branches(business=business),
             pending=pending,
         )
+        payload["product_code"] = product_code.strip().lower() or DEFAULT_PRODUCT_CODE
+        payload["billing_state"] = subscription_billing_state(subscription)
         payload["entitled_features"] = self.entitled_features(business=business)
         return payload
+
+    def billing_snapshots(self, *, business: Business) -> list[dict[str, Any]]:
+        subscriptions = ordered_product_subscriptions(list(business.product_subscriptions.all()))
+        return [
+            self.billing_snapshot(business=business, product_code=subscription.product_code)
+            for subscription in subscriptions
+        ]

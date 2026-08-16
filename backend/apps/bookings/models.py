@@ -214,6 +214,53 @@ class StaffSpecialAvailability(TenantModel):
         db_table = "staff_special_availability"
 
 
+class StaffSlotBlock(TenantModel):
+    """Blocks a staff time range on a calendar date (subtracted from availability)."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business", on_delete=models.CASCADE, related_name="staff_slot_blocks"
+    )
+    staff_id = models.UUIDField(db_index=True)
+    date = models.DateField(db_index=True)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    reason = models.TextField(blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "staff_slot_blocks"
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "staff_id", "date"]),
+        ]
+
+
+class StaffEmergencySlot(TenantModel):
+    """Adds an extra open window on a date without replacing weekly/special availability."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business", on_delete=models.CASCADE, related_name="staff_emergency_slots"
+    )
+    staff_id = models.UUIDField(db_index=True)
+    date = models.DateField(db_index=True)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    capacity = models.PositiveIntegerField(default=1)
+    reason = models.TextField(blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "staff_emergency_slots"
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "staff_id", "date"]),
+        ]
+
+
 class Booking(TenantModel):
     objects = TenantAwareManager()
     active_objects = TenantAwareManager()

@@ -42,11 +42,17 @@ class CustomerDirectNotifier:
         channels: list[str] | None = None,
         event_type: str = "CustomerDirectMessage",
         metadata: dict[str, Any] | None = None,
+        extra_html: str = "",
+        cta_label: str = "",
+        cta_url: str = "",
     ) -> dict[str, Any]:
+        from apps.notifications.services.branding import business_email_brand
+
         wanted = {str(c).strip().lower() for c in (channels or ["in_app", "email"]) if str(c).strip()}
         user = self._resolve_user(customer)
         sent_channels: list[str] = []
         notification_ids: list[str] = []
+        brand = business_email_brand(business)
         meta = {
             "event_type": event_type,
             "audience": "customer",
@@ -93,7 +99,14 @@ class CustomerDirectNotifier:
                     result = self.email_provider.send(
                         template=SimpleNamespace(subject=subject, body=body),
                         recipient=recipient,
-                        context={"subject": subject, "body": body},
+                        context={
+                            "subject": subject,
+                            "body": body,
+                            "extra_html": extra_html,
+                            "cta_label": cta_label,
+                            "cta_url": cta_url,
+                            **brand,
+                        },
                     )
                     notification.status = NotificationStatus.SENT
                     notification.external_id = str(result.get("provider") or "email")
@@ -165,6 +178,8 @@ class CustomerDirectNotifier:
                     "event_type": event_type,
                     "audience": "customer",
                     "pet_id": str((notification.metadata or {}).get("pet_id") or ""),
+                    "order_id": str((notification.metadata or {}).get("order_id") or ""),
+                    "return_id": str((notification.metadata or {}).get("return_id") or ""),
                 },
             )
         except Exception:

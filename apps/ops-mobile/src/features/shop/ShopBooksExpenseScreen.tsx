@@ -18,12 +18,13 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
+import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksVoucher, ShopCashAccount } from '@ie-platform/sdk';
 import {
@@ -267,16 +268,7 @@ export function ShopBooksExpenseScreen() {
           onChange={setCashAccountId}
         />
 
-        <View style={styles.row}>
-          <Text style={styles.label}>Date</Text>
-          <TextInput
-            style={styles.input}
-            value={voucherDate}
-            onChangeText={setVoucherDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <DateField label="Date" value={voucherDate} onChange={setVoucherDate} allowClear={false} />
 
         <TextInput
           style={[styles.input, styles.notes]}
@@ -397,7 +389,6 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
   voidText: { color: colors.destructive, fontSize: 13, fontWeight: '700' },
   error: { color: colors.destructive, marginBottom: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

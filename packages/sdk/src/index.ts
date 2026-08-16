@@ -298,6 +298,8 @@ export type BillingPlanCatalogItem = {
 };
 
 export type BusinessBillingSnapshot = {
+  product_code?: string;
+  billing_state?: string;
   plan_code: string;
   status: string;
   billing_interval: string;
@@ -642,6 +644,8 @@ export type MobileNotificationItem = {
   updated_at?: string;
   booking_id?: string | null;
   pet_id?: string | null;
+  order_id?: string | null;
+  return_id?: string | null;
   notification_type?: string;
 };
 
@@ -676,6 +680,7 @@ export type MobileLoyaltyProgram = {
   points_per_currency_unit: number;
   max_redeem_percent: number;
   min_redeem_points: number;
+  earn_points_per_100?: number;
   currency: string;
 };
 
@@ -688,6 +693,8 @@ export type MobileLoyaltyBalance = {
     points_delta: number;
     reason: string;
     booking_id?: string | null;
+    order_id?: string | null;
+    voucher_id?: string | null;
     created_at: string;
   }>;
 };
@@ -832,6 +839,7 @@ export type MobileBootstrapResponse = {
   branding: MobileBootstrapBranding;
   enabled_products: string[];
   features: Record<string, boolean>;
+  loyalty?: MobileLoyaltyProgram;
   build_metadata?: Record<string, unknown>;
 };
 
@@ -860,20 +868,40 @@ export type WhiteLabelProfile = {
   updated_at?: string;
 };
 
+export type PlatformTenantProductSummary = {
+  product_code: string;
+  plan_code?: string | null;
+  billing_state?: string;
+};
+
 export type PlatformTenantSummary = {
   id: string;
   slug: string;
   display_name: string;
   status: string;
+  owner_email?: string | null;
   business_count: number;
   primary_color: string;
   created_at: string;
   billing_state?: string;
   plan_code?: string | null;
   product_code?: string | null;
+  products?: PlatformTenantProductSummary[];
   last_paid_at?: string | null;
   last_paid_paise?: number | null;
   pending_claims?: number;
+};
+
+export type PlatformTenantBusiness = {
+  id: string;
+  business_code: string;
+  display_name: string;
+  status: string;
+  selected_product?: string;
+  has_white_label_profile: boolean;
+  flavor_key?: string | null;
+  billing?: BusinessBillingSnapshot;
+  billings?: BusinessBillingSnapshot[];
 };
 
 export type PlatformTenantDetail = {
@@ -881,16 +909,7 @@ export type PlatformTenantDetail = {
   slug: string;
   display_name: string;
   status: string;
-  businesses: Array<{
-    id: string;
-    business_code: string;
-    display_name: string;
-    status: string;
-    selected_product?: string;
-    has_white_label_profile: boolean;
-    flavor_key?: string | null;
-    billing?: Record<string, unknown>;
-  }>;
+  businesses: PlatformTenantBusiness[];
 };
 
 export type PlatformAuditEvent = {
@@ -951,6 +970,68 @@ export type PlatformPlanPackage = {
   is_public: boolean;
   sort_order: number;
   metadata?: Record<string, unknown>;
+};
+
+export type PlatformAffiliateCode = {
+  id: string;
+  affiliate_id: string;
+  code: string;
+  is_active: boolean;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type PlatformAffiliate = {
+  id: string;
+  affiliate_type: 'tenant' | 'partner' | string;
+  tenant_id?: string | null;
+  name: string;
+  email: string;
+  status: string;
+  payout_method?: 'upi' | 'bank' | 'other' | string;
+  upi_vpa?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  bank_ifsc?: string;
+  payout_notes?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  codes?: PlatformAffiliateCode[];
+};
+
+export type PlatformAffiliateReferral = {
+  id: string;
+  affiliate_id: string;
+  referred_tenant_id: string;
+  affiliate_code_id?: string | null;
+  starts_at?: string;
+  months: number;
+  status: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type PlatformAffiliateAccrual = {
+  id: string;
+  referral_id: string;
+  period_yyyy_mm: string;
+  amount_paise: number;
+  benefit_type: 'credit' | 'payout' | string;
+  status: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type PlatformAffiliatePayout = {
+  id: string;
+  affiliate_id: string;
+  amount_paise: number;
+  status: string;
+  payment_ref?: string;
+  notes?: string;
+  accrual_id?: string | null;
+  created_at?: string;
 };
 
 export type PlatformPlanPackageUpsertInput = {
@@ -1399,6 +1480,16 @@ export function guessShopProductCategory(raw?: string | null): ShopProductCatego
   return 'other';
 }
 
+export type ShopProductReview = {
+  id: string;
+  rating: number;
+  title?: string;
+  comment?: string;
+  reviewer_name: string;
+  verified_purchase?: boolean;
+  created_at: string;
+};
+
 export type ShopProduct = {
   id: string;
   business: string;
@@ -1406,6 +1497,7 @@ export type ShopProduct = {
   name: string;
   brand?: string;
   description?: string;
+  details_html?: string;
   status: string;
   price: string | number;
   tax_rate?: string | number;
@@ -1420,6 +1512,13 @@ export type ShopProduct = {
   category?: ShopProductCategory | string;
   metadata?: Record<string, unknown>;
   barcodes?: ShopProductBarcode[];
+  rating_avg?: number | null;
+  rating_count?: number;
+  rating_breakdown?: Record<string, number>;
+  reviews?: ShopProductReview[];
+  can_review?: boolean;
+  has_purchased?: boolean;
+  my_review?: ShopProductReview | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -1430,6 +1529,7 @@ export type ShopProductWriteInput = {
   name: string;
   brand?: string;
   description?: string;
+  details_html?: string;
   status?: string;
   price?: string | number;
   tax_rate?: string | number;
@@ -1437,6 +1537,7 @@ export type ShopProductWriteInput = {
   hsn_sac?: string;
   currency?: string;
   stock_on_hand?: string | number;
+  godown_id?: string | null;
   low_stock_threshold?: string | number;
   pack_size?: string;
   image_url?: string;
@@ -1487,6 +1588,7 @@ export type ShopOrderLine = {
   id: string;
   product: string;
   product_name: string;
+  product_image_url?: string;
   barcode_scanned?: string;
   quantity: string | number;
   unit_price: string | number;
@@ -1520,6 +1622,9 @@ export type ShopOrder = {
   payment_proof_url?: string;
   upi_pay_url?: string;
   delivery_fee?: string | number;
+  coupon_code?: string;
+  coupon_name?: string;
+  coupon_discount?: string | number;
   lines?: ShopOrderLine[];
   created_at?: string;
   updated_at?: string;
@@ -1539,6 +1644,8 @@ export type ShopOrderCreateInput = {
   bill_discount_type?: '' | 'percent' | 'amount' | string;
   bill_discount_value?: string | number;
   payment_method?: '' | 'cash' | 'upi' | 'card' | 'borrow' | string;
+  coupon_code?: string;
+  points_to_redeem?: number;
   lines: Array<{
     product_id: string;
     quantity?: string | number;
@@ -1565,6 +1672,8 @@ export type ShopReturn = {
   credit_invoice?: string | null;
   line_items?: unknown[];
   metadata?: Record<string, unknown>;
+  refund_mode?: string;
+  refund_instruction?: string;
   created_at?: string;
   updated_at?: string;
 };
@@ -1750,6 +1859,124 @@ export type ShopSupplierWriteInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type ShopCoupon = {
+  id: string;
+  business: string;
+  code: string;
+  name: string;
+  description?: string;
+  discount_type: 'percent' | 'amount' | string;
+  discount_value: string | number;
+  min_order_total?: string | number;
+  max_discount_amount?: string | number | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  max_redemptions?: number | null;
+  max_redemptions_per_customer?: number | null;
+  first_order_only?: boolean;
+  redemption_count?: number;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopCouponWriteInput = {
+  business_id: string;
+  code: string;
+  name: string;
+  description?: string;
+  discount_type: 'percent' | 'amount' | string;
+  discount_value: string | number;
+  min_order_total?: string | number;
+  max_discount_amount?: string | number | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  max_redemptions?: number | null;
+  max_redemptions_per_customer?: number | null;
+  first_order_only?: boolean;
+  is_active?: boolean;
+};
+
+export type ShopCouponPreview = {
+  valid: boolean;
+  code: string;
+  name: string;
+  description?: string;
+  discount_type: string;
+  discount_value: string;
+  discount_amount: string;
+  min_order_total: string;
+  merchandise_subtotal: string;
+};
+
+export type ShopCouponOffer = {
+  code: string;
+  name: string;
+  description?: string;
+  discount_type: string;
+  discount_value: string;
+  min_order_total: string;
+  max_discount_amount?: string | null;
+  discount_amount: string;
+  applicable: boolean;
+  reason: string;
+  remaining_to_unlock: string;
+  first_order_only?: boolean;
+  ends_at?: string | null;
+};
+
+export type ShopDashboardAd = {
+  id: string;
+  business: string;
+  title: string;
+  body?: string;
+  media?: string | null;
+  image_url?: string;
+  link_url?: string;
+  sort_order?: number;
+  is_active?: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopDashboardAdWriteInput = {
+  business_id: string;
+  title: string;
+  body?: string;
+  media_id?: string | null;
+  image_url?: string;
+  link_url?: string;
+  sort_order?: number;
+  is_active?: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
+};
+
+export type CustomerReferralCode = {
+  id: string;
+  business: string;
+  customer: string;
+  code: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CustomerReferral = {
+  id: string;
+  business: string;
+  referrer: string;
+  referrer_name?: string;
+  referred: string;
+  referred_name?: string;
+  status: 'pending' | 'qualified' | 'rewarded' | 'void' | string;
+  rewarded_at?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type ShopCashAccount = {
   id: string;
   business: string;
@@ -1850,6 +2077,7 @@ export type ShopBooksVoucherCreateInput = {
   amount_paid?: string | number;
   currency?: string;
   metadata?: Record<string, unknown>;
+  points_to_redeem?: number;
 };
 
 export type ShopPartyLedgerEntry = {
@@ -2034,6 +2262,16 @@ export type ShopBooksDocumentCreateInput = {
   }>;
 };
 
+export type ShopGodownStock = {
+  product: string;
+  product_name?: string;
+  sku?: string;
+  quantity: string | number;
+  price?: string | number;
+  low_stock_threshold?: string | number;
+  catalog_stock?: string | number;
+};
+
 export type ShopGodown = {
   id: string;
   business: string;
@@ -2042,6 +2280,7 @@ export type ShopGodown = {
   is_default?: boolean;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
+  stocks?: ShopGodownStock[];
   created_at?: string;
 };
 
@@ -2100,11 +2339,24 @@ export type ShopLoan = {
 };
 
 export type ShopGrowSettings = {
-  whatsapp?: { phone?: string; default_message?: string };
+  whatsapp?: {
+    phone?: string;
+    country_iso?: string;
+    dial_code?: string;
+    national_number?: string;
+    default_message?: string;
+    attachment_media_id?: string;
+    attachment_url?: string;
+  };
   google_profile?: { url?: string; place_id?: string };
   online_store?: { enabled?: boolean; url?: string; slug?: string };
-  sync?: { last_export_at?: string };
+  sync?: { last_export_at?: string; last_export_sections?: string[] };
   loyalty?: { enabled?: boolean; points_per_100?: number; redeem_value?: number };
+  referral?: {
+    enabled?: boolean;
+    points_per_referral?: number;
+    success_event?: 'signup' | 'first_booking' | 'first_paid_order';
+  };
 };
 
 export type BusinessUpdateInput = Partial<
@@ -2220,6 +2472,7 @@ export type Customer = {
   gstin?: string;
   borrow_balance_due?: string | number;
   borrow_currency?: string;
+  loyalty_points?: number;
   created_at?: string;
   updated_at?: string;
 };
@@ -2283,6 +2536,7 @@ export type CustomerCreateInput = {
   profile?: Record<string, unknown>;
   preferences?: Record<string, unknown>;
   send_registration_invite?: boolean;
+  referral_code?: string;
   default_address?: {
     line1?: string;
     full_address?: string;
@@ -2466,6 +2720,50 @@ export type StaffSpecialAvailabilityInput = {
   reason?: string;
 };
 
+export type StaffSlotBlock = {
+  id: string;
+  business?: string;
+  staff_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  reason?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type StaffSlotBlockInput = {
+  business?: string;
+  staff_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  reason?: string;
+};
+
+export type StaffEmergencySlot = {
+  id: string;
+  business?: string;
+  staff_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  capacity?: number;
+  reason?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type StaffEmergencySlotInput = {
+  business?: string;
+  staff_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  capacity?: number;
+  reason?: string;
+};
+
 export type StaffServiceAssignment = {
   id: string;
   tenant?: string;
@@ -2635,10 +2933,14 @@ export type RegisterBusinessInput = RegisterRequest & {
   currency?: string;
   language?: string;
   selected_product?: string;
+  selected_products?: string[];
+  plan_code?: string;
+  plan_codes?: Record<string, string>;
   primary_color?: string;
   secondary_color?: string;
   phone_number?: string;
   settings?: Record<string, unknown>;
+  affiliate_code?: string;
 };
 
 export type WorkspaceProvisionResponse = {
@@ -2705,6 +3007,7 @@ class ApiClient {
       search?: string;
       status?: string;
       category?: string;
+      page_size?: number;
     }) => this.request<ShopProduct[]>('/shop/products', { method: 'GET', query }),
     createProduct: (body: ShopProductWriteInput) =>
       this.request<ShopProduct>('/shop/products', { method: 'POST', body }),
@@ -2726,7 +3029,7 @@ class ApiClient {
     }) => this.request<ShopPackagingAnalyzeJob>('/shop/products/analyze-packaging', { method: 'POST', body }),
     getPackagingAnalysis: (jobId: string) =>
       this.request<ShopPackagingAnalyzeJob>(`/shop/products/analyze-packaging/${jobId}`, { method: 'GET' }),
-    adjustStock: (productId: string, body: { quantity_delta: number | string; reason?: string; movement_type?: string }) =>
+    adjustStock: (productId: string, body: { quantity_delta: number | string; reason?: string; movement_type?: string; godown_id?: string | null }) =>
       this.request<ShopProduct>(`/shop/products/${productId}/stock-adjust`, { method: 'POST', body }),
     listOrders: (query: { business_id: string; status?: string; customer_id?: string }) =>
       this.request<ShopOrder[]>('/shop/orders', { method: 'GET', query }),
@@ -2750,6 +3053,15 @@ class ApiClient {
       this.request<ShopDeliveryZone>('/shop/delivery-zones', { method: 'POST', body }),
     patchDeliveryZone: (zoneId: string, body: Partial<ShopDeliveryZoneWriteInput>) =>
       this.request<ShopDeliveryZone>(`/shop/delivery-zones/${zoneId}`, { method: 'PATCH', body }),
+    listCoupons: (query: { business_id: string; active_only?: boolean }) =>
+      this.request<ShopCoupon[]>('/shop/coupons', { method: 'GET', query }),
+    createCoupon: (body: ShopCouponWriteInput) =>
+      this.request<ShopCoupon>('/shop/coupons', { method: 'POST', body }),
+    getCoupon: (couponId: string) => this.request<ShopCoupon>(`/shop/coupons/${couponId}`, { method: 'GET' }),
+    updateCoupon: (couponId: string, body: Partial<ShopCouponWriteInput>) =>
+      this.request<ShopCoupon>(`/shop/coupons/${couponId}`, { method: 'PATCH', body }),
+    deleteCoupon: (couponId: string) =>
+      this.request<{ deleted: boolean }>(`/shop/coupons/${couponId}`, { method: 'DELETE' }),
     matchDeliveryZone: (body: { business_id: string; city?: string; postal_code?: string }) =>
       this.request<{ matched: boolean; zone: ShopDeliveryZone | null }>('/shop/delivery-zones/match', {
         method: 'POST',
@@ -2865,6 +3177,20 @@ class ApiClient {
       this.request<ShopSupplier>(`/shop/suppliers/${supplierId}`, { method: 'PATCH', body }),
     deleteSupplier: (supplierId: string) =>
       this.request<{ deleted: boolean }>(`/shop/suppliers/${supplierId}`, { method: 'DELETE' }),
+    listAds: (query: { business_id: string; active_only?: boolean }) =>
+      this.request<ShopDashboardAd[]>('/shop/dashboard-ads', { method: 'GET', query }),
+    createAd: (body: ShopDashboardAdWriteInput) =>
+      this.request<ShopDashboardAd>('/shop/dashboard-ads', { method: 'POST', body }),
+    updateAd: (adId: string, body: Partial<ShopDashboardAdWriteInput>) =>
+      this.request<ShopDashboardAd>(`/shop/dashboard-ads/${adId}`, { method: 'PATCH', body }),
+    deleteAd: (adId: string) =>
+      this.request<{ deleted: boolean }>(`/shop/dashboard-ads/${adId}`, { method: 'DELETE' }),
+    listCustomerReferrals: (query: { business_id: string }) =>
+      this.request<CustomerReferral[]>('/shop/customer-referrals', { method: 'GET', query }),
+    getMyReferralCode: (query: { business_id: string; customer_id: string }) =>
+      this.request<CustomerReferralCode>('/shop/customer-referral-codes/mine', { method: 'GET', query }),
+    createMyReferralCode: (body: { business_id: string; customer_id: string; code?: string }) =>
+      this.request<CustomerReferralCode>('/shop/customer-referral-codes/mine', { method: 'POST', body }),
     listCashAccounts: (query: { business_id: string }) =>
       this.request<ShopCashAccount[]>('/shop/books/accounts', { method: 'GET', query }),
     createCashAccount: (body: ShopCashAccountWriteInput) =>
@@ -2970,6 +3296,28 @@ class ApiClient {
         }),
       delete: (specialId: string) =>
         this.request<null>(`/staff-special-availability/${specialId}`, { method: 'DELETE' }),
+    },
+    staffSlotBlocks: {
+      list: (query: { staff_id: string; business?: string; date_from?: string; date_to?: string }) =>
+        this.request<StaffSlotBlock[]>('/staff-slot-blocks', { method: 'GET', query }),
+      create: (body: StaffSlotBlockInput) =>
+        this.request<StaffSlotBlock>('/staff-slot-blocks', { method: 'POST', body }),
+      get: (blockId: string) => this.request<StaffSlotBlock>(`/staff-slot-blocks/${blockId}`, { method: 'GET' }),
+      patch: (blockId: string, body: Partial<StaffSlotBlockInput>) =>
+        this.request<StaffSlotBlock>(`/staff-slot-blocks/${blockId}`, { method: 'PATCH', body }),
+      delete: (blockId: string) => this.request<null>(`/staff-slot-blocks/${blockId}`, { method: 'DELETE' }),
+    },
+    staffEmergencySlots: {
+      list: (query: { staff_id: string; business?: string; date_from?: string; date_to?: string }) =>
+        this.request<StaffEmergencySlot[]>('/staff-emergency-slots', { method: 'GET', query }),
+      create: (body: StaffEmergencySlotInput) =>
+        this.request<StaffEmergencySlot>('/staff-emergency-slots', { method: 'POST', body }),
+      get: (slotId: string) =>
+        this.request<StaffEmergencySlot>(`/staff-emergency-slots/${slotId}`, { method: 'GET' }),
+      patch: (slotId: string, body: Partial<StaffEmergencySlotInput>) =>
+        this.request<StaffEmergencySlot>(`/staff-emergency-slots/${slotId}`, { method: 'PATCH', body }),
+      delete: (slotId: string) =>
+        this.request<null>(`/staff-emergency-slots/${slotId}`, { method: 'DELETE' }),
     },
   };
 
@@ -3137,7 +3485,12 @@ class ApiClient {
     tenantAction: (tenantId: string, action: 'suspend' | 'reactivate' | 'archive', body: { reason: string }) =>
       this.request<{ id: string; status: string }>(`/platform/tenants/${tenantId}/actions/${action}`, { method: 'POST', body }),
     tenantBilling: (tenantId: string, query?: { product_code?: string; business_id?: string }) =>
-      this.request<{ tenant_id: string; business_id: string; billing: Record<string, unknown> }>(
+      this.request<{
+        tenant_id: string;
+        business_id: string;
+        billing: BusinessBillingSnapshot;
+        billings?: BusinessBillingSnapshot[];
+      }>(
         `/platform/tenants/${tenantId}/billing`,
         { method: 'GET', query },
       ),
@@ -3162,7 +3515,7 @@ class ApiClient {
         extra_offices?: number;
         pets_pack_enabled?: boolean;
       },
-    ) => this.request<{ billing: Record<string, unknown> }>(`/platform/tenants/${tenantId}/billing/actions`, { method: 'POST', body }),
+    ) => this.request<{ billing: BusinessBillingSnapshot }>(`/platform/tenants/${tenantId}/billing/actions`, { method: 'POST', body }),
     tenantUsers: (tenantId: string) =>
       this.request<{ users: PlatformUserRow[] }>(`/platform/tenants/${tenantId}/users`, { method: 'GET' }),
     tenantFlags: (tenantId: string) =>
@@ -3244,6 +3597,86 @@ class ApiClient {
       is_active?: boolean;
       reason: string;
     }) => this.request<{ id: string; code: string }>('/platform/coupons', { method: 'POST', body }),
+    affiliates: () =>
+      this.request<{ affiliates: PlatformAffiliate[] }>('/platform/affiliates', { method: 'GET' }),
+    upsertAffiliate: (body: {
+      id?: string;
+      affiliate_type?: 'tenant' | 'partner' | string;
+      type?: 'tenant' | 'partner' | string;
+      tenant_id?: string | null;
+      name: string;
+      email: string;
+      status?: string;
+      payout_method?: 'upi' | 'bank' | 'other' | string;
+      upi_vpa?: string;
+      bank_account_name?: string;
+      bank_account_number?: string;
+      bank_ifsc?: string;
+      payout_notes?: string;
+      metadata?: Record<string, unknown>;
+      reason: string;
+    }) => this.request<PlatformAffiliate>('/platform/affiliates', { method: 'POST', body }),
+    deleteAffiliate: (affiliateId: string, body?: { reason?: string }) =>
+      this.request<{ deleted: boolean }>(`/platform/affiliates/${affiliateId}`, {
+        method: 'DELETE',
+        body: body ?? { reason: 'delete affiliate' },
+      }),
+    affiliateCodes: (query?: { affiliate_id?: string }) =>
+      this.request<{ codes: PlatformAffiliateCode[] }>('/platform/affiliate-codes', {
+        method: 'GET',
+        query,
+      }),
+    upsertAffiliateCode: (body: {
+      affiliate_id: string;
+      code: string;
+      is_active?: boolean;
+      reason: string;
+    }) => this.request<PlatformAffiliateCode>('/platform/affiliate-codes', { method: 'POST', body }),
+    deleteAffiliateCode: (codeId: string, body?: { reason?: string }) =>
+      this.request<{ deleted: boolean }>(`/platform/affiliate-codes/${codeId}`, {
+        method: 'DELETE',
+        body: body ?? { reason: 'delete affiliate code' },
+      }),
+    affiliateReferrals: (query?: { affiliate_id?: string }) =>
+      this.request<{ referrals: PlatformAffiliateReferral[] }>('/platform/affiliate-referrals', {
+        method: 'GET',
+        query,
+      }),
+    affiliateAccruals: (query?: { referral_id?: string }) =>
+      this.request<{ accruals: PlatformAffiliateAccrual[] }>('/platform/affiliate-accruals', {
+        method: 'GET',
+        query,
+      }),
+    createAffiliateAccrual: (body: {
+      referral_id: string;
+      period_yyyy_mm: string;
+      amount_paise: number;
+      benefit_type?: 'credit' | 'payout' | string;
+      reason: string;
+    }) => this.request<PlatformAffiliateAccrual>('/platform/affiliate-accruals', { method: 'POST', body }),
+    approveAffiliateAccrualCredit: (accrualId: string, body: { reason: string }) =>
+      this.request<PlatformAffiliateAccrual>(`/platform/affiliate-accruals/${accrualId}/credit`, {
+        method: 'POST',
+        body,
+      }),
+    approveAffiliateAccrualPayout: (
+      accrualId: string,
+      body: { reason: string; payment_ref?: string; notes?: string },
+    ) =>
+      this.request<PlatformAffiliatePayout>(`/platform/affiliate-accruals/${accrualId}/payout`, {
+        method: 'POST',
+        body,
+      }),
+    affiliatePayouts: (query?: { affiliate_id?: string }) =>
+      this.request<{ payouts: PlatformAffiliatePayout[] }>('/platform/affiliate-payouts', {
+        method: 'GET',
+        query,
+      }),
+    markAffiliatePayoutPaid: (payoutId: string, body: { reason: string; payment_ref?: string }) =>
+      this.request<PlatformAffiliatePayout>(`/platform/affiliate-payouts/${payoutId}/mark-paid`, {
+        method: 'POST',
+        body,
+      }),
     planPackages: (query?: { product_code?: string }) =>
       this.request<{ plan_packages: PlatformPlanPackage[] }>('/platform/plan-packages', {
         method: 'GET',
@@ -3487,7 +3920,8 @@ class ApiClient {
     quoteLoyalty: (body: {
       tenant_slug: string;
       business_code: string;
-      service_id: string;
+      service_id?: string;
+      amount?: string | number;
       points_to_redeem: number;
     }) => this.request<MobileLoyaltyQuote>('/mobile/loyalty/quote', { method: 'POST', body }),
     registerDevice: (body: {
@@ -3508,6 +3942,8 @@ class ApiClient {
       this.request<MobileNotificationItem>(`/mobile/notifications/${notificationId}/read`, { method: 'PATCH', query }),
     readAllNotifications: (query: { tenant_slug: string; business_code: string }) =>
       this.request<{ updated: number }>('/mobile/notifications/read-all', { method: 'PATCH', query }),
+    listShopAds: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopDashboardAd[]>('/mobile/shop/ads', { method: 'GET', query, auth: false }),
     listShopProducts: (query: {
       tenant_slug: string;
       business_code: string;
@@ -3515,7 +3951,35 @@ class ApiClient {
       category?: string;
     }) => this.request<ShopProduct[]>('/mobile/shop/products', { method: 'GET', query, auth: false }),
     getShopProduct: (productId: string, query: { tenant_slug: string; business_code: string }) =>
-      this.request<ShopProduct>(`/mobile/shop/products/${productId}`, { method: 'GET', query, auth: false }),
+      this.request<ShopProduct>(`/mobile/shop/products/${productId}`, { method: 'GET', query }),
+    listShopProductReviews: (productId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopProductReview[]>(`/mobile/shop/products/${productId}/reviews`, {
+        method: 'GET',
+        query,
+        auth: false,
+      }),
+    createShopProductReview: (
+      productId: string,
+      body: {
+        tenant_slug: string;
+        business_code: string;
+        rating: number;
+        title?: string;
+        comment?: string;
+      },
+    ) =>
+      this.request<ShopProductReview>(`/mobile/shop/products/${productId}/reviews`, { method: 'POST', body }),
+    updateShopProductReview: (
+      productId: string,
+      body: {
+        tenant_slug: string;
+        business_code: string;
+        rating: number;
+        title?: string;
+        comment?: string;
+      },
+    ) =>
+      this.request<ShopProductReview>(`/mobile/shop/products/${productId}/reviews`, { method: 'PATCH', body }),
     listShopOrders: (query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopOrder[]>('/mobile/shop/orders', { method: 'GET', query }),
     createShopOrder: (body: {
@@ -3523,12 +3987,35 @@ class ApiClient {
       business_code: string;
       fulfillment_mode?: string;
       notes?: string;
+      preferred_date?: string;
+      preferred_time?: string;
+      fulfillment_note?: string;
       delivery_address?: string;
       delivery_city?: string;
       delivery_postal_code?: string;
       payment_method?: string;
+      coupon_code?: string;
+      points_to_redeem?: number;
       lines: Array<{ product_id: string; quantity?: string | number; barcode_scanned?: string }>;
     }) => this.request<ShopOrder>('/mobile/shop/orders', { method: 'POST', body }),
+    validateShopCoupon: (body: {
+      tenant_slug: string;
+      business_code: string;
+      code: string;
+      fulfillment_mode?: string;
+      lines: Array<{ product_id: string; quantity?: string | number }>;
+    }) => this.request<ShopCouponPreview>('/mobile/shop/coupons/validate', { method: 'POST', body }),
+    listAvailableShopCoupons: (body: {
+      tenant_slug: string;
+      business_code: string;
+      fulfillment_mode?: string;
+      lines: Array<{ product_id: string; quantity?: string | number; unit_price?: string | number }>;
+    }) => this.request<ShopCouponOffer[]>('/mobile/shop/coupons/available', { method: 'POST', body }),
+    getAvailableShopCoupons: (query: {
+      tenant_slug: string;
+      business_code: string;
+      fulfillment_mode?: string;
+    }) => this.request<ShopCouponOffer[]>('/mobile/shop/coupons/available', { method: 'GET', query }),
     getShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopOrder>(`/mobile/shop/orders/${orderId}`, { method: 'GET', query }),
     cancelShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
@@ -3555,10 +4042,43 @@ class ApiClient {
       }>('/mobile/shop/delivery-zones/match', { method: 'GET', query, auth: false }),
     listMyPets: (query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopPet[]>('/mobile/shop/pets', { method: 'GET', query }),
+    createMyPet: (
+      body: {
+        tenant_slug: string;
+        business_code: string;
+        name: string;
+        species?: string;
+        breed?: string;
+        sex?: string;
+        birthday?: string | null;
+        photo_url?: string;
+        medical_notes?: string;
+      },
+    ) => this.request<ShopPet>('/mobile/shop/pets', { method: 'POST', body }),
     getMyPet: (petId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopPet>(`/mobile/shop/pets/${petId}`, { method: 'GET', query }),
+    patchMyPet: (
+      petId: string,
+      body: {
+        name?: string;
+        species?: string;
+        breed?: string;
+        sex?: string;
+        birthday?: string | null;
+        photo_url?: string;
+        medical_notes?: string;
+      },
+      query: { tenant_slug: string; business_code: string },
+    ) => this.request<ShopPet>(`/mobile/shop/pets/${petId}`, { method: 'PATCH', body, query }),
     listMyReturns: (query: { tenant_slug: string; business_code: string; order_id?: string }) =>
       this.request<ShopReturn[]>('/mobile/shop/returns', { method: 'GET', query }),
+    createMyReturn: (body: {
+      tenant_slug: string;
+      business_code: string;
+      order_id: string;
+      reason?: string;
+      lines: Array<{ order_line_id: string; quantity: string | number }>;
+    }) => this.request<ShopReturn>('/mobile/shop/returns', { method: 'POST', body }),
     getMyReturn: (returnId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopReturn>(`/mobile/shop/returns/${returnId}`, { method: 'GET', query }),
     listAddresses: (query: { tenant_slug: string; business_code: string }) =>

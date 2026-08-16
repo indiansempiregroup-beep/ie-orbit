@@ -282,6 +282,7 @@ def _ensure_loyalty_settings(*, business: Business) -> None:
             "points_per_currency_unit": 10,
             "max_redeem_percent": 50,
             "min_redeem_points": 10,
+            "earn_points_per_100": 1,
         }
     )
     settings.loyalty_preferences = prefs

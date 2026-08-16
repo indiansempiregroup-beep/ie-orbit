@@ -125,10 +125,27 @@ class PlatformTenantBillingView(APIView):
     def get(self, request: Request, tenant_id: str) -> Response:
         tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
         business = _svc().resolve_business(tenant, request.query_params.get("business_id"))
-        product_code = request.query_params.get("product_code") or business.selected_product or "appointie"
-        snapshot = EntitlementService().billing_snapshot(business=business, product_code=product_code)
+        entitlements = EntitlementService()
+        requested = (request.query_params.get("product_code") or "").strip().lower()
+        if requested:
+            snapshot = entitlements.billing_snapshot(business=business, product_code=requested)
+            billings = [snapshot]
+        else:
+            billings = entitlements.billing_snapshots(business=business)
+            selected = (business.selected_product or "").strip().lower()
+            snapshot = next((row for row in billings if row.get("product_code") == selected), None)
+            if snapshot is None:
+                snapshot = billings[0] if billings else entitlements.billing_snapshot(
+                    business=business,
+                    product_code=selected or "appointie",
+                )
         return success_response(
-            {"tenant_id": str(tenant.id), "business_id": str(business.id), "billing": snapshot},
+            {
+                "tenant_id": str(tenant.id),
+                "business_id": str(business.id),
+                "billing": snapshot,
+                "billings": billings,
+            },
             request_id=getattr(request, "request_id", None),
         )
 

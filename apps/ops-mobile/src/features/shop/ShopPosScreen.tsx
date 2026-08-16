@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,6 +23,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { DesktopPage } from '../../components/DesktopPage';
+import { DateField } from '../../components/DateField';
 import { SelectField } from '../../components/SelectField';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -37,6 +38,7 @@ import {
 } from './posSession';
 import { normalizeGstin, validateGstin } from '../../utils/gstin';
 import { getApiErrorMessage } from '../../utils/format';
+import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../utils/loyalty';
 
 type BasketLine = {
   product: ShopProduct;
@@ -77,7 +79,7 @@ export function ShopPosScreen() {
   const route = useRoute<Props['route']>();
   const client = useOpsClient();
   const toast = useToast();
-  const { businessId } = useWorkspace();
+  const { businessId, activeBusiness } = useWorkspace();
   const mode = resolvePosMode(route.params?.mode);
   const isPurchase = mode === 'purchase';
   const isQuotation = mode === 'quotation';
@@ -121,6 +123,7 @@ export function ShopPosScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
   const catalogLoadedRef = React.useRef(false);
 
@@ -161,6 +164,7 @@ export function ShopPosScreen() {
   const updateCustomerId = useCallback(
     (id: string) => {
       setCustomerId(id);
+      setPointsToRedeem(0);
       const customer = customers.find((row) => row.id === id);
       const nextGstin = normalizeGstin(customer?.gstin || '');
       setPartyGstin(nextGstin);
@@ -408,6 +412,32 @@ export function ShopPosScreen() {
     [basket, billDiscountType, billDiscountValue],
   );
 
+  const loyaltyPrefs = useMemo(
+    () => readLoyaltyPrefs((activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined),
+    [activeBusiness?.settings],
+  );
+  const selectedPosCustomer = useMemo(
+    () => customers.find((row) => row.id === customerId) ?? null,
+    [customers, customerId],
+  );
+  const loyaltyMaxPoints = useMemo(() => {
+    if (mode !== 'sale' || !customerId) return 0;
+    return maxRedeemablePoints(
+      totals.subtotal,
+      loyaltyPrefs,
+      Number(selectedPosCustomer?.loyalty_points ?? 0),
+    );
+  }, [mode, customerId, totals.subtotal, loyaltyPrefs, selectedPosCustomer?.loyalty_points]);
+  const loyaltyDiscount = useMemo(
+    () => redeemDiscountAmount(pointsToRedeem, loyaltyPrefs),
+    [pointsToRedeem, loyaltyPrefs],
+  );
+  const payableAfterLoyalty = Math.max(0, totals.payable - loyaltyDiscount);
+
+  useEffect(() => {
+    if (pointsToRedeem > loyaltyMaxPoints) setPointsToRedeem(loyaltyMaxPoints);
+  }, [loyaltyMaxPoints, pointsToRedeem]);
+
   function addProduct(product: ShopProduct, barcode?: string) {
     syncBasket((current) => {
       const existing = current.find((line) => line.product.id === product.id);
@@ -589,6 +619,7 @@ export function ShopPosScreen() {
         payment_method: paymentMethod,
         bill_discount_type: billDiscountType,
         bill_discount_value: Number(billDiscountValue) || 0,
+        points_to_redeem: customerId && pointsToRedeem > 0 ? pointsToRedeem : undefined,
         notes:
           paymentMethod === 'borrow'
             ? 'Sale · BORROW (due)'
@@ -607,6 +638,7 @@ export function ShopPosScreen() {
       setBasket([]);
       setBillDiscountType('');
       setBillDiscountValue('0');
+      setPointsToRedeem(0);
       clearPosBillKeepCustomer();
       writePosSession({
         customerId,
@@ -686,6 +718,45 @@ export function ShopPosScreen() {
             </>
           )}
         </View>
+
+        {mode === 'sale' && customerId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+          <View style={styles.loyaltyBox}>
+            <Text style={styles.section}>Reward points</Text>
+            <Text style={styles.meta}>
+              Balance {selectedPosCustomer?.loyalty_points ?? 0} pts · {loyaltyPrefs.points_per_currency_unit} pts = ₹1
+            </Text>
+            <View style={styles.redeemRow}>
+              <Pressable
+                style={styles.redeemBtn}
+                onPress={() =>
+                  setPointsToRedeem((current) => {
+                    if (current <= 0) return 0;
+                    const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
+                    return next < loyaltyPrefs.min_redeem_points ? 0 : next;
+                  })
+                }
+              >
+                <Feather name="minus" size={16} color={colors.foreground} />
+              </Pressable>
+              <Text style={styles.redeemValue}>{pointsToRedeem} pts</Text>
+              <Pressable
+                style={styles.redeemBtn}
+                onPress={() =>
+                  setPointsToRedeem((current) => {
+                    const stepAmount = Math.max(1, loyaltyPrefs.min_redeem_points);
+                    if (current <= 0) return Math.min(loyaltyMaxPoints, stepAmount);
+                    return Math.min(loyaltyMaxPoints, current + stepAmount);
+                  })
+                }
+              >
+                <Feather name="plus" size={16} color={colors.foreground} />
+              </Pressable>
+            </View>
+            {pointsToRedeem > 0 ? (
+              <Text style={styles.meta}>Saves ₹{loyaltyDiscount.toFixed(2)}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <Text style={styles.section}>Add products</Text>
         <View style={styles.scanRow}>
@@ -902,16 +973,12 @@ export function ShopPosScreen() {
 
         {isDocument ? (
           isQuotation ? (
-            <>
-              <Text style={styles.section}>Valid until</Text>
-              <TextInput
-                style={styles.input}
-                value={validUntil}
-                onChangeText={setValidUntil}
-                placeholder="YYYY-MM-DD (optional)"
-                placeholderTextColor={colors.mutedForeground}
-              />
-            </>
+            <DateField
+              label="Valid until"
+              value={validUntil}
+              onChange={setValidUntil}
+              helperText="Optional expiry date for this quotation."
+            />
           ) : (
             <Text style={styles.hint}>
               {isCreditNote
@@ -988,6 +1055,12 @@ export function ShopPosScreen() {
             <Text style={styles.meta}>Bill discount</Text>
             <Text style={styles.meta}>-{totals.billDiscountAmount.toFixed(2)}</Text>
           </View>
+          {loyaltyDiscount > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Reward points</Text>
+              <Text style={styles.meta}>-{loyaltyDiscount.toFixed(2)}</Text>
+            </View>
+          ) : null}
           <View style={styles.totalRow}>
             <Text style={styles.meta}>
               GST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
@@ -1004,7 +1077,9 @@ export function ShopPosScreen() {
                     ? 'Amount to pay'
                     : 'Payable'}
             </Text>
-            <Text style={styles.payableValue}>{totals.payable.toFixed(2)}</Text>
+            <Text style={styles.payableValue}>
+              {(mode === 'sale' ? payableAfterLoyalty : totals.payable).toFixed(2)}
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -1035,8 +1110,8 @@ export function ShopPosScreen() {
                         ? `Record purchase · Due ${totals.payable.toFixed(2)}`
                         : `Record purchase · ${totals.payable.toFixed(2)}`
                       : paymentMethod === 'borrow'
-                        ? `Save bill · Due ${totals.payable.toFixed(2)}`
-                        : `Save & print · ${totals.payable.toFixed(2)}`}
+                        ? `Save bill · Due ${payableAfterLoyalty.toFixed(2)}`
+                        : `Save & print · ${payableAfterLoyalty.toFixed(2)}`}
           </Text>
         </Pressable>
       </View>
@@ -1137,6 +1212,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   customerField: { flex: 1 },
+  loyaltyBox: { marginTop: spacing.sm, gap: 6 },
+  redeemRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  redeemBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+  },
+  redeemValue: { fontFamily: fonts.bodySemi, fontSize: 16, color: colors.foreground, minWidth: 72, textAlign: 'center' },
   sideAddBtn: {
     width: 48,
     height: 48,

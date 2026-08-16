@@ -91,6 +91,71 @@ def test_godown_transfer_moves_location_stock(shop_business: Business) -> None:
 
 
 @pytest.mark.django_db
+def test_catalog_stock_maps_to_default_godown(shop_business: Business) -> None:
+    from apps.shopie.models import ShopGodownStock, StockMovementType
+    from apps.shopie.services.catalog import CatalogService
+
+    godowns = GodownsService()
+    main = godowns.create_godown(
+        tenant=shop_business.tenant, business=shop_business, name="Main", is_default=True
+    )
+    catalog = CatalogService()
+    product = catalog.create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={"name": "Oil", "price": "40", "stock_on_hand": "10"},
+    )
+    row = ShopGodownStock.objects.get(godown=main, product=product)
+    assert row.quantity == Decimal("10.000")
+    product = catalog.adjust_stock(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        product=product,
+        quantity_delta=Decimal("-3"),
+        movement_type=StockMovementType.SALE,
+        reason="POS sale",
+    )
+    row.refresh_from_db()
+    assert product.stock_on_hand == Decimal("7.000")
+    assert row.quantity == Decimal("7.000")
+
+
+@pytest.mark.django_db
+def test_initial_stock_goes_to_selected_godown(shop_business: Business) -> None:
+    from apps.shopie.models import ShopGodownStock
+    from apps.shopie.services.catalog import CatalogService
+
+    godowns = GodownsService()
+    godowns.create_godown(
+        tenant=shop_business.tenant, business=shop_business, name="Shop", is_default=True
+    )
+    warehouse = godowns.create_godown(
+        tenant=shop_business.tenant, business=shop_business, name="Warehouse"
+    )
+    product = CatalogService().create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={"name": "Rice", "price": "80", "stock_on_hand": "8", "godown_id": warehouse.id},
+    )
+    row = ShopGodownStock.objects.get(godown=warehouse, product=product)
+    assert row.quantity == Decimal("8.000")
+    assert not ShopGodownStock.objects.filter(godown__name="Shop", product=product).exists()
+
+
+@pytest.mark.django_db
+def test_catalog_stock_skips_godown_when_none_exist(shop_business: Business) -> None:
+    from apps.shopie.models import ShopGodownStock
+    from apps.shopie.services.catalog import CatalogService
+
+    CatalogService().create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={"name": "Soap", "price": "20", "stock_on_hand": "5"},
+    )
+    assert ShopGodownStock.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_cheque_clear_creates_payment_in(
     shop_business: Business, customer: Customer, cash_account: ShopCashAccount
 ) -> None:

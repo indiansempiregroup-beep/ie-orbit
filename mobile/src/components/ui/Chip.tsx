@@ -18,7 +18,9 @@ export function Chip({ label, active, onPress, primaryColor = colors.primary }: 
         active ? { backgroundColor: primaryColor, borderColor: primaryColor } : null,
       ]}
     >
-      <Text style={[styles.label, active ? styles.labelActive : null]}>{label}</Text>
+      <Text style={[styles.label, active ? styles.labelActive : null]} numberOfLines={1}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -31,6 +33,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
+    flexShrink: 0,
   },
   label: { ...typography.caption, color: colors.mutedForeground, fontWeight: '500' },
   labelActive: { color: colors.primaryForeground },

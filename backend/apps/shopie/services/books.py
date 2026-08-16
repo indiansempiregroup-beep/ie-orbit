@@ -281,7 +281,31 @@ class BooksService:
         totals = compute_voucher_totals(resolved_lines, interstate=interstate)
 
         customer = data.get("customer")
+        linked_order = data.get("linked_order")
         status = str(data.get("status") or VoucherStatus.CONFIRMED)
+        points_to_redeem = int(data.get("points_to_redeem") or 0)
+        loyalty_eligible = _q(totals.get("subtotal") or "0")
+        if points_to_redeem > 0 and linked_order is None:
+            if customer is None:
+                raise ValidationError(
+                    {"points_to_redeem": "Select a customer to redeem reward points."}
+                )
+            from apps.customers.services.loyalty import LoyaltyService
+
+            loyalty = LoyaltyService()
+            account = loyalty.ensure_account(
+                tenant=tenant, business=business, customer=customer
+            )
+            quote = loyalty.quote_redemption(
+                business=business,
+                amount=loyalty_eligible,
+                points_to_redeem=points_to_redeem,
+                points_balance=account.points_balance,
+            )
+            extra = _q(quote["discount_amount"])
+            totals["discount_total"] = _q(totals["discount_total"]) + extra
+            totals["total"] = max(Decimal("0.00"), _q(totals["total"]) - extra)
+
         amount_paid = _q(data.get("amount_paid") or "0")
         if amount_paid > totals["total"]:
             raise ValidationError({"amount_paid": "Amount paid cannot exceed the voucher total."})
@@ -357,6 +381,16 @@ class BooksService:
                     notes=f"Payment for {voucher.voucher_number}",
                 )
                 self._adjust_cash_balance(account=cash_account, delta=amount_paid)
+        self._apply_sale_loyalty(
+            tenant=tenant,
+            business=business,
+            voucher=voucher,
+            customer=customer,
+            linked_order=linked_order,
+            points_to_redeem=points_to_redeem,
+            eligible_amount=loyalty_eligible,
+            status=status,
+        )
         return voucher
 
     @transaction.atomic
@@ -1014,6 +1048,7 @@ class BooksService:
 
         locked.status = VoucherStatus.VOID
         locked.save(update_fields=["status", "updated_at", "version"])
+        self._refund_sale_loyalty(voucher=locked)
         return locked
 
     # ------------------------------------------------------------------
@@ -1049,6 +1084,69 @@ class BooksService:
         if supplier_id:
             qs = qs.filter(supplier_id=supplier_id)
         return qs
+
+    def _apply_sale_loyalty(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        voucher: ShopBooksVoucher,
+        customer: Customer | None,
+        linked_order: Any,
+        points_to_redeem: int,
+        eligible_amount: Decimal,
+        status: str,
+    ) -> None:
+        if linked_order is not None or customer is None:
+            return
+        from apps.customers.services.loyalty import LoyaltyService
+
+        loyalty = LoyaltyService()
+        snapshot = None
+        if int(points_to_redeem or 0) > 0:
+            snapshot = loyalty.redeem_for_voucher(
+                tenant=tenant,
+                business=business,
+                customer=customer,
+                voucher_id=voucher.id,
+                amount=eligible_amount,
+                points_to_redeem=int(points_to_redeem),
+            )
+            metadata = dict(voucher.metadata or {})
+            metadata["loyalty"] = snapshot
+            voucher.metadata = metadata
+            voucher.save(update_fields=["metadata", "updated_at", "version"])
+        if status == VoucherStatus.CONFIRMED:
+            loyalty.award_for_voucher(
+                tenant=tenant,
+                business=business,
+                customer=customer,
+                voucher_id=voucher.id,
+                amount=voucher.total,
+                voucher_number=voucher.voucher_number,
+            )
+
+    def _refund_sale_loyalty(self, *, voucher: ShopBooksVoucher) -> None:
+        if voucher.voucher_type != VoucherType.SALE:
+            return
+        if voucher.customer_id is None or voucher.linked_order_id is not None:
+            return
+        loyalty_meta = (
+            (voucher.metadata or {}).get("loyalty") if isinstance(voucher.metadata, dict) else {}
+        )
+        points_redeemed = int((loyalty_meta or {}).get("points_redeemed") or 0)
+        try:
+            from apps.customers.services.loyalty import LoyaltyService
+
+            LoyaltyService().refund_for_voucher(
+                tenant=voucher.tenant,
+                business=voucher.business,
+                customer=voucher.customer,
+                voucher_id=voucher.id,
+                points_redeemed=points_redeemed,
+            )
+        except Exception:
+            return
 
     def get_voucher(
         self, *, tenant: Tenant, business: Business, voucher_id: UUID

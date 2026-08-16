@@ -216,6 +216,17 @@ def test_mobile_list_notifications_for_authenticated_user(api_client: APIClient,
     )
     tenant = Tenant.objects.get(slug=mobile_context["tenant_slug"])
     business = Business.objects.require_tenant(tenant).get(business_code=mobile_context["business_code"])
+    shared_meta = {"audience": "customer", "event_type": "BookingConfirmed"}
+    Notification.objects.create(
+        tenant=tenant,
+        business=business,
+        user=customer_user,
+        subject="Booking confirmed",
+        body="Your haircut is confirmed.",
+        channel="in_app",
+        status="sent",
+        metadata=shared_meta,
+    )
     Notification.objects.create(
         tenant=tenant,
         business=business,
@@ -224,7 +235,7 @@ def test_mobile_list_notifications_for_authenticated_user(api_client: APIClient,
         body="Your haircut is confirmed.",
         channel="email",
         status="sent",
-        metadata={"audience": "customer", "event_type": "BookingConfirmed"},
+        metadata=shared_meta,
     )
     api_client.force_authenticate(user=customer_user)
     response = api_client.get(
@@ -238,6 +249,7 @@ def test_mobile_list_notifications_for_authenticated_user(api_client: APIClient,
     rows = response.json()["data"]
     assert len(rows) == 1
     assert rows[0]["subject"] == "Booking confirmed"
+    assert rows[0]["channel"] == "in_app"
 
 
 @pytest.mark.django_db

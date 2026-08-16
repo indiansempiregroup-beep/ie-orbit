@@ -35,6 +35,7 @@ from apps.audit.services.audit import record_audit
 from apps.audit.services.events import publish_domain_event
 from apps.businesses.models import Business
 from apps.common.api.responses import success_response
+from apps.common.utils.request_auth import resolve_authenticated_user
 from apps.platform_media.models import MediaFolderType, MediaVisibility
 from apps.platform_media.services import MediaService
 from apps.tenancy.models import Tenant
@@ -101,6 +102,11 @@ class RegisterBusinessView(APIView):
     def post(self, request: Request) -> Response:
         serializer = RegisterBusinessSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        affiliate_code = str(serializer.validated_data.get("affiliate_code") or "").strip()
+        if affiliate_code:
+            from apps.platform_admin.affiliate_service import AffiliateService
+
+            AffiliateService().require_active_code(affiliate_code)
         service = WorkspaceProvisioningService()
         result = service.provision(
             data=dict(serializer.validated_data),
@@ -253,24 +259,18 @@ class VerifyEmailView(APIView):
 
 
 class ResendVerificationView(APIView):
-    authentication_classes: list = []
+    permission_classes = [AllowAny]
+    authentication_classes = []
     serializer_class = ResendVerificationSerializer
-
-    def get_permissions(self):
-        email = self.request.data.get("email") if hasattr(self.request, "data") else None
-        if email:
-            return [AllowAny()]
-        return [IsAuthenticated()]
 
     def post(self, request: Request) -> Response:
         serializer = ResendVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = (serializer.validated_data.get("email") or "").strip().lower()
-        if request.user.is_authenticated:
-            user = request.user
-        elif email:
+        user = resolve_authenticated_user(request)
+        if user is None and email:
             user = User.objects.filter(email__iexact=email).first()
-        else:
+        if user is None and not email:
             return Response(
                 {"error": {"message": "Email is required when not signed in."}},
                 status=status.HTTP_400_BAD_REQUEST,

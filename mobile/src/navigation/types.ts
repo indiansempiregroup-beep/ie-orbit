@@ -27,6 +27,7 @@ export type RootStackParamList = {
   AddressBook: undefined;
   MyPets: undefined;
   PetDetail: { petId: string };
+  PetForm: { petId?: string };
   MyReturns: undefined;
   ReturnDetail: { returnId: string };
   ChangePassword: undefined;

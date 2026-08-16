@@ -11,8 +11,20 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { PlatformTenantDetail } from '@ie-platform/sdk';
+import type { BusinessBillingSnapshot, PlatformTenantBusiness, PlatformTenantDetail } from '@ie-platform/sdk';
 import { voucherStatusStyle } from '../shop/shopBooksHelpers';
+import { getProductName } from '../../utils/products';
+import { formatDate } from '../../utils/format';
+
+function businessBillings(business: PlatformTenantBusiness): BusinessBillingSnapshot[] {
+  if (business.billings?.length) return business.billings;
+  return business.billing ? [business.billing] : [];
+}
+
+function formatInrFromPaise(paise?: number | null) {
+  if (paise == null) return '—';
+  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
 
 export function PlatformAdminTenantDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -130,16 +142,40 @@ export function PlatformAdminTenantDetailScreen() {
 
         <Text style={styles.section}>Businesses</Text>
         {tenant.businesses?.length ? (
-          tenant.businesses.map((business) => (
-            <View key={business.id} style={styles.businessRow}>
-              <Text style={styles.businessName}>{business.display_name}</Text>
-              <Text style={styles.meta}>
-                {business.business_code}
-                {business.selected_product ? ` · ${business.selected_product}` : ''}
-                {` · ${business.status}`}
-              </Text>
-            </View>
-          ))
+          tenant.businesses.map((business) => {
+            const billings = businessBillings(business);
+            return (
+              <View key={business.id} style={styles.businessRow}>
+                <Text style={styles.businessName}>{business.display_name}</Text>
+                <Text style={styles.meta}>
+                  {business.business_code}
+                  {` · ${business.status}`}
+                </Text>
+                {billings.length ? (
+                  billings.map((billing) => (
+                    <View key={billing.product_code || billing.plan_code} style={styles.billingCard}>
+                      <Text style={styles.billingTitle}>
+                        {getProductName(billing.product_code)} · {billing.plan_code || '—'}
+                      </Text>
+                      <Text style={styles.meta}>
+                        {(billing.billing_state || billing.status || 'unknown').replace(/_/g, ' ')}
+                        {billing.billing_interval ? ` · ${billing.billing_interval}` : ''}
+                      </Text>
+                      <Text style={styles.meta}>
+                        {formatInrFromPaise(billing.pricing?.total_amount_paise)}
+                        {billing.current_period_ends_at
+                          ? ` · period ends ${formatDate(billing.current_period_ends_at)}`
+                          : ''}
+                      </Text>
+                      {billing.pets_pack_enabled ? <Text style={styles.meta}>Pets pack enabled</Text> : null}
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.meta}>No product subscriptions.</Text>
+                )}
+              </View>
+            );
+          })
         ) : (
           <Text style={styles.meta}>No businesses on this tenant.</Text>
         )}
@@ -228,6 +264,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   businessName: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.foreground },
+  billingCard: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    gap: 2,
+  },
+  billingTitle: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.foreground },
   actions: { gap: spacing.sm, marginTop: spacing.md },
   input: {
     borderWidth: 1,

@@ -6,6 +6,10 @@ import type {
   StaffServiceAssignmentInput,
   StaffSpecialAvailability,
   StaffSpecialAvailabilityInput,
+  StaffSlotBlock,
+  StaffSlotBlockInput,
+  StaffEmergencySlot,
+  StaffEmergencySlotInput,
 } from '@ie-platform/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
@@ -14,12 +18,18 @@ import {
   createStaffAssignment,
   createStaffLeave,
   createStaffSpecialAvailability,
+  createStaffSlotBlock,
+  createStaffEmergencySlot,
   deleteStaffAssignment,
   deleteStaffLeave,
   deleteStaffSpecialAvailability,
+  deleteStaffSlotBlock,
+  deleteStaffEmergencySlot,
   listStaffAssignments,
   listStaffLeaves,
   listStaffSpecialAvailability,
+  listStaffSlotBlocks,
+  listStaffEmergencySlots,
   patchStaffAssignment,
   patchStaffLeave,
   patchStaffSpecialAvailability,
@@ -118,6 +128,58 @@ export function useStaffAssignmentMutations() {
     }),
     remove: useMutation<void, Error, string>({
       mutationFn: (assignmentId) => deleteStaffAssignment(client, assignmentId),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+export function useStaffSlotBlocks(staffId?: string) {
+  const client = useApiClient();
+  const { businessId, scopeKey, workspaceReady } = useWorkspaceScope();
+  return useQuery<StaffSlotBlock[], Error>({
+    queryKey: ['staff', 'slot-blocks', staffId, ...scopeKey],
+    queryFn: () => listStaffSlotBlocks(client, staffId ?? '', businessId),
+    enabled: workspaceReady && Boolean(staffId),
+  });
+}
+
+export function useStaffSlotBlockMutations() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  const invalidate = () => invalidateWorkspaceData(queryClient);
+  return {
+    create: useMutation<StaffSlotBlock, Error, StaffSlotBlockInput>({
+      mutationFn: (input) => createStaffSlotBlock(client, input),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation<void, Error, string>({
+      mutationFn: (blockId) => deleteStaffSlotBlock(client, blockId),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+export function useStaffEmergencySlots(staffId?: string) {
+  const client = useApiClient();
+  const { businessId, scopeKey, workspaceReady } = useWorkspaceScope();
+  return useQuery<StaffEmergencySlot[], Error>({
+    queryKey: ['staff', 'emergency-slots', staffId, ...scopeKey],
+    queryFn: () => listStaffEmergencySlots(client, staffId ?? '', businessId),
+    enabled: workspaceReady && Boolean(staffId),
+  });
+}
+
+export function useStaffEmergencySlotMutations() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  const invalidate = () => invalidateWorkspaceData(queryClient);
+  return {
+    create: useMutation<StaffEmergencySlot, Error, StaffEmergencySlotInput>({
+      mutationFn: (input) => createStaffEmergencySlot(client, input),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation<void, Error, string>({
+      mutationFn: (slotId) => deleteStaffEmergencySlot(client, slotId),
       onSuccess: invalidate,
     }),
   };

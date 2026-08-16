@@ -7,6 +7,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useShopProductMutations, useShopProducts } from './shopHooks';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
+import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
 import type { Customer, ShopProduct } from '@ie-platform/sdk';
 
 type BasketLine = {
@@ -36,6 +37,7 @@ export function ShopPosPage() {
   const [billDiscountValue, setBillDiscountValue] = useState('0');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [message, setMessage] = useState<string | null>(null);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
   useEffect(() => {
     if (!workspace.businessId) return;
@@ -80,6 +82,21 @@ export function ShopPosPage() {
       ),
     [basket, billDiscountType, billDiscountValue],
   );
+
+  const loyaltyPrefs = useMemo(
+    () => readLoyaltyPrefs((workspace.activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined),
+    [workspace.activeBusiness?.settings],
+  );
+  const selectedCustomer = useMemo(
+    () => customers.find((row) => row.id === customerId) ?? null,
+    [customers, customerId],
+  );
+  const loyaltyMaxPoints = useMemo(
+    () => maxRedeemablePoints(totals.subtotal, loyaltyPrefs, Number(selectedCustomer?.loyalty_points ?? 0)),
+    [totals.subtotal, loyaltyPrefs, selectedCustomer?.loyalty_points],
+  );
+  const loyaltyDiscount = redeemDiscountAmount(customerId ? pointsToRedeem : 0, loyaltyPrefs);
+  const payableAfterLoyalty = Math.max(0, totals.payable - loyaltyDiscount);
 
   function addProduct(product: ShopProduct, barcode?: string) {
     setBasket((current) => {
@@ -171,6 +188,7 @@ export function ShopPosPage() {
         payment_method: paymentMethod,
         bill_discount_type: billDiscountType,
         bill_discount_value: Number(billDiscountValue) || 0,
+        points_to_redeem: customerId && pointsToRedeem > 0 ? pointsToRedeem : undefined,
         notes:
           paymentMethod === 'borrow'
             ? 'POS · BORROW (due)'
@@ -188,6 +206,7 @@ export function ShopPosPage() {
       setBasket([]);
       setBillDiscountType('');
       setBillDiscountValue('0');
+      setPointsToRedeem(0);
       const dueLabel = paymentMethod === 'borrow' ? ' · Due' : '';
       snackbar.push(
         `Bill ${order.order_number} created${dueLabel} · ${totals.payable.toFixed(2)}`,
@@ -286,7 +305,10 @@ export function ShopPosPage() {
             <span style={{ fontSize: 13, fontWeight: 600 }}>Customer</span>
             <select
               value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
+              onChange={(event) => {
+                setCustomerId(event.target.value);
+                setPointsToRedeem(0);
+              }}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             >
               <option value="">Walk-in customer</option>
@@ -302,6 +324,43 @@ export function ShopPosPage() {
               ))}
             </select>
           </label>
+          {customerId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+            <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Reward points</span>
+              <span style={{ fontSize: 13, opacity: 0.8 }}>
+                Balance {selectedCustomer?.loyalty_points ?? 0} pts · {loyaltyPrefs.points_per_currency_unit} pts = ₹1
+              </span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Button
+                  type="button"
+                  variant="neutral"
+                  onClick={() =>
+                    setPointsToRedeem((current) => {
+                      if (current <= 0) return 0;
+                      const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
+                      return next < loyaltyPrefs.min_redeem_points ? 0 : next;
+                    })
+                  }
+                >
+                  −
+                </Button>
+                <strong>{pointsToRedeem} pts</strong>
+                <Button
+                  type="button"
+                  variant="neutral"
+                  onClick={() =>
+                    setPointsToRedeem((current) => {
+                      const step = Math.max(1, loyaltyPrefs.min_redeem_points);
+                      if (current <= 0) return Math.min(loyaltyMaxPoints, step);
+                      return Math.min(loyaltyMaxPoints, current + step);
+                    })
+                  }
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
           <div style={{ display: 'grid', gap: 10, maxHeight: 360, overflow: 'auto', marginBottom: 12 }}>
             {basket.map((line) => {
@@ -442,13 +501,19 @@ export function ShopPosPage() {
               <span>Bill discount</span>
               <span>-{totals.billDiscountAmount.toFixed(2)}</span>
             </div>
+            {loyaltyDiscount > 0 ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Reward points</span>
+                <span>-{loyaltyDiscount.toFixed(2)}</span>
+              </div>
+            ) : null}
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>Tax</span>
               <span>{totals.taxTotal.toFixed(2)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 18 }}>
               <span>{paymentMethod === 'borrow' ? 'Amount due' : 'Payable'}</span>
-              <span>{totals.payable.toFixed(2)}</span>
+              <span>{payableAfterLoyalty.toFixed(2)}</span>
             </div>
           </div>
 
@@ -461,8 +526,8 @@ export function ShopPosPage() {
             {createOrder.isPending
               ? 'Creating bill…'
               : paymentMethod === 'borrow'
-                ? `Create Bill · Due ${totals.payable.toFixed(2)}`
-                : `Create Bill · ${totals.payable.toFixed(2)}`}
+                ? `Create Bill · Due ${payableAfterLoyalty.toFixed(2)}`
+                : `Create Bill · ${payableAfterLoyalty.toFixed(2)}`}
           </Button>
         </Card>
       </div>

@@ -6,6 +6,7 @@ import type {
   ShopBooksVoucherType,
   ShopCashAccountWriteInput,
   ShopComplianceSettingsUpdateInput,
+  ShopCouponWriteInput,
   ShopDeliveryZoneWriteInput,
   ShopEWayGenerateInput,
   ShopOrderCreateInput,
@@ -144,6 +145,24 @@ export function useShopPets(customerId?: string) {
   });
 }
 
+export function useShopGodowns() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const businessId = workspace.businessId ?? '';
+  return useQuery({
+    queryKey: ['shop-godowns', businessId],
+    enabled: Boolean(businessId),
+    queryFn: async () => {
+      try {
+        const response = await client.shop.listGodowns({ business_id: businessId });
+        return response.data ?? [];
+      } catch {
+        return [];
+      }
+    },
+  });
+}
+
 export function useShopProductMutations() {
   const client = useApiClient();
   const workspace = useWorkspace();
@@ -155,7 +174,10 @@ export function useShopProductMutations() {
       const response = await client.shop.createProduct({ ...body, business_id: businessId });
       return response.data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-products'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shop-products'] });
+      queryClient.invalidateQueries({ queryKey: ['shop-godowns'] });
+    },
   });
 
   const update = useMutation({
@@ -169,7 +191,10 @@ export function useShopProductMutations() {
       const response = await client.shop.patchProduct(productId, body);
       return response.data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-products'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shop-products'] });
+      queryClient.invalidateQueries({ queryKey: ['shop-godowns'] });
+    },
   });
 
   const lookup = useMutation({
@@ -317,6 +342,62 @@ export function useShopDeliveryZoneMutations() {
   });
 
   return { createZone, patchZone };
+}
+
+export function useShopCoupons() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const businessId = workspace.businessId ?? '';
+  return useQuery({
+    queryKey: ['shop-coupons', businessId],
+    enabled: Boolean(businessId),
+    queryFn: async () => {
+      const response = await client.shop.listCoupons({ business_id: businessId });
+      return response.data;
+    },
+  });
+}
+
+export function useShopCouponMutations() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const queryClient = useQueryClient();
+  const businessId = workspace.businessId ?? '';
+
+  const createCoupon = useMutation({
+    mutationFn: async (body: Omit<ShopCouponWriteInput, 'business_id'>) => {
+      const response = await client.shop.createCoupon({ ...body, business_id: businessId });
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-coupons'] }),
+  });
+
+  const patchCoupon = useMutation({
+    mutationFn: async ({
+      couponId,
+      body,
+    }: {
+      couponId: string;
+      body: Partial<ShopCouponWriteInput>;
+    }) => {
+      const response = await client.shop.updateCoupon(couponId, {
+        ...body,
+        business_id: businessId,
+      });
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-coupons'] }),
+  });
+
+  const deleteCoupon = useMutation({
+    mutationFn: async (couponId: string) => {
+      const response = await client.shop.deleteCoupon(couponId);
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-coupons'] }),
+  });
+
+  return { createCoupon, patchCoupon, deleteCoupon };
 }
 
 export function useShopSettingsMutations() {

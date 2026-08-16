@@ -209,6 +209,7 @@ class ShopProduct(TenantModel):
     name = models.CharField(max_length=200)
     brand = models.CharField(max_length=120, blank=True)
     description = models.TextField(blank=True)
+    details_html = models.TextField(blank=True)
     status = models.CharField(
         max_length=32,
         choices=ProductStatus.choices,
@@ -298,6 +299,63 @@ class ShopProductBarcode(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.code} ({self.barcode_type})"
+
+
+class ShopProductReview(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_product_reviews",
+    )
+    product = models.ForeignKey(
+        ShopProduct,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="shop_product_reviews",
+    )
+    rating = models.PositiveSmallIntegerField()
+    title = models.CharField(max_length=200, blank=True)
+    comment = models.TextField(blank=True)
+    verified_purchase = models.BooleanField(default=False)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_product_reviews"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(rating__gte=1) & models.Q(rating__lte=5),
+                name="ck_shop_product_review_rating_range",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "product", "customer"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_shop_product_review_customer_active",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["is_active", "deleted_at"], name="shop_produc_is_acti_rev1_idx"),
+            models.Index(fields=["created_at"], name="shop_produc_created_rev1_idx"),
+            models.Index(fields=["updated_at"], name="shop_produc_updated_rev1_idx"),
+            models.Index(
+                fields=["tenant", "is_active", "deleted_at"],
+                name="shop_produc_tenant__rev1_idx",
+            ),
+            models.Index(fields=["tenant", "created_at"], name="shop_produc_tenant_c_rev1_idx"),
+            models.Index(
+                fields=["tenant", "business", "product"],
+                name="shop_produc_tenant_b_rev1_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.rating}★ {self.product_id}"
 
 
 class ShopOrder(TenantModel):
@@ -1272,3 +1330,225 @@ class ShopLoan(TenantModel):
     class Meta(TenantModel.Meta):
         db_table = "shop_loans"
         ordering = ["-created_at"]
+
+
+class ShopDashboardAd(TenantModel):
+    """Promotional banners for the customer app (max 5 active per business)."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_dashboard_ads",
+    )
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True)
+    media = models.ForeignKey(
+        "platform_media.Media",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_dashboard_ads",
+    )
+    image_url = models.CharField(max_length=1024, blank=True)
+    link_url = models.CharField(max_length=1024, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    starts_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_dashboard_ads"
+        ordering = ["sort_order", "-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "is_active", "sort_order"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class CustomerReferralStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    QUALIFIED = "qualified", "Qualified"
+    REWARDED = "rewarded", "Rewarded"
+    VOID = "void", "Void"
+
+
+class CustomerReferralCode(TenantModel):
+    """Per-customer referral code unique within a business."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="customer_referral_codes",
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="referral_codes",
+    )
+    code = models.SlugField(max_length=40)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_customer_referral_codes"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "code"],
+                name="uq_shop_customer_referral_code",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "business", "customer"],
+                name="uq_shop_customer_referral_code_customer",
+            ),
+        ]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "code"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.code
+
+
+class CustomerReferral(TenantModel):
+    """Tracks a referred customer and reward lifecycle."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="customer_referrals",
+    )
+    referrer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="referrals_made",
+    )
+    referred = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="referrals_received",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=CustomerReferralStatus.choices,
+        default=CustomerReferralStatus.PENDING,
+        db_index=True,
+    )
+    rewarded_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_customer_referrals"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "referred"],
+                name="uq_shop_customer_referral_referred",
+            ),
+        ]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "status"]),
+            models.Index(fields=["tenant", "business", "referrer"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.referrer_id} → {self.referred_id} ({self.status})"
+
+
+class ShopCoupon(TenantModel):
+    """Promo code for online (pickup/delivery) shop orders."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_coupons",
+    )
+    code = models.CharField(max_length=40)
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    discount_type = models.CharField(
+        max_length=16,
+        choices=DiscountType.choices,
+        default=DiscountType.PERCENT,
+    )
+    discount_value = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    min_order_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    max_discount_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    starts_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    max_redemptions = models.PositiveIntegerField(null=True, blank=True)
+    max_redemptions_per_customer = models.PositiveIntegerField(null=True, blank=True)
+    first_order_only = models.BooleanField(default=False)
+    redemption_count = models.PositiveIntegerField(default=0)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_coupons"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "code"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_shop_coupon_code_active",
+            ),
+        ]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "code"]),
+            models.Index(fields=["tenant", "business", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.code
+
+
+class ShopCouponRedemption(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_coupon_redemptions",
+    )
+    coupon = models.ForeignKey(ShopCoupon, on_delete=models.CASCADE, related_name="redemptions")
+    order = models.OneToOneField(
+        ShopOrder,
+        on_delete=models.CASCADE,
+        related_name="coupon_redemption",
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_coupon_redemptions",
+    )
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_coupon_redemptions"
+        ordering = ["-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "coupon"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.coupon_id}@{self.order_id}"

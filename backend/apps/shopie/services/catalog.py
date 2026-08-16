@@ -6,7 +6,7 @@ from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Avg, Count, Q, QuerySet
 
 from apps.businesses.models import Business
 from apps.shopie.models import (
@@ -19,6 +19,7 @@ from apps.shopie.models import (
     StockMovementType,
 )
 from apps.shopie.services.enrichment import ProductEnrichmentService
+from apps.shopie.services.html_sanitize import sanitize_product_html
 from apps.tenancy.models import Tenant
 
 
@@ -37,6 +38,14 @@ class CatalogService:
         qs = (
             ShopProduct.objects.filter(tenant=tenant, business=business)
             .prefetch_related("barcodes")
+            .annotate(
+                rating_avg=Avg("reviews__rating", filter=Q(reviews__deleted_at__isnull=True, reviews__is_active=True)),
+                rating_count=Count(
+                    "reviews",
+                    filter=Q(reviews__deleted_at__isnull=True, reviews__is_active=True),
+                    distinct=True,
+                ),
+            )
             .order_by("name")
         )
         if status:
@@ -58,6 +67,14 @@ class CatalogService:
         return (
             ShopProduct.objects.filter(tenant=tenant, business=business, id=product_id)
             .prefetch_related("barcodes")
+            .annotate(
+                rating_avg=Avg("reviews__rating", filter=Q(reviews__deleted_at__isnull=True, reviews__is_active=True)),
+                rating_count=Count(
+                    "reviews",
+                    filter=Q(reviews__deleted_at__isnull=True, reviews__is_active=True),
+                    distinct=True,
+                ),
+            )
             .get()
         )
 
@@ -120,6 +137,7 @@ class CatalogService:
             name=str(data["name"]).strip(),
             brand=str(data.get("brand") or "").strip(),
             description=str(data.get("description") or "").strip(),
+            details_html=sanitize_product_html(data.get("details_html")),
             status=str(data.get("status") or ProductStatus.ACTIVE),
             price=Decimal(str(data.get("price") or "0")),
             tax_rate=Decimal(str(data.get("tax_rate") or "0")),
@@ -127,7 +145,7 @@ class CatalogService:
             gst_rate=Decimal(str(data.get("gst_rate") if data.get("gst_rate") is not None else data.get("tax_rate") or "0")),
             batch_tracking_enabled=bool(data.get("batch_tracking_enabled") or False),
             currency=str(data.get("currency") or business.currency or "INR"),
-            stock_on_hand=Decimal(str(data.get("stock_on_hand") or "0")),
+            stock_on_hand=Decimal("0"),
             low_stock_threshold=Decimal(str(data.get("low_stock_threshold") or "0")),
             pack_size=str(data.get("pack_size") or "").strip(),
             image_url=str(data.get("image_url") or "").strip(),
@@ -137,15 +155,16 @@ class CatalogService:
         product = self._sync_primary_image(product)
         for row in barcodes or []:
             self._attach_barcode(tenant=tenant, business=business, product=product, row=row)
-        if product.stock_on_hand != 0:
-            ShopStockMovement.objects.create(
+        initial_stock = Decimal(str(data.get("stock_on_hand") or "0"))
+        if initial_stock != 0:
+            product = self.adjust_stock(
                 tenant=tenant,
                 business=business,
                 product=product,
+                quantity_delta=initial_stock,
                 movement_type=StockMovementType.RECEIVE,
-                quantity_delta=product.stock_on_hand,
-                quantity_after=product.stock_on_hand,
                 reason="Initial stock",
+                godown_id=data.get("godown_id"),
             )
         return self.get_product(tenant=tenant, business=business, product_id=product.id)
 
@@ -164,13 +183,17 @@ class CatalogService:
             "name",
             "brand",
             "description",
+            "details_html",
             "status",
             "pack_size",
             "image_url",
             "hsn_sac",
         ):
             if field in data and data[field] is not None:
-                setattr(product, field, str(data[field]).strip() if isinstance(data[field], str) else data[field])
+                value = str(data[field]).strip() if isinstance(data[field], str) else data[field]
+                if field == "details_html":
+                    value = sanitize_product_html(str(value) if value is not None else "")
+                setattr(product, field, value)
         for field in ("price", "tax_rate", "gst_rate", "low_stock_threshold"):
             if field in data and data[field] is not None:
                 setattr(product, field, Decimal(str(data[field])))
@@ -191,6 +214,7 @@ class CatalogService:
                     quantity_delta=delta,
                     movement_type=StockMovementType.ADJUST,
                     reason="Manual stock edit",
+                    godown_id=data.get("godown_id"),
                 )
         if "metadata" in data and data["metadata"] is not None:
             incoming = data["metadata"] if isinstance(data["metadata"], dict) else {}
@@ -221,12 +245,29 @@ class CatalogService:
         movement_type: str = StockMovementType.ADJUST,
         reason: str = "",
         order=None,
+        godown_id=None,
     ) -> ShopProduct:
+        quantity_delta = Decimal(str(quantity_delta or "0"))
         new_qty = product.stock_on_hand + quantity_delta
         if new_qty < 0:
             raise ValidationError({"stock_on_hand": "Insufficient stock."})
         product.stock_on_hand = new_qty
         product.save(update_fields=["stock_on_hand", "updated_at", "version"])
+        from apps.shopie.services.godowns import GodownsService
+
+        stock_row = GodownsService().apply_catalog_delta(
+            tenant=tenant,
+            business=business,
+            product=product,
+            delta=quantity_delta,
+            godown_id=godown_id,
+            quantity_after=new_qty,
+        )
+        metadata: dict[str, Any] = {}
+        if godown_id:
+            metadata["godown_id"] = str(godown_id)
+        elif stock_row is not None:
+            metadata["godown_id"] = str(stock_row.godown_id)
         ShopStockMovement.objects.create(
             tenant=tenant,
             business=business,
@@ -236,6 +277,7 @@ class CatalogService:
             quantity_after=new_qty,
             reason=reason,
             order=order,
+            metadata=metadata,
         )
         return product
 

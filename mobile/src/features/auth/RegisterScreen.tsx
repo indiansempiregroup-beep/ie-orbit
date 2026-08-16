@@ -8,6 +8,7 @@ import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import { customerAppFeatures } from '../../utils/customerFeatures';
@@ -18,6 +19,7 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 export function RegisterScreen({ navigation }: Props) {
   const { register } = useAuth();
   const { branding, bootstrap } = useBootstrap();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
   const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
   const appName = branding?.appName ?? 'us';
@@ -70,7 +72,7 @@ export function RegisterScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: headerPaddingTop }]} keyboardShouldPersistTaps="handled">
         <BrandMark />
         <Text style={styles.title}>Create your account</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
@@ -138,7 +140,7 @@ export function RegisterScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xxl, paddingTop: 56, gap: spacing.lg },
+  content: { padding: spacing.xxl, gap: spacing.lg },
   title: { ...typography.heading, color: colors.foreground },
   subtitle: { ...typography.body, color: colors.mutedForeground },
   form: { gap: spacing.lg },

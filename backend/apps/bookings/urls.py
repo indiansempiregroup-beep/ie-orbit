@@ -12,8 +12,12 @@ from apps.bookings.api.views import (
     BookingReviewListView,
     BusinessAvailabilityView,
     StaffAvailabilityView,
+    StaffEmergencySlotDetailView,
+    StaffEmergencySlotListCreateView,
     StaffLeaveDetailView,
     StaffLeaveListCreateView,
+    StaffSlotBlockDetailView,
+    StaffSlotBlockListCreateView,
     StaffSpecialAvailabilityDetailView,
     StaffSpecialAvailabilityListCreateView,
     StaffWeeklyScheduleBulkView,
@@ -69,5 +73,25 @@ urlpatterns = [
         "staff-special-availability/<uuid:special_id>",
         StaffSpecialAvailabilityDetailView.as_view(),
         name="staff-special-availability-detail",
+    ),
+    path(
+        "staff-slot-blocks",
+        StaffSlotBlockListCreateView.as_view(),
+        name="staff-slot-block-list-create",
+    ),
+    path(
+        "staff-slot-blocks/<uuid:block_id>",
+        StaffSlotBlockDetailView.as_view(),
+        name="staff-slot-block-detail",
+    ),
+    path(
+        "staff-emergency-slots",
+        StaffEmergencySlotListCreateView.as_view(),
+        name="staff-emergency-slot-list-create",
+    ),
+    path(
+        "staff-emergency-slots/<uuid:slot_id>",
+        StaffEmergencySlotDetailView.as_view(),
+        name="staff-emergency-slot-detail",
     ),
 ]

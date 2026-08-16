@@ -4,7 +4,7 @@ import { RouteProp, useRoute } from '@react-navigation/native';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { FormScreen } from '../../components/FormScreen';
-import { SelectField } from '../../components/SelectField';
+import { TimeField } from '../../components/TimeField';
 import { ScreenState } from '../../components/ScreenState';
 import { TIME_OPTIONS } from '../../constants/options';
 import { useStaffMember, useStaffSchedule, useStaffScheduleMutations } from '../../hooks/useOpsExtended';
@@ -134,18 +134,16 @@ export function StaffScheduleScreen() {
           </View>
           {row.is_available ? (
             <View style={styles.times}>
-              <SelectField
+              <TimeField
                 label="Start"
                 value={row.shift_start}
-                options={TIME_OPTIONS}
                 onChange={(shift_start) => {
                   setRows((current) => current.map((item, i) => (i === index ? { ...item, shift_start } : item)));
                 }}
               />
-              <SelectField
+              <TimeField
                 label="End"
                 value={row.shift_end}
-                options={TIME_OPTIONS}
                 onChange={(shift_end) => {
                   setRows((current) => current.map((item, i) => (i === index ? { ...item, shift_end } : item)));
                 }}

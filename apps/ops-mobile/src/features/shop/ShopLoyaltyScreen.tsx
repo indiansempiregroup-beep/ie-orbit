@@ -10,44 +10,24 @@ import { Button } from '../../components/ui/Button';
 import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
-import type { Customer, ShopGrowSettings } from '@ie-platform/sdk';
+import type { Customer } from '@ie-platform/sdk';
 import { customerLabel, formatMoney } from './shopBooksHelpers';
-
-type LoyaltySettings = NonNullable<ShopGrowSettings['loyalty']>;
-
-function readGrow(metadata?: Record<string, unknown>): ShopGrowSettings {
-  const grow = metadata?.grow;
-  if (grow && typeof grow === 'object') return grow as ShopGrowSettings;
-  return {};
-}
-
-function customerPoints(customer: Customer): number | null {
-  const meta = (customer as Customer & { metadata?: Record<string, unknown>; loyalty_points?: number })
-    .metadata;
-  const direct = (customer as Customer & { loyalty_points?: number }).loyalty_points;
-  if (typeof direct === 'number') return direct;
-  const fromMeta = meta?.loyalty_points ?? meta?.points;
-  if (typeof fromMeta === 'number') return fromMeta;
-  if (typeof fromMeta === 'string' && fromMeta.trim()) {
-    const n = Number(fromMeta);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
+import { readLoyaltyPrefs } from '../../utils/loyalty';
 
 export function ShopLoyaltyScreen() {
   const client = useOpsClient();
   const toast = useToast();
-  const { businessId } = useWorkspace();
+  const { businessId, activeBusiness, refreshWorkspace } = useWorkspace();
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [rawMetadata, setRawMetadata] = useState<Record<string, unknown>>({});
   const [enabled, setEnabled] = useState(false);
-  const [pointsPer100, setPointsPer100] = useState('1');
-  const [redeemValue, setRedeemValue] = useState('1');
+  const [pointsPerUnit, setPointsPerUnit] = useState('10');
+  const [maxRedeemPercent, setMaxRedeemPercent] = useState('50');
+  const [minRedeemPoints, setMinRedeemPoints] = useState('10');
+  const [earnPointsPer100, setEarnPointsPer100] = useState('1');
   const [customerId, setCustomerId] = useState('');
 
   const load = useCallback(async () => {
@@ -55,19 +35,21 @@ export function ShopLoyaltyScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [settingsRes, customersRes] = await Promise.all([
-        client.shop.getSettings({ business_id: businessId }),
+      const [businessRes, customersRes] = await Promise.all([
+        client.businesses.get(businessId),
         client.customers.list({ business: businessId }),
       ]);
-      const metadata = (settingsRes.data.metadata ?? {}) as Record<string, unknown>;
-      const loyalty = readGrow(metadata).loyalty ?? {};
-      setRawMetadata(metadata);
-      setEnabled(Boolean(loyalty.enabled));
-      setPointsPer100(String(loyalty.points_per_100 ?? 1));
-      setRedeemValue(String(loyalty.redeem_value ?? 1));
+      const prefs = readLoyaltyPrefs(
+        (businessRes.data.settings ?? {}) as Record<string, unknown>,
+      );
+      setEnabled(prefs.enabled);
+      setPointsPerUnit(String(prefs.points_per_currency_unit));
+      setMaxRedeemPercent(String(prefs.max_redeem_percent));
+      setMinRedeemPoints(String(prefs.min_redeem_points));
+      setEarnPointsPer100(String(prefs.earn_points_per_100));
       setCustomers(customersRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load loyalty settings');
+      setError(err instanceof Error ? err.message : 'Failed to load reward points settings');
     } finally {
       setLoading(false);
     }
@@ -96,32 +78,25 @@ export function ShopLoyaltyScreen() {
 
   async function save() {
     if (!client || !businessId) return;
-    const points = Number(pointsPer100);
-    const redeem = Number(redeemValue);
-    if (!Number.isFinite(points) || points < 0 || !Number.isFinite(redeem) || redeem < 0) {
-      toast.push('Enter valid loyalty numbers', 'error');
-      return;
-    }
+    const rate = Math.max(1, Number(pointsPerUnit) || 10);
+    const maxPercent = Math.min(100, Math.max(0, Number(maxRedeemPercent) || 0));
+    const minPoints = Math.max(0, Number(minRedeemPoints) || 0);
+    const earn = Math.max(0, Number(earnPointsPer100) || 0);
     setBusy(true);
     try {
-      const grow = readGrow(rawMetadata);
-      const nextLoyalty: LoyaltySettings = {
-        enabled,
-        points_per_100: points,
-        redeem_value: redeem,
-      };
-      const response = await client.shop.patchSettings({
-        business_id: businessId,
-        metadata: {
-          ...rawMetadata,
-          grow: {
-            ...grow,
-            loyalty: nextLoyalty,
+      await client.businesses.patch(businessId, {
+        settings: {
+          loyalty_preferences: {
+            enabled,
+            points_per_currency_unit: rate,
+            max_redeem_percent: maxPercent,
+            min_redeem_points: minPoints,
+            earn_points_per_100: earn,
           },
         },
       });
-      setRawMetadata((response.data.metadata ?? {}) as Record<string, unknown>);
-      toast.push('Loyalty settings saved', 'success');
+      await refreshWorkspace();
+      toast.push('Reward points settings saved', 'success');
     } catch (err) {
       toast.push(err instanceof Error ? err.message : 'Unable to save settings', 'error');
     } finally {
@@ -145,7 +120,7 @@ export function ShopLoyaltyScreen() {
       onRefresh={onRefresh}
       footer={
         <Button
-          label={busy ? 'Saving…' : 'Save loyalty rules'}
+          label={busy ? 'Saving…' : 'Save reward points'}
           loading={busy}
           fullWidth
           size="lg"
@@ -154,14 +129,15 @@ export function ShopLoyaltyScreen() {
       }
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.formTitle}>Loyalty program</Text>
+      <Text style={styles.formTitle}>Reward points</Text>
       <Text style={styles.help}>
-        Earn and redeem rules are stored in shop settings. Points can be applied at Sale once enabled for
-        your store.
+        Same program as Products & billing. One balance for bookings, online orders, POS, and Books
+        sales.
+        {activeBusiness?.display_name ? ` Workspace: ${activeBusiness.display_name}.` : ''}
       </Text>
 
       <View style={styles.switchRow}>
-        <Text style={styles.label}>Enable loyalty</Text>
+        <Text style={styles.label}>Enable for customers</Text>
         <Switch
           value={enabled}
           onValueChange={setEnabled}
@@ -171,23 +147,42 @@ export function ShopLoyaltyScreen() {
       </View>
 
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Points per ₹100 spent</Text>
+        <Text style={styles.label}>Points per ₹1 off</Text>
         <TextInput
           style={styles.input}
-          value={pointsPer100}
-          onChangeText={(value) => setPointsPer100(value.replace(/[^0-9.]/g, ''))}
-          keyboardType="decimal-pad"
+          value={pointsPerUnit}
+          onChangeText={(value) => setPointsPerUnit(value.replace(/[^0-9]/g, ''))}
+          keyboardType="number-pad"
           placeholderTextColor={colors.mutedForeground}
         />
       </View>
-
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Redeem value (₹ per point)</Text>
+        <Text style={styles.label}>Max redeem %</Text>
         <TextInput
           style={styles.input}
-          value={redeemValue}
-          onChangeText={(value) => setRedeemValue(value.replace(/[^0-9.]/g, ''))}
-          keyboardType="decimal-pad"
+          value={maxRedeemPercent}
+          onChangeText={(value) => setMaxRedeemPercent(value.replace(/[^0-9]/g, ''))}
+          keyboardType="number-pad"
+          placeholderTextColor={colors.mutedForeground}
+        />
+      </View>
+      <View style={styles.fieldBlock}>
+        <Text style={styles.label}>Minimum redeem points</Text>
+        <TextInput
+          style={styles.input}
+          value={minRedeemPoints}
+          onChangeText={(value) => setMinRedeemPoints(value.replace(/[^0-9]/g, ''))}
+          keyboardType="number-pad"
+          placeholderTextColor={colors.mutedForeground}
+        />
+      </View>
+      <View style={styles.fieldBlock}>
+        <Text style={styles.label}>Points per ₹100 spent</Text>
+        <TextInput
+          style={styles.input}
+          value={earnPointsPer100}
+          onChangeText={(value) => setEarnPointsPer100(value.replace(/[^0-9]/g, ''))}
+          keyboardType="number-pad"
           placeholderTextColor={colors.mutedForeground}
         />
       </View>
@@ -208,21 +203,12 @@ export function ShopLoyaltyScreen() {
               Borrow due · {formatMoney(selectedCustomer.borrow_balance_due)}
             </Text>
           ) : null}
-          {(() => {
-            const points = customerPoints(selectedCustomer);
-            return points != null ? (
-              <Text style={styles.meta}>Loyalty points · {points}</Text>
-            ) : (
-              <Text style={styles.meta}>
-                Loyalty balance is not on the customer record yet. Rules above still apply at checkout.
-              </Text>
-            );
-          })()}
+          <Text style={styles.meta}>
+            Reward points · {selectedCustomer.loyalty_points ?? 0}
+          </Text>
         </View>
       ) : (
-        <Text style={styles.meta}>
-          Search a customer to see borrow balance and loyalty notes when available.
-        </Text>
+        <Text style={styles.meta}>Search a customer to see their reward points balance.</Text>
       )}
     </FormScreen>
   );

@@ -3,6 +3,7 @@ import { useBootstrap } from '../contexts/BootstrapContext';
 import { resolveFlavorBranding } from '../config/flavors';
 import { applyMobileBranding } from '../theme/brandTheme';
 import { SplashBackdrop, SplashScreen } from '../components/SplashScreen';
+import { customerAppFeatures } from '../utils/customerFeatures';
 
 const SPLASH_DURATION_MS = 3000;
 
@@ -18,6 +19,13 @@ export function SplashGate({ children }: { children: React.ReactNode }) {
   );
   const businessName =
     bootstrap?.business?.display_name ?? bootstrap?.app_name ?? splashBranding.appName;
+  const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
+  const tagline =
+    showBooking && showShop
+      ? 'Book, shop, and stay connected'
+      : showShop
+        ? 'Your shop, in your pocket'
+        : 'Your appointments, beautifully managed';
 
   useEffect(() => {
     if (!bootstrapSettled || dismissed) return undefined;
@@ -30,7 +38,7 @@ export function SplashGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!dismissed) {
-    return <SplashScreen branding={splashBranding} businessName={businessName} />;
+    return <SplashScreen branding={splashBranding} businessName={businessName} tagline={tagline} />;
   }
 
   return <>{children}</>;

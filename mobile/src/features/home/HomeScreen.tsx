@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
-import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp, useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { MobileDiscoverService, PlatformAnnouncement, ShopOrder, ShopProduct } from '@ie-platform/sdk';
+import type { MobileDiscoverService, PlatformAnnouncement, ShopDashboardAd, ShopOrder, ShopProduct } from '@ie-platform/sdk';
 import { mobileClient } from '../../api/client';
+import { PromoCarousel, openPromoAd } from '../../components/PromoCarousel';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
@@ -16,6 +18,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Avatar } from '../../components/ui/Avatar';
 import { Badge } from '../../components/ui/Badge';
 import { SectionHeader } from '../../components/ui/SectionHeader';
+import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatTime, isUpcomingBooking, mapBookingStatus } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
@@ -27,11 +30,17 @@ type HomeNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+function bookingDateParts(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return { day: '—', month: '', weekday: '', dateLabel: '—' };
+  }
+  return {
+    day: date.toLocaleDateString(undefined, { day: 'numeric' }),
+    month: date.toLocaleDateString(undefined, { month: 'short' }).toUpperCase(),
+    weekday: date.toLocaleDateString(undefined, { weekday: 'short' }),
+    dateLabel: date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' }),
+  };
 }
 
 function announcementTone(severity?: string) {
@@ -42,19 +51,24 @@ function announcementTone(severity?: string) {
 
 export function HomeScreen() {
   const navigation = useNavigation<HomeNavigation>();
+  const homeFocused = useIsFocused();
   const { user } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
   const secondary = branding?.secondaryColor ?? '#1E40AF';
-  const { showBooking, showShop, showPets } = customerAppFeatures(bootstrap?.features);
+  const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
   const appName = bootstrap?.business.display_name ?? branding?.appName ?? 'us';
 
   const [services, setServices] = useState<MobileDiscoverService[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [orders, setOrders] = useState<ShopOrder[]>([]);
   const [announcements, setAnnouncements] = useState<PlatformAnnouncement[]>([]);
+  const [ads, setAds] = useState<ShopDashboardAd[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const { bookings, loading: bookingsLoading, reload: reloadBookings } = useMobileBookings();
   const { unreadCount, loading: notificationsLoading, reload: reloadNotifications } = useMobileNotifications();
   const displayName = user?.first_name || user?.full_name || 'there';
@@ -63,7 +77,7 @@ export function HomeScreen() {
     if (!tenantSlug || !businessCode) return;
     setCatalogLoading(true);
     try {
-      const [serviceRes, productRes, orderRes, announcementRes] = await Promise.allSettled([
+      const [serviceRes, productRes, orderRes, announcementRes, adsRes] = await Promise.allSettled([
         showBooking
           ? mobileClient.mobile.discoverServices({ tenant_slug: tenantSlug, business_code: businessCode })
           : Promise.resolve(null),
@@ -74,6 +88,7 @@ export function HomeScreen() {
           ? mobileClient.mobile.listShopOrders({ tenant_slug: tenantSlug, business_code: businessCode })
           : Promise.resolve(null),
         mobileClient.help.activeAnnouncements(),
+        mobileClient.mobile.listShopAds({ tenant_slug: tenantSlug, business_code: businessCode }),
       ]);
       setServices(
         serviceRes.status === 'fulfilled' && serviceRes.value ? serviceRes.value.data.services.slice(0, 6) : [],
@@ -83,13 +98,28 @@ export function HomeScreen() {
       setAnnouncements(
         announcementRes.status === 'fulfilled' ? announcementRes.value.data.announcements ?? [] : [],
       );
+      setAds(adsRes.status === 'fulfilled' ? adsRes.value.data ?? [] : []);
     } finally {
       setCatalogLoading(false);
     }
   }, [tenantSlug, businessCode, showBooking, showShop]);
 
+  const loadLoyalty = useCallback(async () => {
+    if (!tenantSlug || !businessCode) return;
+    try {
+      const res = await mobileClient.mobile.getLoyalty({
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+      });
+      setLoyaltyEnabled(Boolean(res.data.enabled || bootstrap?.loyalty?.enabled));
+      setLoyaltyPoints(res.data.enabled ? res.data.points_balance ?? 0 : 0);
+    } catch {
+      setLoyaltyEnabled(Boolean(bootstrap?.loyalty?.enabled));
+    }
+  }, [tenantSlug, businessCode, bootstrap?.loyalty?.enabled]);
+
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await Promise.all([reloadBookings(), reloadNotifications(), loadCatalog()]);
+    await Promise.all([reloadBookings(), reloadNotifications(), loadCatalog(), loadLoyalty()]);
   });
 
   const isRefreshing = refreshing || bookingsLoading || notificationsLoading || catalogLoading;
@@ -98,17 +128,26 @@ export function HomeScreen() {
     React.useCallback(() => {
       void reloadBookings();
       void reloadNotifications();
-    }, [reloadBookings, reloadNotifications]),
+      void loadLoyalty();
+    }, [reloadBookings, reloadNotifications, loadLoyalty]),
   );
 
   useEffect(() => {
     void loadCatalog();
-  }, [loadCatalog]);
+    void loadLoyalty();
+  }, [loadCatalog, loadLoyalty]);
 
-  const nextBooking = useMemo(
-    () => bookings.find((booking) => isUpcomingBooking(booking.status, booking.start_at)),
+  const upcomingBookings = useMemo(
+    () =>
+      bookings
+        .filter((booking) => isUpcomingBooking(booking.status, booking.start_at))
+        .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+        .slice(0, 5),
     [bookings],
   );
+  const nextBooking = upcomingBookings[0];
+  const moreUpcoming = upcomingBookings.slice(1);
+  const nextParts = nextBooking ? bookingDateParts(nextBooking.start_at) : null;
 
   const recentBookings = useMemo(
     () =>
@@ -127,105 +166,109 @@ export function HomeScreen() {
       ? 'Your neighborhood shop, in your pocket'
       : 'Your trusted booking partner';
 
-  const quickActions = [
-    showBooking
-      ? { key: 'book', icon: 'calendar' as const, label: 'Book', onPress: () => navigation.navigate('Book') }
-      : null,
-    showShop
-      ? { key: 'shop', icon: 'shopping-bag' as const, label: 'Shop', onPress: () => navigation.navigate('Shop') }
-      : null,
-    showPets
-      ? { key: 'pets', icon: 'heart' as const, label: 'Pets', onPress: () => navigation.navigate('MyPets') }
-      : null,
-    showBooking
-      ? { key: 'history', icon: 'clock' as const, label: 'History', onPress: () => navigation.navigate('BookingHistory') }
-      : showShop
-        ? { key: 'orders', icon: 'package' as const, label: 'Orders', onPress: () => navigation.navigate('ShopOrderHistory') }
-        : null,
-    { key: 'alerts', icon: 'bell' as const, label: 'Alerts', onPress: () => navigation.navigate('Alerts') },
-  ]
-    .filter((item): item is NonNullable<typeof item> => Boolean(item))
-    .slice(0, 4);
-
   return (
-    <RefreshableScrollView
-      style={styles.root}
-      contentContainerStyle={styles.content}
-      refreshing={isRefreshing}
-      onRefresh={onRefresh}
-      primaryColor={primary}
-    >
-      <LinearGradient colors={[primary, secondary]} style={styles.hero}>
-        <View style={styles.heroTop}>
-          <View>
-            <Text style={styles.heroGreeting}>{greeting()},</Text>
-            <Text style={styles.heroName}>{displayName} 👋</Text>
-          </View>
+    <View style={styles.root}>
+      {homeFocused ? <StatusBar style="light" /> : null}
+      <LinearGradient colors={[primary, secondary]} style={[styles.topBar, { paddingTop: headerPaddingTop }]}>
+        <Text style={styles.heroName} numberOfLines={1}>
+          {displayName}
+        </Text>
+        <View style={styles.heroActions}>
+          {loyaltyEnabled ? (
+            <Pressable style={styles.pointsChip} onPress={() => navigation.navigate('Profile')}>
+              <Feather name="award" size={14} color="#fff" />
+              <Text style={styles.pointsChipText}>{loyaltyPoints} pts</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.bell} onPress={() => navigation.navigate('Alerts')}>
             <Feather name="bell" size={16} color="#fff" />
             {unreadCount > 0 ? <View style={styles.bellDot} /> : null}
           </Pressable>
         </View>
+      </LinearGradient>
 
-        <View style={styles.nextCard}>
+      <RefreshableScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        refreshing={isRefreshing}
+        onRefresh={onRefresh}
+        primaryColor={primary}
+      >
+        <LinearGradient colors={[primary, secondary]} style={styles.hero}>
           {showBooking ? (
             nextBooking ? (
-              <>
+              <Pressable
+                style={styles.nextCard}
+                onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
+              >
                 <Text style={styles.nextLabel}>Next appointment</Text>
-                <Text style={styles.nextTitle}>{nextBooking.service_name}</Text>
-                {nextBooking.staff_name ? (
-                  <Text style={styles.nextHint}>with {nextBooking.staff_name}</Text>
-                ) : null}
-                <View style={styles.nextMetaRow}>
-                  <View style={styles.nextMetaItem}>
-                    <Feather name="calendar" size={12} color="rgba(255,255,255,0.6)" />
-                    <Text style={styles.nextMetaText}>{new Date(nextBooking.start_at).toLocaleDateString()}</Text>
+                <View style={styles.nextMain}>
+                  <View style={styles.nextDateTile}>
+                    <Text style={styles.nextDateMonth}>{nextParts?.month}</Text>
+                    <Text style={styles.nextDateDay}>{nextParts?.day}</Text>
                   </View>
-                  <View style={styles.nextMetaItem}>
-                    <Feather name="clock" size={12} color="rgba(255,255,255,0.6)" />
-                    <Text style={styles.nextMetaText}>{formatTime(nextBooking.start_at)}</Text>
+                  <View style={styles.nextCopy}>
+                    <Text style={styles.nextTitle} numberOfLines={2}>
+                      {nextBooking.service_name}
+                    </Text>
+                    <Text style={styles.nextHint}>
+                      {nextParts?.dateLabel} · {formatTime(nextBooking.start_at)}
+                    </Text>
+                    {nextBooking.staff_name ? (
+                      <Text style={styles.nextHint}>with {nextBooking.staff_name}</Text>
+                    ) : null}
                   </View>
                 </View>
-                <Pressable
-                  style={styles.manageBtn}
-                  onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
-                >
-                  <Text style={[styles.manageText, { color: primary }]}>Manage</Text>
-                </Pressable>
-              </>
+                <View style={styles.manageBtn}>
+                  <Text style={[styles.manageText, { color: primary }]}>View details</Text>
+                  <Feather name="chevron-right" size={14} color={primary} />
+                </View>
+              </Pressable>
             ) : (
-              <>
+              <Pressable style={styles.nextCard} onPress={() => navigation.navigate('Book')}>
                 <Text style={styles.nextLabel}>Next appointment</Text>
                 <Text style={styles.nextTitle}>No upcoming bookings</Text>
-                <Text style={styles.nextHint}>Book your next visit in seconds</Text>
-                <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('Book')}>
+                <Text style={styles.nextHint}>Book your next visit in a few taps</Text>
+                <View style={styles.manageBtn}>
                   <Text style={[styles.manageText, { color: primary }]}>Book now</Text>
-                </Pressable>
-              </>
+                  <Feather name="chevron-right" size={14} color={primary} />
+                </View>
+              </Pressable>
             )
           ) : showShop ? (
-            <>
+            <Pressable style={styles.nextCard} onPress={() => navigation.navigate('Shop')}>
               <Text style={styles.nextLabel}>Shop {appName}</Text>
               <Text style={styles.nextTitle}>Order in a few taps</Text>
               <Text style={styles.nextHint}>Browse products and keep your receipts in the app</Text>
-              <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('Shop')}>
+              <View style={styles.manageBtn}>
                 <Text style={[styles.manageText, { color: primary }]}>Shop now</Text>
-              </Pressable>
-            </>
+                <Feather name="chevron-right" size={14} color={primary} />
+              </View>
+            </Pressable>
           ) : (
-            <>
+            <Pressable style={styles.nextCard} onPress={() => navigation.navigate('HelpSupport')}>
               <Text style={styles.nextLabel}>Welcome</Text>
               <Text style={styles.nextTitle}>{appName}</Text>
               <Text style={styles.nextHint}>Reach the team any time from Help & Support</Text>
-              <Pressable style={styles.manageBtn} onPress={() => navigation.navigate('HelpSupport')}>
+              <View style={styles.manageBtn}>
                 <Text style={[styles.manageText, { color: primary }]}>Get help</Text>
-              </Pressable>
-            </>
+                <Feather name="chevron-right" size={14} color={primary} />
+              </View>
+            </Pressable>
           )}
-        </View>
-      </LinearGradient>
+        </LinearGradient>
 
-      <View style={styles.body}>
+        <PromoCarousel
+          ads={ads}
+          playing={homeFocused}
+          fallbackColors={[primary, secondary]}
+          ctaLabel={showShop ? 'Shop now' : 'Learn more'}
+          onPressAd={(ad) =>
+            openPromoAd(ad, (screen, params) => navigation.navigate(screen as never, params as never), showShop)
+          }
+        />
+
+        <View style={styles.body}>
         {announcements.length ? (
           <View style={styles.announceList}>
             {announcements.slice(0, 2).map((item) => {
@@ -240,16 +283,46 @@ export function HomeScreen() {
           </View>
         ) : null}
 
-        <View style={styles.quickActions}>
-          {quickActions.map((action) => (
-            <Pressable key={action.key} style={styles.quickCard} onPress={action.onPress}>
-              <View style={[styles.quickIcon, { backgroundColor: `${primary}14` }]}>
-                <Feather name={action.icon} size={20} color={primary} />
-              </View>
-              <Text style={styles.quickLabel}>{action.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {showBooking && moreUpcoming.length ? (
+          <>
+            <SectionHeader
+              title="Also coming up"
+              action={
+                <Pressable onPress={() => navigation.navigate('BookingHistory')}>
+                  <Text style={[styles.link, { color: primary }]}>See all</Text>
+                </Pressable>
+              }
+            />
+            <View style={styles.upcomingList}>
+              {moreUpcoming.map((booking) => {
+                const parts = bookingDateParts(booking.start_at);
+                return (
+                  <Pressable
+                    key={booking.id}
+                    style={styles.upcomingCard}
+                    onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                  >
+                    <View style={[styles.upcomingDate, { backgroundColor: `${primary}12` }]}>
+                      <Text style={[styles.upcomingMonth, { color: primary }]}>{parts.month}</Text>
+                      <Text style={[styles.upcomingDay, { color: primary }]}>{parts.day}</Text>
+                    </View>
+                    <View style={styles.sampleBody}>
+                      <Text style={styles.sampleTitle} numberOfLines={1}>
+                        {booking.service_name}
+                      </Text>
+                      <Text style={styles.sampleMeta}>
+                        {parts.weekday} · {formatTime(booking.start_at)}
+                        {booking.staff_name ? ` · ${booking.staff_name}` : ''}
+                      </Text>
+                    </View>
+                    <Badge status={mapBookingStatus(booking.status)} />
+                    <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
 
         {showBooking ? (
           <>
@@ -277,7 +350,7 @@ export function HomeScreen() {
                     <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.serviceImage} />
                   ) : (
                     <View style={[styles.serviceIcon, { backgroundColor: `${primary}12` }]}>
-                      <Feather name="scissors" size={18} color={primary} />
+                      <Feather name="calendar" size={18} color={primary} />
                     </View>
                   )}
                   <Text style={styles.serviceName} numberOfLines={2}>
@@ -364,7 +437,7 @@ export function HomeScreen() {
                   >
                     <View style={styles.sampleRow}>
                       <View style={styles.sampleIcon}>
-                        <Feather name="scissors" size={16} color={colors.mutedForeground} />
+                        <Feather name="calendar" size={16} color={colors.mutedForeground} />
                       </View>
                       <View style={styles.sampleBody}>
                         <Text style={styles.sampleTitle}>{booking.service_name}</Text>
@@ -421,17 +494,36 @@ export function HomeScreen() {
           </>
         ) : null}
       </View>
-    </RefreshableScrollView>
+      </RefreshableScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
   content: { paddingBottom: spacing.xxxl },
-  hero: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xxl },
-  heroGreeting: { ...typography.body, color: 'rgba(255,255,255,0.7)' },
-  heroName: { ...typography.heading, color: '#fff', marginTop: 2 },
+  topBar: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  hero: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  pointsChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+  },
+  pointsChipText: { ...typography.caption, color: '#fff', fontWeight: '700' },
+  heroName: { ...typography.heading, color: '#fff', flex: 1, fontSize: 20 },
   bell: {
     width: 36,
     height: 36,
@@ -455,22 +547,54 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: radius.xl,
     padding: spacing.lg,
+    gap: spacing.md,
   },
-  nextLabel: { ...typography.caption, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
+  nextLabel: { ...typography.caption, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.4 },
+  nextMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  nextDateTile: {
+    width: 56,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+  },
+  nextDateMonth: { ...typography.tiny, color: 'rgba(255,255,255,0.75)', fontWeight: '800', letterSpacing: 0.6 },
+  nextDateDay: { fontSize: 22, fontWeight: '800', color: '#fff', lineHeight: 26 },
+  nextCopy: { flex: 1, gap: 4 },
   nextTitle: { ...typography.title, color: '#fff' },
-  nextHint: { ...typography.caption, color: 'rgba(255,255,255,0.75)', marginTop: spacing.sm },
-  nextMetaRow: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
-  nextMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  nextMetaText: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
+  nextHint: { ...typography.caption, color: 'rgba(255,255,255,0.75)' },
   manageBtn: {
     alignSelf: 'flex-start',
-    marginTop: spacing.md,
     backgroundColor: '#fff',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   manageText: { ...typography.caption, fontWeight: '700' },
+  upcomingList: { gap: spacing.sm, marginBottom: spacing.xl },
+  upcomingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  upcomingDate: {
+    width: 52,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+  },
+  upcomingMonth: { ...typography.tiny, fontWeight: '800', letterSpacing: 0.5 },
+  upcomingDay: { fontSize: 20, fontWeight: '800', lineHeight: 24 },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
   announceList: { gap: spacing.sm, marginBottom: spacing.xl },
   announceCard: {
@@ -480,21 +604,6 @@ const styles = StyleSheet.create({
   },
   announceTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   announceBody: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
-  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.xxxl },
-  quickCard: {
-    flexGrow: 1,
-    flexBasis: 72,
-    minWidth: 72,
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.lg,
-  },
-  quickIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  quickLabel: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
   link: { ...typography.caption, fontWeight: '600' },
   serviceRow: { gap: spacing.md, paddingBottom: spacing.sm },
   serviceCard: {

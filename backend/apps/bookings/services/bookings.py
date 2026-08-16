@@ -310,6 +310,14 @@ class BookingService:
                 booking_id=booking.id,
                 service_id=booking.service_id,
             )
+            from apps.shopie.services.referrals import CustomerReferralService
+
+            CustomerReferralService().maybe_award_for_event(
+                tenant=booking.tenant,
+                business=booking.business,
+                referred=customer,
+                event="first_booking",
+            )
         except Exception:
             logger.exception(
                 "Failed to award loyalty points",

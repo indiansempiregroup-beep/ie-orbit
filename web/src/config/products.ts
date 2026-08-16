@@ -2,6 +2,7 @@ export type ProductDefinition = {
   id: string;
   name: string;
   description: string;
+  highlights?: string[];
 };
 
 export type ProductSubscriptionLike = {
@@ -15,11 +16,13 @@ export const PRODUCT_CATALOG: ProductDefinition[] = [
     id: 'appointie',
     name: 'AppointIE',
     description: 'Booking, scheduling, and customer operations for service businesses.',
+    highlights: ['Online bookings and calendar', 'Staff schedules and availability', 'Customers, reminders, and visits'],
   },
   {
     id: 'shopie',
     name: 'ShopIE',
     description: 'Catalog, POS, inventory, and billing for retail businesses.',
+    highlights: ['POS, catalog, and inventory', 'GST books, e-invoice, and reports', 'WhatsApp, ads, and online orders'],
   },
 ];
 

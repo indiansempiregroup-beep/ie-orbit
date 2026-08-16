@@ -45,6 +45,63 @@ export function formatShopOrderFulfillment(mode?: string | null): string {
   return mode || '—';
 }
 
+export const SHOP_ORDER_STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'ready', label: 'Ready' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+export function shopOrderStatusStyle(status?: string | null): { bg: string; text: string; label: string } {
+  const value = String(status || '').toLowerCase();
+  if (value === 'completed') return { bg: '#D1FAE5', text: '#047857', label: 'Completed' };
+  if (value === 'ready') return { bg: '#DBEAFE', text: '#1D4ED8', label: 'Ready' };
+  if (value === 'confirmed') return { bg: '#E0E7FF', text: '#3730A3', label: 'Confirmed' };
+  if (value === 'cancelled') return { bg: '#FEE2E2', text: '#B91C1C', label: 'Cancelled' };
+  if (value === 'pending') return { bg: '#FEF3C7', text: '#B45309', label: 'Pending' };
+  return { bg: '#E2E8F0', text: '#475569', label: value || 'Status' };
+}
+
+export function nextShopOrderAction(
+  status?: string | null,
+  fulfillment?: string | null,
+): { status: string; label: string; hint: string } | null {
+  const value = String(status || '').toLowerCase();
+  const delivery = String(fulfillment || '').toLowerCase() === 'delivery';
+  if (value === 'pending') {
+    return {
+      status: 'confirmed',
+      label: 'Confirm order',
+      hint: 'Accept this order. Stock is deducted when you confirm.',
+    };
+  }
+  if (value === 'confirmed') {
+    return {
+      status: 'ready',
+      label: delivery ? 'Ready to ship' : 'Ready for pickup',
+      hint: delivery
+        ? 'Packed and ready to go out for delivery. The customer will see Out for delivery.'
+        : 'Packed and waiting at the counter. The customer will see Ready for pickup.',
+    };
+  }
+  if (value === 'ready') {
+    return {
+      status: 'completed',
+      label: delivery ? 'Mark delivered' : 'Mark picked up',
+      hint: delivery
+        ? 'Customer has received the order.'
+        : 'Customer has collected the order.',
+    };
+  }
+  return null;
+}
+
+export function canCancelShopOrder(status?: string | null): boolean {
+  return ['pending', 'confirmed', 'ready'].includes(String(status || '').toLowerCase());
+}
+
 export function formatMoney(value: string | number | undefined | null, fallback = '0.00'): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n)) return fallback;

@@ -15,6 +15,7 @@ import {
   AdminStatus,
   AdminTable,
   downloadTextFile,
+  productLabel,
 } from './AdminChrome';
 import { useInvalidatePlatform, usePlatformTenantsQuery } from './adminHooks';
 
@@ -51,7 +52,13 @@ export function PlatformTenantsPage() {
         !needle ||
         tenant.display_name.toLowerCase().includes(needle) ||
         tenant.slug.toLowerCase().includes(needle) ||
-        (tenant.plan_code || '').toLowerCase().includes(needle);
+        (tenant.plan_code || '').toLowerCase().includes(needle) ||
+        (tenant.product_code || '').toLowerCase().includes(needle) ||
+        (tenant.products ?? []).some(
+          (product) =>
+            (product.plan_code || '').toLowerCase().includes(needle) ||
+            product.product_code.toLowerCase().includes(needle),
+        );
       return matchesStatus && matchesBilling && matchesQuery;
     });
   }, [tenants, query, statusFilter, billingFilter]);
@@ -150,10 +157,26 @@ export function PlatformTenantsPage() {
                   <div className="admin-table__muted">{tenant.slug}</div>
                 </td>
                 <td>
-                  {tenant.plan_code || '—'}
-                  {tenant.product_code ? (
-                    <div className="admin-table__muted">{tenant.product_code}</div>
-                  ) : null}
+                  {(tenant.products ?? []).length > 0 ? (
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {(tenant.products ?? []).map((product) => (
+                        <div key={product.product_code}>
+                          {product.plan_code || '—'}
+                          <div className="admin-table__muted">
+                            {productLabel(product.product_code)}
+                            {product.billing_state ? ` · ${product.billing_state.replace(/_/g, ' ')}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      {tenant.plan_code || '—'}
+                      {tenant.product_code ? (
+                        <div className="admin-table__muted">{productLabel(tenant.product_code)}</div>
+                      ) : null}
+                    </>
+                  )}
                 </td>
                 <td>
                   <AdminStatus status={tenant.billing_state || 'none'} />

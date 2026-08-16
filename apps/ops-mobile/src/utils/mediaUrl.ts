@@ -19,3 +19,18 @@ export function resolveMediaUrl(url?: string | null): string {
   const origin = getApiBaseUrl().replace(/\/api\/v1\/?$/, '');
   return `${origin}${url.startsWith('/') ? url : `/${url}`}`;
 }
+
+/** Persist relative /media paths. Drop one-shot picker URIs that die after reload. */
+export function toStoredMediaUrl(url?: string | null): string {
+  const trimmed = String(url || '').trim();
+  if (!trimmed || isLocalOrDataUri(trimmed)) return '';
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
+  try {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return new URL(trimmed).pathname || trimmed;
+    }
+  } catch {
+    // keep original
+  }
+  return trimmed;
+}

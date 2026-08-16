@@ -58,6 +58,41 @@ class ReturnService:
         line_total = Decimal(str(order_line.line_total or "0"))
         return (line_total * qty / sold_qty).quantize(Decimal("0.01"))
 
+    @staticmethod
+    def refund_plan(*, order: ShopOrder, refund_total: Decimal) -> dict[str, str]:
+        """How the shop should give the refund amount back to the customer."""
+        metadata = order.metadata if isinstance(order.metadata, dict) else {}
+        pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
+        method = str(pos.get("payment_method") or "").lower()
+        paid = str(pos.get("payment_status") or "").lower() in {"paid", "settled"}
+        amount = f"{order.currency or 'INR'} {refund_total.quantize(Decimal('0.01'))}"
+        if not paid:
+            return {
+                "refund_mode": "bill_adjustment",
+                "refund_instruction": (
+                    f"No cash refund. {amount} is credited against this unpaid bill."
+                ),
+            }
+        if method == "borrow":
+            return {
+                "refund_mode": "account_credit",
+                "refund_instruction": f"{amount} is credited to the customer account.",
+            }
+        if method == "upi":
+            return {
+                "refund_mode": "original_payment",
+                "refund_instruction": f"Refund {amount} to the customer's UPI.",
+            }
+        if method == "card":
+            return {
+                "refund_mode": "original_payment",
+                "refund_instruction": f"Refund {amount} to the original card.",
+            }
+        return {
+            "refund_mode": "cash_at_shop",
+            "refund_instruction": f"Pay {amount} cash to the customer at the shop.",
+        }
+
     @transaction.atomic
     def create_return(
         self,
@@ -69,10 +104,20 @@ class ReturnService:
         reason: str = "",
         restock: bool = True,
         complete: bool = True,
+        require_delivered: bool = False,
     ) -> ShopReturn:
-        if order.status not in {OrderStatus.COMPLETED, OrderStatus.READY, OrderStatus.CONFIRMED}:
+        allowed_statuses = {OrderStatus.COMPLETED, OrderStatus.READY, OrderStatus.CONFIRMED}
+        if require_delivered:
+            allowed_statuses = {OrderStatus.COMPLETED}
+        if order.status not in allowed_statuses:
             raise ValidationError(
-                {"order": "Returns are only allowed for confirmed/ready/completed orders."}
+                {
+                    "order": (
+                        "Returns are only allowed after the order is delivered or picked up."
+                        if require_delivered
+                        else "Returns are only allowed for confirmed/ready/completed orders."
+                    )
+                }
             )
         if not lines:
             raise ValidationError({"lines": "At least one return line is required."})
@@ -122,6 +167,7 @@ class ReturnService:
             # Reserve qty within this request so duplicate lines in one payload can't over-return.
             already_returned[line_id] = already_returned.get(line_id, Decimal("0")) + qty
 
+        plan = self.refund_plan(order=order, refund_total=refund_total.quantize(Decimal("0.01")))
         shop_return = ShopReturn.objects.create(
             tenant=tenant,
             business=business,
@@ -134,11 +180,14 @@ class ReturnService:
             refund_total=refund_total.quantize(Decimal("0.01")),
             currency=order.currency,
             line_items=serialized,
+            metadata=plan,
         )
         if complete:
             shop_return = self.complete_return(
                 tenant=tenant, business=business, shop_return=shop_return
             )
+        else:
+            self._notify_online_return(shop_return, completed=False)
         return shop_return
 
     @transaction.atomic
@@ -240,7 +289,13 @@ class ReturnService:
             borrow_applied=borrow_applied,
             books_credit_note=books_cn,
         )
+        self._notify_online_return(shop_return, completed=True)
         return shop_return
+
+    def _notify_online_return(self, shop_return: ShopReturn, *, completed: bool) -> None:
+        from apps.shopie.services.order_notify import notify_online_return
+
+        notify_online_return(shop_return=shop_return, completed=completed)
 
     def _post_books_credit_note_for_return(
         self,
