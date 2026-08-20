@@ -1,4 +1,4 @@
-import type { Customer, Service, StaffMember } from '@ie-platform/sdk';
+import type { Customer, Service, ServiceDuration, StaffMember } from '@ie-platform/sdk';
 
 type RawRecord = Record<string, unknown>;
 
@@ -62,7 +62,16 @@ export function normalizeService(raw: RawRecord): Service {
     }> | undefined) ?? [];
   const prices = (raw.prices as Array<{ base_price?: number | string; currency?: string; is_default?: boolean }> | undefined) ?? [];
   const images = (raw.images as Array<{ is_primary?: boolean; image_url?: string; thumbnail_url?: string }> | undefined) ?? [];
-  const defaultDuration = durations.find((row) => row.is_default) ?? durations[0];
+  const normalizedDurations: ServiceDuration[] = durations
+    .filter((row): row is typeof row & { duration_minutes: number } => typeof row.duration_minutes === 'number')
+    .map((row) => ({
+      duration_minutes: row.duration_minutes,
+      buffer_before_minutes: row.buffer_before_minutes,
+      buffer_after_minutes: row.buffer_after_minutes,
+      cleanup_minutes: row.cleanup_minutes,
+      is_default: row.is_default,
+    }));
+  const defaultDuration = normalizedDurations.find((row) => row.is_default) ?? normalizedDurations[0];
   const defaultPrice = prices.find((row) => row.is_default) ?? prices[0];
   const primaryImage = images.find((row) => row.is_primary) ?? images[0];
   const basePrice = defaultPrice?.base_price;
@@ -78,7 +87,7 @@ export function normalizeService(raw: RawRecord): Service {
     buffer_after_minutes: defaultDuration?.buffer_after_minutes ?? 0,
     cleanup_minutes: defaultDuration?.cleanup_minutes ?? 0,
     loyalty_points_earn: Number(raw.loyalty_points_earn ?? 0) || 0,
-    durations,
+    durations: normalizedDurations,
     price: basePrice != null ? Number(basePrice) : undefined,
     currency: (defaultPrice?.currency as string | undefined) ?? null,
     image_url: imageUrl,

@@ -21,6 +21,12 @@ type AddressFormState = {
   longitude: number | null;
 };
 
+function toNullableNumber(value: string | number | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function CustomerDetailPage() {
   const theme = useTheme();
   const snackbar = useSnackbar();
@@ -52,8 +58,8 @@ export function CustomerDetailPage() {
     });
     setAddressForm({
       full_address: customer.full_address ?? customer.address?.full_address ?? customer.address?.line1 ?? '',
-      latitude: customer.latitude ?? customer.address?.latitude ?? null,
-      longitude: customer.longitude ?? customer.address?.longitude ?? null,
+      latitude: toNullableNumber(customer.latitude ?? customer.address?.latitude),
+      longitude: toNullableNumber(customer.longitude ?? customer.address?.longitude),
     });
   }, []);
 
