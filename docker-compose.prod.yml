@@ -1,0 +1,203 @@
+name: ie-platform
+
+# Trial/production stack for a single Hetzner VPS (Postgres + Redis on the same box).
+# Usage: docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ie_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-ie_platform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ie_platform} -d ${POSTGRES_DB:-ie_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - ie-platform
+
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - ie-platform
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        APP_ENV: production
+    working_dir: /app/backend
+    command: ["/app/backend/prod-entrypoint.sh"]
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+      PYTHONPATH: /app/backend
+    volumes:
+      - backend-media:/app/backend/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=5).read()",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      ie-platform:
+        aliases:
+          - backend
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        APP_ENV: production
+    working_dir: /app/backend
+    command: celery -A config.celery worker --loglevel=info --concurrency=1
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+      PYTHONPATH: /app/backend
+    volumes:
+      - backend-media:/app/backend/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "celery -A config.celery inspect ping >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - ie-platform
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        APP_ENV: production
+    working_dir: /app/backend
+    command: celery -A config.celery beat --loglevel=info --schedule /var/lib/celery/celerybeat-schedule
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+      PYTHONPATH: /app/backend
+    volumes:
+      - celery-beat:/var/lib/celery
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ie-platform
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        APP_ENV: production
+        VITE_GOOGLE_PLACES_API_KEY: ${VITE_GOOGLE_PLACES_API_KEY:-}
+    environment:
+      APP_ENV: production
+      NODE_ENV: production
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(() => process.exit(0)).catch(() => process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      ie-platform:
+        aliases:
+          - web
+
+  caddy:
+    image: caddy:2.8-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-:80}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - backend-media:/srv/media:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - web
+    restart: unless-stopped
+    networks:
+      - ie-platform
+
+volumes:
+  postgres-data:
+  redis-data:
+  backend-media:
+  celery-beat:
+  caddy-data:
+  caddy-config:
+
+networks:
+  ie-platform:
+    driver: bridge

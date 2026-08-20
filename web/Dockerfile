@@ -23,8 +23,12 @@ COPY web ./web
 RUN pnpm install --frozen-lockfile --filter @ie-platform/web...
 
 ARG APP_ENV=development
+ARG VITE_GOOGLE_PLACES_API_KEY=
 ENV APP_ENV=${APP_ENV}
+ENV VITE_GOOGLE_PLACES_API_KEY=${VITE_GOOGLE_PLACES_API_KEY}
+
+RUN if [ "$APP_ENV" = "production" ]; then pnpm --dir web build; fi
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "if [ \"$APP_ENV\" = \"production\" ]; then pnpm --dir web build && pnpm --dir web exec vite preview --host 0.0.0.0 --port 3000; else pnpm --dir web dev --host 0.0.0.0 --port 3000; fi"]
+CMD ["sh", "-c", "if [ \"$APP_ENV\" = \"production\" ]; then pnpm --dir web exec vite preview --host 0.0.0.0 --port 3000; else pnpm --dir web dev --host 0.0.0.0 --port 3000; fi"]

@@ -64,6 +64,7 @@ This starts the complete local development environment for:
 - Host PostgreSQL is the default development database; Neon remains optional via `DATABASE_URL`.
 - Expo/React Native should be run on the host machine for emulator and device support.
 - See [docker/README.md](docker/README.md) for service details.
+- See [deploy/README.md](deploy/README.md) to clone this repo on a Hetzner VPS and deploy with `git pull`.
 - See [DEV_DOCKER_GUIDE.md](DEV_DOCKER_GUIDE.md) for onboarding steps.
 - See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues.
 

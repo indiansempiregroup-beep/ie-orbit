@@ -8,6 +8,12 @@ This repository now includes a Docker-based local development platform for the f
 docker compose up --build
 ```
 
+Production/trial on a single VPS uses a separate file and git pull: [deploy/README.md](../deploy/README.md) (`docker-compose.prod.yml`).
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+```
+
 The stack includes:
 
 - Django backend on http://localhost:8000

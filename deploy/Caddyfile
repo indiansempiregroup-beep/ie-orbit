@@ -1,0 +1,25 @@
+# CADDY_SITE_ADDRESS=:80 for an IP-only trial (HTTP).
+# CADDY_SITE_ADDRESS=app.example.com for automatic HTTPS after DNS points here.
+
+{$CADDY_SITE_ADDRESS} {
+	encode gzip
+
+	handle /api* {
+		reverse_proxy backend:8000 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+
+	handle_path /media/* {
+		root * /srv/media
+		file_server
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+}

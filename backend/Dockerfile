@@ -20,13 +20,16 @@ COPY backend/pyproject.toml backend/README.md ./
 COPY backend/apps ./apps
 COPY backend/config ./config
 COPY backend/manage.py ./manage.py
+COPY backend/prod-entrypoint.sh ./prod-entrypoint.sh
 COPY backend/tests ./tests
 
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install -e ".[dev]"
+RUN chmod +x ./prod-entrypoint.sh
 
 ARG APP_ENV=development
 ENV APP_ENV=${APP_ENV}
+
+RUN pip install --upgrade pip setuptools wheel \
+    && if [ "$APP_ENV" = "production" ]; then pip install -e .; else pip install -e ".[dev]"; fi
 
 EXPOSE 8000
 

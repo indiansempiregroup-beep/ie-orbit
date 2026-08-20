@@ -1,0 +1,31 @@
+name: Deploy Hetzner
+
+# Push-to-main deploys only after you set GitHub variable ENABLE_HETZNER_DEPLOY=true
+# and the HETZNER_* secrets. Manual runs always try (workflow_dispatch).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: hetzner-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_HETZNER_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and restart on the VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER || 'root' }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd /opt/ie-platform
+            ./deploy/deploy.sh
