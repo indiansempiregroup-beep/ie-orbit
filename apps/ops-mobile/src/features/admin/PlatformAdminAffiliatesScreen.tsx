@@ -2,7 +2,12 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { PlatformAffiliate, PlatformAffiliateAccrual, PlatformAffiliateCode, PlatformAffiliatePayout } from '@ie-platform/sdk';
+import type {
+  PlatformAffiliate,
+  PlatformAffiliateInsights,
+  PlatformAffiliateLedgerEntry,
+  PlatformAffiliateReferral,
+} from '@ie-platform/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -11,10 +16,17 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import { shopListRefreshControl } from '../shop/shopRefreshControl';
 
-type TabKey = 'affiliates' | 'accruals' | 'payouts';
+type TabKey = 'affiliates' | 'referrals' | 'history';
 
-function paiseLabel(paise: number) {
-  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+function paiseLabel(paise?: number) {
+  return `₹${((paise || 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
+function kindLabel(kind: string) {
+  if (kind === 'earning') return 'Earned';
+  if (kind === 'payment') return 'Paid';
+  if (kind === 'credit') return 'Credited';
+  return kind;
 }
 
 export function PlatformAdminAffiliatesScreen() {
@@ -22,9 +34,9 @@ export function PlatformAdminAffiliatesScreen() {
   const client = useOpsClient();
   const [tab, setTab] = useState<TabKey>('affiliates');
   const [affiliates, setAffiliates] = useState<PlatformAffiliate[]>([]);
-  const [codes, setCodes] = useState<PlatformAffiliateCode[]>([]);
-  const [accruals, setAccruals] = useState<PlatformAffiliateAccrual[]>([]);
-  const [payouts, setPayouts] = useState<PlatformAffiliatePayout[]>([]);
+  const [insights, setInsights] = useState<PlatformAffiliateInsights | null>(null);
+  const [referrals, setReferrals] = useState<PlatformAffiliateReferral[]>([]);
+  const [ledger, setLedger] = useState<PlatformAffiliateLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -34,16 +46,15 @@ export function PlatformAdminAffiliatesScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [affiliatesRes, codesRes, accrualsRes, payoutsRes] = await Promise.all([
+      const [affiliatesRes, referralsRes, ledgerRes] = await Promise.all([
         client.platform.affiliates(),
-        client.platform.affiliateCodes(),
-        client.platform.affiliateAccruals(),
-        client.platform.affiliatePayouts(),
+        client.platform.affiliateReferrals(),
+        client.platform.affiliateLedger(),
       ]);
       setAffiliates(affiliatesRes.data.affiliates ?? []);
-      setCodes(codesRes.data.codes ?? []);
-      setAccruals(accrualsRes.data.accruals ?? []);
-      setPayouts(payoutsRes.data.payouts ?? []);
+      setInsights(affiliatesRes.data.insights ?? null);
+      setReferrals(referralsRes.data.referrals ?? []);
+      setLedger(ledgerRes.data.entries ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load affiliates');
     } finally {
@@ -59,42 +70,14 @@ export function PlatformAdminAffiliatesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  async function approveCredit(accrualId: string) {
+  async function voidEntry(entryId: string) {
     if (!client) return;
-    setBusyId(accrualId);
+    setBusyId(entryId);
     try {
-      await client.platform.approveAffiliateAccrualCredit(accrualId, {
-        reason: 'Approve as subscription credit',
-      });
+      await client.platform.voidAffiliateLedgerEntry(entryId, { reason: 'Void affiliate ledger entry' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to approve credit');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function approvePayout(accrualId: string) {
-    if (!client) return;
-    setBusyId(accrualId);
-    try {
-      await client.platform.approveAffiliateAccrualPayout(accrualId, { reason: 'Approve as payout' });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to approve payout');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function markPaid(payoutId: string) {
-    if (!client) return;
-    setBusyId(payoutId);
-    try {
-      await client.platform.markAffiliatePayoutPaid(payoutId, { reason: 'Marked paid' });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to mark paid');
+      setError(err instanceof Error ? err.message : 'Unable to void entry');
     } finally {
       setBusyId(null);
     }
@@ -104,12 +87,18 @@ export function PlatformAdminAffiliatesScreen() {
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <Text style={styles.hint}>
-          Full create flows are on web admin. Here you can review affiliates and approve credits/payouts.
+          Full create, add-earning, and record-payment flows are on web admin. Here you can review balances and history.
         </Text>
+        {insights ? (
+          <Text style={styles.meta}>
+            {paiseLabel(insights.earned_paise)} earned · {paiseLabel(insights.outstanding_paise)} outstanding ·{' '}
+            {insights.referral_count} businesses
+          </Text>
+        ) : null}
         <View style={styles.chips}>
           <Chip label={`Affiliates (${affiliates.length})`} active={tab === 'affiliates'} onPress={() => setTab('affiliates')} />
-          <Chip label={`Accruals (${accruals.length})`} active={tab === 'accruals'} onPress={() => setTab('accruals')} />
-          <Chip label={`Payouts (${payouts.length})`} active={tab === 'payouts'} onPress={() => setTab('payouts')} />
+          <Chip label={`Businesses (${referrals.length})`} active={tab === 'referrals'} onPress={() => setTab('referrals')} />
+          <Chip label={`History (${ledger.length})`} active={tab === 'history'} onPress={() => setTab('history')} />
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
@@ -124,113 +113,95 @@ export function PlatformAdminAffiliatesScreen() {
               !loading ? <EmptyState icon="users" title="No affiliates" message="Create affiliates on web admin." /> : null
             }
             renderItem={({ item }) => {
-              const affiliateCodes = (item.codes ?? codes.filter((entry) => entry.affiliate_id === item.id)).filter(
-                (entry) => entry.is_active,
-              );
+              const affiliateCodes = (item.codes ?? []).filter((entry) => entry.is_active);
               return (
-              <View style={styles.row}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.meta}>
-                  {item.affiliate_type} · {item.email}
-                </Text>
-                {affiliateCodes.length ? (
-                  affiliateCodes.map((entry) => (
-                    <Text key={entry.id} selectable style={styles.code}>
-                      {entry.code}
-                    </Text>
-                  ))
-                ) : (
-                  <Text style={styles.meta}>No referral code yet</Text>
-                )}
-                {item.payout_method ? (
+                <View style={styles.row}>
+                  <Text style={styles.name}>{item.name}</Text>
                   <Text style={styles.meta}>
-                    {item.payout_method === 'upi' && item.upi_vpa
-                      ? `UPI · ${item.upi_vpa}`
-                      : item.payout_method === 'bank' && item.bank_account_number
-                        ? `Bank · ${item.bank_account_number}`
-                        : item.payout_method}
+                    {item.affiliate_type} · {item.email}
                   </Text>
-                ) : null}
-                <Text style={styles.meta}>{item.status}</Text>
-              </View>
+                  {affiliateCodes.length ? (
+                    affiliateCodes.map((entry) => (
+                      <Text key={entry.id} selectable style={styles.code}>
+                        {entry.code}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text style={styles.meta}>No referral code yet</Text>
+                  )}
+                  <Text style={styles.meta}>
+                    {item.referral_count ?? 0} referred · {paiseLabel(item.earned_paise)} earned ·{' '}
+                    {paiseLabel(item.outstanding_paise)} outstanding
+                  </Text>
+                  {item.payout_method ? (
+                    <Text style={styles.meta}>
+                      {item.payout_method === 'upi' && item.upi_vpa
+                        ? `UPI · ${item.upi_vpa}`
+                        : item.payout_method === 'bank' && item.bank_account_number
+                          ? `Bank · ${item.bank_account_number}`
+                          : item.payout_method}
+                    </Text>
+                  ) : null}
+                </View>
               );
             }}
           />
         ) : null}
 
-        {tab === 'accruals' ? (
+        {tab === 'referrals' ? (
           <FlatList
-            data={accruals}
+            data={referrals}
             keyExtractor={(item) => item.id}
             refreshControl={shopListRefreshControl(refreshing, onRefresh)}
             contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-            ListEmptyComponent={!loading ? <EmptyState icon="inbox" title="No accruals" message="No pending or approved accruals yet." /> : null}
+            ListEmptyComponent={
+              !loading ? (
+                <EmptyState icon="inbox" title="No referred businesses" message="They appear after signup with an affiliate link." />
+              ) : null
+            }
             renderItem={({ item }) => (
               <View style={styles.row}>
-                <Text style={styles.name}>
-                  {item.period_yyyy_mm} · {paiseLabel(item.amount_paise)}
+                <Text style={styles.name}>{item.referred_tenant_name || item.referred_tenant_id}</Text>
+                <Text style={styles.meta}>
+                  {item.affiliate_name || 'Affiliate'} · {item.affiliate_code || 'no code'}
                 </Text>
                 <Text style={styles.meta}>
-                  {item.benefit_type} · {item.status}
+                  {paiseLabel(item.earned_paise)} earned · {paiseLabel(item.outstanding_paise)} outstanding
                 </Text>
-                {item.status === 'pending' ? (
-                  <View style={styles.actions}>
-                    <Pressable
-                      style={styles.actionBtn}
-                      disabled={busyId === item.id}
-                      onPress={() => void approveCredit(item.id)}
-                    >
-                      <Text style={styles.actionText}>Credit</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.actionBtn}
-                      disabled={busyId === item.id}
-                      onPress={() => void approvePayout(item.id)}
-                    >
-                      <Text style={styles.actionText}>Payout</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
               </View>
             )}
           />
         ) : null}
 
-        {tab === 'payouts' ? (
+        {tab === 'history' ? (
           <FlatList
-            data={payouts}
+            data={ledger}
             keyExtractor={(item) => item.id}
             refreshControl={shopListRefreshControl(refreshing, onRefresh)}
             contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-            ListEmptyComponent={!loading ? <EmptyState icon="credit-card" title="No payouts" message="Approve accruals as payout to see them here." /> : null}
-            renderItem={({ item }) => {
-              const affiliate = affiliates.find((aff) => aff.id === item.affiliate_id);
-              const payTo =
-                affiliate?.payout_method === 'upi' && affiliate.upi_vpa
-                  ? `UPI · ${affiliate.upi_vpa}`
-                  : affiliate?.payout_method === 'bank' && affiliate.bank_account_number
-                    ? `Bank · ${affiliate.bank_account_number}`
-                    : affiliate?.payout_method || 'No payout details';
-              return (
-                <View style={styles.row}>
-                  <Text style={styles.name}>
-                    {affiliate?.name ?? 'Affiliate'} · {paiseLabel(item.amount_paise)}
-                  </Text>
-                  <Text style={styles.meta}>
-                    {payTo} · {item.status}
-                  </Text>
-                  {item.status !== 'paid' ? (
-                    <Pressable
-                      style={styles.actionBtn}
-                      disabled={busyId === item.id}
-                      onPress={() => void markPaid(item.id)}
-                    >
-                      <Text style={styles.actionText}>Mark paid</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              );
-            }}
+            ListEmptyComponent={!loading ? <EmptyState icon="credit-card" title="No history" message="Add earnings and record payments on web admin." /> : null}
+            renderItem={({ item }) => (
+              <View style={styles.row}>
+                <Text style={styles.name}>
+                  {kindLabel(item.kind)} · {paiseLabel(item.amount_paise)}
+                </Text>
+                <Text style={styles.meta}>
+                  {item.affiliate_name || 'Affiliate'}
+                  {item.referred_tenant_name ? ` · ${item.referred_tenant_name}` : ''}
+                  {item.payment_ref ? ` · ${item.payment_ref}` : ''}
+                </Text>
+                <Text style={styles.meta}>{item.status}</Text>
+                {item.status !== 'void' ? (
+                  <Pressable
+                    style={styles.actionBtn}
+                    disabled={busyId === item.id}
+                    onPress={() => void voidEntry(item.id)}
+                  >
+                    <Text style={styles.actionText}>Void</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
           />
         ) : null}
       </View>
@@ -255,12 +226,13 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.bodySemi, color: colors.foreground, fontSize: 15 },
   code: { fontFamily: fonts.bodySemi, color: colors.primary, fontSize: 16, marginTop: 4 },
   meta: { color: colors.mutedForeground, fontSize: 13 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 6 },
   actionBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: radius.full,
     backgroundColor: colors.tint,
+    alignSelf: 'flex-start',
+    marginTop: 6,
   },
   actionText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
 });

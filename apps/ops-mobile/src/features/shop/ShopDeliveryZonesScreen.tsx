@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -15,11 +14,16 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
+import { SearchBar } from '../../components/SearchBar';
+import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
-import { colors, spacing } from '../../theme/tokens';
+import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopDeliveryZone } from '@ie-platform/sdk';
 import { shopListRefreshControl } from './shopRefreshControl';
@@ -46,6 +50,12 @@ const EMPTY_FORM: ZoneForm = {
   enabled: true,
 };
 
+const STATUS_OPTIONS = [
+  { value: '', label: 'All zones' },
+  { value: 'enabled', label: 'Enabled' },
+  { value: 'disabled', label: 'Disabled' },
+];
+
 function splitCsv(value: string): string[] {
   return value
     .split(',')
@@ -70,6 +80,7 @@ export function ShopDeliveryZonesScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
+  const toast = useToast();
   const { businessId } = useWorkspace();
   const [zones, setZones] = useState<ShopDeliveryZone[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -77,7 +88,9 @@ export function ShopDeliveryZonesScreen() {
   const [form, setForm] = useState<ZoneForm>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [enabledFilter, setEnabledFilter] = useState('');
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -87,21 +100,16 @@ export function ShopDeliveryZonesScreen() {
 
   const openCreate = useCallback(() => {
     setEditingId(null);
-    setForm({
-      ...EMPTY_FORM,
-      name: 'Nashik city',
-      cities: 'Nashik',
-      prefixes: '422',
-    });
+    setForm(EMPTY_FORM);
     setShowForm(true);
-    setMessage(null);
+    setError(null);
   }, []);
 
   const openEdit = useCallback((zone: ShopDeliveryZone) => {
     setEditingId(zone.id);
     setForm(zoneToForm(zone));
     setShowForm(true);
-    setMessage(null);
+    setError(null);
   }, []);
 
   useLayoutEffect(() => {
@@ -126,11 +134,12 @@ export function ShopDeliveryZonesScreen() {
   const load = useCallback(async () => {
     if (!businessId || !client) return;
     setLoading(true);
+    setError(null);
     try {
       const response = await client.shop.listDeliveryZones({ business_id: businessId });
       setZones(response.data);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to load zones');
+      setError(err instanceof Error ? err.message : 'Failed to load zones');
     } finally {
       setLoading(false);
     }
@@ -144,14 +153,35 @@ export function ShopDeliveryZonesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return zones.filter((zone) => {
+      if (enabledFilter === 'enabled' && !zone.enabled) return false;
+      if (enabledFilter === 'disabled' && zone.enabled) return false;
+      if (!term) return true;
+      return [
+        zone.name,
+        ...(zone.cities ?? []),
+        ...(zone.postal_prefixes ?? []),
+        zone.notes ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [zones, search, enabledFilter]);
+
   function setField<K extends keyof ZoneForm>(key: K, value: ZoneForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   async function save() {
-    if (!client || !businessId || !form.name.trim()) return;
+    if (!client || !businessId || !form.name.trim()) {
+      toast.push('Zone name is required', 'error');
+      return;
+    }
     setSaving(true);
-    setMessage(null);
+    setError(null);
     const payload = {
       business_id: businessId,
       name: form.name.trim(),
@@ -166,32 +196,19 @@ export function ShopDeliveryZonesScreen() {
     try {
       if (editingId) {
         await client.shop.patchDeliveryZone(editingId, payload);
-        setMessage('Zone updated');
+        toast.push('Zone updated.', 'success');
       } else {
         await client.shop.createDeliveryZone(payload);
-        setMessage('Zone saved');
+        toast.push('Zone saved.', 'success');
       }
       closeForm();
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to save zone');
+      const text = err instanceof Error ? err.message : 'Unable to save zone';
+      setError(text);
+      toast.push(text, 'error');
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function toggleEnabled(zone: ShopDeliveryZone) {
-    if (!client || !businessId) return;
-    setMessage(null);
-    try {
-      await client.shop.patchDeliveryZone(zone.id, {
-        business_id: businessId,
-        name: zone.name,
-        enabled: !zone.enabled,
-      });
-      await load();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to update zone');
     }
   }
 
@@ -209,51 +226,49 @@ export function ShopDeliveryZonesScreen() {
         }
       >
         <Text style={styles.formTitle}>{editingId ? 'Edit delivery zone' : 'Add delivery zone'}</Text>
-        {message ? <Text style={styles.meta}>{message}</Text> : null}
-        <TextInput
-          style={styles.input}
+        <Text style={styles.help}>
+          Match checkout addresses by city name and/or postal prefix. Fee is added when the zone
+          matches.
+        </Text>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Input
+          label="Zone name"
           value={form.name}
           onChangeText={(value) => setField('name', value)}
-          placeholder="Zone name"
-          placeholderTextColor={colors.mutedForeground}
+          placeholder="e.g. Nashik city"
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Cities"
           value={form.cities}
           onChangeText={(value) => setField('cities', value)}
-          placeholder="Cities (comma-separated)"
-          placeholderTextColor={colors.mutedForeground}
+          placeholder="Nashik, Nasik"
+          hint="Comma-separated"
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Postal prefixes"
           value={form.prefixes}
           onChangeText={(value) => setField('prefixes', value)}
-          placeholder="Postal prefixes (comma-separated)"
-          placeholderTextColor={colors.mutedForeground}
+          placeholder="422"
+          hint="Comma-separated"
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Delivery fee"
           value={form.fee}
           onChangeText={(value) => setField('fee', value)}
-          placeholder="Delivery fee"
           keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Minimum order"
           value={form.minOrder}
           onChangeText={(value) => setField('minOrder', value)}
-          placeholder="Minimum order total"
           keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={[styles.input, styles.notes]}
+        <Input
+          label="Notes"
           value={form.notes}
           onChangeText={(value) => setField('notes', value)}
-          placeholder="Notes"
+          placeholder="Optional"
           multiline
-          placeholderTextColor={colors.mutedForeground}
         />
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Same-day delivery</Text>
@@ -270,34 +285,71 @@ export function ShopDeliveryZonesScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        {message ? <Text style={styles.meta}>{message}</Text> : null}
+        <SearchBar
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search zone, city, postal…"
+          style={styles.search}
+        />
+        <SelectField
+          label="Availability"
+          value={enabledFilter}
+          options={STATUS_OPTIONS}
+          onChange={setEnabledFilter}
+        />
+        {enabledFilter ? (
+          <Pressable onPress={() => setEnabledFilter('')} style={styles.clearFilters}>
+            <Text style={styles.clearFiltersText}>Clear filters</Text>
+          </Pressable>
+        ) : null}
+
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
-          data={zones}
+          data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, marginTop: spacing.md }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, marginTop: spacing.sm }}
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => openEdit(item)}>
-              <View style={styles.rowMain}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.meta}>
-                  {(item.cities ?? []).join(', ') || 'Any city'} · prefixes{' '}
-                  {(item.postal_prefixes ?? []).join(', ') || 'any'} · fee {item.fee ?? 0}
-                </Text>
-                {item.notes ? <Text style={styles.meta}>{item.notes}</Text> : null}
-                <Text style={styles.hint}>Tap to edit</Text>
+              <View style={styles.rowInner}>
+                <View style={[styles.thumb, styles.thumbEmpty]}>
+                  <Feather name="map-pin" size={18} color={colors.mutedForeground} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text style={styles.meta}>
+                    {item.enabled ? 'Enabled' : 'Disabled'}
+                    {item.same_day ? ' · Same day' : ''}
+                    {` · ${(item.cities ?? []).join(', ') || 'Any city'}`}
+                    {` · fee ${item.fee ?? 0}`}
+                  </Text>
+                  <Text style={styles.meta}>
+                    Prefixes {(item.postal_prefixes ?? []).join(', ') || 'any'}
+                    {item.min_order_total && Number(item.min_order_total)
+                      ? ` · min ${item.min_order_total}`
+                      : ''}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
               </View>
-              <Pressable
-                onPress={() => void toggleEnabled(item)}
-                hitSlop={8}
-                style={[styles.badge, item.enabled ? styles.badgeOn : styles.badgeOff]}
-              >
-                <Text style={styles.badgeText}>{item.enabled ? 'On' : 'Off'}</Text>
-              </Pressable>
             </Pressable>
           )}
-          ListEmptyComponent={!loading ? <Text style={styles.meta}>No zones yet. Tap + to add.</Text> : null}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="map-pin"
+                title={zones.length ? 'No matching zones' : 'No zones yet'}
+                message={
+                  zones.length
+                    ? 'Try another search or clear filters.'
+                    : 'Add a delivery zone so checkout can match city and postal codes.'
+                }
+                actionLabel={zones.length ? undefined : 'Add zone'}
+                onAction={zones.length ? undefined : openCreate}
+              />
+            ) : null
+          }
         />
       </View>
     </DesktopPage>
@@ -314,17 +366,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.tint,
   },
+  search: { marginBottom: spacing.sm },
+  clearFilters: { alignSelf: 'flex-start', marginTop: spacing.sm, marginBottom: spacing.sm },
+  clearFiltersText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.foreground,
-    backgroundColor: colors.card,
-  },
-  notes: { minHeight: 72, textAlignVertical: 'top' },
+  help: { color: colors.mutedForeground, marginBottom: spacing.sm },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -332,23 +378,21 @@ const styles = StyleSheet.create({
   },
   switchLabel: { color: colors.foreground, fontWeight: '500' },
   row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  rowMain: { flex: 1 },
-  name: { fontWeight: '600', color: colors.foreground },
-  meta: { color: colors.mutedForeground, marginTop: 2 },
-  hint: { color: colors.mutedForeground, marginTop: 4, fontSize: 12 },
-  badge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  rowInner: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  thumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.muted },
+  thumbEmpty: {
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  badgeOn: { backgroundColor: '#dcfce7' },
-  badgeOff: { backgroundColor: '#fee2e2' },
-  badgeText: { fontWeight: '600', fontSize: 12, color: colors.foreground },
+  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
+  meta: { marginTop: 4, color: colors.mutedForeground, fontSize: 13 },
+  error: { color: colors.destructive, marginBottom: spacing.sm },
 });

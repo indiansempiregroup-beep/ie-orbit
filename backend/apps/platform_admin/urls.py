@@ -40,6 +40,8 @@ from apps.platform_admin.affiliate_api import (
     PlatformAffiliateCodeDetailView,
     PlatformAffiliateCodesView,
     PlatformAffiliateDetailView,
+    PlatformAffiliateLedgerView,
+    PlatformAffiliateLedgerVoidView,
     PlatformAffiliatePayoutMarkPaidView,
     PlatformAffiliatePayoutsView,
     PlatformAffiliateReferralsView,
@@ -171,6 +173,16 @@ urlpatterns = [
         "platform/affiliate-payouts/<uuid:payout_id>/mark-paid",
         PlatformAffiliatePayoutMarkPaidView.as_view(),
         name="platform-affiliate-payout-mark-paid",
+    ),
+    path(
+        "platform/affiliate-ledger",
+        PlatformAffiliateLedgerView.as_view(),
+        name="platform-affiliate-ledger",
+    ),
+    path(
+        "platform/affiliate-ledger/<uuid:entry_id>/void",
+        PlatformAffiliateLedgerVoidView.as_view(),
+        name="platform-affiliate-ledger-void",
     ),
     path("platform/plan-packages", PlatformPlanPackagesView.as_view(), name="platform-plan-packages"),
     path(

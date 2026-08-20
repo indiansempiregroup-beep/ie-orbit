@@ -87,6 +87,7 @@ def test_register_business_attributes_affiliate_code(api_client: APIClient) -> N
     referral = PlatformReferral.objects.get(referred_tenant_id=tenant_id)
     assert referral.affiliate_id == affiliate.id
     assert referral.metadata.get("code") == "PARTNER1"
+    assert referral.metadata.get("payment_account_opened") is True
 
 
 @pytest.mark.django_db

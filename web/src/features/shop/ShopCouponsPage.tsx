@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { TicketPercent } from 'lucide-react';
+import { Pencil, Plus, TicketPercent } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { useDialog } from '../../hooks/useDialog';
+import { useSnackbar } from '../../hooks/useSnackbar';
 import { useShopCouponMutations, useShopCoupons } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
 import type { ShopCoupon } from '@ie-platform/sdk';
@@ -39,6 +40,9 @@ const EMPTY_FORM: FormState = {
   firstOrderOnly: false,
   isActive: true,
 };
+
+const fieldLabel: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: '#374151' };
+const fieldInput: React.CSSProperties = { padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' };
 
 function dateInput(value?: string | null) {
   return value ? String(value).slice(0, 10) : '';
@@ -106,6 +110,7 @@ export function ShopCouponsPage() {
   const coupons = useShopCoupons();
   const { createCoupon, patchCoupon, deleteCoupon } = useShopCouponMutations();
   const dialog = useDialog();
+  const snackbar = useSnackbar();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -121,6 +126,8 @@ export function ShopCouponsPage() {
       return [coupon.code, coupon.name, coupon.description ?? ''].join(' ').toLowerCase().includes(term);
     });
   }, [coupons.data, search, statusFilter]);
+
+  const busy = createCoupon.isPending || patchCoupon.isPending || deleteCoupon.isPending;
 
   function openCreate() {
     setEditingId(null);
@@ -143,16 +150,38 @@ export function ShopCouponsPage() {
       const body = formPayload(form);
       if (editingId) {
         await patchCoupon.mutateAsync({ couponId: editingId, body });
+        dialog.hide();
+        window.setTimeout(() => snackbar.push('Coupon updated.', 'success'), 0);
       } else {
         await createCoupon.mutateAsync(body);
+        dialog.hide();
+        window.setTimeout(() => snackbar.push('Coupon saved.', 'success'), 0);
       }
-      dialog.hide();
+      setForm(EMPTY_FORM);
+      setEditingId(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to save coupon.');
+      const text = error instanceof Error ? error.message : 'Unable to save coupon.';
+      setMessage(text);
+      snackbar.push(text, 'error');
     }
   }
 
-  const busy = createCoupon.isPending || patchCoupon.isPending;
+  async function handleDelete() {
+    if (!editingId) return;
+    if (!window.confirm(`Delete ${form.code || 'this coupon'}?`)) return;
+    setMessage(null);
+    try {
+      await deleteCoupon.mutateAsync(editingId);
+      dialog.hide();
+      window.setTimeout(() => snackbar.push('Coupon deleted.', 'success'), 0);
+      setForm(EMPTY_FORM);
+      setEditingId(null);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Unable to delete coupon.';
+      setMessage(text);
+      snackbar.push(text, 'error');
+    }
+  }
 
   return (
     <div className="page-stack">
@@ -181,60 +210,88 @@ export function ShopCouponsPage() {
           action={
             <Button type="button" variant="primary" onClick={openCreate}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <TicketPercent size={16} aria-hidden="true" />
+                <Plus size={16} aria-hidden="true" />
                 Add coupon
               </span>
             </Button>
           }
         />
-        <div style={{ display: 'grid', gap: 12 }}>
+
+        {coupons.isLoading ? <p>Loading…</p> : null}
+        {coupons.error ? <p role="alert">{(coupons.error as Error).message}</p> : null}
+        <div style={{ display: 'grid', gap: 8 }}>
           {filtered.map((coupon) => (
-            <div key={coupon.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <strong>{coupon.code}</strong>
-                <div style={{ opacity: 0.8 }}>
-                  {coupon.name} · {discountLabel(coupon)}
-                  {coupon.min_order_total && Number(coupon.min_order_total) > 0
-                    ? ` · min ₹${coupon.min_order_total}`
-                    : ''}
-                  {` · used ${coupon.redemption_count ?? 0}`}
-                  {coupon.max_redemptions != null ? `/${coupon.max_redemptions}` : ''}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Button type="button" onClick={() => openEdit(coupon)}>
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() =>
-                    patchCoupon.mutate({
-                      couponId: coupon.id,
-                      body: { is_active: coupon.is_active === false },
-                    })
-                  }
-                >
-                  {coupon.is_active === false ? 'Enable' : 'Disable'}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm(`Delete ${coupon.code}?`)) {
-                      void deleteCoupon.mutateAsync(coupon.id).catch((error: unknown) => {
-                        setMessage(error instanceof Error ? error.message : 'Unable to delete.');
-                      });
-                    }
+            <div
+              key={coupon.id}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                borderBottom: '1px solid var(--border, #ddd)',
+                paddingBottom: 8,
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 10,
+                    border: '1px solid #e5e7eb',
+                    background: '#f3f4f6',
+                    flexShrink: 0,
+                    display: 'grid',
+                    placeItems: 'center',
+                    color: '#6b7280',
                   }}
                 >
-                  Delete
-                </Button>
+                  <TicketPercent size={20} aria-hidden="true" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <strong>{coupon.code}</strong>
+                  <div style={{ opacity: 0.8 }}>
+                    {coupon.is_active === false ? 'Inactive' : 'Active'} · {coupon.name} ·{' '}
+                    {discountLabel(coupon)}
+                    {coupon.min_order_total && Number(coupon.min_order_total) > 0
+                      ? ` · min ₹${coupon.min_order_total}`
+                      : ''}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    Used {coupon.redemption_count ?? 0}
+                    {coupon.max_redemptions != null ? `/${coupon.max_redemptions}` : ''}
+                    {coupon.first_order_only ? ' · first order only' : ''}
+                    {coupon.starts_at || coupon.ends_at
+                      ? ` · ${dateInput(coupon.starts_at) || 'open'} → ${dateInput(coupon.ends_at) || 'open'}`
+                      : ''}
+                  </div>
+                </div>
               </div>
+              <Button type="button" variant="neutral" onClick={() => openEdit(coupon)}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Pencil size={14} aria-hidden="true" />
+                  Edit
+                </span>
+              </Button>
             </div>
           ))}
-          {!coupons.data?.length ? (
-            <p>No coupons yet. Create a code customers can apply on online checkout.</p>
+          {!coupons.isLoading && !filtered.length ? (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <p>
+                {coupons.data?.length
+                  ? 'No coupons match these filters.'
+                  : 'No coupons yet. Create a code customers can apply on online checkout.'}
+              </p>
+              {!coupons.data?.length ? (
+                <Button type="button" variant="primary" onClick={openCreate}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Plus size={16} aria-hidden="true" />
+                    Add your first coupon
+                  </span>
+                </Button>
+              ) : null}
+            </div>
           ) : null}
-          {coupons.data?.length && !filtered.length ? <p>No coupons match these filters.</p> : null}
         </div>
       </Card>
 
@@ -245,38 +302,41 @@ export function ShopCouponsPage() {
         labelledBy="coupon-dialog"
         busy={busy}
       >
-        <form onSubmit={save} style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            Code
-            <input
-              value={form.code}
-              onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
-              required
-              placeholder="SAVE10"
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 6 }}>
-            Name
-            <input
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              required
-              placeholder="10% off first order"
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 6 }}>
-            Description
-            <input
-              value={form.description}
-              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <form onSubmit={save} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
+          <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
+            Codes customers can apply on pickup and delivery checkout.
+          </p>
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              Type
+              <span style={fieldLabel}>Code</span>
+              <input
+                value={form.code}
+                onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
+                required
+                placeholder="SAVE10"
+                style={fieldInput}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Name</span>
+              <input
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                required
+                placeholder="10% off first order"
+                style={fieldInput}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
+              <span style={fieldLabel}>Description</span>
+              <input
+                value={form.description}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                style={fieldInput}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Type</span>
               <select
                 value={form.discountType}
                 onChange={(event) =>
@@ -285,14 +345,14 @@ export function ShopCouponsPage() {
                     discountType: event.target.value === 'amount' ? 'amount' : 'percent',
                   }))
                 }
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               >
                 <option value="percent">Percent</option>
                 <option value="amount">Fixed amount</option>
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              {form.discountType === 'percent' ? 'Percent' : 'Amount'}
+              <span style={fieldLabel}>{form.discountType === 'percent' ? 'Percent' : 'Amount'}</span>
               <input
                 type="number"
                 min="0"
@@ -300,13 +360,11 @@ export function ShopCouponsPage() {
                 value={form.discountValue}
                 onChange={(event) => setForm((current) => ({ ...current, discountValue: event.target.value }))}
                 required
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               />
             </label>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              Min. order
+              <span style={fieldLabel}>Min. order</span>
               <input
                 type="number"
                 min="0"
@@ -314,11 +372,11 @@ export function ShopCouponsPage() {
                 value={form.minOrder}
                 onChange={(event) => setForm((current) => ({ ...current, minOrder: event.target.value }))}
                 placeholder="Optional"
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              Max discount
+              <span style={fieldLabel}>Max discount</span>
               <input
                 type="number"
                 min="0"
@@ -326,74 +384,80 @@ export function ShopCouponsPage() {
                 value={form.maxDiscount}
                 onChange={(event) => setForm((current) => ({ ...current, maxDiscount: event.target.value }))}
                 placeholder="Optional cap"
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               />
             </label>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              Starts
+              <span style={fieldLabel}>Starts</span>
               <input
                 type="date"
                 value={form.startsAt}
                 onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))}
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              Ends
+              <span style={fieldLabel}>Ends</span>
               <input
                 type="date"
                 value={form.endsAt}
                 onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))}
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               />
             </label>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              Total uses
+              <span style={fieldLabel}>Total uses</span>
               <input
                 type="number"
                 min="1"
                 value={form.maxRedemptions}
                 onChange={(event) => setForm((current) => ({ ...current, maxRedemptions: event.target.value }))}
                 placeholder="Unlimited"
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              Uses per customer
+              <span style={fieldLabel}>Uses per customer</span>
               <input
                 type="number"
                 min="1"
                 value={form.perCustomer}
                 onChange={(event) => setForm((current) => ({ ...current, perCustomer: event.target.value }))}
                 placeholder="Unlimited"
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={fieldInput}
               />
             </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={form.firstOrderOnly}
+                onChange={(event) => setForm((current) => ({ ...current, firstOrderOnly: event.target.checked }))}
+              />
+              First online order only
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+              />
+              Active
+            </label>
           </div>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={form.firstOrderOnly}
-              onChange={(event) => setForm((current) => ({ ...current, firstOrderOnly: event.target.checked }))}
-            />
-            First online order only
-          </label>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={form.isActive}
-              onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
-            />
-            Active
-          </label>
-          {message ? <p role="alert">{message}</p> : null}
-          <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? 'Saving…' : editingId ? 'Save changes' : 'Create coupon'}
-          </Button>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? 'Saving…' : editingId ? 'Update coupon' : 'Save coupon'}
+            </Button>
+            <Button type="button" variant="neutral" onClick={dialog.hide} disabled={busy}>
+              Cancel
+            </Button>
+            {editingId ? (
+              <Button type="button" variant="ghost" onClick={() => void handleDelete()} disabled={busy}>
+                Delete coupon
+              </Button>
+            ) : null}
+          </div>
+          {message ? <p role="status">{message}</p> : null}
         </form>
       </Dialog>
     </div>

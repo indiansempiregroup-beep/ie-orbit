@@ -2,7 +2,6 @@ import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -19,10 +18,12 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
 import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { RemoteImage } from '../../components/RemoteImage';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useUpdateBusinessAddons, useBusinessBillingSnapshot } from '../../hooks/useOpsExtended';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
-import { colors, spacing } from '../../theme/tokens';
+import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopPet } from '@ie-platform/sdk';
 import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../utils/products';
@@ -265,34 +266,43 @@ export function ShopPetsScreen() {
                     style={styles.row}
                     onPress={() => navigation.navigate('ShopPetDetail', { petId: item.id })}
                   >
-                    {photoUri ? (
-                      <Image source={{ uri: photoUri }} style={styles.thumb} />
-                    ) : (
-                      <View style={[styles.thumb, styles.thumbPlaceholder]}>
-                        <Feather name="heart" size={18} color={colors.mutedForeground} />
+                    <View style={styles.rowInner}>
+                      {photoUri ? (
+                        <RemoteImage uri={photoUri} style={styles.thumb} />
+                      ) : (
+                        <View style={[styles.thumb, styles.thumbEmpty]}>
+                          <Feather name="heart" size={18} color={colors.mutedForeground} />
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.name}>{item.name}</Text>
+                        <Text style={styles.meta}>
+                          {[item.species, item.breed].filter(Boolean).join(' · ') || 'No species'}
+                          {item.birthday ? ` · birthday ${item.birthday}` : ''}
+                        </Text>
+                        <Text style={styles.meta}>
+                          {item.customer_name ? `Owner: ${item.customer_name}` : 'No owner name'}
+                          {item.sex ? ` · ${item.sex}` : ''}
+                        </Text>
                       </View>
-                    )}
-                    <View style={styles.rowMain}>
-                      <Text style={styles.name}>{item.name}</Text>
-                      <Text style={styles.meta}>
-                        {[item.species, item.breed].filter(Boolean).join(' · ') || '—'}
-                        {item.birthday ? ` · birthday ${item.birthday}` : ''}
-                      </Text>
-                      {item.customer_name ? (
-                        <Text style={styles.meta}>Owner: {item.customer_name}</Text>
-                      ) : null}
+                      <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
                     </View>
-                    <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
                   </Pressable>
                 );
               }}
               ListEmptyComponent={
                 !loading ? (
-                  <Text style={styles.meta}>
-                    {pets.length
-                      ? 'No pets match these filters.'
-                      : 'No pets yet. Tap + to add.'}
-                  </Text>
+                  <EmptyState
+                    icon="heart"
+                    title={pets.length ? 'No matching pets' : 'No pets yet'}
+                    message={
+                      pets.length
+                        ? 'Try another search or clear filters.'
+                        : 'Add a pet profile with photo, birthday, and owner details.'
+                    }
+                    actionLabel={pets.length ? undefined : 'Add pet'}
+                    onAction={pets.length ? undefined : () => navigation.navigate('ShopPetForm')}
+                  />
                 ) : null
               }
             />
@@ -337,22 +347,20 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontWeight: '600' },
   link: { color: colors.primary, fontWeight: '600', marginTop: spacing.md },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  rowMain: { flex: 1 },
-  thumb: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.muted },
-  thumbPlaceholder: {
     backgroundColor: colors.card,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  rowInner: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  thumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.muted },
+  thumbEmpty: {
+    backgroundColor: colors.tint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { fontWeight: '600', color: colors.foreground },
-  meta: { color: colors.mutedForeground, marginTop: 2 },
+  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
+  meta: { marginTop: 4, color: colors.mutedForeground, fontSize: 13 },
 });

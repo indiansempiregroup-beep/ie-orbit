@@ -981,6 +981,19 @@ export type PlatformAffiliateCode = {
   created_at?: string;
 };
 
+export type PlatformAffiliateMoney = {
+  earned_paise: number;
+  paid_paise: number;
+  credited_paise: number;
+  settled_paise: number;
+  outstanding_paise: number;
+};
+
+export type PlatformAffiliateInsights = PlatformAffiliateMoney & {
+  affiliate_count: number;
+  referral_count: number;
+};
+
 export type PlatformAffiliate = {
   id: string;
   affiliate_type: 'tenant' | 'partner' | string;
@@ -994,22 +1007,57 @@ export type PlatformAffiliate = {
   bank_account_number?: string;
   bank_ifsc?: string;
   payout_notes?: string;
+  default_commission_paise?: number;
+  commission_trigger?: 'first_payment' | 'every_payment' | 'none' | string;
+  commission_type?: 'flat' | 'percent' | string;
+  commission_percent?: number;
+  commission_summary?: string;
   metadata?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
   codes?: PlatformAffiliateCode[];
-};
+  referral_count?: number;
+} & Partial<PlatformAffiliateMoney>;
 
 export type PlatformAffiliateReferral = {
   id: string;
   affiliate_id: string;
+  affiliate_name?: string;
   referred_tenant_id: string;
+  referred_tenant_name?: string;
+  referred_tenant_slug?: string;
   affiliate_code_id?: string | null;
+  affiliate_code?: string;
   starts_at?: string;
   months: number;
   status: string;
+  payment_account_open?: boolean;
   metadata?: Record<string, unknown>;
   created_at?: string;
+} & Partial<PlatformAffiliateMoney>;
+
+export type PlatformAffiliateLedgerEntry = {
+  id: string;
+  affiliate_id: string;
+  affiliate_name?: string;
+  referral_id?: string | null;
+  referred_tenant_name?: string;
+  referred_tenant_slug?: string;
+  kind: 'earning' | 'payment' | 'credit' | string;
+  amount_paise: number;
+  period_yyyy_mm?: string;
+  payment_ref?: string;
+  notes?: string;
+  status: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type PlatformAffiliateDetail = PlatformAffiliate & {
+  insights: PlatformAffiliateMoney;
+  referrals: PlatformAffiliateReferral[];
+  ledger: PlatformAffiliateLedgerEntry[];
+  history: PlatformAffiliateLedgerEntry[];
 };
 
 export type PlatformAffiliateAccrual = {
@@ -3598,7 +3646,12 @@ class ApiClient {
       reason: string;
     }) => this.request<{ id: string; code: string }>('/platform/coupons', { method: 'POST', body }),
     affiliates: () =>
-      this.request<{ affiliates: PlatformAffiliate[] }>('/platform/affiliates', { method: 'GET' }),
+      this.request<{ affiliates: PlatformAffiliate[]; insights: PlatformAffiliateInsights }>(
+        '/platform/affiliates',
+        { method: 'GET' },
+      ),
+    affiliate: (affiliateId: string) =>
+      this.request<PlatformAffiliateDetail>(`/platform/affiliates/${affiliateId}`, { method: 'GET' }),
     upsertAffiliate: (body: {
       id?: string;
       affiliate_type?: 'tenant' | 'partner' | string;
@@ -3613,6 +3666,10 @@ class ApiClient {
       bank_account_number?: string;
       bank_ifsc?: string;
       payout_notes?: string;
+      default_commission_paise?: number;
+      commission_trigger?: 'first_payment' | 'every_payment' | 'none' | string;
+      commission_type?: 'flat' | 'percent' | string;
+      commission_percent?: number;
       metadata?: Record<string, unknown>;
       reason: string;
     }) => this.request<PlatformAffiliate>('/platform/affiliates', { method: 'POST', body }),
@@ -3674,6 +3731,27 @@ class ApiClient {
       }),
     markAffiliatePayoutPaid: (payoutId: string, body: { reason: string; payment_ref?: string }) =>
       this.request<PlatformAffiliatePayout>(`/platform/affiliate-payouts/${payoutId}/mark-paid`, {
+        method: 'POST',
+        body,
+      }),
+    affiliateLedger: (query?: { affiliate_id?: string; referral_id?: string; kind?: string }) =>
+      this.request<{ entries: PlatformAffiliateLedgerEntry[] }>('/platform/affiliate-ledger', {
+        method: 'GET',
+        query,
+      }),
+    createAffiliateLedgerEntry: (body: {
+      affiliate_id: string;
+      referral_id?: string | null;
+      kind: 'earning' | 'payment' | 'credit' | string;
+      amount_paise: number;
+      period_yyyy_mm?: string;
+      payment_ref?: string;
+      notes?: string;
+      reason: string;
+      metadata?: Record<string, unknown>;
+    }) => this.request<PlatformAffiliateLedgerEntry>('/platform/affiliate-ledger', { method: 'POST', body }),
+    voidAffiliateLedgerEntry: (entryId: string, body: { reason: string }) =>
+      this.request<PlatformAffiliateLedgerEntry>(`/platform/affiliate-ledger/${entryId}/void`, {
         method: 'POST',
         body,
       }),

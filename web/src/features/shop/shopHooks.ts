@@ -439,6 +439,31 @@ export function useShopPetMutations() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-pets'] }),
   });
 
+  const patchPet = useMutation({
+    mutationFn: async ({
+      petId,
+      body,
+    }: {
+      petId: string;
+      body: Partial<ShopPetWriteInput>;
+    }) => {
+      const response = await client.shop.patchPet(petId, {
+        ...body,
+        business_id: businessId,
+      });
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-pets'] }),
+  });
+
+  const deletePet = useMutation({
+    mutationFn: async (petId: string) => {
+      const response = await client.shop.deletePet(petId);
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-pets'] }),
+  });
+
   const notifyPetOwner = useMutation({
     mutationFn: async (args: {
       petId: string;
@@ -455,7 +480,7 @@ export function useShopPetMutations() {
     },
   });
 
-  return { createPet, notifyPetOwner };
+  return { createPet, patchPet, deletePet, notifyPetOwner };
 }
 
 /** Customers usable as "sale" / party pickers across Books forms. */

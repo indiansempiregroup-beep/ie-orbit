@@ -216,6 +216,7 @@ class CheckoutService:
             return None
 
         if session.status == CheckoutSessionStatus.PAID:
+            self._record_affiliate_commission(session)
             return session
 
         session.status = CheckoutSessionStatus.PAID
@@ -225,7 +226,19 @@ class CheckoutService:
             "payment_id": payment_id,
         }
         session.save(update_fields=["status", "paid_at", "metadata", "updated_at"])
+        self._record_affiliate_commission(session)
         return session
+
+    def _record_affiliate_commission(self, session: BillingCheckoutSession) -> None:
+        try:
+            from apps.platform_admin.affiliate_service import AffiliateService
+
+            AffiliateService().record_checkout_commission(session=session)
+        except Exception:
+            logger.exception(
+                "billing.affiliate_commission_failed",
+                extra={"session_id": str(session.id), "tenant_id": str(session.tenant_id)},
+            )
 
     def create_upi_checkout_session(
         self,

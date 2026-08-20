@@ -13,21 +13,43 @@ import {
   AdminPageHeader,
   AdminSearch,
   AdminSection,
-  AdminStatus,
   AdminTable,
 } from './AdminChrome';
 import { usePlatformTenantsQuery } from './adminHooks';
 import { affiliateSignupPath } from '../onboarding/affiliateCode';
-import type { PlatformAffiliate, PlatformAffiliateCode } from '@ie-platform/sdk';
+import type {
+  PlatformAffiliate,
+  PlatformAffiliateCode,
+  PlatformAffiliateLedgerEntry,
+  PlatformAffiliateReferral,
+} from '@ie-platform/sdk';
 
-function paiseToInr(paise: number) {
-  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+function paiseToInr(paise?: number | null) {
+  return `₹${((paise || 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
+function inrToPaise(value: string) {
+  return Math.round((Number(value) || 0) * 100);
 }
 
 function signupUrl(code: string) {
   const path = affiliateSignupPath(code);
   if (typeof window === 'undefined') return path;
   return `${window.location.origin}${path}`;
+}
+
+function formatWhen(iso?: string | null) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function kindLabel(kind: string) {
+  if (kind === 'earning') return 'Earned';
+  if (kind === 'payment') return 'Paid';
+  if (kind === 'credit') return 'Credited';
+  return kind;
 }
 
 export function PlatformAffiliatesPage() {
@@ -38,7 +60,7 @@ export function PlatformAffiliatesPage() {
 
   const affiliatesQuery = useQuery({
     queryKey: ['platform', 'affiliates'],
-    queryFn: async () => (await client.platform.affiliates()).data.affiliates,
+    queryFn: async () => (await client.platform.affiliates()).data,
   });
   const codesQuery = useQuery({
     queryKey: ['platform', 'affiliate-codes'],
@@ -48,23 +70,20 @@ export function PlatformAffiliatesPage() {
     queryKey: ['platform', 'affiliate-referrals'],
     queryFn: async () => (await client.platform.affiliateReferrals()).data.referrals,
   });
-  const accrualsQuery = useQuery({
-    queryKey: ['platform', 'affiliate-accruals'],
-    queryFn: async () => (await client.platform.affiliateAccruals()).data.accruals,
-  });
-  const payoutsQuery = useQuery({
-    queryKey: ['platform', 'affiliate-payouts'],
-    queryFn: async () => (await client.platform.affiliatePayouts()).data.payouts,
+  const ledgerQuery = useQuery({
+    queryKey: ['platform', 'affiliate-ledger'],
+    queryFn: async () => (await client.platform.affiliateLedger()).data.entries,
   });
 
-  const [tab, setTab] = useState<'affiliates' | 'codes' | 'referrals' | 'accruals' | 'payouts'>('affiliates');
+  const [tab, setTab] = useState<'affiliates' | 'referrals' | 'earnings' | 'payments'>('affiliates');
   const [query, setQuery] = useState('');
   const [tenantSearch, setTenantSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [accrualOpen, setAccrualOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState<'earning' | 'payment' | 'credit' | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [affiliateType, setAffiliateType] = useState<'partner' | 'tenant'>('partner');
@@ -76,12 +95,24 @@ export function PlatformAffiliatesPage() {
   const [bankAccountNumber, setBankAccountNumber] = useState('');
   const [bankIfsc, setBankIfsc] = useState('');
   const [payoutNotes, setPayoutNotes] = useState('');
-  const [referralId, setReferralId] = useState('');
+  const [defaultCommissionInr, setDefaultCommissionInr] = useState('');
+  const [commissionTrigger, setCommissionTrigger] = useState<'first_payment' | 'every_payment' | 'none'>('first_payment');
+  const [commissionType, setCommissionType] = useState<'flat' | 'percent'>('flat');
+  const [commissionPercent, setCommissionPercent] = useState('');
+  const [ledgerAffiliateId, setLedgerAffiliateId] = useState('');
+  const [ledgerReferralId, setLedgerReferralId] = useState('');
   const [period, setPeriod] = useState(() => new Date().toISOString().slice(0, 7));
-  const [amountInr, setAmountInr] = useState('1000');
-  const [benefitType, setBenefitType] = useState<'credit' | 'payout'>('credit');
-  const [reason, setReason] = useState('Monthly affiliate benefit');
+  const [amountInr, setAmountInr] = useState('');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [notes, setNotes] = useState('');
+  const [reason, setReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+
+  const detailQuery = useQuery({
+    queryKey: ['platform', 'affiliates', selectedId],
+    queryFn: async () => (await client.platform.affiliate(selectedId as string)).data,
+    enabled: Boolean(selectedId),
+  });
 
   const tenants = tenantsQuery.data ?? [];
   const tenantById = useMemo(() => new Map(tenants.map((tenant) => [tenant.id, tenant])), [tenants]);
@@ -104,8 +135,7 @@ export function PlatformAffiliatesPage() {
     void queryClient.invalidateQueries({ queryKey: ['platform', 'affiliates'] });
     void queryClient.invalidateQueries({ queryKey: ['platform', 'affiliate-codes'] });
     void queryClient.invalidateQueries({ queryKey: ['platform', 'affiliate-referrals'] });
-    void queryClient.invalidateQueries({ queryKey: ['platform', 'affiliate-accruals'] });
-    void queryClient.invalidateQueries({ queryKey: ['platform', 'affiliate-payouts'] });
+    void queryClient.invalidateQueries({ queryKey: ['platform', 'affiliate-ledger'] });
   };
 
   const upsertAffiliate = useMutation({
@@ -127,6 +157,10 @@ export function PlatformAffiliatesPage() {
           bank_account_number: bankAccountNumber.trim() || undefined,
           bank_ifsc: bankIfsc.trim() || undefined,
           payout_notes: payoutNotes.trim() || undefined,
+          default_commission_paise: inrToPaise(defaultCommissionInr),
+          commission_trigger: commissionTrigger,
+          commission_type: commissionType,
+          commission_percent: Number(commissionPercent) || 0,
           reason: editingId ? 'Update affiliate' : 'Create affiliate',
         })
       ).data;
@@ -134,28 +168,37 @@ export function PlatformAffiliatesPage() {
     onSuccess: invalidate,
   });
 
-  const createAccrual = useMutation({
-    mutationFn: async () =>
-      (
-        await client.platform.createAffiliateAccrual({
-          referral_id: referralId,
-          period_yyyy_mm: period,
-          amount_paise: Math.round((Number(amountInr) || 0) * 100),
-          benefit_type: benefitType,
-          reason: reason.trim() || 'Monthly affiliate benefit',
+  const saveLedger = useMutation({
+    mutationFn: async () => {
+      if (!ledgerOpen) throw new Error('Choose earning or payment.');
+      const affiliateId = ledgerAffiliateId || selectedId;
+      if (!affiliateId) throw new Error('Select an affiliate.');
+      return (
+        await client.platform.createAffiliateLedgerEntry({
+          affiliate_id: affiliateId,
+          referral_id: ledgerReferralId || undefined,
+          kind: ledgerOpen,
+          amount_paise: inrToPaise(amountInr),
+          period_yyyy_mm: ledgerOpen === 'earning' ? period : undefined,
+          payment_ref: ledgerOpen === 'payment' ? paymentRef.trim() : undefined,
+          notes: notes.trim(),
+          reason: reason.trim() || (ledgerOpen === 'earning' ? 'Add affiliate earning' : 'Record affiliate payment'),
         })
-      ).data,
+      ).data;
+    },
     onSuccess: invalidate,
   });
 
-  const affiliates = affiliatesQuery.data ?? [];
+  const affiliates = affiliatesQuery.data?.affiliates ?? [];
+  const insights = affiliatesQuery.data?.insights;
   const codes = codesQuery.data ?? [];
   const referrals = referralsQuery.data ?? [];
-  const accruals = accrualsQuery.data ?? [];
-  const payouts = payoutsQuery.data ?? [];
+  const ledger = ledgerQuery.data ?? [];
+  const selected = selectedId ? affiliates.find((item) => item.id === selectedId) : undefined;
+  const detail = detailQuery.data;
 
-  const pendingAccruals = accruals.filter((item) => item.status === 'pending').length;
-  const paidPayouts = payouts.filter((item) => item.status === 'paid').length;
+  const earnings = ledger.filter((item) => item.kind === 'earning');
+  const payments = ledger.filter((item) => item.kind === 'payment' || item.kind === 'credit');
 
   const filteredAffiliates = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -184,6 +227,12 @@ export function PlatformAffiliatesPage() {
 
   function activeCodesFor(affiliateId: string) {
     return codesFor(affiliateId).filter((item) => item.is_active);
+  }
+
+  function referralsFor(affiliateId: string) {
+    return (detail?.id === affiliateId ? detail.referrals : referrals).filter(
+      (item) => item.affiliate_id === affiliateId,
+    );
   }
 
   async function copyText(value: string, success: string) {
@@ -218,6 +267,10 @@ export function PlatformAffiliatesPage() {
     setBankAccountNumber('');
     setBankIfsc('');
     setPayoutNotes('');
+    setDefaultCommissionInr('');
+    setCommissionTrigger('first_payment');
+    setCommissionType('flat');
+    setCommissionPercent('');
     setMessage(null);
   }
 
@@ -228,16 +281,54 @@ export function PlatformAffiliatesPage() {
     setEmail(item.email);
     setAffiliateType(item.affiliate_type === 'tenant' ? 'tenant' : 'partner');
     setTenantId(item.tenant_id || '');
-    setStatus(item.status === 'inactive' ? 'inactive' : 'active');
+    setStatus(item.status === 'inactive' || item.status === 'disabled' ? 'inactive' : 'active');
     setPayoutMethod((item.payout_method as 'upi' | 'bank' | 'other' | '') || '');
     setUpiVpa(item.upi_vpa || '');
     setBankAccountName(item.bank_account_name || '');
     setBankAccountNumber(item.bank_account_number || '');
     setBankIfsc(item.bank_ifsc || '');
     setPayoutNotes(item.payout_notes || '');
+    setDefaultCommissionInr(item.default_commission_paise ? String(item.default_commission_paise / 100) : '');
+    setCommissionTrigger(
+      item.commission_trigger === 'every_payment' || item.commission_trigger === 'none'
+        ? item.commission_trigger
+        : 'first_payment',
+    );
+    setCommissionType(item.commission_type === 'percent' ? 'percent' : 'flat');
+    setCommissionPercent(item.commission_percent ? String(item.commission_percent) : '');
     setCode(existing?.code || '');
     setMessage(null);
     setCreateOpen(true);
+  }
+
+  function openLedger(
+    kind: 'earning' | 'payment' | 'credit',
+    affiliateId?: string,
+    referralId?: string,
+    presetAmountPaise?: number,
+  ) {
+    const targetId = affiliateId || selectedId || '';
+    const target = affiliates.find((item) => item.id === targetId);
+    setLedgerOpen(kind);
+    setLedgerAffiliateId(targetId);
+    setLedgerReferralId(referralId || '');
+    setPeriod(new Date().toISOString().slice(0, 7));
+    setAmountInr(
+      presetAmountPaise != null && presetAmountPaise > 0 ? String(presetAmountPaise / 100) : '',
+    );
+    setPaymentRef('');
+    setNotes('');
+    setReason(
+      kind === 'earning'
+        ? 'Add affiliate earning'
+        : kind === 'credit'
+          ? 'Settle as subscription credit'
+          : 'Record affiliate payment',
+    );
+    if (kind === 'payment' && !presetAmountPaise && target?.outstanding_paise) {
+      setAmountInr(String((target.outstanding_paise || 0) / 100));
+    }
+    setMessage(null);
   }
 
   async function deleteAffiliate(item: PlatformAffiliate) {
@@ -247,6 +338,7 @@ export function PlatformAffiliatesPage() {
     try {
       await client.platform.deleteAffiliate(item.id, { reason: 'Delete affiliate' });
       invalidate();
+      if (selectedId === item.id) setSelectedId(null);
       setMessage(`Deleted ${item.name}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to delete affiliate');
@@ -255,39 +347,105 @@ export function PlatformAffiliatesPage() {
     }
   }
 
-  async function deleteCode(item: PlatformAffiliateCode) {
-    if (!window.confirm(`Delete code ${item.code}?`)) return;
+  async function voidEntry(item: PlatformAffiliateLedgerEntry) {
+    if (!window.confirm(`Void this ${kindLabel(item.kind).toLowerCase()} of ${paiseToInr(item.amount_paise)}?`)) {
+      return;
+    }
     setBusyId(item.id);
-    setMessage(null);
     try {
-      await client.platform.deleteAffiliateCode(item.id, { reason: 'Delete affiliate code' });
+      await client.platform.voidAffiliateLedgerEntry(item.id, { reason: 'Void affiliate ledger entry' });
       invalidate();
-      setMessage(`Deleted code ${item.code}`);
+      setMessage(`Voided ${kindLabel(item.kind).toLowerCase()}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to delete code');
+      setMessage(error instanceof Error ? error.message : 'Unable to void entry');
     } finally {
       setBusyId(null);
     }
   }
 
-  function payoutLabel(item: { payout_method?: string; upi_vpa?: string; bank_account_number?: string; bank_ifsc?: string }) {
+  function payoutLabel(item: {
+    payout_method?: string;
+    upi_vpa?: string;
+    bank_account_name?: string;
+    bank_account_number?: string;
+    bank_ifsc?: string;
+  }) {
     if (item.payout_method === 'upi' && item.upi_vpa) return `UPI · ${item.upi_vpa}`;
     if (item.payout_method === 'bank' && item.bank_account_number) {
-      return `Bank · ${item.bank_account_number}${item.bank_ifsc ? ` (${item.bank_ifsc})` : ''}`;
+      const namePart = item.bank_account_name ? `${item.bank_account_name} · ` : '';
+      return `Bank · ${namePart}${item.bank_account_number}${item.bank_ifsc ? ` (${item.bank_ifsc})` : ''}`;
     }
     if (item.payout_method === 'other') return 'Other';
-    return '—';
+    return 'No payout details';
   }
+
+  function renderLedger(items: PlatformAffiliateLedgerEntry[], empty: string) {
+    const visible = items.filter((item) => item.status !== 'void');
+    if (!visible.length) return <AdminEmpty title="No history yet">{empty}</AdminEmpty>;
+    return (
+      <div className="admin-ledger">
+        {items.map((item) => (
+          <div key={item.id} className="admin-ledger__item">
+            <div className={`admin-ledger__kind admin-ledger__kind--${item.status === 'void' ? 'void' : item.kind}`}>
+              {kindLabel(item.kind)}
+            </div>
+            <div>
+              <div className="admin-ledger__title">
+                {item.referred_tenant_name || item.notes || kindLabel(item.kind)}
+              </div>
+              <div className="admin-ledger__meta">
+                {[
+                  item.affiliate_name,
+                  item.period_yyyy_mm,
+                  item.payment_ref ? `Ref ${item.payment_ref}` : '',
+                  formatWhen(item.created_at),
+                  item.status === 'void' ? 'void' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+              {item.notes && item.notes !== item.referred_tenant_name ? (
+                <div className="admin-ledger__meta">{item.notes}</div>
+              ) : null}
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div className={`admin-ledger__amount${item.status === 'void' ? ' admin-ledger__amount--void' : ''}`}>
+                {item.kind === 'earning' ? '+' : '−'}
+                {paiseToInr(item.amount_paise)}
+              </div>
+              {item.status !== 'void' ? (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--ghost"
+                  disabled={busyId === item.id}
+                  onClick={() => void voidEntry(item)}
+                >
+                  Void
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const detailAffiliate = detail ?? selected;
+  const detailReferrals: PlatformAffiliateReferral[] = detail?.referrals ?? referralsFor(selectedId || '');
+  const detailHistory: PlatformAffiliateLedgerEntry[] = detail?.history ?? ledger.filter((item) => item.affiliate_id === selectedId);
 
   return (
     <AdminPage>
       <AdminPageHeader
         title="Affiliates"
-        description="Track partner and tenant referrals, accruals, subscription credits, and cash payouts."
+        description="Signup via an affiliate link opens a payment book for that business. Add earnings over time, record payments, and keep the full history."
         actions={
           <>
-            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setAccrualOpen(true)}>
-              Create accrual
+            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => openLedger('earning')}>
+              Add earning
+            </button>
+            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => openLedger('payment')}>
+              Record payment
             </button>
             <button
               type="button"
@@ -304,21 +462,32 @@ export function PlatformAffiliatesPage() {
       />
 
       <div className="admin-kpi-grid">
-        <AdminKpi label="Affiliates" value={affiliates.length} icon={<Handshake size={16} />} />
-        <AdminKpi label="Referrals" value={referrals.length} />
-        <AdminKpi label="Pending accruals" value={pendingAccruals} tone="warn" />
-        <AdminKpi label="Paid payouts" value={paidPayouts} tone="good" />
+        <AdminKpi label="Affiliates" value={insights?.affiliate_count ?? affiliates.length} icon={<Handshake size={16} />} />
+        <AdminKpi label="Referred businesses" value={insights?.referral_count ?? referrals.length} />
+        <AdminKpi label="Total earned" value={paiseToInr(insights?.earned_paise)} tone="good" />
+        <AdminKpi
+          label="Outstanding"
+          value={paiseToInr(insights?.outstanding_paise)}
+          hint={`${paiseToInr(insights?.paid_paise)} paid · ${paiseToInr(insights?.credited_paise)} credited`}
+          tone={(insights?.outstanding_paise || 0) > 0 ? 'warn' : 'default'}
+        />
       </div>
 
       {message ? <p className="admin-message">{message}</p> : null}
 
-      <AdminSection title="Pipeline">
+      <AdminSection title="Affiliate pipeline">
         <div className="admin-toolbar">
-          <AdminSearch value={query} onChange={setQuery} placeholder="Search affiliates…" />
+          <AdminSearch value={query} onChange={setQuery} placeholder="Search affiliates, codes, or businesses…" />
           <div className="admin-chip-row">
-            {(['affiliates', 'codes', 'referrals', 'accruals', 'payouts'] as const).map((key) => (
+            {(['affiliates', 'referrals', 'earnings', 'payments'] as const).map((key) => (
               <AdminChip key={key} active={tab === key} onClick={() => setTab(key)}>
-                {key}
+                {key === 'affiliates'
+                  ? 'Affiliates'
+                  : key === 'referrals'
+                    ? 'Referred businesses'
+                    : key === 'earnings'
+                      ? 'Earnings'
+                      : 'Payments'}
               </AdminChip>
             ))}
           </div>
@@ -326,54 +495,50 @@ export function PlatformAffiliatesPage() {
 
         {tab === 'affiliates' ? (
           filteredAffiliates.length ? (
-            <AdminTable columns={['Name', 'Code', 'Signup link', 'Type', 'Email', 'Status', '']}>
+            <AdminTable columns={['Affiliate', 'Code', 'Referred', 'Earned', 'Outstanding', 'Pay to', '']}>
               {filteredAffiliates.map((item) => {
-                const linked = item.tenant_id ? tenantById.get(item.tenant_id) : undefined;
                 const affiliateCodes = activeCodesFor(item.id);
                 const primary = affiliateCodes[0];
                 return (
                   <tr key={item.id}>
                     <td>
                       <strong>{item.name}</strong>
-                      {linked ? (
-                        <div className="admin-table__muted">{linked.display_name}</div>
+                      <div className="admin-table__muted">
+                        {item.affiliate_type} · {item.email}
+                      </div>
+                      {item.commission_summary ? (
+                        <div className="admin-table__muted">{item.commission_summary}</div>
                       ) : null}
                     </td>
                     <td>
-                      {affiliateCodes.length ? (
-                        affiliateCodes.map((entry) => (
-                          <div key={entry.id}>
-                            <strong>{entry.code}</strong>
-                          </div>
-                        ))
-                      ) : (
-                        <span className="admin-table__muted">No code yet</span>
-                      )}
-                    </td>
-                    <td>
                       {primary ? (
-                        <div>
-                          <div className="admin-table__muted" style={{ wordBreak: 'break-all' }}>
-                            {signupUrl(primary.code)}
+                        <>
+                          <strong>{primary.code}</strong>
+                          <div>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn--ghost"
+                              onClick={() => void copyText(signupUrl(primary.code), `Copied signup link for ${primary.code}`)}
+                            >
+                              Copy link
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn--ghost"
-                            onClick={() => void copyText(signupUrl(primary.code), `Copied signup link for ${primary.code}`)}
-                          >
-                            Copy link
-                          </button>
-                        </div>
+                        </>
                       ) : (
-                        '—'
+                        <span className="admin-table__muted">No code</span>
                       )}
                     </td>
-                    <td>{item.affiliate_type}</td>
-                    <td>{item.email}</td>
+                    <td>{item.referral_count ?? 0}</td>
+                    <td>{paiseToInr(item.earned_paise)}</td>
                     <td>
-                      <AdminStatus status={item.status} />
+                      <strong>{paiseToInr(item.outstanding_paise)}</strong>
+                      <div className="admin-table__muted">{paiseToInr(item.settled_paise)} settled</div>
                     </td>
+                    <td>{payoutLabel(item)}</td>
                     <td className="admin-table__actions">
+                      <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setSelectedId(item.id)}>
+                        View
+                      </button>
                       <button type="button" className="admin-btn admin-btn--ghost" onClick={() => openEdit(item)}>
                         Edit
                       </button>
@@ -395,179 +560,177 @@ export function PlatformAffiliatesPage() {
           )
         ) : null}
 
-        {tab === 'codes' ? (
-          codes.length ? (
-            <AdminTable columns={['Code', 'Affiliate', 'Signup link', 'Active', '']}>
-              {codes.map((item) => (
+        {tab === 'referrals' ? (
+          referrals.length ? (
+            <AdminTable columns={['Affiliate', 'Referred business', 'Opened', 'Earned', 'Outstanding', '']}>
+              {referrals.map((item) => (
                 <tr key={item.id}>
                   <td>
-                    <strong>{item.code}</strong>
-                    <div>
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn--ghost"
-                        onClick={() => void copyText(item.code, `Copied code ${item.code}`)}
-                      >
-                        Copy code
-                      </button>
-                    </div>
+                    {item.affiliate_name || affiliates.find((aff) => aff.id === item.affiliate_id)?.name || item.affiliate_id}
+                    <div className="admin-table__muted">{item.affiliate_code || '—'}</div>
                   </td>
-                  <td>{affiliates.find((aff) => aff.id === item.affiliate_id)?.name ?? item.affiliate_id}</td>
                   <td>
-                    <div className="admin-table__muted" style={{ wordBreak: 'break-all' }}>
-                      {signupUrl(item.code)}
-                    </div>
-                    <button
-                      type="button"
-                      className="admin-btn admin-btn--ghost"
-                      onClick={() => void copyText(signupUrl(item.code), `Copied signup link for ${item.code}`)}
-                    >
-                      Copy link
-                    </button>
+                    <strong>{item.referred_tenant_name || item.referred_tenant_id}</strong>
+                    <div className="admin-table__muted">{item.referred_tenant_slug}</div>
                   </td>
-                  <td>{item.is_active ? 'Yes' : 'No'}</td>
+                  <td>{formatWhen(item.starts_at || item.created_at)}</td>
+                  <td>{paiseToInr(item.earned_paise)}</td>
+                  <td>{paiseToInr(item.outstanding_paise)}</td>
                   <td className="admin-table__actions">
                     <button
                       type="button"
                       className="admin-btn admin-btn--ghost"
-                      disabled={busyId === item.id}
-                      onClick={() => void deleteCode(item)}
+                      onClick={() => openLedger('earning', item.affiliate_id, item.id)}
                     >
-                      Delete
+                      Add earning
+                    </button>
+                    <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setSelectedId(item.affiliate_id)}>
+                      View affiliate
                     </button>
                   </td>
                 </tr>
               ))}
             </AdminTable>
           ) : (
-            <AdminEmpty title="No codes">Create a referral code when adding an affiliate.</AdminEmpty>
-          )
-        ) : null}
-
-        {tab === 'referrals' ? (
-          referrals.length ? (
-            <AdminTable columns={['Affiliate', 'Referred tenant', 'Months', 'Status']}>
-              {referrals.map((item) => {
-                const affiliate = affiliates.find((aff) => aff.id === item.affiliate_id);
-                const referred = tenantById.get(item.referred_tenant_id);
-                return (
-                  <tr key={item.id}>
-                    <td>{affiliate?.name ?? item.affiliate_id}</td>
-                    <td>
-                      {referred ? (
-                        <>
-                          {referred.display_name}
-                          <div style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{referred.slug}</div>
-                        </>
-                      ) : (
-                        item.referred_tenant_id
-                      )}
-                    </td>
-                    <td>{item.months}</td>
-                    <td>
-                      <AdminStatus status={item.status} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </AdminTable>
-          ) : (
-            <AdminEmpty title="No referrals">
-              Referrals appear when someone registers with an affiliate code.
+            <AdminEmpty title="No referred businesses yet">
+              They appear here as soon as someone registers with an affiliate signup link such as
+              {' '}
+              <code>?ref=CODE</code>
+              .
             </AdminEmpty>
           )
         ) : null}
 
-        {tab === 'accruals' ? (
-          accruals.length ? (
-            <AdminTable columns={['Period', 'Amount', 'Type', 'Status', '']}>
-              {accruals.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.period_yyyy_mm}</td>
-                  <td>{paiseToInr(item.amount_paise)}</td>
-                  <td>{item.benefit_type}</td>
-                  <td>
-                    <AdminStatus status={item.status} />
-                  </td>
-                  <td className="admin-table__actions">
-                    {item.status === 'pending' ? (
-                      <>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn--ghost"
-                          onClick={() => {
-                            void client.platform
-                              .approveAffiliateAccrualCredit(item.id, {
-                                reason: 'Approve as subscription credit',
-                              })
-                              .then(invalidate);
-                          }}
-                        >
-                          Credit
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn--ghost"
-                          onClick={() => {
-                            void client.platform
-                              .approveAffiliateAccrualPayout(item.id, { reason: 'Approve as payout' })
-                              .then(invalidate);
-                          }}
-                        >
-                          Payout
-                        </button>
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </AdminTable>
-          ) : (
-            <AdminEmpty title="No accruals">Create monthly accruals for active referrals.</AdminEmpty>
-          )
-        ) : null}
+        {tab === 'earnings' ? renderLedger(earnings, 'Add earnings against referred businesses.') : null}
+        {tab === 'payments' ? renderLedger(payments, 'Record a cash payment or subscription credit when you settle an affiliate.') : null}
+      </AdminSection>
 
-        {tab === 'payouts' ? (
-          payouts.length ? (
-            <AdminTable columns={['Affiliate', 'Pay to', 'Amount', 'Status', '']}>
-              {payouts.map((item) => {
-                const affiliate = affiliates.find((aff) => aff.id === item.affiliate_id);
-                return (
+      <AdminDrawer
+        open={Boolean(selectedId)}
+        wide
+        onClose={() => setSelectedId(null)}
+        title={detailAffiliate?.name || 'Affiliate'}
+        description="Payment book, referred businesses, earnings, and settlement history."
+        footer={
+          detailAffiliate ? (
+            <>
+              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => openEdit(detailAffiliate)}>
+                Edit details
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--ghost"
+                onClick={() => openLedger('earning', detailAffiliate.id)}
+              >
+                Add earning
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn--primary"
+                onClick={() =>
+                  openLedger(
+                    'payment',
+                    detailAffiliate.id,
+                    undefined,
+                    detailAffiliate.outstanding_paise,
+                  )
+                }
+              >
+                Record payment
+              </button>
+            </>
+          ) : null
+        }
+      >
+        {detailQuery.isLoading && !detailAffiliate ? <p className="admin-message">Loading…</p> : null}
+        {detailAffiliate ? (
+          <>
+            <div className="admin-kpi-grid">
+              <AdminKpi label="Earned" value={paiseToInr(detailAffiliate.earned_paise)} />
+              <AdminKpi label="Paid" value={paiseToInr(detailAffiliate.paid_paise)} />
+              <AdminKpi label="Credited" value={paiseToInr(detailAffiliate.credited_paise)} />
+              <AdminKpi
+                label="Outstanding"
+                value={paiseToInr(detailAffiliate.outstanding_paise)}
+                tone={(detailAffiliate.outstanding_paise || 0) > 0 ? 'warn' : 'good'}
+              />
+            </div>
+            <AdminField label="Pay to" hint="Used when you record a cash payment. Snapshot is stored on each payment.">
+              <div>{payoutLabel(detailAffiliate)}</div>
+              {detailAffiliate.payout_notes ? <div className="admin-table__muted">{detailAffiliate.payout_notes}</div> : null}
+            </AdminField>
+            <AdminField label="Signup link">
+              {activeCodesFor(detailAffiliate.id).length ? (
+                activeCodesFor(detailAffiliate.id).map((entry) => (
+                  <div key={entry.id}>
+                    <strong>{entry.code}</strong>
+                    <div className="admin-table__muted" style={{ wordBreak: 'break-all' }}>
+                      {signupUrl(entry.code)}
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn--ghost"
+                      onClick={() => void copyText(signupUrl(entry.code), `Copied signup link for ${entry.code}`)}
+                    >
+                      Copy link
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <span className="admin-table__muted">No active code</span>
+              )}
+            </AdminField>
+            {detailAffiliate.commission_summary ? (
+              <p className="admin-message">{detailAffiliate.commission_summary}</p>
+            ) : (
+              <p className="admin-message">
+                Set commission on Edit details. First installment from a referred business will then add earnings automatically.
+              </p>
+            )}
+            {detailAffiliate.affiliate_type === 'tenant' ? (
+              <button
+                type="button"
+                className="admin-btn admin-btn--ghost"
+                onClick={() => openLedger('credit', detailAffiliate.id, undefined, detailAffiliate.outstanding_paise)}
+              >
+                Settle as subscription credit
+              </button>
+            ) : null}
+
+            <h3 className="admin-panel__title" style={{ marginTop: 24 }}>Referred businesses</h3>
+            {detailReferrals.length ? (
+              <AdminTable columns={['Business', 'Earned', 'Outstanding', '']}>
+                {detailReferrals.map((item) => (
                   <tr key={item.id}>
-                    <td>{affiliate?.name ?? item.affiliate_id}</td>
-                    <td>{affiliate ? payoutLabel(affiliate) : '—'}</td>
-                    <td>{paiseToInr(item.amount_paise)}</td>
                     <td>
-                      <AdminStatus status={item.status} />
+                      <strong>{item.referred_tenant_name || item.referred_tenant_id}</strong>
+                      <div className="admin-table__muted">
+                        {item.affiliate_code || '—'} · {formatWhen(item.starts_at)}
+                      </div>
                     </td>
-                    <td className="admin-table__actions">
-                      {item.status !== 'paid' ? (
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn--ghost"
-                          onClick={() => {
-                            void client.platform
-                              .markAffiliatePayoutPaid(item.id, { reason: 'Marked paid' })
-                              .then(invalidate);
-                          }}
-                        >
-                          Mark paid
-                        </button>
-                      ) : (
-                        'Paid'
-                      )}
+                    <td>{paiseToInr(item.earned_paise)}</td>
+                    <td>{paiseToInr(item.outstanding_paise)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn--ghost"
+                        onClick={() => openLedger('earning', item.affiliate_id, item.id)}
+                      >
+                        Add earning
+                      </button>
                     </td>
                   </tr>
-                );
-              })}
-            </AdminTable>
-          ) : (
-            <AdminEmpty title="No payouts">Payouts appear after accruals are approved as cash.</AdminEmpty>
-          )
+                ))}
+              </AdminTable>
+            ) : (
+              <AdminEmpty title="No businesses referred yet">Share the signup link to start tracking.</AdminEmpty>
+            )}
+
+            <h3 className="admin-panel__title" style={{ marginTop: 24 }}>History</h3>
+            {renderLedger(detailHistory, 'Earnings and payments for this affiliate will show up here.')}
+          </>
         ) : null}
-      </AdminSection>
+      </AdminDrawer>
 
       <AdminDrawer
         open={createOpen}
@@ -576,7 +739,7 @@ export function PlatformAffiliatesPage() {
           resetCreateForm();
         }}
         title={editingId ? 'Edit affiliate' : 'Add affiliate / code'}
-        description="Partners and tenants can both earn monthly benefits for referred businesses."
+        description="Create a partner or tenant affiliate, then share their signup link. Commission settings control what they earn when a referred business pays."
         footer={
           <button
             type="button"
@@ -625,7 +788,7 @@ export function PlatformAffiliatesPage() {
           </select>
         </AdminField>
         {affiliateType === 'tenant' ? (
-          <AdminField label="Tenant" hint="Required for subscription credit payouts to that workspace.">
+          <AdminField label="Tenant" hint="Required to settle earnings as subscription credit to that workspace.">
             <AdminSearch value={tenantSearch} onChange={setTenantSearch} placeholder="Search tenants by name or slug…" />
             <select
               value={tenantId}
@@ -658,15 +821,58 @@ export function PlatformAffiliatesPage() {
             <option value="inactive">Inactive</option>
           </select>
         </AdminField>
+        <h3 className="admin-panel__title" style={{ marginTop: 8 }}>Commission settings</h3>
         <AdminField
-          label="Payout method"
-          hint="Needed for cash payouts. Not required if you only issue subscription credits."
+          label="When to add commission"
+          hint="First installment is the usual case: when the referred business pays for the first time, this affiliate earns automatically."
         >
+          <select
+            value={commissionTrigger}
+            onChange={(event) =>
+              setCommissionTrigger(event.target.value as 'first_payment' | 'every_payment' | 'none')
+            }
+          >
+            <option value="first_payment">First installment</option>
+            <option value="every_payment">Every installment</option>
+            <option value="none">Manual only</option>
+          </select>
+        </AdminField>
+        {commissionTrigger !== 'none' ? (
+          <>
+            <AdminField label="How to calculate">
+              <select
+                value={commissionType}
+                onChange={(event) => setCommissionType(event.target.value as 'flat' | 'percent')}
+              >
+                <option value="flat">Fixed amount</option>
+                <option value="percent">Percentage of amount paid</option>
+              </select>
+            </AdminField>
+            {commissionType === 'percent' ? (
+              <AdminField label="Commission percent" hint="Example: 10 means 10% of the installment SP pays.">
+                <input
+                  value={commissionPercent}
+                  onChange={(event) => setCommissionPercent(event.target.value)}
+                  placeholder="10"
+                />
+              </AdminField>
+            ) : (
+              <AdminField label="Commission amount (INR)" hint="Added to this affiliate’s payment book automatically.">
+                <input
+                  value={defaultCommissionInr}
+                  onChange={(event) => setDefaultCommissionInr(event.target.value)}
+                  placeholder="500"
+                />
+              </AdminField>
+            )}
+          </>
+        ) : null}
+        <AdminField label="Payout method" hint="How you pay this affiliate. Needed to record cash payments.">
           <select
             value={payoutMethod}
             onChange={(event) => setPayoutMethod(event.target.value as 'upi' | 'bank' | 'other' | '')}
           >
-            <option value="">None (credits only)</option>
+            <option value="">None yet</option>
             <option value="upi">UPI</option>
             <option value="bank">Bank transfer</option>
             <option value="other">Other</option>
@@ -695,68 +901,87 @@ export function PlatformAffiliatesPage() {
             <input value={payoutNotes} onChange={(event) => setPayoutNotes(event.target.value)} />
           </AdminField>
         ) : null}
-        <AdminField
-          label="Referral code"
-          hint="Shown on the affiliate row with a copyable signup link. Required for referrals."
-        >
+        <AdminField label="Referral code" hint="Shown on the affiliate row with a copyable signup link.">
           <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="PARTNER1" />
         </AdminField>
         {message ? <p className="admin-message">{message}</p> : null}
       </AdminDrawer>
 
       <AdminDrawer
-        open={accrualOpen}
-        onClose={() => setAccrualOpen(false)}
-        title="Create accrual"
-        description="Choose credit (subscription wallet) or payout (cash), then approve from the Accruals tab."
+        open={Boolean(ledgerOpen)}
+        onClose={() => setLedgerOpen(null)}
+        title={
+          ledgerOpen === 'earning'
+            ? 'Add earning'
+            : ledgerOpen === 'credit'
+              ? 'Settle as subscription credit'
+              : 'Record payment'
+        }
+        description={
+          ledgerOpen === 'earning'
+            ? 'Add an amount this affiliate has earned for a referred business. You can add more later.'
+            : ledgerOpen === 'credit'
+              ? 'Grant this amount to the affiliate workspace wallet and reduce outstanding.'
+              : 'Record a cash payment you made. Outstanding drops by this amount and the payout snapshot is stored in history.'
+        }
         footer={
           <button
             type="button"
             className="admin-btn admin-btn--primary"
-            disabled={createAccrual.isPending}
+            disabled={saveLedger.isPending}
             onClick={() => {
               void (async () => {
                 setMessage(null);
                 try {
-                  await createAccrual.mutateAsync();
-                  setAccrualOpen(false);
+                  await saveLedger.mutateAsync();
+                  setLedgerOpen(null);
                 } catch (error) {
-                  setMessage(error instanceof Error ? error.message : 'Unable to create accrual');
+                  setMessage(error instanceof Error ? error.message : 'Unable to save ledger entry');
                 }
               })();
             }}
           >
-            Create
+            {ledgerOpen === 'earning' ? 'Add earning' : 'Record'}
           </button>
         }
       >
-        <AdminField label="Referral">
-          <select value={referralId} onChange={(event) => setReferralId(event.target.value)} required>
-            <option value="">Select referral…</option>
-            {referrals.map((item) => {
-              const affiliate = affiliates.find((aff) => aff.id === item.affiliate_id);
-              const referred = tenantById.get(item.referred_tenant_id);
-              return (
-                <option key={item.id} value={item.id}>
-                  {(affiliate?.name ?? 'Affiliate') +
-                    ' → ' +
-                    (referred?.display_name ?? item.referred_tenant_id)}
-                </option>
-              );
-            })}
+        <AdminField label="Affiliate">
+          <select value={ledgerAffiliateId} onChange={(event) => setLedgerAffiliateId(event.target.value)} required>
+            <option value="">Select affiliate…</option>
+            {affiliates.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
           </select>
         </AdminField>
-        <AdminField label="Period (YYYY-MM)">
-          <input value={period} onChange={(event) => setPeriod(event.target.value)} />
+        <AdminField label="Referred business" hint={ledgerOpen === 'earning' ? 'Which signup this earning is for.' : 'Optional. Leave blank for a general payment.'}>
+          <select value={ledgerReferralId} onChange={(event) => setLedgerReferralId(event.target.value)}>
+            <option value="">Select business…</option>
+            {referrals
+              .filter((item) => !ledgerAffiliateId || item.affiliate_id === ledgerAffiliateId)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.referred_tenant_name || item.referred_tenant_id}
+                </option>
+              ))}
+          </select>
         </AdminField>
+        {ledgerOpen === 'earning' ? (
+          <AdminField label="Period (YYYY-MM)">
+            <input value={period} onChange={(event) => setPeriod(event.target.value)} />
+          </AdminField>
+        ) : null}
         <AdminField label="Amount (INR)">
           <input value={amountInr} onChange={(event) => setAmountInr(event.target.value)} />
         </AdminField>
-        <AdminField label="Benefit type">
-          <select value={benefitType} onChange={(event) => setBenefitType(event.target.value as 'credit' | 'payout')}>
-            <option value="credit">Subscription credit</option>
-            <option value="payout">Cash payout</option>
-          </select>
+        {ledgerOpen === 'payment' ? (
+          <AdminField label="Payment reference" hint="UPI/bank UTR, cheque number, or any receipt id.">
+            <input value={paymentRef} onChange={(event) => setPaymentRef(event.target.value)} />
+          </AdminField>
+        ) : null}
+        <AdminField label="Notes">
+          <input value={notes} onChange={(event) => setNotes(event.target.value)} />
         </AdminField>
         <AdminField label="Reason">
           <input value={reason} onChange={(event) => setReason(event.target.value)} />

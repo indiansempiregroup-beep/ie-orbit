@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Heart, Pencil, Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import type { ShopPet } from '@ie-platform/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { useDialog } from '../../hooks/useDialog';
+import { useAuth } from '../../hooks/useAuth';
+import { useSnackbar } from '../../hooks/useSnackbar';
 import { useShopPets, useShopPetMutations } from './shopHooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
@@ -14,12 +16,48 @@ import { ShopFilterBar } from './ShopFilterBar';
 import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../config/products';
 import { useBusinessBillingSnapshotQuery, useUpdateBusinessAddonsMutation } from '../settings/billingHooks';
 import { getApiErrorMessage } from '../../lib/apiClient';
+import { resolveMediaAssetUrl, toStoredMediaAssetUrl } from '../../lib/mediaUrl';
+import { uploadPetImage } from './uploadProductImage';
+
+const SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other'];
+const SEX_OPTIONS = ['Male', 'Female', 'Unknown'];
+
+const emptyForm = {
+  customerId: '',
+  name: '',
+  species: 'Dog',
+  breed: '',
+  sex: '',
+  birthday: '',
+  photoUrl: '',
+  medicalNotes: '',
+};
+
+type FormState = typeof emptyForm;
+
+const fieldLabel: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: '#374151' };
+const fieldInput: React.CSSProperties = { padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' };
+
+function formFromPet(pet: ShopPet): FormState {
+  return {
+    customerId: pet.customer || '',
+    name: pet.name || '',
+    species: pet.species || 'Dog',
+    breed: pet.breed || '',
+    sex: pet.sex || '',
+    birthday: pet.birthday ? String(pet.birthday).slice(0, 10) : '',
+    photoUrl: pet.photo_url || '',
+    medicalNotes: pet.medical_notes || '',
+  };
+}
 
 export function ShopPetsPage() {
   const pets = useShopPets();
-  const { createPet, notifyPetOwner } = useShopPetMutations();
+  const { createPet, patchPet, deletePet, notifyPetOwner } = useShopPetMutations();
   const dialog = useDialog();
   const notifyDialog = useDialog();
+  const auth = useAuth();
+  const snackbar = useSnackbar();
   const client = useApiClient();
   const workspace = useWorkspace();
   const queryClient = useQueryClient();
@@ -41,12 +79,9 @@ export function ShopPetsPage() {
     },
   });
 
-  const [customerId, setCustomerId] = useState('');
-  const [name, setName] = useState('');
-  const [species, setSpecies] = useState('Dog');
-  const [breed, setBreed] = useState('');
-  const [birthday, setBirthday] = useState('');
-  const [medicalNotes, setMedicalNotes] = useState('');
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [speciesFilter, setSpeciesFilter] = useState('');
@@ -64,7 +99,7 @@ export function ShopPetsPage() {
       }
       if (customerFilter && pet.customer !== customerFilter) return false;
       if (!term) return true;
-      return [pet.name, pet.species ?? '', pet.breed ?? '', pet.medical_notes ?? '']
+      return [pet.name, pet.species ?? '', pet.breed ?? '', pet.customer_name ?? '', pet.medical_notes ?? '']
         .join(' ')
         .toLowerCase()
         .includes(term);
@@ -79,6 +114,16 @@ export function ShopPetsPage() {
     );
     return Array.from(set).sort();
   }, [pets.data]);
+
+  const customerNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const customer of customers.data ?? []) {
+      map.set(customer.id, customer.full_name ?? customer.email ?? customer.id);
+    }
+    return map;
+  }, [customers.data]);
+
+  const saving = createPet.isPending || patchPet.isPending || deletePet.isPending || uploading;
 
   useEffect(() => {
     const petId = searchParams.get('petId');
@@ -116,19 +161,24 @@ export function ShopPetsPage() {
       });
       await workspace.refreshWorkspace();
       await queryClient.invalidateQueries({ queryKey: ['shop'] });
-      setMessage(`Pets pack subscribed · ₹${petsPriceInr}/month`);
+      snackbar.push(`Pets pack subscribed · ₹${petsPriceInr}/month`, 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, 'Unable to subscribe to Pets pack.'));
+      const text = getApiErrorMessage(error, 'Unable to subscribe to Pets pack.');
+      setMessage(text);
+      snackbar.push(text, 'error');
     }
   }
 
   function openAddDialog() {
-    setCustomerId('');
-    setName('');
-    setSpecies('Dog');
-    setBreed('');
-    setBirthday('');
-    setMedicalNotes('');
+    setEditingId(null);
+    setForm(emptyForm);
+    setMessage(null);
+    dialog.show();
+  }
+
+  function openEditDialog(pet: ShopPet) {
+    setEditingId(pet.id);
+    setForm(formFromPet(pet));
     setMessage(null);
     dialog.show();
   }
@@ -149,22 +199,76 @@ export function ShopPetsPage() {
     setSearchParams(next, { replace: true });
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!customerId || !name.trim()) return;
+  async function uploadPhoto(file: File | null) {
+    if (!file || !auth.token || !workspace.tenantId || !workspace.businessId) return;
+    setUploading(true);
     setMessage(null);
     try {
-      await createPet.mutateAsync({
-        customer_id: customerId,
-        name: name.trim(),
-        species,
-        breed,
-        birthday: birthday || null,
-        medical_notes: medicalNotes,
+      const url = await uploadPetImage({
+        accessToken: auth.token,
+        tenantId: workspace.tenantId,
+        businessId: workspace.businessId,
+        imageFile: file,
+        petName: form.name || 'Pet',
       });
-      dialog.hide();
+      const stored = toStoredMediaAssetUrl(url) || url;
+      setForm((current) => ({ ...current, photoUrl: stored }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to save pet.');
+      const text = error instanceof Error ? error.message : 'Photo upload failed.';
+      setMessage(text);
+      snackbar.push(text, 'error');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!form.customerId || !form.name.trim()) return;
+    setMessage(null);
+    const payload = {
+      customer_id: form.customerId,
+      name: form.name.trim(),
+      species: form.species,
+      breed: form.breed,
+      sex: form.sex,
+      birthday: form.birthday || null,
+      photo_url: form.photoUrl,
+      medical_notes: form.medicalNotes,
+    };
+    try {
+      if (editingId) {
+        await patchPet.mutateAsync({ petId: editingId, body: payload });
+        dialog.hide();
+        window.setTimeout(() => snackbar.push('Pet updated.', 'success'), 0);
+      } else {
+        await createPet.mutateAsync(payload);
+        dialog.hide();
+        window.setTimeout(() => snackbar.push('Pet saved.', 'success'), 0);
+      }
+      setForm(emptyForm);
+      setEditingId(null);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Unable to save pet.';
+      setMessage(text);
+      snackbar.push(text, 'error');
+    }
+  }
+
+  async function handleDelete() {
+    if (!editingId) return;
+    if (!window.confirm(`Delete ${form.name || 'this pet'}?`)) return;
+    setMessage(null);
+    try {
+      await deletePet.mutateAsync(editingId);
+      dialog.hide();
+      window.setTimeout(() => snackbar.push('Pet deleted.', 'success'), 0);
+      setForm(emptyForm);
+      setEditingId(null);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Unable to delete pet.';
+      setMessage(text);
+      snackbar.push(text, 'error');
     }
   }
 
@@ -183,13 +287,14 @@ export function ShopPetsPage() {
         body: notifyBody.trim(),
       });
       const channels = (result.sent_channels || []).join(', ') || 'none';
-      setNotifyMessage(`Notification sent (${channels}).`);
       closeNotify();
-      setMessage(`Notification sent to owner of ${selectedPet.name} (${channels}).`);
+      snackbar.push(`Notification sent to owner of ${selectedPet.name} (${channels}).`, 'success');
     } catch (error) {
       setNotifyMessage(getApiErrorMessage(error, 'Unable to notify owner.'));
     }
   }
+
+  const photoSrc = resolveMediaAssetUrl(form.photoUrl);
 
   return (
     <div className="page-stack">
@@ -253,35 +358,96 @@ export function ShopPetsPage() {
               },
             ]}
           />
-          {message ? <p role="status">{message}</p> : null}
+          {pets.isLoading ? <p>Loading…</p> : null}
+          {pets.error ? <p role="alert">{(pets.error as Error).message}</p> : null}
           <div style={{ display: 'grid', gap: 8 }}>
-            {filtered.map((pet) => (
-              <div
-                key={pet.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  alignItems: 'flex-start',
-                  padding: 12,
-                  borderRadius: 12,
-                  border: selectedPet?.id === pet.id ? '1px solid #2563eb' : '1px solid transparent',
-                  background: selectedPet?.id === pet.id ? '#eff6ff' : 'transparent',
-                }}
-              >
-                <div>
-                  <strong>{pet.name}</strong> · {pet.species || '—'}{' '}
-                  {pet.breed ? `· ${pet.breed}` : ''}
-                  {pet.birthday ? ` · birthday ${pet.birthday}` : ''}
-                  {pet.medical_notes ? <div style={{ opacity: 0.8 }}>{pet.medical_notes}</div> : null}
+            {filtered.map((pet) => {
+              const src = resolveMediaAssetUrl(pet.photo_url);
+              const owner = pet.customer_name || customerNameById.get(pet.customer) || '';
+              return (
+                <div
+                  key={pet.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    borderBottom: '1px solid var(--border, #ddd)',
+                    paddingBottom: 8,
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', minWidth: 0 }}>
+                    {src ? (
+                      <img
+                        src={src}
+                        alt=""
+                        width={56}
+                        height={56}
+                        style={{
+                          objectFit: 'cover',
+                          borderRadius: 10,
+                          border: '1px solid #e5e7eb',
+                          flexShrink: 0,
+                          background: '#f3f4f6',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 10,
+                          border: '1px solid #e5e7eb',
+                          background: '#f3f4f6',
+                          flexShrink: 0,
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: '#6b7280',
+                        }}
+                      >
+                        <Heart size={20} aria-hidden="true" />
+                      </div>
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <strong>{pet.name}</strong>
+                      <div style={{ opacity: 0.8 }}>
+                        {[pet.species, pet.breed].filter(Boolean).join(' · ') || 'No species'}
+                        {pet.birthday ? ` · birthday ${String(pet.birthday).slice(0, 10)}` : ''}
+                        {owner ? ` · ${owner}` : ''}
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>
+                        {pet.sex ? `${pet.sex} · ` : ''}
+                        {pet.medical_notes || 'No medical notes'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <Button type="button" variant="neutral" onClick={() => openNotify(pet)}>
+                      Notify
+                    </Button>
+                    <Button type="button" variant="neutral" onClick={() => openEditDialog(pet)}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <Pencil size={14} aria-hidden="true" />
+                        Edit
+                      </span>
+                    </Button>
+                  </div>
                 </div>
-                <Button type="button" variant="neutral" onClick={() => openNotify(pet)}>
-                  Notify owner
-                </Button>
+              );
+            })}
+            {!pets.isLoading && !filtered.length ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <p>{pets.data?.length ? 'No pets match these filters.' : 'No pets yet.'}</p>
+                {!pets.data?.length ? (
+                  <Button type="button" variant="primary" onClick={openAddDialog}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <Plus size={16} aria-hidden="true" />
+                      Add your first pet
+                    </span>
+                  </Button>
+                ) : null}
               </div>
-            ))}
-            {!pets.data?.length ? <p>No pets yet.</p> : null}
-            {pets.data?.length && !filtered.length ? <p>No pets match these filters.</p> : null}
+            ) : null}
           </div>
         </Card>
       )}
@@ -289,77 +455,131 @@ export function ShopPetsPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title="Add pet"
-        labelledBy="add-pet-dialog"
-        busy={createPet.isPending}
+        title={editingId ? 'Edit pet' : 'Add pet'}
+        labelledBy="pet-dialog"
+        busy={saving}
       >
         <form onSubmit={submit} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
+          <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
+            Pet profiles, photos, and birthdays used for owner reminders.
+          </p>
           <label style={{ display: 'grid', gap: 8 }}>
-            Customer
-            <select
-              value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-              required
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            >
-              <option value="">Select customer…</option>
-              {(customers.data ?? []).map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.full_name ?? customer.email ?? customer.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: 8 }}>
-            Pet name
+            <span style={fieldLabel}>Photo</span>
             <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              required
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              type="file"
+              accept="image/*"
+              onChange={(event) => void uploadPhoto(event.target.files?.[0] ?? null)}
             />
+            {photoSrc ? (
+              <div style={{ display: 'grid', gap: 6, justifyItems: 'start' }}>
+                <img
+                  src={photoSrc}
+                  alt=""
+                  width={96}
+                  height={96}
+                  style={{ objectFit: 'cover', borderRadius: 12, border: '1px solid #e5e7eb' }}
+                />
+                <Button type="button" variant="neutral" onClick={() => setForm({ ...form, photoUrl: '' })}>
+                  Remove
+                </Button>
+              </div>
+            ) : null}
+            {uploading ? <span style={{ fontSize: 12 }}>Uploading…</span> : null}
           </label>
-          <label style={{ display: 'grid', gap: 8 }}>
-            Species
-            <input
-              value={species}
-              onChange={(event) => setSpecies(event.target.value)}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 8 }}>
-            Breed
-            <input
-              value={breed}
-              onChange={(event) => setBreed(event.target.value)}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 8 }}>
-            Birthday
-            <input
-              type="date"
-              value={birthday}
-              onChange={(event) => setBirthday(event.target.value)}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 8 }}>
-            Medical notes
-            <textarea
-              value={medicalNotes}
-              onChange={(event) => setMedicalNotes(event.target.value)}
-              rows={3}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
+            <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
+              <span style={fieldLabel}>Customer</span>
+              <select
+                value={form.customerId}
+                onChange={(event) => setForm({ ...form, customerId: event.target.value })}
+                required
+                style={fieldInput}
+              >
+                <option value="">Select customer…</option>
+                {(customers.data ?? []).map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.full_name ?? customer.email ?? customer.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Pet name</span>
+              <input
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                required
+                style={fieldInput}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Species</span>
+              <select
+                value={form.species}
+                onChange={(event) => setForm({ ...form, species: event.target.value })}
+                style={fieldInput}
+              >
+                {SPECIES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Breed</span>
+              <input
+                value={form.breed}
+                onChange={(event) => setForm({ ...form, breed: event.target.value })}
+                style={fieldInput}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Sex</span>
+              <select
+                value={form.sex}
+                onChange={(event) => setForm({ ...form, sex: event.target.value })}
+                style={fieldInput}
+              >
+                <option value="">Select…</option>
+                {SEX_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Birthday</span>
+              <input
+                type="date"
+                value={form.birthday}
+                onChange={(event) => setForm({ ...form, birthday: event.target.value })}
+                style={fieldInput}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
+              <span style={fieldLabel}>Medical notes</span>
+              <textarea
+                value={form.medicalNotes}
+                onChange={(event) => setForm({ ...form, medicalNotes: event.target.value })}
+                rows={3}
+                style={fieldInput}
+              />
+            </label>
+          </div>
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" disabled={createPet.isPending}>
-              {createPet.isPending ? 'Saving…' : 'Save pet'}
+            <Button type="submit" variant="primary" disabled={saving}>
+              {saving ? 'Saving…' : editingId ? 'Update pet' : 'Save pet'}
             </Button>
-            <Button type="button" variant="neutral" onClick={dialog.hide} disabled={createPet.isPending}>
+            <Button type="button" variant="neutral" onClick={dialog.hide} disabled={saving}>
               Cancel
             </Button>
+            {editingId ? (
+              <Button type="button" variant="ghost" onClick={() => void handleDelete()} disabled={saving}>
+                Delete pet
+              </Button>
+            ) : null}
           </div>
           {message ? <p role="status">{message}</p> : null}
         </form>
@@ -379,23 +599,23 @@ export function ShopPetsPage() {
             </p>
           ) : null}
           <label style={{ display: 'grid', gap: 8 }}>
-            Subject
+            <span style={fieldLabel}>Subject</span>
             <input
               value={notifySubject}
               onChange={(event) => setNotifySubject(event.target.value)}
               required
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              style={fieldInput}
             />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Message
+            <span style={fieldLabel}>Message</span>
             <textarea
               value={notifyBody}
               onChange={(event) => setNotifyBody(event.target.value)}
               required
               rows={4}
               placeholder="Write a custom message for the pet owner…"
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              style={fieldInput}
             />
           </label>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>

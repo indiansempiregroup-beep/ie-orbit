@@ -268,6 +268,7 @@ class PlatformAffiliateStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     PAUSED = "paused", "Paused"
     DISABLED = "disabled", "Disabled"
+    INACTIVE = "inactive", "Inactive"
 
 
 class PlatformReferralStatus(models.TextChoices):
@@ -293,6 +294,28 @@ class PlatformPayoutStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     PAID = "paid", "Paid"
     VOID = "void", "Void"
+
+
+class PlatformAffiliateLedgerKind(models.TextChoices):
+    EARNING = "earning", "Earning"
+    PAYMENT = "payment", "Payment"
+    CREDIT = "credit", "Subscription credit"
+
+
+class PlatformAffiliateLedgerStatus(models.TextChoices):
+    RECORDED = "recorded", "Recorded"
+    VOID = "void", "Void"
+
+
+class PlatformAffiliateCommissionTrigger(models.TextChoices):
+    FIRST_PAYMENT = "first_payment", "First installment"
+    EVERY_PAYMENT = "every_payment", "Every installment"
+    NONE = "none", "Manual only"
+
+
+class PlatformAffiliateCommissionType(models.TextChoices):
+    FLAT = "flat", "Fixed amount"
+    PERCENT = "percent", "Percentage of payment"
 
 
 class PlatformAffiliate(BaseModel):
@@ -323,6 +346,19 @@ class PlatformAffiliate(BaseModel):
     bank_account_number = models.CharField(max_length=64, blank=True, default="")
     bank_ifsc = models.CharField(max_length=32, blank=True, default="")
     payout_notes = models.TextField(blank=True, default="")
+    default_commission_paise = models.PositiveIntegerField(default=0)
+    commission_trigger = models.CharField(
+        max_length=24,
+        choices=PlatformAffiliateCommissionTrigger.choices,
+        default=PlatformAffiliateCommissionTrigger.FIRST_PAYMENT,
+        db_index=True,
+    )
+    commission_type = models.CharField(
+        max_length=16,
+        choices=PlatformAffiliateCommissionType.choices,
+        default=PlatformAffiliateCommissionType.FLAT,
+    )
+    commission_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -442,3 +478,49 @@ class PlatformPayout(BaseModel):
     class Meta:
         db_table = "platform_payouts"
         ordering = ["-created_at"]
+
+
+class PlatformAffiliateLedgerEntry(BaseModel):
+    affiliate = models.ForeignKey(
+        PlatformAffiliate,
+        on_delete=models.CASCADE,
+        related_name="ledger_entries",
+    )
+    referral = models.ForeignKey(
+        PlatformReferral,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ledger_entries",
+    )
+    kind = models.CharField(
+        max_length=16,
+        choices=PlatformAffiliateLedgerKind.choices,
+        db_index=True,
+    )
+    amount_paise = models.PositiveIntegerField()
+    period_yyyy_mm = models.CharField(max_length=7, blank=True, default="")
+    payment_ref = models.CharField(max_length=120, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16,
+        choices=PlatformAffiliateLedgerStatus.choices,
+        default=PlatformAffiliateLedgerStatus.RECORDED,
+        db_index=True,
+    )
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="platform_affiliate_ledger_entries",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_affiliate_ledger"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["affiliate", "kind", "status"]),
+            models.Index(fields=["referral", "kind", "status"]),
+        ]

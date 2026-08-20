@@ -14,6 +14,7 @@ from apps.platform_admin.affiliate_service import AffiliateService
 from apps.platform_admin.models import (
     PlatformAffiliate,
     PlatformAffiliateCode,
+    PlatformAffiliateLedgerEntry,
     PlatformPayout,
     PlatformReferral,
     PlatformReferralAccrual,
@@ -29,9 +30,12 @@ class PlatformAffiliatesView(APIView):
 
     @extend_schema(tags=["Platform Affiliates"])
     def get(self, request: Request) -> Response:
-        rows = PlatformAffiliate.objects.prefetch_related("codes").all().order_by("name")[:200]
+        rows = list(PlatformAffiliate.objects.prefetch_related("codes").all().order_by("name")[:200])
         return success_response(
-            {"affiliates": [_aff().serialize_affiliate(row) for row in rows]}
+            {
+                "affiliates": _aff().serialize_affiliates(rows),
+                "insights": _aff().insights(),
+            }
         )
 
     @extend_schema(tags=["Platform Affiliates"])
@@ -51,6 +55,10 @@ class PlatformAffiliatesView(APIView):
             bank_account_number=data.get("bank_account_number", ""),
             bank_ifsc=data.get("bank_ifsc", ""),
             payout_notes=data.get("payout_notes", ""),
+            default_commission_paise=data.get("default_commission_paise") or 0,
+            commission_trigger=data.get("commission_trigger") or "first_payment",
+            commission_type=data.get("commission_type") or "flat",
+            commission_percent=data.get("commission_percent") or 0,
             metadata=data.get("metadata") or {},
             reason=data.get("reason", "affiliate upsert"),
             ip_address=client_ip(request),
@@ -87,6 +95,11 @@ class PlatformAffiliateCodesView(APIView):
 
 class PlatformAffiliateDetailView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Affiliates"])
+    def get(self, request: Request, affiliate_id: str) -> Response:
+        row = get_object_or_404(PlatformAffiliate.objects.prefetch_related("codes"), id=affiliate_id)
+        return success_response(_aff().affiliate_detail(row))
 
     @extend_schema(tags=["Platform Affiliates"])
     def delete(self, request: Request, affiliate_id: str) -> Response:
@@ -130,13 +143,14 @@ class PlatformAffiliateReferralsView(APIView):
 
     @extend_schema(tags=["Platform Affiliates"])
     def get(self, request: Request) -> Response:
-        qs = PlatformReferral.objects.select_related("affiliate", "referred_tenant").all()
+        qs = PlatformReferral.objects.select_related(
+            "affiliate", "referred_tenant", "affiliate_code"
+        ).all()
         affiliate_id = request.query_params.get("affiliate_id")
         if affiliate_id:
             qs = qs.filter(affiliate_id=affiliate_id)
-        return success_response(
-            {"referrals": [_aff().serialize_referral(row) for row in qs.order_by("-starts_at")[:200]]}
-        )
+        rows = list(qs.order_by("-starts_at")[:200])
+        return success_response({"referrals": _aff().serialize_referrals(rows)})
 
 
 class PlatformAffiliateAccrualsView(APIView):
@@ -230,3 +244,55 @@ class PlatformAffiliatePayoutMarkPaidView(APIView):
             user_agent=user_agent(request),
         )
         return success_response(_aff().serialize_payout(row))
+
+
+class PlatformAffiliateLedgerView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Affiliates"])
+    def get(self, request: Request) -> Response:
+        rows = _aff().list_ledger(
+            affiliate_id=request.query_params.get("affiliate_id"),
+            referral_id=request.query_params.get("referral_id"),
+            kind=request.query_params.get("kind"),
+        )
+        return success_response({"entries": [_aff().serialize_ledger(row) for row in rows]})
+
+    @extend_schema(tags=["Platform Affiliates"])
+    def post(self, request: Request) -> Response:
+        data = request.data
+        affiliate = get_object_or_404(PlatformAffiliate, id=data.get("affiliate_id"))
+        referral = None
+        if data.get("referral_id"):
+            referral = get_object_or_404(PlatformReferral, id=data.get("referral_id"))
+        row = _aff().add_ledger_entry(
+            actor=request.user,
+            affiliate=affiliate,
+            referral=referral,
+            kind=str(data.get("kind") or ""),
+            amount_paise=data.get("amount_paise") or 0,
+            period_yyyy_mm=str(data.get("period_yyyy_mm") or ""),
+            payment_ref=str(data.get("payment_ref") or ""),
+            notes=str(data.get("notes") or ""),
+            reason=data.get("reason", "affiliate ledger entry"),
+            metadata=data.get("metadata") or {},
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(_aff().serialize_ledger(row), status_code=201)
+
+
+class PlatformAffiliateLedgerVoidView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Affiliates"])
+    def post(self, request: Request, entry_id: str) -> Response:
+        entry = get_object_or_404(PlatformAffiliateLedgerEntry, id=entry_id)
+        row = _aff().void_ledger_entry(
+            actor=request.user,
+            entry=entry,
+            reason=request.data.get("reason", "void affiliate ledger entry"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(_aff().serialize_ledger(row))
