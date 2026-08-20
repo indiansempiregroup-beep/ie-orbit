@@ -35,6 +35,8 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: 3000,
+      // Cursor Cloud Agent previews use *.usN.cursorvm.com Host headers.
+      allowedHosts: ['.cursorvm.com', '.localhost', 'localhost'],
       fs: {
         allow: [repoRoot],
       },
