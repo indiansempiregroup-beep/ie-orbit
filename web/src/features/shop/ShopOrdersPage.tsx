@@ -5,6 +5,11 @@ import { Button } from '../../components/Button';
 import { useShopOrders, useShopProductMutations } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
 import { formatShopOrderPayment, getShopOrderPosMeta } from './posPayment';
+import {
+  shopOrderDeliveryMethod,
+  shopOrderDeliverySummary,
+  shopOrderStatusLabel,
+} from './shopOrderStatus';
 
 export function ShopOrdersPage() {
   const [search, setSearch] = useState('');
@@ -57,6 +62,7 @@ export function ShopOrdersPage() {
                 { value: 'confirmed', label: 'Confirmed' },
                 { value: 'ready', label: 'Ready' },
                 { value: 'out_for_delivery', label: 'Out for delivery' },
+                { value: 'delivery_failed', label: 'Delivery failed' },
                 { value: 'completed', label: 'Completed' },
                 { value: 'cancelled', label: 'Cancelled' },
               ],
@@ -91,14 +97,31 @@ export function ShopOrdersPage() {
             const due =
               String(pos.payment_method || '').toLowerCase() === 'borrow' &&
               Number(pos.amount_due ?? order.total ?? 0) > 0;
+            const deliveryMethod = shopOrderDeliveryMethod(order);
+            const deliverySummary = shopOrderDeliverySummary(order);
+            const fulfillmentLabel =
+              order.fulfillment_mode === 'delivery'
+                ? deliveryMethod === 'instant'
+                  ? 'Deliver now'
+                  : 'Standard delivery'
+                : order.fulfillment_mode === 'pickup'
+                  ? 'Pickup'
+                  : order.fulfillment_mode === 'pos'
+                    ? 'Counter sale'
+                    : order.fulfillment_mode;
             return (
               <div key={order.id} style={{ borderBottom: '1px solid var(--border, #ddd)', paddingBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                   <div>
                     <strong>{order.order_number}</strong>
                     <div style={{ opacity: 0.8 }}>
-                      {order.status} · {order.fulfillment_mode} · {order.currency} {order.total}
+                      {shopOrderStatusLabel(order)} · {fulfillmentLabel} · {order.currency} {order.total}
                     </div>
+                    {deliverySummary ? (
+                      <div style={{ color: 'var(--primary)', fontSize: 13, fontWeight: 700 }}>
+                        {deliverySummary}
+                      </div>
+                    ) : null}
                     {payment ? (
                       <div
                         style={{
@@ -144,7 +167,18 @@ export function ShopOrdersPage() {
                         Complete
                       </Button>
                     ) : null}
-                    {order.status === 'out_for_delivery' ? (
+                    {order.status === 'ready' &&
+                    order.fulfillment_mode === 'delivery' &&
+                    deliveryMethod !== 'instant' ? (
+                      <Button
+                        type="button"
+                        onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'out_for_delivery' })}
+                      >
+                        Mark out for delivery
+                      </Button>
+                    ) : null}
+                    {order.status === 'out_for_delivery' ||
+                    (order.status === 'delivery_failed' && deliveryMethod !== 'instant') ? (
                       <Button
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'completed' })}

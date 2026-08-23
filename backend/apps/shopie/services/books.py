@@ -1470,6 +1470,54 @@ class BooksService:
             qs_filter["voucher_date__lte"] = date_to
         return qs_filter
 
+    def _net_summary(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        primary_type: str,
+        adjustment_type: str,
+        date_from: date | None,
+        date_to: date | None,
+    ) -> dict[str, Any]:
+        """Aggregate a register while subtracting its return/note vouchers."""
+        filters = self._date_range(date_from=date_from, date_to=date_to)
+        qs = ShopBooksVoucher.objects.filter(
+            tenant=tenant,
+            business=business,
+            status=VoucherStatus.CONFIRMED,
+            voucher_type__in=[primary_type, adjustment_type],
+            **filters,
+        )
+
+        def _totals(voucher_type: str) -> dict[str, Decimal]:
+            aggregate = qs.filter(voucher_type=voucher_type).aggregate(
+                taxable=Sum("subtotal"),
+                cgst=Sum("cgst_total"),
+                sgst=Sum("sgst_total"),
+                igst=Sum("igst_total"),
+                tax=Sum("tax_total"),
+                total=Sum("total"),
+            )
+            return {key: _q(value) for key, value in aggregate.items()}
+
+        primary = _totals(primary_type)
+        adjustment = _totals(adjustment_type)
+
+        def _net(key: str) -> str:
+            return str(_q(primary[key] - adjustment[key]))
+
+        return {
+            "count": qs.count(),
+            "adjustment_count": qs.filter(voucher_type=adjustment_type).count(),
+            "taxable_value": _net("taxable"),
+            "cgst": _net("cgst"),
+            "sgst": _net("sgst"),
+            "igst": _net("igst"),
+            "tax_total": _net("tax"),
+            "total": _net("total"),
+        }
+
     def sales_summary(
         self,
         *,
@@ -1478,31 +1526,14 @@ class BooksService:
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> dict[str, Any]:
-        filters = self._date_range(date_from=date_from, date_to=date_to)
-        qs = ShopBooksVoucher.objects.filter(
+        return self._net_summary(
             tenant=tenant,
             business=business,
-            status=VoucherStatus.CONFIRMED,
-            voucher_type__in=[VoucherType.SALE, VoucherType.CREDIT_NOTE],
-            **filters,
+            primary_type=VoucherType.SALE,
+            adjustment_type=VoucherType.CREDIT_NOTE,
+            date_from=date_from,
+            date_to=date_to,
         )
-        agg = qs.aggregate(
-            taxable=Sum("subtotal"),
-            cgst=Sum("cgst_total"),
-            sgst=Sum("sgst_total"),
-            igst=Sum("igst_total"),
-            tax=Sum("tax_total"),
-            total=Sum("total"),
-        )
-        return {
-            "count": qs.count(),
-            "taxable_value": str(_q(agg["taxable"] or 0)),
-            "cgst": str(_q(agg["cgst"] or 0)),
-            "sgst": str(_q(agg["sgst"] or 0)),
-            "igst": str(_q(agg["igst"] or 0)),
-            "tax_total": str(_q(agg["tax"] or 0)),
-            "total": str(_q(agg["total"] or 0)),
-        }
 
     def purchase_summary(
         self,
@@ -1512,31 +1543,14 @@ class BooksService:
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> dict[str, Any]:
-        filters = self._date_range(date_from=date_from, date_to=date_to)
-        qs = ShopBooksVoucher.objects.filter(
+        return self._net_summary(
             tenant=tenant,
             business=business,
-            status=VoucherStatus.CONFIRMED,
-            voucher_type__in=[VoucherType.PURCHASE, VoucherType.DEBIT_NOTE],
-            **filters,
+            primary_type=VoucherType.PURCHASE,
+            adjustment_type=VoucherType.DEBIT_NOTE,
+            date_from=date_from,
+            date_to=date_to,
         )
-        agg = qs.aggregate(
-            taxable=Sum("subtotal"),
-            cgst=Sum("cgst_total"),
-            sgst=Sum("sgst_total"),
-            igst=Sum("igst_total"),
-            tax=Sum("tax_total"),
-            total=Sum("total"),
-        )
-        return {
-            "count": qs.count(),
-            "taxable_value": str(_q(agg["taxable"] or 0)),
-            "cgst": str(_q(agg["cgst"] or 0)),
-            "sgst": str(_q(agg["sgst"] or 0)),
-            "igst": str(_q(agg["igst"] or 0)),
-            "tax_total": str(_q(agg["tax"] or 0)),
-            "total": str(_q(agg["total"] or 0)),
-        }
 
     def gstr1_rows(
         self,
@@ -1545,6 +1559,8 @@ class BooksService:
         business: Business,
         date_from: date | None = None,
         date_to: date | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         filters = self._date_range(date_from=date_from, date_to=date_to)
         qs = (
@@ -1558,6 +1574,8 @@ class BooksService:
             .select_related("customer")
             .order_by("voucher_date")
         )
+        if limit is not None:
+            qs = qs[offset : offset + limit]
         rows: list[dict[str, Any]] = []
         for voucher in qs:
             metadata = voucher.metadata if isinstance(voucher.metadata, dict) else {}
@@ -1643,6 +1661,8 @@ class BooksService:
         business: Business,
         date_from: date | None = None,
         date_to: date | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         filters = self._date_range(date_from=date_from, date_to=date_to)
         qs = (
@@ -1651,13 +1671,20 @@ class BooksService:
             .select_related("customer", "supplier", "cash_account", "contra_account")
             .order_by("voucher_date", "created_at")
         )
+        if limit is not None:
+            qs = qs[offset : offset + limit]
         rows: list[dict[str, Any]] = []
         for voucher in qs:
             party = None
+            party_gstin = ""
             if voucher.customer_id:
                 party = voucher.customer.display_name
+                party_gstin = getattr(voucher.customer, "gstin", "") or ""
             elif voucher.supplier_id:
                 party = voucher.supplier.name
+                party_gstin = getattr(voucher.supplier, "gstin", "") or ""
+            metadata = voucher.metadata if isinstance(voucher.metadata, dict) else {}
+            gstin = str(metadata.get("customer_gstin") or party_gstin or "").strip().upper()
             rows.append(
                 {
                     "id": str(voucher.id),
@@ -1666,8 +1693,16 @@ class BooksService:
                     "voucher_date": voucher.voucher_date.isoformat(),
                     "status": voucher.status,
                     "party": party,
+                    "party_gstin": gstin,
                     "total": str(voucher.total),
                     "amount_paid": str(voucher.amount_paid),
+                    "taxable_value": str(voucher.subtotal),
+                    "cgst": str(voucher.cgst_total),
+                    "sgst": str(voucher.sgst_total),
+                    "igst": str(voucher.igst_total),
+                    "tax_total": str(voucher.tax_total),
+                    "place_of_supply": voucher.place_of_supply,
+                    "is_interstate": voucher.is_interstate,
                     "cash_account": voucher.cash_account.name if voucher.cash_account_id else None,
                 }
             )

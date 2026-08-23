@@ -33,6 +33,9 @@ BI_FEATURES_FULL = (
 )
 
 FEATURE_REWARD_POINTS = "reward_points"
+FEATURE_AD_FREE = "ad_free"
+FEATURE_RAZORPAY_PAYMENTS = "razorpay_payments"
+FEATURE_CASHFREE_PAYMENTS = "cashfree_payments"
 
 FEATURE_APPOINTIE_BOOKINGS = "appointie_bookings"
 FEATURE_APPOINTIE_CALENDAR = "appointie_calendar"
@@ -196,7 +199,12 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "max_staff": 5,
             "max_branches": 5,
             "bi_features": list(BI_FEATURES_FULL),
-            "features": list(PLAN_FEATURES_FULL),
+            "features": [
+                *PLAN_FEATURES_FULL,
+                FEATURE_AD_FREE,
+                FEATURE_RAZORPAY_PAYMENTS,
+                FEATURE_CASHFREE_PAYMENTS,
+            ],
         },
     ],
     PRODUCT_SHOPIE: [
@@ -222,7 +230,13 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
             "max_staff": 5,
             "max_branches": 5,
             "bi_features": list(BI_FEATURES_FULL),
-            "features": [*SHOPIE_ALL_FUNCTION_FEATURES, FEATURE_REWARD_POINTS],
+            "features": [
+                *SHOPIE_ALL_FUNCTION_FEATURES,
+                FEATURE_REWARD_POINTS,
+                FEATURE_AD_FREE,
+                FEATURE_RAZORPAY_PAYMENTS,
+                FEATURE_CASHFREE_PAYMENTS,
+            ],
         },
     ],
 }

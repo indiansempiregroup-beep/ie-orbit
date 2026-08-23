@@ -33,8 +33,13 @@ import {
   isShopOrderBorrowDue,
   nextShopOrderAction,
   SHOP_ORDER_STATUS_OPTIONS,
-  shopOrderStatusStyle,
+  shopOrderBadgeStyle,
 } from './posPayment';
+import {
+  deliveryMethodForOrder,
+  deliverySummaryFromOrder,
+  formatDeliveryStatus,
+} from './deliveryTracking';
 
 /** Online shopping only — counter Sale (POS) lives in Books as GST invoices. */
 const ONLINE_MODES = new Set(['pickup', 'delivery']);
@@ -175,7 +180,11 @@ export function ShopOrdersScreen() {
   }
 
   async function advanceOrder(order: ShopOrder) {
-    const next = nextShopOrderAction(order.status, order.fulfillment_mode);
+    const next = nextShopOrderAction(
+      order.status,
+      order.fulfillment_mode,
+      deliveryMethodForOrder(order),
+    );
     if (!client || !next) return;
     setBusyId(order.id);
     try {
@@ -264,8 +273,13 @@ export function ShopOrdersScreen() {
               .slice(0, 2)
               .map((line) => `${line.product_name} × ${line.quantity}`)
               .join(', ');
-            const next = nextShopOrderAction(item.status, item.fulfillment_mode);
-            const badge = shopOrderStatusStyle(item.status);
+            const deliveryMethod = deliveryMethodForOrder(item);
+            const next =
+              deliveryMethod === 'instant' && item.status === 'delivery_failed'
+                ? null
+                : nextShopOrderAction(item.status, item.fulfillment_mode, deliveryMethod);
+            const deliverySummary = deliverySummaryFromOrder(item);
+            const badge = shopOrderBadgeStyle(item);
             return (
               <Pressable
                 style={styles.row}
@@ -282,9 +296,21 @@ export function ShopOrdersScreen() {
                     <Text style={[styles.statusBadgeText, { color: badge.text }]}>{badge.label}</Text>
                   </View>
                   <Text style={styles.meta}>
-                    {formatShopOrderFulfillment(item.fulfillment_mode)} · {customer}
+                    {String(item.fulfillment_mode).toLowerCase() === 'delivery'
+                      ? deliveryMethod === 'instant'
+                        ? 'Deliver now'
+                        : 'Standard delivery'
+                      : formatShopOrderFulfillment(item.fulfillment_mode)}{' '}
+                    · {customer}
                   </Text>
                 </View>
+                {String(item.fulfillment_mode).toLowerCase() === 'delivery' &&
+                (deliverySummary.status || deliverySummary.etaMinutes != null) ? (
+                  <Text style={styles.deliverySummary}>
+                    {deliverySummary.status ? formatDeliveryStatus(deliverySummary.status) : 'Delivery active'}
+                    {deliverySummary.etaMinutes != null ? ` · ETA ${deliverySummary.etaMinutes} min` : ''}
+                  </Text>
+                ) : null}
                 {address ? <Text style={styles.address}>{address}</Text> : null}
                 {item.created_at ? (
                   <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
@@ -356,6 +382,7 @@ const styles = StyleSheet.create({
   meta: { color: colors.mutedForeground, fontSize: 13 },
   address: { color: colors.foreground, fontSize: 13, lineHeight: 18 },
   preview: { color: colors.foreground, fontSize: 13, marginTop: 2 },
+  deliverySummary: { color: colors.primary, fontSize: 12, fontWeight: '700', marginTop: 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   statusBadgeText: { fontSize: 11, fontWeight: '800' },

@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -44,7 +44,54 @@ def _distance_km(pickup: dict[str, Any], drop: dict[str, Any]) -> float:
 
 
 class MockDeliveryProvider:
+    """Test double that walks a booking through the lifecycle on a timer.
+
+    The booking id carries its creation timestamp so progression needs no
+    server-side state and survives restarts between test steps.
+    """
+
     code = "mock"
+    # Seconds after booking at which each stage begins.
+    STAGES = (
+        (0, "rider_assigned"),
+        (30, "at_pickup"),
+        (60, "picked_up"),
+        (120, "nearby"),
+        (180, "delivered"),
+    )
+    RIDER = {
+        "name": "Demo rider",
+        "phone": "+910000000000",
+        "vehicle": "Two-wheeler",
+        "photo_url": "",
+    }
+
+    def _booked_at(self, booking_id: str) -> datetime | None:
+        parts = str(booking_id).split("_")
+        for part in parts:
+            if part.isdigit() and len(part) >= 10:
+                return datetime.fromtimestamp(int(part), tz=UTC)
+        return None
+
+    def _stage_for(self, booking_id: str) -> str:
+        booked_at = self._booked_at(booking_id)
+        if booked_at is None:
+            return "rider_assigned"
+        elapsed = (datetime.now(tz=UTC) - booked_at).total_seconds()
+        stage = self.STAGES[0][1]
+        for offset, name in self.STAGES:
+            if elapsed >= offset:
+                stage = name
+        return stage
+
+    def _route_for(self, booking_id: str) -> tuple[float, float, float, float] | None:
+        parts = str(booking_id).split("_")
+        if len(parts) < 8:
+            return None
+        try:
+            return tuple(float(value) for value in parts[3:7])  # type: ignore[return-value]
+        except (TypeError, ValueError):
+            return None
 
     def quote(self, payload: dict[str, Any]) -> DeliveryQuote:
         km = _distance_km(payload["pickup"], payload["drop"])
@@ -59,24 +106,58 @@ class MockDeliveryProvider:
         )
 
     def book(self, payload: dict[str, Any]) -> dict[str, Any]:
+        stamp = int(datetime.now(tz=UTC).timestamp())
+        pickup = payload.get("pickup") or {}
+        drop = payload.get("drop") or {}
+        route = "_".join(
+            str(value)
+            for value in (
+                pickup.get("latitude", ""),
+                pickup.get("longitude", ""),
+                drop.get("latitude", ""),
+                drop.get("longitude", ""),
+            )
+        )
         return {
-            "booking_id": f"mock_delivery_{uuid.uuid4().hex}",
+            "booking_id": f"mock_delivery_{stamp}_{route}_{uuid.uuid4().hex}",
             "tracking_url": "",
             "partner_status": "rider_assigned",
             "eta_minutes": int(payload.get("eta_minutes") or 25),
-            "rider": {
-                "name": "Demo rider",
-                "phone": "+910000000000",
-                "vehicle": "Two-wheeler",
-                "photo_url": "",
-            },
+            "rider": dict(self.RIDER),
         }
 
     def cancel(self, booking_id: str) -> dict[str, Any]:
         return {"booking_id": booking_id, "partner_status": "cancelled"}
 
     def track(self, booking_id: str) -> dict[str, Any]:
-        return {"booking_id": booking_id, "partner_status": "rider_assigned"}
+        stage = self._stage_for(booking_id)
+        remaining = {
+            "rider_assigned": 12,
+            "at_pickup": 9,
+            "picked_up": 6,
+            "nearby": 2,
+        }
+        rider = dict(self.RIDER)
+        route = self._route_for(booking_id)
+        if route is not None:
+            pickup_lat, pickup_lng, drop_lat, drop_lng = route
+            booked_at = self._booked_at(booking_id)
+            elapsed = (
+                (datetime.now(tz=UTC) - booked_at).total_seconds()
+                if booked_at
+                else 0
+            )
+            progress = min(1.0, max(0.0, (elapsed - 60) / 120))
+            rider["location"] = {
+                "latitude": pickup_lat + (drop_lat - pickup_lat) * progress,
+                "longitude": pickup_lng + (drop_lng - pickup_lng) * progress,
+            }
+        return {
+            "booking_id": booking_id,
+            "partner_status": stage,
+            "rider": rider,
+            **({"eta_minutes": remaining[stage]} if stage in remaining else {}),
+        }
 
 
 class JsonHttpProvider:
@@ -417,7 +498,7 @@ class ShiprocketQuickProvider(JsonHttpProvider):
             str(self.config.get("create_order_path") or "/orders/create/adhoc"),
             payload={
                 "order_id": str(order.get("number") or order.get("id") or uuid.uuid4()),
-                "order_date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+                "order_date": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
                 "pickup_location": str(
                     self.config.get("pickup_location") or "Primary"
                 ),

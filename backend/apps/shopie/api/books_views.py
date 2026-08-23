@@ -398,6 +398,17 @@ class ShopBooksReportView(APIView):
         business = _business(request, business_id, feature=FEATURE_SHOPIE_GST_REPORTS)
         date_from = _parse_date(request.query_params.get("date_from"))
         date_to = _parse_date(request.query_params.get("date_to"))
+        row_report = slug in {"daybook", "gstr1"}
+        page_size = 500
+        offset = 0
+        if row_report:
+            try:
+                page_size = min(max(int(request.query_params.get("limit") or 500), 1), 500)
+                offset = max(int(request.query_params.get("offset") or 0), 0)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(
+                    {"pagination": "limit and offset must be whole numbers."}
+                ) from exc
 
         report_fn = {
             "sales": self.books.sales_summary,
@@ -407,10 +418,25 @@ class ShopBooksReportView(APIView):
             "gstr3b": self.books.gstr3b_summary,
             "pnl": self.books.pnl_simple,
         }[slug]
-        data = report_fn(
-            tenant=request.current_tenant, business=business, date_from=date_from, date_to=date_to
+        kwargs = {
+            "tenant": request.current_tenant,
+            "business": business,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+        if row_report:
+            kwargs.update({"limit": page_size, "offset": offset})
+        data = report_fn(**kwargs)
+        if not row_report:
+            return success_response(data)
+        return success_response(
+            data,
+            meta={
+                "page_size": page_size,
+                "offset": offset,
+                "next_offset": offset + page_size if len(data) == page_size else None,
+            },
         )
-        return success_response(data)
 
 
 class ShopQuotationConvertToSaleView(APIView):

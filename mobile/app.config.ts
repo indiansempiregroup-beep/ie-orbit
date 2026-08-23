@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 // Monorepo-wide env: ie-platform/.env (not mobile/.env)
@@ -36,6 +39,24 @@ try {
 }
 
 const FACE_ID_USAGE = 'Allow $(PRODUCT_NAME) to use Face ID for quick sign-in.';
+const androidPackage = selectedFlavor?.bundleIdAndroid ?? 'com.ieplatform.mobile.dev';
+const googleServicesFile = `./credentials/google-services/${androidPackage}.json`;
+const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services', `${androidPackage}.json`);
+const adMobAndroidAppId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID;
+const adMobIosAppId = process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID;
+const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
+  adMobAndroidAppId && adMobIosAppId
+    ? [
+        'react-native-google-mobile-ads',
+        {
+          androidAppId: adMobAndroidAppId,
+          iosAppId: adMobIosAppId,
+          delayAppMeasurementInit: true,
+          userTrackingUsageDescription:
+            'This identifier is used to deliver more relevant ads and measure ad performance.',
+        },
+      ]
+    : null;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -54,7 +75,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   android: {
-    package: selectedFlavor?.bundleIdAndroid ?? 'com.ieplatform.mobile.dev',
+    package: androidPackage,
+    ...(fs.existsSync(googleServicesFileAbs) ? { googleServicesFile } : {}),
     softwareKeyboardLayoutMode: 'resize',
     intentFilters: referralHost
       ? [
@@ -104,7 +126,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         cameraPermission: 'Allow $(PRODUCT_NAME) to use the camera for your profile picture.',
       },
     ],
-    'expo-notifications',
+    [
+      'expo-notifications',
+      {
+        defaultChannel: 'default',
+      },
+    ],
+    ...(adMobPlugin ? [adMobPlugin] : []),
   ],
   assetBundlePatterns: ['**/*'],
 });

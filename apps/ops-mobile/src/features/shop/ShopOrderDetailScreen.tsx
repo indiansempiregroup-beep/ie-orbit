@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,7 +21,7 @@ import { colors, fonts, spacing } from '../../theme/tokens';
 import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
-import { formatDateTime } from '../../utils/format';
+import { formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { confirmAction } from '../../utils/confirmAction';
 import { DesktopPage } from '../../components/DesktopPage';
 import {
@@ -30,9 +31,17 @@ import {
   getShopOrderPosMeta,
   isShopOrderBorrowDue,
   canCancelShopOrder,
+  canDispatchShopOrder,
   nextShopOrderAction,
-  shopOrderStatusStyle,
+  shopOrderBadgeStyle,
 } from './posPayment';
+import { DeliveryTrackingMap } from './DeliveryTrackingMap';
+import { DeliveryMapLegend } from './DeliveryMapLegend';
+import {
+  deliveryMethodForOrder,
+  formatDeliveryStatus,
+  groupDeliveryEvents,
+} from './deliveryTracking';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
 
@@ -96,17 +105,15 @@ export function ShopOrderDetailScreen() {
       ]);
       setOrder(orderRes.data);
       setReturns(returnsRes.data ?? []);
-      const hasLiveDelivery =
-        orderRes.data.metadata &&
-        typeof orderRes.data.metadata === 'object' &&
-        orderRes.data.metadata.delivery;
-      if (hasLiveDelivery) {
+      if (String(orderRes.data.fulfillment_mode || '').toLowerCase() === 'delivery') {
         try {
           const live = await client.shop.getOrderDeliveryLive(orderId, true);
           setDeliveryLive(live.data);
         } catch {
           setDeliveryLive(null);
         }
+      } else {
+        setDeliveryLive(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load order');
@@ -127,11 +134,20 @@ export function ShopOrderDetailScreen() {
     const timer = setInterval(() => {
       void client.shop
         .getOrderDeliveryLive(orderId, true)
-        .then((response) => setDeliveryLive(response.data))
+        .then(async (response) => {
+          setDeliveryLive(response.data);
+          if (
+            response.data.order_status &&
+            response.data.order_status !== order?.status
+          ) {
+            const refreshed = await client.shop.getOrder(orderId);
+            setOrder(refreshed.data);
+          }
+        })
         .catch(() => undefined);
     }, 12000);
     return () => clearInterval(timer);
-  }, [client, deliveryLive, orderId]);
+  }, [client, deliveryLive, order?.status, orderId]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -208,6 +224,7 @@ export function ShopOrderDetailScreen() {
         ready: 'Order marked ready',
         completed: 'Order completed',
         cancelled: 'Order cancelled',
+        delivery_failed: 'Delivery marked failed',
       };
       toast.push(messages[status] || 'Order updated', 'success');
     } catch (err) {
@@ -261,7 +278,25 @@ export function ShopOrderDetailScreen() {
       setDeliveryLive(live.data);
       toast.push('Rider requested. Live tracking is active.', 'success');
     } catch (err) {
-      const text = err instanceof Error ? err.message : 'Unable to dispatch order';
+      const text = getApiErrorMessage(err, 'Unable to dispatch order');
+      setError(text);
+      toast.push(text, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function simulateDeliveryStep() {
+    if (!client || !order) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const live = await client.shop.simulateOrderDelivery(order.id);
+      setDeliveryLive(live.data);
+      await load();
+      toast.push(`Mock delivery · ${live.data.headline}`, 'success');
+    } catch (err) {
+      const text = getApiErrorMessage(err, 'Unable to simulate delivery');
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -352,14 +387,8 @@ export function ShopOrderDetailScreen() {
             }
           | undefined)
       : undefined;
-  const orderMetadata =
-    order.metadata && typeof order.metadata === 'object'
-      ? (order.metadata as Record<string, unknown>)
-      : {};
-  const deliveryMethod = String(orderMetadata.delivery_method || '');
-  const isInstantDelivery =
-    deliveryMethod === 'instant' ||
-    (!deliveryMethod && typeof orderMetadata.delivery === 'object' && orderMetadata.delivery !== null);
+  const deliveryMethod = deliveryMethodForOrder(order);
+  const isInstantDelivery = deliveryMethod === 'instant';
   const isBorrow = String(pos.payment_method || '').toLowerCase() === 'borrow';
   const amountDue = Number(pos.amount_due ?? (isBorrow ? order.total : 0) ?? 0);
   const customerName = order.customer_id
@@ -381,9 +410,10 @@ export function ShopOrderDetailScreen() {
       .filter(Boolean)
       .join(', ');
   const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
-  const nextAction = nextShopOrderAction(order.status, order.fulfillment_mode);
-  const statusStyle = shopOrderStatusStyle(order.status);
-  const canCancel = canCancelShopOrder(order.status) && !deliveryLive?.available;
+  const nextAction = nextShopOrderAction(order.status, order.fulfillment_mode, deliveryMethod);
+  const statusStyle = shopOrderBadgeStyle(order);
+  const canCancel =
+    canCancelShopOrder(order.status) && !(isInstantDelivery && deliveryLive?.available && !deliveryLive.terminal);
   const lineDiscountTotal = Number(pos.line_discount_total ?? 0);
   const billDiscountAmount = Number(pos.bill_discount_amount ?? 0);
   const merchandiseGross = (order.lines ?? []).reduce((sum, line) => {
@@ -393,6 +423,21 @@ export function ShopOrderDetailScreen() {
   }, 0);
   const borrowPreview = isBorrow ? Math.min(selectedRefund, Math.max(0, amountDue)) : 0;
   const cashCreditPreview = Math.max(0, selectedRefund - borrowPreview);
+  const deliveryGroups = deliveryLive?.available ? groupDeliveryEvents(deliveryLive) : [];
+  const activeDeliveryAttempt = deliveryLive?.attempts?.find(
+    (attempt) => attempt.attempt_number === deliveryLive.active_attempt_number,
+  );
+  const liveRider = deliveryLive?.rider ?? activeDeliveryAttempt?.rider;
+  const deliveryTrackingUrl = deliveryLive?.tracking_url ?? activeDeliveryAttempt?.tracking_url;
+  const failureReason =
+    deliveryLive?.events
+      ?.slice()
+      .reverse()
+      .find((event) => event.reason)?.reason ??
+    deliveryLive?.attempts
+      ?.slice()
+      .reverse()
+      .find((attempt) => attempt.reason)?.reason;
 
   return (
     <DesktopPage>
@@ -438,29 +483,95 @@ export function ShopOrderDetailScreen() {
             <View style={styles.deliveryLiveHeader}>
               <View style={[styles.deliveryLiveDot, { backgroundColor: deliveryLive.terminal ? colors.success : colors.primary }]} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.section}>Live delivery</Text>
-                <Text style={styles.deliveryHeadline}>{deliveryLive.headline}</Text>
-              </View>
-            </View>
-            {deliveryLive.rider?.name ? (
-              <View style={styles.addressBox}>
-                <Text style={styles.addressLabel}>Rider</Text>
-                <Text style={styles.addressValue}>
-                  {deliveryLive.rider.name}
-                  {deliveryLive.rider.vehicle ? ` · ${deliveryLive.rider.vehicle}` : ''}
-                  {deliveryLive.rider.phone ? ` · ${deliveryLive.rider.phone}` : ''}
+                <Text style={styles.deliveryEyebrow}>
+                  {deliveryLive.delivery_method === 'instant' ? 'DELIVERY PARTNER' : 'STANDARD DELIVERY'}
                 </Text>
+                <Text style={styles.deliveryState}>
+                  {deliveryLive.headline || formatDeliveryStatus(deliveryLive.partner_status)}
+                </Text>
+                {deliveryLive.subtitle ? <Text style={styles.deliverySubtitle}>{deliveryLive.subtitle}</Text> : null}
+              </View>
+              {deliveryLive.eta_minutes != null ? (
+                <View style={styles.etaCard}>
+                  <Text style={styles.etaValue}>{deliveryLive.eta_minutes}</Text>
+                  <Text style={styles.etaLabel}>min ETA</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={[styles.updatedText, deliveryLive.stale && styles.staleText]}>
+              {deliveryLive.stale ? 'Location may be stale' : 'Tracking up to date'}
+              {deliveryLive.last_updated ? ` · ${formatDateTime(deliveryLive.last_updated)}` : ''}
+            </Text>
+            {failureReason ? <Text style={styles.failureReason}>{failureReason}</Text> : null}
+            {liveRider?.name || liveRider?.phone ? (
+              <View style={styles.riderCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.addressLabel}>Rider</Text>
+                  <Text style={styles.riderName}>{liveRider?.name || 'Assigned rider'}</Text>
+                  {liveRider?.vehicle ? (
+                    <Text style={styles.meta}>{liveRider.vehicle}</Text>
+                  ) : null}
+                </View>
+                {liveRider?.phone && deliveryLive.can_call_rider !== false ? (
+                  <Pressable
+                    style={styles.callBtn}
+                    onPress={() => void Linking.openURL(`tel:${liveRider.phone}`)}
+                  >
+                    <Feather name="phone" size={16} color="#fff" />
+                    <Text style={styles.callBtnText}>Call</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
-            {[...(deliveryLive.events ?? [])].reverse().map((event, index) => (
-              <View key={`${event.status}-${event.occurred_at}-${index}`} style={styles.deliveryEvent}>
-                <View style={[styles.deliveryEventDot, index === 0 && { backgroundColor: colors.primary }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.deliveryEventLabel}>{event.label || event.status.replace(/_/g, ' ')}</Text>
-                  {event.occurred_at ? <Text style={styles.meta}>{formatDateTime(event.occurred_at)}</Text> : null}
-                </View>
+            {deliveryTrackingUrl ? (
+              <Pressable
+                style={styles.trackingLink}
+                onPress={() => void Linking.openURL(deliveryTrackingUrl)}
+              >
+                <Feather name="external-link" size={15} color={colors.primary} />
+                <Text style={styles.trackingLinkText}>Open partner tracking</Text>
+              </Pressable>
+            ) : null}
+            <DeliveryTrackingMap delivery={deliveryLive} />
+            <DeliveryMapLegend delivery={deliveryLive} />
+            {deliveryGroups.length ? <Text style={styles.historyTitle}>Delivery history</Text> : null}
+            {deliveryGroups.map((group) => (
+              <View key={group.attemptNumber ?? 'order'} style={styles.attemptGroup}>
+                <Text style={styles.attemptTitle}>
+                  {group.attemptNumber == null
+                    ? 'Order updates'
+                    : `Attempt ${group.attemptNumber}${group.attempt?.provider ? ` · ${group.attempt.provider}` : ''}`}
+                </Text>
+                {group.attempt?.reason ? <Text style={styles.failureReason}>{group.attempt.reason}</Text> : null}
+                {group.events.map((event, index) => (
+                  <View key={event.id || `${event.status}-${event.occurred_at}-${index}`} style={styles.deliveryEvent}>
+                    <View style={styles.deliveryEventDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.deliveryEventLabel}>
+                        {event.label || formatDeliveryStatus(event.status)}
+                      </Text>
+                      {event.reason ? <Text style={styles.eventReason}>{event.reason}</Text> : null}
+                      <Text style={styles.meta}>
+                        {event.occurred_at ? formatDateTime(event.occurred_at) : 'Time unavailable'}
+                        {event.eta_minutes != null ? ` · ETA ${event.eta_minutes} min` : ''}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
               </View>
             ))}
+            {isInstantDelivery &&
+            deliveryLive.provider === 'mock' &&
+            deliveryLive.dispatched &&
+            !deliveryLive.terminal ? (
+              <Pressable
+                style={[styles.secondaryBtn, busy && styles.btnDisabled]}
+                disabled={busy}
+                onPress={() => void simulateDeliveryStep()}
+              >
+                <Text style={styles.secondaryBtnText}>Simulate next delivery status</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 
@@ -469,14 +580,20 @@ export function ShopOrderDetailScreen() {
             <Text style={styles.section}>Fulfillment</Text>
             {nextAction ? <Text style={styles.meta}>{nextAction.hint}</Text> : null}
             {String(order.fulfillment_mode).toLowerCase() === 'delivery' &&
-            order.status === 'ready' &&
+            canDispatchShopOrder(order.status) &&
             isInstantDelivery ? (
               <Pressable
                 style={[styles.primaryBtn, busy && styles.btnDisabled]}
                 disabled={busy}
                 onPress={() => void dispatchOrder()}
               >
-                <Text style={styles.primaryBtnText}>{busy ? 'Requesting rider…' : 'Dispatch · request rider'}</Text>
+                <Text style={styles.primaryBtnText}>
+                  {busy
+                    ? 'Requesting rider…'
+                    : order.status === 'delivery_failed'
+                      ? 'Retry · request another rider'
+                      : 'Dispatch · request rider'}
+                </Text>
               </Pressable>
             ) : nextAction ? (
               <Pressable
@@ -485,6 +602,15 @@ export function ShopOrderDetailScreen() {
                 onPress={() => void confirmAdvance(nextAction)}
               >
                 <Text style={styles.primaryBtnText}>{busy ? 'Updating…' : nextAction.label}</Text>
+              </Pressable>
+            ) : null}
+            {isInstantDelivery && order.status === 'delivery_failed' && nextAction ? (
+              <Pressable
+                style={[styles.secondaryBtn, busy && styles.btnDisabled]}
+                disabled={busy}
+                onPress={() => void confirmAdvance(nextAction)}
+              >
+                <Text style={styles.secondaryBtnText}>{nextAction.label}</Text>
               </Pressable>
             ) : null}
             {canCancel ? (
@@ -789,6 +915,65 @@ const styles = StyleSheet.create({
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   deliveryLiveHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   deliveryLiveDot: { width: 10, height: 10, borderRadius: 5, marginTop: 14 },
+  deliveryEyebrow: {
+    color: colors.mutedForeground,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  deliveryState: {
+    fontFamily: fonts.display,
+    fontSize: 24,
+    color: colors.foreground,
+    marginTop: 3,
+  },
+  deliverySubtitle: { color: colors.mutedForeground, fontSize: 13, lineHeight: 18, marginTop: 3 },
+  etaCard: {
+    minWidth: 70,
+    borderRadius: 12,
+    backgroundColor: colors.muted,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  etaValue: { fontFamily: fonts.display, fontSize: 22, color: colors.foreground },
+  etaLabel: { color: colors.mutedForeground, fontSize: 11, fontWeight: '700' },
+  updatedText: { color: colors.success, fontSize: 12, marginTop: 6 },
+  staleText: { color: colors.warning },
+  failureReason: { color: colors.destructive, fontSize: 13, lineHeight: 18, marginTop: 4 },
+  riderCard: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  riderName: { color: colors.foreground, fontFamily: fonts.bodySemi, fontSize: 16, marginTop: 2 },
+  callBtn: {
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  callBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  trackingLink: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10, alignSelf: 'flex-start' },
+  trackingLinkText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
+  historyTitle: { fontFamily: fonts.bodySemi, color: colors.foreground, fontSize: 16, marginTop: 16 },
+  attemptGroup: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    marginTop: 8,
+  },
+  attemptTitle: { color: colors.foreground, fontWeight: '800', fontSize: 13 },
+  eventReason: { color: colors.destructive, fontSize: 12, marginTop: 2 },
   deliveryHeadline: {
     fontFamily: fonts.bodySemi,
     fontSize: 17,

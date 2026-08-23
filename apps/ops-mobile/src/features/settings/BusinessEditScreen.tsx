@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
@@ -15,9 +17,11 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { colors, fonts, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import type { RootStackParamList } from '../../navigation/types';
 
 export function BusinessEditScreen() {
   const client = useOpsClient();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { token } = useAuth();
   const { activeBusiness, businessId, tenantId, refreshWorkspace } = useWorkspace();
   const [businessName, setBusinessName] = useState('');
@@ -37,9 +41,7 @@ export function BusinessEditScreen() {
   const [gstTaxNumber, setGstTaxNumber] = useState('');
   const [logoAsset, setLogoAsset] = useState<ImagePickerAsset | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [upiVpa, setUpiVpa] = useState('');
-  const [paymentQrAsset, setPaymentQrAsset] = useState<ImagePickerAsset | null>(null);
-  const [paymentQrPreview, setPaymentQrPreview] = useState<string | null>(null);
+  const [razorpayStatusLabel, setRazorpayStatusLabel] = useState('Not connected');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -61,8 +63,6 @@ export function BusinessEditScreen() {
     setTimezone(activeBusiness.timezone || 'Asia/Kolkata');
     setCurrency(activeBusiness.currency || 'INR');
     setGstTaxNumber((activeBusiness as { gst_tax_number?: string }).gst_tax_number || '');
-    setUpiVpa((activeBusiness as { upi_vpa?: string }).upi_vpa || '');
-    setPaymentQrPreview((activeBusiness as { payment_qr_url?: string }).payment_qr_url || null);
   }, [activeBusiness]);
 
   useEffect(() => {
@@ -71,9 +71,22 @@ export function BusinessEditScreen() {
   }, [activeBusiness, logoAsset]);
 
   useEffect(() => {
-    if (!activeBusiness || paymentQrAsset) return;
-    setPaymentQrPreview((activeBusiness as { payment_qr_url?: string }).payment_qr_url || null);
-  }, [activeBusiness, paymentQrAsset]);
+    if (!client || !businessId) return;
+    void client.shop
+      .getMerchantPaymentSettings({ business_id: businessId })
+      .then((response) => {
+        setRazorpayStatusLabel(
+          response.data.can_accept_payments
+            ? 'Payments live'
+            : response.data.connected
+              ? 'Connected but paused'
+              : 'Not connected',
+        );
+      })
+      .catch(() => {
+        setRazorpayStatusLabel('Not connected');
+      });
+  }, [businessId, client]);
 
   const timezoneOptions =
     timezone && !TIMEZONES.some((option) => option.value === timezone)
@@ -98,7 +111,6 @@ export function BusinessEditScreen() {
             setError(null);
             try {
               let logo = activeBusiness?.logo;
-              let paymentQrUrl = (activeBusiness as { payment_qr_url?: string } | null)?.payment_qr_url;
               if (logoAsset) {
                 const uploaded = await uploadBrandingLogo({
                   token,
@@ -108,16 +120,6 @@ export function BusinessEditScreen() {
                   displayName: displayName || activeBusiness?.business_name || 'Business',
                 });
                 logo = uploaded.public_url || uploaded.private_url || logo;
-              }
-              if (paymentQrAsset) {
-                const uploaded = await uploadBrandingLogo({
-                  token,
-                  tenantId,
-                  businessId,
-                  asset: paymentQrAsset,
-                  displayName: `${displayName || 'Business'} payment QR`,
-                });
-                paymentQrUrl = uploaded.public_url || uploaded.private_url || paymentQrUrl;
               }
               await client.businesses.patch(businessId, {
                 business_name: businessName || displayName,
@@ -135,8 +137,6 @@ export function BusinessEditScreen() {
                 country: country || undefined,
                 latitude,
                 longitude,
-                upi_vpa: upiVpa || '',
-                payment_qr_url: paymentQrUrl || '',
                 ...(logo ? { logo } : {}),
               });
               await refreshWorkspace();
@@ -216,23 +216,17 @@ export function BusinessEditScreen() {
       </FormSection>
 
       <FormSection title="Shop payments">
-        <Input
-          label="UPI ID"
-          value={upiVpa}
-          onChangeText={setUpiVpa}
-          autoCapitalize="none"
-          placeholder="shop@okaxis"
-          hint="Used to generate amount-specific QR codes for online orders."
-        />
-        <ImagePickerButton
-          label="Static payment QR (optional)"
-          variant="card"
-          valueUri={paymentQrPreview || undefined}
-          onPicked={(asset) => {
-            setPaymentQrAsset(asset);
-            setPaymentQrPreview(asset.uri);
-          }}
-          helperText="Fallback image if UPI ID is not set."
+        <View style={styles.paymentStatus}>
+          <Text style={styles.paymentStatusTitle}>Razorpay · {razorpayStatusLabel}</Text>
+          <Text style={styles.paymentStatusHint}>
+            Razorpay keys, UPI ID and payment QR now live in Settings → Payments.
+          </Text>
+        </View>
+        <Button
+          label="Open payment settings"
+          variant="secondary"
+          fullWidth
+          onPress={() => navigation.navigate('PaymentSettings')}
         />
       </FormSection>
 
@@ -253,4 +247,7 @@ const styles = StyleSheet.create({
   subtitle: { ...typography.body, color: colors.mutedForeground },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },
+  paymentStatus: { gap: 4, padding: 14, borderRadius: 14, backgroundColor: colors.muted },
+  paymentStatusTitle: { ...typography.body, fontFamily: fonts.bodyBold, color: colors.foreground },
+  paymentStatusHint: { ...typography.caption, color: colors.mutedForeground },
 });

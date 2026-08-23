@@ -38,6 +38,9 @@ export const PlanFeature = {
   shopieGrowAds: 'shopie_grow_ads',
   shopieCustomerReferral: 'shopie_customer_referral',
   rewardPoints: 'reward_points',
+  adFree: 'ad_free',
+  razorpayPayments: 'razorpay_payments',
+  cashfreePayments: 'cashfree_payments',
 } as const;
 
 export const SHOPIE_BOOKS_FEATURES = [

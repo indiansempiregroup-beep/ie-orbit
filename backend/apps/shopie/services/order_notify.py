@@ -132,7 +132,7 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
             f"Hi {name},\n\nOrder #{number} is with your rider. Open the order for live delivery updates.",
             "On the way",
         )
-    if status in {"failed", "cancelled"} and delivery:
+    if status in {OrderStatus.DELIVERY_FAILED, "failed", "cancelled"} and delivery:
         return (
             f"Delivery update needed · #{number}",
             f"Hi {name},\n\nThe delivery for order #{number} needs attention. {shop} will contact you with the next step.",

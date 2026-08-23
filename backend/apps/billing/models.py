@@ -33,6 +33,7 @@ class BillingCheckoutSession(TenantModel):
     product_code = models.SlugField(max_length=80)
     plan_code = models.SlugField(max_length=80)
     razorpay_order_id = models.CharField(max_length=120, unique=True)
+    cashfree_order_id = models.CharField(max_length=120, unique=True, null=True, blank=True)
     amount_paise = models.PositiveIntegerField()
     currency = models.CharField(max_length=3, default="INR")
     status = models.CharField(
@@ -51,6 +52,7 @@ class BillingCheckoutSession(TenantModel):
             *TenantModel.Meta.indexes,
             models.Index(fields=["tenant", "business", "status"]),
             models.Index(fields=["razorpay_order_id"]),
+            models.Index(fields=["cashfree_order_id"]),
         ]
 
     def __str__(self) -> str:

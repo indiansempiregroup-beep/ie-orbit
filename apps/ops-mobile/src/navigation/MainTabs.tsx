@@ -1,12 +1,19 @@
-import React, { useMemo } from 'react';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator, BottomTabBar } from '@react-navigation/bottom-tabs';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { colors, fonts } from '../theme/tokens';
+import { colors, fonts, spacing } from '../theme/tokens';
+import { TAB_BAR_RADIUS } from '../theme/layout';
+import { GlassTabBarBackground } from '../components/GlassTabBarBackground';
+import {
+  GOOGLE_AD_BANNER_HEIGHT,
+  GoogleAdBanner,
+  isGoogleAdMobAvailable,
+} from '../components/GoogleAdBanner';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { useTabBarLayout } from '../hooks/useTabBarLayout';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { hasShopie } from '../utils/products';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../utils/planFeatures';
@@ -28,33 +35,70 @@ const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Feather.glyphMap> =
   More: 'menu',
 };
 
-function AdaptiveTabBar(props: BottomTabBarProps) {
+function AdaptiveTabBar({
+  adVisible,
+  adBottom,
+  onCloseAd,
+  ...props
+}: BottomTabBarProps & {
+  adVisible: boolean;
+  adBottom: number;
+  onCloseAd: () => void;
+}) {
   const { isDesktop } = useBreakpoint();
   /** Desktop chrome lives in DesktopShell — hide bottom tabs entirely. */
   if (isDesktop) {
     return null;
   }
-  return <BottomTabBar {...props} />;
+  return (
+    <>
+      {adVisible ? (
+        <View style={[styles.adContainer, { bottom: adBottom }]}>
+          <GoogleAdBanner
+            onClose={onCloseAd}
+            onRemoveAds={() => {
+              props.navigation.getParent()?.navigate('ProductSettings' as never);
+            }}
+          />
+        </View>
+      ) : null}
+      <BottomTabBar {...props} />
+    </>
+  );
 }
 
 export function MainTabs() {
   const { t } = useTranslation();
   const { isDesktop } = useBreakpoint();
-  const insets = useSafeAreaInsets();
   const { activeBusiness } = useWorkspace();
-  const { has, hasAny } = usePlanFeatures();
+  const { billing, has, hasAny } = usePlanFeatures();
   const showBooks = hasShopie(activeBusiness?.product_subscriptions) && hasAny(SHOPIE_BOOKS_FEATURES);
   const showBookings = has(PlanFeature.appointieBookings);
   const showCalendar = has(PlanFeature.appointieCalendar);
 
-  const tabBarHeight = useMemo(() => 52 + Math.max(insets.bottom, 8), [insets.bottom]);
+  const { pillHeight, sideInset, bottomOffset } = useTabBarLayout();
+  const [adClosed, setAdClosed] = useState(false);
+  const showGoogleAds =
+    !isDesktop &&
+    billing?.show_google_ads === true &&
+    !adClosed &&
+    isGoogleAdMobAvailable();
+  const adBottom = bottomOffset + pillHeight + spacing.xs;
 
   return (
       <Tab.Navigator
       key="main-tabs-no-alerts"
-      tabBar={(props) => <AdaptiveTabBar {...props} />}
+      tabBar={(props) => (
+        <AdaptiveTabBar
+          {...props}
+          adVisible={showGoogleAds}
+          adBottom={adBottom}
+          onCloseAd={() => setAdClosed(true)}
+        />
+      )}
       screenOptions={({ route }) => ({
         headerShown: false,
+        sceneStyle: showGoogleAds ? { paddingBottom: GOOGLE_AD_BANNER_HEIGHT } : undefined,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarHideOnKeyboard: true,
@@ -63,20 +107,14 @@ export function MainTabs() {
           ? styles.hiddenTabBar
           : [
               styles.tabBar,
-              {
-                height: tabBarHeight,
-                paddingBottom: Math.max(insets.bottom, 6),
-              },
+              { height: pillHeight, start: sideInset, end: sideInset, bottom: bottomOffset },
             ],
-        tabBarItemStyle: styles.tabItem,
+        tabBarBackground: isDesktop ? undefined : () => <GlassTabBarBackground />,
         tabBarLabelStyle: styles.tabLabel,
         tabBarIcon: ({ color, focused }) => (
-          <Feather
-            name={TAB_ICONS[route.name]}
-            size={20}
-            color={color}
-            style={focused ? styles.activeIcon : undefined}
-          />
+          <View style={[styles.iconChip, focused && styles.iconChipActive]}>
+            <Feather name={TAB_ICONS[route.name]} size={22} color={color} />
+          </View>
         ),
       })}
     >
@@ -108,29 +146,32 @@ export function MainTabs() {
 }
 
 const styles = StyleSheet.create({
+  /** Floating pill: the glass fill and its shadow come from `tabBarBackground`. */
   tabBar: {
-    backgroundColor: colors.card,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 4,
-    elevation: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: -2 },
-      },
-      default: {},
-    }),
+    position: 'absolute',
+    borderRadius: TAB_BAR_RADIUS,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    elevation: 0,
+    paddingHorizontal: spacing.xs,
+    paddingTop: 5,
+    paddingBottom: 5,
   },
   hiddenTabBar: {
     display: 'none',
     height: 0,
     overflow: 'hidden',
   },
-  tabItem: {
-    paddingTop: 2,
+  /** WhatsApp-style rounded highlight behind the focused icon, label sits below it. */
+  iconChip: {
+    width: 38,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconChipActive: {
+    backgroundColor: colors.tint,
   },
   tabLabel: {
     fontFamily: fonts.bodyMedium,
@@ -139,5 +180,10 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     marginTop: 2,
   },
-  activeIcon: { transform: [{ scale: 1.05 }] },
+  adContainer: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    zIndex: 20,
+  },
 });

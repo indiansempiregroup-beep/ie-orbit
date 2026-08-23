@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 // Monorepo-wide env: ie-platform/.env (not apps/ops-mobile/.env)
@@ -10,6 +13,24 @@ const CAMERA_USAGE =
   'Allow IE Platform to use the camera for barcode scanning and profile photos.';
 const PHOTOS_USAGE =
   'Allow IE Platform to access your photos for profile and business images.';
+
+const googleServicesFile = './credentials/google-services.json';
+const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services.json');
+const adMobAndroidAppId = process.env.EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID;
+const adMobIosAppId = process.env.EXPO_PUBLIC_ADMOB_OPS_IOS_APP_ID;
+const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
+  adMobAndroidAppId && adMobIosAppId
+    ? [
+        'react-native-google-mobile-ads',
+        {
+          androidAppId: adMobAndroidAppId,
+          iosAppId: adMobIosAppId,
+          delayAppMeasurementInit: true,
+          userTrackingUsageDescription:
+            'This identifier is used to deliver more relevant ads and measure ad performance.',
+        },
+      ]
+    : null;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -27,7 +48,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     ...(Array.isArray(config.plugins) ? config.plugins : []),
     'expo-font',
-    'expo-notifications',
+    [
+      'expo-notifications',
+      {
+        defaultChannel: 'default',
+      },
+    ],
     [
       'expo-camera',
       {
@@ -50,6 +76,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         resizeMode: 'cover',
       },
     ],
+    ...(adMobPlugin ? [adMobPlugin] : []),
   ],
   ios: {
     ...config.ios,
@@ -68,6 +95,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     ...config.android,
     package: 'com.ieplatform.ops',
+    ...(fs.existsSync(googleServicesFileAbs) ? { googleServicesFile } : {}),
     softwareKeyboardLayoutMode: 'resize',
     config: {
       ...config.android?.config,
@@ -94,6 +122,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     ...config.extra,
+    googleMapsApiKey:
+      process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
+      process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ||
+      process.env.GOOGLE_PLACES_API_KEY ||
+      '',
     eas: {
       ...(typeof config.extra?.eas === 'object' && config.extra.eas ? config.extra.eas : {}),
       projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '',

@@ -15,7 +15,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { useScreenInsets } from '../../theme/layout';
+import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { filterFutureSlots, formatDateKey, formatMoney, formatTime } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
@@ -27,6 +27,7 @@ export function BookingScreen() {
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
+  const { contentInset } = useTabBarLayout();
   const primary = branding?.primaryColor ?? colors.primary;
 
   const [step, setStep] = useState(0);
@@ -629,7 +630,7 @@ export function BookingScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </RefreshableScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: contentInset }]}>
         <Button
           label={step === reviewStep ? 'Confirm Booking' : 'Continue'}
           size="lg"
@@ -676,7 +677,7 @@ const styles = StyleSheet.create({
   progressBar: { flex: 1, height: 4, borderRadius: 2 },
   stepMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
   title: { ...typography.heading, fontSize: 20, color: colors.foreground },
-  body: { padding: spacing.xl, gap: spacing.md, paddingBottom: 120 },
+  body: { padding: spacing.xl, gap: spacing.md },
   categoryBlock: { gap: spacing.sm, marginBottom: spacing.md },
   categoryLabel: {
     ...typography.caption,

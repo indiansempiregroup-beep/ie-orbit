@@ -1,13 +1,21 @@
-import React, { useMemo } from 'react';
-import { Platform, StyleSheet } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import React, { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useBootstrap } from '../contexts/BootstrapContext';
 import { useMobileNotifications } from '../hooks/useMobileNotifications';
 import { useNotificationStream } from '../hooks/useNotificationStream';
-import { colors } from '../theme/tokens';
+import { GlassTabBarBackground } from '../components/GlassTabBarBackground';
+import {
+  GOOGLE_AD_BANNER_HEIGHT,
+  GoogleAdBanner,
+  isGoogleAdMobAvailable,
+} from '../components/GoogleAdBanner';
+import { colors, spacing } from '../theme/tokens';
+import { withAlpha } from '../theme/colorUtils';
+import { TAB_BAR_RADIUS, useTabBarLayout } from '../theme/layout';
 import type { MainTabParamList } from './types';
 import { HomeScreen } from '../features/home/HomeScreen';
 import { DiscoverScreen } from '../features/discover/DiscoverScreen';
@@ -19,32 +27,63 @@ import { customerAppFeatures } from '../utils/customerFeatures';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+function CustomerTabBar({
+  adVisible,
+  bottom,
+  onCloseAd,
+  ...props
+}: BottomTabBarProps & {
+  adVisible: boolean;
+  bottom: number;
+  onCloseAd: () => void;
+}) {
+  return (
+    <>
+      {adVisible ? (
+        <View style={[styles.adContainer, { bottom }]}>
+          <GoogleAdBanner onClose={onCloseAd} />
+        </View>
+      ) : null}
+      <BottomTabBar {...props} />
+    </>
+  );
+}
+
 export function MainTabs() {
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
   const { branding, bootstrap } = useBootstrap();
   const { unreadCount, reload } = useMobileNotifications();
   useNotificationStream({ onNotification: reload });
   const primary = branding?.primaryColor ?? colors.primary;
   const { showShop, showBooking } = customerAppFeatures(bootstrap?.features);
-  const tabBarHeight = useMemo(() => 52 + Math.max(insets.bottom, 8), [insets.bottom]);
+  const { pillHeight, sideInset, bottomOffset } = useTabBarLayout();
+  const [adClosed, setAdClosed] = useState(false);
+  const showGoogleAds =
+    bootstrap?.show_google_ads === true && !adClosed && isGoogleAdMobAvailable();
+  const adBottom = bottomOffset + pillHeight + spacing.xs;
 
   return (
     <Tab.Navigator
+      tabBar={(props) => (
+        <CustomerTabBar
+          {...props}
+          adVisible={showGoogleAds}
+          bottom={adBottom}
+          onCloseAd={() => setAdClosed(true)}
+        />
+      )}
       screenOptions={({ route }) => ({
         headerShown: false,
+        sceneStyle: showGoogleAds ? { paddingBottom: GOOGLE_AD_BANNER_HEIGHT } : undefined,
         tabBarActiveTintColor: primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarHideOnKeyboard: true,
         tabBarAllowFontScaling: false,
         tabBarStyle: [
           styles.tabBar,
-          {
-            height: tabBarHeight,
-            paddingBottom: Math.max(insets.bottom, 6),
-          },
+          { height: pillHeight, start: sideInset, end: sideInset, bottom: bottomOffset },
         ],
-        tabBarItemStyle: styles.tabItem,
+        tabBarBackground: () => <GlassTabBarBackground />,
         tabBarLabelStyle: styles.tabLabel,
         tabBarIcon: ({ color, focused }) => {
           const icons: Record<string, keyof typeof Feather.glyphMap> = {
@@ -56,12 +95,14 @@ export function MainTabs() {
             Profile: 'user',
           };
           return (
-            <Feather
-              name={icons[route.name] ?? 'circle'}
-              size={20}
-              color={color}
-              style={focused ? styles.activeIcon : undefined}
-            />
+            <View
+              style={[
+                styles.iconChip,
+                focused && { backgroundColor: withAlpha(primary, 0.14) },
+              ]}
+            >
+              <Feather name={icons[route.name] ?? 'circle'} size={22} color={color} />
+            </View>
           );
         },
       })}
@@ -87,23 +128,30 @@ export function MainTabs() {
 }
 
 const styles = StyleSheet.create({
+  /** Floating pill: the glass fill and its shadow come from `tabBarBackground`. */
   tabBar: {
-    backgroundColor: colors.card,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 4,
-    elevation: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: -2 },
-      },
-      default: {},
-    }),
+    position: 'absolute',
+    borderRadius: TAB_BAR_RADIUS,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    elevation: 0,
+    paddingHorizontal: spacing.xs,
+    paddingTop: 5,
+    paddingBottom: 5,
   },
-  tabItem: { paddingTop: 2 },
+  /** WhatsApp-style rounded highlight behind the focused icon, label sits below it. */
+  iconChip: {
+    width: 38,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tabLabel: { fontSize: 10, fontWeight: '500', lineHeight: 12, marginTop: 2 },
-  activeIcon: { transform: [{ scale: 1.05 }] },
+  adContainer: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    zIndex: 20,
+  },
 });

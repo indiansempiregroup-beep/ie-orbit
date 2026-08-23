@@ -11,18 +11,23 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.businesses.models import Branch, BranchStatus, Business
 from apps.shopie.models import (
+    DeliveryAttemptStatus,
     DeliveryWebhookStatus,
     OrderStatus,
     ShopBusinessSettings,
+    ShopDeliveryAttempt,
     ShopDeliveryWebhookEvent,
     ShopOrder,
+    TrackingEventSource,
 )
 from apps.shopie.services.delivery.providers import DeliveryQuote, get_delivery_provider
 from apps.shopie.services.delivery_secrets import decrypt_secret, encrypt_secret, mask_secret
 from apps.shopie.services.order_notify import notify_online_order
+from apps.shopie.services.tracking import TrackingHistoryService, canonical_order_status
 from apps.shopie.services.zones import DeliveryZoneService
 from apps.tenancy.models import Tenant
 
@@ -60,6 +65,17 @@ STATUS_ALIASES = {
 }
 
 TERMINAL_PARTNER_STATUSES = {"delivered", "failed", "cancelled"}
+# Forward-only lifecycle: partners retry webhooks and polling races them, so a
+# late ping for an earlier stage must not walk a delivery backwards.
+PARTNER_STATUS_SEQUENCE = (
+    "packing",
+    "finding_rider",
+    "rider_assigned",
+    "at_pickup",
+    "picked_up",
+    "nearby",
+    "delivered",
+)
 WEBHOOK_RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
 
 
@@ -415,7 +431,7 @@ class DeliveryService:
         )
         if order.fulfillment_mode != "delivery":
             raise ValidationError({"order": "Only delivery orders can be dispatched."})
-        if order.status != OrderStatus.READY:
+        if order.status not in {OrderStatus.READY, OrderStatus.DELIVERY_FAILED}:
             raise ValidationError({"order": "Mark the order ready before dispatching."})
         metadata = dict(order.metadata or {})
         if metadata.get("delivery_method") == "standard":
@@ -427,6 +443,7 @@ class DeliveryService:
             raise ValidationError({"delivery": "This order has no instant-delivery quote."})
         if delivery.get("booking_id"):
             return order
+        retrying = order.status == OrderStatus.DELIVERY_FAILED
         settings = self.ensure_settings(tenant=order.tenant, business=order.business)
         if not settings.instant_delivery_enabled:
             raise ValidationError({"delivery": "Instant delivery is not enabled for this shop."})
@@ -467,12 +484,39 @@ class DeliveryService:
                     {"status": status, "occurred_at": now, "label": "Delivery requested"},
                 ],
                 "last_updated": now,
+                # A retry after a failed trip must not keep showing the old reason.
+                "reason": "",
             }
         )
         metadata["delivery"] = delivery
         order.metadata = metadata
-        order.save(update_fields=["metadata", "updated_at", "version"])
-        notify_online_order(order=order, status="finding_rider")
+        if retrying:
+            order.status = OrderStatus.READY
+        order.save(update_fields=["metadata", "status", "updated_at", "version"])
+        history = TrackingHistoryService()
+        if retrying:
+            history.record_status(
+                order=order,
+                status="retrying",
+                source=TrackingEventSource.DISPATCH,
+                source_key=f"retrying:{booking_id}",
+            )
+        attempt = history.open_attempt(
+            order=order,
+            provider=str(delivery.get("provider") or ""),
+            booking_id=booking_id,
+            tracking_url=str(delivery.get("tracking_url") or ""),
+            rider=dict(delivery.get("rider") or {}),
+        )
+        history.record_status(
+            order=order,
+            attempt=attempt,
+            status=status,
+            source=TrackingEventSource.DISPATCH,
+            eta_minutes=delivery.get("eta_minutes"),
+            source_key=f"dispatch:{booking_id}:{status}",
+        )
+        notify_online_order(order=order, status=status)
         return order
 
     def _extract_tracking(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -495,14 +539,102 @@ class DeliveryService:
             "reason": data.get("reason") or data.get("message") or "",
         }
 
+    def _merge_rider(
+        self,
+        *,
+        existing: dict[str, Any],
+        incoming: dict[str, Any],
+    ) -> dict[str, Any]:
+        # Providers routinely omit the rider block on later status pings, so a
+        # partial payload must never blank out details captured at booking.
+        merged = dict(existing)
+        for key, value in incoming.items():
+            if value not in (None, "", {}):
+                merged[key] = value
+        return merged
+
+    def _resolve_partner_status(self, *, previous: str, incoming: str) -> str:
+        if previous == incoming:
+            return incoming
+        if previous in TERMINAL_PARTNER_STATUSES:
+            return previous
+        if incoming in TERMINAL_PARTNER_STATUSES:
+            return incoming
+        try:
+            forward = PARTNER_STATUS_SEQUENCE.index(incoming) > PARTNER_STATUS_SEQUENCE.index(
+                previous
+            )
+        except ValueError:
+            return incoming
+        return incoming if forward else previous
+
+    def _order_status_for_partner_status(self, *, order: ShopOrder, status: str) -> str:
+        if status == "delivered":
+            return OrderStatus.COMPLETED
+        if status in {"picked_up", "nearby"}:
+            return OrderStatus.OUT_FOR_DELIVERY
+        if status in {"failed", "cancelled"}:
+            # Cancelling the order itself stays a merchant decision because it
+            # has to release stock and coupons.
+            if order.status in {OrderStatus.READY, OrderStatus.OUT_FOR_DELIVERY}:
+                return OrderStatus.DELIVERY_FAILED
+            return order.status
+        return order.status
+
+    def _archive_failed_booking(self, delivery: dict[str, Any]) -> dict[str, Any]:
+        """Retire a dead booking so the shop can request a fresh rider.
+
+        The quote is kept for the retry, and the attempt is filed under
+        `attempts` so the failed rider's details are not lost.
+        """
+        if not delivery.get("booking_id"):
+            return delivery
+        delivery["attempts"] = [
+            *(delivery.get("attempts") or []),
+            {
+                "booking_id": delivery.get("booking_id"),
+                "partner_status": delivery.get("partner_status"),
+                "rider": delivery.get("rider") or {},
+                "reason": delivery.get("reason") or "",
+                "ended_at": timezone.now().isoformat(),
+            },
+        ]
+        for key in ("booking_id", "tracking_url", "rider", "rider_lat", "rider_lng"):
+            delivery.pop(key, None)
+        return delivery
+
     @transaction.atomic
-    def apply_tracking(self, *, order: ShopOrder, payload: dict[str, Any]) -> ShopOrder:
+    def apply_tracking(
+        self,
+        *,
+        order: ShopOrder,
+        payload: dict[str, Any],
+        source: str = TrackingEventSource.POLL,
+        source_key: str = "",
+        webhook_event: ShopDeliveryWebhookEvent | None = None,
+        attempt: ShopDeliveryAttempt | None = None,
+    ) -> ShopOrder:
         order = ShopOrder.objects.select_for_update().get(id=order.id)
         metadata = dict(order.metadata or {})
         delivery = dict(metadata.get("delivery") or {})
         tracking = self._extract_tracking(payload)
+        history = TrackingHistoryService()
+        attempt = attempt or history.active_attempt(order=order)
+        if attempt is not None and attempt.status != DeliveryAttemptStatus.ACTIVE:
+            # A delayed webhook for an archived attempt is acknowledged and
+            # retained in ShopDeliveryWebhookEvent, but it must not rewrite or
+            # extend the customer-visible history after that attempt closed.
+            return order
         previous = str(delivery.get("partner_status") or "")
-        current = tracking["partner_status"]
+        current = self._resolve_partner_status(
+            previous=previous,
+            incoming=tracking["partner_status"],
+        )
+        tracking["partner_status"] = current
+        delivery["rider"] = self._merge_rider(
+            existing=dict(delivery.get("rider") or {}),
+            incoming=dict(tracking.pop("rider") or {}),
+        )
         for key, value in tracking.items():
             if value not in (None, "", {}):
                 delivery[key] = value
@@ -517,16 +649,89 @@ class DeliveryService:
                 },
             ]
         delivery["last_updated"] = timezone.now().isoformat()
+        order.status = self._order_status_for_partner_status(order=order, status=current)
+        if current in {"failed", "cancelled"}:
+            delivery = self._archive_failed_booking(delivery)
         metadata["delivery"] = delivery
         order.metadata = metadata
-        if current in {"picked_up", "nearby"}:
-            order.status = OrderStatus.OUT_FOR_DELIVERY
-        elif current == "delivered":
-            order.status = OrderStatus.COMPLETED
         order.save(update_fields=["metadata", "status", "updated_at", "version"])
+        if attempt is not None:
+            history.update_attempt(
+                attempt=attempt,
+                rider=dict(delivery.get("rider") or {}),
+                tracking_url=str(delivery.get("tracking_url") or ""),
+            )
+        if current != previous:
+            history.record_status(
+                order=order,
+                attempt=attempt,
+                status=current,
+                source=source,
+                source_key=f"{source_key}:status" if source_key else "",
+                webhook_event=webhook_event,
+                reason=str(tracking.get("reason") or ""),
+                eta_minutes=tracking.get("eta_minutes"),
+            )
+        history.record_location(
+            order=order,
+            attempt=attempt,
+            latitude=tracking.get("rider_lat"),
+            longitude=tracking.get("rider_lng"),
+            source=source,
+            status=current,
+            eta_minutes=tracking.get("eta_minutes"),
+            source_key=f"{source_key}:location" if source_key else "",
+            webhook_event=webhook_event,
+        )
+        if attempt is not None and current in TERMINAL_PARTNER_STATUSES:
+            attempt_status = {
+                "delivered": DeliveryAttemptStatus.DELIVERED,
+                "failed": DeliveryAttemptStatus.FAILED,
+                "cancelled": DeliveryAttemptStatus.CANCELLED,
+            }[current]
+            history.update_attempt(
+                attempt=attempt,
+                status=attempt_status,
+                reason=str(tracking.get("reason") or ""),
+                ended_at=timezone.now(),
+            )
         if current != previous:
             notify_online_order(order=order, status=current)
         return order
+
+    def simulate_tracking(self, *, order: ShopOrder, status: str = "") -> ShopOrder:
+        """Advance a mock booking by hand so testers can step the lifecycle.
+
+        Restricted to the mock provider: a shop wired to a real partner must
+        only ever move on partner-reported events.
+        """
+        delivery = dict((order.metadata or {}).get("delivery") or {})
+        if not delivery.get("booking_id"):
+            raise ValidationError({"delivery": "Dispatch the order before simulating tracking."})
+        settings = self.ensure_settings(tenant=order.tenant, business=order.business)
+        config = self._decrypted_config(settings)
+        if str(config.get("provider") or "") != "mock":
+            raise ValidationError(
+                {"delivery": "Tracking can only be simulated on the mock provider."}
+            )
+        current = normalize_partner_status(delivery.get("partner_status"))
+        if status:
+            target = normalize_partner_status(status)
+        elif current in TERMINAL_PARTNER_STATUSES:
+            target = current
+        else:
+            index = PARTNER_STATUS_SEQUENCE.index(current)
+            target = PARTNER_STATUS_SEQUENCE[min(index + 1, len(PARTNER_STATUS_SEQUENCE) - 1)]
+        return self.apply_tracking(
+            order=order,
+            payload={
+                "booking_id": delivery["booking_id"],
+                "partner_status": target,
+                "rider": delivery.get("rider") or {},
+            },
+            source=TrackingEventSource.SIMULATION,
+            source_key=f"simulation:{delivery['booking_id']}:{target}",
+        )
 
     def refresh_tracking(self, *, order: ShopOrder) -> ShopOrder:
         delivery = (order.metadata or {}).get("delivery") or {}
@@ -535,34 +740,62 @@ class DeliveryService:
             return order
         settings = self.ensure_settings(tenant=order.tenant, business=order.business)
         provider = get_delivery_provider(self._decrypted_config(settings))
-        return self.apply_tracking(order=order, payload=provider.track(booking_id))
+        return self.apply_tracking(
+            order=order,
+            payload=provider.track(booking_id),
+            source=TrackingEventSource.POLL,
+        )
 
     def live_payload(self, *, order: ShopOrder, refresh: bool = False) -> dict[str, Any]:
         if refresh:
             order = self.refresh_tracking(order=order)
         delivery = dict((order.metadata or {}).get("delivery") or {})
-        status = str(delivery.get("partner_status") or "packing")
+        status = str(
+            delivery.get("partner_status")
+            or canonical_order_status(order, order.status)
+            or "order_placed"
+        )
         rider = dict(delivery.get("rider") or {})
         eta = delivery.get("eta_minutes")
         rider_name = str(rider.get("name") or "").strip()
         headlines = {
+            "order_placed": "Order placed",
+            "confirmed": "Order confirmed",
             "packing": "The shop is packing your order",
+            "packed": "Packed and ready",
             "finding_rider": "Finding a delivery rider",
             "rider_assigned": f"{rider_name or 'Your rider'} is heading to the shop",
             "at_pickup": "Your rider is at the shop",
             "picked_up": f"{rider_name or 'Your rider'} is on the way",
+            "out_for_delivery": "Your order is out for delivery",
             "nearby": "Your delivery is nearby",
             "delivered": "Delivered",
+            "delivery_failed": "Delivery needs attention",
+            "delivery_cancelled": "Delivery was cancelled",
+            "retrying": "The shop is requesting another rider",
             "failed": "Delivery needs attention",
             "cancelled": "Delivery was cancelled",
         }
         headline = headlines.get(status, "Delivery update")
         if eta and status not in TERMINAL_PARTNER_STATUSES:
             headline = f"{headline} · {eta} min"
+        history = TrackingHistoryService().payload(order=order)
+        events = history["events"] or delivery.get("events") or []
+        last_updated = delivery.get("last_updated")
+        parsed_last_updated = parse_datetime(str(last_updated or ""))
+        terminal = order.status in {OrderStatus.COMPLETED, OrderStatus.CANCELLED}
+        stale = bool(
+            not terminal
+            and parsed_last_updated
+            and (timezone.now() - parsed_last_updated).total_seconds() > 45
+        )
         return {
-            "available": bool(delivery),
+            "available": order.fulfillment_mode == "delivery",
             "order_id": str(order.id),
+            "order_status": order.status,
+            "delivery_method": str((order.metadata or {}).get("delivery_method") or "standard"),
             "provider": delivery.get("provider"),
+            "dispatched": bool(delivery.get("booking_id")),
             "partner_status": status,
             "headline": headline,
             "subtitle": delivery.get("reason") or "",
@@ -574,11 +807,15 @@ class DeliveryService:
                 "latitude": delivery.get("rider_lat"),
                 "longitude": delivery.get("rider_lng"),
             },
-            "events": delivery.get("events") or [],
+            "events": events,
+            "attempts": history["attempts"],
+            "active_attempt_number": history["active_attempt_number"],
+            "location_trail": history["location_trail"],
             "tracking_url": delivery.get("tracking_url") or "",
             "can_call_rider": bool(rider.get("phone")),
-            "last_updated": delivery.get("last_updated"),
-            "terminal": status in TERMINAL_PARTNER_STATUSES,
+            "last_updated": last_updated or (events[-1].get("occurred_at") if events else None),
+            "terminal": terminal,
+            "stale": stale,
         }
 
     def verify_webhook(
@@ -641,17 +878,27 @@ class DeliveryService:
         )
         if not created:
             return {"accepted": True, "duplicate": True, "event_id": event_id}
+        attempt = TrackingHistoryService().attempt_for_booking(booking_id=booking_id)
         order = ShopOrder.objects.filter(
             tenant=business.tenant,
             business=business,
             metadata__delivery__booking_id=booking_id,
         ).first()
+        if order is None and attempt is not None and attempt.business_id == business.id:
+            order = attempt.order
         if order is None:
             event.status = DeliveryWebhookStatus.IGNORED
             event.error_message = "No matching order."
         else:
             try:
-                order = self.apply_tracking(order=order, payload=payload)
+                order = self.apply_tracking(
+                    order=order,
+                    payload=payload,
+                    source=TrackingEventSource.WEBHOOK,
+                    source_key=f"webhook:{provider}:{event_id}",
+                    webhook_event=event,
+                    attempt=attempt,
+                )
                 event.order = order
                 event.status = DeliveryWebhookStatus.PROCESSED
                 event.processed_at = timezone.now()
@@ -696,11 +943,14 @@ class DeliveryService:
             or (payload.get("data") or {}).get("booking_id")
             or ""
         )
+        attempt = TrackingHistoryService().attempt_for_booking(booking_id=booking_id)
         order = ShopOrder.objects.filter(
             tenant=event.tenant,
             business=event.business,
             metadata__delivery__booking_id=booking_id,
         ).first()
+        if order is None and attempt is not None and attempt.business_id == event.business_id:
+            order = attempt.order
         if order is None:
             event.status = DeliveryWebhookStatus.IGNORED
             event.error_message = "No matching order."
@@ -708,7 +958,14 @@ class DeliveryService:
             event.save()
             return {"processed": False, "status": event.status}
         try:
-            order = self.apply_tracking(order=order, payload=payload)
+            order = self.apply_tracking(
+                order=order,
+                payload=payload,
+                source=TrackingEventSource.WEBHOOK,
+                source_key=f"webhook:{event.provider}:{event.external_event_id}",
+                webhook_event=event,
+                attempt=attempt,
+            )
             event.order = order
             event.status = DeliveryWebhookStatus.PROCESSED
             event.processed_at = timezone.now()

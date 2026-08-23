@@ -119,6 +119,13 @@ coverage/
 .expo-shared/
 web-build/
 
+# Firebase / FCM — keep *.example.json; never commit real keys or service accounts
+google-services.json
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+**/credentials/google-services/*.json
+!**/google-services.example.json
+
 ############################################################
 # React Native
 ############################################################

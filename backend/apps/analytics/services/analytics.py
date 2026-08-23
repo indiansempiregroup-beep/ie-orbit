@@ -570,7 +570,12 @@ class AnalyticsService:
             .count()
         )
         open_orders = orders_qs.filter(
-            status__in=[OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.READY]
+            status__in=[
+                OrderStatus.PENDING,
+                OrderStatus.CONFIRMED,
+                OrderStatus.READY,
+                OrderStatus.DELIVERY_FAILED,
+            ]
         ).count()
 
         return {

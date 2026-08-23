@@ -8,7 +8,7 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { useMobileNotifications } from '../../hooks/useMobileNotifications';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { useScreenInsets } from '../../theme/layout';
+import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatRelativeTime } from '../../utils/format';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -33,6 +33,7 @@ export function NotificationsScreen() {
   const navigation = useNavigation<Nav>();
   const { branding } = useBootstrap();
   const { headerPaddingTop } = useScreenInsets();
+  const { contentInset } = useTabBarLayout();
   const primary = branding?.primaryColor ?? colors.primary;
   const { notifications, loading, error, reload, markAllRead, markRead } = useMobileNotifications();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
@@ -56,7 +57,10 @@ export function NotificationsScreen() {
 
       <RefreshableScrollView
         style={styles.list}
-        contentContainerStyle={!notifications.length ? styles.emptyContainer : undefined}
+        contentContainerStyle={[
+          !notifications.length ? styles.emptyContainer : undefined,
+          { paddingBottom: contentInset },
+        ]}
         refreshing={refreshing}
         onRefresh={onRefresh}
         primaryColor={primary}

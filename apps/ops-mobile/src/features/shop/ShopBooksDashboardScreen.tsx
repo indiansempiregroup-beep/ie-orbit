@@ -14,6 +14,7 @@ import { MenuRow } from '../../components/ui/MenuRow';
 import { MenuSection } from '../../components/ui/MenuSection';
 import { TileGrid } from '../../components/ui/TileGrid';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksDashboard } from '@ie-platform/sdk';
@@ -27,6 +28,7 @@ export function ShopBooksDashboardScreen() {
   const client = useOpsClient();
   const { businessId } = useWorkspace();
   const { isDesktop } = useBreakpoint();
+  const { contentInset } = useTabBarLayout();
   const { has } = usePlanFeatures();
   const [dashboard, setDashboard] = useState<ShopBooksDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,7 +89,7 @@ export function ShopBooksDashboardScreen() {
           scrollYRef.current = event.nativeEvent.contentOffset.y;
         }}
         scrollEventThrottle={16}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ paddingBottom: contentInset }}
       >
         <OpsHeader title={t('nav.shopBooks')} subtitle="Cash, documents & reports" compact />
 
@@ -426,7 +428,6 @@ function CounterTile({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { paddingBottom: spacing.xxxl },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   bodyDesktop: { paddingHorizontal: 0 },
   /** Gap must live on DesktopContent's wrapper — body only has that one child. */

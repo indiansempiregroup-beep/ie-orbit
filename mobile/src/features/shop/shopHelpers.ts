@@ -188,10 +188,10 @@ export function isShopOrderUnpaid(order: Pick<ShopOrder, 'payment_status'>): boo
 
 export function shopOrderStatusTone(status?: string | null): ShopOrderStatusTone {
   const value = String(status || '').toLowerCase();
-  if (value === 'completed') return 'success';
-  if (value === 'ready' || value === 'confirmed' || value === 'out_for_delivery') return 'info';
-  if (value === 'pending') return 'warning';
-  if (value === 'cancelled') return 'danger';
+  if (value === 'completed' || value === 'delivered') return 'success';
+  if (['ready', 'packed', 'confirmed', 'out_for_delivery'].includes(value)) return 'info';
+  if (value === 'pending' || value === 'order_placed') return 'warning';
+  if (['cancelled', 'delivery_cancelled', 'delivery_failed', 'failed'].includes(value)) return 'danger';
   return 'muted';
 }
 
@@ -210,7 +210,50 @@ export function shopOrderStatusColors(tone: ShopOrderStatusTone): { bg: string; 
   }
 }
 
-export function shopOrderHeadline(order: Pick<ShopOrder, 'status' | 'fulfillment_mode'>): {
+const PARTNER_HEADLINES: Record<
+  string,
+  { title: string; subtitle: string; tone: ShopOrderStatusTone }
+> = {
+  finding_rider: {
+    title: 'Finding your rider',
+    subtitle: 'The shop is looking for a rider to pick up your parcel.',
+    tone: 'warning',
+  },
+  rider_assigned: {
+    title: 'Rider assigned',
+    subtitle: 'Your rider is heading to the shop for pickup.',
+    tone: 'info',
+  },
+  at_pickup: {
+    title: 'Rider at the shop',
+    subtitle: 'Your rider is collecting the parcel now.',
+    tone: 'info',
+  },
+  picked_up: {
+    title: 'On the way',
+    subtitle: 'Your order is with the rider and on the way.',
+    tone: 'info',
+  },
+  nearby: {
+    title: 'Almost there',
+    subtitle: 'Your rider is close by. Keep your phone handy.',
+    tone: 'info',
+  },
+  failed: {
+    title: 'Delivery needs attention',
+    subtitle: 'The delivery could not be completed. The shop will get in touch.',
+    tone: 'danger',
+  },
+  cancelled: {
+    title: 'Delivery cancelled',
+    subtitle: 'The rider trip was cancelled. The shop still has your order.',
+    tone: 'danger',
+  },
+};
+
+export function shopOrderHeadline(
+  order: Pick<ShopOrder, 'status' | 'fulfillment_mode' | 'metadata'>,
+): {
   title: string;
   subtitle: string;
   tone: ShopOrderStatusTone;
@@ -218,17 +261,36 @@ export function shopOrderHeadline(order: Pick<ShopOrder, 'status' | 'fulfillment
   const status = String(order.status || '').toLowerCase();
   const delivery = String(order.fulfillment_mode || '').toLowerCase() === 'delivery';
   const tone = shopOrderStatusTone(status);
-  if (status === 'cancelled') {
+  if (status === 'cancelled' || status === 'delivery_cancelled') {
     return { title: 'Cancelled', subtitle: 'This order was cancelled.', tone };
   }
-  if (status === 'completed') {
+  if (status === 'delivery_failed' || status === 'failed') {
+    return {
+      title: 'Delivery needs attention',
+      subtitle: 'The delivery could not be completed. The shop is arranging the next step.',
+      tone,
+    };
+  }
+  // A dispatched rider is more specific than the order's own status, which
+  // stays on "ready" until the parcel is actually picked up.
+  const meta =
+    order.metadata && typeof order.metadata === 'object'
+      ? ((order.metadata as Record<string, unknown>).delivery as
+          | { booking_id?: string; partner_status?: string }
+          | undefined)
+      : undefined;
+  if (!['completed', 'delivered'].includes(status) && meta?.partner_status) {
+    const partner = PARTNER_HEADLINES[String(meta.partner_status || '').toLowerCase()];
+    if (partner) return partner;
+  }
+  if (status === 'completed' || status === 'delivered') {
     return {
       title: delivery ? 'Delivered' : 'Picked up',
       subtitle: delivery ? 'Your order has been delivered.' : 'Your order has been collected.',
       tone,
     };
   }
-  if (status === 'ready') {
+  if (status === 'ready' || status === 'packed') {
     return {
       title: delivery ? 'Packed and ready' : 'Ready for pickup',
       subtitle: delivery
@@ -255,6 +317,27 @@ export function shopOrderHeadline(order: Pick<ShopOrder, 'status' | 'fulfillment
     title: 'Order placed',
     subtitle: 'We have received your order and will update you soon.',
     tone,
+  };
+}
+
+export function shopOrderDeliverySummary(
+  order: Pick<ShopOrder, 'status' | 'fulfillment_mode' | 'metadata'>,
+): { active: boolean; statusLabel: string; etaLabel: string | null; actionLabel: 'Track' | 'View' } | null {
+  if (String(order.fulfillment_mode || '').toLowerCase() !== 'delivery') return null;
+  const status = String(order.status || '').toLowerCase();
+  const metadata = order.metadata && typeof order.metadata === 'object'
+    ? (order.metadata as Record<string, unknown>)
+    : {};
+  const delivery = metadata.delivery && typeof metadata.delivery === 'object'
+    ? (metadata.delivery as Record<string, unknown>)
+    : {};
+  const eta = Number(delivery.eta_minutes ?? metadata.eta_minutes);
+  const terminal = ['completed', 'delivered', 'cancelled'].includes(status);
+  return {
+    active: !terminal,
+    statusLabel: shopOrderHeadline(order).title,
+    etaLabel: !terminal && Number.isFinite(eta) && eta > 0 ? `${Math.round(eta)} min` : null,
+    actionLabel: terminal ? 'View' : 'Track',
   };
 }
 
@@ -317,11 +400,16 @@ export function shopOrderTimeline(order: Pick<ShopOrder, 'status' | 'fulfillment
   const status = String(order.status || '').toLowerCase();
   const delivery = String(order.fulfillment_mode || '').toLowerCase() === 'delivery';
   const rankByStatus: Record<string, number> = {
+    order_placed: 0,
     pending: 0,
     confirmed: 1,
+    packed: 2,
     ready: 2,
     out_for_delivery: 3,
+    // A failed trip puts the parcel back at the packed step, awaiting a retry.
+    delivery_failed: 2,
     completed: delivery ? 4 : 3,
+    delivered: delivery ? 4 : 3,
     cancelled: -1,
   };
   const rank = rankByStatus[status] ?? 0;
@@ -350,9 +438,14 @@ export function shopOrderMatchesFilters(
   },
 ): boolean {
   const status = String(order.status || '').toLowerCase();
-  if (filters.status === 'processing' && !['pending', 'confirmed'].includes(status)) return false;
-  if (filters.status === 'ready' && status !== 'ready') return false;
-  if (filters.status === 'completed' && status !== 'completed') return false;
+  if (
+    filters.status === 'processing' &&
+    !['order_placed', 'pending', 'confirmed', 'out_for_delivery', 'delivery_failed'].includes(status)
+  ) {
+    return false;
+  }
+  if (filters.status === 'ready' && !['ready', 'packed'].includes(status)) return false;
+  if (filters.status === 'completed' && !['completed', 'delivered'].includes(status)) return false;
   if (filters.status === 'cancelled' && status !== 'cancelled') return false;
 
   const mode = String(order.fulfillment_mode || '').toLowerCase();

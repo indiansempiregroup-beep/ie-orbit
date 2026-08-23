@@ -11,6 +11,8 @@
  */
 process.env.EXPO_NO_METRO_WORKSPACE_ROOT = '1';
 
+require('../../scripts/load-root-env.cjs').loadRootEnv();
+
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');

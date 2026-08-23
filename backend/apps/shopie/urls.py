@@ -21,11 +21,13 @@ from apps.shopie.api.compliance_views import (
     ShopVoucherEInvoiceView,
     ShopVoucherEWayView,
 )
+from apps.shopie.api.coupon_views import ShopCouponDetailView, ShopCouponListCreateView
 from apps.shopie.api.delivery_views import (
     ShopDeliveryQuoteView,
     ShopDeliverySettingsView,
     ShopDeliveryWebhookView,
     ShopOrderDeliveryLiveView,
+    ShopOrderDeliverySimulateView,
     ShopOrderDispatchView,
 )
 from apps.shopie.api.extended_books_views import (
@@ -51,7 +53,6 @@ from apps.shopie.api.extended_views import (
     ShopReturnListCreateView,
     ShopSettingsView,
 )
-from apps.shopie.api.coupon_views import ShopCouponDetailView, ShopCouponListCreateView
 from apps.shopie.api.grow_views import (
     ShopCustomerReferralCodeMineView,
     ShopCustomerReferralListView,
@@ -59,6 +60,7 @@ from apps.shopie.api.grow_views import (
     ShopDashboardAdListCreateView,
 )
 from apps.shopie.api.views import (
+    MerchantPaymentSettingsView,
     ShopBarcodeEnrichView,
     ShopBarcodeLookupView,
     ShopInvoiceFromOrderView,
@@ -66,6 +68,10 @@ from apps.shopie.api.views import (
     ShopOrderConfirmPaymentView,
     ShopOrderDetailView,
     ShopOrderListCreateView,
+    ShopOrderCashfreeCheckoutView,
+    ShopOrderCashfreeVerifyView,
+    ShopOrderRazorpayCheckoutView,
+    ShopOrderRazorpayVerifyView,
     ShopOrderSettlePaymentView,
     ShopOrderStatusView,
     ShopPackagingAnalyzeStatusView,
@@ -74,6 +80,8 @@ from apps.shopie.api.views import (
     ShopProductListCreateView,
     ShopProductOfficeStockView,
     ShopQuotationListCreateView,
+    ShopCashfreeWebhookView,
+    ShopRazorpayWebhookView,
     ShopStockAdjustView,
     ShopStockMovementListView,
 )
@@ -108,6 +116,26 @@ urlpatterns = [
     path("shop/orders", ShopOrderListCreateView.as_view(), name="shop-order-list-create"),
     path("shop/orders/<uuid:order_id>", ShopOrderDetailView.as_view(), name="shop-order-detail"),
     path(
+        "shop/orders/<uuid:order_id>/razorpay-checkout",
+        ShopOrderRazorpayCheckoutView.as_view(),
+        name="shop-order-razorpay-checkout",
+    ),
+    path(
+        "shop/orders/<uuid:order_id>/razorpay-verify",
+        ShopOrderRazorpayVerifyView.as_view(),
+        name="shop-order-razorpay-verify",
+    ),
+    path(
+        "shop/orders/<uuid:order_id>/cashfree-checkout",
+        ShopOrderCashfreeCheckoutView.as_view(),
+        name="shop-order-cashfree-checkout",
+    ),
+    path(
+        "shop/orders/<uuid:order_id>/cashfree-verify",
+        ShopOrderCashfreeVerifyView.as_view(),
+        name="shop-order-cashfree-verify",
+    ),
+    path(
         "shop/orders/<uuid:order_id>/dispatch",
         ShopOrderDispatchView.as_view(),
         name="shop-order-dispatch",
@@ -116,6 +144,11 @@ urlpatterns = [
         "shop/orders/<uuid:order_id>/delivery-live",
         ShopOrderDeliveryLiveView.as_view(),
         name="shop-order-delivery-live",
+    ),
+    path(
+        "shop/orders/<uuid:order_id>/delivery-simulate",
+        ShopOrderDeliverySimulateView.as_view(),
+        name="shop-order-delivery-simulate",
     ),
     path(
         "shop/orders/<uuid:order_id>/status",
@@ -146,6 +179,21 @@ urlpatterns = [
         name="shop-delivery-zone-detail",
     ),
     path("shop/settings", ShopSettingsView.as_view(), name="shop-settings"),
+    path(
+        "shop/payment-settings",
+        MerchantPaymentSettingsView.as_view(),
+        name="shop-payment-settings",
+    ),
+    path(
+        "shop/payment-webhooks/razorpay/<uuid:business_id>",
+        ShopRazorpayWebhookView.as_view(),
+        name="shop-razorpay-webhook",
+    ),
+    path(
+        "shop/payment-webhooks/cashfree/<uuid:business_id>",
+        ShopCashfreeWebhookView.as_view(),
+        name="shop-cashfree-webhook",
+    ),
     path(
         "shop/delivery-settings",
         ShopDeliverySettingsView.as_view(),

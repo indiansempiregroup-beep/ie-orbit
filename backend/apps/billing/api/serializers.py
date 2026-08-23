@@ -8,6 +8,11 @@ from apps.billing.models import BillingWebhookEvent
 class BillingCheckoutSerializer(serializers.Serializer):
     product_code = serializers.SlugField()
     plan_code = serializers.SlugField()
+    provider = serializers.ChoiceField(
+        choices=["razorpay", "cashfree"],
+        required=False,
+        allow_blank=True,
+    )
 
 
 class BillingCheckoutResponseSerializer(serializers.Serializer):

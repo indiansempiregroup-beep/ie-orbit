@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { useApiClient } from '../../hooks/useApiClient';
+import { getApiErrorMessage } from '../../lib/apiClient';
 import { useShopReturnMutations, useShopReturns } from './shopHooks';
+import {
+  shopOrderDeliveryMethod,
+  shopOrderStatusLabel,
+} from './shopOrderStatus';
+import { DeliveryRouteMap } from './DeliveryRouteMap';
 
 export function ShopOrderDetailPage() {
   const { orderId = '' } = useParams();
@@ -36,11 +41,7 @@ export function ShopOrderDetailPage() {
   });
   const deliveryLive = useQuery({
     queryKey: ['shop-order-delivery-live', orderId],
-    enabled: Boolean(
-      order.data?.metadata &&
-        typeof order.data.metadata === 'object' &&
-        order.data.metadata.delivery,
-    ),
+    enabled: order.data?.fulfillment_mode === 'delivery',
     queryFn: async () => {
       const response = await client.shop.getOrderDeliveryLive(orderId, true);
       return response.data;
@@ -57,6 +58,68 @@ export function ShopOrderDetailPage() {
       void deliveryLive.refetch();
     },
   });
+  const updateStatus = useMutation({
+    mutationFn: async (status: string) => {
+      const response = await client.shop.setOrderStatus(orderId, { status });
+      return response.data;
+    },
+    onSuccess: () => {
+      void order.refetch();
+      void deliveryLive.refetch();
+    },
+    onError: (error) => {
+      setMessage(getApiErrorMessage(error, 'Unable to update delivery status.'));
+    },
+  });
+  const simulateDelivery = useMutation({
+    mutationFn: async () => {
+      const response = await client.shop.simulateOrderDelivery(orderId);
+      return response.data;
+    },
+    onSuccess: () => {
+      void order.refetch();
+      void deliveryLive.refetch();
+    },
+  });
+
+  useEffect(() => {
+    if (
+      deliveryLive.data?.order_status &&
+      order.data?.status &&
+      deliveryLive.data.order_status !== order.data.status
+    ) {
+      void order.refetch();
+    }
+  }, [deliveryLive.data?.order_status, order.data?.status, order.refetch]);
+
+  const deliveryGroups = useMemo(() => {
+    const live = deliveryLive.data;
+    if (!live) return [];
+    const attempts = [...(live.attempts ?? [])].sort((a, b) => a.attempt_number - b.attempt_number);
+    const events = [...(live.events ?? [])].sort(
+      (a, b) =>
+        (a.occurred_at ? new Date(a.occurred_at).getTime() : 0) -
+        (b.occurred_at ? new Date(b.occurred_at).getTime() : 0),
+    );
+    const numbers = new Set<number>();
+    attempts.forEach((attempt) => numbers.add(attempt.attempt_number));
+    events.forEach((event) => {
+      if (event.attempt_number != null) numbers.add(event.attempt_number);
+    });
+    if (!numbers.size) return events.length ? [{ number: null, attempt: null, events }] : [];
+    const groups: Array<{
+      number: number | null;
+      attempt: (typeof attempts)[number] | null;
+      events: typeof events;
+    }> = [...numbers].sort((a, b) => a - b).map((number) => ({
+      number,
+      attempt: attempts.find((attempt) => attempt.attempt_number === number) ?? null,
+      events: events.filter((event) => event.attempt_number === number),
+    }));
+    const unassigned = events.filter((event) => event.attempt_number == null);
+    if (unassigned.length) groups.unshift({ number: null, attempt: null, events: unassigned });
+    return groups;
+  }, [deliveryLive.data]);
 
   if (order.isLoading) return <p>Loading…</p>;
   if (order.error || !order.data) return <p role="alert">Order not found.</p>;
@@ -79,14 +142,22 @@ export function ShopOrderDetailPage() {
           | undefined
       : undefined;
   const shortfall = fulfillment?.shortfall ?? [];
-  const orderMetadata =
-    data.metadata && typeof data.metadata === 'object'
-      ? (data.metadata as Record<string, unknown>)
-      : {};
-  const deliveryMethod = String(orderMetadata.delivery_method || '');
-  const isInstantDelivery =
-    deliveryMethod === 'instant' ||
-    (!deliveryMethod && typeof orderMetadata.delivery === 'object' && orderMetadata.delivery !== null);
+  const deliveryMethod = shopOrderDeliveryMethod(data);
+  const isInstantDelivery = deliveryMethod === 'instant';
+  const activeDeliveryAttempt = deliveryLive.data?.attempts?.find(
+    (attempt) => attempt.attempt_number === deliveryLive.data?.active_attempt_number,
+  );
+  const liveRider = deliveryLive.data?.rider ?? activeDeliveryAttempt?.rider;
+  const deliveryTrackingUrl = deliveryLive.data?.tracking_url ?? activeDeliveryAttempt?.tracking_url;
+  const deliveryFailureReason =
+    deliveryLive.data?.events
+      ?.slice()
+      .reverse()
+      .find((event) => event.reason)?.reason ??
+    deliveryLive.data?.attempts
+      ?.slice()
+      .reverse()
+      .find((attempt) => attempt.reason)?.reason;
 
   async function processReturn(event: React.FormEvent) {
     event.preventDefault();
@@ -126,7 +197,7 @@ export function ShopOrderDetailPage() {
           <div>
             <strong>{data.order_number}</strong>
             <div style={{ opacity: 0.8 }}>
-              {data.status} ·{' '}
+              {shopOrderStatusLabel(data)} ·{' '}
               {data.fulfillment_mode === 'delivery'
                 ? deliveryMethod === 'instant'
                   ? 'deliver now'
@@ -135,7 +206,9 @@ export function ShopOrderDetailPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {data.fulfillment_mode === 'delivery' && data.status === 'ready' && isInstantDelivery ? (
+            {data.fulfillment_mode === 'delivery' &&
+            ['ready', 'delivery_failed'].includes(data.status) &&
+            isInstantDelivery ? (
               <Button
                 type="button"
                 variant="primary"
@@ -149,7 +222,47 @@ export function ShopOrderDetailPage() {
                     );
                 }}
               >
-                {dispatch.isPending ? 'Requesting rider…' : 'Dispatch'}
+                {dispatch.isPending
+                  ? 'Requesting rider…'
+                  : data.status === 'delivery_failed'
+                    ? 'Retry dispatch'
+                    : 'Dispatch'}
+              </Button>
+            ) : null}
+            {data.fulfillment_mode === 'delivery' &&
+            !isInstantDelivery &&
+            data.status === 'ready' ? (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={updateStatus.isPending}
+                onClick={() => updateStatus.mutate('out_for_delivery')}
+              >
+                Mark out for delivery
+              </Button>
+            ) : null}
+            {data.fulfillment_mode === 'delivery' &&
+            !isInstantDelivery &&
+            ['out_for_delivery', 'delivery_failed'].includes(data.status) ? (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={updateStatus.isPending}
+                onClick={() => updateStatus.mutate('completed')}
+              >
+                Mark delivered
+              </Button>
+            ) : null}
+            {data.fulfillment_mode === 'delivery' &&
+            isInstantDelivery &&
+            data.status === 'delivery_failed' ? (
+              <Button
+                type="button"
+                variant="neutral"
+                disabled={updateStatus.isPending}
+                onClick={() => updateStatus.mutate('completed')}
+              >
+                Mark delivered
               </Button>
             ) : null}
             <Link to="/shop/billing">
@@ -228,54 +341,103 @@ export function ShopOrderDetailPage() {
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div>
-              <h2 style={{ margin: 0 }}>Live delivery</h2>
-              <p style={{ margin: '6px 0 0', fontWeight: 700 }}>{deliveryLive.data.headline}</p>
+              <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800, letterSpacing: '.08em' }}>
+                {isInstantDelivery ? 'DELIVERY PARTNER' : 'STANDARD DELIVERY'}
+              </div>
+              <h2 style={{ margin: '4px 0 0', fontSize: 28 }}>{deliveryLive.data.headline}</h2>
+              {deliveryLive.data.subtitle ? (
+                <p style={{ margin: '5px 0 0', color: '#6b7280' }}>{deliveryLive.data.subtitle}</p>
+              ) : null}
+              <div style={{ marginTop: 6, color: deliveryLive.data.stale ? '#b45309' : '#047857', fontSize: 13 }}>
+                {deliveryLive.data.stale ? 'Location may be stale' : 'Tracking up to date'}
+                {deliveryLive.data.last_updated
+                  ? ` · ${new Date(deliveryLive.data.last_updated).toLocaleString()}`
+                  : ''}
+              </div>
+              {deliveryFailureReason ? (
+                <p style={{ color: '#b42318', margin: '6px 0 0' }}>{deliveryFailureReason}</p>
+              ) : null}
             </div>
-            {deliveryLive.data.rider?.phone ? (
-              <a href={`tel:${deliveryLive.data.rider.phone}`}>
-                <Button type="button" variant="neutral">Call rider</Button>
-              </a>
+            {deliveryLive.data.eta_minutes != null ? (
+              <div style={{ minWidth: 100, borderRadius: 14, background: 'var(--muted, #f3f4f6)', padding: '12px 16px', textAlign: 'center' }}>
+                <strong style={{ display: 'block', fontSize: 26 }}>{deliveryLive.data.eta_minutes}</strong>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>min ETA</span>
+              </div>
             ) : null}
           </div>
-          <div style={{ marginTop: 16 }}>
-            <AddressMapPreview
-              latitude={
-                deliveryLive.data.rider_location?.latitude != null
-                  ? Number(deliveryLive.data.rider_location.latitude)
-                  : deliveryLive.data.drop?.latitude != null
-                    ? Number(deliveryLive.data.drop.latitude)
-                    : null
-              }
-              longitude={
-                deliveryLive.data.rider_location?.longitude != null
-                  ? Number(deliveryLive.data.rider_location.longitude)
-                  : deliveryLive.data.drop?.longitude != null
-                    ? Number(deliveryLive.data.drop.longitude)
-                    : null
-              }
-            />
-          </div>
-          {deliveryLive.data.rider?.name ? (
+          {liveRider?.name || liveRider?.phone ? (
+            <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--border, #ddd)', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div>
+                <small style={{ color: '#6b7280' }}>RIDER</small>
+                <strong style={{ display: 'block' }}>{liveRider?.name || 'Assigned rider'}</strong>
+                {liveRider?.vehicle ? <span>{liveRider.vehicle}</span> : null}
+              </div>
+              {liveRider?.phone && deliveryLive.data.can_call_rider !== false ? (
+                <a href={`tel:${liveRider.phone}`}>
+                  <Button type="button" variant="neutral">Call rider</Button>
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+          {deliveryTrackingUrl ? (
             <p>
-              <strong>{deliveryLive.data.rider.name}</strong>
-              {deliveryLive.data.rider.vehicle ? ` · ${deliveryLive.data.rider.vehicle}` : ''}
+              <a href={deliveryTrackingUrl} target="_blank" rel="noreferrer">
+                Open partner tracking ↗
+              </a>
             </p>
           ) : null}
-          <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-            {[...(deliveryLive.data.events ?? [])].reverse().map((event, index) => (
-              <div key={`${event.status}-${event.occurred_at}-${index}`} style={{ display: 'flex', gap: 10 }}>
-                <span aria-hidden style={{ color: index === 0 ? 'var(--primary)' : 'var(--muted-foreground)' }}>●</span>
-                <div>
-                  <strong>{event.label || event.status.replaceAll('_', ' ')}</strong>
-                  {event.occurred_at ? (
-                    <div style={{ opacity: 0.7, fontSize: 13 }}>
-                      {new Date(event.occurred_at).toLocaleString()}
+          <div style={{ marginTop: 16 }}>
+            <DeliveryRouteMap delivery={deliveryLive.data} />
+          </div>
+          <div style={{ display: 'grid', gap: 16, marginTop: 20 }}>
+            {deliveryGroups.map((group) => (
+              <section key={group.number ?? 'order'} style={{ borderTop: '1px solid var(--border, #ddd)', paddingTop: 12 }}>
+                <strong>
+                  {group.number == null
+                    ? 'Order updates'
+                    : `Attempt ${group.number}${group.attempt?.provider ? ` · ${group.attempt.provider}` : ''}`}
+                </strong>
+                {group.attempt?.reason ? <p style={{ color: '#b42318', margin: '5px 0' }}>{group.attempt.reason}</p> : null}
+                <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                  {group.events.map((event, index) => (
+                    <div key={event.id || `${event.status}-${event.occurred_at}-${index}`} style={{ display: 'flex', gap: 10 }}>
+                      <span aria-hidden style={{ color: 'var(--primary)' }}>●</span>
+                      <div>
+                        <strong>{event.label || event.status.replaceAll('_', ' ')}</strong>
+                        {event.reason ? <div style={{ color: '#b42318', fontSize: 13 }}>{event.reason}</div> : null}
+                        <div style={{ opacity: 0.7, fontSize: 13 }}>
+                          {event.occurred_at ? new Date(event.occurred_at).toLocaleString() : 'Time unavailable'}
+                          {event.eta_minutes != null ? ` · ETA ${event.eta_minutes} min` : ''}
+                        </div>
+                      </div>
                     </div>
-                  ) : null}
+                  ))}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
+          {isInstantDelivery &&
+          deliveryLive.data.provider === 'mock' &&
+          deliveryLive.data.dispatched &&
+          !deliveryLive.data.terminal ? (
+            <div style={{ marginTop: 16 }}>
+              <Button
+                type="button"
+                variant="neutral"
+                disabled={simulateDelivery.isPending}
+                onClick={() => {
+                  void simulateDelivery
+                    .mutateAsync()
+                    .then((live) => setMessage(`Mock delivery · ${live.headline}`))
+                    .catch((error: unknown) =>
+                      setMessage(getApiErrorMessage(error, 'Simulation failed.')),
+                    );
+                }}
+              >
+                {simulateDelivery.isPending ? 'Advancing…' : 'Simulate next delivery status'}
+              </Button>
+            </div>
+          ) : null}
         </Card>
       ) : null}
 

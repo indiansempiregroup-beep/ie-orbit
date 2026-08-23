@@ -343,6 +343,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
           'Settings',
           'BusinessProfile',
           'BusinessEdit',
+          'PaymentSettings',
           'ProductSettings',
           'Branches',
           'BranchForm',

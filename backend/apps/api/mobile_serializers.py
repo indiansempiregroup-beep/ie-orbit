@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.common.api.fields import CoordinateField
+
 
 class MobileDiscoverQuerySerializer(serializers.Serializer):
     tenant_slug = serializers.SlugField()
@@ -159,8 +161,8 @@ class MobileCustomerAddressSerializer(serializers.Serializer):
     state = serializers.CharField(required=False, allow_blank=True)
     country = serializers.CharField(required=False, allow_blank=True)
     postal_code = serializers.CharField(required=False, allow_blank=True)
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    latitude = CoordinateField()
+    longitude = CoordinateField()
 
 
 class MobileCustomerProfileSerializer(serializers.Serializer):

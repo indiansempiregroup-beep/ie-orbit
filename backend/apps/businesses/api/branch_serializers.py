@@ -3,9 +3,13 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.businesses.models import Branch
+from apps.common.api.fields import CoordinateField
 
 
 class BranchSerializer(serializers.ModelSerializer):
+    latitude = CoordinateField()
+    longitude = CoordinateField()
+
     class Meta:
         model = Branch
         fields = [

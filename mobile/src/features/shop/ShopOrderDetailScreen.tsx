@@ -79,29 +79,101 @@ function ProductThumb({ uri, size = 72 }: { uri?: string | null; size?: number }
 }
 
 function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: string }) {
+  const events = [...(live.events ?? [])].sort((a, b) => {
+    const left = a.occurred_at ? new Date(a.occurred_at).getTime() : 0;
+    const right = b.occurred_at ? new Date(b.occurred_at).getTime() : 0;
+    return left - right;
+  });
+  const orderEvents = events.filter((event) => event.attempt_number == null);
+  const attemptNumbers = Array.from(
+    new Set([
+      ...(live.attempts ?? []).map((attempt) => attempt.attempt_number),
+      ...events
+        .map((event) => event.attempt_number)
+        .filter((attemptNumber): attemptNumber is number => attemptNumber != null),
+    ]),
+  ).sort((a, b) => a - b);
+  const activeAttempt =
+    (live.attempts ?? []).find((attempt) => attempt.attempt_number === live.active_attempt_number) ??
+    (live.attempts ?? []).at(-1);
+  const rider = live.rider ?? activeAttempt?.rider;
+  const trackingUrl = live.tracking_url || activeAttempt?.tracking_url;
+  const failureReason = live.subtitle || activeAttempt?.reason;
+  const headline = String(live.headline || 'Delivery update').replace(/\s*·\s*\d+\s*min(?:utes?)?$/i, '');
+
+  const renderEvents = (rows: typeof events) => (
+    <View style={styles.deliveryEvents}>
+      {rows.map((event, index) => (
+        <View key={event.id || `${event.status}-${event.occurred_at}-${index}`} style={styles.deliveryEvent}>
+          <View style={styles.eventTrack}>
+            <View
+              style={[
+                styles.eventDot,
+                { backgroundColor: index === rows.length - 1 ? primary : colors.border },
+              ]}
+            />
+            {index < rows.length - 1 ? <View style={styles.eventLine} /> : null}
+          </View>
+          <View style={styles.eventBody}>
+            <Text style={styles.eventLabel}>{event.label || event.status.replace(/_/g, ' ')}</Text>
+            <View style={styles.eventMetaRow}>
+              {event.occurred_at ? <Text style={styles.meta}>{formatDateTime(event.occurred_at)}</Text> : null}
+              {event.eta_minutes != null ? <Text style={styles.meta}>ETA {event.eta_minutes} min</Text> : null}
+            </View>
+            {event.reason ? <Text style={styles.eventReason}>{event.reason}</Text> : null}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+
   return (
     <View style={styles.trackingCard}>
       <View style={styles.trackingHeader}>
         <View style={[styles.liveDot, { backgroundColor: live.terminal ? colors.success : primary }]} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.trackingTitle}>{live.headline}</Text>
-          {live.subtitle ? <Text style={styles.meta}>{live.subtitle}</Text> : null}
+          <Text style={styles.trackingEyebrow}>{live.terminal ? 'DELIVERY STATUS' : 'LIVE DELIVERY'}</Text>
+          <Text style={styles.trackingTitle}>{headline}</Text>
+          {failureReason ? <Text style={styles.trackingSubtitle}>{failureReason}</Text> : null}
+          <Text style={[styles.updatedText, live.stale && styles.staleText]}>
+            {live.stale
+              ? `Location may be outdated${live.last_updated ? ` · Updated ${formatDateTime(live.last_updated)}` : ''}`
+              : live.last_updated
+                ? `Updated ${formatDateTime(live.last_updated)}`
+                : 'Waiting for an update'}
+          </Text>
         </View>
       </View>
+      {!live.terminal ? (
+        <View style={[styles.etaBox, { backgroundColor: `${primary}12` }]}>
+          <Feather name="clock" size={20} color={primary} />
+          <View>
+            <Text style={styles.etaLabel}>ESTIMATED ARRIVAL</Text>
+            <Text style={[styles.etaValue, { color: primary }]}>
+              {live.eta_minutes != null ? `${live.eta_minutes} min` : 'Updating'}
+            </Text>
+          </View>
+        </View>
+      ) : null}
       <DeliveryTrackerMap live={live} primary={primary} />
-      {live.rider?.name ? (
+      {rider?.name || rider?.phone || rider?.vehicle ? (
         <View style={styles.riderRow}>
-          <View style={[styles.riderAvatar, { backgroundColor: `${primary}18` }]}>
-            <Feather name="user" size={20} color={primary} />
-          </View>
+          {resolveMediaUrl(rider.photo_url) ? (
+            <Image source={{ uri: resolveMediaUrl(rider.photo_url) || '' }} style={styles.riderPhoto} />
+          ) : (
+            <View style={[styles.riderAvatar, { backgroundColor: `${primary}18` }]}>
+              <Feather name="user" size={20} color={primary} />
+            </View>
+          )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.riderName}>{live.rider.name}</Text>
-            <Text style={styles.meta}>{live.rider.vehicle || 'Delivery rider'}</Text>
+            <Text style={styles.riderName}>{rider.name || 'Delivery rider'}</Text>
+            <Text style={styles.meta}>{rider.vehicle || 'Your delivery partner'}</Text>
+            {rider.phone ? <Text style={styles.riderPhone}>{rider.phone}</Text> : null}
           </View>
-          {live.can_call_rider && live.rider.phone ? (
+          {live.can_call_rider && rider.phone ? (
             <Pressable
               style={[styles.callButton, { borderColor: primary }]}
-              onPress={() => Linking.openURL(`tel:${live.rider?.phone}`)}
+              onPress={() => Linking.openURL(`tel:${rider.phone}`)}
             >
               <Feather name="phone" size={16} color={primary} />
               <Text style={{ color: primary, fontWeight: '700' }}>Call</Text>
@@ -109,20 +181,39 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
           ) : null}
         </View>
       ) : null}
-      {(live.events ?? []).length ? (
-        <View style={styles.deliveryEvents}>
-          {[...(live.events ?? [])].reverse().map((event, index) => (
-            <View key={`${event.status}-${event.occurred_at}-${index}`} style={styles.deliveryEvent}>
-              <View style={[styles.eventDot, { backgroundColor: index === 0 ? primary : colors.border }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.eventLabel}>{event.label || event.status.replace(/_/g, ' ')}</Text>
-                {event.occurred_at ? (
-                  <Text style={styles.meta}>{formatDateTime(event.occurred_at)}</Text>
-                ) : null}
-                {event.reason ? <Text style={styles.meta}>{event.reason}</Text> : null}
-              </View>
+      {trackingUrl ? (
+        <Pressable style={styles.trackingLink} onPress={() => Linking.openURL(trackingUrl)}>
+          <Feather name="external-link" size={16} color={primary} />
+          <Text style={[styles.trackingLinkText, { color: primary }]}>Open carrier tracking</Text>
+        </Pressable>
+      ) : null}
+      {orderEvents.length || attemptNumbers.length ? (
+        <View style={styles.historySection}>
+          <Text style={styles.historyTitle}>Delivery journey</Text>
+          {orderEvents.length ? (
+            <View style={styles.attemptSection}>
+              <Text style={styles.attemptTitle}>Order updates</Text>
+              {renderEvents(orderEvents)}
             </View>
-          ))}
+          ) : null}
+          {attemptNumbers.map((attemptNumber) => {
+            const attempt = (live.attempts ?? []).find((item) => item.attempt_number === attemptNumber);
+            const attemptEvents = events.filter((event) => event.attempt_number === attemptNumber);
+            const isActive = attemptNumber === live.active_attempt_number;
+            return (
+              <View key={attemptNumber} style={styles.attemptSection}>
+                <View style={styles.attemptHeader}>
+                  <Text style={styles.attemptTitle}>Delivery attempt {attemptNumber}</Text>
+                  <Text style={[styles.attemptStatus, isActive && { color: primary }]}>
+                    {isActive ? 'Current' : String(attempt?.status || '').replace(/_/g, ' ')}
+                  </Text>
+                </View>
+                {attempt?.provider ? <Text style={styles.meta}>{attempt.provider}</Text> : null}
+                {attempt?.reason ? <Text style={styles.eventReason}>{attempt.reason}</Text> : null}
+                {attemptEvents.length ? renderEvents(attemptEvents) : null}
+              </View>
+            );
+          })}
         </View>
       ) : null}
     </View>
@@ -146,43 +237,48 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [deliveryLive, setDeliveryLive] = useState<ShopDeliveryLive | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const primary = branding?.primaryColor ?? colors.primary;
   const business = bootstrap?.business;
 
   const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
     if (mode === 'refresh') setRefreshing(true);
-    const response = await mobileClient.mobile.getShopOrder(route.params.orderId, {
-      tenant_slug: tenantSlug,
-      business_code: businessCode,
-    });
-    setOrder(response.data);
-    const deliveryMeta =
-      response.data.metadata &&
-      typeof response.data.metadata === 'object' &&
-      typeof response.data.metadata.delivery === 'object'
-        ? response.data.metadata.delivery
-        : null;
-    if (deliveryMeta) {
-      try {
-        const tracking = await mobileClient.mobile.getShopOrderDeliveryLive(route.params.orderId, {
-          tenant_slug: tenantSlug,
-          business_code: businessCode,
-          refresh: true,
-        });
-        setDeliveryLive(tracking.data);
-      } catch {
-        setDeliveryLive(null);
-      }
-    }
+    setOrderError(null);
     try {
-      const ret = await mobileClient.mobile.listMyReturns({
+      const response = await mobileClient.mobile.getShopOrder(route.params.orderId, {
         tenant_slug: tenantSlug,
         business_code: businessCode,
-        order_id: route.params.orderId,
       });
-      setReturns(ret.data);
-    } catch {
-      setReturns([]);
+      setOrder(response.data);
+      if (String(response.data.fulfillment_mode).toLowerCase() === 'delivery') {
+        setDeliveryError(null);
+        try {
+          const tracking = await mobileClient.mobile.getShopOrderDeliveryLive(route.params.orderId, {
+            tenant_slug: tenantSlug,
+            business_code: businessCode,
+            refresh: true,
+          });
+          setDeliveryLive(tracking.data);
+        } catch (err) {
+          setDeliveryError(err instanceof Error ? err.message : 'Unable to load live delivery updates.');
+        }
+      } else {
+        setDeliveryLive(null);
+        setDeliveryError(null);
+      }
+      try {
+        const ret = await mobileClient.mobile.listMyReturns({
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+          order_id: route.params.orderId,
+        });
+        setReturns(ret.data);
+      } catch {
+        setReturns([]);
+      }
+    } catch (err) {
+      setOrderError(err instanceof Error ? err.message : 'Unable to load this order.');
     } finally {
       setRefreshing(false);
     }
@@ -195,7 +291,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
   );
 
   useEffect(() => {
-    if (!deliveryLive || deliveryLive.terminal) return;
+    const isDelivery = String(order?.fulfillment_mode || '').toLowerCase() === 'delivery';
+    const orderTerminal = ['completed', 'cancelled'].includes(String(order?.status || '').toLowerCase());
+    if (!isDelivery || orderTerminal || deliveryLive?.terminal) return;
     const timer = setInterval(() => {
       void mobileClient.mobile
         .getShopOrderDeliveryLive(route.params.orderId, {
@@ -203,11 +301,33 @@ export function ShopOrderDetailScreen({ route }: Props) {
           business_code: businessCode,
           refresh: true,
         })
-        .then((response) => setDeliveryLive(response.data))
-        .catch(() => undefined);
+        .then(async (response) => {
+          setDeliveryLive(response.data);
+          setDeliveryError(null);
+          if (
+            response.data.order_status &&
+            String(response.data.order_status).toLowerCase() !== String(order?.status || '').toLowerCase()
+          ) {
+            const orderResponse = await mobileClient.mobile.getShopOrder(route.params.orderId, {
+              tenant_slug: tenantSlug,
+              business_code: businessCode,
+            });
+            setOrder(orderResponse.data);
+          }
+        })
+        .catch((err) =>
+          setDeliveryError(err instanceof Error ? err.message : 'Unable to refresh live delivery updates.'),
+        );
     }, 12000);
     return () => clearInterval(timer);
-  }, [businessCode, deliveryLive, route.params.orderId, tenantSlug]);
+  }, [
+    businessCode,
+    deliveryLive?.terminal,
+    order?.fulfillment_mode,
+    order?.status,
+    route.params.orderId,
+    tenantSlug,
+  ]);
 
   const paymentStatus = order?.payment_status || '';
   const showQr =
@@ -312,7 +432,18 @@ export function ShopOrderDetailScreen({ route }: Props) {
     return (
       <View style={styles.screen}>
         <ScreenHeader title="Order details" onBack={() => navigation.goBack()} />
-        <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} />
+        {orderError ? (
+          <View style={styles.loadError}>
+            <Feather name="alert-circle" size={24} color={colors.destructive} />
+            <Text style={styles.loadErrorTitle}>Couldn’t load your order</Text>
+            <Text style={styles.loadErrorText}>{orderError}</Text>
+            <Pressable style={[styles.retryButton, { backgroundColor: primary }]} onPress={() => void load()}>
+              <Text style={styles.buttonText}>Try again</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} />
+        )}
       </View>
     );
   }
@@ -430,6 +561,18 @@ export function ShopOrderDetailScreen({ route }: Props) {
         </View>
 
         {deliveryLive?.available ? <DeliveryTracker live={deliveryLive} primary={primary} /> : null}
+
+        {String(order.fulfillment_mode).toLowerCase() === 'delivery' && deliveryError ? (
+          <View style={styles.deliveryError}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.deliveryErrorTitle}>Live tracking is unavailable</Text>
+              <Text style={styles.meta}>{deliveryError}</Text>
+            </View>
+            <Pressable style={[styles.errorRetry, { borderColor: primary }]} onPress={() => void load('refresh')}>
+              <Text style={{ color: primary, fontWeight: '700' }}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {!deliveryLive?.available && timeline.length ? (
           <View style={styles.card}>
@@ -816,7 +959,20 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   liveDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
+  trackingEyebrow: { ...typography.tiny, color: colors.mutedForeground, fontWeight: '800', letterSpacing: 0.7 },
   trackingTitle: { ...typography.title, fontSize: 18, color: colors.foreground },
+  trackingSubtitle: { ...typography.body, color: colors.foreground, marginTop: 5 },
+  updatedText: { ...typography.caption, color: colors.mutedForeground, marginTop: 6 },
+  staleText: { color: colors.warning, fontWeight: '700' },
+  etaBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  etaLabel: { ...typography.tiny, color: colors.mutedForeground, fontWeight: '800', letterSpacing: 0.5 },
+  etaValue: { fontSize: 22, fontWeight: '800', marginTop: 1 },
   riderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -832,7 +988,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  riderPhoto: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.muted },
   riderName: { ...typography.label, color: colors.foreground, fontWeight: '800' },
+  riderPhone: { ...typography.caption, color: colors.foreground, marginTop: 2 },
   callButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -842,15 +1000,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  deliveryEvents: { padding: spacing.lg, gap: spacing.md },
-  deliveryEvent: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  trackingLink: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  trackingLinkText: { ...typography.label, fontWeight: '700' },
+  historySection: { padding: spacing.lg, gap: spacing.lg },
+  historyTitle: { ...typography.title, fontSize: 16, color: colors.foreground },
+  attemptSection: { gap: spacing.sm },
+  attemptHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
+  attemptTitle: { ...typography.label, color: colors.foreground, fontWeight: '800' },
+  attemptStatus: { ...typography.caption, color: colors.mutedForeground, fontWeight: '700', textTransform: 'capitalize' },
+  deliveryEvents: { gap: 0 },
+  deliveryEvent: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
+  eventTrack: { width: 12, alignItems: 'center' },
   eventDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
+  eventLine: { width: 2, flex: 1, minHeight: 22, backgroundColor: colors.border, marginVertical: 3 },
+  eventBody: { flex: 1, paddingBottom: spacing.md },
   eventLabel: {
     ...typography.label,
     color: colors.foreground,
     fontWeight: '700',
     textTransform: 'capitalize',
   },
+  eventMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  eventReason: { ...typography.caption, color: colors.destructive, marginTop: 4 },
+  loadError: { alignItems: 'center', padding: spacing.xl, marginTop: spacing.xl, gap: spacing.sm },
+  loadErrorTitle: { ...typography.title, color: colors.foreground },
+  loadErrorText: { ...typography.body, color: colors.mutedForeground, textAlign: 'center' },
+  retryButton: { minHeight: 44, paddingHorizontal: spacing.xl, borderRadius: radius.md, justifyContent: 'center' },
+  deliveryError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
+  deliveryErrorTitle: { ...typography.label, color: colors.destructive, fontWeight: '800' },
+  errorRetry: { borderWidth: 1, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8 },
   section: { ...typography.title, fontSize: 16, color: colors.foreground, marginBottom: spacing.md },
   timeline: { flexDirection: 'row' },
   timelineStep: { flex: 1 },

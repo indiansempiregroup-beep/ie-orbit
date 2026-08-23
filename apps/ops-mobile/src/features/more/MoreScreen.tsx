@@ -12,6 +12,7 @@ import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import {
   canAccessReports,
   canAccessSettings,
@@ -35,6 +36,7 @@ export function MoreScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { isDesktop } = useBreakpoint();
+  const { contentInset } = useTabBarLayout();
   const { user, logout } = useAuth();
   const { activeBusiness } = useWorkspace();
   const displayName = user?.full_name || user?.email || t('common.account');
@@ -62,7 +64,7 @@ export function MoreScreen() {
       style={styles.screen}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + spacing.xl },
+        { paddingTop: insets.top + spacing.xl, paddingBottom: contentInset },
         isDesktop && styles.contentDesktop,
       ]}
     >
@@ -266,7 +268,7 @@ export function MoreScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.xxxl, paddingHorizontal: spacing.xl },
+  content: { paddingHorizontal: spacing.xl },
   contentDesktop: { paddingHorizontal: 0 },
   hero: { alignItems: 'center', paddingBottom: spacing.xxl },
   name: {

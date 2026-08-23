@@ -8,3 +8,9 @@ export const layout = {
   authCardMaxWidth: 440,
   desktopGutter: 32,
 } as const;
+
+/** Floating glass tab bar geometry. Consumed via `useTabBarLayout`. */
+export const TAB_BAR_PILL_HEIGHT = 64;
+export const TAB_BAR_RADIUS = 29;
+export const TAB_BAR_SIDE_INSET = 16;
+export const TAB_BAR_MAX_WIDTH = 460;

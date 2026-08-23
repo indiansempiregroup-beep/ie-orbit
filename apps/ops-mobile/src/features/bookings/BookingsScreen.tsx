@@ -16,6 +16,7 @@ import { Chip } from '../../components/ui/Chip';
 import { ScreenState } from '../../components/ScreenState';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
@@ -60,6 +61,7 @@ export function BookingsScreen() {
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
   const { staff } = useStaffMembers();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
+  const { contentInset } = useTabBarLayout();
 
   const staffOptions = useMemo(
     () => [
@@ -185,7 +187,7 @@ export function BookingsScreen() {
       <RefreshableScrollView
         refreshing={refreshing || loading}
         onRefresh={onRefresh}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: contentInset }]}
       >
         <ScreenState
           loading={loading && !bookings.length}

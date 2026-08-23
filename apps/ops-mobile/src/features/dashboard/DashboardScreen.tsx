@@ -18,6 +18,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
 import { useBIOverview, useEntityMaps, usePlanFeatures } from '../../hooks/useOpsExtended';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -45,6 +46,7 @@ export function DashboardScreen() {
   const { activeBusiness, businessId } = useWorkspace();
   const client = useOpsClient();
   const { isDesktop } = useBreakpoint();
+  const { contentInset } = useTabBarLayout();
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const { has, hasAny } = usePlanFeatures();
@@ -213,7 +215,11 @@ export function DashboardScreen() {
 
   return (
     <View style={styles.screen}>
-      <RefreshableScrollView refreshing={isRefreshing} onRefresh={onRefresh} contentContainerStyle={styles.scrollContent}>
+      <RefreshableScrollView
+        refreshing={isRefreshing}
+        onRefresh={onRefresh}
+        contentContainerStyle={{ paddingBottom: contentInset }}
+      >
         <OpsHeader
           title={displayName}
           subtitle={greeting()}
@@ -480,7 +486,7 @@ export function DashboardScreen() {
 
       {showFab ? (
         <Pressable
-          style={[styles.fab, isDesktop && styles.fabDesktop]}
+          style={[styles.fab, { bottom: contentInset }, isDesktop && styles.fabDesktop]}
           onPress={onFabPress}
           accessibilityLabel={fabNeedsMenu ? 'Create booking or sale' : hasAppointie ? 'New booking' : 'New sale'}
         >
@@ -554,7 +560,6 @@ function QuickAction({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { paddingBottom: 100 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nextCard: {
     marginTop: spacing.xl,

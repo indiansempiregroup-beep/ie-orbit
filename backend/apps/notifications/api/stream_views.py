@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Iterator
 from typing import Any
 
 from django.http import StreamingHttpResponse
-from django_redis import get_redis_connection
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -18,8 +18,9 @@ from rest_framework.views import APIView
 from apps.api.mobile_permissions import IsEmailVerified
 from apps.api.mobile_serializers import MobileScopedQuerySerializer
 from apps.api.mobile_views import _resolve_tenant_business
-from apps.notifications.services.realtime import user_notification_channel
+from apps.notifications.services.realtime import realtime_redis, user_notification_channel
 
+logger = logging.getLogger("ie_platform.notifications.realtime")
 
 KEEPALIVE_SECONDS = 25
 POLL_TIMEOUT_SECONDS = 1.0
@@ -50,10 +51,33 @@ def _matches_business_filter(payload: dict[str, Any], business_id: str | None) -
     return str(event_business_id) == str(business_id)
 
 
+def _keepalive_only_stream() -> Iterator[str]:
+    """Hold the connection open when pub/sub is unavailable.
+
+    The response has already been committed by the time the generator runs, so
+    raising here would surface as a 500 on every reconnect. Clients treat a
+    silent stream as a signal to keep polling.
+    """
+    yield "event: connected\ndata: {}\n\n"
+    while True:
+        time.sleep(KEEPALIVE_SECONDS)
+        yield ": keepalive\n\n"
+
+
 def _notification_event_stream(*, user_id: str, business_id: str | None = None) -> Iterator[str]:
-    redis_client = get_redis_connection("default")
-    pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
-    pubsub.subscribe(user_notification_channel(str(user_id)))
+    channel = user_notification_channel(str(user_id))
+    redis_client = realtime_redis()
+    pubsub = None
+    if redis_client is not None:
+        try:
+            pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(channel)
+        except Exception:
+            logger.warning("Notification stream falling back to polling.", exc_info=True)
+            pubsub = None
+    if pubsub is None:
+        yield from _keepalive_only_stream()
+        return
     last_ping = time.monotonic()
 
     try:
@@ -77,8 +101,10 @@ def _notification_event_stream(*, user_id: str, business_id: str | None = None) 
                 yield ": keepalive\n\n"
                 last_ping = now
     finally:
-        pubsub.unsubscribe(user_notification_channel(str(user_id)))
-        pubsub.close()
+        try:
+            pubsub.unsubscribe(channel)
+        finally:
+            pubsub.close()
 
 
 def _stream_response(*, user_id: str, business_id: str | None = None) -> StreamingHttpResponse:

@@ -26,6 +26,7 @@ from apps.billing.api.views import (
     BillingWebhookEventListView,
     BillingWebhookEventReprocessView,
     BillingWebhookSummaryView,
+    CashfreeWebhookView,
     RazorpayWebhookView,
 )
 
@@ -95,5 +96,10 @@ urlpatterns = [
         "billing/webhooks/razorpay",
         RazorpayWebhookView.as_view(),
         name="billing-razorpay-webhook",
+    ),
+    path(
+        "billing/webhooks/cashfree",
+        CashfreeWebhookView.as_view(),
+        name="billing-cashfree-webhook",
     ),
 ]

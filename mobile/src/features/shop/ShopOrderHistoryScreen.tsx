@@ -32,6 +32,7 @@ import {
   formatShopQty,
   isShopOrderUnpaid,
   shopFulfillmentLabel,
+  shopOrderDeliverySummary,
   shopOrderHeadline,
   shopOrderMatchesFilters,
   shopOrderStatusColors,
@@ -130,6 +131,7 @@ export function ShopOrderHistoryScreen() {
     const preview = lines.slice(0, 2);
     const extra = Math.max(0, lines.length - preview.length);
     const firstProductId = lines[0]?.product;
+    const deliverySummary = shopOrderDeliverySummary(item);
 
     return (
       <Pressable
@@ -161,7 +163,12 @@ export function ShopOrderHistoryScreen() {
 
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
           <View style={[styles.statusDot, { backgroundColor: tone.dot }]} />
-          <Text style={[styles.statusText, { color: tone.text }]}>{headline.title}</Text>
+          <Text style={[styles.statusText, { color: tone.text }]}>
+            {deliverySummary?.statusLabel || headline.title}
+          </Text>
+          {deliverySummary?.etaLabel ? (
+            <Text style={[styles.statusText, { color: tone.text }]}> · ETA {deliverySummary.etaLabel}</Text>
+          ) : null}
           {isShopOrderUnpaid(item) ? <Text style={styles.unpaidHint}> · Pay now</Text> : null}
         </View>
 
@@ -194,7 +201,9 @@ export function ShopOrderHistoryScreen() {
             style={styles.actionBtn}
             onPress={() => navigation.navigate('ShopOrderDetail', { orderId: item.id })}
           >
-            <Text style={styles.actionBtnText}>View details</Text>
+            <Text style={styles.actionBtnText}>
+              {deliverySummary?.active ? `${deliverySummary.actionLabel} delivery` : 'View details'}
+            </Text>
           </Pressable>
           {firstProductId ? (
             <Pressable

@@ -98,6 +98,9 @@ const FEATURE_GROUPS: Array<{
     products: ['appointie', 'shopie'],
     options: [
       { value: 'shopie_grow_ads', label: 'Customer app ads (max 5)' },
+      { value: 'ad_free', label: 'Ad-free apps (hide Google Ads)' },
+      { value: 'razorpay_payments', label: 'Razorpay customer payments' },
+      { value: 'cashfree_payments', label: 'Cashfree customer payments' },
     ],
   },
   {

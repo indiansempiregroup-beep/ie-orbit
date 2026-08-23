@@ -18,13 +18,14 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Avatar } from '../../components/ui/Avatar';
 import { Badge, badgeTone, type BadgeStatus } from '../../components/ui/Badge';
 import { SectionHeader } from '../../components/ui/SectionHeader';
-import { useScreenInsets } from '../../theme/layout';
+import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateTime, formatTime, isUpcomingBooking, mapBookingStatus } from '../../utils/format';
 import {
   formatShopMoney,
   formatShopOrderPlaced,
   isShopOrderUnpaid,
+  shopOrderDeliverySummary,
   shopOrderHeadline,
   shopOrderStatusColors,
 } from '../shop/shopHelpers';
@@ -103,6 +104,7 @@ export function HomeScreen() {
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
+  const { contentInset } = useTabBarLayout();
   const primary = branding?.primaryColor ?? colors.primary;
   const secondary = branding?.secondaryColor ?? '#1E40AF';
   const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
@@ -241,7 +243,7 @@ export function HomeScreen() {
 
       <RefreshableScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={{ paddingBottom: contentInset }}
         refreshing={refreshing}
         onRefresh={onRefresh}
         primaryColor={primary}
@@ -598,6 +600,7 @@ export function HomeScreen() {
                   const itemCount = orderItemCount(order);
                   const thumbUrl = resolveMediaUrl(order.lines?.[0]?.product_image_url);
                   const unpaid = isShopOrderUnpaid(order);
+                  const deliverySummary = shopOrderDeliverySummary(order);
                   return (
                     <Pressable
                       key={order.id}
@@ -626,13 +629,18 @@ export function HomeScreen() {
                           <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
                             <View style={[styles.statusDot, { backgroundColor: tone.dot }]} />
                             <Text style={[styles.statusText, { color: tone.text }]} numberOfLines={1}>
-                              {headline.title}
+                              {deliverySummary?.statusLabel || headline.title}
+                              {deliverySummary?.etaLabel ? ` · ETA ${deliverySummary.etaLabel}` : ''}
                             </Text>
                           </View>
                           {unpaid ? <Text style={styles.unpaidHint}>Payment due</Text> : null}
                         </View>
                       </View>
-                      <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                      {deliverySummary?.active ? (
+                        <Text style={[styles.trackAction, { color: primary }]}>{deliverySummary.actionLabel}</Text>
+                      ) : (
+                        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                      )}
                     </Pressable>
                   );
                 })}
@@ -674,7 +682,6 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   scroll: { flex: 1 },
-  content: { paddingBottom: spacing.xxxl },
   topBar: {
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.sm,
@@ -905,6 +912,7 @@ const styles = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { ...typography.tiny, fontWeight: '800' },
   unpaidHint: { ...typography.tiny, color: colors.warning, fontWeight: '800' },
+  trackAction: { ...typography.caption, fontWeight: '800' },
   skeletonIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.muted },
   skeletonLine: { height: 10, borderRadius: radius.sm, backgroundColor: colors.muted },
   skeletonLineShort: { width: '55%', marginTop: spacing.sm },

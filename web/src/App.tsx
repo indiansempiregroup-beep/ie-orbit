@@ -141,6 +141,7 @@ const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then(
 const BusinessManagementPage = lazy(() => import('./features/settings/BusinessManagementPage').then((m) => ({ default: m.BusinessManagementPage })));
 const BusinessProfileEditPage = lazy(() => import('./features/settings/BusinessProfileEditPage').then((m) => ({ default: m.BusinessProfileEditPage })));
 const ProductSettingsPage = lazy(() => import('./features/settings/ProductSettingsPage').then((m) => ({ default: m.ProductSettingsPage })));
+const PaymentSettingsPage = lazy(() => import('./features/settings/PaymentSettingsPage').then((m) => ({ default: m.PaymentSettingsPage })));
 const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout').then((m) => ({ default: m.SettingsLayout })));
 const TeamSettingsPage = lazy(() => import('./features/settings/TeamSettingsPage').then((m) => ({ default: m.TeamSettingsPage })));
 const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })));
@@ -285,6 +286,7 @@ function App() {
                     <Route path="business" element={<BusinessManagementPage />} />
                     <Route path="business/edit" element={<BusinessProfileEditPage />} />
                     <Route path="products" element={<ProductSettingsPage />} />
+                    <Route path="payments" element={<PaymentSettingsPage />} />
                     <Route element={<PermissionGuard permission="iam:role:assign" />}>
                       <Route path="team" element={<TeamSettingsPage />} />
                     </Route>

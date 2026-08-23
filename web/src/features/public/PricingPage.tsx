@@ -50,6 +50,14 @@ function planFeatures(plan: BillingPlanCatalogItem): string[] {
   if ((plan.features ?? []).includes('reward_points')) {
     bullets.push('Reward points for customers (earn & redeem)');
   }
+  if ((plan.features ?? []).includes('ad_free')) {
+    bullets.push('Ad-free operations and customer apps');
+  } else {
+    bullets.push('Supported by Google Ads in the mobile apps');
+  }
+  if ((plan.features ?? []).includes('razorpay_payments')) {
+    bullets.push('Connect your Razorpay account for customer payments');
+  }
   bullets.push('Self-serve staff and office add-ons');
   return bullets;
 }

@@ -17,6 +17,7 @@ from apps.billing.constants import (
 )
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.addon_pricing import get_addon_prices
+from apps.billing.services.cashfree_client import CashfreeClient, get_cashfree_config
 from apps.billing.services.razorpay_client import RazorpayClient, get_razorpay_config
 from apps.businesses.constants import DEFAULT_TRIAL_DAYS, VALID_PRODUCT_CODES, get_plan_definition
 from apps.businesses.models import Business
@@ -26,19 +27,64 @@ logger = logging.getLogger("ie_platform.billing.checkout")
 
 
 class CheckoutService:
-    def __init__(self, razorpay_client: RazorpayClient | None = None) -> None:
+    def __init__(
+        self,
+        razorpay_client: RazorpayClient | None = None,
+        cashfree_client: CashfreeClient | None = None,
+    ) -> None:
         self.razorpay = razorpay_client or RazorpayClient()
+        self.cashfree = cashfree_client or CashfreeClient()
 
     def get_status(self) -> dict[str, Any]:
-        config = get_razorpay_config()
+        razorpay = get_razorpay_config()
+        cashfree = get_cashfree_config()
+        razorpay_configured = razorpay.is_configured
+        cashfree_configured = cashfree.is_configured
+        configured = razorpay_configured or cashfree_configured
+        razorpay_webhook = bool(razorpay.webhook_secret)
+        # Cashfree signs webhooks with the PG Secret Key, so a configured
+        # Cashfree account is also ready for signature verification.
+        cashfree_webhook = cashfree_configured
+        webhook_configured = (razorpay_configured and razorpay_webhook) or (
+            cashfree_configured and cashfree_webhook
+        )
+        if razorpay_configured and cashfree_configured:
+            provider = "both"
+        elif cashfree_configured and not razorpay_configured:
+            provider = "cashfree"
+        else:
+            provider = "razorpay"
         return {
-            "provider": "razorpay",
-            "configured": config.is_configured,
-            "key_id": config.key_id if config.is_configured else None,
-            "webhook_configured": bool(config.webhook_secret),
+            "provider": provider,
+            "configured": configured,
+            "key_id": razorpay.key_id if razorpay_configured else None,
+            "webhook_configured": webhook_configured,
             "currency": DEFAULT_CHECKOUT_CURRENCY,
-            "mock_mode": not config.is_configured,
+            "mock_mode": not configured,
+            "razorpay": {
+                "configured": razorpay_configured,
+                "key_id": razorpay.key_id if razorpay_configured else None,
+                "webhook_configured": razorpay_webhook,
+            },
+            "cashfree": {
+                "configured": cashfree_configured,
+                "app_id": cashfree.app_id if cashfree_configured else None,
+                "webhook_configured": cashfree_webhook,
+                "env": cashfree.env,
+            },
         }
+
+    def _resolve_checkout_provider(self, provider: str | None) -> str:
+        requested = str(provider or "").strip().lower()
+        razorpay_ok = self.razorpay.is_configured
+        cashfree_ok = self.cashfree.is_configured
+        if requested in {"razorpay", "cashfree"}:
+            return requested
+        if razorpay_ok:
+            return "razorpay"
+        if cashfree_ok:
+            return "cashfree"
+        return "razorpay"
 
     def create_checkout_session(
         self,
@@ -48,6 +94,7 @@ class CheckoutService:
         product_code: str,
         plan_code: str,
         actor_id: str | None = None,
+        provider: str | None = None,
     ) -> dict[str, Any]:
         normalized_product = product_code.strip().lower()
         normalized_plan = plan_code.strip().lower()
@@ -60,14 +107,29 @@ class CheckoutService:
         amount_paise = self._resolve_plan_price_paise(normalized_plan)
         if amount_paise is None:
             raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
-        if settings.BILLING_ENFORCE_LIVE_CHECKOUT and not self.razorpay.is_configured:
+        checkout_provider = self._resolve_checkout_provider(provider)
+        selected_provider_ready = (
+            self.cashfree.is_configured
+            if checkout_provider == "cashfree"
+            else self.razorpay.is_configured
+        )
+        if settings.BILLING_ENFORCE_LIVE_CHECKOUT and not selected_provider_ready:
             raise ValidationError(
                 {
                     "billing": (
-                        "Live checkout is enforced. Configure Razorpay credentials "
-                        "before creating checkout sessions."
+                        f"Live checkout is enforced. Configure {checkout_provider.title()} "
+                        "credentials before using this provider."
                     )
                 }
+            )
+        if checkout_provider == "cashfree":
+            return self._create_cashfree_session(
+                tenant=tenant,
+                business=business,
+                normalized_product=normalized_product,
+                normalized_plan=normalized_plan,
+                amount_paise=amount_paise,
+                actor_id=actor_id,
             )
 
         receipt = f"biz-{business.id}-{normalized_plan}-{uuid.uuid4().hex[:8]}"
@@ -98,12 +160,14 @@ class CheckoutService:
                 "receipt": receipt,
                 "created_by": actor_id,
                 "mock": bool(order.get("mock")),
+                "provider": "razorpay",
             },
         )
 
         config = get_razorpay_config()
         return {
             "session_id": str(session.id),
+            "provider": "razorpay",
             "order_id": session.razorpay_order_id,
             "amount": session.amount_paise,
             "currency": session.currency,
@@ -111,6 +175,71 @@ class CheckoutService:
             "plan_code": session.plan_code,
             "configured": config.is_configured,
             "key_id": config.key_id if config.is_configured else None,
+            "mock_mode": not config.is_configured,
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def _create_cashfree_session(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        normalized_product: str,
+        normalized_plan: str,
+        amount_paise: int,
+        actor_id: str | None,
+    ) -> dict[str, Any]:
+        order_id = f"ie{uuid.uuid4().hex[:18]}"
+        phone = "".join(ch for ch in str(business.primary_contact or "") if ch.isdigit())[-10:]
+        remote = self.cashfree.create_order(
+            amount_paise=amount_paise,
+            currency=DEFAULT_CHECKOUT_CURRENCY,
+            order_id=order_id,
+            customer_id=str(business.id).replace("-", "")[:50],
+            customer_phone=phone or "9999999999",
+            customer_email=str(business.email or ""),
+            notes={
+                "tenant_id": str(tenant.id),
+                "business_id": str(business.id),
+                "product_code": normalized_product,
+                "plan_code": normalized_plan,
+            },
+        )
+        cashfree_order_id = str(remote.get("order_id") or order_id)
+        payment_session_id = str(remote.get("payment_session_id") or "")
+        expires_at = timezone.now() + timedelta(hours=CHECKOUT_SESSION_TTL_HOURS)
+        session = BillingCheckoutSession.objects.create(
+            tenant=tenant,
+            business=business,
+            product_code=normalized_product,
+            plan_code=normalized_plan,
+            razorpay_order_id=f"cf_{cashfree_order_id}"[:120],
+            cashfree_order_id=cashfree_order_id,
+            amount_paise=amount_paise,
+            currency=str(remote.get("order_currency") or DEFAULT_CHECKOUT_CURRENCY),
+            status=CheckoutSessionStatus.CREATED,
+            expires_at=expires_at,
+            metadata={
+                "created_by": actor_id,
+                "mock": bool(remote.get("mock")),
+                "provider": "cashfree",
+                "payment_session_id": payment_session_id,
+            },
+        )
+        config = get_cashfree_config()
+        return {
+            "session_id": str(session.id),
+            "provider": "cashfree",
+            "order_id": cashfree_order_id,
+            "payment_session_id": payment_session_id,
+            "amount": session.amount_paise,
+            "currency": session.currency,
+            "product_code": session.product_code,
+            "plan_code": session.plan_code,
+            "configured": config.is_configured,
+            "key_id": None,
+            "app_id": config.app_id if config.is_configured else None,
+            "env": config.env,
             "mock_mode": not config.is_configured,
             "expires_at": expires_at.isoformat(),
         }
@@ -212,8 +341,10 @@ class CheckoutService:
         try:
             session = BillingCheckoutSession.objects.get(razorpay_order_id=order_id)
         except BillingCheckoutSession.DoesNotExist:
-            logger.warning("billing.checkout_session_not_found", extra={"order_id": order_id})
-            return None
+            session = BillingCheckoutSession.objects.filter(cashfree_order_id=order_id).first()
+            if session is None:
+                logger.warning("billing.checkout_session_not_found", extra={"order_id": order_id})
+                return None
 
         if session.status == CheckoutSessionStatus.PAID:
             self._record_affiliate_commission(session)

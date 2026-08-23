@@ -1,35 +1,47 @@
 from __future__ import annotations
 
+import json
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.billing.services.cashfree_client import CashfreeClient
+from apps.billing.services.razorpay_client import RazorpayClient
 from apps.businesses.constants import (
     FEATURE_SHOPIE_BOOKS_QUOTATIONS,
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_PRODUCTS,
 )
-from apps.customers.models import Customer
+from apps.businesses.models import Business
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
+from apps.customers.models import Customer
 from apps.shopie.api.access import (
     CATALOG_FEATURES,
     INVOICE_FEATURES,
     POS_SCAN_FEATURES,
     STOCK_FEATURES,
     require_any_shopie_feature,
+)
+from apps.shopie.api.access import (
     require_business as _business,
 )
 from apps.shopie.api.permissions import ShopAccessPermission
 from apps.shopie.api.serializers import (
     BarcodeLookupSerializer,
     EnrichBarcodeSerializer,
+    CashfreePaymentVerifySerializer,
+    MerchantPaymentSettingsSerializer,
     PackagingAnalyzeSerializer,
+    RazorpayPaymentVerifySerializer,
     ShopInvoiceSerializer,
     ShopOrderCreateSerializer,
     ShopOrderSerializer,
@@ -46,6 +58,7 @@ from apps.shopie.api.serializers import (
 from apps.shopie.models import ShopInvoice, ShopOrder, ShopProduct, ShopQuotation, ShopStockMovement
 from apps.shopie.services import CatalogService, OrderService
 from apps.shopie.services.fulfillment import FulfillmentService
+from apps.shopie.services.merchant_payments import MerchantPaymentService
 from apps.shopie.services.packaging_analysis import PackagingAnalysisService
 from apps.shopie.tasks import analyze_packaging_images_task
 
@@ -469,6 +482,260 @@ class ShopOrderConfirmPaymentView(APIView):
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
         return success_response(ShopOrderSerializer(order).data)
+
+
+class MerchantPaymentSettingsView(APIView):
+    permission_classes = [ShopAccessPermission]
+    payments = MerchantPaymentService()
+
+    def _business(self, request: Request, business_id):
+        return _business(request, business_id, feature=FEATURE_SHOPIE_ORDERS)
+
+    def _webhook_url(self, request: Request, business) -> str:
+        return request.build_absolute_uri(
+            reverse("shop-razorpay-webhook", kwargs={"business_id": business.id})
+        )
+
+    def _cashfree_webhook_url(self, request: Request, business) -> str:
+        return request.build_absolute_uri(
+            reverse("shop-cashfree-webhook", kwargs={"business_id": business.id})
+        )
+
+    def get(self, request: Request) -> Response:
+        business_id = request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "This field is required."})
+        business = self._business(request, business_id)
+        return success_response(
+            self.payments.public_settings(
+                business=business,
+                webhook_url=self._webhook_url(request, business),
+                cashfree_webhook_url=self._cashfree_webhook_url(request, business),
+            )
+        )
+
+    def patch(self, request: Request) -> Response:
+        serializer = MerchantPaymentSettingsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = self._business(request, data["business_id"])
+        try:
+            cashfree = data.get("cashfree") if isinstance(data.get("cashfree"), dict) else None
+            razorpay_touched = any(
+                field in request.data
+                for field in ("key_id", "key_secret", "webhook_secret", "enabled")
+            )
+            if razorpay_touched or cashfree is None:
+                payload = self.payments.update_settings(
+                    business=business,
+                    key_id=data.get("key_id") or "",
+                    key_secret=data.get("key_secret") or "",
+                    webhook_secret=data.get("webhook_secret") or "",
+                    upi_vpa=data.get("upi_vpa"),
+                    enabled=data.get("enabled"),
+                    test_connection=bool(data.get("test_connection", True)),
+                )
+            else:
+                payload = self.payments.public_settings(business=business)
+            if cashfree is not None:
+                payload = self.payments.update_cashfree_settings(
+                    business=business,
+                    app_id=str(cashfree.get("app_id") or ""),
+                    secret_key=str(cashfree.get("secret_key") or ""),
+                    enabled=cashfree.get("enabled"),
+                    env=cashfree.get("env"),
+                    test_connection=bool(cashfree.get("test_connection", data.get("test_connection", True))),
+                    upi_vpa=data.get("upi_vpa"),
+                )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        payload["webhook_url"] = self._webhook_url(request, business)
+        payload["cashfree"] = payload.get("cashfree") or {}
+        payload["cashfree"]["webhook_url"] = self._cashfree_webhook_url(request, business)
+        return success_response(payload)
+
+
+class ShopOrderRazorpayCheckoutView(APIView):
+    permission_classes = [ShopAccessPermission]
+    payments = MerchantPaymentService()
+
+    def post(self, request: Request, order_id) -> Response:
+        order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
+        try:
+            payload = self.payments.create_checkout(order=order)
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(payload, status_code=status.HTTP_201_CREATED)
+
+
+class ShopOrderRazorpayVerifyView(APIView):
+    permission_classes = [ShopAccessPermission]
+    orders = OrderService()
+    payments = MerchantPaymentService()
+
+    def post(self, request: Request, order_id) -> Response:
+        serializer = RazorpayPaymentVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
+        pos = (order.metadata or {}).get("pos") or {}
+        if str(pos.get("razorpay_order_id") or "") != data["razorpay_order_id"]:
+            raise ValidationError({"razorpay_order_id": "Order ID does not match this bill."})
+        config = self.payments.config_for_business(business=order.business)
+        valid = RazorpayClient(config.as_client_config()).verify_payment_signature(
+            order_id=data["razorpay_order_id"],
+            payment_id=data["razorpay_payment_id"],
+            signature=data["razorpay_signature"],
+        )
+        if not valid:
+            raise ValidationError({"razorpay_signature": "Payment signature is invalid."})
+        order = self.orders.mark_razorpay_paid(
+            tenant=order.tenant,
+            business=order.business,
+            order=order,
+            payment_id=data["razorpay_payment_id"],
+        )
+        return success_response(ShopOrderSerializer(order).data)
+
+
+class ShopRazorpayWebhookView(APIView):
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+    orders = OrderService()
+    payments = MerchantPaymentService()
+
+    def post(self, request: Request, business_id) -> Response:
+        business = get_object_or_404(Business.all_objects.select_related("tenant"), id=business_id)
+        config = self.payments.config_for_business(business=business)
+        signature = request.headers.get("X-Razorpay-Signature", "")
+        if not RazorpayClient(config.as_client_config()).verify_webhook_signature(
+            request.body,
+            signature,
+        ):
+            return Response({"detail": "Invalid signature."}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValidationError({"payload": "Invalid JSON payload."})
+        if str(payload.get("event") or "") != "payment.captured":
+            return success_response({"processed": False, "reason": "event_ignored"})
+        payment = payload.get("payload", {}).get("payment", {}).get("entity", {}) or {}
+        razorpay_order_id = str(payment.get("order_id") or "")
+        payment_id = str(payment.get("id") or "")
+        order = ShopOrder.all_objects.filter(
+            business=business,
+            metadata__pos__razorpay_order_id=razorpay_order_id,
+        ).first()
+        if order is None:
+            return success_response({"processed": False, "reason": "order_not_found"})
+        self.orders.mark_razorpay_paid(
+            tenant=business.tenant,
+            business=business,
+            order=order,
+            payment_id=payment_id,
+        )
+        return success_response({"processed": True})
+
+
+class ShopOrderCashfreeCheckoutView(APIView):
+    permission_classes = [ShopAccessPermission]
+    payments = MerchantPaymentService()
+
+    def post(self, request: Request, order_id) -> Response:
+        order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
+        try:
+            payload = self.payments.create_cashfree_checkout(order=order)
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(payload, status_code=status.HTTP_201_CREATED)
+
+
+class ShopOrderCashfreeVerifyView(APIView):
+    permission_classes = [ShopAccessPermission]
+    orders = OrderService()
+    payments = MerchantPaymentService()
+
+    def post(self, request: Request, order_id) -> Response:
+        serializer = CashfreePaymentVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        order = get_object_or_404(ShopOrder, tenant=request.current_tenant, id=order_id)
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
+        pos = (order.metadata or {}).get("pos") or {}
+        if str(pos.get("cashfree_order_id") or "") != data["cashfree_order_id"]:
+            raise ValidationError({"cashfree_order_id": "Order ID does not match this bill."})
+        config = self.payments.cashfree_config_for_business(business=order.business)
+        client = CashfreeClient(config.as_client_config())
+        remote = client.get_order(data["cashfree_order_id"])
+        status_value = str(remote.get("order_status") or "").upper()
+        paid = status_value == "PAID" or bool(remote.get("mock"))
+        if not paid:
+            paid = any(
+                str(item.get("payment_status") or "").upper() == "SUCCESS"
+                for item in client.get_payments(data["cashfree_order_id"])
+            )
+        if not paid:
+            raise ValidationError({"cashfree": "Cashfree has not confirmed this payment yet."})
+        order = self.orders.mark_online_paid(
+            tenant=order.tenant,
+            business=order.business,
+            order=order,
+            payment_id=str(data.get("cashfree_payment_id") or data["cashfree_order_id"]),
+            payment_method="cashfree",
+        )
+        return success_response(ShopOrderSerializer(order).data)
+
+
+class ShopCashfreeWebhookView(APIView):
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+    orders = OrderService()
+    payments = MerchantPaymentService()
+
+    def post(self, request: Request, business_id) -> Response:
+        business = get_object_or_404(Business.all_objects.select_related("tenant"), id=business_id)
+        config = self.payments.cashfree_config_for_business(business=business)
+        signature = request.headers.get("x-webhook-signature", "") or request.headers.get(
+            "X-Webhook-Signature", ""
+        )
+        timestamp = request.headers.get("x-webhook-timestamp", "") or request.headers.get(
+            "X-Webhook-Timestamp", ""
+        )
+        if not CashfreeClient(config.as_client_config()).verify_webhook_signature(
+            body=request.body,
+            timestamp=timestamp,
+            signature=signature,
+        ):
+            return Response({"detail": "Invalid signature."}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValidationError({"payload": "Invalid JSON payload."})
+        event_type = str(payload.get("type") or "")
+        if event_type not in {"PAYMENT_SUCCESS_WEBHOOK"}:
+            return success_response({"processed": False, "reason": "event_ignored"})
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        order_info = data.get("order") if isinstance(data.get("order"), dict) else {}
+        payment = data.get("payment") if isinstance(data.get("payment"), dict) else {}
+        cashfree_order_id = str(order_info.get("order_id") or "")
+        payment_id = str(payment.get("cf_payment_id") or "")
+        order = ShopOrder.all_objects.filter(
+            business=business,
+            metadata__pos__cashfree_order_id=cashfree_order_id,
+        ).first()
+        if order is None:
+            return success_response({"processed": False, "reason": "order_not_found"})
+        self.orders.mark_online_paid(
+            tenant=business.tenant,
+            business=business,
+            order=order,
+            payment_id=payment_id or cashfree_order_id,
+            payment_method="cashfree",
+        )
+        return success_response({"processed": True})
 
 
 class ShopInvoiceFromOrderView(APIView):

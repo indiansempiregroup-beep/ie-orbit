@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 const settingsNav = [
   { to: '/settings', labelKey: 'settings.overview', end: true },
   { to: '/settings/business', labelKey: 'settings.businessProfile' },
+  { to: '/settings/payments', labelKey: 'settings.payments', label: 'Payments' },
   { to: '/settings/products', labelKey: 'settings.products' },
   { to: '/settings/team', labelKey: 'settings.team', permission: 'iam:role:assign' },
 ];
@@ -37,7 +38,7 @@ export function SettingsLayout() {
                 border: isActive ? '1px solid #bfdbfe' : '1px solid transparent',
               })}
             >
-              {t(item.labelKey)}
+              {'label' in item ? item.label : t(item.labelKey)}
             </NavLink>
           ))}
         </nav>

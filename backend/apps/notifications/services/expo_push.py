@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from django.conf import settings
 from django.utils import timezone
 
 logger = logging.getLogger("ie_platform.notifications.expo_push")
@@ -24,14 +25,18 @@ def send_expo_push_messages(messages: list[dict[str, Any]]) -> dict[str, Any]:
     for index in range(0, len(messages), EXPO_CHUNK_SIZE):
         chunk = messages[index : index + EXPO_CHUNK_SIZE]
         payload = json.dumps(chunk).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate",
+        }
+        access_token = str(getattr(settings, "EXPO_ACCESS_TOKEN", "") or "").strip()
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
         request = urllib.request.Request(
             EXPO_PUSH_URL,
             data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "Accept-Encoding": "gzip, deflate",
-            },
+            headers=headers,
             method="POST",
         )
         try:

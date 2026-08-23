@@ -20,6 +20,7 @@ import { mobileClient } from '../../api/client';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { EmptyState } from '../../components/ProfileMenuScreen';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { useTabBarLayout } from '../../theme/layout';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { useCart } from './CartContext';
 import { QtyStepper } from './QtyStepper';
@@ -40,6 +41,7 @@ import type { RootStackParamList } from '../../navigation/types';
 export function ShopScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { contentInset } = useTabBarLayout();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
@@ -330,7 +332,7 @@ export function ShopScreen() {
           keyExtractor={(item) => item.id}
           numColumns={2}
           columnWrapperStyle={styles.row}
-          contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: insets.bottom + 24, flexGrow: 1 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: contentInset, flexGrow: 1 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => void load('refresh')} tintColor={primary} colors={[primary]} />
           }

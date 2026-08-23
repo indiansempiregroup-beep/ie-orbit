@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from apps.businesses.models import Business, BusinessProductSubscription, BusinessProductSubscriptionStatus, WhiteLabelProfile
+from apps.businesses.constants import FEATURE_AD_FREE
+from apps.businesses.models import (
+    Business,
+    BusinessProductSubscription,
+    BusinessProductSubscriptionStatus,
+    WhiteLabelProfile,
+)
+from apps.businesses.services.entitlements import EntitlementService
+from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, tenant_feature_enabled
 
 
 PRODUCT_FEATURES: dict[str, list[str]] = {
@@ -79,6 +87,10 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
     business = profile.business
     tenant = business.tenant
     product_codes = active_product_codes(business)
+    show_google_ads = tenant_feature_enabled(
+        tenant=tenant,
+        key=GOOGLE_ADS_FLAG,
+    ) and FEATURE_AD_FREE not in EntitlementService().entitled_features(business=business)
     profile_record = getattr(business, "profile", None)
     cancellation_policy = ""
     rescheduling_policy = ""
@@ -141,6 +153,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         },
         "enabled_products": product_codes,
         "features": enabled_features(product_codes, business=business),
+        "show_google_ads": show_google_ads,
         "loyalty": _loyalty_program_summary(business),
         "referral": _referral_program_summary(business),
         "build_metadata": profile.build_metadata,

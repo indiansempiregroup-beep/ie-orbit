@@ -12,6 +12,7 @@ from apps.audit.services.events import publish_domain_event
 from apps.billing.constants import WEBHOOK_RETRY_DELAYS_SECONDS
 from apps.billing.models import BillingWebhookEvent, WebhookEventStatus
 from apps.billing.services.alerts import BillingAlertService
+from apps.billing.services.cashfree_client import CashfreeClient
 from apps.billing.services.checkout import CheckoutService
 from apps.billing.services.razorpay_client import RazorpayClient
 from apps.businesses.models import BusinessProductSubscription
@@ -67,12 +68,17 @@ class WebhookService:
     def __init__(
         self,
         razorpay_client: RazorpayClient | None = None,
+        cashfree_client: CashfreeClient | None = None,
         checkout_service: CheckoutService | None = None,
         billing_service: ProductBillingService | None = None,
         alert_service: BillingAlertService | None = None,
     ) -> None:
         self.razorpay = razorpay_client or RazorpayClient()
-        self.checkout = checkout_service or CheckoutService(razorpay_client=self.razorpay)
+        self.cashfree = cashfree_client or CashfreeClient()
+        self.checkout = checkout_service or CheckoutService(
+            razorpay_client=self.razorpay,
+            cashfree_client=self.cashfree,
+        )
         self.billing_service = billing_service or default_product_billing_service()
         self.alert_service = alert_service or BillingAlertService()
 
@@ -105,7 +111,7 @@ class WebhookService:
             defaults["tenant_id"] = tenant_id
         webhook_event, created = BillingWebhookEvent.objects.get_or_create(
             external_event_id=event_id[:120],
-            defaults=defaults,
+            defaults={**defaults, "provider": "razorpay"},
         )
         if not created:
             return {"accepted": True, "duplicate": True, "event_id": webhook_event.external_event_id}
@@ -132,10 +138,76 @@ class WebhookService:
             logger.exception("billing.webhook_processing_failed", extra={"event_type": event_type})
             raise
 
+    def process_cashfree_webhook(
+        self,
+        *,
+        body: bytes,
+        timestamp: str,
+        signature: str,
+        external_event_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.cashfree.verify_webhook_signature(
+            body=body,
+            timestamp=timestamp,
+            signature=signature,
+        ):
+            return {"accepted": False, "reason": "invalid_signature"}
+
+        try:
+            payload = json.loads(body.decode())
+        except json.JSONDecodeError:
+            return {"accepted": False, "reason": "invalid_payload"}
+
+        event_type = str(payload.get("type") or payload.get("event") or "unknown")
+        event_id = self._resolve_cashfree_event_id(
+            payload=payload,
+            external_event_id=external_event_id,
+        )
+        tenant_id = self._extract_cashfree_tenant_id(payload)
+        defaults: dict[str, object] = {
+            "event_type": event_type,
+            "payload": payload,
+            "status": WebhookEventStatus.RECEIVED,
+            "provider": "cashfree",
+        }
+        if tenant_id:
+            defaults["tenant_id"] = tenant_id
+        webhook_event, created = BillingWebhookEvent.objects.get_or_create(
+            external_event_id=event_id[:120],
+            defaults=defaults,
+        )
+        if not created:
+            return {"accepted": True, "duplicate": True, "event_id": webhook_event.external_event_id}
+
+        try:
+            self._handle_cashfree_event(payload)
+            webhook_event.status = WebhookEventStatus.PROCESSED
+            webhook_event.processed_at = timezone.now()
+            webhook_event.next_retry_at = None
+            webhook_event.error_message = ""
+            webhook_event.save(
+                update_fields=["status", "processed_at", "next_retry_at", "error_message", "updated_at"]
+            )
+            return {"accepted": True, "event_id": webhook_event.external_event_id}
+        except Exception as exc:
+            webhook_event.status = WebhookEventStatus.FAILED
+            webhook_event.error_message = str(exc)
+            webhook_event.processed_at = timezone.now()
+            webhook_event.save(
+                update_fields=["status", "error_message", "processed_at", "updated_at"]
+            )
+            self._emit_failure_alert(webhook_event=webhook_event)
+            self._schedule_retry(webhook_event=webhook_event)
+            logger.exception("billing.cashfree_webhook_processing_failed", extra={"event_type": event_type})
+            raise
+
     def reprocess_webhook_event(self, *, webhook_event: BillingWebhookEvent) -> dict[str, Any]:
         payload = webhook_event.payload or {}
         try:
-            self._handle_event(payload)
+            if str(webhook_event.provider or "") == "cashfree":
+                self._handle_cashfree_event(payload)
+            else:
+                self._handle_event(payload)
             webhook_event.status = WebhookEventStatus.PROCESSED
             webhook_event.processed_at = timezone.now()
             webhook_event.next_retry_at = None
@@ -219,12 +291,57 @@ class WebhookService:
         order_notes = order_entity.get("notes") or {}
         return str(order_notes["tenant_id"]) if order_notes.get("tenant_id") else None
 
+    def _resolve_cashfree_event_id(
+        self,
+        *,
+        payload: dict[str, Any],
+        external_event_id: str | None,
+    ) -> str:
+        if external_event_id:
+            return external_event_id
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        payment = data.get("payment") if isinstance(data.get("payment"), dict) else {}
+        return str(
+            payload.get("event_time")
+            or payment.get("cf_payment_id")
+            or payload.get("type")
+            or uuid.uuid4()
+        )
+
+    def _extract_cashfree_tenant_id(self, payload: dict[str, Any]) -> str | None:
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        order = data.get("order") if isinstance(data.get("order"), dict) else {}
+        notes = order.get("order_tags") or order.get("order_note") or {}
+        if isinstance(notes, str):
+            try:
+                notes = json.loads(notes)
+            except json.JSONDecodeError:
+                notes = {}
+        if isinstance(notes, dict) and notes.get("tenant_id"):
+            return str(notes["tenant_id"])
+        return None
+
     def _handle_event(self, payload: dict[str, Any]) -> None:
         event_type = str(payload.get("event", ""))
         if event_type == "payment.captured":
             self._handle_payment_captured(payload)
         else:
             logger.info("billing.webhook_ignored", extra={"event_type": event_type})
+
+    def _handle_cashfree_event(self, payload: dict[str, Any]) -> None:
+        event_type = str(payload.get("type") or payload.get("event") or "")
+        if event_type not in {"PAYMENT_SUCCESS_WEBHOOK", "PAYMENT_CHARGES_WEBHOOK"}:
+            logger.info("billing.cashfree_webhook_ignored", extra={"event_type": event_type})
+            return
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        order = data.get("order") if isinstance(data.get("order"), dict) else {}
+        payment = data.get("payment") if isinstance(data.get("payment"), dict) else {}
+        payment_status = str(payment.get("payment_status") or "").upper()
+        if event_type == "PAYMENT_SUCCESS_WEBHOOK" or payment_status == "SUCCESS":
+            order_id = str(order.get("order_id") or "")
+            payment_id = str(payment.get("cf_payment_id") or "")
+            if order_id:
+                self._activate_paid_session(order_id=order_id, payment_id=payment_id)
 
     def _emit_failure_alert(self, *, webhook_event: BillingWebhookEvent) -> None:
         self.alert_service.notify_webhook_failure(webhook_event=webhook_event)
@@ -276,6 +393,21 @@ class WebhookService:
             return
 
         session = self.checkout.mark_session_paid(order_id=str(order_id), payment_id=str(payment_id))
+        if not session:
+            return
+        self._activate_paid_session(order_id=str(order_id), payment_id=str(payment_id), session=session)
+
+    def _activate_paid_session(
+        self,
+        *,
+        order_id: str,
+        payment_id: str,
+        session=None,
+    ) -> None:
+        session = session or self.checkout.mark_session_paid(
+            order_id=str(order_id),
+            payment_id=str(payment_id),
+        )
         if not session:
             return
 

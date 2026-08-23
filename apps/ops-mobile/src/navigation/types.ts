@@ -56,6 +56,7 @@ export type RootStackParamList = {
   Settings: undefined;
   BusinessProfile: undefined;
   BusinessEdit: undefined;
+  PaymentSettings: undefined;
   ProductSettings: undefined;
   ShopProducts: undefined;
   ShopProductAdd: { enrichCode?: string; productId?: string; returnTo?: 'pos' } | undefined;

@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from django.core.exceptions import ObjectDoesNotExist
 
+from apps.common.api.fields import CoordinateField
 from apps.customers.models import (
     Customer,
     CustomerAddress,
@@ -49,6 +50,8 @@ class CustomerPreferencesSerializer(serializers.ModelSerializer):
 
 class CustomerAddressSerializer(serializers.ModelSerializer):
     full_address = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    latitude = CoordinateField()
+    longitude = CoordinateField()
 
     class Meta:
         model = CustomerAddress

@@ -12,7 +12,7 @@ import { useMobileBookings } from '../../hooks/useMobileBookings';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Avatar } from '../../components/ui/Avatar';
-import { useScreenInsets } from '../../theme/layout';
+import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { RootStackParamList } from '../../navigation/types';
@@ -40,6 +40,7 @@ export function ProfileScreen() {
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
+  const { contentInset } = useTabBarLayout();
   const { bookings, reload } = useMobileBookings();
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
@@ -137,7 +138,7 @@ export function ProfileScreen() {
   return (
     <RefreshableScrollView
       style={styles.root}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={{ paddingBottom: contentInset }}
       refreshing={refreshing}
       onRefresh={onRefresh}
       primaryColor={primary}
@@ -222,7 +223,6 @@ export function ProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.xxxl },
   hero: { alignItems: 'center', paddingBottom: spacing.xxl, paddingHorizontal: spacing.xl },
   avatarWrap: { position: 'relative', marginBottom: spacing.md },
   editBadge: {

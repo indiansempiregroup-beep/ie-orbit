@@ -72,6 +72,12 @@ class RazorpayClient:
         }
         return self._request("POST", "/orders", payload)
 
+    def test_connection(self) -> bool:
+        if not self.is_configured:
+            return False
+        self._request("GET", "/orders?count=1")
+        return True
+
     def verify_payment_signature(
         self,
         *,
@@ -126,12 +132,17 @@ class RazorpayClient:
             payload["notes"] = notes
         return self._request("POST", f"/payments/{payment_id}/refund", payload)
 
-    def _request(self, method: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         url = f"{RAZORPAY_API_BASE}{path}"
         credentials = base64.b64encode(
             f"{self.config.key_id}:{self.config.key_secret}".encode()
         ).decode()
-        data = json.dumps(payload).encode()
+        data = json.dumps(payload).encode() if payload is not None else None
         req = request.Request(
             url,
             data=data,

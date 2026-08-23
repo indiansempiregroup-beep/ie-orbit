@@ -1,10 +1,19 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { mobileClient } from '../api/client';
 import { mobileRuntime } from '../config/flavors';
 import { useAuth } from '../contexts/AuthContext';
 import { useBusinessContext } from '../contexts/BootstrapContext';
+
+function resolveEasProjectId(): string {
+  const fromExtra = Constants.expoConfig?.extra?.eas?.projectId;
+  if (typeof fromExtra === 'string' && fromExtra.trim()) {
+    return fromExtra.trim();
+  }
+  return (process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '').trim();
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -31,7 +40,8 @@ async function getExpoPushToken(): Promise<string | null> {
     });
   }
 
-  const token = await Notifications.getExpoPushTokenAsync();
+  const projectId = resolveEasProjectId();
+  const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
   return token.data || null;
 }
 

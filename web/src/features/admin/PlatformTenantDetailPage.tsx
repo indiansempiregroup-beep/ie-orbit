@@ -29,6 +29,12 @@ import {
 
 type TabKey = 'overview' | 'billing' | 'users' | 'payments';
 
+const FEATURE_FLAG_LABELS: Record<string, string> = {
+  google_ads: 'Google Ads in mobile apps',
+  razorpay: 'Razorpay customer payments',
+  cashfree: 'Cashfree customer payments',
+};
+
 function formatInrFromPaise(paise?: number | null) {
   if (paise == null) return '—';
   return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -297,6 +303,39 @@ export function PlatformTenantDetailPage() {
                 </div>
               ))}
               {(tenant?.businesses ?? []).length === 0 ? <AdminEmpty>No businesses on this tenant.</AdminEmpty> : null}
+            </div>
+          </AdminSection>
+
+          <AdminSection
+            title="Feature flags"
+            description="Toggle Google Ads, Razorpay, and product modules for this tenant."
+          >
+            <div className="admin-list">
+              {flagsQuery.isLoading ? <AdminEmpty>Loading flags…</AdminEmpty> : null}
+              {(flagsQuery.data ?? []).map((flag) => (
+                <label key={flag.key} className="admin-list-row admin-list-row--static">
+                  <span className="admin-list-row__title">{FEATURE_FLAG_LABELS[flag.key] ?? flag.key}</span>
+                  <input
+                    type="checkbox"
+                    checked={flag.enabled}
+                    disabled={Boolean(busy)}
+                    onChange={(e) =>
+                      run(`Flag ${flag.key}`, () =>
+                        client.platform.updateTenantFlags(tenantId!, {
+                          flags: { [flag.key]: e.target.checked },
+                          reason,
+                        }),
+                      )
+                    }
+                  />
+                </label>
+              ))}
+              {!flagsQuery.isLoading && (flagsQuery.data ?? []).length === 0 ? (
+                <AdminEmpty>No flags configured.</AdminEmpty>
+              ) : null}
+              {flagsQuery.isError ? (
+                <AdminEmpty>Could not load flags. Check that you are signed in as a platform admin.</AdminEmpty>
+              ) : null}
             </div>
           </AdminSection>
 
@@ -683,45 +722,20 @@ export function PlatformTenantDetailPage() {
               </AdminTable>
             )}
           </AdminSection>
-          <div style={{ display: 'grid', gap: 16 }}>
-            <AdminSection title="Feature flags" description="Toggle product modules for this tenant.">
-              <div className="admin-list">
-                {(flagsQuery.data ?? []).map((flag) => (
-                  <label key={flag.key} className="admin-list-row admin-list-row--static">
-                    <span className="admin-list-row__title">{flag.key}</span>
-                    <input
-                      type="checkbox"
-                      checked={flag.enabled}
-                      disabled={Boolean(busy)}
-                      onChange={(e) =>
-                        run(`Flag ${flag.key}`, () =>
-                          client.platform.updateTenantFlags(tenantId!, {
-                            flags: { [flag.key]: e.target.checked },
-                            reason,
-                          }),
-                        )
-                      }
-                    />
-                  </label>
-                ))}
-                {(flagsQuery.data ?? []).length === 0 ? <AdminEmpty>No flags configured.</AdminEmpty> : null}
-              </div>
-            </AdminSection>
-            <AdminSection title="Credits" description={`Balance ${formatInrFromPaise(creditsQuery.data ?? 0)}`}>
-              <button
-                type="button"
-                className="admin-btn admin-btn--primary"
-                disabled={Boolean(busy)}
-                onClick={() =>
-                  run('Grant ₹500 credit', () =>
-                    client.platform.grantCredit(tenantId!, { amount_paise: 50000, reason }),
-                  )
-                }
-              >
-                Grant ₹500 credit
-              </button>
-            </AdminSection>
-          </div>
+          <AdminSection title="Credits" description={`Balance ${formatInrFromPaise(creditsQuery.data ?? 0)}`}>
+            <button
+              type="button"
+              className="admin-btn admin-btn--primary"
+              disabled={Boolean(busy)}
+              onClick={() =>
+                run('Grant ₹500 credit', () =>
+                  client.platform.grantCredit(tenantId!, { amount_paise: 50000, reason }),
+                )
+              }
+            >
+              Grant ₹500 credit
+            </button>
+          </AdminSection>
         </div>
       ) : null}
 

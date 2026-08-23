@@ -15,6 +15,7 @@ from apps.businesses.constants import (
     BI_FEATURES_FULL,
     BI_FEATURES_LIMITED,
     DEFAULT_PRODUCT_CODE,
+    FEATURE_AD_FREE,
     FEATURE_APPOINTIE_BOOKINGS,
     FEATURE_REWARD_POINTS,
     FEATURE_SHOPIE_LOYALTY,
@@ -594,6 +595,12 @@ class EntitlementService:
         payload["product_code"] = product_code.strip().lower() or DEFAULT_PRODUCT_CODE
         payload["billing_state"] = subscription_billing_state(subscription)
         payload["entitled_features"] = self.entitled_features(business=business)
+        from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, tenant_feature_enabled
+
+        payload["show_google_ads"] = tenant_feature_enabled(
+            tenant=business.tenant,
+            key=GOOGLE_ADS_FLAG,
+        ) and FEATURE_AD_FREE not in payload["entitled_features"]
         return payload
 
     def billing_snapshots(self, *, business: Business) -> list[dict[str, Any]]:

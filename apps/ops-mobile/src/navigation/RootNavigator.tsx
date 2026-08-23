@@ -41,6 +41,7 @@ import { StaffAvailabilityScreen } from '../features/staff/StaffAvailabilityScre
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { BusinessProfileScreen } from '../features/settings/BusinessProfileScreen';
 import { BusinessEditScreen } from '../features/settings/BusinessEditScreen';
+import { PaymentSettingsScreen } from '../features/settings/PaymentSettingsScreen';
 import { ProductSettingsScreen } from '../features/settings/ProductSettingsScreen';
 import { ShopProductsScreen } from '../features/shop/ShopProductsScreen';
 import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
@@ -222,6 +223,7 @@ export function RootNavigator() {
             {stackScreen('Settings', SettingsScreen, t('nav.settings'))}
             {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
             {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
+            {stackScreen('PaymentSettings', PaymentSettingsScreen, 'Payments')}
             {stackScreen('ProductSettings', ProductSettingsScreen, t('settings.productsBilling'))}
             {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
             {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}

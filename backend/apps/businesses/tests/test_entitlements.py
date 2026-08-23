@@ -7,7 +7,12 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.authentication.models import User, UserStatus
-from apps.businesses.constants import DEFAULT_TRIAL_DAYS
+from apps.businesses.constants import (
+    DEFAULT_TRIAL_DAYS,
+    FEATURE_AD_FREE,
+    FEATURE_CASHFREE_PAYMENTS,
+    FEATURE_RAZORPAY_PAYMENTS,
+)
 from apps.businesses.models import (
     Branch,
     Business,
@@ -67,6 +72,59 @@ def test_trial_uses_pro_limits(business: Business) -> None:
     assert "forecast" in entitlements.bi_features
     assert "reward_points" in entitlements.features
     assert "appointie_bookings" in entitlements.features
+    assert FEATURE_AD_FREE in entitlements.features
+    assert FEATURE_RAZORPAY_PAYMENTS in entitlements.features
+    assert FEATURE_CASHFREE_PAYMENTS in entitlements.features
+
+
+@pytest.mark.django_db
+def test_starter_shows_ads_and_pro_is_ad_free(business: Business) -> None:
+    starter, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "AppointIE Starter", "is_public": True},
+    )
+    subscription = BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=starter,
+    )
+    service = EntitlementService()
+    assert service.billing_snapshot(business=business)["show_google_ads"] is True
+
+    pro, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-pro",
+        defaults={"name": "AppointIE Pro", "is_public": True},
+    )
+    subscription.plan = pro
+    subscription.save(update_fields=["plan"])
+    snapshot = service.billing_snapshot(business=business)
+    assert snapshot["show_google_ads"] is False
+    assert FEATURE_AD_FREE in snapshot["entitled_features"]
+
+
+@pytest.mark.django_db
+def test_platform_admin_can_disable_google_ads(business: Business) -> None:
+    from apps.platform_admin.models import PlatformFeatureFlag
+
+    starter, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "AppointIE Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=starter,
+    )
+    PlatformFeatureFlag.objects.create(
+        tenant=business.tenant,
+        key="google_ads",
+        enabled=False,
+    )
+    assert EntitlementService().billing_snapshot(business=business)["show_google_ads"] is False
 
 
 @pytest.mark.django_db

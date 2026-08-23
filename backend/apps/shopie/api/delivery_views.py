@@ -11,7 +11,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.businesses.constants import FEATURE_SHOPIE_INSTANT_DELIVERY
+from apps.businesses.constants import FEATURE_SHOPIE_INSTANT_DELIVERY, FEATURE_SHOPIE_ORDERS
 from apps.businesses.models import Business
 from apps.common.api.responses import success_response
 from apps.shopie.api.access import require_any_shopie_feature, require_business
@@ -161,6 +161,29 @@ class ShopOrderDispatchView(APIView):
         return success_response(ShopOrderSerializer(order).data)
 
 
+class ShopOrderDeliverySimulateView(APIView):
+    """Step a mock delivery forward without a partner webhook."""
+
+    permission_classes = [ShopAccessPermission]
+    delivery = DeliveryService()
+
+    def post(self, request: Request, order_id) -> Response:
+        order = get_object_or_404(
+            ShopOrder.objects.select_related("business", "customer", "tenant"),
+            tenant=request.current_tenant,
+            id=order_id,
+        )
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_INSTANT_DELIVERY,))
+        try:
+            order = self.delivery.simulate_tracking(
+                order=order,
+                status=str(request.data.get("partner_status") or ""),
+            )
+        except DjangoValidationError as exc:
+            raise _api_validation(exc) from exc
+        return success_response(self.delivery.live_payload(order=order))
+
+
 class ShopOrderDeliveryLiveView(APIView):
     permission_classes = [ShopAccessPermission]
     delivery = DeliveryService()
@@ -171,7 +194,7 @@ class ShopOrderDeliveryLiveView(APIView):
             tenant=request.current_tenant,
             id=order_id,
         )
-        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_INSTANT_DELIVERY,))
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
         refresh = str(request.query_params.get("refresh") or "").lower() in {"1", "true", "yes"}
         try:
             return success_response(self.delivery.live_payload(order=order, refresh=refresh))

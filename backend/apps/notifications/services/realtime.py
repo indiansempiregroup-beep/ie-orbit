@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any
 
-from django_redis import get_redis_connection
+from django.conf import settings
 
 logger = logging.getLogger("ie_platform.notifications.realtime")
 
@@ -13,6 +13,26 @@ CHANNEL_PREFIX = "notifications:user:"
 
 def user_notification_channel(user_id: str) -> str:
     return f"{CHANNEL_PREFIX}{user_id}"
+
+
+def realtime_redis() -> Any | None:
+    """A raw Redis client for pub/sub, or None when realtime is unavailable.
+
+    The cache backend only exposes a connection when it is django_redis, which
+    is production-only; local development runs LocMemCache. Connecting through
+    REDIS_URL keeps pub/sub working in both, and returning None lets callers
+    fall back to polling instead of failing the request.
+    """
+    url = str(getattr(settings, "REDIS_URL", "") or "")
+    if not url:
+        return None
+    try:
+        import redis
+
+        return redis.Redis.from_url(url, socket_connect_timeout=5, socket_timeout=5)
+    except Exception:
+        logger.warning("Realtime notifications disabled: cannot reach Redis.", exc_info=True)
+        return None
 
 
 def publish_notification_created(*, notification: Any) -> None:
@@ -35,9 +55,11 @@ def publish_notification_created(*, notification: Any) -> None:
             "booking_id": str(notification.booking_id) if notification.booking_id else None,
         },
     }
-    message = json.dumps(payload)
+    client = realtime_redis()
+    if client is None:
+        return
     try:
-        client = get_redis_connection("default")
+        message = json.dumps(payload, default=str)
         client.publish(user_notification_channel(str(notification.user_id)), message)
     except Exception:
         logger.exception(

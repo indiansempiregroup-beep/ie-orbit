@@ -139,6 +139,7 @@ class BillingCheckoutView(APIView):
             product_code=serializer.validated_data["product_code"],
             plan_code=serializer.validated_data["plan_code"],
             actor_id=str(request.user.id),
+            provider=serializer.validated_data.get("provider"),
         )
         return success_response(
             checkout,
@@ -409,13 +410,13 @@ class BillingGoLiveCheckView(APIView):
         checks = [
             {
                 "id": "razorpay_configured",
-                "label": "Razorpay API credentials configured",
+                "label": "At least one payment gateway configured",
                 "ok": bool(checkout_status["configured"]),
                 "severity": "blocker",
             },
             {
                 "id": "webhook_secret_configured",
-                "label": "Webhook secret configured",
+                "label": "Webhook secret configured for a live gateway",
                 "ok": bool(checkout_status["webhook_configured"]),
                 "severity": "blocker",
             },
@@ -488,17 +489,19 @@ class BillingReleaseGateView(APIView):
         checks = [
             {
                 "id": "razorpay_configured",
-                "label": "Razorpay API credentials configured",
+                "label": "At least one payment gateway configured",
                 "ok": bool(checkout_status["configured"]),
                 "severity": "blocker",
-                "remediation": "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in backend environment.",
+                "remediation": "Set RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET or CASHFREE_APP_ID/CASHFREE_SECRET_KEY.",
             },
             {
                 "id": "webhook_secret_configured",
-                "label": "Webhook secret configured",
+                "label": "Webhook secret configured for a live gateway",
                 "ok": bool(checkout_status["webhook_configured"]),
                 "severity": "blocker",
-                "remediation": "Set RAZORPAY_WEBHOOK_SECRET and rotate it in Razorpay dashboard if needed.",
+                "remediation": (
+                    "Set RAZORPAY_WEBHOOK_SECRET for Razorpay. Cashfree uses its PG Secret Key."
+                ),
             },
             {
                 "id": "live_checkout_enforced",
@@ -714,14 +717,14 @@ class BillingOpsSnapshotView(APIView):
             recommendations.append(
                 {
                     "severity": "blocker",
-                    "action": "Configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET before launch.",
+                    "action": "Configure Razorpay or Cashfree API credentials before launch.",
                 }
             )
         if "webhook_secret_configured" in blockers:
             recommendations.append(
                 {
                     "severity": "blocker",
-                    "action": "Set RAZORPAY_WEBHOOK_SECRET and validate signature checks.",
+                    "action": "Set a webhook secret for the live gateway (Razorpay or Cashfree).",
                 }
             )
         if dead_letter > 0:
@@ -1240,6 +1243,30 @@ class RazorpayWebhookView(APIView):
             body=request.body,
             signature=signature,
             external_event_id=external_event_id,
+        )
+        if not result.get("accepted"):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return success_response(result, request_id=getattr(request, "request_id", None))
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class CashfreeWebhookView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    @extend_schema(tags=["Billing"], description="Cashfree payment webhook endpoint.")
+    def post(self, request: Request) -> Response:
+        signature = request.headers.get("x-webhook-signature", "") or request.headers.get(
+            "X-Webhook-Signature", ""
+        )
+        timestamp = request.headers.get("x-webhook-timestamp", "") or request.headers.get(
+            "X-Webhook-Timestamp", ""
+        )
+        result = WebhookService().process_cashfree_webhook(
+            body=request.body,
+            timestamp=timestamp,
+            signature=signature,
+            external_event_id=request.headers.get("x-idempotency-key"),
         )
         if not result.get("accepted"):
             return Response(result, status=status.HTTP_400_BAD_REQUEST)

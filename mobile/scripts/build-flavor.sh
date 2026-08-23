@@ -6,7 +6,7 @@ PLATFORM="${2:-all}"
 
 if [[ -z "$PROFILE" ]]; then
   echo "Usage: ./scripts/build-flavor.sh <eas-profile> [ios|android|all]"
-  echo "Profiles: demo-main-preview | demo-main-production | empire-salon-preview | empire-salon-production"
+  echo "Profiles: demo-main-preview | demo-main-production | empire-salon-preview | empire-salon-production | rupali-sirsat-preview | rupali-sirsat-production"
   exit 1
 fi
 

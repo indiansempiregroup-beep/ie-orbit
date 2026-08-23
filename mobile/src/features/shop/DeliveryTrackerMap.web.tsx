@@ -16,7 +16,7 @@ type Props = { live: ShopDeliveryLive; primary: string };
 const asLatLng = (point: DeliveryPoint): LatLngLiteral => ({ lat: point.latitude, lng: point.longitude });
 
 export function DeliveryTrackerMap({ live, primary }: Props) {
-  const { pickup, rider, drop, points, center } = deliveryMapPoints(live);
+  const { pickup, rider, drop, trail, points, center } = deliveryMapPoints(live);
   const [mapError, setMapError] = useState<string | null>(MAPS_API_KEY ? null : MISSING_KEY_MESSAGE);
   const [mapReady, setMapReady] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -42,8 +42,8 @@ export function DeliveryTrackerMap({ live, primary }: Props) {
           streetViewControl: false,
           fullscreenControl: false,
           clickableIcons: false,
-          zoomControl: false,
-          gestureHandling: 'none',
+          zoomControl: true,
+          gestureHandling: 'greedy',
         });
 
         if (pickup) {
@@ -66,10 +66,12 @@ export function DeliveryTrackerMap({ live, primary }: Props) {
             }),
           );
         }
-        if (points.length > 1) {
+        if (trail.length > 1) {
           overlays.push(
-            new maps.Polyline({ map, path: points.map(asLatLng), strokeColor: primary, strokeWeight: 4 }),
+            new maps.Polyline({ map, path: trail.map(asLatLng), strokeColor: primary, strokeWeight: 4 }),
           );
+        }
+        if (points.length > 1) {
           const bounds = new maps.LatLngBounds();
           points.forEach((point) => bounds.extend(asLatLng(point)));
           map.fitBounds(bounds, 48);
@@ -88,7 +90,13 @@ export function DeliveryTrackerMap({ live, primary }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, primary, riderName]);
 
-  if (!center) return null;
+  if (!center) {
+    return (
+      <View style={styles.fallback}>
+        <Text style={styles.fallbackText}>Live GPS will appear here when the rider starts sharing location.</Text>
+      </View>
+    );
+  }
 
   if (mapError) {
     return (

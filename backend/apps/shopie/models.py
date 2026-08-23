@@ -43,6 +43,7 @@ class OrderStatus(models.TextChoices):
     CONFIRMED = "confirmed", "Confirmed"
     READY = "ready", "Ready"
     OUT_FOR_DELIVERY = "out_for_delivery", "Out for Delivery"
+    DELIVERY_FAILED = "delivery_failed", "Delivery Failed"
     COMPLETED = "completed", "Completed"
     CANCELLED = "cancelled", "Cancelled"
 
@@ -638,6 +639,149 @@ class DeliveryWebhookStatus(models.TextChoices):
     FAILED = "failed", "Failed"
     IGNORED = "ignored", "Ignored"
     DEAD_LETTER = "dead_letter", "Dead Letter"
+
+
+class DeliveryAttemptStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    DELIVERED = "delivered", "Delivered"
+    FAILED = "failed", "Failed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class TrackingEventKind(models.TextChoices):
+    STATUS = "status", "Status"
+    LOCATION = "location", "Location"
+
+
+class TrackingEventSource(models.TextChoices):
+    ORDER = "order", "Order"
+    DISPATCH = "dispatch", "Dispatch"
+    WEBHOOK = "webhook", "Webhook"
+    POLL = "poll", "Poll"
+    SIMULATION = "simulation", "Simulation"
+    MIGRATION = "migration", "Migration"
+
+
+class ShopDeliveryAttempt(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_delivery_attempts",
+    )
+    order = models.ForeignKey(
+        ShopOrder,
+        on_delete=models.CASCADE,
+        related_name="delivery_attempts",
+    )
+    attempt_number = models.PositiveSmallIntegerField()
+    provider = models.CharField(max_length=32, blank=True, db_index=True)
+    booking_id = models.CharField(max_length=180, blank=True, db_index=True)
+    status = models.CharField(
+        max_length=32,
+        choices=DeliveryAttemptStatus.choices,
+        default=DeliveryAttemptStatus.ACTIVE,
+        db_index=True,
+    )
+    tracking_url = models.URLField(max_length=1000, blank=True)
+    rider = models.JSONField(default=dict, blank=True)
+    reason = models.TextField(blank=True)
+    started_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_delivery_attempts"
+        ordering = ["attempt_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order", "attempt_number"],
+                name="uq_shop_delivery_attempt_order_number",
+            )
+        ]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["business", "status", "started_at"]),
+            models.Index(fields=["provider", "booking_id"]),
+        ]
+
+
+class ShopOrderTrackingEvent(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_order_tracking_events",
+    )
+    order = models.ForeignKey(
+        ShopOrder,
+        on_delete=models.CASCADE,
+        related_name="tracking_events",
+    )
+    attempt = models.ForeignKey(
+        ShopDeliveryAttempt,
+        on_delete=models.CASCADE,
+        related_name="events",
+        null=True,
+        blank=True,
+    )
+    webhook_event = models.ForeignKey(
+        "ShopDeliveryWebhookEvent",
+        on_delete=models.SET_NULL,
+        related_name="tracking_events",
+        null=True,
+        blank=True,
+    )
+    kind = models.CharField(
+        max_length=16,
+        choices=TrackingEventKind.choices,
+        default=TrackingEventKind.STATUS,
+        db_index=True,
+    )
+    status = models.CharField(max_length=40, blank=True, db_index=True)
+    label = models.CharField(max_length=160, blank=True)
+    source = models.CharField(
+        max_length=20,
+        choices=TrackingEventSource.choices,
+        default=TrackingEventSource.ORDER,
+        db_index=True,
+    )
+    source_key = models.CharField(max_length=220, blank=True)
+    occurred_at = models.DateTimeField(db_index=True)
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+    )
+    eta_minutes = models.PositiveSmallIntegerField(null=True, blank=True)
+    reason = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_order_tracking_events"
+        ordering = ["occurred_at", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order", "source_key"],
+                condition=~models.Q(source_key=""),
+                name="uq_shop_tracking_order_source_key",
+            )
+        ]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["order", "kind", "occurred_at"]),
+            models.Index(fields=["attempt", "kind", "occurred_at"]),
+        ]
 
 
 class ShopDeliveryWebhookEvent(BaseModel):

@@ -34,6 +34,12 @@ export function SettingsScreen() {
             onPress={() => navigation.navigate('BusinessProfile')}
           />
           <MenuRow
+            icon="credit-card"
+            label="Payments"
+            subtitle="Razorpay, Cashfree, UPI & payment QR"
+            onPress={() => navigation.navigate('PaymentSettings')}
+          />
+          <MenuRow
             icon="package"
             label={t('settings.productsPlans')}
             subtitle="Plans & pricing"

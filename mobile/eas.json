@@ -9,7 +9,12 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_MOBILE_DEV_MODE": "true",
-        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1"
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
       }
     },
     "demo-main-preview": {
@@ -18,7 +23,12 @@
         "EXPO_PUBLIC_FLAVOR_KEY": "demo-MAIN",
         "EXPO_PUBLIC_APP_NAME": "Demo Salon",
         "EXPO_PUBLIC_APP_SLUG": "demo-salon",
-        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1"
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
       }
     },
     "demo-main-production": {
@@ -27,7 +37,12 @@
         "EXPO_PUBLIC_FLAVOR_KEY": "demo-MAIN",
         "EXPO_PUBLIC_APP_NAME": "Demo Salon",
         "EXPO_PUBLIC_APP_SLUG": "demo-salon",
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
       }
     },
     "empire-salon-preview": {
@@ -36,7 +51,12 @@
         "EXPO_PUBLIC_FLAVOR_KEY": "empire-salon-main",
         "EXPO_PUBLIC_APP_NAME": "Empire Salon",
         "EXPO_PUBLIC_APP_SLUG": "empire-salon",
-        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1"
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
       }
     },
     "empire-salon-production": {
@@ -45,12 +65,46 @@
         "EXPO_PUBLIC_FLAVOR_KEY": "empire-salon-main",
         "EXPO_PUBLIC_APP_NAME": "Empire Salon",
         "EXPO_PUBLIC_APP_SLUG": "empire-salon",
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
+      }
+    },
+    "rupali-sirsat-preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "rupali-s-business-rupali-s-business",
+        "EXPO_PUBLIC_APP_NAME": "Rupali Sirsat",
+        "EXPO_PUBLIC_APP_SLUG": "rupali-sirsat",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
+      }
+    },
+    "rupali-sirsat-production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "rupali-s-business-rupali-s-business",
+        "EXPO_PUBLIC_APP_NAME": "Rupali Sirsat",
+        "EXPO_PUBLIC_APP_SLUG": "rupali-sirsat",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
       }
     }
   },
   "submit": {
     "demo-main-production": {},
-    "empire-salon-production": {}
+    "empire-salon-production": {},
+    "rupali-sirsat-production": {}
   }
 }

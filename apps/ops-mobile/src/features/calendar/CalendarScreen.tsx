@@ -15,6 +15,7 @@ import { Button } from '../../components/ui/Button';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useAvailability, useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
@@ -59,6 +60,7 @@ export function CalendarScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await Promise.all([reload(), reloadSlots()]);
   });
+  const { contentInset } = useTabBarLayout();
 
   const staffOptions = useMemo(
     () => [
@@ -115,7 +117,7 @@ export function CalendarScreen() {
       <RefreshableScrollView
         refreshing={refreshing || loading || slotsLoading}
         onRefresh={onRefresh}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: contentInset }]}
       >
         <CalendarPicker
           value={dateKey}

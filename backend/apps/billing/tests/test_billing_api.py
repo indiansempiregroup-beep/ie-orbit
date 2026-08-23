@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -61,9 +63,10 @@ def test_billing_status_mock_mode(api_client: APIClient, user: User) -> None:
     response = api_client.get(reverse("billing-status"))
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["provider"] == "razorpay"
-    assert payload["configured"] is False
-    assert payload["mock_mode"] is True
+    assert payload["provider"] in {"razorpay", "cashfree", "both"}
+    assert "razorpay" in payload
+    assert "cashfree" in payload
+    assert payload["configured"] is (not payload["mock_mode"])
 
 
 @pytest.mark.django_db
@@ -116,7 +119,11 @@ def test_billing_plan_catalog_honors_price_override(api_client: APIClient, user:
 
 
 @pytest.mark.django_db
-def test_billing_checkout_creates_mock_order(api_client: APIClient, user: User) -> None:
+def test_billing_checkout_creates_mock_order(api_client: APIClient, user: User, settings) -> None:
+    settings.RAZORPAY_KEY_ID = ""
+    settings.RAZORPAY_KEY_SECRET = ""
+    settings.CASHFREE_APP_ID = ""
+    settings.CASHFREE_SECRET_KEY = ""
     access = authenticate(api_client, user)
     tenant_id = create_tenant(api_client)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
@@ -227,7 +234,132 @@ def test_razorpay_mock_order_client() -> None:
 @pytest.mark.django_db
 def test_checkout_service_status() -> None:
     status_payload = CheckoutService().get_status()
-    assert status_payload["provider"] == "razorpay"
+    assert status_payload["provider"] in {"razorpay", "cashfree", "both"}
+    assert "razorpay" in status_payload
+    assert "cashfree" in status_payload
+    assert "env" in status_payload["cashfree"]
+
+
+@pytest.mark.django_db
+def test_cashfree_mock_order_and_checkout(settings) -> None:
+    from apps.billing.services.cashfree_client import CashfreeClient
+
+    client = CashfreeClient()
+    order = client.create_order(
+        amount_paise=25000,
+        currency="INR",
+        order_id="ie_test_order",
+        customer_id="biz1",
+    )
+    assert order["mock"] is True
+    assert order["payment_session_id"].startswith("session_mock_")
+
+    settings.CASHFREE_APP_ID = "TESTAPP"
+    settings.CASHFREE_SECRET_KEY = "secret"
+    settings.RAZORPAY_KEY_ID = ""
+    settings.RAZORPAY_KEY_SECRET = ""
+    status_payload = CheckoutService().get_status()
+    assert status_payload["provider"] == "cashfree"
+    assert status_payload["configured"] is True
+    assert status_payload["cashfree"]["configured"] is True
+
+
+@pytest.mark.django_db
+def test_billing_checkout_cashfree_provider(api_client: APIClient, user: User, monkeypatch: pytest.MonkeyPatch, settings) -> None:
+    from apps.billing.services.cashfree_client import CashfreeClient
+
+    settings.CASHFREE_APP_ID = "TESTAPP"
+    settings.CASHFREE_SECRET_KEY = "secret"
+
+    def fake_create_order(self, **kwargs):
+        return {
+            "order_id": kwargs["order_id"],
+            "payment_session_id": "session_live_1",
+            "order_currency": "INR",
+        }
+
+    monkeypatch.setattr(CashfreeClient, "create_order", fake_create_order)
+
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_response = api_client.post(
+        reverse("business-list-create"),
+        {
+            "business_code": "billing-cf-biz",
+            "business_name": "Billing CF Biz",
+            "display_name": "Billing CF Biz",
+        },
+        format="json",
+    )
+    business_id = business_response.json()["data"]["id"]
+    api_client.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+        HTTP_X_TENANT_ID=tenant_id,
+        HTTP_X_BUSINESS_ID=business_id,
+    )
+    response = api_client.post(
+        reverse("billing-checkout"),
+        {
+            "product_code": "appointie",
+            "plan_code": "appointie-starter",
+            "business_id": business_id,
+            "provider": "cashfree",
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+    payload = response.json()["data"]
+    assert payload["provider"] == "cashfree"
+    assert payload["payment_session_id"] == "session_live_1"
+
+
+@pytest.mark.django_db
+def test_cashfree_webhook_marks_session_paid(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
+    from apps.billing.services.cashfree_client import CashfreeClient
+    from apps.businesses.models import Business
+    from apps.tenancy.models import Organization, Tenant
+
+    tenant = Tenant.objects.create(slug="cf-wh", display_name="CF WH")
+    organization = Organization.objects.create(tenant=tenant, name="CF WH Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="cf-wh-biz",
+        business_name="CF WH Biz",
+        display_name="CF WH Biz",
+    )
+    session = BillingCheckoutSession.objects.create(
+        tenant=tenant,
+        business=business,
+        product_code="appointie",
+        plan_code="appointie-starter",
+        razorpay_order_id="cf_order_paid_1",
+        cashfree_order_id="order_paid_1",
+        amount_paise=99900,
+        currency="INR",
+        metadata={"provider": "cashfree"},
+    )
+    monkeypatch.setattr(CashfreeClient, "verify_webhook_signature", lambda self, **kwargs: True)
+
+    def fake_activate(self, *, order_id, payment_id, session=None):
+        CheckoutService().mark_session_paid(order_id=order_id, payment_id=payment_id)
+
+    monkeypatch.setattr(WebhookService, "_activate_paid_session", fake_activate)
+    body = json.dumps(
+        {
+            "type": "PAYMENT_SUCCESS_WEBHOOK",
+            "data": {
+                "order": {"order_id": "order_paid_1"},
+                "payment": {"cf_payment_id": "pay_cf_1", "payment_status": "SUCCESS"},
+            },
+        }
+    ).encode()
+    result = WebhookService().process_cashfree_webhook(body=body, timestamp="1", signature="ok")
+    assert result["accepted"] is True
+    session.refresh_from_db()
+    assert session.status == CheckoutSessionStatus.PAID
 
 
 @pytest.mark.django_db

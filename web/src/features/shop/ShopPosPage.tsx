@@ -9,7 +9,7 @@ import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
-import type { Customer, ShopProduct } from '@ie-platform/sdk';
+import type { Customer, MerchantCashfreeCheckout, MerchantRazorpayCheckout, ShopProduct } from '@ie-platform/sdk';
 
 type BasketLine = {
   product: ShopProduct;
@@ -19,7 +19,44 @@ type BasketLine = {
   discountValue: number;
 };
 
-type PaymentMethod = 'cash' | 'upi' | 'card' | 'borrow';
+type PaymentMethod = 'cash' | 'upi' | 'card' | 'borrow' | 'razorpay' | 'cashfree';
+
+type RazorpayResult = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    Cashfree?: (options: { mode: string }) => {
+      checkout: (options: Record<string, unknown>) => Promise<{ paymentDetails?: { paymentId?: string } }>;
+    };
+  }
+}
+
+function loadCashfreeCheckout(): Promise<boolean> {
+  if (window.Cashfree) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+function loadRazorpayCheckout(): Promise<boolean> {
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 export function ShopPosPage() {
   const client = useApiClient();
@@ -43,18 +80,103 @@ export function ShopPosPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [message, setMessage] = useState<string | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [razorpayConnected, setRazorpayConnected] = useState(false);
+  const [cashfreeConnected, setCashfreeConnected] = useState(false);
+  const [paymentSheet, setPaymentSheet] = useState<{
+    orderId: string;
+    orderNumber: string;
+    amount: number;
+    status: 'opening' | 'waiting' | 'paid' | 'failed';
+  } | null>(null);
 
   useEffect(() => {
     if (!workspace.businessId) return;
+    const businessId = workspace.businessId;
     void (async () => {
       try {
-        const response = await client.customers.list({ business: workspace.businessId });
+        const response = await client.customers.list({ business: businessId });
         setCustomers(response.data ?? []);
       } catch {
         setCustomers([]);
       }
+      try {
+        const response = await client.shop.getMerchantPaymentSettings({ business_id: businessId });
+        setRazorpayConnected(response.data.can_accept_payments);
+        setCashfreeConnected(Boolean(response.data.cashfree?.can_accept_payments));
+      } catch {
+        setRazorpayConnected(false);
+        setCashfreeConnected(false);
+      }
     })();
   }, [client, workspace.businessId]);
+
+  useEffect(() => {
+    if (!paymentSheet || !['opening', 'waiting'].includes(paymentSheet.status)) return;
+    const interval = window.setInterval(() => {
+      void client.shop.getOrder(paymentSheet.orderId).then((response) => {
+        if (response.data.payment_status === 'paid') {
+          setPaymentSheet((current) => (current ? { ...current, status: 'paid' } : current));
+          setBasket([]);
+          setBillDiscountType('');
+          setBillDiscountValue('0');
+          setPointsToRedeem(0);
+        }
+      });
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [client, paymentSheet]);
+
+  async function openRazorpay(checkoutData: MerchantRazorpayCheckout) {
+    const loaded = await loadRazorpayCheckout();
+    if (!loaded || !window.Razorpay) throw new Error('Unable to load secure Razorpay Checkout.');
+    setPaymentSheet({
+      orderId: checkoutData.shop_order_id,
+      orderNumber: checkoutData.order_number,
+      amount: checkoutData.amount / 100,
+      status: 'waiting',
+    });
+    const result = await new Promise<RazorpayResult>((resolve, reject) => {
+      const checkout = new window.Razorpay!({
+        key: checkoutData.key_id,
+        order_id: checkoutData.razorpay_order_id,
+        amount: checkoutData.amount,
+        currency: checkoutData.currency,
+        name: checkoutData.business_name,
+        description: `Bill ${checkoutData.order_number}`,
+        handler: resolve,
+        modal: { ondismiss: () => reject(new Error('Payment window closed. The unpaid bill is saved.')) },
+        theme: { color: '#2563eb' },
+      });
+      checkout.open();
+    });
+    const verified = await client.shop.verifyRazorpayPayment(checkoutData.shop_order_id, result);
+    setPaymentSheet((current) => (current ? { ...current, status: 'paid' } : current));
+    return verified.data;
+  }
+
+  async function openCashfree(checkoutData: MerchantCashfreeCheckout) {
+    const loaded = await loadCashfreeCheckout();
+    if (!loaded || !window.Cashfree) throw new Error('Unable to load Cashfree Checkout.');
+    setPaymentSheet({
+      orderId: checkoutData.shop_order_id,
+      orderNumber: checkoutData.order_number,
+      amount: checkoutData.amount / 100,
+      status: 'waiting',
+    });
+    const cashfree = window.Cashfree({
+      mode: checkoutData.env === 'production' ? 'production' : 'sandbox',
+    });
+    const result = await cashfree.checkout({
+      paymentSessionId: checkoutData.payment_session_id,
+      redirectTarget: '_modal',
+    });
+    const verified = await client.shop.verifyCashfreePayment(checkoutData.shop_order_id, {
+      cashfree_order_id: checkoutData.cashfree_order_id,
+      cashfree_payment_id: result?.paymentDetails?.paymentId,
+    });
+    setPaymentSheet((current) => (current ? { ...current, status: 'paid' } : current));
+    return verified.data;
+  }
 
   const filteredProducts = useMemo(() => {
     const rows = products.data ?? [];
@@ -218,7 +340,11 @@ export function ShopPosPage() {
         notes:
           paymentMethod === 'borrow'
             ? 'POS · BORROW (due)'
-            : `POS · ${paymentMethod.toUpperCase()}`,
+            : paymentMethod === 'razorpay'
+              ? 'POS · RAZORPAY (awaiting payment)'
+              : paymentMethod === 'cashfree'
+                ? 'POS · CASHFREE (awaiting payment)'
+                : `POS · ${paymentMethod.toUpperCase()}`,
         lines: basket.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
@@ -229,11 +355,36 @@ export function ShopPosPage() {
           discount_value: line.discountValue,
         })),
       });
+      if (paymentMethod === 'razorpay') {
+        setPaymentSheet({
+          orderId: order.id,
+          orderNumber: order.order_number,
+          amount: Number(order.total),
+          status: 'opening',
+        });
+        const checkoutResponse = await client.shop.createRazorpayCheckout(order.id);
+        await openRazorpay(checkoutResponse.data);
+      }
+      if (paymentMethod === 'cashfree') {
+        setPaymentSheet({
+          orderId: order.id,
+          orderNumber: order.order_number,
+          amount: Number(order.total),
+          status: 'opening',
+        });
+        const checkoutResponse = await client.shop.createCashfreeCheckout(order.id);
+        await openCashfree(checkoutResponse.data);
+      }
       setBasket([]);
       setBillDiscountType('');
       setBillDiscountValue('0');
       setPointsToRedeem(0);
-      const dueLabel = paymentMethod === 'borrow' ? ' · Due' : '';
+      const dueLabel =
+        paymentMethod === 'borrow'
+          ? ' · Due'
+          : paymentMethod === 'razorpay' || paymentMethod === 'cashfree'
+            ? ' · Paid online'
+            : '';
       snackbar.push(
         `Bill ${order.order_number} created${dueLabel} · ${totals.payable.toFixed(2)}`,
         'success',
@@ -497,6 +648,8 @@ export function ShopPosPage() {
                   { value: 'upi', label: 'UPI' },
                   { value: 'card', label: 'Card' },
                   { value: 'borrow', label: 'Borrow' },
+                  ...(razorpayConnected ? [{ value: 'razorpay' as const, label: 'Pay with Razorpay' }] : []),
+                  ...(cashfreeConnected ? [{ value: 'cashfree' as const, label: 'Pay with Cashfree' }] : []),
                 ] as const
               ).map((method) => (
                 <Button
@@ -513,6 +666,16 @@ export function ShopPosPage() {
               <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
                 Borrow / credit: customer takes goods now and pays later. A customer is required (not
                 Walk-in).
+              </p>
+            ) : null}
+            {paymentMethod === 'razorpay' ? (
+              <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
+                Secure Razorpay Checkout opens after the bill is created. The bill stays unpaid until Razorpay confirms it.
+              </p>
+            ) : null}
+            {paymentMethod === 'cashfree' ? (
+              <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
+                Cashfree Checkout opens after the bill is created. The bill stays unpaid until Cashfree confirms it.
               </p>
             ) : null}
             </>
@@ -567,10 +730,59 @@ export function ShopPosPage() {
                 ? `Save challan · ${totals.payable.toFixed(2)}`
               : paymentMethod === 'borrow'
                 ? `Create Bill · Due ${payableAfterLoyalty.toFixed(2)}`
+                : paymentMethod === 'razorpay'
+                  ? `Pay with Razorpay · ${payableAfterLoyalty.toFixed(2)}`
+                : paymentMethod === 'cashfree'
+                  ? `Pay with Cashfree · ${payableAfterLoyalty.toFixed(2)}`
                 : `Create Bill · ${payableAfterLoyalty.toFixed(2)}`}
           </Button>
         </Card>
       </div>
+      {paymentSheet ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Online payment status"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(15, 23, 42, 0.55)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 20,
+          }}
+        >
+          <Card style={{ width: 'min(440px, 100%)', textAlign: 'center', padding: 28 }}>
+            <div style={{ fontSize: 42, marginBottom: 8 }}>
+              {paymentSheet.status === 'paid' ? '✓' : paymentSheet.status === 'failed' ? '!' : '◌'}
+            </div>
+            <h2 style={{ margin: '0 0 8px' }}>
+              {paymentSheet.status === 'paid'
+                ? 'Payment received'
+                : paymentSheet.status === 'failed'
+                  ? 'Payment failed'
+                  : 'Waiting for payment'}
+            </h2>
+            <p style={{ margin: '0 0 4px', color: '#6b7280' }}>Bill {paymentSheet.orderNumber}</p>
+            <strong style={{ display: 'block', fontSize: 28, margin: '12px 0 20px' }}>
+              ₹{paymentSheet.amount.toFixed(2)}
+            </strong>
+            {paymentSheet.status !== 'paid' ? (
+              <p style={{ color: '#6b7280' }}>
+                Complete the secure Razorpay window. This status also updates automatically from the webhook.
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              variant={paymentSheet.status === 'paid' ? 'primary' : 'neutral'}
+              onClick={() => setPaymentSheet(null)}
+            >
+              {paymentSheet.status === 'paid' ? 'Done' : 'Close — keep bill unpaid'}
+            </Button>
+          </Card>
+        </div>
+      ) : null}
     </div>
   );
 }

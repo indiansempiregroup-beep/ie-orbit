@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.common.api.fields import CoordinateField
 from apps.shopie.models import (
     BarcodeType,
     CashAccountType,
@@ -229,6 +230,10 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     payment_status = serializers.SerializerMethodField()
     upi_utr = serializers.SerializerMethodField()
     payment_proof_url = serializers.SerializerMethodField()
+    razorpay_order_id = serializers.SerializerMethodField()
+    razorpay_payment_id = serializers.SerializerMethodField()
+    cashfree_order_id = serializers.SerializerMethodField()
+    cashfree_payment_id = serializers.SerializerMethodField()
     upi_pay_url = serializers.SerializerMethodField()
     delivery_fee = serializers.SerializerMethodField()
     coupon_code = serializers.SerializerMethodField()
@@ -256,6 +261,10 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "payment_status",
             "upi_utr",
             "payment_proof_url",
+            "razorpay_order_id",
+            "razorpay_payment_id",
+            "cashfree_order_id",
+            "cashfree_payment_id",
             "upi_pay_url",
             "delivery_fee",
             "coupon_code",
@@ -282,6 +291,18 @@ class ShopOrderSerializer(serializers.ModelSerializer):
 
     def get_payment_proof_url(self, obj: ShopOrder) -> str:
         return str(self._pos(obj).get("payment_proof_url") or "")
+
+    def get_razorpay_order_id(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("razorpay_order_id") or "")
+
+    def get_razorpay_payment_id(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("razorpay_payment_id") or "")
+
+    def get_cashfree_order_id(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("cashfree_order_id") or "")
+
+    def get_cashfree_payment_id(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("cashfree_payment_id") or "")
 
     def get_delivery_fee(self, obj: ShopOrder) -> str:
         metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
@@ -355,12 +376,8 @@ class ShopOrderCreateSerializer(serializers.Serializer):
     delivery_city = serializers.CharField(required=False, allow_blank=True)
     delivery_state = serializers.CharField(required=False, allow_blank=True)
     delivery_postal_code = serializers.CharField(required=False, allow_blank=True)
-    delivery_latitude = serializers.DecimalField(
-        max_digits=9, decimal_places=6, required=False, allow_null=True
-    )
-    delivery_longitude = serializers.DecimalField(
-        max_digits=9, decimal_places=6, required=False, allow_null=True
-    )
+    delivery_latitude = CoordinateField()
+    delivery_longitude = CoordinateField()
     delivery_method = serializers.ChoiceField(
         choices=[("standard", "Standard"), ("instant", "Instant")],
         required=False,
@@ -385,6 +402,8 @@ class ShopOrderCreateSerializer(serializers.Serializer):
             ("upi", "UPI"),
             ("card", "Card"),
             ("borrow", "Borrow"),
+            ("razorpay", "Pay online"),
+            ("cashfree", "Pay with Cashfree"),
             ("", "None"),
         ],
         required=False,
@@ -393,6 +412,38 @@ class ShopOrderCreateSerializer(serializers.Serializer):
     coupon_code = serializers.CharField(required=False, allow_blank=True, max_length=40)
     points_to_redeem = serializers.IntegerField(required=False, min_value=0, default=0)
     lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+
+
+class MerchantPaymentSettingsSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    enabled = serializers.BooleanField(required=False)
+    key_id = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    key_secret = serializers.CharField(
+        max_length=240,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
+    webhook_secret = serializers.CharField(
+        max_length=240,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
+    upi_vpa = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    test_connection = serializers.BooleanField(required=False, default=True)
+    cashfree = serializers.DictField(required=False)
+
+
+class RazorpayPaymentVerifySerializer(serializers.Serializer):
+    razorpay_payment_id = serializers.CharField(max_length=160)
+    razorpay_order_id = serializers.CharField(max_length=160)
+    razorpay_signature = serializers.CharField(max_length=256)
+
+
+class CashfreePaymentVerifySerializer(serializers.Serializer):
+    cashfree_order_id = serializers.CharField(max_length=160)
+    cashfree_payment_id = serializers.CharField(max_length=160, required=False, allow_blank=True)
 
 
 class BarcodeBulkLookupSerializer(serializers.Serializer):
@@ -496,8 +547,8 @@ class ShopDeliveryQuoteSerializer(serializers.Serializer):
         )
 
     business_id = serializers.UUIDField(required=False)
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    latitude = CoordinateField(required=True, allow_null=False)
+    longitude = CoordinateField(required=True, allow_null=False)
     address = serializers.CharField(required=False, allow_blank=True)
     city = serializers.CharField(required=False, allow_blank=True)
     state = serializers.CharField(required=False, allow_blank=True)
@@ -1063,6 +1114,8 @@ class ShopGodownStockLineSerializer(serializers.ModelSerializer):
 
 
 class ShopGodownSerializer(serializers.ModelSerializer):
+    latitude = CoordinateField()
+    longitude = CoordinateField()
     stocks = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
     effective_location = serializers.SerializerMethodField()

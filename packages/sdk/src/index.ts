@@ -255,23 +255,39 @@ export type BillingStatus = {
   webhook_configured: boolean;
   currency: string;
   mock_mode: boolean;
+  razorpay?: {
+    configured: boolean;
+    key_id?: string | null;
+    webhook_configured: boolean;
+  };
+  cashfree?: {
+    configured: boolean;
+    app_id?: string | null;
+    webhook_configured: boolean;
+    env?: string;
+  };
 };
 
 export type BillingCheckoutInput = {
   product_code: string;
   plan_code: string;
   business_id?: string;
+  provider?: 'razorpay' | 'cashfree';
 };
 
 export type BillingCheckoutSession = {
   session_id: string;
+  provider?: string;
   order_id: string;
+  payment_session_id?: string;
   amount: number;
   currency: string;
   product_code: string;
   plan_code: string;
   configured: boolean;
   key_id?: string | null;
+  app_id?: string | null;
+  env?: string;
   mock_mode: boolean;
   expires_at: string;
 };
@@ -329,6 +345,7 @@ export type BusinessBillingSnapshot = {
   bi_features: string[];
   features?: string[];
   entitled_features?: string[];
+  show_google_ads?: boolean;
   pricing: {
     currency: string;
     base_amount_paise: number;
@@ -871,6 +888,7 @@ export type MobileBootstrapResponse = {
   branding: MobileBootstrapBranding;
   enabled_products: string[];
   features: Record<string, boolean>;
+  show_google_ads: boolean;
   loyalty?: MobileLoyaltyProgram;
   referral?: MobileReferralProgram;
   build_metadata?: Record<string, unknown>;
@@ -1776,6 +1794,10 @@ export type ShopOrder = {
   payment_status?: string;
   upi_utr?: string;
   payment_proof_url?: string;
+  razorpay_order_id?: string;
+  razorpay_payment_id?: string;
+  cashfree_order_id?: string;
+  cashfree_payment_id?: string;
   upi_pay_url?: string;
   delivery_fee?: string | number;
   coupon_code?: string;
@@ -1799,10 +1821,57 @@ export type ShopDeliveryQuote = {
   expires_in_seconds?: number;
 };
 
+export type ShopTrackingEvent = {
+  id?: string;
+  kind?: 'status' | 'location' | string;
+  status: string;
+  label?: string;
+  occurred_at?: string;
+  reason?: string;
+  eta_minutes?: number | null;
+  attempt_number?: number | null;
+  source?: string;
+};
+
+export type ShopDeliveryAttempt = {
+  id: string;
+  attempt_number: number;
+  provider?: string;
+  booking_id?: string;
+  status: 'active' | 'delivered' | 'failed' | 'cancelled' | string;
+  tracking_url?: string;
+  rider?: { name?: string; phone?: string; vehicle?: string; photo_url?: string };
+  reason?: string;
+  started_at: string;
+  ended_at?: string | null;
+};
+
+export type ShopDeliveryLocation = {
+  latitude: number;
+  longitude: number;
+  occurred_at?: string;
+  status?: string;
+};
+
+/** Pickup or drop endpoint of a delivery, as stored on the order. */
+export type ShopDeliveryPlace = {
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  contact?: { name?: string; phone?: string };
+};
+
 export type ShopDeliveryLive = {
   available: boolean;
   order_id: string;
+  order_status?: string;
+  delivery_method?: 'instant' | 'standard' | string;
   provider?: string;
+  /** True once a rider booking exists with the partner. */
+  dispatched?: boolean;
   partner_status:
     | 'packing'
     | 'finding_rider'
@@ -1818,14 +1887,18 @@ export type ShopDeliveryLive = {
   subtitle?: string;
   eta_minutes?: number | null;
   rider?: { name?: string; phone?: string; vehicle?: string; photo_url?: string };
-  pickup?: { latitude?: number; longitude?: number; address?: string };
-  drop?: { latitude?: number; longitude?: number; address?: string };
+  pickup?: ShopDeliveryPlace;
+  drop?: ShopDeliveryPlace;
   rider_location?: { latitude?: number | null; longitude?: number | null };
-  events?: Array<{ status: string; label?: string; occurred_at?: string; reason?: string }>;
+  events?: ShopTrackingEvent[];
+  attempts?: ShopDeliveryAttempt[];
+  active_attempt_number?: number | null;
+  location_trail?: ShopDeliveryLocation[];
   tracking_url?: string;
   can_call_rider?: boolean;
   last_updated?: string | null;
   terminal?: boolean;
+  stale?: boolean;
 };
 
 export type ShopDeliverySettings = {
@@ -1862,7 +1935,7 @@ export type ShopOrderCreateInput = {
   confirm?: boolean;
   bill_discount_type?: '' | 'percent' | 'amount' | string;
   bill_discount_value?: string | number;
-  payment_method?: '' | 'cash' | 'upi' | 'card' | 'borrow' | string;
+  payment_method?: '' | 'cash' | 'upi' | 'card' | 'borrow' | 'razorpay' | 'cashfree' | string;
   coupon_code?: string;
   points_to_redeem?: number;
   lines: Array<{
@@ -1875,6 +1948,80 @@ export type ShopOrderCreateInput = {
     discount_type?: '' | 'percent' | 'amount' | string;
     discount_value?: string | number;
   }>;
+};
+
+export type MerchantCashfreeSettings = {
+  provider: 'cashfree';
+  configured: boolean;
+  connected: boolean;
+  platform_enabled: boolean;
+  plan_entitled: boolean;
+  available: boolean;
+  enabled: boolean;
+  can_accept_payments: boolean;
+  status:
+    | 'disabled_by_platform'
+    | 'not_in_plan'
+    | 'not_configured'
+    | 'verification_required'
+    | 'paused'
+    | 'live';
+  app_id: string;
+  secret_masked: string;
+  webhook_configured: boolean;
+  last_tested_at?: string | null;
+  webhook_url: string;
+  env: string;
+};
+
+export type MerchantPaymentSettings = {
+  provider: 'razorpay';
+  configured: boolean;
+  connected: boolean;
+  platform_enabled: boolean;
+  plan_entitled: boolean;
+  available: boolean;
+  enabled: boolean;
+  can_accept_payments: boolean;
+  status:
+    | 'disabled_by_platform'
+    | 'not_in_plan'
+    | 'not_configured'
+    | 'verification_required'
+    | 'paused'
+    | 'live';
+  key_id: string;
+  key_secret_masked: string;
+  webhook_secret_masked: string;
+  webhook_configured: boolean;
+  last_tested_at?: string | null;
+  webhook_url: string;
+  upi_vpa: string;
+  cashfree?: MerchantCashfreeSettings;
+};
+
+export type MerchantRazorpayCheckout = {
+  shop_order_id: string;
+  order_number: string;
+  razorpay_order_id: string;
+  key_id: string;
+  amount: number;
+  currency: string;
+  business_name: string;
+  payment_status: string;
+};
+
+export type MerchantCashfreeCheckout = {
+  shop_order_id: string;
+  order_number: string;
+  cashfree_order_id: string;
+  payment_session_id: string;
+  app_id: string;
+  env: string;
+  amount: number;
+  currency: string;
+  business_name: string;
+  payment_status: string;
 };
 
 export type ShopReturn = {
@@ -3310,6 +3457,49 @@ class ApiClient {
       this.request<ShopOrder[]>('/shop/orders', { method: 'GET', query }),
     createOrder: (body: ShopOrderCreateInput) => this.request<ShopOrder>('/shop/orders', { method: 'POST', body }),
     getOrder: (orderId: string) => this.request<ShopOrder>(`/shop/orders/${orderId}`, { method: 'GET' }),
+    getMerchantPaymentSettings: (query: { business_id: string }) =>
+      this.request<MerchantPaymentSettings>('/shop/payment-settings', { method: 'GET', query }),
+    updateMerchantPaymentSettings: (body: {
+      business_id: string;
+      enabled?: boolean;
+      key_id?: string;
+      key_secret?: string;
+      webhook_secret?: string;
+      upi_vpa?: string;
+      test_connection?: boolean;
+      cashfree?: {
+        app_id?: string;
+        secret_key?: string;
+        enabled?: boolean;
+        env?: string;
+        test_connection?: boolean;
+      };
+    }) => this.request<MerchantPaymentSettings>('/shop/payment-settings', { method: 'PATCH', body }),
+    createRazorpayCheckout: (orderId: string) =>
+      this.request<MerchantRazorpayCheckout>(`/shop/orders/${orderId}/razorpay-checkout`, {
+        method: 'POST',
+        body: {},
+      }),
+    verifyRazorpayPayment: (
+      orderId: string,
+      body: {
+        razorpay_payment_id: string;
+        razorpay_order_id: string;
+        razorpay_signature: string;
+      },
+    ) => this.request<ShopOrder>(`/shop/orders/${orderId}/razorpay-verify`, { method: 'POST', body }),
+    createCashfreeCheckout: (orderId: string) =>
+      this.request<MerchantCashfreeCheckout>(`/shop/orders/${orderId}/cashfree-checkout`, {
+        method: 'POST',
+        body: {},
+      }),
+    verifyCashfreePayment: (
+      orderId: string,
+      body: {
+        cashfree_order_id: string;
+        cashfree_payment_id?: string;
+      },
+    ) => this.request<ShopOrder>(`/shop/orders/${orderId}/cashfree-verify`, { method: 'POST', body }),
     setOrderStatus: (orderId: string, body: { status: string }) =>
       this.request<ShopOrder>(`/shop/orders/${orderId}/status`, { method: 'POST', body }),
     dispatchOrder: (orderId: string) =>
@@ -3318,6 +3508,11 @@ class ApiClient {
       this.request<ShopDeliveryLive>(`/shop/orders/${orderId}/delivery-live`, {
         method: 'GET',
         query: { refresh },
+      }),
+    simulateOrderDelivery: (orderId: string, body?: { partner_status?: string }) =>
+      this.request<ShopDeliveryLive>(`/shop/orders/${orderId}/delivery-simulate`, {
+        method: 'POST',
+        body: body ?? {},
       }),
     confirmOrderPayment: (orderId: string, body: { action: 'confirm' | 'reject' | string; note?: string }) =>
       this.request<ShopOrder>(`/shop/orders/${orderId}/confirm-payment`, { method: 'POST', body }),
@@ -3512,8 +3707,18 @@ class ApiClient {
       this.request<ShopPartyStatement>('/shop/books/party-statement', { method: 'GET', query }),
     booksReport: (
       slug: ShopBooksReportSlug | string,
-      query: { business_id: string; date_from?: string; date_to?: string },
-    ) => this.request<Record<string, unknown>>(`/shop/books/reports/${slug}`, { method: 'GET', query }),
+      query: {
+        business_id: string;
+        date_from?: string;
+        date_to?: string;
+        limit?: number;
+        offset?: number;
+      },
+    ) =>
+      this.request<Record<string, unknown> | Array<Record<string, unknown>>>(
+        `/shop/books/reports/${slug}`,
+        { method: 'GET', query },
+      ),
     getComplianceSettings: (query: { business_id: string }) =>
       this.request<ShopComplianceSettings>('/shop/books/compliance-settings', { method: 'GET', query }),
     updateComplianceSettings: (body: ShopComplianceSettingsUpdateInput) =>

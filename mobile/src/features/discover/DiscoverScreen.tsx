@@ -11,7 +11,7 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Chip } from '../../components/ui/Chip';
 import { Input } from '../../components/ui/Input';
-import { useScreenInsets } from '../../theme/layout';
+import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -26,6 +26,7 @@ export function DiscoverScreen() {
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
+  const { contentInset } = useTabBarLayout();
   const primary = branding?.primaryColor ?? colors.primary;
 
   const [query, setQuery] = useState('');
@@ -84,7 +85,7 @@ export function DiscoverScreen() {
       </View>
 
       <RefreshableScrollView
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: contentInset }]}
         refreshing={refreshing}
         onRefresh={onRefresh}
         primaryColor={primary}

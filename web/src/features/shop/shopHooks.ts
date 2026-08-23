@@ -799,16 +799,39 @@ export function usePartyStatement(kind: 'customer' | 'supplier', id: string) {
 export function useShopBooksReport(
   slug: ShopBooksReportSlug | string,
   range: { date_from?: string; date_to?: string } = {},
+  options?: { enabled?: boolean },
 ) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
   return useQuery({
     queryKey: ['shop-books-report', businessId, slug, range],
-    enabled: Boolean(businessId) && Boolean(slug),
+    enabled: Boolean(businessId) && Boolean(slug) && (options?.enabled ?? true),
     queryFn: async () => {
-      const response = await client.shop.booksReport(slug, { business_id: businessId, ...range });
-      return response.data;
+      if (slug !== 'daybook' && slug !== 'gstr1') {
+        const response = await client.shop.booksReport(slug, {
+          business_id: businessId,
+          ...range,
+        });
+        return response.data;
+      }
+
+      const rows: Array<Record<string, unknown>> = [];
+      let offset = 0;
+      while (true) {
+        const response = await client.shop.booksReport(slug, {
+          business_id: businessId,
+          ...range,
+          limit: 500,
+          offset,
+        });
+        const page = Array.isArray(response.data) ? response.data : [];
+        rows.push(...page);
+        const nextOffset = response.meta.next_offset;
+        if (typeof nextOffset !== 'number' || !page.length) break;
+        offset = nextOffset;
+      }
+      return rows;
     },
   });
 }

@@ -10,6 +10,7 @@ from apps.businesses.models import (
     BusinessProfile,
     BusinessSettings,
 )
+from apps.common.api.fields import CoordinateField
 
 
 class BusinessProfileSerializer(serializers.ModelSerializer):
@@ -100,6 +101,8 @@ class BusinessMediaSerializer(serializers.ModelSerializer):
 
 
 class BusinessSerializer(serializers.ModelSerializer):
+    latitude = CoordinateField()
+    longitude = CoordinateField()
     profile = BusinessProfileSerializer(required=False)
     settings = BusinessSettingsSerializer(required=False)
     media = BusinessMediaSerializer(many=True, read_only=True)

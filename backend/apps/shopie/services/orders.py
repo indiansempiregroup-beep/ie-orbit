@@ -30,7 +30,6 @@ from apps.shopie.services.fulfillment import FulfillmentService
 from apps.shopie.services.zones import DeliveryZoneService
 from apps.tenancy.models import Tenant
 
-
 DELIVERY_METHOD_STANDARD = "standard"
 DELIVERY_METHOD_INSTANT = "instant"
 DELIVERY_METHODS = {DELIVERY_METHOD_STANDARD, DELIVERY_METHOD_INSTANT}
@@ -186,6 +185,60 @@ class OrderService:
             raise ValidationError(
                 {"customer_id": "Select a customer for borrow / credit bills."}
             )
+        if payment == "razorpay":
+            from apps.shopie.services.merchant_payments import MerchantPaymentService
+
+            merchant_payments = MerchantPaymentService()
+            availability = merchant_payments.availability(business=business)
+            if not availability["available"]:
+                raise ValidationError(
+                    {
+                        "payment_method": (
+                            "Razorpay is disabled by the platform admin or is not included "
+                            "in this plan."
+                        )
+                    }
+                )
+            if not availability["enabled"]:
+                raise ValidationError(
+                    {"payment_method": "Razorpay is disabled in business payment settings."}
+                )
+            provider = merchant_payments.public_settings(business=business)
+            if not provider["configured"]:
+                raise ValidationError(
+                    {"payment_method": "Connect this business's Razorpay account first."}
+                )
+            if not provider["connected"]:
+                raise ValidationError(
+                    {"payment_method": "Test and verify the saved Razorpay credentials first."}
+                )
+        if payment == "cashfree":
+            from apps.shopie.services.merchant_payments import MerchantPaymentService
+
+            merchant_payments = MerchantPaymentService()
+            availability = merchant_payments.cashfree_availability(business=business)
+            if not availability["available"]:
+                raise ValidationError(
+                    {
+                        "payment_method": (
+                            "Cashfree is disabled by the platform admin or is not included "
+                            "in this plan."
+                        )
+                    }
+                )
+            if not availability["enabled"]:
+                raise ValidationError(
+                    {"payment_method": "Cashfree is disabled in business payment settings."}
+                )
+            provider = merchant_payments.cashfree_public_settings(business=business)
+            if not provider["configured"]:
+                raise ValidationError(
+                    {"payment_method": "Connect this business's Cashfree account first."}
+                )
+            if not provider["connected"]:
+                raise ValidationError(
+                    {"payment_method": "Test and verify the saved Cashfree credentials first."}
+                )
         bill_dtype = str(bill_discount_type or "").strip().lower()
         bill_dvalue = Decimal(str(bill_discount_value or "0"))
         coupon_code = str(coupon_code or "").strip()
@@ -194,9 +247,9 @@ class OrderService:
                 {"coupon_code": "Cannot combine a coupon with a bill discount."}
             )
         # Initial status before totals exist; finalized below once order.total is known.
-        if payment == "borrow":
+        if payment in {"borrow", "razorpay", "cashfree"}:
             payment_status = "due"
-        elif payment in {"cash", "upi", "card"}:
+        elif mode == FulfillmentMode.POS and payment in {"cash", "upi", "card"}:
             payment_status = "paid"
         else:
             payment_status = "due" if payment else ""
@@ -220,6 +273,14 @@ class OrderService:
             delivery_address=delivery_address or "",
             metadata=metadata,
         )
+        if mode == FulfillmentMode.DELIVERY:
+            from apps.shopie.services.tracking import TrackingHistoryService
+
+            TrackingHistoryService().record_order_status(
+                order=order,
+                status=OrderStatus.PENDING,
+                occurred_at=order.created_at,
+            )
 
         merchandise_subtotal = Decimal("0.00")
         line_discount_total = Decimal("0.00")
@@ -532,13 +593,29 @@ class OrderService:
     ) -> ShopOrder:
         allowed = {
             OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
-            OrderStatus.CONFIRMED: {OrderStatus.READY, OrderStatus.COMPLETED, OrderStatus.CANCELLED},
+            OrderStatus.CONFIRMED: {
+                OrderStatus.READY,
+                OrderStatus.COMPLETED,
+                OrderStatus.CANCELLED,
+            },
             OrderStatus.READY: {
+                OrderStatus.OUT_FOR_DELIVERY,
+                OrderStatus.DELIVERY_FAILED,
+                OrderStatus.COMPLETED,
+                OrderStatus.CANCELLED,
+            },
+            OrderStatus.OUT_FOR_DELIVERY: {
+                OrderStatus.COMPLETED,
+                OrderStatus.DELIVERY_FAILED,
+            },
+            # A failed rider trip is recoverable: the shop can re-dispatch,
+            # hand over itself, or cancel and refund.
+            OrderStatus.DELIVERY_FAILED: {
+                OrderStatus.READY,
                 OrderStatus.OUT_FOR_DELIVERY,
                 OrderStatus.COMPLETED,
                 OrderStatus.CANCELLED,
             },
-            OrderStatus.OUT_FOR_DELIVERY: {OrderStatus.COMPLETED},
             OrderStatus.COMPLETED: set(),
             OrderStatus.CANCELLED: set(),
         }
@@ -548,6 +625,14 @@ class OrderService:
         previous = order.status
         order.status = status
         order.save(update_fields=["status", "updated_at", "version"])
+        if order.fulfillment_mode == FulfillmentMode.DELIVERY:
+            from apps.shopie.services.tracking import TrackingHistoryService
+
+            TrackingHistoryService().record_order_status(
+                order=order,
+                status=status,
+                occurred_at=order.updated_at,
+            )
 
         if status == OrderStatus.CANCELLED:
             CouponService().release_for_order(order=order)
@@ -576,6 +661,7 @@ class OrderService:
         if status == OrderStatus.CANCELLED and previous in {
             OrderStatus.CONFIRMED,
             OrderStatus.READY,
+            OrderStatus.DELIVERY_FAILED,
         }:
             for line in order.lines.select_related("product"):
                 self.catalog.adjust_stock(
@@ -728,6 +814,69 @@ class OrderService:
             self._maybe_award_loyalty_on_paid(order=refreshed)
             return refreshed
         return self.get_order(tenant=tenant, business=business, order_id=locked.id)
+
+    @transaction.atomic
+    def mark_razorpay_paid(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        payment_id: str,
+    ) -> ShopOrder:
+        return self.mark_online_paid(
+            tenant=tenant,
+            business=business,
+            order=order,
+            payment_id=payment_id,
+            payment_method="razorpay",
+        )
+
+    @transaction.atomic
+    def mark_online_paid(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        payment_id: str,
+        payment_method: str = "razorpay",
+    ) -> ShopOrder:
+        locked = (
+            ShopOrder.objects.select_for_update()
+            .filter(tenant=tenant, business=business, id=order.id)
+            .first()
+        )
+        if locked is None:
+            raise ValidationError({"order": "Order not found."})
+        metadata = dict(locked.metadata or {})
+        pos = dict(metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {})
+        method = str(payment_method or "razorpay").strip().lower()
+        if str(pos.get("payment_method") or "").strip().lower() != method:
+            raise ValidationError({"payment": f"This is not a {method} order."})
+        if str(pos.get("payment_status") or "").strip().lower() in {"paid", "settled"}:
+            return self.get_order(tenant=tenant, business=business, order_id=locked.id)
+
+        pos.update(
+            {
+                "payment_status": "paid",
+                "amount_paid": str(locked.total),
+                "amount_due": "0.00",
+                "confirmed_at": timezone.now().isoformat(),
+            }
+        )
+        if method == "cashfree":
+            pos["cashfree_payment_id"] = str(payment_id)
+        else:
+            pos["razorpay_payment_id"] = str(payment_id)
+        metadata["pos"] = pos
+        locked.metadata = metadata
+        locked.save(update_fields=["metadata", "updated_at", "version"])
+        refreshed = self.get_order(tenant=tenant, business=business, order_id=locked.id)
+        self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+        self._maybe_award_referral_on_paid(order=refreshed)
+        self._maybe_award_loyalty_on_paid(order=refreshed)
+        return refreshed
 
     def _redeem_loyalty_on_create(
         self,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -8,7 +9,14 @@ from django.core.exceptions import ValidationError
 from apps.authentication.models import User, UserStatus
 from apps.businesses.models import Business
 from apps.customers.models import Customer
-from apps.shopie.models import CashAccountType, ShopCashAccount, ShopProduct
+from apps.shopie.models import (
+    CashAccountType,
+    ShopBooksVoucher,
+    ShopCashAccount,
+    ShopProduct,
+    VoucherStatus,
+    VoucherType,
+)
 from apps.shopie.services.books import BooksService
 from apps.shopie.services.gst import split_gst
 from apps.shopie.services.suppliers import SupplierService
@@ -191,6 +199,117 @@ def test_gstr1_uses_customer_gstin_for_direct_books_sale(
     assert row["invoice_type"] == "B2B"
     assert row["customer_gstin"] == "27ABCDE1234F1Z5"
     assert row["customer_name"] == "Test Buyer"
+
+
+@pytest.mark.django_db
+def test_register_summaries_subtract_credit_and_debit_notes(shop_business: Business) -> None:
+    common = {
+        "tenant": shop_business.tenant,
+        "business": shop_business,
+        "voucher_date": date(2026, 8, 23),
+        "status": VoucherStatus.CONFIRMED,
+        "cgst_total": Decimal("9.00"),
+        "sgst_total": Decimal("9.00"),
+        "igst_total": Decimal("0.00"),
+        "tax_total": Decimal("18.00"),
+    }
+    ShopBooksVoucher.objects.create(
+        **common,
+        voucher_type=VoucherType.SALE,
+        voucher_number="SV-TEST",
+        subtotal=Decimal("100.00"),
+        total=Decimal("118.00"),
+    )
+    ShopBooksVoucher.objects.create(
+        **{
+            **common,
+            "cgst_total": Decimal("1.80"),
+            "sgst_total": Decimal("1.80"),
+            "tax_total": Decimal("3.60"),
+        },
+        voucher_type=VoucherType.CREDIT_NOTE,
+        voucher_number="CN-TEST",
+        subtotal=Decimal("20.00"),
+        total=Decimal("23.60"),
+    )
+    ShopBooksVoucher.objects.create(
+        **common,
+        voucher_type=VoucherType.PURCHASE,
+        voucher_number="PV-TEST",
+        subtotal=Decimal("100.00"),
+        total=Decimal("118.00"),
+    )
+    ShopBooksVoucher.objects.create(
+        **{
+            **common,
+            "cgst_total": Decimal("2.25"),
+            "sgst_total": Decimal("2.25"),
+            "tax_total": Decimal("4.50"),
+        },
+        voucher_type=VoucherType.DEBIT_NOTE,
+        voucher_number="DN-TEST",
+        subtotal=Decimal("25.00"),
+        total=Decimal("29.50"),
+    )
+
+    books = BooksService()
+    sales = books.sales_summary(tenant=shop_business.tenant, business=shop_business)
+    purchases = books.purchase_summary(tenant=shop_business.tenant, business=shop_business)
+
+    assert sales == {
+        "count": 2,
+        "adjustment_count": 1,
+        "taxable_value": "80.00",
+        "cgst": "7.20",
+        "sgst": "7.20",
+        "igst": "0.00",
+        "tax_total": "14.40",
+        "total": "94.40",
+    }
+    assert purchases == {
+        "count": 2,
+        "adjustment_count": 1,
+        "taxable_value": "75.00",
+        "cgst": "6.75",
+        "sgst": "6.75",
+        "igst": "0.00",
+        "tax_total": "13.50",
+        "total": "88.50",
+    }
+
+
+@pytest.mark.django_db
+def test_daybook_includes_exportable_gst_fields(
+    shop_business: Business, customer: Customer
+) -> None:
+    customer.gstin = "27ABCDE1234F1Z5"
+    customer.save(update_fields=["gstin"])
+    voucher = ShopBooksVoucher.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        voucher_type=VoucherType.SALE,
+        voucher_number="SV-DAYBOOK",
+        voucher_date=date(2026, 8, 23),
+        status=VoucherStatus.CONFIRMED,
+        customer=customer,
+        subtotal=Decimal("100.00"),
+        cgst_total=Decimal("9.00"),
+        sgst_total=Decimal("9.00"),
+        tax_total=Decimal("18.00"),
+        total=Decimal("118.00"),
+        place_of_supply="Maharashtra",
+    )
+
+    rows = BooksService().daybook(tenant=shop_business.tenant, business=shop_business)
+
+    row = next(item for item in rows if item["id"] == str(voucher.id))
+    assert row["party_gstin"] == "27ABCDE1234F1Z5"
+    assert row["taxable_value"] == "100.00"
+    assert row["cgst"] == "9.00"
+    assert row["sgst"] == "9.00"
+    assert row["igst"] == "0.00"
+    assert row["tax_total"] == "18.00"
+    assert row["place_of_supply"] == "Maharashtra"
 
 
 @pytest.mark.django_db

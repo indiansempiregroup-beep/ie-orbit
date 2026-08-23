@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, type MapPressEvent, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
@@ -126,7 +126,6 @@ export function AddressMapPicker({
 async function openInMaps(latitude: number, longitude: number) {
   const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
   try {
-    const { Linking } = await import('react-native');
     await Linking.openURL(url);
   } catch {
     Alert.alert('Maps', 'Unable to open Google Maps on this device.');
