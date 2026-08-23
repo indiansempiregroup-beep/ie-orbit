@@ -702,6 +702,7 @@ class ShopDeliveryZone(TenantModel):
     )
     name = models.CharField(max_length=120)
     enabled = models.BooleanField(default=True)
+    instant_delivery_enabled = models.BooleanField(default=False)
     # City/area matching (case-insensitive contains) and optional postal prefixes.
     cities = models.JSONField(default=list, blank=True)
     postal_prefixes = models.JSONField(default=list, blank=True)

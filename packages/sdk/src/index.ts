@@ -721,6 +721,25 @@ export type MobileLoyaltyQuote = {
   max_discount_amount: string;
 };
 
+export type MobileReferralProgram = {
+  enabled: boolean;
+  points_per_referral: number;
+  success_event: 'signup' | 'first_booking' | 'first_paid_order' | string;
+};
+
+export type MobileReferralSnapshot = MobileReferralProgram & {
+  code?: string | null;
+  stats: {
+    invited: number;
+    pending: number;
+    rewarded: number;
+    points_earned: number;
+  };
+  referrals: CustomerReferral[];
+  applied_code?: string | null;
+  applied_status?: string | null;
+};
+
 export type MobileDeviceRegistration = {
   id: string;
   expo_push_token: string;
@@ -853,6 +872,7 @@ export type MobileBootstrapResponse = {
   enabled_products: string[];
   features: Record<string, boolean>;
   loyalty?: MobileLoyaltyProgram;
+  referral?: MobileReferralProgram;
   build_metadata?: Record<string, unknown>;
 };
 
@@ -1818,6 +1838,7 @@ export type ShopDeliverySettings = {
     charge_bearer?: 'customer' | 'merchant' | 'split' | string;
     free_delivery_min_order?: string | number;
     merchant_absorb_cap?: string | number;
+    pickup_location?: string;
     default_parcel_weight_kg?: string | number;
   };
 };
@@ -1893,6 +1914,7 @@ export type ShopDeliveryZone = {
   business: string;
   name: string;
   enabled: boolean;
+  instant_delivery_enabled?: boolean;
   cities?: string[];
   postal_prefixes?: string[];
   same_day?: boolean;
@@ -1908,6 +1930,7 @@ export type ShopDeliveryZoneWriteInput = {
   business_id: string;
   name: string;
   enabled?: boolean;
+  instant_delivery_enabled?: boolean;
   cities?: string[];
   postal_prefixes?: string[];
   same_day?: boolean;
@@ -2509,6 +2532,22 @@ export type ShopGodown = {
   metadata?: Record<string, unknown>;
   stocks?: ShopGodownStock[];
   created_at?: string;
+};
+
+export type ShopGodownWriteInput = {
+  business_id: string;
+  name: string;
+  code?: string;
+  is_default?: boolean;
+  phone_number?: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state?: string;
+  country: string;
+  postal_code?: string;
+  latitude: number;
+  longitude: number;
 };
 
 export type ShopStockTransfer = {
@@ -3379,21 +3418,10 @@ class ApiClient {
       }),
     listGodowns: (query: { business_id: string }) =>
       this.request<ShopGodown[]>('/shop/godowns', { method: 'GET', query }),
-    createGodown: (body: {
-      business_id: string;
-      name: string;
-      code?: string;
-      is_default?: boolean;
-      phone_number?: string;
-      address_line1: string;
-      address_line2?: string;
-      city: string;
-      state?: string;
-      country: string;
-      postal_code?: string;
-      latitude: number;
-      longitude: number;
-    }) => this.request<ShopGodown>('/shop/godowns', { method: 'POST', body }),
+    createGodown: (body: ShopGodownWriteInput) =>
+      this.request<ShopGodown>('/shop/godowns', { method: 'POST', body }),
+    patchGodown: (godownId: string, body: Partial<ShopGodownWriteInput>) =>
+      this.request<ShopGodown>(`/shop/godowns/${godownId}`, { method: 'PATCH', body }),
     listStockTransfers: (query: { business_id: string }) =>
       this.request<ShopStockTransfer[]>('/shop/stock-transfers', { method: 'GET', query }),
     createStockTransfer: (body: {
@@ -4275,6 +4303,10 @@ class ApiClient {
       this.request<{ updated: number }>('/mobile/notifications/read-all', { method: 'PATCH', query }),
     listShopAds: (query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopDashboardAd[]>('/mobile/shop/ads', { method: 'GET', query, auth: false }),
+    getReferral: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileReferralSnapshot>('/mobile/shop/referral', { method: 'GET', query }),
+    applyReferral: (body: { tenant_slug: string; business_code: string; referral_code: string }) =>
+      this.request<MobileReferralSnapshot>('/mobile/shop/referral/apply', { method: 'POST', body }),
     listShopProducts: (query: {
       tenant_slug: string;
       business_code: string;
@@ -4379,6 +4411,7 @@ class ApiClient {
           fee: string;
           min_order_total: string;
           same_day: boolean;
+          instant_delivery_enabled: boolean;
         };
       }>('/mobile/shop/delivery-zones/match', { method: 'GET', query, auth: false }),
     quoteShopDelivery: (body: {

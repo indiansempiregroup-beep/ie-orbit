@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useShopProductMutations, useShopProducts } from './shopHooks';
+import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts } from './shopHooks';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
@@ -24,8 +25,12 @@ export function ShopPosPage() {
   const client = useApiClient();
   const workspace = useWorkspace();
   const snackbar = useSnackbar();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isChallan = searchParams.get('mode') === 'delivery_challan';
   const products = useShopProducts('', 'active');
   const { lookup, lookupBulk, createOrder } = useShopProductMutations();
+  const { create: createDocument } = useShopBooksDocumentMutations();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [scan, setScan] = useState('');
@@ -173,7 +178,7 @@ export function ShopPosPage() {
 
   async function checkout() {
     if (!basket.length) return;
-    if (paymentMethod === 'borrow' && !customerId) {
+    if (!isChallan && paymentMethod === 'borrow' && !customerId) {
       const text = 'Select a customer for borrow / credit bills.';
       setMessage(text);
       snackbar.push(text, 'error');
@@ -181,6 +186,27 @@ export function ShopPosPage() {
     }
     setMessage(null);
     try {
+      if (isChallan) {
+        const challan = await createDocument.mutateAsync({
+          doc_type: 'delivery_challan',
+          customer_id: customerId || null,
+          notes: 'Delivery challan from Sale counter',
+          lines: basket.map((line) => ({
+            product_id: line.product.id,
+            quantity: line.quantity,
+            unit_price: line.product.price,
+            tax_rate: line.product.tax_rate,
+          })),
+        });
+        setBasket([]);
+        setBillDiscountType('');
+        setBillDiscountValue('0');
+        setPointsToRedeem(0);
+        snackbar.push(`Challan ${challan.document_number} created · ${totals.payable.toFixed(2)}`, 'success');
+        setMessage(`Challan ${challan.document_number} created.`);
+        navigate('/shop/books/delivery-challans');
+        return;
+      }
       const order = await createOrder.mutateAsync({
         fulfillment_mode: 'pos',
         confirm: true,
@@ -225,7 +251,7 @@ export function ShopPosPage() {
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0,1.1fr) minmax(320px,0.9fr)' }}>
         <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
           <Card>
-            <h2 style={{ marginTop: 0 }}>Add to bill</h2>
+            <h2 style={{ marginTop: 0 }}>{isChallan ? 'Add to challan' : 'Add to bill'}</h2>
             <form onSubmit={handleScan} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 autoFocus
@@ -300,7 +326,7 @@ export function ShopPosPage() {
         </div>
 
         <Card style={{ position: 'sticky', top: 16, alignSelf: 'start' }}>
-          <h2 style={{ marginTop: 0 }}>Bill</h2>
+          <h2 style={{ marginTop: 0 }}>{isChallan ? 'Delivery challan' : 'Bill'}</h2>
           <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>Customer</span>
             <select
@@ -324,7 +350,7 @@ export function ShopPosPage() {
               ))}
             </select>
           </label>
-          {customerId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+          {customerId && !isChallan && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
             <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>Reward points</span>
               <span style={{ fontSize: 13, opacity: 0.8 }}>
@@ -433,7 +459,9 @@ export function ShopPosPage() {
                 </div>
               );
             })}
-            {!basket.length ? <p>Scan or pick products to start the bill.</p> : null}
+            {!basket.length ? (
+              <p>{isChallan ? 'Scan or pick products to start the challan.' : 'Scan or pick products to start the bill.'}</p>
+            ) : null}
           </div>
 
           <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
@@ -460,6 +488,8 @@ export function ShopPosPage() {
                 />
               ) : null}
             </div>
+            {!isChallan ? (
+            <>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {(
                 [
@@ -485,10 +515,16 @@ export function ShopPosPage() {
                 Walk-in).
               </p>
             ) : null}
+            </>
+            ) : (
+              <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
+                No payment now. Dispatch the challan from the list when goods leave — stock is deducted then.
+              </p>
+            )}
           </div>
 
           <div style={{ display: 'grid', gap: 6, marginBottom: 16 }}>
-            <strong>Bill summary</strong>
+            <strong>{isChallan ? 'Challan summary' : 'Bill summary'}</strong>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>Items</span>
               <span>{totals.merchandiseGross.toFixed(2)}</span>
@@ -512,7 +548,7 @@ export function ShopPosPage() {
               <span>{totals.taxTotal.toFixed(2)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 18 }}>
-              <span>{paymentMethod === 'borrow' ? 'Amount due' : 'Payable'}</span>
+              <span>{isChallan ? 'Total' : paymentMethod === 'borrow' ? 'Amount due' : 'Payable'}</span>
               <span>{payableAfterLoyalty.toFixed(2)}</span>
             </div>
           </div>
@@ -521,10 +557,14 @@ export function ShopPosPage() {
             type="button"
             variant="primary"
             onClick={() => void checkout()}
-            disabled={!basket.length || createOrder.isPending}
+            disabled={!basket.length || createOrder.isPending || createDocument.isPending}
           >
-            {createOrder.isPending
+            {createDocument.isPending
+              ? 'Saving challan…'
+              : createOrder.isPending
               ? 'Creating bill…'
+              : isChallan
+                ? `Save challan · ${totals.payable.toFixed(2)}`
               : paymentMethod === 'borrow'
                 ? `Create Bill · Due ${payableAfterLoyalty.toFixed(2)}`
                 : `Create Bill · ${payableAfterLoyalty.toFixed(2)}`}

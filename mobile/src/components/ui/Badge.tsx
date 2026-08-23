@@ -10,7 +10,13 @@ const STATUS_STYLES = {
   noshow: { bg: '#FFEDD5', text: '#C2410C', label: 'No Show' },
 } as const;
 
-type Status = keyof typeof STATUS_STYLES;
+export type BadgeStatus = keyof typeof STATUS_STYLES;
+
+type Status = BadgeStatus;
+
+export function badgeTone(status: BadgeStatus) {
+  return STATUS_STYLES[status];
+}
 
 export function Badge({ status }: { status: Status }) {
   const s = STATUS_STYLES[status];

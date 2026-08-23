@@ -162,6 +162,38 @@ def test_create_sale_voucher_updates_stock_ledger_and_cash(
 
 
 @pytest.mark.django_db
+def test_gstr1_uses_customer_gstin_for_direct_books_sale(
+    shop_business: Business, customer: Customer
+) -> None:
+    customer.gstin = "27ABCDE1234F1Z5"
+    customer.save(update_fields=["gstin"])
+    product = ShopProduct.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="GST Item",
+        price=Decimal("100"),
+        gst_rate=Decimal("18"),
+        stock_on_hand=Decimal("5"),
+    )
+    books = BooksService()
+    voucher = books.create_sale_voucher(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "customer": customer,
+            "lines": [{"product_id": product.id, "qty": "1", "rate": "100", "gst_rate": "18"}],
+        },
+    )
+
+    rows = books.gstr1_rows(tenant=shop_business.tenant, business=shop_business)
+
+    row = next(item for item in rows if item["voucher_number"] == voucher.voucher_number)
+    assert row["invoice_type"] == "B2B"
+    assert row["customer_gstin"] == "27ABCDE1234F1Z5"
+    assert row["customer_name"] == "Test Buyer"
+
+
+@pytest.mark.django_db
 def test_purchase_voucher_updates_supplier_ledger_and_stock(shop_business: Business) -> None:
     supplier = SupplierService().create_supplier(
         tenant=shop_business.tenant,

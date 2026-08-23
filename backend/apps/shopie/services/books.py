@@ -1561,10 +1561,19 @@ class BooksService:
         rows: list[dict[str, Any]] = []
         for voucher in qs:
             metadata = voucher.metadata if isinstance(voucher.metadata, dict) else {}
-            gstin = str(metadata.get("customer_gstin") or "")
+            gstin = str(
+                metadata.get("customer_gstin")
+                or (getattr(voucher.customer, "gstin", None) if voucher.customer_id else "")
+                or ""
+            ).strip().upper()
             customer_name = str(
                 metadata.get("customer_name")
-                or (voucher.customer.display_name if voucher.customer_id else "Walk-in / B2C")
+                or (
+                    getattr(voucher.customer, "full_name", None)
+                    or voucher.customer.display_name
+                    if voucher.customer_id
+                    else "Walk-in / B2C"
+                )
             )
             rows.append(
                 {

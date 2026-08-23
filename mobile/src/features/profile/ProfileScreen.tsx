@@ -24,6 +24,7 @@ const menuItems = [
   { icon: 'rotate-ccw', labelKey: 'shop.returns', route: 'MyReturns' as const, feature: 'mobile_shop' as const },
   { icon: 'heart', labelKey: 'shop.myPets', route: 'MyPets' as const, feature: 'mobile_pets' as const },
   { icon: 'map-pin', labelKey: 'shop.addresses', route: 'AddressBook' as const, feature: 'mobile_shop' as const },
+  { icon: 'gift', labelKey: 'referral.menu', route: 'Referral' as const, feature: 'referral' as const },
   { icon: 'user', labelKey: 'profile.personalInfo', route: 'ProfileEdit' as const, feature: null },
   { icon: 'bell', labelKey: 'profile.notificationPreferences', route: 'NotificationPreferences' as const, feature: null },
   { icon: 'credit-card', labelKey: 'profile.paymentMethods', route: 'PaymentMethods' as const, feature: null },
@@ -39,7 +40,7 @@ export function ProfileScreen() {
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
-  const { bookings, loading, reload } = useMobileBookings();
+  const { bookings, reload } = useMobileBookings();
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
   const [orders, setOrders] = useState<ShopOrder[]>([]);
@@ -50,6 +51,7 @@ export function ProfileScreen() {
     if (item.feature === 'mobile_booking') return showBooking;
     if (item.feature === 'mobile_shop') return showShop;
     if (item.feature === 'mobile_pets') return showPets;
+    if (item.feature === 'referral') return Boolean(bootstrap?.referral?.enabled);
     return false;
   });
 
@@ -91,8 +93,6 @@ export function ProfileScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await Promise.all([reload(), loadLoyalty(), loadOrders()]);
   });
-  const isRefreshing = refreshing || loading;
-
   useFocusEffect(
     useCallback(() => {
       void loadLoyalty();
@@ -138,7 +138,7 @@ export function ProfileScreen() {
     <RefreshableScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      refreshing={isRefreshing}
+      refreshing={refreshing}
       onRefresh={onRefresh}
       primaryColor={primary}
       refreshTintColor={primary}
@@ -163,16 +163,35 @@ export function ProfileScreen() {
       </LinearGradient>
 
       {loyaltyEnabled ? (
-        <View style={styles.pointsCard}>
+        <Pressable
+          style={styles.pointsCard}
+          onPress={() => (bootstrap?.referral?.enabled ? navigation.navigate('Referral') : undefined)}
+        >
           <View style={[styles.pointsIcon, { backgroundColor: `${primary}18` }]}>
             <Feather name="award" size={18} color={primary} />
           </View>
           <View style={styles.pointsBody}>
             <Text style={styles.pointsLabel}>{t('profile.rewardPoints')}</Text>
             <Text style={styles.pointsValue}>{loyaltyPoints} pts</Text>
-            <Text style={styles.pointsHint}>{t('profile.rewardPointsHint')}</Text>
+            <Text style={styles.pointsHint}>
+              {bootstrap?.referral?.enabled ? t('referral.homeSubtitle') : t('profile.rewardPointsHint')}
+            </Text>
           </View>
-        </View>
+          {bootstrap?.referral?.enabled ? (
+            <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+          ) : null}
+        </Pressable>
+      ) : bootstrap?.referral?.enabled ? (
+        <Pressable style={styles.pointsCard} onPress={() => navigation.navigate('Referral')}>
+          <View style={[styles.pointsIcon, { backgroundColor: `${primary}18` }]}>
+            <Feather name="gift" size={18} color={primary} />
+          </View>
+          <View style={styles.pointsBody}>
+            <Text style={styles.pointsLabel}>{t('referral.homeTitle')}</Text>
+            <Text style={styles.pointsHint}>{t('referral.homeSubtitle')}</Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+        </Pressable>
       ) : null}
 
       <View style={styles.menu}>

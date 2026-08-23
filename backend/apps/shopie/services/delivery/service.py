@@ -23,6 +23,7 @@ from apps.shopie.models import (
 from apps.shopie.services.delivery.providers import DeliveryQuote, get_delivery_provider
 from apps.shopie.services.delivery_secrets import decrypt_secret, encrypt_secret, mask_secret
 from apps.shopie.services.order_notify import notify_online_order
+from apps.shopie.services.zones import DeliveryZoneService
 from apps.tenancy.models import Tenant
 
 SECRET_KEYS = frozenset(
@@ -124,6 +125,10 @@ class DeliveryService:
         provider = str(incoming.get("provider", current.get("provider", "mock"))).strip().lower()
         if provider not in {"mock", "porter", "shiprocket_quick"}:
             raise ValidationError({"provider": "Choose mock, porter, or shiprocket_quick."})
+        if provider == "shiprocket_quick" and not str(
+            incoming.get("base_url", current.get("base_url") or "")
+        ).strip():
+            incoming = {**incoming, "base_url": "https://apiv2.shiprocket.in/v1/external"}
         bearer = str(
             incoming.get("charge_bearer", current.get("charge_bearer", "customer"))
         ).strip().lower()
@@ -353,6 +358,16 @@ class DeliveryService:
         settings = self.ensure_settings(tenant=tenant, business=business)
         if not settings.instant_delivery_enabled:
             return {"available": False, "reason": "instant_delivery_disabled"}
+        zone = DeliveryZoneService().match_zone(
+            tenant=tenant,
+            business=business,
+            city=str(drop.get("city") or ""),
+            postal_code=str(drop.get("postal_code") or ""),
+        )
+        if zone is None:
+            return {"available": False, "reason": "outside_delivery_zone"}
+        if not zone.instant_delivery_enabled:
+            return {"available": False, "reason": "instant_delivery_disabled_for_zone"}
         config = self._decrypted_config(settings)
         provider = get_delivery_provider(config)
         payload = self._provider_payload(
@@ -383,6 +398,8 @@ class DeliveryService:
             "merchant_fee": str(merchant_fee),
             "eta_minutes": result.eta_minutes,
             "expires_in_seconds": result.expires_in_seconds,
+            "delivery_zone_id": str(zone.id),
+            "delivery_zone_name": zone.name,
             "pickup": payload["pickup"],
             "drop": payload["drop"],
         }

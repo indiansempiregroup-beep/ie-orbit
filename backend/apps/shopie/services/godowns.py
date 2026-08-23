@@ -164,6 +164,68 @@ class GodownsService:
             longitude=longitude,
         )
 
+    @transaction.atomic
+    def update_godown(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        godown: ShopGodown,
+        data: dict[str, Any],
+    ) -> ShopGodown:
+        if godown.branch_id is not None:
+            raise ValidationError(
+                {
+                    "godown": (
+                        "This location mirrors an office. Edit the office to change its "
+                        "name or address."
+                    )
+                }
+            )
+        if "name" in data:
+            name = str(data["name"] or "").strip()
+            if not name:
+                raise ValidationError({"name": "Name is required."})
+            godown.name = name
+        for field in (
+            "code",
+            "phone_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state",
+            "country",
+            "postal_code",
+        ):
+            if field in data:
+                setattr(godown, field, str(data[field] or "").strip())
+        if "latitude" in data or "longitude" in data:
+            latitude = data.get("latitude", godown.latitude)
+            longitude = data.get("longitude", godown.longitude)
+            if latitude in (None, "") or longitude in (None, ""):
+                raise ValidationError({"location": "Select a mapped address for this godown."})
+            godown.latitude = latitude
+            godown.longitude = longitude
+        if not godown.address_line1 or not godown.city or not godown.country:
+            raise ValidationError(
+                {"address": "Standalone godowns need a full address, city, and country."}
+            )
+        if "is_default" in data and data["is_default"] is not None:
+            wants_default = bool(data["is_default"])
+            if wants_default and not godown.is_default:
+                ShopGodown.objects.filter(
+                    tenant=tenant, business=business, is_default=True
+                ).exclude(id=godown.id).update(is_default=False)
+                godown.is_default = True
+            elif not wants_default and godown.is_default:
+                # Something has to own POS and online stock, so the default moves
+                # by promoting another godown rather than by clearing this one.
+                raise ValidationError(
+                    {"is_default": "Make another godown the default instead."}
+                )
+        godown.save()
+        return godown
+
     @staticmethod
     def effective_location(godown: ShopGodown, business: Business) -> dict[str, Any] | None:
         branch = godown.branch
@@ -205,10 +267,31 @@ class GodownsService:
         Runs regardless of the Books godowns feature: order routing needs the
         per-office quantities even when the merchant never opens the godowns UI.
         """
-        existing = ShopGodown.objects.filter(
-            tenant=tenant, business=business, branch=branch, is_active=True
+        existing = ShopGodown.all_objects.filter(
+            tenant=tenant, business=business, branch=branch
         ).first()
         if existing:
+            if branch.is_primary:
+                ShopGodown.objects.filter(
+                    tenant=tenant,
+                    business=business,
+                    is_default=True,
+                ).exclude(id=existing.id).update(is_default=False)
+            changed_fields: list[str] = []
+            mirrored = {
+                "name": branch.display_name or branch.branch_name,
+                "code": branch.branch_code[:32],
+                "is_default": branch.is_primary,
+                "is_active": True,
+            }
+            for field, value in mirrored.items():
+                if getattr(existing, field) != value:
+                    setattr(existing, field, value)
+                    changed_fields.append(field)
+            if changed_fields:
+                existing.save(
+                    update_fields=[*changed_fields, "updated_at", "version"]
+                )
             return existing
         # Legacy shops keep all stock in one unlinked godown. Adopt it for the
         # primary office instead of stranding that quantity in a dead location.
@@ -229,7 +312,11 @@ class GodownsService:
             if orphan:
                 orphan.branch = branch
                 orphan.save(update_fields=["branch", "updated_at", "version"])
-                return orphan
+                return self.ensure_office_godown(
+                    tenant=tenant,
+                    business=business,
+                    branch=branch,
+                )
         return self.create_godown(
             tenant=tenant,
             business=business,
@@ -239,6 +326,51 @@ class GodownsService:
             branch=branch,
         )
 
+    @transaction.atomic
+    def sync_office_godown(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        branch: Branch,
+    ) -> ShopGodown | None:
+        """Mirror one office's lifecycle onto its persistent stock location."""
+        office_is_active = (
+            branch.status == BranchStatus.ACTIVE
+            and branch.is_active
+            and branch.deleted_at is None
+        )
+        if office_is_active:
+            return self.ensure_office_godown(
+                tenant=tenant,
+                business=business,
+                branch=branch,
+            )
+
+        godown = ShopGodown.all_objects.filter(
+            tenant=tenant,
+            business=business,
+            branch=branch,
+        ).first()
+        if godown is not None:
+            changed_fields: list[str] = []
+            mirrored = {
+                "name": branch.display_name or branch.branch_name,
+                "code": branch.branch_code[:32],
+                "is_active": False,
+                "is_default": False,
+            }
+            for field, value in mirrored.items():
+                if getattr(godown, field) != value:
+                    setattr(godown, field, value)
+                    changed_fields.append(field)
+            if changed_fields:
+                godown.save(
+                    update_fields=[*changed_fields, "updated_at", "version"]
+                )
+        return godown
+
+    @transaction.atomic
     def sync_office_godowns(
         self,
         *,
@@ -246,12 +378,23 @@ class GodownsService:
         business: Business,
     ) -> list[tuple[Branch, ShopGodown]]:
         branches = Branch.objects.filter(
-            tenant=tenant, business=business, status=BranchStatus.ACTIVE
+            tenant=tenant,
+            business=business,
         ).order_by("-is_primary", "created_at")
-        return [
-            (branch, self.ensure_office_godown(tenant=tenant, business=business, branch=branch))
-            for branch in branches
-        ]
+        active: list[tuple[Branch, ShopGodown]] = []
+        for branch in branches:
+            godown = self.sync_office_godown(
+                tenant=tenant,
+                business=business,
+                branch=branch,
+            )
+            if (
+                godown is not None
+                and branch.status == BranchStatus.ACTIVE
+                and branch.is_active
+            ):
+                active.append((branch, godown))
+        return active
 
     def office_stock(
         self,

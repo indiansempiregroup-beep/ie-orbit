@@ -3,6 +3,11 @@ import { RefreshControl, ScrollView, StyleSheet, type ScrollViewProps } from 're
 import { colors } from '../theme/tokens';
 
 type Props = ScrollViewProps & {
+  /**
+   * Pull-gesture state only. Passing a fetch/loading flag here activates the native
+   * refresh control programmatically, which reserves space for a spinner that never
+   * renders and leaves a blank strip under the header until the next real pull.
+   */
   refreshing?: boolean;
   onRefresh?: () => void | Promise<void>;
   primaryColor?: string;
@@ -10,20 +15,24 @@ type Props = ScrollViewProps & {
   refreshTintColor?: string;
 };
 
-export function RefreshableScrollView({
-  refreshing = false,
-  onRefresh,
-  primaryColor = colors.primary,
-  refreshTintColor,
-  children,
-  style,
-  contentContainerStyle,
-  ...rest
-}: Props) {
+export const RefreshableScrollView = React.forwardRef<ScrollView, Props>(function RefreshableScrollView(
+  {
+    refreshing = false,
+    onRefresh,
+    primaryColor = colors.primary,
+    refreshTintColor,
+    children,
+    style,
+    contentContainerStyle,
+    ...rest
+  },
+  ref,
+) {
   const spinnerColor = refreshTintColor ?? primaryColor;
 
   return (
     <ScrollView
+      ref={ref}
       {...rest}
       style={[styles.scroll, style]}
       contentContainerStyle={[styles.content, contentContainerStyle]}
@@ -46,7 +55,7 @@ export function RefreshableScrollView({
       {children}
     </ScrollView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },

@@ -10,6 +10,7 @@ export type MobileFlavorConfig = {
 type FlavorManifestEntry = {
   key: string;
   appName: string;
+  appSlug: string;
   tenantSlug: string;
   businessCode: string;
   primaryColor: string;
@@ -20,12 +21,16 @@ type FlavorManifestEntry = {
 const manifest = require('../../flavors/manifest.json') as { flavors: FlavorManifestEntry[] };
 
 const flavorKey = process.env.EXPO_PUBLIC_FLAVOR_KEY ?? '';
+const selectedFlavor = manifest.flavors.find((row) => row.key === flavorKey);
 const isDevMode = process.env.EXPO_PUBLIC_MOBILE_DEV_MODE === 'true';
 
 export const mobileRuntime = {
   flavorKey,
+  appSlug: process.env.EXPO_PUBLIC_APP_SLUG ?? selectedFlavor?.appSlug ?? 'ie-platform-mobile',
   isDevMode,
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1',
+  referralLinkBaseUrl: process.env.EXPO_PUBLIC_REFERRAL_LINK_BASE_URL ?? '',
+  appDownloadUrl: process.env.EXPO_PUBLIC_APP_DOWNLOAD_URL ?? '',
 };
 
 export function resolveBootstrapQuery(): {

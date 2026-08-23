@@ -1,8 +1,9 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RefreshableScrollView } from './RefreshableScrollView';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { colors, spacing, typography } from '../theme/tokens';
 
 type HeaderProps = {
@@ -33,6 +34,8 @@ type Props = {
   refreshing?: boolean;
   onRefresh?: () => void | Promise<void>;
   primaryColor?: string;
+  /** Lets a screen scroll its own content, e.g. to lift a focused field above the keyboard. */
+  scrollRef?: React.Ref<ScrollView>;
 };
 
 export function ProfileMenuScreen({
@@ -42,25 +45,28 @@ export function ProfileMenuScreen({
   refreshing = false,
   onRefresh,
   primaryColor = colors.primary,
+  scrollRef,
 }: Props) {
+  const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
+  const bottomPadding = keyboardHeight
+    ? keyboardHeight + spacing.lg
+    : insets.bottom + spacing.xxxl;
+
   return (
     <View style={styles.root}>
       <ScreenHeader title={title} onBack={onBack} />
-      {onRefresh ? (
-        <RefreshableScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.content}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          primaryColor={primaryColor}
-        >
-          {children}
-        </RefreshableScrollView>
-      ) : (
-        <RefreshableScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-          {children}
-        </RefreshableScrollView>
-      )}
+      <RefreshableScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
+        keyboardShouldPersistTaps="handled"
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        primaryColor={primaryColor}
+      >
+        {children}
+      </RefreshableScrollView>
     </View>
   );
 }

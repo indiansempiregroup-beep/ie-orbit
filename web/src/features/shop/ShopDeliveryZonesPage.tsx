@@ -17,6 +17,7 @@ const emptyForm = {
   minOrder: '0',
   notes: '',
   sameDay: true,
+  instantDelivery: false,
   enabled: true,
 };
 
@@ -41,6 +42,7 @@ function formFromZone(zone: ShopDeliveryZone): FormState {
     minOrder: String(zone.min_order_total ?? '0'),
     notes: zone.notes ?? '',
     sameDay: zone.same_day !== false,
+    instantDelivery: zone.instant_delivery_enabled === true,
     enabled: zone.enabled !== false,
   };
 }
@@ -102,6 +104,7 @@ export function ShopDeliveryZonesPage() {
       min_order_total: form.minOrder.trim() || '0',
       notes: form.notes.trim(),
       same_day: form.sameDay,
+      instant_delivery_enabled: form.instantDelivery,
       enabled: form.enabled,
     };
     try {
@@ -193,6 +196,7 @@ export function ShopDeliveryZonesPage() {
                   <div style={{ opacity: 0.8 }}>
                     {zone.enabled ? 'Enabled' : 'Disabled'}
                     {zone.same_day ? ' · Same day' : ''}
+                    {zone.instant_delivery_enabled ? ' · Deliver now' : ''}
                     {` · ${(zone.cities ?? []).join(', ') || 'Any city'}`}
                     {` · fee ${zone.fee ?? 0}`}
                   </div>
@@ -243,7 +247,7 @@ export function ShopDeliveryZonesPage() {
         <form onSubmit={handleSave} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
             Match checkout addresses by city name and/or postal prefix. Fee is added when the zone
-            matches.
+            matches. Deliver now appears only in zones where it is explicitly allowed.
           </p>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
@@ -306,6 +310,16 @@ export function ShopDeliveryZonesPage() {
                 onChange={(event) => setForm({ ...form, sameDay: event.target.checked })}
               />
               Same-day delivery
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={form.instantDelivery}
+                onChange={(event) =>
+                  setForm({ ...form, instantDelivery: event.target.checked })
+                }
+              />
+              Allow Deliver now
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input

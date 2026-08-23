@@ -2,12 +2,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClientError } from '@ie-platform/sdk';
 import type {
   ShopBooksReportSlug,
+  ShopBooksDocumentCreateInput,
+  ShopBooksDocumentType,
   ShopBooksVoucherCreateInput,
   ShopBooksVoucherType,
   ShopCashAccountWriteInput,
   ShopComplianceSettingsUpdateInput,
   ShopCouponWriteInput,
   ShopDeliveryZoneWriteInput,
+  ShopGodownWriteInput,
   ShopEWayGenerateInput,
   ShopOrderCreateInput,
   ShopPetWriteInput,
@@ -161,6 +164,84 @@ export function useShopGodowns() {
       }
     },
   });
+}
+
+export function useShopGodownMutations() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const queryClient = useQueryClient();
+  const businessId = workspace.businessId ?? '';
+
+  const createGodown = useMutation({
+    mutationFn: async (body: Omit<ShopGodownWriteInput, 'business_id'>) => {
+      const response = await client.shop.createGodown({ ...body, business_id: businessId });
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-godowns'] }),
+  });
+
+  const patchGodown = useMutation({
+    mutationFn: async ({
+      godownId,
+      body,
+    }: {
+      godownId: string;
+      body: Partial<ShopGodownWriteInput>;
+    }) => {
+      const response = await client.shop.patchGodown(godownId, {
+        ...body,
+        business_id: businessId,
+      });
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-godowns'] }),
+  });
+
+  return { createGodown, patchGodown };
+}
+
+export function useShopStockTransfers() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const businessId = workspace.businessId ?? '';
+  return useQuery({
+    queryKey: ['shop-stock-transfers', businessId],
+    enabled: Boolean(businessId),
+    queryFn: async () => {
+      const response = await client.shop.listStockTransfers({ business_id: businessId });
+      return response.data ?? [];
+    },
+  });
+}
+
+export function useShopStockTransferMutations() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const queryClient = useQueryClient();
+  const businessId = workspace.businessId ?? '';
+
+  const createTransfer = useMutation({
+    mutationFn: async (body: {
+      from_godown_id: string;
+      to_godown_id: string;
+      transfer_date?: string;
+      notes?: string;
+      lines: Array<{ product_id: string; quantity: string | number }>;
+    }) => {
+      const response = await client.shop.createStockTransfer({
+        ...body,
+        business_id: businessId,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shop-godowns'] });
+      queryClient.invalidateQueries({ queryKey: ['shop-stock-transfers'] });
+      queryClient.invalidateQueries({ queryKey: ['shop-products'] });
+    },
+  });
+
+  return { createTransfer };
 }
 
 export function useShopProductMutations() {
@@ -514,6 +595,45 @@ export function useShopBooksDashboard() {
       return response.data;
     },
   });
+}
+
+export function useShopBooksDocuments(docType: ShopBooksDocumentType) {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const businessId = workspace.businessId ?? '';
+  return useQuery({
+    queryKey: ['shop-books-documents', businessId, docType],
+    enabled: Boolean(businessId),
+    queryFn: async () => {
+      const response = await client.shop.listDocuments({ business_id: businessId, doc_type: docType });
+      return response.data;
+    },
+  });
+}
+
+export function useShopBooksDocumentMutations() {
+  const client = useApiClient();
+  const workspace = useWorkspace();
+  const queryClient = useQueryClient();
+  const businessId = workspace.businessId ?? '';
+
+  const create = useMutation({
+    mutationFn: async (body: Omit<ShopBooksDocumentCreateInput, 'business_id'>) => {
+      const response = await client.shop.createDocument({ ...body, business_id: businessId });
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-books-documents', businessId] }),
+  });
+
+  const convert = useMutation({
+    mutationFn: async (documentId: string) => {
+      const response = await client.shop.convertDocument(documentId, {});
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-books-documents', businessId] }),
+  });
+
+  return { create, convert };
 }
 
 export function useShopCashAccounts() {

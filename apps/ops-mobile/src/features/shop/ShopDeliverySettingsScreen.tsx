@@ -21,6 +21,8 @@ const PROVIDER_OPTIONS = [
   { value: 'shiprocket_quick', label: 'Shiprocket Quick' },
 ];
 
+const SHIPROCKET_BASE_URL = 'https://apiv2.shiprocket.in/v1/external';
+
 const BEARER_OPTIONS = [
   { value: 'customer', label: 'Customer pays the live fee' },
   { value: 'merchant', label: 'Shop pays (free delivery)' },
@@ -53,6 +55,8 @@ export function ShopDeliverySettingsScreen() {
   const [apiKey, setApiKey] = useState('');
   const [password, setPassword] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
+  const [pickupLocation, setPickupLocation] = useState('Primary');
+  const [parcelWeight, setParcelWeight] = useState('1');
   const [storedSecrets, setStoredSecrets] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
@@ -69,6 +73,8 @@ export function ShopDeliverySettingsScreen() {
       setChargeBearer(String(config.charge_bearer || 'customer'));
       setFreeMin(String(config.free_delivery_min_order ?? '0'));
       setAbsorbCap(String(config.merchant_absorb_cap ?? '0'));
+      setPickupLocation(String(config.pickup_location || 'Primary'));
+      setParcelWeight(String(config.default_parcel_weight_kg ?? '1'));
       setEmail(String(credentials.email || ''));
       setApiKey('');
       setPassword('');
@@ -118,10 +124,12 @@ export function ShopDeliverySettingsScreen() {
     if (provider === 'shiprocket_quick') credentials.email = email.trim();
     const integration: Record<string, unknown> = {
       provider,
-      base_url: baseUrl.trim(),
+      base_url: baseUrl.trim() || (provider === 'shiprocket_quick' ? SHIPROCKET_BASE_URL : ''),
       charge_bearer: chargeBearer,
       free_delivery_min_order: freeMin.trim() || '0',
       merchant_absorb_cap: absorbCap.trim() || '0',
+      pickup_location: pickupLocation.trim() || 'Primary',
+      default_parcel_weight_kg: parcelWeight.trim() || '1',
       credentials,
     };
     if (webhookSecret.trim()) integration.webhook_secret = webhookSecret.trim();
@@ -199,7 +207,12 @@ export function ShopDeliverySettingsScreen() {
         label="Delivery provider"
         value={provider}
         options={PROVIDER_OPTIONS}
-        onChange={setProvider}
+        onChange={(next) => {
+          setProvider(next);
+          if (next === 'shiprocket_quick' && !baseUrl.trim()) {
+            setBaseUrl(SHIPROCKET_BASE_URL);
+          }
+        }}
       />
 
       {needsCredentials ? (
@@ -212,10 +225,18 @@ export function ShopDeliverySettingsScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            hint="Use the URL your provider account manager gave you."
+            hint={
+              provider === 'shiprocket_quick'
+                ? 'Leave blank to use https://apiv2.shiprocket.in/v1/external'
+                : 'Use the URL your provider account manager gave you.'
+            }
           />
           <Input
-            label={provider === 'porter' ? 'Porter API key' : 'API key / token'}
+            label={
+              provider === 'porter'
+                ? 'Porter API key'
+                : 'API token (optional if email/password is set)'
+            }
             value={apiKey}
             onChangeText={setApiKey}
             secureTextEntry
@@ -226,6 +247,18 @@ export function ShopDeliverySettingsScreen() {
           />
           {provider === 'shiprocket_quick' ? (
             <>
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>After Shiprocket KYC</Text>
+                <Text style={styles.cardHint}>
+                  1. In Shiprocket go to Settings → API → Configure → Create an API User. Use an
+                  email that is different from your dashboard login.{'\n'}
+                  2. Under Settings → Pickup, add the shop address. The nickname must match Pickup
+                  location name below (usually Primary).{'\n'}
+                  3. Paste that API user email and password here, then save.{'\n'}
+                  4. Turn on Allow Deliver now for the matching delivery zone.{'\n'}
+                  5. Paste the webhook URL below into Shiprocket if they give you a webhook field.
+                </Text>
+              </View>
               <Input
                 label="API user email"
                 value={email}
@@ -246,6 +279,18 @@ export function ShopDeliverySettingsScreen() {
                     ? 'Saved — leave blank to keep the current password.'
                     : undefined
                 }
+              />
+              <Input
+                label="Pickup location name"
+                value={pickupLocation}
+                onChangeText={setPickupLocation}
+                hint="Must match the nickname in Shiprocket Settings → Pickup."
+              />
+              <Input
+                label="Default parcel weight (kg)"
+                value={parcelWeight}
+                onChangeText={setParcelWeight}
+                keyboardType="decimal-pad"
               />
             </>
           ) : null}

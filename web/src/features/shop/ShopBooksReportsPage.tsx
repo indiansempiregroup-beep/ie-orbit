@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ShopBooksReportSlug } from '@ie-platform/sdk';
+import { Download, Printer, RefreshCw } from 'lucide-react';
+import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { formatMoney } from '../../lib/currency';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -48,6 +50,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export function ShopBooksReportsPage() {
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency;
@@ -57,11 +68,78 @@ export function ShopBooksReportsPage() {
 
   const report = useShopBooksReport(slug, { date_from: dateFrom || undefined, date_to: dateTo || undefined });
   const data = report.data;
+  const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo);
+  const activeReport = REPORT_TABS.find((item) => item.slug === slug);
+  const periodLabel = dateFrom || dateTo ? `${dateFrom || 'Beginning'} – ${dateTo || 'Today'}` : 'All time';
+
+  const exportRows = useMemo<Array<Record<string, unknown>>>(() => {
+    if (Array.isArray(data)) return data.filter(isRecord);
+    if (isRecord(data)) {
+      return Object.entries(data).map<Record<string, unknown>>(([metric, value]) => ({
+        metric: metric.replace(/_/g, ' '),
+        value: isRecord(value) ? JSON.stringify(value) : value,
+      }));
+    }
+    return [];
+  }, [data]);
+
+  function setPreset(kind: 'month' | 'quarter' | 'year' | 'all') {
+    if (kind === 'all') {
+      setDateFrom('');
+      setDateTo('');
+      return;
+    }
+    const today = new Date();
+    const start =
+      kind === 'month'
+        ? new Date(today.getFullYear(), today.getMonth(), 1)
+        : kind === 'quarter'
+          ? new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1)
+          : new Date(today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear(), 3, 1);
+    setDateFrom(toIsoDate(start));
+    setDateTo(toIsoDate(today));
+  }
+
+  function downloadCsv() {
+    if (!exportRows.length) return;
+    const columns = Array.from(new Set(exportRows.flatMap((row) => Object.keys(row))));
+    const csv = [
+      columns.map(csvCell).join(','),
+      ...exportRows.map((row) => columns.map((column) => csvCell(row[column])).join(',')),
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${slug}-${dateFrom || 'all'}-${dateTo || 'today'}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="page-stack">
       <Card>
-        <h2 style={{ marginTop: 0 }}>Books reports</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Books reports</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
+              Review performance, verify GST figures, and export filing-ready data.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button type="button" variant="neutral" onClick={() => void report.refetch()} disabled={report.isFetching || invalidRange}>
+              <RefreshCw size={15} aria-hidden="true" /> {report.isFetching ? 'Refreshing…' : 'Refresh'}
+            </Button>
+            <Button type="button" variant="neutral" onClick={downloadCsv} disabled={!exportRows.length || invalidRange}>
+              <Download size={15} aria-hidden="true" /> Export CSV
+            </Button>
+            <Button type="button" variant="neutral" onClick={() => window.print()} disabled={!data}>
+              <Printer size={15} aria-hidden="true" /> Print
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {REPORT_TABS.map((item) => (
             <TabButton key={item.slug} active={slug === item.slug} onClick={() => setSlug(item.slug)}>
@@ -70,8 +148,14 @@ export function ShopBooksReportsPage() {
           ))}
         </div>
         <p style={{ color: 'var(--muted-foreground)', margin: '0 0 12px' }}>
-          {REPORT_TABS.find((item) => item.slug === slug)?.description}
+          {activeReport?.description}
         </p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          <Button type="button" variant="neutral" onClick={() => setPreset('month')}>This month</Button>
+          <Button type="button" variant="neutral" onClick={() => setPreset('quarter')}>This quarter</Button>
+          <Button type="button" variant="neutral" onClick={() => setPreset('year')}>This financial year</Button>
+          <Button type="button" variant="neutral" onClick={() => setPreset('all')}>All time</Button>
+        </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
             From
@@ -82,10 +166,22 @@ export function ShopBooksReportsPage() {
             <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }} />
           </label>
         </div>
+        {invalidRange ? (
+          <p role="alert" style={{ color: '#b91c1c', fontSize: 13, margin: '10px 0 0' }}>
+            “From” date must be before or equal to “To” date.
+          </p>
+        ) : null}
       </Card>
 
       <Card>
-        {report.isLoading ? <p>Loading…</p> : null}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 16 }}>{activeReport?.label}</h3>
+            <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{periodLabel}</span>
+          </div>
+          {report.isFetching && !report.isLoading ? <span style={{ color: 'var(--muted-foreground)', fontSize: 13 }}>Updating…</span> : null}
+        </div>
+        {report.isLoading ? <p role="status">Preparing report…</p> : null}
         {report.error ? <p role="alert">{(report.error as Error).message}</p> : null}
 
         {!report.isLoading && data && (slug === 'sales' || slug === 'purchase') && isRecord(data) ? (

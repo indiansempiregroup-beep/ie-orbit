@@ -45,6 +45,19 @@ def enabled_features(product_codes: list[str], *, business: Business | None = No
     return features
 
 
+def _referral_program_summary(business: Business) -> dict[str, Any]:
+    try:
+        from apps.shopie.services.referrals import CustomerReferralService
+
+        return CustomerReferralService().public_program(business=business)
+    except Exception:
+        return {
+            "enabled": False,
+            "points_per_referral": 0,
+            "success_event": "first_paid_order",
+        }
+
+
 def _loyalty_program_summary(business: Business) -> dict[str, Any]:
     try:
         from apps.customers.services.loyalty import LoyaltyService
@@ -129,6 +142,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         "enabled_products": product_codes,
         "features": enabled_features(product_codes, business=business),
         "loyalty": _loyalty_program_summary(business),
+        "referral": _referral_program_summary(business),
         "build_metadata": profile.build_metadata,
     }
 

@@ -31,8 +31,8 @@ from apps.shopie.api.serializers import (
     ShopChequeClearSerializer,
     ShopChequeCreateSerializer,
     ShopChequeSerializer,
-    ShopGodownCreateSerializer,
     ShopGodownSerializer,
+    ShopGodownWriteSerializer,
     ShopLoanCreateSerializer,
     ShopLoanRepaymentSerializer,
     ShopLoanSerializer,
@@ -44,6 +44,7 @@ from apps.shopie.models import (
     ShopBooksVoucher,
     ShopCashAccount,
     ShopCheque,
+    ShopGodown,
     ShopLoan,
     ShopSupplier,
 )
@@ -152,7 +153,7 @@ class ShopGodownListCreateView(APIView):
         return paginated_list_response(request, qs, ShopGodownSerializer)
 
     def post(self, request: Request) -> Response:
-        serializer = ShopGodownCreateSerializer(data=request.data)
+        serializer = ShopGodownWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         business = _stock_location_business(
@@ -179,6 +180,31 @@ class ShopGodownListCreateView(APIView):
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
         return success_response(ShopGodownSerializer(godown).data, status_code=status.HTTP_201_CREATED)
+
+
+class ShopGodownDetailView(APIView):
+    permission_classes = [ShopAccessPermission]
+    godowns = GodownsService()
+
+    def patch(self, request: Request, godown_id) -> Response:
+        godown = get_object_or_404(ShopGodown, tenant=request.current_tenant, id=godown_id)
+        business = _stock_location_business(
+            request, godown.business_id, feature=FEATURE_SHOPIE_BOOKS_GODOWNS
+        )
+        serializer = ShopGodownWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        data.pop("business_id", None)
+        try:
+            godown = self.godowns.update_godown(
+                tenant=request.current_tenant,
+                business=business,
+                godown=godown,
+                data=data,
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopGodownSerializer(godown).data)
 
 
 class ShopStockTransferListCreateView(APIView):

@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 
 from apps.api.mobile_helpers import ensure_customer_for_user
 from apps.api.mobile_serializers import MobileDiscoverQuerySerializer
-from apps.businesses.constants import FEATURE_SHOPIE_GROW_ADS, PRODUCT_SHOPIE
+from apps.businesses.constants import FEATURE_SHOPIE_CUSTOMER_REFERRAL, FEATURE_SHOPIE_GROW_ADS, PRODUCT_SHOPIE
 from apps.businesses.models import Business
 from apps.businesses.services.entitlements import EntitlementService
 from apps.common.api.responses import success_response
@@ -20,6 +20,7 @@ from apps.common.upi import build_upi_pay_url
 from apps.platform_media.models import MediaFolderType, MediaVisibility
 from apps.platform_media.services import MediaService
 from apps.shopie.api.serializers import (
+    CustomerReferralSerializer,
     MobileShopOrderSerializer,
     MobileShopPetWriteSerializer,
     ShopDashboardAdSerializer,
@@ -41,6 +42,7 @@ from apps.shopie.services.ads import DashboardAdService
 from apps.shopie.services.coupons import CouponService
 from apps.shopie.services.pets import PetsService
 from apps.shopie.services.product_reviews import ProductReviewService
+from apps.shopie.services.referrals import CustomerReferralService
 from apps.shopie.services.returns import ReturnService
 from apps.shopie.services.zones import DeliveryZoneService
 from apps.tenancy.models import Tenant
@@ -532,6 +534,7 @@ class MobileShopDeliveryZoneMatchView(APIView):
                     "fee": str(zone.fee),
                     "min_order_total": str(zone.min_order_total),
                     "same_day": zone.same_day,
+                    "instant_delivery_enabled": zone.instant_delivery_enabled,
                 },
             }
         )
@@ -775,3 +778,97 @@ class MobileUpiPreviewView(APIView):
                 "upi_pay_url": url,
             }
         )
+
+
+class MobileShopReferralView(APIView):
+    permission_classes = [AllowAny]
+    referrals = CustomerReferralService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def get(self, request: Request) -> Response:
+        serializer = MobileDiscoverQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        program = self.referrals.public_program(business=business)
+        payload: dict = {
+            **program,
+            "code": None,
+            "stats": {"invited": 0, "pending": 0, "rewarded": 0, "points_earned": 0},
+            "referrals": [],
+            "applied_code": None,
+            "applied_status": None,
+        }
+        user = getattr(request, "user", None)
+        if not program["enabled"] or user is None or not getattr(user, "is_authenticated", False):
+            return success_response(payload)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=user)
+        code_row = self.referrals.get_or_create_code(
+            tenant=tenant, business=business, customer=customer
+        )
+        made = list(
+            self.referrals.list_referrals_made(tenant=tenant, business=business, customer=customer)[:40]
+        )
+        received = self.referrals.get_received_referral(
+            tenant=tenant, business=business, customer=customer
+        )
+        rewarded = [row for row in made if row.status == "rewarded"]
+        pending = [row for row in made if row.status in {"pending", "qualified"}]
+        points_earned = sum(int((row.metadata or {}).get("points_awarded") or 0) for row in rewarded)
+        payload.update(
+            {
+                "code": code_row.code,
+                "stats": {
+                    "invited": len(made),
+                    "pending": len(pending),
+                    "rewarded": len(rewarded),
+                    "points_earned": points_earned,
+                },
+                "referrals": CustomerReferralSerializer(made, many=True).data,
+                "applied_code": (received.metadata or {}).get("code") if received else None,
+                "applied_status": received.status if received else None,
+            }
+        )
+        return success_response(payload)
+
+
+class MobileShopReferralApplyView(APIView):
+    permission_classes = [IsAuthenticated]
+    referrals = CustomerReferralService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request) -> Response:
+        serializer = MobileDiscoverQuerySerializer(
+            data={
+                "tenant_slug": request.data.get("tenant_slug"),
+                "business_code": request.data.get("business_code"),
+            }
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        code = str(request.data.get("referral_code") or request.data.get("code") or "").strip()
+        try:
+            self.referrals.apply_code(
+                tenant=tenant,
+                business=business,
+                referred=customer,
+                code=code,
+            )
+        except DjangoValidationError as exc:
+            raise _django_validation(exc) from exc
+        request._request.GET = request._request.GET.copy()
+        request._request.GET["tenant_slug"] = serializer.validated_data["tenant_slug"]
+        request._request.GET["business_code"] = serializer.validated_data["business_code"]
+        return MobileShopReferralView().get(request)

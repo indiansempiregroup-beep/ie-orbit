@@ -63,7 +63,15 @@ export type RootStackParamList = {
   ShopOrderDetail: { orderId: string };
   ShopPos:
     | {
-        mode?: 'sale' | 'purchase' | 'quotation' | 'credit_note' | 'debit_note';
+        mode?:
+          | 'sale'
+          | 'purchase'
+          | 'quotation'
+          | 'credit_note'
+          | 'debit_note'
+          | 'sale_order'
+          | 'purchase_order'
+          | 'delivery_challan';
         addCode?: string;
         addProductId?: string;
         selectCustomerId?: string;

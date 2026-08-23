@@ -44,23 +44,30 @@ export function AddressPlacesField({
   longitude,
 }: Props) {
   const [query, setQuery] = useState(value);
+  const [searchTerm, setSearchTerm] = useState('');
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectingRef = useRef(false);
+  const typedValueRef = useRef<string | null>(null);
   const sessionTokenRef = useRef(newSessionToken());
+  // Read when the request fires so moving the map pin biases the next search
+  // instead of restarting the current one.
+  const biasRef = useRef({ latitude, longitude });
+  biasRef.current = { latitude, longitude };
 
   useEffect(() => {
     setQuery(value);
+    if (value === typedValueRef.current) return;
+    // The screen supplied this text (opening an office to edit, resetting after
+    // save), so it is not something the merchant is searching for.
+    typedValueRef.current = null;
+    setSearchTerm('');
+    setPredictions([]);
   }, [value]);
 
   useEffect(() => {
-    if (selectingRef.current) {
-      selectingRef.current = false;
-      return;
-    }
-    const term = query.trim();
+    const term = searchTerm.trim();
     if (term.length < 3) {
       setPredictions([]);
       return;
@@ -75,8 +82,8 @@ export function AddressPlacesField({
           const response = await opsClient.places.autocomplete({
             input: term,
             session_token: sessionTokenRef.current,
-            latitude: latitude ?? undefined,
-            longitude: longitude ?? undefined,
+            latitude: biasRef.current.latitude ?? undefined,
+            longitude: biasRef.current.longitude ?? undefined,
             country_code: 'IN',
           });
           setPredictions(response.data.predictions ?? []);
@@ -92,10 +99,19 @@ export function AddressPlacesField({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [latitude, longitude, query]);
+  }, [searchTerm]);
+
+  function handleTyping(text: string) {
+    typedValueRef.current = text;
+    setQuery(text);
+    setSearchTerm(text);
+    onChangeText(text);
+  }
 
   async function selectPrediction(prediction: Prediction) {
-    selectingRef.current = true;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    typedValueRef.current = prediction.description;
+    setSearchTerm('');
     setPredictions([]);
     setQuery(prediction.description);
     onChangeText(prediction.description);
@@ -109,7 +125,7 @@ export function AddressPlacesField({
       sessionTokenRef.current = newSessionToken();
       const result = response.data;
       const formatted = result.formatted_address || prediction.description;
-      selectingRef.current = true;
+      typedValueRef.current = formatted;
       setQuery(formatted);
       onChangeText(formatted);
       onPlaceSelected?.({
@@ -136,10 +152,7 @@ export function AddressPlacesField({
         <Feather name="map-pin" size={16} color={colors.mutedForeground} />
         <TextInput
           value={query}
-          onChangeText={(text) => {
-            setQuery(text);
-            onChangeText(text);
-          }}
+          onChangeText={handleTyping}
           placeholder="Search address on Google Maps"
           placeholderTextColor={colors.mutedForeground}
           style={styles.input}

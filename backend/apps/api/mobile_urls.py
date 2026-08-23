@@ -48,6 +48,8 @@ from apps.shopie.api.mobile_views import (
     MobileShopProductDetailView,
     MobileShopProductListView,
     MobileShopProductReviewListCreateView,
+    MobileShopReferralApplyView,
+    MobileShopReferralView,
     MobileShopReturnDetailView,
     MobileShopReturnListView,
     MobileUpiPreviewView,
@@ -109,6 +111,12 @@ urlpatterns = [
         name="mobile-notification-mark-read",
     ),
     path("mobile/shop/ads", MobileShopAdListView.as_view(), name="mobile-shop-ads"),
+    path("mobile/shop/referral", MobileShopReferralView.as_view(), name="mobile-shop-referral"),
+    path(
+        "mobile/shop/referral/apply",
+        MobileShopReferralApplyView.as_view(),
+        name="mobile-shop-referral-apply",
+    ),
     path("mobile/shop/products", MobileShopProductListView.as_view(), name="mobile-shop-products"),
     path(
         "mobile/shop/products/<uuid:product_id>",

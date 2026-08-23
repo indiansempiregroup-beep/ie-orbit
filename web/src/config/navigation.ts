@@ -20,10 +20,12 @@ import {
   ShieldCheck,
   ShoppingCart,
   TicketPercent,
+  Truck,
   UserCog,
   Users,
   UsersRound,
   WalletCards,
+  Warehouse,
 } from 'lucide-react';
 import { getSubscribedProductIds, hasPetsPack, type ProductSubscriptionLike } from './products';
 import type { UserProfile } from '@ie-platform/sdk';
@@ -172,9 +174,25 @@ export const navigationItems: AppNavItem[] = [
     anyPermissions: ['business:read', 'business:write'],
   },
   {
+    to: '/shop/books/delivery-challans',
+    labelKey: 'nav.shopDeliveryChallans',
+    icon: Truck,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'business:write'],
+  },
+  {
     to: '/shop/books/compliance',
     labelKey: 'nav.shopCompliance',
     icon: ShieldCheck,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'business:write'],
+  },
+  {
+    to: '/shop/godowns',
+    labelKey: 'nav.shopGodowns',
+    icon: Warehouse,
     group: 'operations',
     products: ['shopie'],
     anyPermissions: ['business:read', 'business:write'],

@@ -16,11 +16,18 @@ import { useMobileBookings } from '../../hooks/useMobileBookings';
 import { useMobileNotifications } from '../../hooks/useMobileNotifications';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Avatar } from '../../components/ui/Avatar';
-import { Badge } from '../../components/ui/Badge';
+import { Badge, badgeTone, type BadgeStatus } from '../../components/ui/Badge';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { formatTime, isUpcomingBooking, mapBookingStatus } from '../../utils/format';
+import { formatDateTime, formatTime, isUpcomingBooking, mapBookingStatus } from '../../utils/format';
+import {
+  formatShopMoney,
+  formatShopOrderPlaced,
+  isShopOrderUnpaid,
+  shopOrderHeadline,
+  shopOrderStatusColors,
+} from '../shop/shopHelpers';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -43,10 +50,50 @@ function bookingDateParts(iso: string) {
   };
 }
 
+type FeatherName = React.ComponentProps<typeof Feather>['name'];
+
+const HISTORY_ICONS: Record<BadgeStatus, FeatherName> = {
+  confirmed: 'calendar',
+  pending: 'clock',
+  cancelled: 'x-circle',
+  completed: 'check-circle',
+  noshow: 'alert-circle',
+};
+
+function orderTimestamp(order: ShopOrder) {
+  if (!order.created_at) return 0;
+  const ts = new Date(order.created_at).getTime();
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+/** Prefer summed quantities so "3 items" matches what the customer actually bought. */
+function orderItemCount(order: ShopOrder) {
+  const lines = order.lines ?? [];
+  const quantity = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
+  return quantity > 0 ? quantity : lines.length;
+}
+
 function announcementTone(severity?: string) {
   if (severity === 'warning') return { border: '#F59E0B', bg: '#FFFBEB' };
   if (severity === 'critical' || severity === 'error') return { border: '#DC2626', bg: '#FEF2F2' };
   return { border: '#2563EB', bg: '#EFF6FF' };
+}
+
+/** Placeholder rows so the section never flashes "nothing here" while the first load runs. */
+function HistorySkeleton({ rows = 2 }: { rows?: number }) {
+  return (
+    <View style={[styles.historyList, styles.sectionGap]}>
+      {Array.from({ length: rows }).map((_, index) => (
+        <View key={index} style={styles.historyCard}>
+          <View style={styles.skeletonIcon} />
+          <View style={styles.sampleBody}>
+            <View style={styles.skeletonLine} />
+            <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 export function HomeScreen() {
@@ -70,7 +117,7 @@ export function HomeScreen() {
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const { bookings, loading: bookingsLoading, reload: reloadBookings } = useMobileBookings();
-  const { unreadCount, loading: notificationsLoading, reload: reloadNotifications } = useMobileNotifications();
+  const { unreadCount, reload: reloadNotifications } = useMobileNotifications();
   const displayName = user?.first_name || user?.full_name || 'there';
 
   const loadCatalog = useCallback(async () => {
@@ -94,7 +141,8 @@ export function HomeScreen() {
         serviceRes.status === 'fulfilled' && serviceRes.value ? serviceRes.value.data.services.slice(0, 6) : [],
       );
       setProducts(productRes.status === 'fulfilled' && productRes.value ? productRes.value.data.slice(0, 6) : []);
-      setOrders(orderRes.status === 'fulfilled' && orderRes.value ? orderRes.value.data.slice(0, 3) : []);
+      const orderList = orderRes.status === 'fulfilled' && orderRes.value ? orderRes.value.data : [];
+      setOrders([...orderList].sort((a, b) => orderTimestamp(b) - orderTimestamp(a)).slice(0, 3));
       setAnnouncements(
         announcementRes.status === 'fulfilled' ? announcementRes.value.data.announcements ?? [] : [],
       );
@@ -121,8 +169,6 @@ export function HomeScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await Promise.all([reloadBookings(), reloadNotifications(), loadCatalog(), loadLoyalty()]);
   });
-
-  const isRefreshing = refreshing || bookingsLoading || notificationsLoading || catalogLoading;
 
   useFocusEffect(
     React.useCallback(() => {
@@ -153,8 +199,14 @@ export function HomeScreen() {
     () =>
       bookings
         .filter((booking) => !isUpcomingBooking(booking.status, booking.start_at))
+        .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
         .slice(0, 3),
     [bookings],
+  );
+
+  const rebookTarget = useMemo(
+    () => recentBookings.find((booking) => mapBookingStatus(booking.status) === 'completed') ?? recentBookings[0],
+    [recentBookings],
   );
 
   const featuredServices = useMemo(() => services.slice(0, 3), [services]);
@@ -190,7 +242,7 @@ export function HomeScreen() {
       <RefreshableScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        refreshing={isRefreshing}
+        refreshing={refreshing}
         onRefresh={onRefresh}
         primaryColor={primary}
       >
@@ -264,9 +316,29 @@ export function HomeScreen() {
           fallbackColors={[primary, secondary]}
           ctaLabel={showShop ? 'Shop now' : 'Learn more'}
           onPressAd={(ad) =>
-            openPromoAd(ad, (screen, params) => navigation.navigate(screen as never, params as never), showShop)
+            openPromoAd(
+              ad,
+              (screen, params) =>
+                (navigation.navigate as unknown as (name: string, params?: object) => void)(screen, params),
+              showShop,
+            )
           }
         />
+
+        {bootstrap?.referral?.enabled ? (
+          <Pressable style={styles.inviteCard} onPress={() => navigation.navigate('Referral')}>
+            <View style={[styles.inviteIcon, { backgroundColor: `${primary}18` }]}>
+              <Feather name="gift" size={18} color={primary} />
+            </View>
+            <View style={styles.inviteBody}>
+              <Text style={styles.inviteTitle}>Invite a friend</Text>
+              <Text style={styles.inviteSubtitle}>
+                Share your code and earn {bootstrap.referral.points_per_referral} reward points
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+          </Pressable>
+        ) : null}
 
         <View style={styles.body}>
         {announcements.length ? (
@@ -363,7 +435,9 @@ export function HomeScreen() {
               ))}
               {!featuredServices.length ? (
                 <View style={styles.serviceCard}>
-                  <Text style={styles.serviceMeta}>Services will appear here once loaded.</Text>
+                  <Text style={styles.serviceMeta}>
+                    {catalogLoading ? 'Loading services...' : 'Services will appear here once loaded.'}
+                  </Text>
                 </View>
               ) : null}
             </ScrollView>
@@ -409,10 +483,177 @@ export function HomeScreen() {
               ))}
               {!featuredProducts.length ? (
                 <View style={styles.serviceCard}>
-                  <Text style={styles.serviceMeta}>Products will appear here once loaded.</Text>
+                  <Text style={styles.serviceMeta}>
+                    {catalogLoading ? 'Loading products...' : 'Products will appear here once loaded.'}
+                  </Text>
                 </View>
               ) : null}
             </ScrollView>
+          </>
+        ) : null}
+
+        {showBooking ? (
+          <>
+            <SectionHeader
+              title="Recent appointments"
+              action={
+                recentBookings.length ? (
+                  <Pressable onPress={() => navigation.navigate('BookingHistory')} hitSlop={8}>
+                    <Text style={[styles.link, { color: primary }]}>See all</Text>
+                  </Pressable>
+                ) : undefined
+              }
+            />
+            {bookingsLoading && !bookings.length ? (
+              <HistorySkeleton />
+            ) : recentBookings.length ? (
+              <View style={styles.historyBlock}>
+                <View style={styles.historyList}>
+                  {recentBookings.map((booking) => {
+                    const status = mapBookingStatus(booking.status);
+                    const tone = badgeTone(status);
+                    return (
+                      <Pressable
+                        key={booking.id}
+                        style={({ pressed }) => [styles.historyCard, pressed && styles.cardPressed]}
+                        onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                      >
+                        <View style={[styles.historyIcon, { backgroundColor: tone.bg }]}>
+                          <Feather name={HISTORY_ICONS[status]} size={16} color={tone.text} />
+                        </View>
+                        <View style={styles.sampleBody}>
+                          <Text style={styles.sampleTitle} numberOfLines={1}>
+                            {booking.service_name}
+                          </Text>
+                          <Text style={styles.sampleMeta} numberOfLines={1}>
+                            {formatDateTime(booking.start_at)}
+                            {booking.staff_name ? ` · ${booking.staff_name}` : ''}
+                          </Text>
+                        </View>
+                        <Badge status={status} />
+                        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {rebookTarget ? (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.repeatBtn,
+                      { borderColor: `${primary}40`, backgroundColor: `${primary}0D` },
+                      pressed && styles.cardPressed,
+                    ]}
+                    onPress={() => navigation.navigate('Book', { serviceId: rebookTarget.service_id })}
+                  >
+                    <Feather name="rotate-ccw" size={14} color={primary} />
+                    <Text style={[styles.repeatText, { color: primary }]} numberOfLines={1}>
+                      Book {rebookTarget.service_name} again
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.emptyCard}>
+                <View style={[styles.emptyIcon, { backgroundColor: `${primary}12` }]}>
+                  <Feather name="calendar" size={18} color={primary} />
+                </View>
+                <Text style={styles.emptyTitle}>{nextBooking ? 'No past visits yet' : 'No past appointments'}</Text>
+                <Text style={styles.emptyText}>
+                  {nextBooking
+                    ? 'Once your upcoming appointment is done, it will appear here for easy rebooking.'
+                    : 'Visit us once and your history lands here, so you can rebook in a tap.'}
+                </Text>
+                {!nextBooking ? (
+                  <Pressable
+                    style={[styles.emptyCta, { backgroundColor: primary }]}
+                    onPress={() => navigation.navigate('Book')}
+                  >
+                    <Text style={styles.emptyCtaText}>Book your first visit</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
+          </>
+        ) : null}
+
+        {showShop ? (
+          <>
+            <SectionHeader
+              title="Recent orders"
+              action={
+                orders.length ? (
+                  <Pressable onPress={() => navigation.navigate('ShopOrderHistory')} hitSlop={8}>
+                    <Text style={[styles.link, { color: primary }]}>See all</Text>
+                  </Pressable>
+                ) : undefined
+              }
+            />
+            {catalogLoading && !orders.length ? (
+              <HistorySkeleton />
+            ) : orders.length ? (
+              <View style={[styles.historyList, styles.sectionGap]}>
+                {orders.map((order) => {
+                  const headline = shopOrderHeadline(order);
+                  const tone = shopOrderStatusColors(headline.tone);
+                  const itemCount = orderItemCount(order);
+                  const thumbUrl = resolveMediaUrl(order.lines?.[0]?.product_image_url);
+                  const unpaid = isShopOrderUnpaid(order);
+                  return (
+                    <Pressable
+                      key={order.id}
+                      style={({ pressed }) => [styles.historyCard, pressed && styles.cardPressed]}
+                      onPress={() => navigation.navigate('ShopOrderDetail', { orderId: order.id })}
+                    >
+                      {thumbUrl ? (
+                        <Image source={{ uri: thumbUrl }} style={styles.orderThumb} />
+                      ) : (
+                        <View style={[styles.orderThumb, styles.orderThumbEmpty]}>
+                          <Feather name="package" size={18} color={colors.mutedForeground} />
+                        </View>
+                      )}
+                      <View style={styles.sampleBody}>
+                        <View style={styles.orderTopRow}>
+                          <Text style={styles.orderNumber} numberOfLines={1}>
+                            #{order.order_number}
+                          </Text>
+                          <Text style={styles.orderTotal}>{formatShopMoney(order.total, order.currency)}</Text>
+                        </View>
+                        <Text style={styles.sampleMeta} numberOfLines={1}>
+                          {formatShopOrderPlaced(order.created_at)}
+                          {itemCount ? ` · ${itemCount} item${itemCount === 1 ? '' : 's'}` : ''}
+                        </Text>
+                        <View style={styles.orderStatusRow}>
+                          <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+                            <View style={[styles.statusDot, { backgroundColor: tone.dot }]} />
+                            <Text style={[styles.statusText, { color: tone.text }]} numberOfLines={1}>
+                              {headline.title}
+                            </Text>
+                          </View>
+                          {unpaid ? <Text style={styles.unpaidHint}>Payment due</Text> : null}
+                        </View>
+                      </View>
+                      <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.emptyCard}>
+                <View style={[styles.emptyIcon, { backgroundColor: `${primary}12` }]}>
+                  <Feather name="shopping-bag" size={18} color={primary} />
+                </View>
+                <Text style={styles.emptyTitle}>No orders yet</Text>
+                <Text style={styles.emptyText}>
+                  Your purchases and receipts stay here, ready to reorder any time.
+                </Text>
+                <Pressable
+                  style={[styles.emptyCta, { backgroundColor: primary }]}
+                  onPress={() => navigation.navigate('Shop')}
+                >
+                  <Text style={styles.emptyCtaText}>Start shopping</Text>
+                </Pressable>
+              </View>
+            )}
           </>
         ) : null}
 
@@ -424,75 +665,6 @@ export function HomeScreen() {
             <Text style={styles.aboutSubtitle}>{aboutSubtitle}</Text>
           </View>
         </View>
-
-        {showBooking ? (
-          <>
-            <SectionHeader title="Recent appointments" />
-            {recentBookings.length ? (
-              <View style={styles.historyList}>
-                {recentBookings.map((booking) => (
-                  <Pressable
-                    key={booking.id}
-                    onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-                  >
-                    <View style={styles.sampleRow}>
-                      <View style={styles.sampleIcon}>
-                        <Feather name="calendar" size={16} color={colors.mutedForeground} />
-                      </View>
-                      <View style={styles.sampleBody}>
-                        <Text style={styles.sampleTitle}>{booking.service_name}</Text>
-                        <Text style={styles.sampleMeta}>
-                          {new Date(booking.start_at).toLocaleDateString()} · #{booking.booking_number}
-                        </Text>
-                      </View>
-                      <Badge status={mapBookingStatus(booking.status)} />
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyHistory}>
-                <Feather name="calendar" size={20} color={colors.mutedForeground} />
-                <Text style={styles.emptyText}>Your appointment history will show up here after your first booking.</Text>
-              </View>
-            )}
-          </>
-        ) : null}
-
-        {showShop ? (
-          <>
-            <SectionHeader title="Recent orders" />
-            {orders.length ? (
-              <View style={styles.historyList}>
-                {orders.map((order) => (
-                  <Pressable
-                    key={order.id}
-                    onPress={() => navigation.navigate('ShopOrderDetail', { orderId: order.id })}
-                  >
-                    <View style={styles.sampleRow}>
-                      <View style={styles.sampleIcon}>
-                        <Feather name="package" size={16} color={colors.mutedForeground} />
-                      </View>
-                      <View style={styles.sampleBody}>
-                        <Text style={styles.sampleTitle}>{order.order_number}</Text>
-                        <Text style={styles.sampleMeta}>
-                          {order.currency ?? ''} {order.total}
-                          {order.created_at ? ` · ${new Date(order.created_at).toLocaleDateString()}` : ''}
-                        </Text>
-                      </View>
-                      <Text style={styles.sampleMeta}>{order.status}</Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyHistory}>
-                <Feather name="shopping-bag" size={20} color={colors.mutedForeground} />
-                <Text style={styles.emptyText}>Your orders will show up here after your first purchase.</Text>
-              </View>
-            )}
-          </>
-        ) : null}
       </View>
       </RefreshableScrollView>
     </View>
@@ -619,6 +791,28 @@ const styles = StyleSheet.create({
   serviceImage: { width: '100%', height: 72, borderRadius: radius.md, marginBottom: spacing.sm },
   serviceName: { ...typography.label, color: colors.foreground },
   serviceMeta: { ...typography.caption, color: colors.mutedForeground },
+  inviteCard: {
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  inviteIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inviteBody: { flex: 1 },
+  inviteTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  inviteSubtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   aboutCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -628,25 +822,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
-    marginBottom: spacing.xxxl,
+    marginBottom: spacing.xl,
   },
   aboutText: { flex: 1 },
   aboutTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   aboutSubtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
-  emptyHistory: {
-    flexDirection: 'row',
+  emptyCard: {
     alignItems: 'center',
     gap: spacing.sm,
-    padding: spacing.lg,
+    padding: spacing.xl,
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xl,
   },
-  emptyText: { ...typography.caption, color: colors.mutedForeground, flex: 1 },
-  historyList: { gap: spacing.md, marginBottom: spacing.xl },
-  sampleRow: {
+  emptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  emptyText: { ...typography.caption, color: colors.mutedForeground, textAlign: 'center' },
+  emptyCta: {
+    marginTop: spacing.sm,
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.full,
+  },
+  emptyCtaText: { ...typography.label, color: '#fff', fontWeight: '700' },
+  historyBlock: { gap: spacing.sm, marginBottom: spacing.xl },
+  historyList: { gap: spacing.sm },
+  sectionGap: { marginBottom: spacing.xl },
+  historyCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
@@ -656,14 +867,47 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  sampleIcon: {
+  cardPressed: { opacity: 0.6 },
+  historyIcon: {
     width: 40,
     height: 40,
     borderRadius: radius.md,
-    backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  repeatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  repeatText: { ...typography.label, fontWeight: '700', flexShrink: 1 },
+  orderThumb: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.muted },
+  orderThumbEmpty: { alignItems: 'center', justifyContent: 'center' },
+  orderTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  orderNumber: { ...typography.label, color: colors.foreground, fontWeight: '700', flex: 1 },
+  orderTotal: { ...typography.label, color: colors.foreground, fontWeight: '800' },
+  orderStatusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    flexShrink: 1,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { ...typography.tiny, fontWeight: '800' },
+  unpaidHint: { ...typography.tiny, color: colors.warning, fontWeight: '800' },
+  skeletonIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.muted },
+  skeletonLine: { height: 10, borderRadius: radius.sm, backgroundColor: colors.muted },
+  skeletonLineShort: { width: '55%', marginTop: spacing.sm },
   sampleBody: { flex: 1 },
   sampleTitle: { ...typography.label, color: colors.foreground },
   sampleMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },

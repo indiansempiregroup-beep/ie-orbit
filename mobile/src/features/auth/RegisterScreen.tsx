@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { Feather } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
-import { useBootstrap } from '../../contexts/BootstrapContext';
+import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { BrandMark } from '../../components/BrandMark';
 import { Button } from '../../components/ui/Button';
 import { FormAlert } from '../../components/ui/FormAlert';
@@ -12,6 +12,7 @@ import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import { customerAppFeatures } from '../../utils/customerFeatures';
+import { mobileClient } from '../../api/client';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
@@ -19,6 +20,7 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 export function RegisterScreen({ navigation }: Props) {
   const { register } = useAuth();
   const { branding, bootstrap } = useBootstrap();
+  const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
   const primary = branding?.primaryColor ?? colors.primary;
   const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
@@ -39,6 +41,7 @@ export function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -57,6 +60,18 @@ export function RegisterScreen({ navigation }: Props) {
         last_name: lastName.trim(),
         phone_number: phone.trim() || undefined,
       });
+      const code = referralCode.trim();
+      if (code && tenantSlug && businessCode) {
+        try {
+          await mobileClient.mobile.applyReferral({
+            tenant_slug: tenantSlug,
+            business_code: businessCode,
+            referral_code: code,
+          });
+        } catch {
+          // Account is created even if the invite code is invalid; user can retry from Profile.
+        }
+      }
     } catch (err) {
       setError(
         getApiErrorMessage(
@@ -112,6 +127,17 @@ export function RegisterScreen({ navigation }: Props) {
             value={password}
             onChangeText={setPassword}
           />
+          {bootstrap?.referral?.enabled ? (
+            <Input
+              label="Invite code (optional)"
+              leftIcon="gift"
+              placeholder="Friend's code"
+              autoCapitalize="characters"
+              value={referralCode}
+              onChangeText={(value) => setReferralCode(value.toUpperCase())}
+              hint={`You'll help a friend earn ${bootstrap.referral.points_per_referral} points`}
+            />
+          ) : null}
 
           <View style={styles.perks}>
             {perks.map((perk) => (

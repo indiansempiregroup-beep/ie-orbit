@@ -27,6 +27,13 @@ const flavorKey = process.env.EXPO_PUBLIC_FLAVOR_KEY ?? 'dev';
 const selectedFlavor = manifest.flavors.find((entry) => entry.key === flavorKey);
 const appName = process.env.EXPO_PUBLIC_APP_NAME ?? selectedFlavor?.appName ?? 'IE Platform Mobile';
 const appSlug = process.env.EXPO_PUBLIC_APP_SLUG ?? selectedFlavor?.appSlug ?? 'ie-platform-mobile';
+const referralLinkBaseUrl = process.env.EXPO_PUBLIC_REFERRAL_LINK_BASE_URL ?? '';
+let referralHost = '';
+try {
+  referralHost = referralLinkBaseUrl ? new URL(referralLinkBaseUrl).host : '';
+} catch {
+  referralHost = '';
+}
 
 const FACE_ID_USAGE = 'Allow $(PRODUCT_NAME) to use Face ID for quick sign-in.';
 
@@ -34,11 +41,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: appName,
   slug: appSlug,
+  scheme: appSlug,
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
   ios: {
     bundleIdentifier: selectedFlavor?.bundleIdIos ?? 'com.ieplatform.mobile.dev',
+    associatedDomains: referralHost ? [`applinks:${referralHost}`] : undefined,
     infoPlist: {
       ...config.ios?.infoPlist,
       NSFaceIDUsageDescription: FACE_ID_USAGE,
@@ -47,6 +56,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: selectedFlavor?.bundleIdAndroid ?? 'com.ieplatform.mobile.dev',
     softwareKeyboardLayoutMode: 'resize',
+    intentFilters: referralHost
+      ? [
+          {
+            action: 'VIEW',
+            autoVerify: true,
+            data: [{ scheme: 'https', host: referralHost, pathPrefix: '/invite' }],
+            category: ['BROWSABLE', 'DEFAULT'],
+          },
+        ]
+      : undefined,
     config: {
       googleMaps: {
         apiKey:

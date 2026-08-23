@@ -38,4 +38,5 @@ export type RootStackParamList = {
   Reviews: undefined;
   HelpSupport: undefined;
   HelpArticle: { slug: string };
+  Referral: undefined;
 };

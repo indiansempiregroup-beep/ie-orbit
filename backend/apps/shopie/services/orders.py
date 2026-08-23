@@ -143,10 +143,26 @@ class OrderService:
                     raise ValidationError(
                         {"delivery": "Instant delivery is not enabled for this shop."}
                     )
+                zone = self.zones.match_zone(
+                    tenant=tenant,
+                    business=business,
+                    city=delivery_city,
+                    postal_code=delivery_postal_code,
+                )
+                if zone is None:
+                    raise ValidationError(
+                        {"delivery": "Delivery is not available for this city/postal code."}
+                    )
+                if not zone.instant_delivery_enabled:
+                    raise ValidationError(
+                        {"delivery": "Instant delivery is not available in this delivery zone."}
+                    )
                 if delivery_latitude in (None, "") or delivery_longitude in (None, ""):
                     raise ValidationError(
                         {"delivery_address": "Select a mapped address for instant delivery."}
                     )
+                metadata["delivery_zone_id"] = str(zone.id)
+                metadata["delivery_zone_name"] = zone.name
             else:
                 zone = self.zones.match_zone(
                     tenant=tenant,

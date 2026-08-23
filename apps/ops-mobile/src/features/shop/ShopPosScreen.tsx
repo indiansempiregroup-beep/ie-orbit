@@ -49,7 +49,15 @@ type BasketLine = {
 };
 
 type PaymentMethod = 'cash' | 'upi' | 'card' | 'borrow';
-type PosMode = 'sale' | 'purchase' | 'quotation' | 'credit_note' | 'debit_note';
+type PosMode =
+  | 'sale'
+  | 'purchase'
+  | 'quotation'
+  | 'credit_note'
+  | 'debit_note'
+  | 'sale_order'
+  | 'purchase_order'
+  | 'delivery_challan';
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopPos'>;
 
 function resolvePosMode(value?: string | null): PosMode {
@@ -57,7 +65,10 @@ function resolvePosMode(value?: string | null): PosMode {
     value === 'purchase' ||
     value === 'quotation' ||
     value === 'credit_note' ||
-    value === 'debit_note'
+    value === 'debit_note' ||
+    value === 'sale_order' ||
+    value === 'purchase_order' ||
+    value === 'delivery_challan'
   ) {
     return value;
   }
@@ -69,6 +80,9 @@ function modeTitle(mode: PosMode) {
   if (mode === 'quotation') return 'New quotation';
   if (mode === 'credit_note') return 'Credit note';
   if (mode === 'debit_note') return 'Debit note';
+  if (mode === 'sale_order') return 'New sale order';
+  if (mode === 'purchase_order') return 'New purchase order';
+  if (mode === 'delivery_challan') return 'New delivery challan';
   return 'Sale';
 }
 
@@ -85,9 +99,13 @@ export function ShopPosScreen() {
   const isQuotation = mode === 'quotation';
   const isCreditNote = mode === 'credit_note';
   const isDebitNote = mode === 'debit_note';
+  const isSaleOrder = mode === 'sale_order';
+  const isPurchaseOrder = mode === 'purchase_order';
+  const isChallan = mode === 'delivery_challan';
   const isNote = isCreditNote || isDebitNote;
-  const isDocument = isQuotation || isNote;
-  const usesSupplier = isPurchase || isDebitNote;
+  const isOrder = isSaleOrder || isPurchaseOrder;
+  const isDocument = isQuotation || isNote || isOrder || isChallan;
+  const usesSupplier = isPurchase || isDebitNote || isPurchaseOrder;
   const skipSaleSession = isDocument || isPurchase;
   const initialSession = readPosSession();
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -504,6 +522,12 @@ export function ShopPosScreen() {
       toast.push(text, 'error');
       return;
     }
+    if (isPurchaseOrder && !supplierId) {
+      const text = 'Select a supplier for the purchase order.';
+      setMessage(text);
+      toast.push(text, 'error');
+      return;
+    }
     if (isPurchase && paymentMethod !== 'borrow' && !cashAccountId) {
       const text = 'Select a cash/bank account for the payment.';
       setMessage(text);
@@ -534,6 +558,46 @@ export function ShopPosScreen() {
           ? { supplier_gstin: resolvedGstin }
           : { customer_gstin: resolvedGstin }
         : {};
+
+      if (isOrder || isChallan) {
+        const gstinNote = resolvedGstin
+          ? `${usesSupplier ? 'Supplier' : 'Customer'} GSTIN ${resolvedGstin}`
+          : '';
+        const docType = isPurchaseOrder
+          ? 'purchase_order'
+          : isChallan
+            ? 'delivery_challan'
+            : 'sale_order';
+        const sourceNote = isPurchaseOrder
+          ? 'Purchase order from Sale counter'
+          : isChallan
+            ? 'Delivery challan from Sale counter'
+            : 'Sale order from Sale counter';
+        const response = await client.shop.createDocument({
+          business_id: businessId,
+          doc_type: docType,
+          customer_id: isPurchaseOrder ? null : customerId || null,
+          supplier_id: isPurchaseOrder ? supplierId : null,
+          notes: [sourceNote, gstinNote].filter(Boolean).join(' · '),
+          lines: basket.map((line) => ({
+            product_id: line.product.id,
+            quantity: line.quantity,
+            unit_price: line.product.price,
+            tax_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+          })),
+        });
+        setBasket([]);
+        setBillDiscountType('');
+        setBillDiscountValue('0');
+        setSupplierId('');
+        const label = isPurchaseOrder ? 'Purchase order' : isChallan ? 'Delivery challan' : 'Sale order';
+        toast.push(
+          `${label} ${response.data.document_number} created · ${totals.payable.toFixed(2)}`,
+          'success',
+        );
+        navigation.navigate('ShopBooksDocuments', { docType });
+        return;
+      }
 
       if (isQuotation) {
         const response = await client.shop.createQuotation({
@@ -658,13 +722,19 @@ export function ShopPosScreen() {
       navigation.navigate('ShopBooksSale');
     } catch (err) {
       const fallback =
-        isQuotation
-          ? 'Unable to create quotation'
-          : isNote
-            ? 'Unable to record note'
-            : isPurchase
-              ? 'Unable to record purchase'
-              : 'Unable to create bill';
+        isOrder || isChallan
+          ? isPurchaseOrder
+            ? 'Unable to create purchase order'
+            : isChallan
+              ? 'Unable to create delivery challan'
+              : 'Unable to create sale order'
+          : isQuotation
+            ? 'Unable to create quotation'
+            : isNote
+              ? 'Unable to record note'
+              : isPurchase
+                ? 'Unable to record purchase'
+                : 'Unable to create bill';
       const text = getApiErrorMessage(err, fallback);
       setMessage(text);
       toast.push(text, 'error');
@@ -703,10 +773,16 @@ export function ShopPosScreen() {
                   options={customerOptions}
                   onChange={updateCustomerId}
                   searchable
-                  placeholder={isCreditNote ? 'Select customer' : 'Walk-in customer'}
+                  placeholder={
+                    isCreditNote
+                      ? 'Select customer'
+                      : isSaleOrder || isChallan
+                        ? 'Customer (optional)'
+                        : 'Walk-in customer'
+                  }
                 />
               </View>
-              {!isDocument || isQuotation || isCreditNote ? (
+              {!isDocument || isQuotation || isCreditNote || isSaleOrder || isChallan ? (
                 <Pressable
                   style={styles.sideAddBtn}
                   onPress={openAddCustomer}
@@ -805,26 +881,34 @@ export function ShopPosScreen() {
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
 
         <Text style={styles.section}>
-          {isQuotation
-            ? `Estimate (${basket.length} items)`
-            : isPurchase
-              ? `Purchase (${basket.length} items)`
-              : isCreditNote
-                ? `Credit note (${basket.length} items)`
-                : isDebitNote
-                  ? `Debit note (${basket.length} items)`
-                  : `Bill (${basket.length} items)`}
+          {isSaleOrder
+            ? `Sale order (${basket.length} items)`
+            : isPurchaseOrder
+              ? `Purchase order (${basket.length} items)`
+              : isQuotation
+                ? `Estimate (${basket.length} items)`
+                : isPurchase
+                  ? `Purchase (${basket.length} items)`
+                  : isCreditNote
+                    ? `Credit note (${basket.length} items)`
+                    : isDebitNote
+                      ? `Debit note (${basket.length} items)`
+                      : `Bill (${basket.length} items)`}
         </Text>
         {!basket.length ? (
           <View style={styles.emptyBill}>
             <Text style={styles.meta}>
-              {isQuotation
-                ? 'Scan or search products to build the quotation.'
-                : isPurchase
-                  ? 'Scan or search products from the supplier bill.'
-                  : isNote
-                    ? 'Scan or search products for this adjustment note.'
-                    : 'Scan or search products to start billing.'}
+              {isSaleOrder
+                ? 'Scan or search products to build the sale order. Stock and payment wait until you convert it.'
+                : isPurchaseOrder
+                  ? 'Scan or search products to build the purchase order. Stock waits until you convert it.'
+                  : isQuotation
+                    ? 'Scan or search products to build the quotation.'
+                    : isPurchase
+                      ? 'Scan or search products from the supplier bill.'
+                      : isNote
+                        ? 'Scan or search products for this adjustment note.'
+                        : 'Scan or search products to start billing.'}
             </Text>
           </View>
         ) : (
@@ -979,6 +1063,14 @@ export function ShopPosScreen() {
               onChange={setValidUntil}
               helperText="Optional expiry date for this quotation."
             />
+          ) : isOrder || isChallan ? (
+            <Text style={styles.hint}>
+              {isPurchaseOrder
+                ? 'No payment and no stock change yet. Convert this purchase order to a purchase bill when goods arrive.'
+                : isChallan
+                  ? 'No invoice and no payment. Dispatch this challan when goods leave — stock is deducted then.'
+                  : 'No payment and no stock change yet. Convert this sale order to a sale invoice when you deliver.'}
+            </Text>
           ) : (
             <Text style={styles.hint}>
               {isCreditNote
@@ -1033,15 +1125,21 @@ export function ShopPosScreen() {
 
         <View style={styles.totalsCard}>
           <Text style={styles.summaryTitle}>
-            {isQuotation
-              ? 'Estimate summary'
-              : isPurchase
-                ? 'Purchase summary'
-                : isCreditNote
-                  ? 'Credit note summary'
-                  : isDebitNote
-                    ? 'Debit note summary'
-                    : 'Bill summary'}
+            {isSaleOrder
+              ? 'Sale order summary'
+              : isPurchaseOrder
+                ? 'Purchase order summary'
+                : isChallan
+                  ? 'Delivery challan summary'
+                  : isQuotation
+                  ? 'Estimate summary'
+                  : isPurchase
+                    ? 'Purchase summary'
+                    : isCreditNote
+                      ? 'Credit note summary'
+                      : isDebitNote
+                        ? 'Debit note summary'
+                        : 'Bill summary'}
           </Text>
           <View style={styles.totalRow}>
             <Text style={styles.meta}>Items</Text>
@@ -1069,7 +1167,7 @@ export function ShopPosScreen() {
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.payableLabel}>
-              {isQuotation || isNote
+              {isQuotation || isNote || isOrder || isChallan
                 ? 'Total'
                 : paymentMethod === 'borrow'
                   ? 'Amount due'
@@ -1092,26 +1190,38 @@ export function ShopPosScreen() {
         >
           <Text style={styles.checkoutText}>
             {busy
-              ? isQuotation
-                ? 'Saving quotation…'
-                : isNote
-                  ? 'Saving note…'
-                  : isPurchase
-                    ? 'Recording purchase…'
-                    : 'Creating bill…'
-              : isQuotation
-                ? `Save quotation · ${totals.payable.toFixed(2)}`
-                : isCreditNote
-                  ? `Save credit note · ${totals.payable.toFixed(2)}`
-                  : isDebitNote
-                    ? `Save debit note · ${totals.payable.toFixed(2)}`
-                    : isPurchase
-                      ? paymentMethod === 'borrow'
-                        ? `Record purchase · Due ${totals.payable.toFixed(2)}`
-                        : `Record purchase · ${totals.payable.toFixed(2)}`
-                      : paymentMethod === 'borrow'
-                        ? `Save bill · Due ${payableAfterLoyalty.toFixed(2)}`
-                        : `Save & print · ${payableAfterLoyalty.toFixed(2)}`}
+              ? isSaleOrder
+                ? 'Saving sale order…'
+                : isPurchaseOrder
+                  ? 'Saving purchase order…'
+                  : isChallan
+                    ? 'Saving challan…'
+                    : isQuotation
+                    ? 'Saving quotation…'
+                    : isNote
+                      ? 'Saving note…'
+                      : isPurchase
+                        ? 'Recording purchase…'
+                        : 'Creating bill…'
+              : isSaleOrder
+                ? `Save sale order · ${totals.payable.toFixed(2)}`
+                : isPurchaseOrder
+                  ? `Save purchase order · ${totals.payable.toFixed(2)}`
+                  : isChallan
+                    ? `Save challan · ${totals.payable.toFixed(2)}`
+                    : isQuotation
+                    ? `Save quotation · ${totals.payable.toFixed(2)}`
+                    : isCreditNote
+                      ? `Save credit note · ${totals.payable.toFixed(2)}`
+                      : isDebitNote
+                        ? `Save debit note · ${totals.payable.toFixed(2)}`
+                        : isPurchase
+                          ? paymentMethod === 'borrow'
+                            ? `Record purchase · Due ${totals.payable.toFixed(2)}`
+                            : `Record purchase · ${totals.payable.toFixed(2)}`
+                          : paymentMethod === 'borrow'
+                            ? `Save bill · Due ${payableAfterLoyalty.toFixed(2)}`
+                            : `Save & print · ${payableAfterLoyalty.toFixed(2)}`}
           </Text>
         </Pressable>
       </View>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -57,10 +57,16 @@ export function NotificationsScreen() {
       <RefreshableScrollView
         style={styles.list}
         contentContainerStyle={!notifications.length ? styles.emptyContainer : undefined}
-        refreshing={refreshing || loading}
+        refreshing={refreshing}
         onRefresh={onRefresh}
         primaryColor={primary}
       >
+        {loading && !notifications.length ? (
+          <View style={styles.empty}>
+            <ActivityIndicator color={primary} />
+          </View>
+        ) : null}
+
         {!loading && !notifications.length ? (
           <View style={styles.empty}>
             <Feather name="bell" size={24} color={colors.mutedForeground} />

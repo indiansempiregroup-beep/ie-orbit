@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { ShopGstCompliance, ShopGstComplianceProvider } from '@ie-platform/sdk';
+import { AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
@@ -41,6 +42,7 @@ export function ShopComplianceSettingsPage() {
   const [einvoiceEnabled, setEinvoiceEnabled] = useState(false);
   const [ewayEnabled, setEwayEnabled] = useState(false);
   const [compliance, setCompliance] = useState<Required<ShopGstCompliance>>(EMPTY_COMPLIANCE);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!settings.data) return;
@@ -55,6 +57,25 @@ export function ShopComplianceSettingsPage() {
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
+    const sellerComplete = Boolean(
+      compliance.seller_legal_name.trim() &&
+        compliance.seller_addr1.trim() &&
+        compliance.seller_loc.trim() &&
+        /^\d{6}$/.test(compliance.seller_pin.trim()) &&
+        /^\d{2}$/.test(compliance.seller_state_code.trim()),
+    );
+    const credentialsComplete =
+      compliance.provider === 'mock' ||
+      Boolean(compliance.username.trim() && compliance.password.trim() && compliance.client_id.trim() && compliance.client_secret.trim());
+    if ((einvoiceEnabled || ewayEnabled) && !sellerComplete) {
+      setValidationError('Complete the seller legal name, address, city, 6-digit PIN, and 2-digit GST state code.');
+      return;
+    }
+    if ((einvoiceEnabled || ewayEnabled) && !credentialsComplete) {
+      setValidationError('Complete the provider credentials before enabling live GST compliance.');
+      return;
+    }
+    setValidationError(null);
     try {
       await update.mutateAsync({
         einvoice_enabled: einvoiceEnabled,
@@ -68,15 +89,74 @@ export function ShopComplianceSettingsPage() {
   }
 
   const showCredentials = compliance.provider !== 'mock';
+  const readiness = useMemo(
+    () => [
+      {
+        label: 'Compliance service',
+        ready: einvoiceEnabled || ewayEnabled,
+        detail: einvoiceEnabled || ewayEnabled ? 'At least one service is enabled' : 'Enable e-invoice or e-way bill',
+      },
+      {
+        label: 'Seller identity',
+        ready: Boolean(compliance.seller_legal_name.trim() && compliance.seller_addr1.trim() && compliance.seller_loc.trim()),
+        detail: 'Legal name and registered address',
+      },
+      {
+        label: 'GST location',
+        ready: /^\d{6}$/.test(compliance.seller_pin.trim()) && /^\d{2}$/.test(compliance.seller_state_code.trim()),
+        detail: '6-digit PIN and 2-digit state code',
+      },
+      {
+        label: 'Provider connection',
+        ready:
+          compliance.provider === 'mock' ||
+          Boolean(compliance.username.trim() && compliance.password.trim() && compliance.client_id.trim() && compliance.client_secret.trim()),
+        detail: compliance.provider === 'mock' ? 'Demo provider selected' : 'Live credentials configured',
+      },
+    ],
+    [compliance, einvoiceEnabled, ewayEnabled],
+  );
+  const readyCount = readiness.filter((item) => item.ready).length;
 
   return (
     <div className="page-stack">
       <Card>
-        <h2 style={{ margin: 0 }}>GST e-invoice &amp; e-way bill</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ShieldCheck size={24} color="var(--primary)" aria-hidden="true" />
+          <h2 style={{ margin: 0 }}>GST e-invoice &amp; e-way bill</h2>
+        </div>
         <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
           Turn on IRN (e-invoice) and e-way bill generation for your GST sale vouchers. Defaults to a mock
           provider so you can try it out without NIC/GSP credentials.
         </p>
+      </Card>
+
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Setup readiness</h3>
+            <p style={{ margin: '3px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
+              {readyCount} of {readiness.length} checks complete
+            </p>
+          </div>
+          <strong style={{ color: readyCount === readiness.length ? '#15803d' : '#b45309' }}>
+            {Math.round((readyCount / readiness.length) * 100)}%
+          </strong>
+        </div>
+        <div style={{ height: 7, borderRadius: 999, background: 'var(--muted, #f3f4f6)', overflow: 'hidden', marginBottom: 14 }}>
+          <div style={{ width: `${(readyCount / readiness.length) * 100}%`, height: '100%', background: readyCount === readiness.length ? '#16a34a' : '#f59e0b' }} />
+        </div>
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))' }}>
+          {readiness.map((item) => (
+            <div key={item.label} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: 10, border: '1px solid var(--border, #e5e7eb)', borderRadius: 10 }}>
+              {item.ready ? <CheckCircle2 size={17} color="#16a34a" aria-hidden="true" /> : <AlertTriangle size={17} color="#d97706" aria-hidden="true" />}
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{item.label}</div>
+                <div style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{item.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </Card>
 
       {settings.isLoading ? (
@@ -210,22 +290,32 @@ export function ShopComplianceSettingsPage() {
               label="PIN code"
               style={fieldStyle}
               value={compliance.seller_pin}
-              onChange={(event) => setField('seller_pin', event.target.value)}
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setField('seller_pin', event.target.value.replace(/\D/g, ''))}
             />
             <Input
               label="State code (GST)"
               style={fieldStyle}
               value={compliance.seller_state_code}
-              onChange={(event) => setField('seller_state_code', event.target.value)}
+                inputMode="numeric"
+                maxLength={2}
+                onChange={(event) => setField('seller_state_code', event.target.value.replace(/\D/g, ''))}
               placeholder="e.g. 27"
             />
           </div>
         </Card>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+        {validationError ? (
+          <p role="alert" style={{ color: '#b91c1c', fontSize: 13, margin: '16px 0 0' }}>{validationError}</p>
+        ) : null}
+        <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center' }}>
           <Button type="submit" variant="primary" disabled={update.isPending || settings.isLoading}>
             {update.isPending ? 'Saving…' : 'Save compliance settings'}
           </Button>
+          <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>
+            Credentials are stored securely and are never shown in reports.
+          </span>
         </div>
       </form>
     </div>

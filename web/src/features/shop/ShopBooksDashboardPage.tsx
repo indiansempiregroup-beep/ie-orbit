@@ -9,8 +9,10 @@ import {
   ShieldCheck,
   ShoppingBag,
   ShoppingCart,
+  Truck,
   UsersRound,
   Wallet,
+  Warehouse,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -175,6 +177,8 @@ export function ShopBooksDashboardPage() {
           <QuickLink to="/shop/books/expense" label="Expenses" description="Shop running costs" icon={FileSpreadsheet} />
           <QuickLink to="/shop/books/cash" label="Cash & bank" description="Accounts, payments, transfers" icon={Landmark} />
           <QuickLink to="/shop/books/parties" label="Parties" description="Customers & suppliers ledger" icon={UsersRound} />
+          <QuickLink to="/shop/books/delivery-challans" label="Delivery challans" description="Create, track, and dispatch goods" icon={Truck} />
+          <QuickLink to="/shop/godowns" label="Godowns" description="Warehouses, stock locations, transfers" icon={Warehouse} />
           <QuickLink to="/shop/books/reports" label="Reports" description="Daybook, GSTR-1/3B, P&L" icon={FileSpreadsheet} />
           <QuickLink
             to="/shop/books/compliance"

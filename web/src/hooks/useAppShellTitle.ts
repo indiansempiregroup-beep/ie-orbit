@@ -26,6 +26,7 @@ const STATIC_TITLES: Record<string, string> = {
   orders: 'Shop orders',
   billing: 'Billing',
   returns: 'Returns',
+  godowns: 'Godowns',
   'delivery-zones': 'Delivery zones',
   'delivery-settings': 'Instant delivery',
   coupons: 'Coupons',

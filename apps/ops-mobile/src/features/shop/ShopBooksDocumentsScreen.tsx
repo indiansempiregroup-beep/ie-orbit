@@ -130,12 +130,30 @@ export function ShopBooksDocumentsScreen() {
     setNotes('');
   }, []);
 
+  const opensInPos =
+    docType === 'sale_order' || docType === 'purchase_order' || docType === 'delivery_challan';
+
+  const openCreate = useCallback(() => {
+    if (opensInPos) {
+      navigation.navigate('ShopPos', {
+        mode:
+          docType === 'purchase_order'
+            ? 'purchase_order'
+            : docType === 'delivery_challan'
+              ? 'delivery_challan'
+              : 'sale_order',
+      });
+      return;
+    }
+    setShowForm(true);
+  }, [navigation, opensInPos, docType]);
+
   useLayoutEffect(() => {
     navigation.setOptions({
       title: meta.title,
       headerRight: () => (
         <Pressable
-          onPress={() => (showForm ? closeForm() : setShowForm(true))}
+          onPress={() => (showForm ? closeForm() : openCreate())}
           accessibilityRole="button"
           accessibilityLabel={showForm ? 'Close' : `New ${meta.singular}`}
           hitSlop={8}
@@ -145,7 +163,7 @@ export function ShopBooksDocumentsScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm, meta.title, meta.singular]);
+  }, [navigation, showForm, closeForm, openCreate, meta.title, meta.singular]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -447,7 +465,7 @@ export function ShopBooksDocumentsScreen() {
                 title={`No ${meta.title.toLowerCase()} yet`}
                 message={`Create a ${meta.singular} and convert it when ready.`}
                 actionLabel={`New ${meta.singular}`}
-                onAction={() => setShowForm(true)}
+                onAction={openCreate}
               />
             ) : null
           }

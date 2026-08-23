@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils.text import slugify
 from rest_framework.exceptions import ValidationError
 
+from apps.businesses.constants import PRODUCT_SHOPIE
 from apps.businesses.models import Branch, BranchStatus, Business
 from apps.businesses.repositories.branches import BranchRepository
 from apps.businesses.services.entitlements import EntitlementService
@@ -23,11 +24,33 @@ class BranchService:
         self.repository = repository or BranchRepository()
         self.entitlements = entitlements or EntitlementService()
 
+    @staticmethod
+    def _sync_shop_stock_locations(*, business: Business) -> None:
+        if business.selected_product != PRODUCT_SHOPIE:
+            return
+        # Keep the businesses app independent at import time while making office
+        # creation and updates immediately visible to ShopIE inventory.
+        from apps.shopie.services.godowns import GodownsService
+
+        GodownsService().sync_office_godowns(
+            tenant=business.tenant,
+            business=business,
+        )
+
     def list_branches(self, *, tenant: Any, business: Business) -> Any:
         return self.repository.list_for_business(tenant=tenant, business_id=str(business.id))
 
-    def _validate_office_location(self, data: dict[str, Any], *, partial: bool = False, branch: Branch | None = None) -> None:
-        address_line1 = data.get("address_line1", getattr(branch, "address_line1", "") if branch else "")
+    def _validate_office_location(
+        self,
+        data: dict[str, Any],
+        *,
+        partial: bool = False,
+        branch: Branch | None = None,
+    ) -> None:
+        address_line1 = data.get(
+            "address_line1",
+            getattr(branch, "address_line1", "") if branch else "",
+        )
         city = data.get("city", getattr(branch, "city", "") if branch else "")
         country = data.get("country", getattr(branch, "country", "") if branch else "")
         latitude = data.get("latitude", getattr(branch, "latitude", None) if branch else None)
@@ -86,15 +109,20 @@ class BranchService:
             Branch.objects.filter(business=business, is_primary=True).update(is_primary=False)
         branch.full_clean()
         branch.save()
-        logger.info("Branch created", extra={"business_id": str(business.id), "branch_id": str(branch.id)})
+        self._sync_shop_stock_locations(business=business)
+        logger.info(
+            "Branch created",
+            extra={"business_id": str(business.id), "branch_id": str(branch.id)},
+        )
         return branch
 
     @transaction.atomic
     def update_branch(self, *, branch: Branch, data: dict[str, Any], actor: Any) -> Branch:
         next_status = data.get("status", branch.status)
-        becoming_inactive = next_status in {BranchStatus.INACTIVE, BranchStatus.ARCHIVED} or data.get(
-            "is_active"
-        ) is False
+        becoming_inactive = (
+            next_status in {BranchStatus.INACTIVE, BranchStatus.ARCHIVED}
+            or data.get("is_active") is False
+        )
         if becoming_inactive:
             active_count = Branch.objects.filter(
                 business=branch.business,
@@ -109,12 +137,14 @@ class BranchService:
                 continue
             setattr(branch, field, value)
         if data.get("is_primary"):
-            Branch.objects.filter(business=branch.business, is_primary=True).exclude(id=branch.id).update(
-                is_primary=False
-            )
+            Branch.objects.filter(
+                business=branch.business,
+                is_primary=True,
+            ).exclude(id=branch.id).update(is_primary=False)
             branch.is_primary = True
         if getattr(actor, "is_authenticated", False):
             branch.mark_updated(actor_id=actor.id)
         branch.full_clean()
         branch.save()
+        self._sync_shop_stock_locations(business=branch.business)
         return branch

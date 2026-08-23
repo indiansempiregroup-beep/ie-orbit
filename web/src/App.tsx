@@ -43,6 +43,9 @@ const ShopReturnsPage = lazy(() => import('./features/shop/ShopReturnsPage').the
 const ShopDeliveryZonesPage = lazy(() =>
   import('./features/shop/ShopDeliveryZonesPage').then((m) => ({ default: m.ShopDeliveryZonesPage })),
 );
+const ShopGodownsPage = lazy(() =>
+  import('./features/shop/ShopGodownsPage').then((m) => ({ default: m.ShopGodownsPage })),
+);
 const ShopDeliverySettingsPage = lazy(() =>
   import('./features/shop/ShopDeliverySettingsPage').then((m) => ({ default: m.ShopDeliverySettingsPage })),
 );
@@ -70,6 +73,9 @@ const ShopBooksReportsPage = lazy(() =>
 );
 const ShopComplianceSettingsPage = lazy(() =>
   import('./features/shop/ShopComplianceSettingsPage').then((m) => ({ default: m.ShopComplianceSettingsPage })),
+);
+const ShopDeliveryChallansPage = lazy(() =>
+  import('./features/shop/ShopDeliveryChallansPage').then((m) => ({ default: m.ShopDeliveryChallansPage })),
 );
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const ReportsPage = lazy(() => import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
@@ -253,6 +259,8 @@ function App() {
                     <Route path="/shop/books/parties" element={<ShopPartiesPage />} />
                     <Route path="/shop/books/reports" element={<ShopBooksReportsPage />} />
                     <Route path="/shop/books/compliance" element={<ShopComplianceSettingsPage />} />
+                    <Route path="/shop/books/delivery-challans" element={<ShopDeliveryChallansPage />} />
+                    <Route path="/shop/godowns" element={<ShopGodownsPage />} />
                     <Route path="/shop/delivery-zones" element={<ShopDeliveryZonesPage />} />
                     <Route path="/shop/delivery-settings" element={<ShopDeliverySettingsPage />} />
                     <Route path="/shop/coupons" element={<ShopCouponsPage />} />

@@ -85,7 +85,7 @@ export function DiscoverScreen() {
 
       <RefreshableScrollView
         contentContainerStyle={styles.list}
-        refreshing={refreshing || loading}
+        refreshing={refreshing}
         onRefresh={onRefresh}
         primaryColor={primary}
       >

@@ -146,6 +146,8 @@ class DocumentsService:
     ) -> ShopBooksVoucher | ShopBooksDocument:
         if document.status == BooksDocumentStatus.CONVERTED:
             raise ValidationError({"status": "Document already converted."})
+        if document.status == BooksDocumentStatus.DISPATCHED:
+            raise ValidationError({"status": "Delivery challan already dispatched."})
         if document.status == BooksDocumentStatus.CANCELLED:
             raise ValidationError({"status": "Cancelled documents cannot be converted."})
 

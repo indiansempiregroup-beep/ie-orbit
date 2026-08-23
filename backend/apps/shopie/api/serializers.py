@@ -453,6 +453,7 @@ class ShopDeliveryZoneSerializer(serializers.ModelSerializer):
             "business",
             "name",
             "enabled",
+            "instant_delivery_enabled",
             "cities",
             "postal_prefixes",
             "same_day",
@@ -469,6 +470,7 @@ class ShopDeliveryZoneWriteSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     name = serializers.CharField(max_length=120)
     enabled = serializers.BooleanField(required=False, default=True)
+    instant_delivery_enabled = serializers.BooleanField(required=False, default=False)
     cities = serializers.ListField(child=serializers.CharField(), required=False)
     postal_prefixes = serializers.ListField(child=serializers.CharField(), required=False)
     same_day = serializers.BooleanField(required=False, default=True)
@@ -1112,7 +1114,7 @@ class ShopGodownSerializer(serializers.ModelSerializer):
         return self.get_effective_location(obj) is not None
 
 
-class ShopGodownCreateSerializer(serializers.Serializer):
+class ShopGodownWriteSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     name = serializers.CharField(max_length=120)
     code = serializers.CharField(required=False, allow_blank=True, max_length=32)

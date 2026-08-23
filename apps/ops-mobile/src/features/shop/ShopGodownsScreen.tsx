@@ -161,6 +161,7 @@ export function ShopGodownsScreen() {
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [isDefault, setIsDefault] = useState(false);
@@ -180,6 +181,7 @@ export function ShopGodownsScreen() {
 
   const closeForm = useCallback(() => {
     setMode('list');
+    setEditingId(null);
     setName('');
     setCode('');
     setIsDefault(false);
@@ -195,6 +197,22 @@ export function ShopGodownsScreen() {
     setToGodownId('');
     setProductId('');
     setQty('1');
+  }, []);
+
+  const openEdit = useCallback((godown: ShopGodown) => {
+    setEditingId(godown.id);
+    setName(godown.name);
+    setCode(godown.code ?? '');
+    setIsDefault(Boolean(godown.is_default));
+    setPhoneNumber(godown.phone_number ?? '');
+    setAddressLine1(godown.address_line1 ?? '');
+    setCity(godown.city ?? '');
+    setState(godown.state ?? '');
+    setCountry(godown.country ?? '');
+    setPostalCode(godown.postal_code ?? '');
+    setLatitude(godown.latitude == null ? null : Number(godown.latitude));
+    setLongitude(godown.longitude == null ? null : Number(godown.longitude));
+    setMode('godown');
   }, []);
 
   const openTransfer = useCallback((fromId?: string, toId?: string) => {
@@ -306,12 +324,12 @@ export function ShopGodownsScreen() {
     }
     setBusy(true);
     try {
-      await client.shop.createGodown({
+      const payload = {
         business_id: businessId,
         name: name.trim(),
-        code: code.trim() || undefined,
+        code: code.trim(),
         is_default: isDefault,
-        phone_number: phoneNumber.trim() || undefined,
+        phone_number: phoneNumber.trim(),
         address_line1: addressLine1.trim(),
         city: city.trim(),
         state: state.trim(),
@@ -319,12 +337,19 @@ export function ShopGodownsScreen() {
         postal_code: postalCode.trim(),
         latitude: latitude!,
         longitude: longitude!,
-      });
-      toast.push('Godown created', 'success');
+      };
+      if (editingId) {
+        await client.shop.patchGodown(editingId, payload);
+        toast.push('Godown updated', 'success');
+      } else {
+        await client.shop.createGodown(payload);
+        toast.push('Godown created', 'success');
+      }
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to create godown', 'error');
+      const fallback = editingId ? 'Unable to update godown' : 'Unable to create godown';
+      toast.push(err instanceof Error ? err.message : fallback, 'error');
     } finally {
       setBusy(false);
     }
@@ -364,11 +389,12 @@ export function ShopGodownsScreen() {
   }
 
   if (mode === 'godown') {
+    const lockedDefault = Boolean(editingId && godowns.find((g) => g.id === editingId)?.is_default);
     return (
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : 'Create godown'}
+            label={busy ? 'Saving…' : editingId ? 'Save changes' : 'Create godown'}
             loading={busy}
             fullWidth
             size="lg"
@@ -376,7 +402,7 @@ export function ShopGodownsScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>New godown</Text>
+        <Text style={styles.formTitle}>{editingId ? 'Edit godown' : 'New godown'}</Text>
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Name</Text>
           <TextInput
@@ -435,12 +461,15 @@ export function ShopGodownsScreen() {
           <Switch
             value={isDefault}
             onValueChange={setIsDefault}
+            disabled={lockedDefault}
             trackColor={{ false: colors.border, true: colors.tintStrong }}
             thumbColor={isDefault ? colors.primary : colors.mutedForeground}
           />
         </View>
         <Text style={styles.hint}>
-          POS and online orders deduct stock from the default godown.
+          {lockedDefault
+            ? 'POS and online orders sell from this godown. Mark another godown as default to move them.'
+            : 'POS and online orders deduct stock from the default godown.'}
         </Text>
       </FormScreen>
     );
@@ -742,6 +771,19 @@ export function ShopGodownsScreen() {
                     <Feather name="arrow-down-left" size={14} color={colors.primary} />
                     <Text style={styles.cardActionText}>Receive</Text>
                   </Pressable>
+                  {item.godown.branch ? (
+                    <Text style={styles.meta}>Office location · edit under Offices</Text>
+                  ) : (
+                    <Pressable
+                      style={styles.cardAction}
+                      onPress={() => openEdit(item.godown)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${item.godown.name}`}
+                    >
+                      <Feather name="edit-2" size={14} color={colors.primary} />
+                      <Text style={styles.cardActionText}>Edit</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             );

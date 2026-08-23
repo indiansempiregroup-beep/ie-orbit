@@ -22,6 +22,7 @@ class DeliveryZoneService:
             business=business,
             name=name,
             enabled=bool(data.get("enabled", True)),
+            instant_delivery_enabled=bool(data.get("instant_delivery_enabled", False)),
             cities=list(data.get("cities") or []),
             postal_prefixes=list(data.get("postal_prefixes") or []),
             same_day=bool(data.get("same_day", True)),
@@ -35,7 +36,7 @@ class DeliveryZoneService:
         for field in ("name", "notes"):
             if field in data and data[field] is not None:
                 setattr(zone, field, str(data[field]).strip())
-        for field in ("enabled", "same_day"):
+        for field in ("enabled", "instant_delivery_enabled", "same_day"):
             if field in data and data[field] is not None:
                 setattr(zone, field, bool(data[field]))
         for field in ("cities", "postal_prefixes", "metadata"):

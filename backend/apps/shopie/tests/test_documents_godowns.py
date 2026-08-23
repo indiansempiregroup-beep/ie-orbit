@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import pytest
+from django.core.exceptions import ValidationError
 
 from apps.businesses.models import Business
 from apps.customers.models import Customer
@@ -51,6 +52,49 @@ def test_sale_order_converts_to_sale(
 
 
 @pytest.mark.django_db
+def test_delivery_challan_dispatches_stock_only_once(
+    shop_business: Business, customer: Customer
+) -> None:
+    product = ShopProduct.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Dispatch Item",
+        price=Decimal("75"),
+        gst_rate=Decimal("5"),
+        stock_on_hand=Decimal("10"),
+    )
+    docs = DocumentsService()
+    document = docs.create_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        doc_type=BooksDocumentType.DELIVERY_CHALLAN,
+        customer=customer,
+        lines=[{"product_id": product.id, "quantity": "3", "unit_price": "75", "tax_rate": "5"}],
+    )
+
+    dispatched = docs.convert_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        document=document,
+    )
+
+    product.refresh_from_db()
+    document.refresh_from_db()
+    assert dispatched.id == document.id
+    assert document.status == BooksDocumentStatus.DISPATCHED
+    assert product.stock_on_hand == Decimal("7.000")
+
+    with pytest.raises(ValidationError, match="already dispatched"):
+        docs.convert_document(
+            tenant=shop_business.tenant,
+            business=shop_business,
+            document=document,
+        )
+    product.refresh_from_db()
+    assert product.stock_on_hand == Decimal("7.000")
+
+
+@pytest.mark.django_db
 def test_godown_transfer_moves_location_stock(shop_business: Business) -> None:
     product = ShopProduct.objects.create(
         tenant=shop_business.tenant,
@@ -88,6 +132,68 @@ def test_godown_transfer_moves_location_stock(shop_business: Business) -> None:
     sec_stock = ShopGodownStock.objects.get(godown=secondary, product=product)
     assert main_stock.quantity == Decimal("6.000")
     assert sec_stock.quantity == Decimal("4.000")
+
+
+@pytest.mark.django_db
+def test_godown_update_edits_details_and_moves_default(shop_business: Business) -> None:
+    godowns = GodownsService()
+    main = godowns.create_godown(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Main",
+        is_default=True,
+        address_line1="1 Old Road",
+        city="Mumbai",
+        country="India",
+        latitude="19.0760",
+        longitude="72.8777",
+    )
+    spare = godowns.create_godown(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Spare",
+        address_line1="2 New Road",
+        city="Mumbai",
+        country="India",
+        latitude="19.1800",
+        longitude="72.8600",
+    )
+
+    updated = godowns.update_godown(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        godown=spare,
+        data={"name": "Warehouse", "code": "WH1", "is_default": True},
+    )
+    main.refresh_from_db()
+
+    assert updated.name == "Warehouse"
+    assert updated.code == "WH1"
+    assert updated.is_default is True
+    assert main.is_default is False
+
+
+@pytest.mark.django_db
+def test_godown_update_rejects_office_locations(shop_business: Business) -> None:
+    from django.core.exceptions import ValidationError
+
+    from apps.shopie.tests.conftest import make_office
+
+    branch = make_office(
+        shop_business, name="Andheri", latitude="19.0760", longitude="72.8777", is_primary=True
+    )
+    godowns = GodownsService()
+    godown = godowns.ensure_office_godown(
+        tenant=shop_business.tenant, business=shop_business, branch=branch
+    )
+
+    with pytest.raises(ValidationError):
+        godowns.update_godown(
+            tenant=shop_business.tenant,
+            business=shop_business,
+            godown=godown,
+            data={"name": "Renamed"},
+        )
 
 
 @pytest.mark.django_db

@@ -34,6 +34,7 @@ from apps.shopie.api.extended_books_views import (
     ShopChequeBounceView,
     ShopChequeClearView,
     ShopChequeListCreateView,
+    ShopGodownDetailView,
     ShopGodownListCreateView,
     ShopLoanListCreateView,
     ShopLoanRepaymentView,
@@ -203,6 +204,11 @@ urlpatterns = [
         name="shop-books-document-convert",
     ),
     path("shop/godowns", ShopGodownListCreateView.as_view(), name="shop-godown-list-create"),
+    path(
+        "shop/godowns/<uuid:godown_id>",
+        ShopGodownDetailView.as_view(),
+        name="shop-godown-detail",
+    ),
     path(
         "shop/stock-transfers",
         ShopStockTransferListCreateView.as_view(),

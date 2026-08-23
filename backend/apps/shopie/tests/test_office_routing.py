@@ -1,14 +1,19 @@
 from dataclasses import dataclass
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
 
-from apps.businesses.models import Business
+from apps.businesses.models import BranchStatus, Business
+from apps.businesses.services.branches import BranchService
 from apps.customers.models import Customer
 from apps.shopie.models import (
     FulfillmentMode,
     OrderStatus,
+    ShopDeliveryZone,
+    ShopGodown,
     ShopGodownStock,
     ShopProduct,
 )
@@ -76,6 +81,62 @@ def test_every_office_gets_its_own_stock_location(shop_business: Business) -> No
         tenant=shop_business.tenant, business=shop_business
     )
     assert [g.id for _, g in again] == [g.id for _, g in offices]
+
+
+@pytest.mark.django_db
+def test_office_service_keeps_linked_godown_in_sync(shop_business: Business) -> None:
+    service = BranchService(entitlements=Mock())
+    actor = SimpleNamespace(is_authenticated=False)
+
+    primary = service.create_branch(
+        business=shop_business,
+        actor=actor,
+        data={
+            "branch_name": "Andheri",
+            "display_name": "Andheri",
+            "address_line1": "Andheri Road",
+            "city": "Mumbai",
+            "country": "India",
+            "latitude": Decimal(NEAR_A[0]),
+            "longitude": Decimal(NEAR_A[1]),
+        },
+    )
+    service.create_branch(
+        business=shop_business,
+        actor=actor,
+        data={
+            "branch_name": "Borivali",
+            "display_name": "Borivali",
+            "address_line1": "Borivali Road",
+            "city": "Mumbai",
+            "country": "India",
+            "latitude": Decimal(NEAR_B[0]),
+            "longitude": Decimal(NEAR_B[1]),
+        },
+    )
+
+    godown = ShopGodown.objects.get(branch=primary)
+    assert godown.name == "Andheri"
+    assert godown.is_default is True
+
+    service.update_branch(
+        branch=primary,
+        actor=actor,
+        data={"display_name": "Andheri West", "status": BranchStatus.INACTIVE},
+    )
+    godown.refresh_from_db()
+    assert godown.name == "Andheri West"
+    assert godown.is_active is False
+    assert godown.is_default is False
+
+    service.update_branch(
+        branch=primary,
+        actor=actor,
+        data={"status": BranchStatus.ACTIVE},
+    )
+    godown.refresh_from_db()
+    assert godown.is_active is True
+    assert ShopGodown.objects.get(branch=primary).id == godown.id
 
 
 @pytest.mark.django_db
@@ -366,6 +427,12 @@ def test_enabling_delivery_requires_an_office_pin(
 @pytest.mark.django_db
 def test_quote_pickup_uses_the_source_office(shop_business: Business) -> None:
     service = DeliveryService()
+    ShopDeliveryZone.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Instant service area",
+        instant_delivery_enabled=True,
+    )
     make_office(
         shop_business, name="Andheri", latitude=NEAR_A[0], longitude=NEAR_A[1], is_primary=True
     )

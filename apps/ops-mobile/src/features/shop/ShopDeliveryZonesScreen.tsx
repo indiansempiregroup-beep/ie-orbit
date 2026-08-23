@@ -36,6 +36,7 @@ type ZoneForm = {
   minOrder: string;
   notes: string;
   sameDay: boolean;
+  instantDelivery: boolean;
   enabled: boolean;
 };
 
@@ -47,6 +48,7 @@ const EMPTY_FORM: ZoneForm = {
   minOrder: '0',
   notes: '',
   sameDay: true,
+  instantDelivery: false,
   enabled: true,
 };
 
@@ -72,6 +74,7 @@ function zoneToForm(zone: ShopDeliveryZone): ZoneForm {
     minOrder: String(zone.min_order_total ?? '0'),
     notes: zone.notes ?? '',
     sameDay: zone.same_day !== false,
+    instantDelivery: zone.instant_delivery_enabled === true,
     enabled: zone.enabled !== false,
   };
 }
@@ -191,6 +194,7 @@ export function ShopDeliveryZonesScreen() {
       min_order_total: form.minOrder.trim() || '0',
       notes: form.notes.trim(),
       same_day: form.sameDay,
+      instant_delivery_enabled: form.instantDelivery,
       enabled: form.enabled,
     };
     try {
@@ -228,7 +232,7 @@ export function ShopDeliveryZonesScreen() {
         <Text style={styles.formTitle}>{editingId ? 'Edit delivery zone' : 'Add delivery zone'}</Text>
         <Text style={styles.help}>
           Match checkout addresses by city name and/or postal prefix. Fee is added when the zone
-          matches.
+          matches. Deliver now appears only in zones where it is explicitly allowed.
         </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Input
@@ -273,6 +277,13 @@ export function ShopDeliveryZonesScreen() {
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Same-day delivery</Text>
           <Switch value={form.sameDay} onValueChange={(value) => setField('sameDay', value)} />
+        </View>
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Allow Deliver now</Text>
+          <Switch
+            value={form.instantDelivery}
+            onValueChange={(value) => setField('instantDelivery', value)}
+          />
         </View>
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Enabled</Text>
@@ -321,6 +332,7 @@ export function ShopDeliveryZonesScreen() {
                   <Text style={styles.meta}>
                     {item.enabled ? 'Enabled' : 'Disabled'}
                     {item.same_day ? ' · Same day' : ''}
+                    {item.instant_delivery_enabled ? ' · Deliver now' : ''}
                     {` · ${(item.cities ?? []).join(', ') || 'Any city'}`}
                     {` · fee ${item.fee ?? 0}`}
                   </Text>

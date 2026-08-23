@@ -38,6 +38,12 @@ export function addressSingleLine(address: CustomerAddress): string {
   return addressLines(address).join(', ');
 }
 
+/** Street-level address for orders and rider drops; city, state and pincode travel as separate fields. */
+export function deliveryAddressLine(address: Pick<CustomerAddress, 'line1' | 'line2'> | null | undefined): string {
+  if (!address) return '';
+  return [address.line2, address.line1].filter(Boolean).join(', ');
+}
+
 export function toCoordinate(value: number | string | null | undefined): number | null {
   if (value == null || value === '') return null;
   const parsed = typeof value === 'number' ? value : Number(value);

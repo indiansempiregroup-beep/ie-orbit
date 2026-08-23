@@ -34,7 +34,9 @@ import {
   PrivacySecurityScreen,
   ReviewsScreen,
 } from '../features/profile/ProfileSubScreens';
+import { ReferralScreen } from '../features/profile/ReferralScreen';
 import { usePushRegistration } from '../hooks/usePushRegistration';
+import { ReferralLinkHandler } from '../components/ReferralLinkHandler';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -76,6 +78,7 @@ export function RootNavigator() {
 
   return (
     <BootstrapGate>
+      <ReferralLinkHandler />
       <NavigationContainer>
         {user && !needsVerification ? (
           <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -106,6 +109,7 @@ export function RootNavigator() {
             <Stack.Screen name="Reviews" component={ReviewsScreen} />
             <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
             <Stack.Screen name="HelpArticle" component={HelpArticleScreen} />
+            <Stack.Screen name="Referral" component={ReferralScreen} />
           </Stack.Navigator>
         ) : needsVerification ? (
           <VerifyEmailStack />

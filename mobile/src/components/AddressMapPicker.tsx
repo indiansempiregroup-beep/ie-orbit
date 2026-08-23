@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, type MapPressEvent, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -30,20 +30,27 @@ export function AddressMapPicker({
   onLocationChange,
   primaryColor = colors.primary,
 }: AddressMapPickerProps) {
-  const [region, setRegion] = useState<Region>({
+  const mapRef = useRef<MapView | null>(null);
+  const initialRegion = useRef<Region>({
     ...DEFAULT_REGION,
     latitude: latitude ?? DEFAULT_REGION.latitude,
     longitude: longitude ?? DEFAULT_REGION.longitude,
-  });
+  }).current;
+  const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(
+    latitude != null && longitude != null ? { latitude, longitude } : null,
+  );
+  // A tap or drag already put the pin where the customer wants it, so the
+  // geocoded coordinates that come back must not yank the camera around.
+  const fromMapRef = useRef(false);
 
   useEffect(() => {
-    if (latitude != null && longitude != null) {
-      setRegion((current) => ({
-        ...current,
-        latitude,
-        longitude,
-      }));
+    if (latitude == null || longitude == null) return;
+    setPin({ latitude, longitude });
+    if (fromMapRef.current) {
+      fromMapRef.current = false;
+      return;
     }
+    mapRef.current?.animateCamera({ center: { latitude, longitude } }, { duration: 300 });
   }, [latitude, longitude]);
 
   async function useCurrentLocation() {
@@ -57,18 +64,19 @@ export function AddressMapPicker({
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,
     };
-    setRegion((current) => ({ ...current, ...next }));
+    setPin(next);
     onLocationChange(next.latitude, next.longitude);
   }
 
   function onMapPress(event: MapPressEvent) {
     const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
+    fromMapRef.current = true;
+    setPin({ latitude: lat, longitude: lng });
     onLocationChange(lat, lng);
-    setRegion((current) => ({ ...current, latitude: lat, longitude: lng }));
   }
 
-  const markerLat = latitude ?? region.latitude;
-  const markerLng = longitude ?? region.longitude;
+  const markerLat = pin?.latitude ?? initialRegion.latitude;
+  const markerLng = pin?.longitude ?? initialRegion.longitude;
 
   return (
     <View style={styles.wrap}>
@@ -81,9 +89,10 @@ export function AddressMapPicker({
       </View>
       <View style={styles.mapWrap}>
         <MapView
+          ref={mapRef}
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          region={region}
+          initialRegion={initialRegion}
           onPress={onMapPress}
         >
           <Marker
@@ -91,6 +100,8 @@ export function AddressMapPicker({
             draggable
             onDragEnd={(event) => {
               const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
+              fromMapRef.current = true;
+              setPin({ latitude: lat, longitude: lng });
               onLocationChange(lat, lng);
             }}
           />

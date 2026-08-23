@@ -61,16 +61,26 @@ export function AddressLocationPicker({
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [typedTerm, setTypedTerm] = useState('');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionTokenRef = useRef(newSessionToken());
-  const selectingRef = useRef(false);
+  const typedValueRef = useRef<string | null>(null);
+  // Read inside the debounce so moving the pin biases the next search without
+  // restarting the current one.
+  const biasRef = useRef({ latitude, longitude });
+  biasRef.current = { latitude, longitude };
 
   useEffect(() => {
-    if (selectingRef.current) {
-      selectingRef.current = false;
-      return;
-    }
-    const term = value.trim();
+    if (value === typedValueRef.current) return;
+    // The parent set this text (opening an edit form, resetting after save), so
+    // it is not something the merchant is searching for.
+    typedValueRef.current = null;
+    setTypedTerm('');
+    setPredictions([]);
+  }, [value]);
+
+  useEffect(() => {
+    const term = typedTerm.trim();
     if (term.length < 3) {
       setPredictions([]);
       return;
@@ -84,8 +94,8 @@ export function AddressLocationPicker({
           const response = await client.places.autocomplete({
             input: term,
             session_token: sessionTokenRef.current,
-            latitude: latitude ?? undefined,
-            longitude: longitude ?? undefined,
+            latitude: biasRef.current.latitude ?? undefined,
+            longitude: biasRef.current.longitude ?? undefined,
             country_code: 'IN',
           });
           setPredictions(response.data.predictions);
@@ -100,10 +110,18 @@ export function AddressLocationPicker({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [client, latitude, longitude, value]);
+  }, [client, typedTerm]);
+
+  function handleTyping(next: string) {
+    typedValueRef.current = next;
+    setTypedTerm(next);
+    onChangeText(next);
+  }
 
   async function selectPrediction(prediction: Prediction) {
-    selectingRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    typedValueRef.current = prediction.description;
+    setTypedTerm('');
     setPredictions([]);
     onChangeText(prediction.description);
     setLoading(true);
@@ -123,6 +141,7 @@ export function AddressLocationPicker({
   }
 
   async function reverse(latitudeValue: number, longitudeValue: number) {
+    if (timerRef.current) clearTimeout(timerRef.current);
     setLoading(true);
     setError(null);
     try {
@@ -130,8 +149,11 @@ export function AddressLocationPicker({
         latitude: latitudeValue,
         longitude: longitudeValue,
       });
-      selectingRef.current = true;
-      onPlaceSelected(asPlace(response.data));
+      const place = asPlace(response.data);
+      typedValueRef.current = place.formattedAddress;
+      setTypedTerm('');
+      setPredictions([]);
+      onPlaceSelected(place);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to identify this map location.');
     } finally {
@@ -173,7 +195,7 @@ export function AddressLocationPicker({
       <div style={{ position: 'relative' }}>
         <input
           value={value}
-          onChange={(event) => onChangeText(event.target.value)}
+          onChange={(event) => handleTyping(event.target.value)}
           placeholder="Search address, shop, building or landmark"
           autoComplete="off"
           style={{ width: '100%', boxSizing: 'border-box', padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}

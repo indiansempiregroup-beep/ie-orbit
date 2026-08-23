@@ -65,6 +65,57 @@ class CustomerReferralService:
             "referrer", "referred"
         )
 
+    def public_program(self, *, business: Business) -> dict[str, Any]:
+        settings = self.get_referral_settings(business=business)
+        active = self.is_program_active(business=business)
+        return {
+            "enabled": active,
+            "points_per_referral": int(settings["points_per_referral"]) if active else 0,
+            "success_event": settings["success_event"],
+        }
+
+    def list_referrals_made(
+        self, *, tenant: Tenant, business: Business, customer: Customer
+    ) -> QuerySet[CustomerReferral]:
+        return (
+            CustomerReferral.objects.filter(tenant=tenant, business=business, referrer=customer)
+            .select_related("referred")
+            .order_by("-created_at")
+        )
+
+    def get_received_referral(
+        self, *, tenant: Tenant, business: Business, customer: Customer
+    ) -> CustomerReferral | None:
+        return (
+            CustomerReferral.objects.filter(tenant=tenant, business=business, referred=customer)
+            .select_related("referrer")
+            .first()
+        )
+
+    def apply_code(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        referred: Customer,
+        code: str,
+    ) -> CustomerReferral:
+        if not self.is_program_active(business=business):
+            raise ValidationError({"referral_code": "Referral program is not active."})
+        if CustomerReferral.objects.filter(
+            tenant=tenant, business=business, referred=referred
+        ).exists():
+            raise ValidationError({"referral_code": "You have already used a referral code."})
+        result = self.apply_code_on_customer_create(
+            tenant=tenant,
+            business=business,
+            referred=referred,
+            code=code,
+        )
+        if result is None:
+            raise ValidationError({"referral_code": "Enter a valid referral code."})
+        return result
+
     def _generate_unique_code(self, *, tenant: Tenant, business: Business) -> str:
         alphabet = string.ascii_uppercase + string.digits
         for _ in range(20):

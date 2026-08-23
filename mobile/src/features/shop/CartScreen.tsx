@@ -30,7 +30,7 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { buildUpiPayUrl } from '../../utils/upi';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { useCart } from './CartContext';
-import { addressSingleLine, addressTypeMeta } from './addressUtils';
+import { addressSingleLine, addressTypeMeta, deliveryAddressLine } from './addressUtils';
 import { QtyStepper } from './QtyStepper';
 import { formatShopMoney, formatShopDateIso, formatShopDateLabel, formatShopTimeLabel, isPickupTimeAfterNow, nextAvailablePickupTime, shopLinePayable } from './shopHelpers';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
@@ -67,6 +67,7 @@ type StandardDeliveryOption = {
   fee: number;
   zoneName: string;
   sameDay: boolean;
+  instantEnabled: boolean;
 };
 
 export function CartScreen() {
@@ -322,56 +323,58 @@ export function CartScreen() {
       setInstantDelivery(null);
       setStandardDelivery(null);
 
-      const instantRequest =
-        selectedAddress.latitude != null && selectedAddress.longitude != null
-          ? mobileClient.mobile
-              .quoteShopDelivery({
-                tenant_slug: tenantSlug,
-                business_code: businessCode,
-                latitude: selectedAddress.latitude,
-                longitude: selectedAddress.longitude,
-                address: [selectedAddress.line1, selectedAddress.line2].filter(Boolean).join(', '),
-                city: selectedAddress.city || '',
-                state: selectedAddress.state || '',
-                postal_code: selectedAddress.postal_code || '',
-                subtotal: merchandiseAfterCoupon,
-                lines: lines.map((line) => ({
-                  product_id: line.product.id,
-                  quantity: line.quantity,
-                })),
-              })
-              .then((response) =>
-                response.data.available
-                  ? {
-                      fee: Number(response.data.customer_fee || 0),
-                      providerLabel: response.data.provider_label || 'Instant delivery',
-                      quoteId: response.data.quote_id || '',
-                      etaMinutes: response.data.eta_minutes ?? null,
-                    }
-                  : null,
-              )
-              .catch(() => null)
-          : Promise.resolve(null);
-
-      const standardRequest = mobileClient.mobile
+      const zoneResponse = await mobileClient.mobile
         .matchDeliveryZone({
           tenant_slug: tenantSlug,
           business_code: businessCode,
           city: selectedAddress.city || '',
           postal_code: selectedAddress.postal_code || '',
         })
-        .then((response) =>
-          response.data.matched && response.data.zone
-            ? {
-                fee: Number(response.data.zone.fee || 0),
-                zoneName: response.data.zone.name,
-                sameDay: Boolean(response.data.zone.same_day),
-              }
-            : null,
-        )
         .catch(() => null);
+      if (cancelled) return;
+      const zone =
+        zoneResponse?.data.matched && zoneResponse.data.zone ? zoneResponse.data.zone : null;
+      const standard = zone
+        ? {
+            fee: Number(zone.fee || 0),
+            zoneName: zone.name,
+            sameDay: Boolean(zone.same_day),
+            instantEnabled: Boolean(zone.instant_delivery_enabled),
+          }
+        : null;
 
-      const [instant, standard] = await Promise.all([instantRequest, standardRequest]);
+      let instant: InstantDeliveryOption | null = null;
+      if (
+        zone?.instant_delivery_enabled &&
+        selectedAddress.latitude != null &&
+        selectedAddress.longitude != null
+      ) {
+        const response = await mobileClient.mobile
+          .quoteShopDelivery({
+            tenant_slug: tenantSlug,
+            business_code: businessCode,
+            latitude: selectedAddress.latitude,
+            longitude: selectedAddress.longitude,
+            address: deliveryAddressLine(selectedAddress),
+            city: selectedAddress.city || '',
+            state: selectedAddress.state || '',
+            postal_code: selectedAddress.postal_code || '',
+            subtotal: merchandiseAfterCoupon,
+            lines: lines.map((line) => ({
+              product_id: line.product.id,
+              quantity: line.quantity,
+            })),
+          })
+          .catch(() => null);
+        if (response?.data.available) {
+          instant = {
+            fee: Number(response.data.customer_fee || 0),
+            providerLabel: response.data.provider_label || 'Instant delivery',
+            quoteId: response.data.quote_id || '',
+            etaMinutes: response.data.eta_minutes ?? null,
+          };
+        }
+      }
       if (cancelled) return;
       setInstantDelivery(instant);
       setStandardDelivery(standard);
@@ -385,7 +388,7 @@ export function CartScreen() {
     return () => {
       cancelled = true;
     };
-  }, [businessCode, fulfillment, merchandiseAfterCoupon, selectedAddress, tenantSlug]);
+  }, [businessCode, fulfillment, lines, merchandiseAfterCoupon, selectedAddress, tenantSlug]);
 
   const applyCoupon = useCallback(
     async (code: string, closeSheet = false) => {
@@ -516,10 +519,7 @@ export function CartScreen() {
         preferred_date: fulfillment === 'pickup' ? preferredDate : undefined,
         preferred_time: fulfillment === 'pickup' ? preferredTime : undefined,
         fulfillment_note: fulfillmentNote.trim(),
-        delivery_address:
-          fulfillment === 'delivery'
-            ? [selectedAddress?.line1, selectedAddress?.line2].filter(Boolean).join(', ')
-            : '',
+        delivery_address: fulfillment === 'delivery' ? deliveryAddressLine(selectedAddress) : '',
         delivery_city: fulfillment === 'delivery' ? selectedAddress?.city || '' : '',
         delivery_state: fulfillment === 'delivery' ? selectedAddress?.state || '' : '',
         delivery_postal_code: fulfillment === 'delivery' ? selectedAddress?.postal_code || '' : '',
@@ -778,9 +778,14 @@ export function CartScreen() {
                                   ? formatShopMoney(instantDelivery.fee, currency)
                                   : 'Free delivery'
                               }`
-                            : selectedAddress.latitude == null || selectedAddress.longitude == null
-                              ? 'Add a map pin to this address for an instant quote.'
-                              : 'Instant delivery is unavailable for this address.'}
+                            : !standardDelivery
+                              ? 'This address is outside the shop’s delivery zones.'
+                              : !standardDelivery.instantEnabled
+                                ? `Deliver now is not enabled for ${standardDelivery.zoneName}.`
+                                : selectedAddress.latitude == null ||
+                                    selectedAddress.longitude == null
+                                  ? 'Add a map pin to this address for an instant quote.'
+                                  : 'The delivery partner is unavailable right now.'}
                         </Text>
                         {instantDelivery ? (
                           <Text style={styles.deliveryHint}>
