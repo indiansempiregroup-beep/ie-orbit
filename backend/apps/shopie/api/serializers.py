@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.shopie.models import (
@@ -320,6 +322,27 @@ class ShopOrderSerializer(serializers.ModelSerializer):
         )
 
 
+class MobileShopOrderSerializer(ShopOrderSerializer):
+    """Customer-facing order payload.
+
+    Which office ships the order is an internal routing decision, so it is
+    stripped before the customer app sees the metadata blob.
+    """
+
+    internal_metadata_keys = ("fulfillment",)
+
+    def to_representation(self, instance: ShopOrder) -> dict:
+        data = super().to_representation(instance)
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict):
+            data["metadata"] = {
+                key: value
+                for key, value in metadata.items()
+                if key not in self.internal_metadata_keys
+            }
+        return data
+
+
 class ShopOrderCreateSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     customer_id = serializers.UUIDField(required=False, allow_null=True)
@@ -330,7 +353,23 @@ class ShopOrderCreateSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
     delivery_address = serializers.CharField(required=False, allow_blank=True)
     delivery_city = serializers.CharField(required=False, allow_blank=True)
+    delivery_state = serializers.CharField(required=False, allow_blank=True)
     delivery_postal_code = serializers.CharField(required=False, allow_blank=True)
+    delivery_latitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True
+    )
+    delivery_longitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True
+    )
+    delivery_method = serializers.ChoiceField(
+        choices=[("standard", "Standard"), ("instant", "Instant")],
+        required=False,
+        allow_blank=True,
+    )
+    delivery_quote_id = serializers.CharField(required=False, allow_blank=True, max_length=160)
+    displayed_delivery_fee = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
     confirm = serializers.BooleanField(required=False, default=False)
     bill_discount_type = serializers.ChoiceField(
         choices=[("percent", "Percent"), ("amount", "Amount"), ("", "None")],
@@ -445,6 +484,32 @@ class ShopDeliveryMatchSerializer(serializers.Serializer):
     postal_code = serializers.CharField(required=False, allow_blank=True)
 
 
+class ShopDeliveryQuoteSerializer(serializers.Serializer):
+    class LineSerializer(serializers.Serializer):
+        product_id = serializers.UUIDField()
+        quantity = serializers.DecimalField(
+            max_digits=12,
+            decimal_places=3,
+            min_value=Decimal("0.001"),
+        )
+
+    business_id = serializers.UUIDField(required=False)
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    address = serializers.CharField(required=False, allow_blank=True)
+    city = serializers.CharField(required=False, allow_blank=True)
+    state = serializers.CharField(required=False, allow_blank=True)
+    postal_code = serializers.CharField(required=False, allow_blank=True)
+    subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    lines = LineSerializer(many=True, required=False, default=list)
+
+
+class ShopDeliverySettingsPatchSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    instant_delivery_enabled = serializers.BooleanField(required=False)
+    delivery_integration = serializers.DictField(required=False)
+
+
 class ShopPetSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
 
@@ -521,6 +586,7 @@ class ShopSettingsSerializer(serializers.ModelSerializer):
             "pets_enabled",
             "default_fulfillment_mode",
             "same_day_delivery_enabled",
+            "instant_delivery_enabled",
             "metadata",
         ]
 
@@ -996,14 +1062,30 @@ class ShopGodownStockLineSerializer(serializers.ModelSerializer):
 
 class ShopGodownSerializer(serializers.ModelSerializer):
     stocks = serializers.SerializerMethodField()
+    branch_name = serializers.SerializerMethodField()
+    effective_location = serializers.SerializerMethodField()
+    online_fulfillment_ready = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopGodown
         fields = [
             "id",
             "business",
+            "branch",
+            "branch_name",
             "name",
             "code",
+            "phone_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state",
+            "country",
+            "postal_code",
+            "latitude",
+            "longitude",
+            "effective_location",
+            "online_fulfillment_ready",
             "is_default",
             "is_active",
             "metadata",
@@ -1011,9 +1093,23 @@ class ShopGodownSerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+    def get_branch_name(self, obj: ShopGodown) -> str:
+        branch = getattr(obj, "branch", None)
+        if branch is None:
+            return ""
+        return str(branch.display_name or branch.branch_name)
+
     def get_stocks(self, obj: ShopGodown) -> list[dict]:
         rows = [row for row in obj.stocks.all() if row.quantity]
         return ShopGodownStockLineSerializer(rows, many=True).data
+
+    def get_effective_location(self, obj: ShopGodown) -> dict | None:
+        from apps.shopie.services.godowns import GodownsService
+
+        return GodownsService.effective_location(obj, obj.business)
+
+    def get_online_fulfillment_ready(self, obj: ShopGodown) -> bool:
+        return self.get_effective_location(obj) is not None
 
 
 class ShopGodownCreateSerializer(serializers.Serializer):
@@ -1021,6 +1117,15 @@ class ShopGodownCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=120)
     code = serializers.CharField(required=False, allow_blank=True, max_length=32)
     is_default = serializers.BooleanField(required=False, default=False)
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    address_line1 = serializers.CharField(max_length=255)
+    address_line2 = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    city = serializers.CharField(max_length=120)
+    state = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    country = serializers.CharField(max_length=120)
+    postal_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    latitude = serializers.FloatField(min_value=-90, max_value=90)
+    longitude = serializers.FloatField(min_value=-180, max_value=180)
 
 
 class ShopStockTransferSerializer(serializers.ModelSerializer):

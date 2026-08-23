@@ -55,6 +55,7 @@ const FEATURE_GROUPS: Array<{
       { value: 'shopie_orders', label: 'Online orders' },
       { value: 'shopie_returns', label: 'Returns' },
       { value: 'shopie_delivery_zones', label: 'Delivery zones' },
+      { value: 'shopie_instant_delivery', label: 'Instant delivery (Porter / Shiprocket)' },
       { value: 'shopie_coupons', label: 'Online order coupons' },
       { value: 'shopie_loyalty', label: 'Shop loyalty rules' },
     ],

@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PlatformPlanPackageUpsertInput, WhiteLabelProfile } from '@ie-platform/sdk';
+import type {
+  PlatformPlanPackageUpsertInput,
+  PlatformAuditQuery,
+  PlatformUserSearchParams,
+  WhiteLabelProfile,
+} from '@ie-platform/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 
 export function usePlatformTenantsQuery() {
@@ -70,14 +75,15 @@ export function usePlatformTenantCreditsQuery(tenantId: string | undefined) {
   });
 }
 
-export function usePlatformAuditQuery(filters?: { limit?: number; tenant_id?: string; action?: string }) {
+export function usePlatformAuditQuery(filters: PlatformAuditQuery = {}) {
   const client = useApiClient();
-  const limit = filters?.limit ?? 100;
-  const tenantId = filters?.tenant_id || undefined;
-  const action = filters?.action || undefined;
+  const normalized = Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== undefined && value !== ''),
+  ) as PlatformAuditQuery;
   return useQuery({
-    queryKey: ['platform', 'audit', limit, tenantId ?? '', action ?? ''],
-    queryFn: async () => (await client.platform.audit({ limit, tenant_id: tenantId, action })).data.events,
+    queryKey: ['platform', 'audit', normalized],
+    queryFn: async () => (await client.platform.audit(normalized)).data,
+    placeholderData: (previous) => previous,
     retry: false,
   });
 }
@@ -101,13 +107,13 @@ export function usePlatformTicketQuery(ticketId: string | null) {
   });
 }
 
-export function usePlatformUserSearchQuery(email: string) {
+export function usePlatformUserSearchQuery(params: PlatformUserSearchParams) {
   const client = useApiClient();
-  const query = email.trim();
+  const normalized: PlatformUserSearchParams = { ...params, q: (params.q ?? '').trim() || undefined };
   return useQuery({
-    queryKey: ['platform', 'users', 'search', query],
-    queryFn: async () => (await client.platform.searchUsers(query)).data.users,
-    enabled: query.length >= 2,
+    queryKey: ['platform', 'users', 'search', normalized],
+    queryFn: async () => (await client.platform.searchUsers(normalized)).data,
+    placeholderData: (previous) => previous,
     retry: false,
   });
 }

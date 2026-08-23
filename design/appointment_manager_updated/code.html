@@ -1,0 +1,396 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Appointment Management - NexusHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-on-surface": "#ecf1ff",
+                        "surface-dim": "#cfdaf2",
+                        "inverse-surface": "#263143",
+                        "outline-variant": "#c5c5d4",
+                        "surface-bright": "#f9f9ff",
+                        "on-primary-container": "#cacfff",
+                        "secondary-container": "#6cf8bb",
+                        "surface-tint": "#4355b9",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#00105c",
+                        "on-tertiary-fixed": "#2a1700",
+                        "secondary-fixed-dim": "#4edea3",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#bac3ff",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-error": "#ffffff",
+                        "surface": "#f9f9ff",
+                        "primary": "#24389c",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-surface-variant": "#454652",
+                        "error": "#ba1a1a",
+                        "tertiary-container": "#805000",
+                        "on-primary": "#ffffff",
+                        "on-secondary-fixed": "#002113",
+                        "on-primary-fixed-variant": "#293ca0",
+                        "on-secondary-container": "#00714d",
+                        "secondary": "#006c49",
+                        "tertiary-fixed": "#ffddb8",
+                        "surface-container": "#e7eeff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#111c2d",
+                        "tertiary": "#603b00",
+                        "primary-fixed": "#dee0ff",
+                        "on-tertiary-container": "#ffc988",
+                        "inverse-primary": "#bac3ff",
+                        "outline": "#757684",
+                        "surface-container-high": "#dee8ff",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "on-background": "#111c2d",
+                        "primary-container": "#3f51b5",
+                        "surface-container-low": "#f0f3ff",
+                        "background": "#f9f9ff",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#d8e3fb",
+                        "surface-variant": "#d8e3fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1280px",
+                        "md": "16px",
+                        "xl": "40px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "xs": "4px",
+                        "base": "4px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "data-mono": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Hide scrollbar for clean horizontal scrolls */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md h-screen overflow-hidden flex flex-col md:flex-row">
+<!-- NavigationDrawer (Desktop) -->
+<nav class="hidden lg:flex flex-col h-screen border-r border-outline-variant bg-surface-container-low fixed left-0 top-0 w-64 shadow-md z-40">
+<div class="p-lg border-b border-outline-variant/30 flex items-center gap-md">
+<span class="material-symbols-outlined fill text-[32px] text-primary">file_map_stack</span>
+<span class="font-headline-md text-headline-md text-primary font-bold">NexusHub</span>
+</div>
+<div class="p-lg pb-0 flex items-center gap-md">
+<img alt="Manager Profile" class="w-12 h-12 rounded-full object-cover border border-outline-variant" data-alt="A professional headshot of a business manager, smiling slightly, wearing corporate modern attire. The background is a well-lit, minimal office setting. Corporate modern aesthetic, light mode, high quality, sharp focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB6zPjg9HlA2yDYJq6wHqFtER6k6cxDPibvOWCVOAS4hL_NI_NTni8gVytm5ymlVHD1Nvxk6b6zcct2n9bvvCcE8H5K7UMsioJmMMVl04VeC4dxOikFv1BiiKNu7CSnxK-2Y00uKPLWTPUlTaUhcvvDtvnUQZU7jvl9ptHGQV3GrPKvSJ4S9kEKNXfNomH-P48aCm8KlbTwSMMZNmnZqwxwmmyupB8j3S5-WdN473lvyeYWHY8J1veugw">
+<div>
+<p class="font-body-md text-body-md font-semibold">Business Manager</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Administrator</p>
+<p class="font-label-caps text-label-caps text-outline mt-xs">HQ Office</p>
+</div>
+</div>
+<div class="mt-lg flex-1 overflow-y-auto py-md px-md flex flex-col gap-sm">
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-high px-md py-sm rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-high px-md py-sm rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="point_of_sale">point_of_sale</span>
+<span class="font-body-md text-body-md">POS Terminal</span>
+</a>
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-high px-md py-sm rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-body-md text-body-md">Inventory Control</span>
+</a>
+<!-- Active State -->
+<a class="flex items-center gap-md bg-primary-container text-on-primary-container rounded-lg px-md py-sm transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined fill" data-icon="calendar_month">calendar_month</span>
+<span class="font-body-md text-body-md font-semibold">Appointments</span>
+</a>
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-high px-md py-sm rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-body-md text-body-md">Analytics</span>
+</a>
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-high px-md py-sm rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span class="font-body-md text-body-md">Team Management</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-screen w-full lg:ml-64 bg-surface">
+<!-- TopAppBar (Mobile/Tablet) -->
+<header class="bg-surface-bright shadow-sm flex justify-between items-center w-full px-lg py-md lg:hidden z-30 docked full-width top-0">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined fill text-[24px] text-primary">file_map_stack</span>
+<span class="font-headline-md text-headline-md font-bold text-primary">NexusHub</span>
+</div>
+<button class="active:scale-95 duration-150 text-primary hover:bg-surface-container-high p-sm rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</header>
+<!-- Top Header for Desktop -->
+<header class="hidden lg:flex bg-surface-bright shadow-sm justify-between items-center w-full px-lg py-md z-30">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Appointments</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Manage bookings and schedules</p>
+</div>
+<div class="flex items-center gap-md">
+<button class="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-caps text-label-caps shadow-sm hover:shadow-md transition-shadow flex items-center gap-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                    Add Booking
+                </button>
+<button class="active:scale-95 duration-150 text-on-surface-variant hover:bg-surface-container-high p-sm rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Canvas -->
+<div class="flex-1 overflow-y-auto p-md lg:p-lg">
+<div class="max-w-container-max mx-auto grid grid-cols-1 lg:grid-cols-12 gap-lg pb-xl">
+<!-- Left Column (Calendar & Timeline) - spans 8 cols on lg -->
+<div class="lg:col-span-8 flex flex-col gap-lg">
+<!-- Weekly Calendar Stripe -->
+<section class="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-outline-variant/30 p-md">
+<div class="flex justify-between items-center mb-md">
+<h2 class="font-headline-md text-headline-md text-on-surface">This Week</h2>
+<div class="flex gap-sm">
+<button class="p-xs rounded hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined">chevron_left</span></button>
+<button class="p-xs rounded hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined">chevron_right</span></button>
+</div>
+</div>
+<div class="flex justify-between gap-sm overflow-x-auto no-scrollbar pb-sm">
+<!-- Day Cards -->
+<div class="flex-1 min-w-[60px] flex flex-col items-center justify-center py-md rounded-lg border border-transparent text-on-surface-variant cursor-pointer hover:bg-surface-container-low transition-colors">
+<span class="font-label-caps text-label-caps uppercase">Mon</span>
+<span class="font-headline-md text-headline-md mt-xs">12</span>
+</div>
+<div class="flex-1 min-w-[60px] flex flex-col items-center justify-center py-md rounded-lg border border-transparent text-on-surface-variant cursor-pointer hover:bg-surface-container-low transition-colors">
+<span class="font-label-caps text-label-caps uppercase">Tue</span>
+<span class="font-headline-md text-headline-md mt-xs">13</span>
+</div>
+<!-- Active Day -->
+<div class="flex-1 min-w-[60px] flex flex-col items-center justify-center py-md rounded-lg bg-primary text-on-primary shadow-sm cursor-pointer transform scale-105 transition-transform">
+<span class="font-label-caps text-label-caps uppercase">Wed</span>
+<span class="font-headline-md text-headline-md mt-xs font-bold">14</span>
+<div class="w-1 h-1 bg-white rounded-full mt-sm"></div>
+</div>
+<div class="flex-1 min-w-[60px] flex flex-col items-center justify-center py-md rounded-lg border border-transparent text-on-surface-variant cursor-pointer hover:bg-surface-container-low transition-colors">
+<span class="font-label-caps text-label-caps uppercase">Thu</span>
+<span class="font-headline-md text-headline-md mt-xs">15</span>
+</div>
+<div class="flex-1 min-w-[60px] flex flex-col items-center justify-center py-md rounded-lg border border-transparent text-on-surface-variant cursor-pointer hover:bg-surface-container-low transition-colors">
+<span class="font-label-caps text-label-caps uppercase">Fri</span>
+<span class="font-headline-md text-headline-md mt-xs">16</span>
+</div>
+<div class="flex-1 min-w-[60px] flex flex-col items-center justify-center py-md rounded-lg border border-transparent text-outline opacity-50 cursor-not-allowed">
+<span class="font-label-caps text-label-caps uppercase">Sat</span>
+<span class="font-headline-md text-headline-md mt-xs">17</span>
+</div>
+<div class="flex-1 min-w-[60px] flex flex-col items-center justify-center py-md rounded-lg border border-transparent text-outline opacity-50 cursor-not-allowed">
+<span class="font-label-caps text-label-caps uppercase">Sun</span>
+<span class="font-headline-md text-headline-md mt-xs">18</span>
+</div>
+</div>
+</section>
+<!-- Timeline List -->
+<section class="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-outline-variant/30 overflow-hidden flex flex-col flex-1 min-h-[400px]">
+<div class="p-md border-b border-outline-variant/30 flex justify-between items-center bg-surface-bright">
+<h2 class="font-body-lg text-body-lg font-semibold">Today's Schedule</h2>
+<span class="font-label-caps text-label-caps bg-surface-container text-on-surface px-sm py-xs rounded-full">4 Appointments</span>
+</div>
+<div class="p-md flex flex-col gap-md">
+<!-- Appointment Card: Confirmed -->
+<div class="relative pl-md pr-sm py-sm border border-outline-variant/50 rounded-lg hover:shadow-md transition-shadow bg-white flex justify-between items-center group">
+<!-- Status Bar Indicator -->
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex gap-md items-center w-full">
+<div class="min-w-[80px] text-right">
+<p class="font-data-mono text-data-mono text-on-surface">09:00</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">AM</p>
+</div>
+<div class="w-px h-10 bg-outline-variant/30 mx-xs"></div>
+<div class="flex-1">
+<h3 class="font-body-md text-body-md font-semibold text-on-surface">Eleanor Vance</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Initial Consultation</p>
+</div>
+<div class="hidden sm:block">
+<span class="inline-flex items-center px-2 py-1 rounded-full bg-secondary/10 text-secondary font-label-caps text-[10px]">
+                                            Confirmed
+                                        </span>
+</div>
+<button class="text-primary hover:bg-surface-container p-sm rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" title="Reschedule">
+<span class="material-symbols-outlined text-[20px]">edit_calendar</span>
+</button>
+</div>
+</div>
+<!-- Appointment Card: In Progress -->
+<div class="relative pl-md pr-sm py-sm border-2 border-primary/20 rounded-lg shadow-sm bg-surface-container-lowest flex justify-between items-center group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-lg"></div>
+<div class="flex gap-md items-center w-full">
+<div class="min-w-[80px] text-right">
+<p class="font-data-mono text-data-mono text-primary font-bold">11:30</p>
+<p class="font-body-sm text-body-sm text-primary/70">AM</p>
+</div>
+<div class="w-px h-10 bg-primary/20 mx-xs"></div>
+<div class="flex-1">
+<h3 class="font-body-md text-body-md font-bold text-on-surface">Marcus Thorne</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Strategy Review</p>
+</div>
+<div class="hidden sm:block">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary font-label-caps text-[10px]">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span> In Progress
+                                        </span>
+</div>
+<button class="text-primary hover:bg-primary-container p-sm rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]">edit_calendar</span>
+</button>
+</div>
+</div>
+<!-- Appointment Card: Pending -->
+<div class="relative pl-md pr-sm py-sm border border-outline-variant/30 rounded-lg bg-surface-bright flex justify-between items-center opacity-80 group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-tertiary-fixed-dim rounded-l-lg"></div>
+<div class="flex gap-md items-center w-full">
+<div class="min-w-[80px] text-right">
+<p class="font-data-mono text-data-mono text-on-surface-variant">02:15</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">PM</p>
+</div>
+<div class="w-px h-10 bg-outline-variant/30 mx-xs"></div>
+<div class="flex-1">
+<h3 class="font-body-md text-body-md text-on-surface-variant">Sarah Jenkins</h3>
+<p class="font-body-sm text-body-sm text-outline">Follow-up Call</p>
+</div>
+<div class="hidden sm:block">
+<span class="inline-flex items-center px-2 py-1 rounded-full bg-tertiary-fixed-dim/20 text-tertiary font-label-caps text-[10px]">
+                                            Pending
+                                        </span>
+</div>
+<button class="text-primary hover:bg-surface-container p-sm rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]">edit_calendar</span>
+</button>
+</div>
+</div>
+<!-- Add Booking Button Mobile -->
+<button class="lg:hidden mt-md w-full bg-primary text-on-primary py-sm rounded-lg font-label-caps text-label-caps flex items-center justify-center gap-sm shadow-md active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                                Add Booking
+                            </button>
+</div>
+</section>
+</div>
+<!-- Right Column (Analytics & Actions) - spans 4 cols on lg -->
+<div class="lg:col-span-4 flex flex-col gap-lg">
+<!-- Analytics Bento Card -->
+<section class="bg-inverse-surface text-inverse-on-surface rounded-xl shadow-lg p-lg relative overflow-hidden">
+<!-- Abstract BG Element -->
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-primary-container opacity-20 rounded-full blur-2xl"></div>
+<h2 class="font-body-lg text-body-lg font-semibold mb-md relative z-10 text-on-primary-container">Weekly Overview</h2>
+<div class="grid grid-cols-2 gap-md relative z-10">
+<div>
+<p class="font-label-caps text-label-caps text-surface-dim opacity-80 mb-xs">Total Bookings</p>
+<p class="font-display-lg text-display-lg text-white">42</p>
+<p class="font-body-sm text-body-sm text-secondary-fixed-dim flex items-center gap-1 mt-xs">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> +12%
+                                </p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-surface-dim opacity-80 mb-xs">Cancellations</p>
+<p class="font-display-lg text-display-lg text-white">3</p>
+<p class="font-body-sm text-body-sm text-error-container flex items-center gap-1 mt-xs">
+<span class="material-symbols-outlined text-[14px]">trending_down</span> -2%
+                                </p>
+</div>
+</div>
+<!-- Mini Bar Chart placeholder (visual representation) -->
+<div class="mt-lg pt-md border-t border-outline-variant/20 flex items-end justify-between h-16 gap-sm relative z-10">
+<div class="w-full bg-surface-dim/20 rounded-t-sm h-[40%]"></div>
+<div class="w-full bg-surface-dim/20 rounded-t-sm h-[60%]"></div>
+<div class="w-full bg-primary-fixed-dim rounded-t-sm h-[100%] shadow-[0_0_10px_rgba(186,195,255,0.3)]"></div>
+<div class="w-full bg-surface-dim/20 rounded-t-sm h-[80%]"></div>
+<div class="w-full bg-surface-dim/20 rounded-t-sm h-[30%]"></div>
+</div>
+</section>
+<!-- Quick Actions / Upcoming Info (Optional context) -->
+<section class="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-outline-variant/30 p-md flex flex-col gap-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-xs">Quick Actions</h3>
+<button class="w-full text-left px-md py-sm border border-primary/30 rounded-lg text-primary hover:bg-primary-container/20 transition-colors font-body-md text-body-md flex items-center gap-sm">
+<span class="material-symbols-outlined text-[18px]">sync</span>
+                             Sync External Calendar
+                         </button>
+<button class="w-full text-left px-md py-sm border border-outline-variant rounded-lg text-on-surface hover:bg-surface-container transition-colors font-body-md text-body-md flex items-center gap-sm">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+                             Availability Settings
+                         </button>
+</section>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex justify-around items-center gap-md px-md py-xs lg:hidden bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg rounded-full w-max max-w-[90%]">
+<a class="flex flex-col items-center justify-center flex-1 py-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined text-[24px]" data-icon="dashboard">dashboard</span>
+<span class="text-[10px] font-medium mt-1">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center flex-1 py-2 text-primary transition-colors active:scale-95 relative" href="#">
+<div class="absolute left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-full bottom-0"></div>
+<span class="material-symbols-outlined fill text-[24px]" data-icon="calendar_month">calendar_month</span>
+<span class="text-[10px] font-bold mt-1">Bookings</span>
+</a>
+<a class="flex flex-col items-center justify-center flex-1 py-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined text-[24px]" data-icon="inventory_2">inventory_2</span>
+<span class="text-[10px] font-medium mt-1">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center flex-1 py-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined text-[24px]" data-icon="groups">groups</span>
+<span class="text-[10px] font-medium mt-1">Team</span>
+</a>
+</nav>
+
+
+</body></html>

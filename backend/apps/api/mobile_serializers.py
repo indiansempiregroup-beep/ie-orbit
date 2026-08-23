@@ -174,6 +174,11 @@ class MobileCustomerProfileSerializer(serializers.Serializer):
 
 class MobileCustomerProfileUpdateSerializer(serializers.Serializer):
     full_address = serializers.CharField(required=False, allow_blank=True)
+    line1 = serializers.CharField(required=False, allow_blank=True)
+    city = serializers.CharField(required=False, allow_blank=True)
+    state = serializers.CharField(required=False, allow_blank=True)
+    country = serializers.CharField(required=False, allow_blank=True)
+    postal_code = serializers.CharField(required=False, allow_blank=True)
     # Accept GPS floats (often >6 dp) then quantize for CustomerAddress DecimalFields.
     latitude = serializers.FloatField(required=False, allow_null=True)
     longitude = serializers.FloatField(required=False, allow_null=True)

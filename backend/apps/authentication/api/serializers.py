@@ -85,6 +85,8 @@ class RegisterBusinessSerializer(serializers.Serializer):
     city = serializers.CharField(required=False, allow_blank=True)
     postal_code = serializers.CharField(required=False, allow_blank=True)
     address_line1 = serializers.CharField(required=False, allow_blank=True)
+    latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
     timezone = serializers.CharField(required=False, allow_blank=True, default="UTC")
     currency = serializers.CharField(required=False, allow_blank=True, default="USD")
     language = serializers.CharField(required=False, allow_blank=True, default="en")

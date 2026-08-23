@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { loadGoogleMaps, type GoogleMapsWindow } from '../lib/googleMaps';
 
 export type PlaceSelection = {
   formattedAddress: string;
@@ -20,59 +21,11 @@ type Props = {
 
 const PLACES_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY ?? '';
 
-type GoogleMapsWindow = Window & {
-  google?: {
-    maps?: {
-      places?: {
-        Autocomplete: new (
-          input: HTMLInputElement,
-          opts?: { fields?: string[]; types?: string[] },
-        ) => {
-          addListener: (eventName: string, handler: () => void) => void;
-          getPlace: () => {
-            formatted_address?: string;
-            address_components?: Array<{ long_name: string; short_name: string; types: string[] }>;
-            geometry?: { location?: { lat: () => number; lng: () => number } };
-          };
-        };
-      };
-    };
-  };
-  __ieGoogleMapsPromise?: Promise<void>;
-};
-
 function componentByType(
   components: Array<{ long_name: string; short_name: string; types: string[] }> | undefined,
   type: string,
 ) {
   return components?.find((item) => item.types.includes(type))?.long_name ?? '';
-}
-
-function loadGoogleMaps(apiKey: string): Promise<void> {
-  const win = window as GoogleMapsWindow;
-  if (win.google?.maps?.places) {
-    return Promise.resolve();
-  }
-  if (win.__ieGoogleMapsPromise) {
-    return win.__ieGoogleMapsPromise;
-  }
-  win.__ieGoogleMapsPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-ie-google-maps="1"]');
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Failed to load Google Maps.')));
-      return;
-    }
-    const script = document.createElement('script');
-    script.dataset.ieGoogleMaps = '1';
-    script.async = true;
-    script.src =
-      `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Maps.'));
-    document.head.appendChild(script);
-  });
-  return win.__ieGoogleMapsPromise;
 }
 
 export function AddressPlacesField({

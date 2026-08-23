@@ -1,180 +1,224 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { AddressPlacesField } from '../../components/AddressPlacesField';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { Branch } from '@ie-platform/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
-import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
-import { Input } from '../../components/ui/Input';
-import { RefreshableScrollView } from '../../components/RefreshableScrollView';
-import { ScreenState } from '../../components/ScreenState';
-import { useBranches, useBranchMutations } from '../../hooks/useOpsExtended';
-import { colors, spacing, typography } from '../../theme/tokens';
-import { getApiErrorMessage } from '../../utils/format';
+import { SelectField } from '../../components/SelectField';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useBranches } from '../../hooks/useOpsExtended';
+import { colors, fonts, radius, spacing } from '../../theme/tokens';
+import type { RootStackParamList } from '../../navigation/types';
+import { shopListRefreshControl } from '../shop/shopRefreshControl';
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: '', label: 'All statuses' },
+];
+
+function isActive(branch: Branch) {
+  return (branch.status ?? 'active') === 'active';
+}
 
 export function BranchesScreen() {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { branches, loading, reload } = useBranches();
-  const { create, setPrimary } = useBranchMutations();
-  const [showForm, setShowForm] = useState(false);
-  const [branchName, setBranchName] = useState('');
-  const [address, setAddress] = useState('');
-  const [addressLine1, setAddressLine1] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [country, setCountry] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('active');
 
-  const resetForm = () => {
-    setBranchName('');
-    setAddress('');
-    setAddressLine1('');
-    setCity('');
-    setState('');
-    setCountry('');
-    setPostalCode('');
-    setLatitude(null);
-    setLongitude(null);
-  };
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={() => navigation.navigate('BranchForm')}
+          accessibilityRole="button"
+          accessibilityLabel="Add office"
+          hitSlop={8}
+          style={styles.headerBtn}
+        >
+          <Feather name="plus" size={20} color={colors.primary} />
+        </Pressable>
+      ),
+    });
+  }, [navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
+
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return branches.filter((branch) => {
+      if (status === 'active' && !isActive(branch)) return false;
+      if (status === 'inactive' && isActive(branch)) return false;
+      if (!term) return true;
+      return [
+        branch.display_name,
+        branch.branch_name,
+        branch.address_line1,
+        branch.city,
+        branch.state,
+        branch.postal_code,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [branches, search, status]);
 
   return (
     <DesktopPage>
-    <RefreshableScrollView contentContainerStyle={styles.wrap} onRefresh={reload}>
-      <Text style={styles.title}>Offices</Text>
-      <Text style={styles.subtitle}>
-        At least one office is required. Each office needs a full address and Google Map pin.
-      </Text>
+      <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search offices"
+          style={styles.input}
+          placeholderTextColor={colors.mutedForeground}
+        />
+        <View style={styles.filters}>
+          <SelectField label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
+        </View>
 
-      <Button
-        label={showForm ? 'Cancel' : 'Add office'}
-        variant={showForm ? 'outline' : 'primary'}
-        onPress={() => setShowForm((v) => !v)}
-      />
-
-      {showForm ? (
-        <Card>
-          <Input label="Office name" value={branchName} onChangeText={setBranchName} placeholder="Downtown clinic" />
-          <AddressPlacesField
-            label="Office address"
-            value={address}
-            onChangeText={setAddress}
-            onPlaceSelected={(place) => {
-              setAddress(place.formattedAddress);
-              setAddressLine1(place.line1 || place.formattedAddress);
-              setCity(place.city || '');
-              setState(place.state || '');
-              setCountry(place.country || '');
-              setPostalCode(place.postalCode || '');
-              setLatitude(place.latitude ?? null);
-              setLongitude(place.longitude ?? null);
-            }}
-          />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Button
-            label="Create office"
-            loading={submitting}
-            fullWidth
-            onPress={async () => {
-              if (!branchName.trim()) {
-                setError('Office name is required.');
-                return;
-              }
-              if (!addressLine1.trim() || !city.trim() || !country.trim()) {
-                setError('Select a full office address from Google Places.');
-                return;
-              }
-              if (latitude == null || longitude == null) {
-                setError('Google Map location is required.');
-                return;
-              }
-              setSubmitting(true);
-              setError(null);
-              try {
-                await create({
-                  branch_name: branchName.trim(),
-                  display_name: branchName.trim(),
-                  address_line1: addressLine1.trim(),
-                  city: city.trim(),
-                  state: state.trim() || undefined,
-                  country: country.trim(),
-                  postal_code: postalCode.trim() || undefined,
-                  latitude,
-                  longitude,
-                  is_primary: branches.length === 0,
-                });
-                resetForm();
-                setShowForm(false);
-                setMessage('Office created.');
-                await reload();
-              } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to create office.'));
-              } finally {
-                setSubmitting(false);
-              }
-            }}
-          />
-        </Card>
-      ) : null}
-
-      {message ? <Text style={styles.success}>{message}</Text> : null}
-
-      <ScreenState
-        loading={loading && !branches.length}
-        empty={!loading && branches.length === 0}
-        emptyMessage="No offices yet. Add your first office to start taking bookings."
-      />
-      {branches.map((branch) => (
-        <Card key={branch.id}>
-          <View style={styles.branchRow}>
-            <View style={styles.branchInfo}>
-              <Text style={styles.branchName}>{branch.display_name ?? branch.branch_name}</Text>
-              <Text style={styles.branchMeta}>
-                {[branch.address_line1, branch.city, branch.state, branch.country].filter(Boolean).join(', ') ||
-                  'No location set'}
-              </Text>
-              {branch.latitude != null && branch.longitude != null ? (
-                <Text style={styles.branchMeta}>
-                  Map pin: {Number(branch.latitude).toFixed(4)}, {Number(branch.longitude).toFixed(4)}
-                </Text>
-              ) : null}
-              {branch.is_primary ? <Text style={styles.primaryBadge}>Primary</Text> : null}
-            </View>
-            {!branch.is_primary ? (
+        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          refreshControl={shopListRefreshControl(refreshing, onRefresh)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          renderItem={({ item }) => {
+            const active = isActive(item);
+            const hasPin = item.latitude != null && item.longitude != null;
+            return (
               <Pressable
-                onPress={async () => {
-                  try {
-                    await setPrimary(branch.id);
-                    setMessage('Primary office updated.');
-                    await reload();
-                  } catch (err) {
-                    setError(getApiErrorMessage(err, 'Unable to update office.'));
-                  }
-                }}
+                style={styles.row}
+                onPress={() => navigation.navigate('BranchForm', { branchId: item.id })}
               >
-                <Text style={styles.link}>Set primary</Text>
+                <View style={styles.rowInner}>
+                  <View style={[styles.icon, !active && styles.iconMuted]}>
+                    <Feather
+                      name="map-pin"
+                      size={18}
+                      color={active ? colors.primary : colors.mutedForeground}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.name}>{item.display_name ?? item.branch_name}</Text>
+                      {item.is_primary ? (
+                        <Text style={styles.primaryBadge}>Primary</Text>
+                      ) : null}
+                      {!active ? <Text style={styles.inactiveBadge}>Inactive</Text> : null}
+                    </View>
+                    <Text style={styles.meta}>
+                      {[item.address_line1, item.city, item.state, item.country]
+                        .filter(Boolean)
+                        .join(', ') || 'No address set'}
+                    </Text>
+                    <Text style={hasPin ? styles.meta : styles.metaWarning}>
+                      {hasPin
+                        ? `Map pin ${Number(item.latitude).toFixed(4)}, ${Number(item.longitude).toFixed(4)}`
+                        : 'No map pin — delivery pickup will fail'}
+                      {item.phone_number ? ` · ${item.phone_number}` : ''}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+                </View>
               </Pressable>
-            ) : null}
-          </View>
-        </Card>
-      ))}
-    </RefreshableScrollView>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon="map-pin"
+                title={branches.length ? 'No offices match' : 'No offices yet'}
+                message={
+                  branches.length
+                    ? 'Try a different search or status filter.'
+                    : 'Add your first office with a full address and map pin to start taking bookings and orders.'
+                }
+                actionLabel={branches.length ? undefined : 'Add office'}
+                onAction={branches.length ? undefined : () => navigation.navigate('BranchForm')}
+              />
+            ) : null
+          }
+        />
+      </View>
     </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
-  title: { ...typography.title, color: colors.foreground },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
-  branchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md },
-  branchInfo: { flex: 1, gap: 4 },
-  branchName: { ...typography.body, color: colors.foreground, fontWeight: '600' },
-  branchMeta: { ...typography.caption, color: colors.mutedForeground },
-  primaryBadge: { ...typography.caption, color: colors.primary, fontWeight: '700', marginTop: 4 },
-  link: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  success: { ...typography.caption, color: colors.success },
-  error: { ...typography.caption, color: colors.destructive },
+  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.tint,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: spacing.sm,
+    color: colors.foreground,
+    backgroundColor: colors.card,
+  },
+  filters: { marginBottom: spacing.sm },
+  row: {
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  rowInner: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  icon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconMuted: { backgroundColor: colors.muted },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
+  primaryBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    backgroundColor: colors.tint,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  inactiveBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.mutedForeground,
+    backgroundColor: colors.muted,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  meta: { marginTop: 4, color: colors.mutedForeground, fontSize: 13 },
+  metaWarning: { marginTop: 4, color: colors.warning, fontSize: 13 },
 });

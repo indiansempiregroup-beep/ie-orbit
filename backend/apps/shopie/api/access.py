@@ -14,7 +14,7 @@ from apps.businesses.constants import (
     SHOPIE_BOOKS_FEATURES,
     VOUCHER_TYPE_FEATURES,
 )
-from apps.businesses.models import Business
+from apps.businesses.models import Branch, BranchStatus, Business
 from apps.businesses.services.entitlements import EntitlementService
 
 CATALOG_FEATURES = (FEATURE_SHOPIE_PRODUCTS, FEATURE_SHOPIE_POS, FEATURE_SHOPIE_ORDERS)
@@ -45,6 +45,29 @@ def require_business(
             feature=feature,
             product_code=PRODUCT_SHOPIE,
         )
+    return business
+
+
+def require_business_with_offices(
+    request: Request,
+    business_id,
+    *,
+    feature: str,
+) -> Business:
+    """Resolve a business for stock-location endpoints.
+
+    Shops running more than one office need to move stock between them even
+    without the premium godowns feature, because order routing picks the source
+    office from those per-office quantities.
+    """
+    business = get_object_or_404(Business, tenant=request.current_tenant, id=business_id)
+    if Branch.objects.filter(business=business, status=BranchStatus.ACTIVE).count() > 1:
+        return business
+    _entitlements.ensure_feature(
+        business=business,
+        feature=feature,
+        product_code=PRODUCT_SHOPIE,
+    )
     return business
 
 

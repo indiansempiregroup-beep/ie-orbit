@@ -20,9 +20,9 @@ from apps.common.upi import build_upi_pay_url
 from apps.platform_media.models import MediaFolderType, MediaVisibility
 from apps.platform_media.services import MediaService
 from apps.shopie.api.serializers import (
+    MobileShopOrderSerializer,
     MobileShopPetWriteSerializer,
     ShopDashboardAdSerializer,
-    ShopOrderSerializer,
     ShopPetSerializer,
     ShopProductReviewSerializer,
     ShopProductSerializer,
@@ -260,7 +260,7 @@ class MobileShopOrderListCreateView(APIView):
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
         customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
         qs = self.orders.list_orders(tenant=tenant, business=business, customer_id=customer.id)
-        return success_response(ShopOrderSerializer(qs[:50], many=True).data)
+        return success_response(MobileShopOrderSerializer(qs[:50], many=True).data)
 
     @extend_schema(tags=["Mobile Shop"])
     def post(self, request: Request) -> Response:
@@ -309,7 +309,13 @@ class MobileShopOrderListCreateView(APIView):
                 notes=notes,
                 delivery_address=str(request.data.get("delivery_address") or ""),
                 delivery_city=str(request.data.get("delivery_city") or ""),
+                delivery_state=str(request.data.get("delivery_state") or ""),
                 delivery_postal_code=str(request.data.get("delivery_postal_code") or ""),
+                delivery_latitude=request.data.get("delivery_latitude"),
+                delivery_longitude=request.data.get("delivery_longitude"),
+                delivery_method=str(request.data.get("delivery_method") or ""),
+                delivery_quote_id=str(request.data.get("delivery_quote_id") or ""),
+                displayed_delivery_fee=request.data.get("displayed_delivery_fee"),
                 payment_method=str(request.data.get("payment_method") or "cash"),
                 coupon_code=str(request.data.get("coupon_code") or ""),
                 points_to_redeem=points_to_redeem,
@@ -320,7 +326,9 @@ class MobileShopOrderListCreateView(APIView):
             if isinstance(exc, DjangoValidationError) and hasattr(exc, "message_dict"):
                 raise ValidationError(exc.message_dict) from exc
             raise ValidationError({"detail": str(exc)}) from exc
-        return success_response(ShopOrderSerializer(order).data, status_code=status.HTTP_201_CREATED)
+        return success_response(
+            MobileShopOrderSerializer(order).data, status_code=status.HTTP_201_CREATED
+        )
 
 
 class MobileShopCouponValidateView(APIView):
@@ -415,7 +423,7 @@ class MobileShopOrderDetailView(APIView):
             _, _, _, order = self._owned_order(request, order_id)
         except (ValueError, LookupError, ShopProduct.DoesNotExist, Exception) as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
-        return success_response(ShopOrderSerializer(order).data)
+        return success_response(MobileShopOrderSerializer(order).data)
 
 
 class MobileShopOrderCancelView(APIView):
@@ -433,7 +441,7 @@ class MobileShopOrderCancelView(APIView):
             order = self.orders.cancel_customer_order(tenant=tenant, business=business, order=order)
         except DjangoValidationError as exc:
             raise _django_validation(exc) from exc
-        return success_response(ShopOrderSerializer(order).data)
+        return success_response(MobileShopOrderSerializer(order).data)
 
 
 class MobileShopOrderClaimPaymentView(APIView):
@@ -459,7 +467,7 @@ class MobileShopOrderClaimPaymentView(APIView):
             if hasattr(exc, "message_dict"):
                 raise ValidationError(exc.message_dict) from exc
             raise ValidationError({"detail": str(exc)}) from exc
-        return success_response(ShopOrderSerializer(order).data)
+        return success_response(MobileShopOrderSerializer(order).data)
 
 
 class MobileShopOrderPaymentProofView(APIView):

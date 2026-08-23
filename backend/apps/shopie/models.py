@@ -4,7 +4,8 @@ from decimal import Decimal
 
 from django.db import models
 
-from apps.core.models import TenantModel
+from apps.businesses.validators import validate_latitude, validate_longitude
+from apps.core.models import BaseModel, TenantModel
 from apps.tenancy.managers import TenantAwareManager
 
 
@@ -41,6 +42,7 @@ class OrderStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     CONFIRMED = "confirmed", "Confirmed"
     READY = "ready", "Ready"
+    OUT_FOR_DELIVERY = "out_for_delivery", "Out for Delivery"
     COMPLETED = "completed", "Completed"
     CANCELLED = "cancelled", "Cancelled"
 
@@ -580,6 +582,19 @@ def _default_gst_compliance() -> dict:
     }
 
 
+def _default_delivery_integration() -> dict:
+    return {
+        "provider": "mock",
+        "credentials": {},
+        "base_url": "",
+        "webhook_secret": "",
+        "charge_bearer": "customer",
+        "free_delivery_min_order": "0",
+        "merchant_absorb_cap": "0",
+        "default_parcel_weight_kg": "1",
+    }
+
+
 class ShopBusinessSettings(TenantModel):
     """Per-business ShopIE settings (packs, default fulfillment, etc.)."""
 
@@ -598,6 +613,11 @@ class ShopBusinessSettings(TenantModel):
         default=FulfillmentMode.PICKUP,
     )
     same_day_delivery_enabled = models.BooleanField(default=False)
+    instant_delivery_enabled = models.BooleanField(default=False)
+    delivery_integration = models.JSONField(
+        default=_default_delivery_integration,
+        blank=True,
+    )
     # Indian GST e-invoice (IRN) + e-way bill compliance toggles and GSP/portal config.
     einvoice_enabled = models.BooleanField(default=False)
     eway_enabled = models.BooleanField(default=False)
@@ -610,6 +630,65 @@ class ShopBusinessSettings(TenantModel):
     def pets_enabled(self) -> bool:
         packs = self.enabled_packs or []
         return VerticalPack.PETS in packs or "pets" in packs
+
+
+class DeliveryWebhookStatus(models.TextChoices):
+    RECEIVED = "received", "Received"
+    PROCESSED = "processed", "Processed"
+    FAILED = "failed", "Failed"
+    IGNORED = "ignored", "Ignored"
+    DEAD_LETTER = "dead_letter", "Dead Letter"
+
+
+class ShopDeliveryWebhookEvent(BaseModel):
+    tenant = models.ForeignKey(
+        "tenancy.Tenant",
+        on_delete=models.SET_NULL,
+        related_name="shop_delivery_webhook_events",
+        null=True,
+        blank=True,
+    )
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.SET_NULL,
+        related_name="shop_delivery_webhook_events",
+        null=True,
+        blank=True,
+    )
+    order = models.ForeignKey(
+        ShopOrder,
+        on_delete=models.SET_NULL,
+        related_name="delivery_webhook_events",
+        null=True,
+        blank=True,
+    )
+    provider = models.CharField(max_length=32, db_index=True)
+    external_event_id = models.CharField(max_length=160)
+    event_type = models.CharField(max_length=120, blank=True, db_index=True)
+    payload = models.JSONField(default=dict)
+    status = models.CharField(
+        max_length=32,
+        choices=DeliveryWebhookStatus.choices,
+        default=DeliveryWebhookStatus.RECEIVED,
+        db_index=True,
+    )
+    processed_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+    retry_count = models.PositiveSmallIntegerField(default=0)
+    next_retry_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        db_table = "shop_delivery_webhook_events"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "external_event_id"],
+                name="uq_shop_delivery_webhook_provider_event",
+            )
+        ]
+        indexes = [
+            *BaseModel.Meta.indexes,
+            models.Index(fields=["provider", "event_type", "status"]),
+        ]
 
 
 class ShopDeliveryZone(TenantModel):
@@ -1170,8 +1249,36 @@ class ShopGodown(TenantModel):
         on_delete=models.CASCADE,
         related_name="shop_godowns",
     )
+    branch = models.ForeignKey(
+        "businesses.Branch",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_godowns",
+    )
     name = models.CharField(max_length=120)
     code = models.CharField(max_length=32, blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=120, blank=True)
+    state = models.CharField(max_length=120, blank=True)
+    country = models.CharField(max_length=120, blank=True)
+    postal_code = models.CharField(max_length=32, blank=True)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[validate_latitude],
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[validate_longitude],
+    )
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     metadata = models.JSONField(default=dict, blank=True)
@@ -1179,6 +1286,13 @@ class ShopGodown(TenantModel):
     class Meta(TenantModel.Meta):
         db_table = "shop_godowns"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "branch"],
+                condition=models.Q(branch__isnull=False),
+                name="uniq_shop_godown_per_branch",
+            )
+        ]
 
 
 class ShopGodownStock(TenantModel):

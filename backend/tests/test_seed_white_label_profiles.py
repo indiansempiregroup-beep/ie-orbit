@@ -1,3 +1,6 @@
+import pytest
+
+
 @pytest.mark.django_db
 def test_seed_white_label_profiles_command_creates_pilot_flavors() -> None:
     from django.core.management import call_command

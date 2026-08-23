@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { CommonActions, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AddressPlacesField } from '../../components/AddressPlacesField';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';
@@ -193,8 +193,10 @@ export function CustomerFormScreen() {
       </FormSection>
 
       <FormSection title="Address" subtitle="Optional — helps with location-aware booking.">
-        <AddressPlacesField
+        <AddressLocationPicker
           value={address.line1}
+          latitude={address.latitude ?? null}
+          longitude={address.longitude ?? null}
           onChangeText={(line1) => setAddress((current) => ({ ...current, line1 }))}
           onPlaceSelected={(place) =>
             setAddress({

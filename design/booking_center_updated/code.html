@@ -1,0 +1,376 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Booking Center - NexusHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-on-surface": "#ecf1ff",
+                      "surface-dim": "#cfdaf2",
+                      "inverse-surface": "#263143",
+                      "outline-variant": "#c5c5d4",
+                      "surface-bright": "#f9f9ff",
+                      "on-primary-container": "#cacfff",
+                      "secondary-container": "#6cf8bb",
+                      "surface-tint": "#4355b9",
+                      "on-tertiary": "#ffffff",
+                      "on-primary-fixed": "#00105c",
+                      "on-tertiary-fixed": "#2a1700",
+                      "secondary-fixed-dim": "#4edea3",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#bac3ff",
+                      "error-container": "#ffdad6",
+                      "secondary-fixed": "#6ffbbe",
+                      "on-error": "#ffffff",
+                      "surface": "#f9f9ff",
+                      "primary": "#24389c",
+                      "on-secondary-fixed-variant": "#005236",
+                      "on-surface-variant": "#454652",
+                      "error": "#ba1a1a",
+                      "tertiary-container": "#805000",
+                      "on-primary": "#ffffff",
+                      "on-secondary-fixed": "#002113",
+                      "on-primary-fixed-variant": "#293ca0",
+                      "on-secondary-container": "#00714d",
+                      "secondary": "#006c49",
+                      "tertiary-fixed": "#ffddb8",
+                      "surface-container": "#e7eeff",
+                      "surface-container-lowest": "#ffffff",
+                      "on-surface": "#111c2d",
+                      "tertiary": "#603b00",
+                      "primary-fixed": "#dee0ff",
+                      "on-tertiary-container": "#ffc988",
+                      "inverse-primary": "#bac3ff",
+                      "outline": "#757684",
+                      "surface-container-high": "#dee8ff",
+                      "tertiary-fixed-dim": "#ffb95f",
+                      "on-background": "#111c2d",
+                      "primary-container": "#3f51b5",
+                      "surface-container-low": "#f0f3ff",
+                      "background": "#f9f9ff",
+                      "on-tertiary-fixed-variant": "#653e00",
+                      "on-error-container": "#93000a",
+                      "surface-container-highest": "#d8e3fb",
+                      "surface-variant": "#d8e3fb"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "container-max": "1280px",
+                      "md": "16px",
+                      "xl": "40px",
+                      "lg": "24px",
+                      "sm": "8px",
+                      "xs": "4px",
+                      "base": "4px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "data-mono": [
+                              "JetBrains Mono"
+                      ],
+                      "headline-lg-mobile": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "label-caps": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "display-lg": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "data-mono": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-caps": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md">
+<!-- TopAppBar (Web) -->
+<header class="hidden md:flex justify-between items-center w-full px-lg py-md max-w-container-max mx-auto bg-surface dark:bg-inverse-surface shadow-sm docked full-width top-0 z-50">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary text-headline-md">file_map_stack</span>
+<h1 class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed-dim">NexusHub</h1>
+</div>
+<nav class="flex gap-lg">
+<a class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors px-md py-sm rounded-lg text-label-caps font-label-caps" href="#">Home</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors px-md py-sm rounded-lg text-label-caps font-label-caps" href="#">Shop</a>
+<a class="text-primary dark:text-inverse-primary font-bold px-md py-sm rounded-lg text-label-caps font-label-caps border-b-2 border-primary" href="#">Book</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors px-md py-sm rounded-lg text-label-caps font-label-caps" href="#">Rewards</a>
+</nav>
+<button class="active:scale-95 duration-150 p-sm rounded-full hover:bg-surface-container-high text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<!-- TopAppBar (Mobile) -->
+<header class="md:hidden flex justify-between items-center w-full px-md py-md bg-surface shadow-sm fixed top-0 z-50">
+<h1 class="text-headline-md font-headline-md font-bold text-primary">Book Appointment</h1>
+<button class="p-sm rounded-full bg-surface-container text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="flex-grow pt-24 pb-32 md:py-lg px-md md:px-lg max-w-container-max mx-auto w-full grid grid-cols-4 md:grid-cols-12 gap-gutter">
+<!-- Booking Flow Container -->
+<div class="col-span-4 md:col-span-8 flex flex-col gap-lg">
+<!-- Service Selection -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-md shadow-sm">
+<h2 class="text-body-lg font-body-lg font-semibold text-on-surface mb-md">Select Service</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-md">
+<!-- Service Card 1 -->
+<label class="cursor-pointer relative">
+<input checked="" class="peer sr-only" name="service" type="radio">
+<div class="p-md rounded-lg border border-outline-variant bg-surface hover:bg-surface-container-low peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary transition-all">
+<div class="flex justify-between items-start mb-sm">
+<span class="material-symbols-outlined text-primary">build</span>
+<span class="text-label-caps font-label-caps bg-secondary-container text-on-secondary-container px-2 py-1 rounded-full">45 MIN</span>
+</div>
+<h3 class="text-body-md font-body-md font-semibold text-on-surface">Standard Maintenance</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">Comprehensive system check and optimization.</p>
+<p class="text-data-mono font-data-mono text-primary mt-sm">$120.00</p>
+</div>
+</label>
+<!-- Service Card 2 -->
+<label class="cursor-pointer relative">
+<input class="peer sr-only" name="service" type="radio">
+<div class="p-md rounded-lg border border-outline-variant bg-surface hover:bg-surface-container-low peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary transition-all">
+<div class="flex justify-between items-start mb-sm">
+<span class="material-symbols-outlined text-primary">files</span>
+<span class="text-label-caps font-label-caps bg-surface-container-high text-on-surface-variant px-2 py-1 rounded-full">30 MIN</span>
+</div>
+<h3 class="text-body-md font-body-md font-semibold text-on-surface">Expert Consultation</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">One-on-one session to discuss specialized needs.</p>
+<p class="text-data-mono font-data-mono text-primary mt-sm">$80.00</p>
+</div>
+</label>
+</div>
+</section>
+<!-- Date Selection -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-md shadow-sm">
+<div class="flex justify-between items-center mb-md">
+<h2 class="text-body-lg font-body-lg font-semibold text-on-surface">Select Date</h2>
+<span class="text-body-sm font-body-sm text-on-surface-variant">October 2023</span>
+</div>
+<div class="flex gap-sm overflow-x-auto pb-sm snap-x snap-mandatory hide-scrollbar">
+<!-- Date 1 -->
+<label class="cursor-pointer snap-start flex-shrink-0">
+<input class="peer sr-only" name="date" type="radio">
+<div class="flex flex-col items-center justify-center w-[72px] h-[88px] rounded-lg border border-outline-variant bg-surface peer-checked:bg-primary peer-checked:text-on-primary peer-checked:border-primary transition-colors">
+<span class="text-label-caps font-label-caps uppercase opacity-80">Mon</span>
+<span class="text-headline-md font-headline-md font-bold">16</span>
+</div>
+</label>
+<!-- Date 2 (Selected) -->
+<label class="cursor-pointer snap-start flex-shrink-0">
+<input checked="" class="peer sr-only" name="date" type="radio">
+<div class="flex flex-col items-center justify-center w-[72px] h-[88px] rounded-lg border border-outline-variant bg-surface peer-checked:bg-primary peer-checked:text-on-primary peer-checked:border-primary transition-colors">
+<span class="text-label-caps font-label-caps uppercase opacity-80">Tue</span>
+<span class="text-headline-md font-headline-md font-bold">17</span>
+</div>
+</label>
+<!-- Date 3 -->
+<label class="cursor-pointer snap-start flex-shrink-0">
+<input class="peer sr-only" name="date" type="radio">
+<div class="flex flex-col items-center justify-center w-[72px] h-[88px] rounded-lg border border-outline-variant bg-surface peer-checked:bg-primary peer-checked:text-on-primary peer-checked:border-primary transition-colors">
+<span class="text-label-caps font-label-caps uppercase opacity-80">Wed</span>
+<span class="text-headline-md font-headline-md font-bold">18</span>
+</div>
+</label>
+<!-- Date 4 -->
+<label class="cursor-pointer snap-start flex-shrink-0">
+<input class="peer sr-only" name="date" type="radio">
+<div class="flex flex-col items-center justify-center w-[72px] h-[88px] rounded-lg border border-outline-variant bg-surface peer-checked:bg-primary peer-checked:text-on-primary peer-checked:border-primary transition-colors">
+<span class="text-label-caps font-label-caps uppercase opacity-80">Thu</span>
+<span class="text-headline-md font-headline-md font-bold">19</span>
+</div>
+</label>
+<!-- Date 5 -->
+<label class="cursor-pointer snap-start flex-shrink-0 opacity-50">
+<input class="peer sr-only" disabled="" name="date" type="radio">
+<div class="flex flex-col items-center justify-center w-[72px] h-[88px] rounded-lg border border-outline-variant bg-surface-container-high transition-colors">
+<span class="text-label-caps font-label-caps uppercase opacity-80">Fri</span>
+<span class="text-headline-md font-headline-md font-bold">20</span>
+</div>
+</label>
+</div>
+</section>
+<!-- Time Selection -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-md shadow-sm">
+<h2 class="text-body-lg font-body-lg font-semibold text-on-surface mb-md">Available Times</h2>
+<div class="mb-md">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant mb-sm">MORNING</h3>
+<div class="grid grid-cols-3 sm:grid-cols-4 gap-sm">
+<button class="py-sm px-xs border border-outline-variant rounded bg-surface hover:bg-surface-container text-body-sm font-body-sm">09:00 AM</button>
+<button class="py-sm px-xs border border-outline-variant rounded bg-surface hover:bg-surface-container text-body-sm font-body-sm">09:30 AM</button>
+<button class="py-sm px-xs border border-primary rounded bg-primary-container text-on-primary-container font-semibold text-body-sm font-body-sm">10:00 AM</button>
+<button class="py-sm px-xs border border-outline-variant rounded bg-surface opacity-50 cursor-not-allowed text-body-sm font-body-sm">11:00 AM</button>
+</div>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-on-surface-variant mb-sm">AFTERNOON</h3>
+<div class="grid grid-cols-3 sm:grid-cols-4 gap-sm">
+<button class="py-sm px-xs border border-outline-variant rounded bg-surface hover:bg-surface-container text-body-sm font-body-sm">01:00 PM</button>
+<button class="py-sm px-xs border border-outline-variant rounded bg-surface hover:bg-surface-container text-body-sm font-body-sm">02:30 PM</button>
+<button class="py-sm px-xs border border-outline-variant rounded bg-surface hover:bg-surface-container text-body-sm font-body-sm">03:00 PM</button>
+<button class="py-sm px-xs border border-outline-variant rounded bg-surface hover:bg-surface-container text-body-sm font-body-sm">04:30 PM</button>
+</div>
+</div>
+</section>
+</div>
+<!-- Summary Panel -->
+<div class="col-span-4 md:col-span-4">
+<div class="bg-surface-container-low rounded-xl p-md border border-outline-variant sticky top-32">
+<h2 class="text-body-lg font-body-lg font-semibold text-on-surface mb-md">Booking Summary</h2>
+<div class="flex flex-col gap-sm mb-lg">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">Standard Maintenance</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Tue, Oct 17 • 10:00 AM</p>
+</div>
+<p class="text-data-mono font-data-mono text-on-surface">$120.00</p>
+</div>
+</div>
+<div class="border-t border-outline-variant pt-sm mb-lg">
+<div class="flex justify-between items-center bg-secondary-container/20 p-sm rounded mt-sm">
+<div class="flex items-center gap-xs text-secondary">
+<span class="material-symbols-outlined text-sm">stars</span>
+<span class="text-body-sm font-body-sm font-medium">Points Earned</span>
+</div>
+<span class="text-body-sm font-body-sm font-bold text-secondary">+120 pts</span>
+</div>
+</div>
+<div class="flex justify-between items-center mb-lg">
+<span class="text-body-lg font-body-lg font-semibold text-on-surface">Total</span>
+<span class="text-headline-md font-headline-md font-bold text-primary">$120.00</span>
+</div>
+<button class="w-full bg-primary hover:bg-on-primary-fixed-variant text-on-primary py-md rounded-lg font-semibold text-body-md transition-colors active:scale-95">
+                    Confirm Booking
+                </button>
+<p class="text-center text-label-caps font-label-caps text-on-surface-variant mt-sm">Payment collected at time of service</p>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex justify-around items-center gap-md px-md py-xs bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg rounded-full w-max max-w-[90%]">
+<a class="flex flex-col items-center justify-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-label-caps font-label-caps">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined">shopping_bag</span>
+<span class="text-label-caps font-label-caps">Shop</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-xs text-primary transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined font-bold" style="font-variation-settings: 'FILL' 1">calendar_today</span>
+<span class="text-label-caps font-label-caps font-bold">Book</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined">stars</span>
+<span class="text-label-caps font-label-caps">Rewards</span>
+</a>
+</nav>
+<style>
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+
+
+</body></html>

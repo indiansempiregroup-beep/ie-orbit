@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { BillingPlanCatalogItem } from '@ie-platform/sdk';
 import { Button } from '../../components/ui/Button';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
@@ -116,6 +117,8 @@ function defaultValues(): RegisterWizardValues {
     state: '',
     address: '',
     postalCode: '',
+    latitude: null,
+    longitude: null,
     firstName: '',
     lastName: '',
     email: '',
@@ -301,7 +304,23 @@ export function RegisterWizardScreen() {
             value={values.businessPhone}
             onChangeText={(v) => patch({ businessPhone: v })}
           />
-          <Input label="Address" value={values.address} onChangeText={(v) => patch({ address: v })} />
+          <AddressLocationPicker
+            value={values.address}
+            latitude={values.latitude}
+            longitude={values.longitude}
+            onChangeText={(address) => patch({ address })}
+            onPlaceSelected={(place) =>
+              patch({
+                address: place.line1 || place.formattedAddress,
+                city: place.city || '',
+                state: place.state || '',
+                country: place.country || '',
+                postalCode: place.postalCode || '',
+                latitude: place.latitude ?? null,
+                longitude: place.longitude ?? null,
+              })
+            }
+          />
           <Input label="City" value={values.city} onChangeText={(v) => patch({ city: v })} />
           <Input label="State" value={values.state} onChangeText={(v) => patch({ state: v })} />
           <Input

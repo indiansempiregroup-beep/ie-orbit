@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { mobileClient } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 
 export type PlaceSelection = {
@@ -20,20 +21,19 @@ type Props = {
   onChangeText: (value: string) => void;
   onPlaceSelected?: (place: PlaceSelection) => void;
   primaryColor?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type Prediction = {
   place_id: string;
   description: string;
+  main_text: string;
+  secondary_text?: string;
 };
 
-const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
-
-function componentByType(
-  components: Array<{ long_name: string; short_name: string; types: string[] }> | undefined,
-  type: string,
-) {
-  return components?.find((item) => item.types.includes(type))?.long_name ?? '';
+function newSessionToken() {
+  return globalThis.crypto?.randomUUID?.() ?? `sess-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function AddressPlacesField({
@@ -42,6 +42,8 @@ export function AddressPlacesField({
   onChangeText,
   onPlaceSelected,
   primaryColor = colors.primary,
+  latitude,
+  longitude,
 }: Props) {
   const [query, setQuery] = useState(value);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -49,6 +51,7 @@ export function AddressPlacesField({
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectingRef = useRef(false);
+  const sessionTokenRef = useRef(newSessionToken());
 
   useEffect(() => {
     setQuery(value);
@@ -57,10 +60,6 @@ export function AddressPlacesField({
   useEffect(() => {
     if (selectingRef.current) {
       selectingRef.current = false;
-      return;
-    }
-    if (!PLACES_KEY) {
-      setPredictions([]);
       return;
     }
     const term = query.trim();
@@ -75,23 +74,16 @@ export function AddressPlacesField({
         setLoading(true);
         setError(null);
         try {
-          const url =
-            `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-            `?input=${encodeURIComponent(term)}&key=${encodeURIComponent(PLACES_KEY)}`;
-          const response = await fetch(url);
-          const payload = (await response.json()) as {
-            status?: string;
-            error_message?: string;
-            predictions?: Prediction[];
-          };
-          if (payload.status && payload.status !== 'OK' && payload.status !== 'ZERO_RESULTS') {
-            setError(payload.error_message || `Places lookup failed (${payload.status}).`);
-            setPredictions([]);
-            return;
-          }
-          setPredictions(payload.predictions ?? []);
-        } catch {
-          setError('Unable to search places right now.');
+          const response = await mobileClient.places.autocomplete({
+            input: term,
+            session_token: sessionTokenRef.current,
+            latitude: latitude ?? undefined,
+            longitude: longitude ?? undefined,
+            country_code: 'IN',
+          });
+          setPredictions(response.data.predictions ?? []);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Unable to search places right now.');
           setPredictions([]);
         } finally {
           setLoading(false);
@@ -102,65 +94,38 @@ export function AddressPlacesField({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [latitude, longitude, query]);
 
   async function selectPrediction(prediction: Prediction) {
     selectingRef.current = true;
     setPredictions([]);
     setQuery(prediction.description);
     onChangeText(prediction.description);
-
-    if (!PLACES_KEY) return;
-
     setLoading(true);
     setError(null);
     try {
-      const url =
-        `https://maps.googleapis.com/maps/api/place/details/json` +
-        `?place_id=${encodeURIComponent(prediction.place_id)}` +
-        `&fields=formatted_address,geometry,address_component` +
-        `&key=${encodeURIComponent(PLACES_KEY)}`;
-      const response = await fetch(url);
-      const payload = (await response.json()) as {
-        status?: string;
-        error_message?: string;
-        result?: {
-          formatted_address?: string;
-          geometry?: { location?: { lat?: number; lng?: number } };
-          address_components?: Array<{ long_name: string; short_name: string; types: string[] }>;
-        };
-      };
-      if (payload.status && payload.status !== 'OK') {
-        setError(payload.error_message || `Place details failed (${payload.status}).`);
-        return;
-      }
-
-      const result = payload.result;
-      const formatted = result?.formatted_address || prediction.description;
-      const city =
-        componentByType(result?.address_components, 'locality') ||
-        componentByType(result?.address_components, 'administrative_area_level_2');
-      const state = componentByType(result?.address_components, 'administrative_area_level_1');
-      const country = componentByType(result?.address_components, 'country');
-      const postalCode = componentByType(result?.address_components, 'postal_code');
-      const latitude = result?.geometry?.location?.lat ?? null;
-      const longitude = result?.geometry?.location?.lng ?? null;
-
+      const response = await mobileClient.places.details({
+        place_id: prediction.place_id,
+        session_token: sessionTokenRef.current,
+      });
+      sessionTokenRef.current = newSessionToken();
+      const result = response.data;
+      const formatted = result.formatted_address || prediction.description;
       selectingRef.current = true;
       setQuery(formatted);
       onChangeText(formatted);
       onPlaceSelected?.({
         formattedAddress: formatted,
-        line1: formatted,
-        city: city || undefined,
-        state: state || undefined,
-        country: country || undefined,
-        postalCode: postalCode || undefined,
-        latitude,
-        longitude,
+        line1: result.line1 || formatted,
+        city: result.city || undefined,
+        state: result.state || undefined,
+        country: result.country || undefined,
+        postalCode: result.postal_code || undefined,
+        latitude: result.latitude ?? null,
+        longitude: result.longitude ?? null,
       });
-    } catch {
-      setError('Unable to load place details.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load place details.');
     } finally {
       setLoading(false);
     }
@@ -177,22 +142,24 @@ export function AddressPlacesField({
             setQuery(text);
             onChangeText(text);
           }}
-          placeholder={PLACES_KEY ? 'Search address on Google Maps' : 'House / street / area'}
+          placeholder="Search address on Google Maps"
           placeholderTextColor={colors.mutedForeground}
           style={styles.input}
           multiline
         />
         {loading ? <ActivityIndicator size="small" color={primaryColor} /> : null}
       </View>
-      {!PLACES_KEY ? (
-        <Text style={styles.hint}>Search is manual until Google Places is configured for this app.</Text>
-      ) : null}
       {predictions.length ? (
         <View style={styles.suggestions}>
           {predictions.map((item) => (
             <Pressable key={item.place_id} style={styles.suggestion} onPress={() => void selectPrediction(item)}>
               <Feather name="map-pin" size={14} color={primaryColor} />
-              <Text style={styles.suggestionText}>{item.description}</Text>
+              <View style={styles.suggestionCopy}>
+                <Text style={styles.suggestionText}>{item.main_text || item.description}</Text>
+                {item.secondary_text ? (
+                  <Text style={styles.suggestionSecondary}>{item.secondary_text}</Text>
+                ) : null}
+              </View>
             </Pressable>
           ))}
         </View>
@@ -225,7 +192,6 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     textAlignVertical: 'top',
   },
-  hint: { ...typography.caption, color: colors.mutedForeground },
   suggestions: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -243,5 +209,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   suggestionText: { ...typography.body, color: colors.foreground, flex: 1 },
+  suggestionCopy: { flex: 1, gap: 2 },
+  suggestionSecondary: { ...typography.caption, color: colors.mutedForeground },
   error: { ...typography.caption, color: colors.destructive },
 });

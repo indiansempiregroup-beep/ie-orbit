@@ -10,7 +10,7 @@ import { uploadCustomerProfilePhoto } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useMobileCustomerProfile } from '../../hooks/useMobileCustomerProfile';
-import { AddressMapPicker } from '../../components/AddressMapPicker';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { LanguagePicker } from '../../components/LanguagePicker';
 import { Button } from '../../components/ui/Button';
@@ -42,6 +42,10 @@ export function ProfileEditScreen() {
   const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(user?.profile_photo ?? null);
   const [fullAddress, setFullAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -62,8 +66,12 @@ export function ProfileEditScreen() {
     const address = profile?.address;
     if (!address) return;
     setFullAddress(address.full_address || address.line1 || '');
-    setLatitude(address.latitude ?? null);
-    setLongitude(address.longitude ?? null);
+    setCity(address.city || '');
+    setState(address.state || '');
+    setCountry(address.country || '');
+    setPostalCode(address.postal_code || '');
+    setLatitude(address.latitude != null ? Number(address.latitude) : null);
+    setLongitude(address.longitude != null ? Number(address.longitude) : null);
   }, [profile?.address]);
 
   async function onSave() {
@@ -92,6 +100,11 @@ export function ProfileEditScreen() {
         await mobileClient.mobile.updateCustomerProfile(
           {
             full_address: fullAddress.trim(),
+            line1: fullAddress.trim(),
+            city,
+            state,
+            country,
+            postal_code: postalCode,
             latitude: roundCoord(latitude),
             longitude: roundCoord(longitude),
           },
@@ -157,17 +170,26 @@ export function ProfileEditScreen() {
         />
         <Text style={styles.hint}>{t('profile.languageHint')}</Text>
 
-        <AddressMapPicker
+        <AddressLocationPicker
           value={fullAddress}
           onChangeText={setFullAddress}
           latitude={latitude}
           longitude={longitude}
-          onLocationChange={(lat, lng) => {
-            setLatitude(lat);
-            setLongitude(lng);
+          onPlaceSelected={(place) => {
+            setFullAddress(place.line1 || place.formattedAddress);
+            setCity(place.city || '');
+            setState(place.state || '');
+            setCountry(place.country || '');
+            setPostalCode(place.postalCode || '');
+            setLatitude(place.latitude ?? null);
+            setLongitude(place.longitude ?? null);
           }}
           primaryColor={primary}
         />
+        <Input label="City" value={city} onChangeText={setCity} />
+        <Input label="State" value={state} onChangeText={setState} />
+        <Input label="Country" value={country} onChangeText={setCountry} />
+        <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} keyboardType="number-pad" />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {success ? <Text style={styles.success}>{success}</Text> : null}

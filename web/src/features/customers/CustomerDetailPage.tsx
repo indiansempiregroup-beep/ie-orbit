@@ -5,6 +5,7 @@ import { useDialog } from '../../hooks/useDialog';
 import { useEditFormInit } from '../../hooks/useEditFormInit';
 import type { Customer, CustomerUpdateInput } from '@ie-platform/sdk';
 import { AddressMapPreview } from '../../components/AddressMapPreview';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -17,6 +18,10 @@ import { CustomerBorrowPanel } from './CustomerBorrowPanel';
 
 type AddressFormState = {
   full_address: string;
+  city: string;
+  state: string;
+  country: string;
+  postal_code: string;
   latitude: number | null;
   longitude: number | null;
 };
@@ -38,6 +43,10 @@ export function CustomerDetailPage() {
   });
   const [addressForm, setAddressForm] = useState<AddressFormState>({
     full_address: '',
+    city: '',
+    state: '',
+    country: '',
+    postal_code: '',
     latitude: null,
     longitude: null,
   });
@@ -52,25 +61,24 @@ export function CustomerDetailPage() {
     });
     setAddressForm({
       full_address: customer.full_address ?? customer.address?.full_address ?? customer.address?.line1 ?? '',
-      latitude: customer.latitude ?? customer.address?.latitude ?? null,
-      longitude: customer.longitude ?? customer.address?.longitude ?? null,
+      city: customer.address?.city ?? '',
+      state: customer.address?.state ?? '',
+      country: customer.address?.country ?? '',
+      postal_code: customer.address?.postal_code ?? '',
+      latitude:
+        customer.latitude != null || customer.address?.latitude != null
+          ? Number(customer.latitude ?? customer.address?.latitude)
+          : null,
+      longitude:
+        customer.longitude != null || customer.address?.longitude != null
+          ? Number(customer.longitude ?? customer.address?.longitude)
+          : null,
     });
   }, []);
 
   useEditFormInit(editDialog.open, customerQuery.data, initForm);
 
   const customerName = customerQuery.data?.full_name ?? 'Customer profile';
-
-  function useBrowserLocation() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((position) => {
-      setAddressForm((current) => ({
-        ...current,
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      }));
-    });
-  }
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
@@ -180,6 +188,10 @@ export function CustomerDetailPage() {
                   ...formState,
                   default_address: {
                     full_address: addressForm.full_address,
+                    city: addressForm.city,
+                    state: addressForm.state,
+                    country: addressForm.country,
+                    postal_code: addressForm.postal_code,
                     latitude: addressForm.latitude,
                     longitude: addressForm.longitude,
                     is_default: true,
@@ -227,18 +239,35 @@ export function CustomerDetailPage() {
             <option value="inactive">Inactive</option>
           </select>
           <div style={{ display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <label style={{ color: '#6b7280' }}>Full address</label>
-              <Button type="button" variant="ghost" onClick={useBrowserLocation}>Use my location</Button>
-            </div>
-            <textarea
+            <AddressLocationPicker
+              label="Customer address (Google Maps)"
               value={addressForm.full_address}
-              onChange={(event) => setAddressForm({ ...addressForm, full_address: event.target.value })}
-              placeholder="House / street / area / city / pin code"
-              rows={4}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              latitude={addressForm.latitude}
+              longitude={addressForm.longitude}
+              onChangeText={(full_address) => setAddressForm((current) => ({ ...current, full_address }))}
+              onPlaceSelected={(place) => {
+                setAddressForm({
+                  full_address: place.formattedAddress,
+                  city: place.city || '',
+                  state: place.state || '',
+                  country: place.country || '',
+                  postal_code: place.postalCode || '',
+                  latitude: place.latitude ?? null,
+                  longitude: place.longitude ?? null,
+                });
+              }}
             />
-            <AddressMapPreview latitude={addressForm.latitude} longitude={addressForm.longitude} height={180} />
+            <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
+              {(['city', 'state', 'country', 'postal_code'] as const).map((field) => (
+                <input
+                  key={field}
+                  value={addressForm[field]}
+                  onChange={(event) => setAddressForm((current) => ({ ...current, [field]: event.target.value }))}
+                  placeholder={field === 'postal_code' ? 'Postal code' : field[0].toUpperCase() + field.slice(1)}
+                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                />
+              ))}
+            </div>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" loading={updateCustomer.isPending} loadingLabel="Saving…">

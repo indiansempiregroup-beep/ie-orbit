@@ -57,3 +57,8 @@ class BillingWebhookBulkReprocessSerializer(serializers.Serializer):
     scope = serializers.ChoiceField(choices=["failed", "dead_letter"])
     limit = serializers.IntegerField(min_value=1, max_value=200, default=50)
     confirm = serializers.BooleanField(default=False)
+    window_hours = serializers.IntegerField(min_value=1, max_value=24 * 30, required=False)
+    tenant_id = serializers.UUIDField(required=False)
+    provider = serializers.CharField(max_length=32, required=False, allow_blank=True)
+    event_type = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    q = serializers.CharField(max_length=200, required=False, allow_blank=True)

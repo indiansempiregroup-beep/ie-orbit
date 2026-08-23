@@ -179,6 +179,13 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               onPress: () => go('ShopDeliveryZones'),
             },
             {
+              key: 'instantDelivery',
+              label: t('nav.shopInstantDelivery'),
+              icon: 'truck',
+              match: ['ShopDeliverySettings'],
+              onPress: () => go('ShopDeliverySettings'),
+            },
+            {
               key: 'coupons',
               label: t('nav.shopCoupons'),
               icon: 'tag',
@@ -254,6 +261,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
             if (item.key === 'orders') return has(PlanFeature.shopieOrders);
             if (item.key === 'returns') return has(PlanFeature.shopieReturns);
             if (item.key === 'zones') return has(PlanFeature.shopieDeliveryZones);
+            if (item.key === 'instantDelivery') return has(PlanFeature.shopieInstantDelivery);
             if (item.key === 'coupons') return has(PlanFeature.shopieCoupons);
             return true;
           }),
@@ -331,7 +339,15 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
         key: 'settings',
         label: t('settings.title'),
         icon: 'settings',
-        match: ['Settings', 'BusinessProfile', 'BusinessEdit', 'ProductSettings', 'Branches', 'Team'],
+        match: [
+          'Settings',
+          'BusinessProfile',
+          'BusinessEdit',
+          'ProductSettings',
+          'Branches',
+          'BranchForm',
+          'Team',
+        ],
         onPress: () => go('Settings'),
       });
     }

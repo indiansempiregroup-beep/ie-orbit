@@ -74,6 +74,7 @@ export type RootStackParamList = {
   BarcodeScanner: { target?: 'pos' | 'addProduct'; productId?: string } | undefined;
   ShopReturns: undefined;
   ShopDeliveryZones: undefined;
+  ShopDeliverySettings: undefined;
   ShopCoupons: undefined;
   ShopPets: { selectCustomerId?: string; openAdd?: boolean } | undefined;
   ShopPetForm: { petId?: string; selectCustomerId?: string } | undefined;
@@ -101,6 +102,7 @@ export type RootStackParamList = {
   GrowAds: undefined;
   GrowReferral: undefined;
   Branches: undefined;
+  BranchForm: { branchId?: string } | undefined;
   BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };
   Reports: undefined;
   Team: undefined;

@@ -56,6 +56,7 @@ export function ShopOrdersPage() {
                 { value: 'pending', label: 'Pending' },
                 { value: 'confirmed', label: 'Confirmed' },
                 { value: 'ready', label: 'Ready' },
+                { value: 'out_for_delivery', label: 'Out for delivery' },
                 { value: 'completed', label: 'Completed' },
                 { value: 'cancelled', label: 'Cancelled' },
               ],
@@ -135,12 +136,20 @@ export function ShopOrdersPage() {
                         Ready
                       </Button>
                     ) : null}
-                    {order.status === 'ready' ? (
+                    {order.status === 'ready' && order.fulfillment_mode !== 'delivery' ? (
                       <Button
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'completed' })}
                       >
                         Complete
+                      </Button>
+                    ) : null}
+                    {order.status === 'out_for_delivery' ? (
+                      <Button
+                        type="button"
+                        onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'completed' })}
+                      >
+                        Mark delivered
                       </Button>
                     ) : null}
                     <Link to={`/shop/orders/${order.id}`}>Open</Link>

@@ -8,7 +8,7 @@ import {
   useCustomerSearch,
   useCustomerUpdate,
 } from '../management/managementHooks';
-import { AddressMapPreview } from '../../components/AddressMapPreview';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { BusinessWorkspaceSelect } from '../../components/BusinessWorkspaceSelect';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -40,6 +40,10 @@ export function CustomersPage() {
     status: 'active',
     send_registration_invite: true,
     full_address: '',
+    city: '',
+    state: '',
+    country: '',
+    postal_code: '',
     latitude: null as number | null,
     longitude: null as number | null,
   });
@@ -75,19 +79,12 @@ export function CustomersPage() {
       status: 'active',
       send_registration_invite: true,
       full_address: '',
+      city: '',
+      state: '',
+      country: '',
+      postal_code: '',
       latitude: null,
       longitude: null,
-    });
-  }
-
-  function useBrowserLocation() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((position) => {
-      setFormState((current) => ({
-        ...current,
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      }));
     });
   }
 
@@ -299,6 +296,10 @@ export function CustomersPage() {
                 default_address: formState.full_address.trim()
                   ? {
                       full_address: formState.full_address,
+                      city: formState.city,
+                      state: formState.state,
+                      country: formState.country,
+                      postal_code: formState.postal_code,
                       latitude: formState.latitude,
                       longitude: formState.longitude,
                       is_default: true,
@@ -359,18 +360,36 @@ export function CustomersPage() {
             <span>Send registration invite email</span>
           </label>
           <div style={{ display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <label style={{ color: '#6b7280' }}>Full address</label>
-              <Button type="button" variant="ghost" onClick={useBrowserLocation}>Use my location</Button>
-            </div>
-            <textarea
+            <AddressLocationPicker
+              label="Customer address (Google Maps)"
               value={formState.full_address}
-              onChange={(event) => setFormState({ ...formState, full_address: event.target.value })}
-              placeholder="House / street / area / city / pin code"
-              rows={4}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              latitude={formState.latitude}
+              longitude={formState.longitude}
+              onChangeText={(full_address) => setFormState((current) => ({ ...current, full_address }))}
+              onPlaceSelected={(place) => {
+                setFormState((current) => ({
+                  ...current,
+                  full_address: place.formattedAddress,
+                  city: place.city || '',
+                  state: place.state || '',
+                  country: place.country || '',
+                  postal_code: place.postalCode || '',
+                  latitude: place.latitude ?? null,
+                  longitude: place.longitude ?? null,
+                }));
+              }}
             />
-            <AddressMapPreview latitude={formState.latitude} longitude={formState.longitude} height={180} />
+            <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
+              {(['city', 'state', 'country', 'postal_code'] as const).map((field) => (
+                <input
+                  key={field}
+                  value={formState[field]}
+                  onChange={(event) => setFormState((current) => ({ ...current, [field]: event.target.value }))}
+                  placeholder={field === 'postal_code' ? 'Postal code' : field[0].toUpperCase() + field.slice(1)}
+                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                />
+              ))}
+            </div>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" loading={createCustomer.isPending} loadingLabel="Creating…">

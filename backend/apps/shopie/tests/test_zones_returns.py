@@ -16,6 +16,7 @@ from apps.shopie.models import (
     VerticalPack,
 )
 from apps.shopie.services.catalog import CatalogService
+from apps.shopie.services.delivery import DeliveryService
 from apps.shopie.services.orders import OrderService
 from apps.shopie.services.pets import PetsService
 from apps.shopie.services.returns import ReturnService
@@ -85,6 +86,17 @@ def test_delivery_zone_match_and_order_gate(shop_ctx: tuple[Tenant, Business, Cu
         },
         barcodes=[{"code": "RFID-1", "barcode_type": BarcodeType.RFID_EPC}],
     )
+    # A configured instant-delivery provider must not disable standard zones.
+    business.address_line1 = "1 Shop Road"
+    business.latitude = Decimal("19.076000")
+    business.longitude = Decimal("72.877700")
+    business.save(update_fields=["address_line1", "latitude", "longitude", "updated_at"])
+    DeliveryService().update_settings(
+        tenant=tenant,
+        business=business,
+        enabled=True,
+        incoming={"provider": "mock", "charge_bearer": "customer"},
+    )
 
     with pytest.raises(ValidationError):
         orders.create_order(
@@ -92,6 +104,7 @@ def test_delivery_zone_match_and_order_gate(shop_ctx: tuple[Tenant, Business, Cu
             business=business,
             customer=customer,
             fulfillment_mode=FulfillmentMode.DELIVERY,
+            delivery_method="standard",
             delivery_city="Pune",
             delivery_postal_code="411001",
             lines=[{"product_id": str(product.id), "quantity": 1}],
@@ -103,6 +116,7 @@ def test_delivery_zone_match_and_order_gate(shop_ctx: tuple[Tenant, Business, Cu
         business=business,
         customer=customer,
         fulfillment_mode=FulfillmentMode.DELIVERY,
+        delivery_method="standard",
         delivery_city="Nashik",
         delivery_postal_code="422001",
         delivery_address="Gangapur Road",
@@ -111,6 +125,8 @@ def test_delivery_zone_match_and_order_gate(shop_ctx: tuple[Tenant, Business, Cu
     )
     assert order.status == OrderStatus.CONFIRMED
     assert order.metadata.get("delivery_zone_name") == "Nashik"
+    assert order.metadata.get("delivery_method") == "standard"
+    assert "delivery" not in order.metadata
 
 
 @pytest.mark.django_db

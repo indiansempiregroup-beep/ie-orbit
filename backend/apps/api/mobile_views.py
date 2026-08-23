@@ -623,7 +623,16 @@ class MobileCustomerProfileView(APIView):
         customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
         address_payload = {
             key: serializer.validated_data[key]
-            for key in ("full_address", "latitude", "longitude")
+            for key in (
+                "full_address",
+                "line1",
+                "city",
+                "state",
+                "country",
+                "postal_code",
+                "latitude",
+                "longitude",
+            )
             if key in serializer.validated_data
         }
         if address_payload:

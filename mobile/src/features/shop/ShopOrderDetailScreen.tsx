@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -25,6 +26,7 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateTime } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { DeliveryTrackerMap } from './DeliveryTrackerMap';
 import {
   formatShopDateLabel,
   formatShopMoney,
@@ -41,7 +43,7 @@ import {
   shopPaymentStatusLabel,
   shopRefundPlan,
 } from './shopHelpers';
-import type { ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
+import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
@@ -76,6 +78,57 @@ function ProductThumb({ uri, size = 72 }: { uri?: string | null; size?: number }
   );
 }
 
+function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: string }) {
+  return (
+    <View style={styles.trackingCard}>
+      <View style={styles.trackingHeader}>
+        <View style={[styles.liveDot, { backgroundColor: live.terminal ? colors.success : primary }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.trackingTitle}>{live.headline}</Text>
+          {live.subtitle ? <Text style={styles.meta}>{live.subtitle}</Text> : null}
+        </View>
+      </View>
+      <DeliveryTrackerMap live={live} primary={primary} />
+      {live.rider?.name ? (
+        <View style={styles.riderRow}>
+          <View style={[styles.riderAvatar, { backgroundColor: `${primary}18` }]}>
+            <Feather name="user" size={20} color={primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.riderName}>{live.rider.name}</Text>
+            <Text style={styles.meta}>{live.rider.vehicle || 'Delivery rider'}</Text>
+          </View>
+          {live.can_call_rider && live.rider.phone ? (
+            <Pressable
+              style={[styles.callButton, { borderColor: primary }]}
+              onPress={() => Linking.openURL(`tel:${live.rider?.phone}`)}
+            >
+              <Feather name="phone" size={16} color={primary} />
+              <Text style={{ color: primary, fontWeight: '700' }}>Call</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+      {(live.events ?? []).length ? (
+        <View style={styles.deliveryEvents}>
+          {[...(live.events ?? [])].reverse().map((event, index) => (
+            <View key={`${event.status}-${event.occurred_at}-${index}`} style={styles.deliveryEvent}>
+              <View style={[styles.eventDot, { backgroundColor: index === 0 ? primary : colors.border }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.eventLabel}>{event.label || event.status.replace(/_/g, ' ')}</Text>
+                {event.occurred_at ? (
+                  <Text style={styles.meta}>{formatDateTime(event.occurred_at)}</Text>
+                ) : null}
+                {event.reason ? <Text style={styles.meta}>{event.reason}</Text> : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function ShopOrderDetailScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -92,6 +145,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [deliveryLive, setDeliveryLive] = useState<ShopDeliveryLive | null>(null);
   const primary = branding?.primaryColor ?? colors.primary;
   const business = bootstrap?.business;
 
@@ -102,6 +156,24 @@ export function ShopOrderDetailScreen({ route }: Props) {
       business_code: businessCode,
     });
     setOrder(response.data);
+    const deliveryMeta =
+      response.data.metadata &&
+      typeof response.data.metadata === 'object' &&
+      typeof response.data.metadata.delivery === 'object'
+        ? response.data.metadata.delivery
+        : null;
+    if (deliveryMeta) {
+      try {
+        const tracking = await mobileClient.mobile.getShopOrderDeliveryLive(route.params.orderId, {
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+          refresh: true,
+        });
+        setDeliveryLive(tracking.data);
+      } catch {
+        setDeliveryLive(null);
+      }
+    }
     try {
       const ret = await mobileClient.mobile.listMyReturns({
         tenant_slug: tenantSlug,
@@ -122,6 +194,21 @@ export function ShopOrderDetailScreen({ route }: Props) {
     }, [load]),
   );
 
+  useEffect(() => {
+    if (!deliveryLive || deliveryLive.terminal) return;
+    const timer = setInterval(() => {
+      void mobileClient.mobile
+        .getShopOrderDeliveryLive(route.params.orderId, {
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+          refresh: true,
+        })
+        .then((response) => setDeliveryLive(response.data))
+        .catch(() => undefined);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, [businessCode, deliveryLive, route.params.orderId, tenantSlug]);
+
   const paymentStatus = order?.payment_status || '';
   const showQr =
     order?.payment_method === 'upi' &&
@@ -138,6 +225,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       preferredTime: String(raw.preferred_time || ''),
       fulfillmentNote: String(raw.fulfillment_note || ''),
       deliveryZone: String(raw.delivery_zone_name || ''),
+      deliveryMethod: String(raw.delivery_method || ''),
     };
   }, [order]);
 
@@ -270,6 +358,8 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const refundPlan = shopRefundPlan(order, selectedRefund);
 
   async function submitReturn() {
+    if (!order) return;
+    const currentOrder = order;
     const lines = returnableLines
       .map((row) => ({
         order_line_id: row.line.id,
@@ -286,7 +376,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       const response = await mobileClient.mobile.createMyReturn({
         tenant_slug: tenantSlug,
         business_code: businessCode,
-        order_id: order.id,
+        order_id: currentOrder.id,
         reason: reason.trim(),
         lines,
       });
@@ -294,7 +384,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       setQtyByLine({});
       setReason('');
       setMessage(
-        `Return ${response.data.return_number} submitted. Refund ${formatShopMoney(response.data.refund_total, response.data.currency || order.currency)} will be given as recorded below.`,
+        `Return ${response.data.return_number} submitted. Refund ${formatShopMoney(response.data.refund_total, response.data.currency || currentOrder.currency)} will be given as recorded below.`,
       );
       await load();
     } catch (err) {
@@ -339,7 +429,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
           </View>
         </View>
 
-        {timeline.length ? (
+        {deliveryLive?.available ? <DeliveryTracker live={deliveryLive} primary={primary} /> : null}
+
+        {!deliveryLive?.available && timeline.length ? (
           <View style={styles.card}>
             <View style={styles.timeline}>
               {timeline.map((step, index) => (
@@ -415,6 +507,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
             </Text>
           </View>
           {meta.deliveryZone ? <Text style={styles.meta}>Zone · {meta.deliveryZone}</Text> : null}
+          {String(order.fulfillment_mode).toLowerCase() === 'delivery' && meta.deliveryMethod ? (
+            <Text style={styles.meta}>
+              {meta.deliveryMethod === 'instant' ? 'Deliver now · rider after packing' : 'Standard delivery'}
+            </Text>
+          ) : null}
           {slotLabel ? (
             <View style={styles.infoRow}>
               <Feather name="clock" size={16} color={primary} />
@@ -704,6 +801,55 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  trackingCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  trackingHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  liveDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
+  trackingTitle: { ...typography.title, fontSize: 18, color: colors.foreground },
+  riderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  riderAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  riderName: { ...typography.label, color: colors.foreground, fontWeight: '800' },
+  callButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  deliveryEvents: { padding: spacing.lg, gap: spacing.md },
+  deliveryEvent: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  eventDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
+  eventLabel: {
+    ...typography.label,
+    color: colors.foreground,
+    fontWeight: '700',
+    textTransform: 'capitalize',
   },
   section: { ...typography.title, fontSize: 16, color: colors.foreground, marginBottom: spacing.md },
   timeline: { flexDirection: 'row' },

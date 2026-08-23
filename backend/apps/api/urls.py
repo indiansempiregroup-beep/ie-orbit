@@ -1,8 +1,16 @@
 from django.urls import include, path
 
 from apps.api.views import HealthView, OperationsSearchView
+from apps.common.api.places_views import (
+    PlacesAutocompleteView,
+    PlacesDetailsView,
+    ReverseGeocodeView,
+)
 
 urlpatterns = [
+    path("places/autocomplete", PlacesAutocompleteView.as_view(), name="places-autocomplete"),
+    path("places/details", PlacesDetailsView.as_view(), name="places-details"),
+    path("places/reverse", ReverseGeocodeView.as_view(), name="places-reverse"),
     path("", include("apps.api.mobile_urls")),
     path("auth/", include("apps.authentication.urls")),
     path("", include("apps.tenancy.urls")),

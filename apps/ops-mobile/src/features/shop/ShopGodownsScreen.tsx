@@ -19,6 +19,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -163,6 +164,14 @@ export function ShopGodownsScreen() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [isDefault, setIsDefault] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
 
   const [fromGodownId, setFromGodownId] = useState('');
   const [toGodownId, setToGodownId] = useState('');
@@ -174,6 +183,14 @@ export function ShopGodownsScreen() {
     setName('');
     setCode('');
     setIsDefault(false);
+    setPhoneNumber('');
+    setAddressLine1('');
+    setCity('');
+    setState('');
+    setCountry('');
+    setPostalCode('');
+    setLatitude(null);
+    setLongitude(null);
     setFromGodownId('');
     setToGodownId('');
     setProductId('');
@@ -283,6 +300,10 @@ export function ShopGodownsScreen() {
       toast.push('Enter a godown name', 'error');
       return;
     }
+    if (!addressLine1.trim() || latitude == null || longitude == null) {
+      toast.push('Search and confirm the godown address on the map', 'error');
+      return;
+    }
     setBusy(true);
     try {
       await client.shop.createGodown({
@@ -290,6 +311,14 @@ export function ShopGodownsScreen() {
         name: name.trim(),
         code: code.trim() || undefined,
         is_default: isDefault,
+        phone_number: phoneNumber.trim() || undefined,
+        address_line1: addressLine1.trim(),
+        city: city.trim(),
+        state: state.trim(),
+        country: country.trim(),
+        postal_code: postalCode.trim(),
+        latitude: latitude!,
+        longitude: longitude!,
       });
       toast.push('Godown created', 'success');
       closeForm();
@@ -357,6 +386,38 @@ export function ShopGodownsScreen() {
             placeholder="Main warehouse"
             placeholderTextColor={colors.mutedForeground}
           />
+        </View>
+        <AddressLocationPicker
+          value={addressLine1}
+          latitude={latitude}
+          longitude={longitude}
+          onChangeText={setAddressLine1}
+          onPlaceSelected={(place) => {
+            setAddressLine1(place.line1 || place.formattedAddress);
+            setCity(place.city || '');
+            setState(place.state || '');
+            setCountry(place.country || '');
+            setPostalCode(place.postalCode || '');
+            setLatitude(place.latitude ?? null);
+            setLongitude(place.longitude ?? null);
+          }}
+        />
+        <View style={styles.fieldBlock}>
+          <Text style={styles.label}>Pickup phone</Text>
+          <TextInput
+            style={styles.input}
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            placeholder="Optional"
+            placeholderTextColor={colors.mutedForeground}
+            keyboardType="phone-pad"
+          />
+        </View>
+        <View style={styles.fieldBlock}>
+          <Text style={styles.label}>City / State / Country / Postal code</Text>
+          <Text style={styles.hint}>
+            {[city, state, country, postalCode].filter(Boolean).join(', ') || 'Select an address above'}
+          </Text>
         </View>
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>Code</Text>

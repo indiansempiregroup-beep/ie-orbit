@@ -11,6 +11,7 @@ import type {
   BookingCreateInput,
   Branch,
   BranchCreateInput,
+  BranchUpdateInput,
   BusinessBillingSnapshot,
   Customer,
   CustomerCreateInput,
@@ -501,9 +502,17 @@ export function useBranchMutations() {
       if (!client || !businessId) throw new Error('Not ready');
       return (await client.businesses.branches.create(businessId, body)).data;
     },
+    update: async (branchId: string, body: BranchUpdateInput) => {
+      if (!client || !businessId) throw new Error('Not ready');
+      return (await client.businesses.branches.patch(businessId, branchId, body)).data;
+    },
     setPrimary: async (branchId: string) => {
       if (!client || !businessId) throw new Error('Not ready');
       return (await client.businesses.branches.patch(businessId, branchId, { is_primary: true })).data;
+    },
+    setStatus: async (branchId: string, status: 'active' | 'inactive') => {
+      if (!client || !businessId) throw new Error('Not ready');
+      return (await client.businesses.branches.patch(businessId, branchId, { status })).data;
     },
   };
 }

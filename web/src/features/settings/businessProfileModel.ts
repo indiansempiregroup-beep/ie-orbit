@@ -21,6 +21,8 @@ export type BusinessProfileFormState = {
   city: string;
   address_line1: string;
   postal_code: string;
+  latitude: number | null;
+  longitude: number | null;
   currency: string;
   timezone: string;
   language: string;
@@ -49,6 +51,8 @@ type BusinessRecord = Business & {
   city?: string | null;
   address_line1?: string | null;
   postal_code?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   language?: string | null;
 };
 
@@ -84,6 +88,8 @@ export function createEmptyBusinessProfileFormState(): BusinessProfileFormState 
     city: '',
     address_line1: '',
     postal_code: '',
+    latitude: null,
+    longitude: null,
     currency: 'USD',
     timezone: 'UTC',
     language: 'en',
@@ -136,6 +142,8 @@ export function businessToFormState(
     city: business.city ?? '',
     address_line1: business.address_line1 ?? '',
     postal_code: business.postal_code ?? '',
+    latitude: business.latitude != null ? Number(business.latitude) : null,
+    longitude: business.longitude != null ? Number(business.longitude) : null,
     currency: business.currency ?? 'USD',
     timezone: business.timezone ?? 'UTC',
     language: business.language ?? localization.language?.toString() ?? 'en',
@@ -196,6 +204,8 @@ export function formStateToBusinessUpdate(
     city: formState.city,
     address_line1: formState.address_line1,
     postal_code: formState.postal_code,
+    latitude: formState.latitude,
+    longitude: formState.longitude,
     currency: formState.currency,
     timezone: formState.timezone,
     language: formState.language,

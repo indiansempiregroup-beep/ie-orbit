@@ -97,6 +97,8 @@ class WorkspaceProvisioningService:
                 "city": data.get("city", ""),
                 "postal_code": data.get("postal_code", ""),
                 "address_line1": data.get("address_line1", ""),
+                "latitude": data.get("latitude"),
+                "longitude": data.get("longitude"),
                 "primary_contact": data.get("primary_contact", ""),
                 "website": data.get("website", ""),
                 "selected_product": data.get("selected_product", ""),

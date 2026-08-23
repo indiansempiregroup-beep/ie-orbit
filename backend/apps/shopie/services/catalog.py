@@ -246,6 +246,7 @@ class CatalogService:
         reason: str = "",
         order=None,
         godown_id=None,
+        allow_backorder: bool = False,
     ) -> ShopProduct:
         quantity_delta = Decimal(str(quantity_delta or "0"))
         new_qty = product.stock_on_hand + quantity_delta
@@ -262,6 +263,7 @@ class CatalogService:
             delta=quantity_delta,
             godown_id=godown_id,
             quantity_after=new_qty,
+            allow_backorder=allow_backorder,
         )
         metadata: dict[str, Any] = {}
         if godown_id:

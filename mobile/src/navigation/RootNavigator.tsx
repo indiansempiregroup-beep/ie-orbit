@@ -19,6 +19,7 @@ import { CartScreen } from '../features/shop/CartScreen';
 import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopOrderHistoryScreen } from '../features/shop/ShopOrderHistoryScreen';
 import { AddressBookScreen } from '../features/shop/AddressBookScreen';
+import { AddressFormScreen } from '../features/shop/AddressFormScreen';
 import { MyReturnsScreen } from '../features/shop/MyReturnsScreen';
 import { ReturnDetailScreen } from '../features/shop/ReturnDetailScreen';
 import { MyPetsScreen } from '../features/pets/MyPetsScreen';
@@ -87,6 +88,7 @@ export function RootNavigator() {
             <Stack.Screen name="ShopOrderDetail" component={ShopOrderDetailScreen} />
             <Stack.Screen name="ShopOrderHistory" component={ShopOrderHistoryScreen} />
             <Stack.Screen name="AddressBook" component={AddressBookScreen} />
+            <Stack.Screen name="AddressForm" component={AddressFormScreen} />
             <Stack.Screen name="MyReturns" component={MyReturnsScreen} />
             <Stack.Screen name="ReturnDetail" component={ReturnDetailScreen} />
             <Stack.Screen name="MyPets" component={MyPetsScreen} />

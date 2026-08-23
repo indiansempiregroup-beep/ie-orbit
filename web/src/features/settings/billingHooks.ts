@@ -140,22 +140,57 @@ export function useBillingPlatformMonitoringQuery(windowHours = 24, enabled = fa
 }
 
 export function useBillingPlatformWebhookEventsQuery(
-  windowHours = 24,
-  status?: string,
+  filters: {
+    windowHours?: number;
+    status?: string;
+    query?: string;
+    tenantId?: string;
+    provider?: string;
+    eventType?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
   enabled = false,
 ) {
   const client = useApiClient();
+  const {
+    windowHours = 24,
+    status,
+    query,
+    tenantId,
+    provider,
+    eventType,
+    limit = 50,
+    offset = 0,
+  } = filters;
   return useQuery({
-    queryKey: ['billing', 'platform-webhook-events', windowHours, status ?? 'problem'],
+    queryKey: [
+      'billing',
+      'platform-webhook-events',
+      windowHours,
+      status ?? 'problem',
+      query ?? '',
+      tenantId ?? '',
+      provider ?? '',
+      eventType ?? '',
+      limit,
+      offset,
+    ],
     queryFn: async () =>
       (
         await client.billing.platformWebhookEvents({
           window_hours: windowHours,
           status: status || undefined,
-          limit: 100,
+          q: query || undefined,
+          tenant_id: tenantId || undefined,
+          provider: provider || undefined,
+          event_type: eventType || undefined,
+          limit,
+          offset,
         })
       ).data,
     enabled,
+    placeholderData: (previous) => previous,
     retry: false,
   });
 }

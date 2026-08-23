@@ -28,6 +28,10 @@ from apps.api.mobile_views import (
     MobileStaffListView,
 )
 from apps.notifications.api.stream_views import MobileNotificationStreamView
+from apps.shopie.api.delivery_views import (
+    MobileShopDeliveryQuoteView,
+    MobileShopOrderDeliveryLiveView,
+)
 from apps.shopie.api.mobile_views import (
     MobileShopAdListView,
     MobileShopCouponAvailableView,
@@ -133,6 +137,11 @@ urlpatterns = [
         name="mobile-shop-order-detail",
     ),
     path(
+        "mobile/shop/orders/<uuid:order_id>/delivery-live",
+        MobileShopOrderDeliveryLiveView.as_view(),
+        name="mobile-shop-order-delivery-live",
+    ),
+    path(
         "mobile/shop/orders/<uuid:order_id>/cancel",
         MobileShopOrderCancelView.as_view(),
         name="mobile-shop-order-cancel",
@@ -151,6 +160,11 @@ urlpatterns = [
         "mobile/shop/delivery-zones/match",
         MobileShopDeliveryZoneMatchView.as_view(),
         name="mobile-shop-delivery-zone-match",
+    ),
+    path(
+        "mobile/shop/delivery/quote",
+        MobileShopDeliveryQuoteView.as_view(),
+        name="mobile-shop-delivery-quote",
     ),
     path("mobile/shop/pets", MobileShopPetListView.as_view(), name="mobile-shop-pets"),
     path("mobile/shop/pets/photo", MobileShopPetPhotoView.as_view(), name="mobile-shop-pet-photo"),

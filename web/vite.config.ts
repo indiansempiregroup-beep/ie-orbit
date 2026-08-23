@@ -18,7 +18,7 @@ function resolveApiProxyTarget(env: Record<string, string>) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
-  const places = env.GOOGLE_PLACES_API_KEY || env.VITE_GOOGLE_PLACES_API_KEY || '';
+  const places = env.VITE_GOOGLE_PLACES_API_KEY || env.GOOGLE_PLACES_API_KEY || '';
   const apiProxyTarget = resolveApiProxyTarget(env);
 
   return {

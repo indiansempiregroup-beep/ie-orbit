@@ -188,6 +188,14 @@ export const navigationItems: AppNavItem[] = [
     anyPermissions: ['business:read', 'business:write'],
   },
   {
+    to: '/shop/delivery-settings',
+    labelKey: 'nav.shopInstantDelivery',
+    icon: Settings,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'business:write'],
+  },
+  {
     to: '/shop/coupons',
     labelKey: 'nav.shopCoupons',
     icon: TicketPercent,

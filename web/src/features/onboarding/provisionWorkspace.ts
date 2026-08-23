@@ -66,6 +66,8 @@ export async function provisionWorkspace({
     city: values.city,
     postal_code: values.postalCode,
     address_line1: values.address,
+    latitude: values.latitude,
+    longitude: values.longitude,
     timezone: values.timezone,
     currency: values.currency,
     language: values.language,

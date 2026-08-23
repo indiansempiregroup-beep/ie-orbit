@@ -125,6 +125,14 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('ShopDeliveryZones')}
               />
             ) : null}
+            {has(PlanFeature.shopieInstantDelivery) ? (
+              <MenuRow
+                icon="truck"
+                label={t('nav.shopInstantDelivery')}
+                subtitle="Porter / Shiprocket Quick & fee rules"
+                onPress={() => navigation.navigate('ShopDeliverySettings')}
+              />
+            ) : null}
             {has(PlanFeature.shopieCoupons) ? (
               <MenuRow
                 icon="tag"

@@ -367,6 +367,12 @@ export type BillingWebhookBulkReprocessInput = {
   scope: 'failed' | 'dead_letter';
   limit?: number;
   confirm?: boolean;
+  window_hours?: number;
+  tenant_id?: string;
+  provider?: string;
+  event_type?: string;
+  q?: string;
+  reason?: string;
 };
 
 export type BillingWebhookBulkReprocessResult = {
@@ -578,8 +584,15 @@ export type BillingPlatformRevenue = {
 
 export type BillingPlatformMonitoring = {
   window_hours: number;
+  total_events: number;
+  processed_events: number;
   failed_events: number;
   dead_letter_events: number;
+  received_events: number;
+  ignored_events: number;
+  scheduled_retries: number;
+  overdue_retries: number;
+  success_rate: number;
   reprocess_actions: number;
   reconciliation_runs: number;
   tenants_impacted: number;
@@ -922,7 +935,35 @@ export type PlatformAuditEvent = {
   tenant_id?: string | null;
   tenant_name?: string | null;
   metadata?: Record<string, unknown>;
+  ip_address?: string | null;
+  user_agent?: string;
   created_at: string;
+};
+
+export type PlatformAuditQuery = {
+  q?: string;
+  tenant_id?: string;
+  action?: string;
+  actor?: string;
+  resource_type?: string;
+  window_days?: number;
+  limit?: number;
+  offset?: number;
+};
+
+export type PlatformAuditResult = {
+  events: PlatformAuditEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: {
+    total: number;
+    with_reason: number;
+    tenant_scoped: number;
+    global_events: number;
+  };
+  actions: string[];
+  resource_types: string[];
 };
 
 export type PlatformPaymentRow = {
@@ -1124,8 +1165,14 @@ export type PlatformUserRow = {
   id: string;
   email: string;
   full_name?: string;
+  phone_number?: string;
   roles?: string[];
   is_active: boolean;
+  status?: string;
+  is_locked?: boolean;
+  email_verified?: boolean;
+  created_at?: string | null;
+  last_login?: string | null;
   relation?: string;
   owned_tenants?: Array<{
     id: string;
@@ -1133,6 +1180,35 @@ export type PlatformUserRow = {
     display_name: string;
     status: string;
   }>;
+};
+
+export type PlatformUserFilter =
+  | 'all'
+  | 'active'
+  | 'disabled'
+  | 'locked'
+  | 'unverified'
+  | 'suspended'
+  | 'never_logged_in';
+
+export type PlatformUserSearchParams = {
+  q?: string;
+  status?: PlatformUserFilter;
+  role?: string;
+  tenants?: 'all' | 'owners' | 'none';
+  joined_within_days?: number;
+  sort?: 'recent' | 'oldest' | 'email' | 'name' | 'last_login' | 'stale';
+  limit?: number;
+  offset?: number;
+};
+
+export type PlatformUserSearchResult = {
+  users: PlatformUserRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: Record<string, number>;
+  roles: string[];
 };
 
 export type SupportTicketNote = {
@@ -1437,6 +1513,8 @@ export type Business = {
   state?: string | null;
   postal_code?: string | null;
   country?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   selected_product?: string | null;
   product_subscriptions?: BusinessProductSubscription[];
   settings?: Record<string, unknown>;
@@ -1459,6 +1537,8 @@ export type BusinessCreateInput = {
   city?: string;
   postal_code?: string;
   address_line1?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   primary_contact?: string;
   website?: string;
   selected_product?: string;
@@ -1536,6 +1616,14 @@ export type ShopProductReview = {
   reviewer_name: string;
   verified_purchase?: boolean;
   created_at: string;
+};
+
+export type ShopProductOfficeStock = {
+  branch_id: string;
+  branch_name: string;
+  is_primary: boolean;
+  godown_id: string;
+  quantity: string;
 };
 
 export type ShopProduct = {
@@ -1678,6 +1766,62 @@ export type ShopOrder = {
   updated_at?: string;
 };
 
+export type ShopDeliveryQuote = {
+  available: boolean;
+  reason?: string;
+  provider?: 'mock' | 'porter' | 'shiprocket_quick' | string;
+  provider_label?: string;
+  quote_id?: string;
+  quoted_fee?: string | number;
+  customer_fee?: string | number;
+  merchant_fee?: string | number;
+  eta_minutes?: number;
+  expires_in_seconds?: number;
+};
+
+export type ShopDeliveryLive = {
+  available: boolean;
+  order_id: string;
+  provider?: string;
+  partner_status:
+    | 'packing'
+    | 'finding_rider'
+    | 'rider_assigned'
+    | 'at_pickup'
+    | 'picked_up'
+    | 'nearby'
+    | 'delivered'
+    | 'failed'
+    | 'cancelled'
+    | string;
+  headline: string;
+  subtitle?: string;
+  eta_minutes?: number | null;
+  rider?: { name?: string; phone?: string; vehicle?: string; photo_url?: string };
+  pickup?: { latitude?: number; longitude?: number; address?: string };
+  drop?: { latitude?: number; longitude?: number; address?: string };
+  rider_location?: { latitude?: number | null; longitude?: number | null };
+  events?: Array<{ status: string; label?: string; occurred_at?: string; reason?: string }>;
+  tracking_url?: string;
+  can_call_rider?: boolean;
+  last_updated?: string | null;
+  terminal?: boolean;
+};
+
+export type ShopDeliverySettings = {
+  instant_delivery_enabled: boolean;
+  delivery_integration: {
+    provider?: 'mock' | 'porter' | 'shiprocket_quick' | string;
+    credentials?: Record<string, string>;
+    base_url?: string;
+    webhook_secret?: string;
+    charge_bearer?: 'customer' | 'merchant' | 'split' | string;
+    free_delivery_min_order?: string | number;
+    merchant_absorb_cap?: string | number;
+    default_parcel_weight_kg?: string | number;
+  };
+};
+
 export type ShopOrderCreateInput = {
   business_id: string;
   customer_id?: string | null;
@@ -1687,7 +1831,13 @@ export type ShopOrderCreateInput = {
   notes?: string;
   delivery_address?: string;
   delivery_city?: string;
+  delivery_state?: string;
   delivery_postal_code?: string;
+  delivery_latitude?: string | number | null;
+  delivery_longitude?: string | number | null;
+  delivery_method?: 'standard' | 'instant' | string;
+  delivery_quote_id?: string;
+  displayed_delivery_fee?: string | number | null;
   confirm?: boolean;
   bill_discount_type?: '' | 'percent' | 'amount' | string;
   bill_discount_value?: string | number;
@@ -1806,6 +1956,7 @@ export type ShopSettings = {
   pets_enabled?: boolean;
   default_fulfillment_mode?: string;
   same_day_delivery_enabled?: boolean;
+  instant_delivery_enabled?: boolean;
   metadata?: Record<string, unknown>;
 };
 
@@ -2323,8 +2474,36 @@ export type ShopGodownStock = {
 export type ShopGodown = {
   id: string;
   business: string;
+  /** Office this stock location belongs to, when it maps to one. */
+  branch?: string | null;
+  branch_name?: string;
   name: string;
   code?: string;
+  phone_number?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal_code?: string;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  effective_location?: {
+    latitude: string | number;
+    longitude: string | number;
+    address_line1?: string;
+    address_line2?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postal_code?: string;
+    contact_name?: string;
+    contact_phone?: string;
+    branch_id?: string;
+    godown_id: string;
+    source_type: 'office' | 'godown';
+  } | null;
+  online_fulfillment_ready?: boolean;
   is_default?: boolean;
   is_active?: boolean;
   metadata?: Record<string, unknown>;
@@ -2429,10 +2608,13 @@ export type BusinessUpdateInput = Partial<
   city?: string;
   postal_code?: string;
   address_line1?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   primary_contact?: string;
   website?: string;
   language?: string;
   settings?: Record<string, unknown>;
+  gst_tax_number?: string;
 };
 
 export type Branch = {
@@ -2977,6 +3159,8 @@ export type RegisterBusinessInput = RegisterRequest & {
   city?: string;
   postal_code?: string;
   address_line1?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   timezone?: string;
   currency?: string;
   language?: string;
@@ -3079,12 +3263,23 @@ class ApiClient {
       this.request<ShopPackagingAnalyzeJob>(`/shop/products/analyze-packaging/${jobId}`, { method: 'GET' }),
     adjustStock: (productId: string, body: { quantity_delta: number | string; reason?: string; movement_type?: string; godown_id?: string | null }) =>
       this.request<ShopProduct>(`/shop/products/${productId}/stock-adjust`, { method: 'POST', body }),
+    listProductOfficeStock: (productId: string) =>
+      this.request<ShopProductOfficeStock[]>(`/shop/products/${productId}/office-stock`, {
+        method: 'GET',
+      }),
     listOrders: (query: { business_id: string; status?: string; customer_id?: string }) =>
       this.request<ShopOrder[]>('/shop/orders', { method: 'GET', query }),
     createOrder: (body: ShopOrderCreateInput) => this.request<ShopOrder>('/shop/orders', { method: 'POST', body }),
     getOrder: (orderId: string) => this.request<ShopOrder>(`/shop/orders/${orderId}`, { method: 'GET' }),
     setOrderStatus: (orderId: string, body: { status: string }) =>
       this.request<ShopOrder>(`/shop/orders/${orderId}/status`, { method: 'POST', body }),
+    dispatchOrder: (orderId: string) =>
+      this.request<ShopOrder>(`/shop/orders/${orderId}/dispatch`, { method: 'POST', body: {} }),
+    getOrderDeliveryLive: (orderId: string, refresh = true) =>
+      this.request<ShopDeliveryLive>(`/shop/orders/${orderId}/delivery-live`, {
+        method: 'GET',
+        query: { refresh },
+      }),
     confirmOrderPayment: (orderId: string, body: { action: 'confirm' | 'reject' | string; note?: string }) =>
       this.request<ShopOrder>(`/shop/orders/${orderId}/confirm-payment`, { method: 'POST', body }),
     settleOrderPayment: (orderId: string, body?: { settled_via?: 'cash' | 'upi' | 'card' | string }) =>
@@ -3115,6 +3310,24 @@ class ApiClient {
         method: 'POST',
         body,
       }),
+    quoteDelivery: (body: {
+      business_id: string;
+      latitude: string | number;
+      longitude: string | number;
+      address?: string;
+      city?: string;
+      state?: string;
+      postal_code?: string;
+      subtotal: string | number;
+      lines?: Array<{ product_id: string; quantity: string | number }>;
+    }) => this.request<ShopDeliveryQuote>('/shop/delivery/quote', { method: 'POST', body }),
+    getDeliverySettings: (query: { business_id: string }) =>
+      this.request<ShopDeliverySettings>('/shop/delivery-settings', { method: 'GET', query }),
+    patchDeliverySettings: (body: {
+      business_id: string;
+      instant_delivery_enabled?: boolean;
+      delivery_integration?: ShopDeliverySettings['delivery_integration'];
+    }) => this.request<ShopDeliverySettings>('/shop/delivery-settings', { method: 'PATCH', body }),
     getSettings: (query: { business_id: string }) =>
       this.request<ShopSettings>('/shop/settings', { method: 'GET', query }),
     patchSettings: (body: {
@@ -3171,6 +3384,15 @@ class ApiClient {
       name: string;
       code?: string;
       is_default?: boolean;
+      phone_number?: string;
+      address_line1: string;
+      address_line2?: string;
+      city: string;
+      state?: string;
+      country: string;
+      postal_code?: string;
+      latitude: number;
+      longitude: number;
     }) => this.request<ShopGodown>('/shop/godowns', { method: 'POST', body }),
     listStockTransfers: (query: { business_id: string }) =>
       this.request<ShopStockTransfer[]>('/shop/stock-transfers', { method: 'GET', query }),
@@ -3619,13 +3841,16 @@ class ApiClient {
         method: 'POST',
         body,
       }),
-    searchUsers: (email: string) =>
-      this.request<{ users: PlatformUserRow[] }>('/platform/users/search', { method: 'GET', query: { email } }),
+    searchUsers: (params: PlatformUserSearchParams | string = {}) =>
+      this.request<PlatformUserSearchResult>('/platform/users/search', {
+        method: 'GET',
+        query: typeof params === 'string' ? { q: params } : { ...params },
+      }),
     userAction: (userId: string, action: 'disable' | 'enable' | 'reset_password', body: { reason: string }) =>
       this.request<Record<string, unknown>>(`/platform/users/${userId}/actions/${action}`, { method: 'POST', body }),
-    audit: (query?: { tenant_id?: string; action?: string; limit?: number }) =>
-      this.request<{ events: PlatformAuditEvent[] }>('/platform/audit', { method: 'GET', query }),
-    exportCsv: (exportType: 'tenants' | 'audit' | 'payments', query?: { tenant_id?: string; action?: string }) =>
+    audit: (query?: PlatformAuditQuery) =>
+      this.request<PlatformAuditResult>('/platform/audit', { method: 'GET', query }),
+    exportCsv: (exportType: 'tenants' | 'audit' | 'payments', query?: PlatformAuditQuery) =>
       this.request<string>(`/platform/exports/${exportType}`, { method: 'GET', query }),
     coupons: () =>
       this.request<{
@@ -3852,14 +4077,33 @@ class ApiClient {
       this.request<BillingPlatformRevenue>('/billing/platform-revenue', { method: 'GET' }),
     platformMonitoring: (query?: { window_hours?: number }) =>
       this.request<BillingPlatformMonitoring>('/billing/platform-monitoring', { method: 'GET', query }),
-    platformWebhookEvents: (query?: { window_hours?: number; status?: string; limit?: number }) =>
-      this.request<{ window_hours: number; count: number; events: BillingWebhookEvent[] }>(
+    platformWebhookEvents: (query?: {
+      window_hours?: number;
+      status?: string;
+      q?: string;
+      tenant_id?: string;
+      provider?: string;
+      event_type?: string;
+      limit?: number;
+      offset?: number;
+    }) =>
+      this.request<{
+        window_hours: number;
+        count: number;
+        total: number;
+        limit: number;
+        offset: number;
+        providers: string[];
+        event_types: string[];
+        events: BillingWebhookEvent[];
+      }>(
         '/billing/platform-webhook-events',
         { method: 'GET', query },
       ),
-    platformReprocessWebhookEvent: (eventId: string) =>
+    platformReprocessWebhookEvent: (eventId: string, body?: { reason?: string }) =>
       this.request<BillingWebhookReprocessResult>(`/billing/platform-webhook-events/${eventId}/reprocess`, {
         method: 'POST',
+        body,
       }),
     platformReprocessWebhookEventsBulk: (body: BillingWebhookBulkReprocessInput) =>
       this.request<BillingWebhookBulkReprocessResult>('/billing/platform-webhook-events/reprocess-bulk', {
@@ -3983,7 +4227,16 @@ class ApiClient {
     getCustomerProfile: (query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileCustomerProfile>('/mobile/customer/profile', { method: 'GET', query }),
     updateCustomerProfile: (
-      body: { full_address?: string; latitude?: number | null; longitude?: number | null },
+      body: {
+        full_address?: string;
+        line1?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        postal_code?: string;
+        latitude?: number | null;
+        longitude?: number | null;
+      },
       query: { tenant_slug: string; business_code: string },
     ) => this.request<MobileCustomerProfile>('/mobile/customer/profile', { method: 'PATCH', body, query }),
     listMyReviews: (query: { tenant_slug: string; business_code: string }) =>
@@ -4070,7 +4323,13 @@ class ApiClient {
       fulfillment_note?: string;
       delivery_address?: string;
       delivery_city?: string;
+      delivery_state?: string;
       delivery_postal_code?: string;
+      delivery_latitude?: string | number | null;
+      delivery_longitude?: string | number | null;
+      delivery_method?: 'standard' | 'instant';
+      delivery_quote_id?: string;
+      displayed_delivery_fee?: string | number | null;
       payment_method?: string;
       coupon_code?: string;
       points_to_redeem?: number;
@@ -4096,6 +4355,10 @@ class ApiClient {
     }) => this.request<ShopCouponOffer[]>('/mobile/shop/coupons/available', { method: 'GET', query }),
     getShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopOrder>(`/mobile/shop/orders/${orderId}`, { method: 'GET', query }),
+    getShopOrderDeliveryLive: (
+      orderId: string,
+      query: { tenant_slug: string; business_code: string; refresh?: boolean },
+    ) => this.request<ShopDeliveryLive>(`/mobile/shop/orders/${orderId}/delivery-live`, { method: 'GET', query }),
     cancelShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopOrder>(`/mobile/shop/orders/${orderId}/cancel`, { method: 'POST', query }),
     claimShopPayment: (
@@ -4118,6 +4381,18 @@ class ApiClient {
           same_day: boolean;
         };
       }>('/mobile/shop/delivery-zones/match', { method: 'GET', query, auth: false }),
+    quoteShopDelivery: (body: {
+      tenant_slug: string;
+      business_code: string;
+      latitude: string | number;
+      longitude: string | number;
+      address?: string;
+      city?: string;
+      state?: string;
+      postal_code?: string;
+      subtotal: string | number;
+      lines?: Array<{ product_id: string; quantity: string | number }>;
+    }) => this.request<ShopDeliveryQuote>('/mobile/shop/delivery/quote', { method: 'POST', body }),
     listMyPets: (query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopPet[]>('/mobile/shop/pets', { method: 'GET', query }),
     createMyPet: (
@@ -4202,6 +4477,53 @@ class ApiClient {
     getHealth: () => this.request<{ status: string }>('/health', { method: 'GET' }),
     getLiveness: () => this.request<{ status: string }>('/liveness', { method: 'GET' }),
     getReadiness: () => this.request<{ status: string }>('/readiness', { method: 'GET' }),
+  };
+
+  places = {
+    autocomplete: (body: {
+      input: string;
+      session_token: string;
+      latitude?: number;
+      longitude?: number;
+      country_code?: string;
+      language_code?: string;
+    }) =>
+      this.request<{
+        predictions: Array<{
+          place_id: string;
+          description: string;
+          main_text: string;
+          secondary_text?: string;
+          types?: string[];
+        }>;
+      }>(
+        '/places/autocomplete',
+        { method: 'POST', body },
+      ),
+    details: (query: { place_id: string; session_token: string; language_code?: string }) =>
+      this.request<{
+        formatted_address: string;
+        line1: string;
+        display_name?: string | null;
+        city?: string | null;
+        state?: string | null;
+        country?: string | null;
+        postal_code?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+      }>('/places/details', { method: 'GET', query }),
+    reverse: (query: { latitude: number; longitude: number; language_code?: string }) =>
+      this.request<{
+        formatted_address: string;
+        line1: string;
+        display_name?: string | null;
+        city?: string | null;
+        state?: string | null;
+        country?: string | null;
+        postal_code?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+      }>('/places/reverse', { method: 'GET', query }),
   };
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<ApiEnvelope<T>> {

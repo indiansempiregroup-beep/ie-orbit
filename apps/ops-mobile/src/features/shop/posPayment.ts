@@ -50,6 +50,7 @@ export const SHOP_ORDER_STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'ready', label: 'Ready' },
+  { value: 'out_for_delivery', label: 'Out for delivery' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
@@ -58,6 +59,9 @@ export function shopOrderStatusStyle(status?: string | null): { bg: string; text
   const value = String(status || '').toLowerCase();
   if (value === 'completed') return { bg: '#D1FAE5', text: '#047857', label: 'Completed' };
   if (value === 'ready') return { bg: '#DBEAFE', text: '#1D4ED8', label: 'Ready' };
+  if (value === 'out_for_delivery') {
+    return { bg: '#CFFAFE', text: '#0E7490', label: 'Out for delivery' };
+  }
   if (value === 'confirmed') return { bg: '#E0E7FF', text: '#3730A3', label: 'Confirmed' };
   if (value === 'cancelled') return { bg: '#FEE2E2', text: '#B91C1C', label: 'Cancelled' };
   if (value === 'pending') return { bg: '#FEF3C7', text: '#B45309', label: 'Pending' };
@@ -87,12 +91,18 @@ export function nextShopOrderAction(
     };
   }
   if (value === 'ready') {
+    if (delivery) return null;
     return {
       status: 'completed',
-      label: delivery ? 'Mark delivered' : 'Mark picked up',
-      hint: delivery
-        ? 'Customer has received the order.'
-        : 'Customer has collected the order.',
+      label: 'Mark picked up',
+      hint: 'Customer has collected the order.',
+    };
+  }
+  if (value === 'out_for_delivery') {
+    return {
+      status: 'completed',
+      label: 'Mark delivered',
+      hint: 'Use this only if the provider has not already confirmed delivery.',
     };
   }
   return null;

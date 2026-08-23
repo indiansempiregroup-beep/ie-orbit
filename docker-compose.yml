@@ -29,6 +29,7 @@ services:
       EMAIL_USE_SSL: ${EMAIL_USE_SSL:-false}
       CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-false}
       PYTHONPATH: /app/backend
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:
@@ -62,7 +63,7 @@ services:
         APP_ENV: development
     working_dir: /app
     command: >-
-      sh -c "rm -rf /app/node_modules /app/web/node_modules /app/packages/sdk/node_modules /app/packages/i18n/node_modules && pnpm install --frozen-lockfile --filter @ie-platform/web... && mkdir -p /app/web/node_modules/@ie-platform && ln -sfn ../../../packages/i18n /app/web/node_modules/@ie-platform/i18n && ln -sfn ../../../packages/sdk /app/web/node_modules/@ie-platform/sdk && pnpm --dir web dev --host 0.0.0.0 --port 3000"
+      sh -c "pnpm install --frozen-lockfile --filter @ie-platform/web... && mkdir -p /app/web/node_modules/@ie-platform && ln -sfn ../../../packages/i18n /app/web/node_modules/@ie-platform/i18n && ln -sfn ../../../packages/sdk /app/web/node_modules/@ie-platform/sdk && pnpm --dir web dev --host 0.0.0.0 --port 3000"
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
@@ -77,6 +78,12 @@ services:
       - "3000:3000"
     volumes:
       - .:/app
+      # Keep Linux container modules out of the host bind mount. Without these,
+      # restarting web can remove/replace the macOS modules Metro is actively using.
+      - web-root-node-modules:/app/node_modules
+      - web-app-node-modules:/app/web/node_modules
+      - web-sdk-node-modules:/app/packages/sdk/node_modules
+      - web-i18n-node-modules:/app/packages/i18n/node_modules
       - pnpm-store:/root/.local/share/pnpm/store/v3
     depends_on:
       - backend
@@ -222,6 +229,10 @@ volumes:
   backend-python-cache:
   backend-media:
   pnpm-store:
+  web-root-node-modules:
+  web-app-node-modules:
+  web-sdk-node-modules:
+  web-i18n-node-modules:
 
 networks:
   ie-platform:

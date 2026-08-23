@@ -21,10 +21,11 @@ export type RootStackParamList = {
   BookingDetail: { bookingId: string };
   ServiceDetail: { serviceId: string };
   ShopProductDetail: { productId: string };
-  Cart: undefined;
+  Cart: { selectedAddressId?: string } | undefined;
   ShopOrderDetail: { orderId: string };
   ShopOrderHistory: undefined;
-  AddressBook: undefined;
+  AddressBook: { mode?: 'select'; selectedAddressId?: string } | undefined;
+  AddressForm: { addressId?: string; selectOnSave?: boolean } | undefined;
   MyPets: undefined;
   PetDetail: { petId: string };
   PetForm: { petId?: string };

@@ -1,0 +1,365 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Loyalty &amp; Rewards - NexusHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-on-surface": "#ecf1ff",
+                      "surface-dim": "#cfdaf2",
+                      "inverse-surface": "#263143",
+                      "outline-variant": "#c5c5d4",
+                      "surface-bright": "#f9f9ff",
+                      "on-primary-container": "#cacfff",
+                      "secondary-container": "#6cf8bb",
+                      "surface-tint": "#4355b9",
+                      "on-tertiary": "#ffffff",
+                      "on-primary-fixed": "#00105c",
+                      "on-tertiary-fixed": "#2a1700",
+                      "secondary-fixed-dim": "#4edea3",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#bac3ff",
+                      "error-container": "#ffdad6",
+                      "secondary-fixed": "#6ffbbe",
+                      "on-error": "#ffffff",
+                      "surface": "#f9f9ff",
+                      "primary": "#24389c",
+                      "on-secondary-fixed-variant": "#005236",
+                      "on-surface-variant": "#454652",
+                      "error": "#ba1a1a",
+                      "tertiary-container": "#805000",
+                      "on-primary": "#ffffff",
+                      "on-secondary-fixed": "#002113",
+                      "on-primary-fixed-variant": "#293ca0",
+                      "on-secondary-container": "#00714d",
+                      "secondary": "#006c49",
+                      "tertiary-fixed": "#ffddb8",
+                      "surface-container": "#e7eeff",
+                      "surface-container-lowest": "#ffffff",
+                      "on-surface": "#111c2d",
+                      "tertiary": "#603b00",
+                      "primary-fixed": "#dee0ff",
+                      "on-tertiary-container": "#ffc988",
+                      "inverse-primary": "#bac3ff",
+                      "outline": "#757684",
+                      "surface-container-high": "#dee8ff",
+                      "tertiary-fixed-dim": "#ffb95f",
+                      "on-background": "#111c2d",
+                      "primary-container": "#3f51b5",
+                      "surface-container-low": "#f0f3ff",
+                      "background": "#f9f9ff",
+                      "on-tertiary-fixed-variant": "#653e00",
+                      "on-error-container": "#93000a",
+                      "surface-container-highest": "#d8e3fb",
+                      "surface-variant": "#d8e3fb"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "container-max": "1280px",
+                      "md": "16px",
+                      "xl": "40px",
+                      "lg": "24px",
+                      "sm": "8px",
+                      "xs": "4px",
+                      "base": "4px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "body-sm": ["Inter"],
+                      "data-mono": ["JetBrains Mono"],
+                      "headline-lg-mobile": ["Inter"],
+                      "body-md": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "headline-md": ["Inter"]
+              },
+              "fontSize": {
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "data-mono": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .pattern-bg {
+            background-image: radial-gradient(var(--tw-colors-primary-fixed) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md antialiased min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-inverse-surface shadow-sm docked full-width top-0 z-50">
+<div class="flex justify-between items-center w-full px-lg py-md max-w-container-max mx-auto">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="business_logo">business_center</span>
+</div>
+<h1 class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed-dim">NexusHub</h1>
+</div>
+<nav class="hidden md:flex gap-lg items-center">
+<a class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors px-md py-sm rounded-lg active:scale-95 duration-150" href="#">
+<span class="text-label-caps font-label-caps">Home</span>
+</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors px-md py-sm rounded-lg active:scale-95 duration-150" href="#">
+<span class="text-label-caps font-label-caps">Shop</span>
+</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors px-md py-sm rounded-lg active:scale-95 duration-150" href="#">
+<span class="text-label-caps font-label-caps">Book</span>
+</a>
+<a class="text-primary dark:text-inverse-primary font-bold hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors px-md py-sm rounded-lg active:scale-95 duration-150" href="#">
+<span class="text-label-caps font-label-caps">Rewards</span>
+</a>
+</nav>
+<button class="w-10 h-10 rounded-full hover:bg-surface-container-high dark:hover:bg-surface-variant flex items-center justify-center text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<main class="flex-grow max-w-container-max w-full mx-auto px-4 md:px-lg py-lg md:py-xl grid grid-cols-1 md:grid-cols-12 gap-lg pb-24 md:pb-lg">
+<!-- Hero / Points Balance -->
+<section class="col-span-1 md:col-span-8 flex flex-col gap-lg">
+<div class="relative overflow-hidden rounded-xl bg-primary text-on-primary shadow-lg p-lg md:p-xl h-full flex flex-col justify-between">
+<!-- Background Pattern -->
+<div class="absolute inset-0 opacity-10 pattern-bg"></div>
+<div class="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-lg">
+<div>
+<p class="text-label-caps font-label-caps text-primary-fixed-dim uppercase tracking-widest mb-xs">Available Royalty Points</p>
+<h2 class="text-display-lg font-display-lg">12,450</h2>
+</div>
+<div class="bg-white/20 backdrop-blur-md rounded-full px-md py-sm flex items-center gap-sm">
+<span class="material-symbols-outlined text-secondary-fixed" data-icon="stars" style="font-variation-settings: 'FILL' 1;">stars</span>
+<span class="text-label-caps font-label-caps text-white">Gold Tier</span>
+</div>
+</div>
+<div class="mt-xl">
+<div class="flex justify-between items-end mb-sm">
+<span class="text-body-sm font-body-sm text-primary-fixed-dim">2,550 points to Platinum</span>
+<span class="text-data-mono font-data-mono">15,000</span>
+</div>
+<div class="w-full bg-black/20 rounded-full h-3 overflow-hidden">
+<div class="bg-secondary-fixed h-full rounded-full transition-all duration-1000 ease-out w-[83%] relative overflow-hidden" style="width: 83%;">
+<div class="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Digital Card -->
+<section class="col-span-1 md:col-span-4">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant p-lg h-full flex flex-col items-center justify-center text-center relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-secondary"></div>
+<h3 class="text-headline-md font-headline-md text-on-surface mb-sm">Digital Card</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-lg">Scan to earn or redeem in-store</p>
+<div class="bg-white p-sm rounded-lg shadow-sm border border-outline-variant mb-lg w-48 h-48 flex items-center justify-center">
+<!-- Placeholder for QR Code image -->
+<img alt="QR Code" class="w-full h-full object-contain mix-blend-multiply opacity-80" data-alt="A high contrast, sharp, minimalist black and white QR code set against a stark white square background. The design is purely functional and digital, lacking any extraneous decoration or shadows, representing a sleek, modern digital loyalty card scan interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC4vjvXIJPZqNr9SQrjZO0bZvzctGMZpUsPlfp6Rplkcm5Wq_4ktetvAX0ytvETqpHljMlhs7JjM_j8wNwzZPPLVoKJyHG9C8JBdNAaY2CGesknUBweMhlmZZ6NhEl0ZSYyPDl-8sjhGI9H6viLLzNLNtOtN1aSEekrQq91FaC1lSgB9mZAoxcxXUp1g2_VopsbcM_0xpeDwcgPgaNRyEhN5xNACsNF7qoElHyc_QnQWimeJCCKakLzTQ">
+</div>
+<div class="bg-surface-container px-md py-sm rounded-lg flex items-center gap-sm">
+<span class="material-symbols-outlined text-outline" data-icon="qr_code_scanner">qr_code_scanner</span>
+<span class="text-data-mono font-data-mono text-on-surface-variant tracking-widest">NX-882-991A</span>
+</div>
+</div>
+</section>
+<!-- Rewards For You (Bento) -->
+<section class="col-span-1 md:col-span-12 mt-md">
+<div class="flex items-center justify-between mb-lg">
+<h3 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-on-surface">Rewards for You</h3>
+<button class="text-primary hover:text-primary-fixed-dim text-body-sm font-body-sm font-medium flex items-center gap-xs transition-colors">
+                    View All <span class="material-symbols-outlined text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md">
+<!-- Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant overflow-hidden group hover:shadow-md transition-shadow">
+<div class="h-32 bg-surface-container-high relative overflow-hidden">
+<img alt="Coffee Reward" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A beautifully composed flat lay of premium artisanal coffee beans scattered around a sleek, modern matte black espresso cup. The lighting is soft and natural, casting subtle shadows on a pristine white marble surface. The aesthetic is clean, sophisticated, and inviting, typical of a high-end corporate cafe setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBV0enAsDsDISRS5hamuolZQ9ZRn_dNMmXyvhlMufMpfH9m0Bdo99-AXqcu7zcbYmDEifIKUPq44BHCFW98jepXc7dlx8UixBtR9PPOC37p40dEXMXGTTwgbz5l_QXQk65i7c3Hj_iGgFs4Ux6XaPbdlXM50--oS4D3e-YRUzyZwdueJ9ZzXq-5vbWL3-WenEvkqhfi6JM2ci3gCe2FApCq48Q4O1_V6nkv43a_gzKKLCazsDoXOzlvaw">
+<div class="absolute top-sm right-sm bg-surface/90 backdrop-blur text-primary text-label-caps font-label-caps px-sm py-xs rounded">500 pts</div>
+</div>
+<div class="p-md">
+<h4 class="text-body-md font-body-md font-semibold text-on-surface mb-xs">Free Artisan Coffee</h4>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-md">Redeem for any standard espresso drink.</p>
+<button class="w-full bg-primary/10 text-primary hover:bg-primary/20 py-sm rounded-lg text-body-sm font-body-sm font-medium transition-colors">Redeem Reward</button>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant overflow-hidden group hover:shadow-md transition-shadow">
+<div class="h-32 bg-secondary/10 relative overflow-hidden flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl text-secondary" data-icon="percent" style="font-variation-settings: 'FILL' 1;">percent</span>
+<div class="absolute top-sm right-sm bg-surface/90 backdrop-blur text-primary text-label-caps font-label-caps px-sm py-xs rounded">1,200 pts</div>
+</div>
+<div class="p-md">
+<h4 class="text-body-md font-body-md font-semibold text-on-surface mb-xs">15% Off Next Purchase</h4>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-md">Valid on all retail items in-store.</p>
+<button class="w-full bg-primary text-on-primary hover:bg-primary/90 py-sm rounded-lg text-body-sm font-body-sm font-medium transition-colors shadow-sm">Redeem Reward</button>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant overflow-hidden group hover:shadow-md transition-shadow">
+<div class="h-32 bg-surface-container relative overflow-hidden">
+<img alt="Booking Reward" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A pristine, minimalist workspace featuring a high-end digital tablet displaying a sleek calendar interface, resting next to a premium mechanical pen on a clean, light wood desk surface. The lighting is bright and airy, creating a modern, productive atmosphere suitable for a premium business service app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVsAbJJUR3FIWMBoMj5pPh6_ZFYyLc5i5FbEvJVOIq6bpItRFeGY1xKbyS-SwPDPTju5PFI6Io_FdhIpQpUKd50ubgbctB72LNUeEIkGWc7NsOECmuqyDBl9BPj6JyCR1WzvJ2PpKgnnQEcnYSvW5FpZHZXqj4Teru5JFqIPCtuIjS3MYkngGRCQFfuDQhQjUT1t2C1UVajG9dpih2M13-dz2qFONTArXLDhWu7P9OqRJ0ilKXxBL4MQ">
+<div class="absolute top-sm right-sm bg-surface/90 backdrop-blur text-primary text-label-caps font-label-caps px-sm py-xs rounded">3,000 pts</div>
+</div>
+<div class="p-md">
+<h4 class="text-body-md font-body-md font-semibold text-on-surface mb-xs">Priority Booking Pass</h4>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-md">Skip the waitlist for your next appointment.</p>
+<button class="w-full bg-primary/10 text-primary hover:bg-primary/20 py-sm rounded-lg text-body-sm font-body-sm font-medium transition-colors">Redeem Reward</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Lower Section: History & Info -->
+<section class="col-span-1 md:col-span-12 grid grid-cols-1 md:grid-cols-2 gap-lg mt-md">
+<!-- History -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant p-lg">
+<div class="flex items-center justify-between mb-lg">
+<h3 class="text-headline-md font-headline-md text-on-surface">History</h3>
+<span class="text-label-caps font-label-caps text-on-surface-variant cursor-pointer hover:text-primary">FILTER</span>
+</div>
+<div class="space-y-0">
+<!-- Transaction 1 -->
+<div class="flex items-center justify-between py-md border-b border-surface-container">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="shopping_bag">shopping_bag</span>
+</div>
+<div>
+<p class="text-body-sm font-body-sm font-medium text-on-surface">In-store Purchase</p>
+<p class="text-label-caps font-label-caps text-on-surface-variant mt-xs">OCT 24 • #ORD-092</p>
+</div>
+</div>
+<span class="text-body-sm font-body-sm font-semibold text-secondary">+120 pts</span>
+</div>
+<!-- Transaction 2 -->
+<div class="flex items-center justify-between py-md border-b border-surface-container">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+</div>
+<div>
+<p class="text-body-sm font-body-sm font-medium text-on-surface">Consultation Booking</p>
+<p class="text-label-caps font-label-caps text-on-surface-variant mt-xs">OCT 20 • APPT-44</p>
+</div>
+</div>
+<span class="text-body-sm font-body-sm font-semibold text-secondary">+450 pts</span>
+</div>
+<!-- Transaction 3 -->
+<div class="flex items-center justify-between py-md">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-on-error-container">
+<span class="material-symbols-outlined" data-icon="local_cafe">local_cafe</span>
+</div>
+<div>
+<p class="text-body-sm font-body-sm font-medium text-on-surface">Reward Redemption</p>
+<p class="text-label-caps font-label-caps text-on-surface-variant mt-xs">OCT 15 • Coffee</p>
+</div>
+</div>
+<span class="text-body-sm font-body-sm font-semibold text-on-surface">-500 pts</span>
+</div>
+</div>
+</div>
+<!-- How it Works -->
+<div class="bg-surface-container-low rounded-xl p-lg flex flex-col justify-center">
+<h3 class="text-headline-md font-headline-md text-on-surface mb-lg">How It Works</h3>
+<div class="space-y-md">
+<div class="flex gap-md">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 font-bold text-body-sm">1</div>
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">Earn on every interaction</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">Get 10 points for every $1 spent in-store or online, plus bonus points for booking appointments.</p>
+</div>
+</div>
+<div class="flex gap-md">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 font-bold text-body-sm">2</div>
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">Climb the tiers</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">Move from Silver to Gold to Platinum. Higher tiers unlock multipliers and exclusive perks.</p>
+</div>
+</div>
+<div class="flex gap-md">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 font-bold text-body-sm">3</div>
+<div>
+<p class="text-body-md font-body-md font-medium text-on-surface">Redeem for value</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-xs">Use your points at checkout for direct discounts, or claim special reward items from the catalog.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex justify-around items-center gap-md px-md py-xs bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg rounded-full w-max max-w-[90%] lg:hidden">
+<a class="flex flex-col items-center justify-center px-md py-1 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="text-label-caps font-label-caps">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center px-md py-1 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="shopping_bag">shopping_bag</span>
+<span class="text-label-caps font-label-caps">Shop</span>
+</a>
+<a class="flex flex-col items-center justify-center px-md py-1 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="calendar_today">calendar_today</span>
+<span class="text-label-caps font-label-caps">Book</span>
+</a>
+<a class="flex flex-col items-center justify-center px-md py-1 text-primary relative" href="#">
+<div class="absolute -top-2 w-8 h-1 bg-primary rounded-full"></div>
+<span class="material-symbols-outlined mb-1" data-icon="stars" style="font-variation-settings: 'FILL' 1;">stars</span>
+<span class="text-label-caps font-label-caps font-bold">Rewards</span>
+</a>
+</nav>
+<script>
+        // Simple animation for the progress bar on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const bar = document.querySelector('.bg-secondary-fixed');
+            if(bar) {
+                bar.style.width = '0%';
+                setTimeout(() => {
+                    bar.style.width = '83%';
+                }, 100);
+            }
+        });
+    </script>
+
+
+
+
+
+
+
+
+
+
+
+
+</body></html>

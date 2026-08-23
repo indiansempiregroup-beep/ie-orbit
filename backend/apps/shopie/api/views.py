@@ -45,6 +45,7 @@ from apps.shopie.api.serializers import (
 )
 from apps.shopie.models import ShopInvoice, ShopOrder, ShopProduct, ShopQuotation, ShopStockMovement
 from apps.shopie.services import CatalogService, OrderService
+from apps.shopie.services.fulfillment import FulfillmentService
 from apps.shopie.services.packaging_analysis import PackagingAnalysisService
 from apps.shopie.tasks import analyze_packaging_images_task
 
@@ -279,6 +280,33 @@ class ShopStockAdjustView(APIView):
         return success_response(ShopProductSerializer(product).data)
 
 
+class ShopProductOfficeStockView(APIView):
+    """Quantity of one product at each office, for merchant stock views."""
+
+    permission_classes = [ShopAccessPermission]
+
+    def get(self, request: Request, product_id) -> Response:
+        product = get_object_or_404(ShopProduct, tenant=request.current_tenant, id=product_id)
+        require_any_shopie_feature(product.business, STOCK_FEATURES)
+        offices = FulfillmentService().office_availability(
+            tenant=request.current_tenant,
+            business=product.business,
+            product_ids=[product.id],
+        )
+        return success_response(
+            [
+                {
+                    "branch_id": office["branch_id"],
+                    "branch_name": office["branch_name"],
+                    "is_primary": office["is_primary"],
+                    "godown_id": office["godown_id"],
+                    "quantity": office["quantities"].get(str(product.id), "0.000"),
+                }
+                for office in offices
+            ]
+        )
+
+
 class ShopStockMovementListView(APIView):
     permission_classes = [ShopAccessPermission]
 
@@ -344,7 +372,13 @@ class ShopOrderListCreateView(APIView):
                 notes=data.get("notes") or "",
                 delivery_address=data.get("delivery_address") or "",
                 delivery_city=data.get("delivery_city") or "",
+                delivery_state=data.get("delivery_state") or "",
                 delivery_postal_code=data.get("delivery_postal_code") or "",
+                delivery_latitude=data.get("delivery_latitude"),
+                delivery_longitude=data.get("delivery_longitude"),
+                delivery_method=data.get("delivery_method") or "",
+                delivery_quote_id=data.get("delivery_quote_id") or "",
+                displayed_delivery_fee=data.get("displayed_delivery_fee"),
                 confirm=bool(data.get("confirm")),
                 bill_discount_type=data.get("bill_discount_type") or "",
                 bill_discount_value=data.get("bill_discount_value") or 0,

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import MapView, { Marker, type MapPressEvent, type Region } from 'react-native-maps';
+import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, type MapPressEvent, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
 import { Button } from './ui/Button';
@@ -80,7 +80,12 @@ export function AddressMapPicker({
         </Pressable>
       </View>
       <View style={styles.mapWrap}>
-        <MapView style={styles.map} region={region} onPress={onMapPress}>
+        <MapView
+          style={styles.map}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          region={region}
+          onPress={onMapPress}
+        >
           <Marker
             coordinate={{ latitude: markerLat, longitude: markerLng }}
             draggable

@@ -11,6 +11,7 @@ import { Select } from '../../components/Select';
 import { ColorInput } from '../../components/ColorInput';
 import { LogoUploadField } from '../../components/LogoUploadField';
 import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { WizardShell } from './components/WizardShell';
 import { PasswordStrengthIndicator } from '../auth/components/PasswordStrengthIndicator';
 import { useOnboardingDraft } from './hooks/useOnboardingDraft';
@@ -270,10 +271,27 @@ export function RegisterWizard() {
         {errors.businessEmail ? <span className="field-error">{errors.businessEmail.message}</span> : null}
         <Input label="Business phone" {...register('businessPhone')} />
         <Input label="Website (optional)" {...register('website')} />
+        <div style={{ gridColumn: '1 / -1' }}>
+          <AddressLocationPicker
+            label="Business address"
+            value={values.address}
+            latitude={values.latitude}
+            longitude={values.longitude}
+            onChangeText={(value) => setValue('address', value, { shouldDirty: true, shouldValidate: true })}
+            onPlaceSelected={(place) => {
+              setValue('address', place.line1 || place.formattedAddress, { shouldDirty: true });
+              setValue('city', place.city || '', { shouldDirty: true });
+              setValue('state', place.state || '', { shouldDirty: true });
+              setValue('country', place.country || '', { shouldDirty: true });
+              setValue('postalCode', place.postalCode || '', { shouldDirty: true });
+              setValue('latitude', place.latitude ?? null, { shouldDirty: true });
+              setValue('longitude', place.longitude ?? null, { shouldDirty: true });
+            }}
+          />
+        </div>
         <Input label="Country" {...register('country')} />
         <Input label="State" {...register('state')} />
         <Input label="City" {...register('city')} />
-        <Input label="Address" {...register('address')} />
         <Input label="Postal code" {...register('postalCode')} />
       </div>
     );

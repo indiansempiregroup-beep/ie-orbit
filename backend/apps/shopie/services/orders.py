@@ -26,8 +26,14 @@ from apps.shopie.models import (
 )
 from apps.shopie.services.catalog import CatalogService
 from apps.shopie.services.coupons import CouponService
+from apps.shopie.services.fulfillment import FulfillmentService
 from apps.shopie.services.zones import DeliveryZoneService
 from apps.tenancy.models import Tenant
+
+
+DELIVERY_METHOD_STANDARD = "standard"
+DELIVERY_METHOD_INSTANT = "instant"
+DELIVERY_METHODS = {DELIVERY_METHOD_STANDARD, DELIVERY_METHOD_INSTANT}
 
 
 class OrderService:
@@ -90,7 +96,13 @@ class OrderService:
         notes: str = "",
         delivery_address: str = "",
         delivery_city: str = "",
+        delivery_state: str = "",
         delivery_postal_code: str = "",
+        delivery_latitude: Decimal | str | float | None = None,
+        delivery_longitude: Decimal | str | float | None = None,
+        delivery_method: str = "",
+        delivery_quote_id: str = "",
+        displayed_delivery_fee: Decimal | str | float | None = None,
         confirm: bool = False,
         bill_discount_type: str = "",
         bill_discount_value: Decimal | str | int | float = "0",
@@ -104,21 +116,52 @@ class OrderService:
 
         mode = fulfillment_mode or FulfillmentMode.PICKUP
         metadata: dict[str, Any] = dict(metadata_extra or {})
+        live_delivery_enabled = False
+        selected_delivery_method = str(delivery_method or "").strip().lower()
         if mode == FulfillmentMode.DELIVERY:
-            zone = self.zones.match_zone(
-                tenant=tenant,
-                business=business,
-                city=delivery_city,
-                postal_code=delivery_postal_code,
-            )
-            if zone is None:
-                raise ValidationError(
-                    {"delivery": "Delivery is not available for this city/postal code."}
+            from apps.shopie.services.delivery import DeliveryService
+
+            delivery_service = DeliveryService()
+            live_delivery_enabled = delivery_service.ensure_settings(
+                tenant=tenant, business=business
+            ).instant_delivery_enabled
+            # Preserve existing API behavior for callers that predate an explicit
+            # delivery method, while allowing customers to choose standard delivery.
+            if not selected_delivery_method:
+                selected_delivery_method = (
+                    DELIVERY_METHOD_INSTANT
+                    if live_delivery_enabled
+                    else DELIVERY_METHOD_STANDARD
                 )
-            metadata["delivery_zone_id"] = str(zone.id)
-            metadata["delivery_zone_name"] = zone.name
-            metadata["delivery_fee"] = str(zone.fee)
-            metadata["same_day"] = zone.same_day
+            if selected_delivery_method not in DELIVERY_METHODS:
+                raise ValidationError(
+                    {"delivery_method": "Choose standard or instant delivery."}
+                )
+            metadata["delivery_method"] = selected_delivery_method
+            if selected_delivery_method == DELIVERY_METHOD_INSTANT:
+                if not live_delivery_enabled:
+                    raise ValidationError(
+                        {"delivery": "Instant delivery is not enabled for this shop."}
+                    )
+                if delivery_latitude in (None, "") or delivery_longitude in (None, ""):
+                    raise ValidationError(
+                        {"delivery_address": "Select a mapped address for instant delivery."}
+                    )
+            else:
+                zone = self.zones.match_zone(
+                    tenant=tenant,
+                    business=business,
+                    city=delivery_city,
+                    postal_code=delivery_postal_code,
+                )
+                if zone is None:
+                    raise ValidationError(
+                        {"delivery": "Delivery is not available for this city/postal code."}
+                    )
+                metadata["delivery_zone_id"] = str(zone.id)
+                metadata["delivery_zone_name"] = zone.name
+                metadata["delivery_fee"] = str(zone.fee)
+                metadata["same_day"] = zone.same_day
 
         payment = str(payment_method or "").strip().lower()
         if payment in {"cod", "qr"}:
@@ -299,7 +342,76 @@ class OrderService:
 
         ShopOrderLine.objects.bulk_create(built_lines)
 
-        delivery_fee = Decimal(str(metadata.get("delivery_fee") or "0"))
+        source_office = FulfillmentService().select_source_office(
+            tenant=tenant,
+            business=business,
+            lines=built_lines,
+            drop_latitude=delivery_latitude,
+            drop_longitude=delivery_longitude,
+        )
+        if source_office is not None:
+            metadata["fulfillment"] = source_office.as_metadata()
+
+        if (
+            mode == FulfillmentMode.DELIVERY
+            and selected_delivery_method == DELIVERY_METHOD_INSTANT
+        ):
+            from apps.shopie.services.delivery import DeliveryService
+
+            customer_name = (
+                str(getattr(customer, "display_name", "") or "") if customer is not None else ""
+            )
+            customer_phone = (
+                str(getattr(customer, "phone_number", "") or "") if customer is not None else ""
+            )
+            quoted = DeliveryService().quote(
+                tenant=tenant,
+                business=business,
+                drop={
+                    "latitude": delivery_latitude,
+                    "longitude": delivery_longitude,
+                    "address": delivery_address,
+                    "city": delivery_city,
+                    "state": delivery_state,
+                    "postal_code": delivery_postal_code,
+                    "contact": {"name": customer_name, "phone": customer_phone},
+                },
+                subtotal=subtotal,
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                branch=source_office.branch if source_office else None,
+                pickup_source=source_office.location if source_office else None,
+            )
+            if not quoted.get("available"):
+                raise ValidationError({"delivery": "Instant delivery is unavailable."})
+            delivery_fee = Decimal(str(quoted["customer_fee"]))
+            if displayed_delivery_fee is not None:
+                displayed = Decimal(str(displayed_delivery_fee))
+                tolerance = max(Decimal("5.00"), displayed * Decimal("0.10"))
+                if abs(delivery_fee - displayed) > tolerance:
+                    raise ValidationError(
+                        {
+                            "delivery_fee": (
+                                "The live delivery fee changed. Refresh the quote before ordering."
+                            )
+                        }
+                    )
+            metadata["delivery_fee"] = str(delivery_fee)
+            metadata["same_day"] = True
+            metadata["delivery"] = {
+                **quoted,
+                "quote_id": quoted.get("quote_id") or delivery_quote_id,
+                "partner_status": "packing",
+                "events": [
+                    {
+                        "status": "packing",
+                        "label": "Order placed",
+                        "occurred_at": timezone.now().isoformat(),
+                    }
+                ],
+            }
+        else:
+            delivery_fee = Decimal(str(metadata.get("delivery_fee") or "0"))
         order.subtotal = subtotal
         order.discount_total = (line_discount_total + bill_discount).quantize(Decimal("0.01"))
         order.tax_total = tax_total
@@ -405,7 +517,12 @@ class OrderService:
         allowed = {
             OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
             OrderStatus.CONFIRMED: {OrderStatus.READY, OrderStatus.COMPLETED, OrderStatus.CANCELLED},
-            OrderStatus.READY: {OrderStatus.COMPLETED, OrderStatus.CANCELLED},
+            OrderStatus.READY: {
+                OrderStatus.OUT_FOR_DELIVERY,
+                OrderStatus.COMPLETED,
+                OrderStatus.CANCELLED,
+            },
+            OrderStatus.OUT_FOR_DELIVERY: {OrderStatus.COMPLETED},
             OrderStatus.COMPLETED: set(),
             OrderStatus.CANCELLED: set(),
         }
@@ -420,6 +537,11 @@ class OrderService:
             CouponService().release_for_order(order=order)
             self._refund_loyalty_on_cancel(order=order)
 
+        source_godown_id = (
+            (order.metadata or {}).get("fulfillment", {}).get("godown_id")
+            if isinstance(order.metadata, dict)
+            else None
+        )
         if status == OrderStatus.CONFIRMED and previous == OrderStatus.PENDING:
             for line in order.lines.select_related("product"):
                 self.catalog.adjust_stock(
@@ -430,6 +552,10 @@ class OrderService:
                     movement_type=StockMovementType.SALE,
                     reason=f"Order {order.order_number}",
                     order=order,
+                    godown_id=source_godown_id,
+                    # The source office may be short on part of the cart; the gap is
+                    # recorded as backorder on the order rather than blocking the sale.
+                    allow_backorder=True,
                 )
         if status == OrderStatus.CANCELLED and previous in {
             OrderStatus.CONFIRMED,
@@ -444,6 +570,7 @@ class OrderService:
                     movement_type=StockMovementType.RETURN,
                     reason=f"Cancel {order.order_number}",
                     order=order,
+                    godown_id=source_godown_id,
                 )
         refreshed = self.get_order(tenant=tenant, business=business, order_id=order.id)
         if status in {OrderStatus.CONFIRMED, OrderStatus.COMPLETED}:

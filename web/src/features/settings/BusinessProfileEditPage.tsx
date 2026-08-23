@@ -7,6 +7,7 @@ import { Select } from '../../components/Select';
 import { ColorInput } from '../../components/ColorInput';
 import { LogoUploadField } from '../../components/LogoUploadField';
 import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { PRODUCT_CATALOG } from '../../config/products';
 import {
   APPOINTMENT_INTERVALS,
@@ -201,11 +202,29 @@ export function BusinessProfileEditPage() {
           </Section>
 
           <Section title="Location">
+            <AddressLocationPicker
+              label="Business address"
+              value={formState.address_line1}
+              latitude={formState.latitude}
+              longitude={formState.longitude}
+              onChangeText={(value) => updateField('address_line1', value)}
+              onPlaceSelected={(place) => {
+                setFormState((current) => ({
+                  ...current,
+                  address_line1: place.line1 || place.formattedAddress,
+                  city: place.city || '',
+                  state: place.state || '',
+                  country: place.country || '',
+                  postal_code: place.postalCode || '',
+                  latitude: place.latitude ?? null,
+                  longitude: place.longitude ?? null,
+                }));
+              }}
+            />
             <div style={fieldGridStyle}>
               <Input label="Country" value={formState.country} onChange={(e) => updateField('country', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
               <Input label="State" value={formState.state} onChange={(e) => updateField('state', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
               <Input label="City" value={formState.city} onChange={(e) => updateField('city', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Address" value={formState.address_line1} onChange={(e) => updateField('address_line1', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
               <Input label="Postal code" value={formState.postal_code} onChange={(e) => updateField('postal_code', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
             </div>
           </Section>

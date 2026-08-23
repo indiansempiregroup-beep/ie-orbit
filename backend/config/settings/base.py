@@ -159,6 +159,7 @@ REST_FRAMEWORK = {
         "user": "1000/hour",
         "auth_login": "10/minute",
         "password_reset": "5/minute",
+        "places": "60/minute",
     },
     "PAGE_SIZE": 50,
     "EXCEPTION_HANDLER": "apps.common.api.exceptions.global_exception_handler",
@@ -253,6 +254,10 @@ CELERY_BEAT_SCHEDULE = {
 }
 CELERY_BEAT_SCHEDULE = {key: value for key, value in CELERY_BEAT_SCHEDULE.items() if value is not None}
 
+GOOGLE_PLACES_API_KEY = (
+    os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
+    or os.getenv("GOOGLE_MAPS_SERVER_API_KEY", "").strip()
+)
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")

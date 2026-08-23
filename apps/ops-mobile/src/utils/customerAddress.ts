@@ -9,8 +9,8 @@ export type CustomerAddressLike = {
     postal_code?: string | null;
     full_address?: string | null;
     is_default?: boolean;
-    latitude?: number | null;
-    longitude?: number | null;
+    latitude?: number | string | null;
+    longitude?: number | string | null;
   }>;
   address?: {
     line1?: string | null;
@@ -19,8 +19,8 @@ export type CustomerAddressLike = {
     country?: string | null;
     postal_code?: string | null;
     full_address?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
+    latitude?: number | string | null;
+    longitude?: number | string | null;
   } | null;
 };
 
@@ -44,8 +44,8 @@ export function parseCustomerAddress(customer: CustomerAddressLike): ParsedCusto
     state: defaultAddress?.state ?? undefined,
     country: defaultAddress?.country ?? undefined,
     postalCode: defaultAddress?.postal_code ?? undefined,
-    latitude: defaultAddress?.latitude ?? null,
-    longitude: defaultAddress?.longitude ?? null,
+    latitude: defaultAddress?.latitude != null ? Number(defaultAddress.latitude) : null,
+    longitude: defaultAddress?.longitude != null ? Number(defaultAddress.longitude) : null,
   };
 }
 

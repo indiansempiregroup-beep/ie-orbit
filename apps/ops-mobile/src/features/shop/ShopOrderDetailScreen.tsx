@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -17,7 +17,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
 import { colors, fonts, spacing } from '../../theme/tokens';
-import type { ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
+import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime } from '../../utils/format';
@@ -83,6 +83,7 @@ export function ShopOrderDetailScreen() {
   const [qtyByLine, setQtyByLine] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
   const [restock, setRestock] = useState(true);
+  const [deliveryLive, setDeliveryLive] = useState<ShopDeliveryLive | null>(null);
 
   const load = useCallback(async () => {
     if (!client || !orderId || !businessId) return;
@@ -95,6 +96,18 @@ export function ShopOrderDetailScreen() {
       ]);
       setOrder(orderRes.data);
       setReturns(returnsRes.data ?? []);
+      const hasLiveDelivery =
+        orderRes.data.metadata &&
+        typeof orderRes.data.metadata === 'object' &&
+        orderRes.data.metadata.delivery;
+      if (hasLiveDelivery) {
+        try {
+          const live = await client.shop.getOrderDeliveryLive(orderId, true);
+          setDeliveryLive(live.data);
+        } catch {
+          setDeliveryLive(null);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load order');
       setOrder(null);
@@ -108,6 +121,17 @@ export function ShopOrderDetailScreen() {
       void load();
     }, [load]),
   );
+
+  useEffect(() => {
+    if (!client || !deliveryLive || deliveryLive.terminal) return;
+    const timer = setInterval(() => {
+      void client.shop
+        .getOrderDeliveryLive(orderId, true)
+        .then((response) => setDeliveryLive(response.data))
+        .catch(() => undefined);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, [client, deliveryLive, orderId]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -219,6 +243,32 @@ export function ShopOrderDetailScreen() {
     if (ok) await setOrderStatus('cancelled');
   }
 
+  async function dispatchOrder() {
+    if (!client || !order) return;
+    const ok = await confirmAction({
+      title: 'Request a rider?',
+      message: 'The delivery partner will charge this shop’s connected account.',
+      confirmLabel: 'Dispatch',
+      cancelLabel: 'Not yet',
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await client.shop.dispatchOrder(order.id);
+      setOrder(response.data);
+      const live = await client.shop.getOrderDeliveryLive(order.id, true);
+      setDeliveryLive(live.data);
+      toast.push('Rider requested. Live tracking is active.', 'success');
+    } catch (err) {
+      const text = err instanceof Error ? err.message : 'Unable to dispatch order';
+      setError(text);
+      toast.push(text, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitReturn() {
     if (!client || !businessId || !order) return;
     const lines = returnableLines
@@ -287,6 +337,29 @@ export function ShopOrderDetailScreen() {
   const pos = getShopOrderPosMeta(order);
   const payment = formatShopOrderPayment(order);
   const due = isShopOrderBorrowDue(order);
+  const fulfillment =
+    order.metadata && typeof order.metadata === 'object'
+      ? ((order.metadata as Record<string, unknown>).fulfillment as
+          | {
+              branch_name?: string;
+              distance_km?: number | null;
+              shortfall?: Array<{
+                product_id: string;
+                product_name: string;
+                needed: string;
+                available: string;
+              }>;
+            }
+          | undefined)
+      : undefined;
+  const orderMetadata =
+    order.metadata && typeof order.metadata === 'object'
+      ? (order.metadata as Record<string, unknown>)
+      : {};
+  const deliveryMethod = String(orderMetadata.delivery_method || '');
+  const isInstantDelivery =
+    deliveryMethod === 'instant' ||
+    (!deliveryMethod && typeof orderMetadata.delivery === 'object' && orderMetadata.delivery !== null);
   const isBorrow = String(pos.payment_method || '').toLowerCase() === 'borrow';
   const amountDue = Number(pos.amount_due ?? (isBorrow ? order.total : 0) ?? 0);
   const customerName = order.customer_id
@@ -310,7 +383,7 @@ export function ShopOrderDetailScreen() {
   const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
   const nextAction = nextShopOrderAction(order.status, order.fulfillment_mode);
   const statusStyle = shopOrderStatusStyle(order.status);
-  const canCancel = canCancelShopOrder(order.status);
+  const canCancel = canCancelShopOrder(order.status) && !deliveryLive?.available;
   const lineDiscountTotal = Number(pos.line_discount_total ?? 0);
   const billDiscountAmount = Number(pos.bill_discount_amount ?? 0);
   const merchandiseGross = (order.lines ?? []).reduce((sum, line) => {
@@ -341,7 +414,11 @@ export function ShopOrderDetailScreen() {
             </View>
           </View>
           <Text style={styles.meta}>
-            {formatShopOrderFulfillment(order.fulfillment_mode)}
+            {String(order.fulfillment_mode).toLowerCase() === 'delivery'
+              ? isInstantDelivery
+                ? 'Deliver now'
+                : 'Standard delivery'
+              : formatShopOrderFulfillment(order.fulfillment_mode)}
             {order.created_at ? ` · ${formatDateTime(order.created_at)}` : ''}
           </Text>
           <Text style={styles.customer}>{customerName}</Text>
@@ -356,11 +433,52 @@ export function ShopOrderDetailScreen() {
           {payment ? <Text style={[styles.payment, due && styles.due]}>{payment}</Text> : null}
         </View>
 
+        {deliveryLive?.available ? (
+          <View style={styles.headerCard}>
+            <View style={styles.deliveryLiveHeader}>
+              <View style={[styles.deliveryLiveDot, { backgroundColor: deliveryLive.terminal ? colors.success : colors.primary }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.section}>Live delivery</Text>
+                <Text style={styles.deliveryHeadline}>{deliveryLive.headline}</Text>
+              </View>
+            </View>
+            {deliveryLive.rider?.name ? (
+              <View style={styles.addressBox}>
+                <Text style={styles.addressLabel}>Rider</Text>
+                <Text style={styles.addressValue}>
+                  {deliveryLive.rider.name}
+                  {deliveryLive.rider.vehicle ? ` · ${deliveryLive.rider.vehicle}` : ''}
+                  {deliveryLive.rider.phone ? ` · ${deliveryLive.rider.phone}` : ''}
+                </Text>
+              </View>
+            ) : null}
+            {[...(deliveryLive.events ?? [])].reverse().map((event, index) => (
+              <View key={`${event.status}-${event.occurred_at}-${index}`} style={styles.deliveryEvent}>
+                <View style={[styles.deliveryEventDot, index === 0 && { backgroundColor: colors.primary }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.deliveryEventLabel}>{event.label || event.status.replace(/_/g, ' ')}</Text>
+                  {event.occurred_at ? <Text style={styles.meta}>{formatDateTime(event.occurred_at)}</Text> : null}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {isOnlineOrder && (nextAction || canCancel) ? (
           <View style={styles.headerCard}>
             <Text style={styles.section}>Fulfillment</Text>
             {nextAction ? <Text style={styles.meta}>{nextAction.hint}</Text> : null}
-            {nextAction ? (
+            {String(order.fulfillment_mode).toLowerCase() === 'delivery' &&
+            order.status === 'ready' &&
+            isInstantDelivery ? (
+              <Pressable
+                style={[styles.primaryBtn, busy && styles.btnDisabled]}
+                disabled={busy}
+                onPress={() => void dispatchOrder()}
+              >
+                <Text style={styles.primaryBtnText}>{busy ? 'Requesting rider…' : 'Dispatch · request rider'}</Text>
+              </Pressable>
+            ) : nextAction ? (
               <Pressable
                 style={[styles.primaryBtn, busy && styles.btnDisabled]}
                 disabled={busy}
@@ -497,6 +615,21 @@ export function ShopOrderDetailScreen() {
           <View style={styles.notesCard}>
             <Text style={styles.section}>Delivery</Text>
             <Text style={styles.meta}>{order.delivery_address}</Text>
+          </View>
+        ) : null}
+
+        {fulfillment?.branch_name ? (
+          <View style={styles.notesCard}>
+            <Text style={styles.section}>Fulfilled from</Text>
+            <Text style={styles.meta}>
+              {fulfillment.branch_name}
+              {fulfillment.distance_km != null ? ` · ${fulfillment.distance_km} km from customer` : ''}
+            </Text>
+            {(fulfillment.shortfall ?? []).map((row) => (
+              <Text key={row.product_id} style={styles.backorder}>
+                {row.product_name}: {row.needed} needed, {row.available} in stock
+              </Text>
+            ))}
           </View>
         ) : null}
 
@@ -654,6 +787,33 @@ const styles = StyleSheet.create({
   },
   orderNumber: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground, flex: 1 },
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  deliveryLiveHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  deliveryLiveDot: { width: 10, height: 10, borderRadius: 5, marginTop: 14 },
+  deliveryHeadline: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 17,
+    color: colors.foreground,
+    marginTop: 4,
+  },
+  deliveryEvent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  deliveryEventDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    marginTop: 5,
+    backgroundColor: colors.border,
+  },
+  deliveryEventLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 14,
+    color: colors.foreground,
+    textTransform: 'capitalize',
+  },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   statusBadgeText: { fontSize: 12, fontWeight: '800' },
   cancelOrderBtn: {
@@ -704,6 +864,7 @@ const styles = StyleSheet.create({
   lineHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   name: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground },
   meta: { color: colors.mutedForeground, fontSize: 13 },
+  backorder: { color: colors.warning, fontSize: 13, marginTop: 4 },
   returnedHint: { color: colors.primary, fontSize: 12, fontWeight: '600', marginTop: 2 },
   qty: { color: colors.foreground, fontWeight: '600', fontSize: 14 },
   lineTotal: { fontFamily: fonts.bodySemi, fontSize: 16, color: colors.foreground },

@@ -1,0 +1,517 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>POS Counter Billing</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-on-surface": "#ecf1ff",
+                        "surface-dim": "#cfdaf2",
+                        "inverse-surface": "#263143",
+                        "outline-variant": "#c5c5d4",
+                        "surface-bright": "#f9f9ff",
+                        "on-primary-container": "#cacfff",
+                        "secondary-container": "#6cf8bb",
+                        "surface-tint": "#4355b9",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#00105c",
+                        "on-tertiary-fixed": "#2a1700",
+                        "secondary-fixed-dim": "#4edea3",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#bac3ff",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-error": "#ffffff",
+                        "surface": "#f9f9ff",
+                        "primary": "#24389c",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-surface-variant": "#454652",
+                        "error": "#ba1a1a",
+                        "tertiary-container": "#805000",
+                        "on-primary": "#ffffff",
+                        "on-secondary-fixed": "#002113",
+                        "on-primary-fixed-variant": "#293ca0",
+                        "on-secondary-container": "#00714d",
+                        "secondary": "#006c49",
+                        "tertiary-fixed": "#ffddb8",
+                        "surface-container": "#e7eeff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#111c2d",
+                        "tertiary": "#603b00",
+                        "primary-fixed": "#dee0ff",
+                        "on-tertiary-container": "#ffc988",
+                        "inverse-primary": "#bac3ff",
+                        "outline": "#757684",
+                        "surface-container-high": "#dee8ff",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "on-background": "#111c2d",
+                        "primary-container": "#3f51b5",
+                        "surface-container-low": "#f0f3ff",
+                        "background": "#f9f9ff",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#d8e3fb",
+                        "surface-variant": "#d8e3fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1280px",
+                        "md": "16px",
+                        "xl": "40px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "xs": "4px",
+                        "base": "4px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "data-mono": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom scrollbar for better POS feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f0f3ff; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c5c5d4; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #757684; 
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md h-screen overflow-hidden flex flex-col md:flex-row">
+<!-- SideNav (Desktop) -->
+<nav class="hidden lg:flex flex-col h-screen border-r border-outline-variant bg-surface-container-low w-64 flex-shrink-0 z-10 shadow-md">
+<div class="p-lg flex items-center gap-md border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-primary text-[32px]">point_of_sale</span>
+<span class="text-headline-md font-headline-md text-primary font-bold">NexusHub</span>
+</div>
+<div class="p-md flex items-center gap-md border-b border-outline-variant/30">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a business manager in a corporate setting. The manager is wearing smart casual attire and has a friendly, confident expression. The lighting is soft and natural, creating a welcoming and trustworthy corporate aesthetic suitable for a business dashboard profile picture." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8QYZLgxcX4zuXOQSxndk_PoqfmHvSFZmNcoVvYBskJcR0p8T1FtULwD23GG0zCGVEMaMdtLIUITDt9q0BHf_3XWVQ57cdf8h2r5NJRELqYs8elDsyKsnNTE0Vfn1JTy6xPG6lGyaHnCqUEWHk5Z8wWOQ4rr4SDsIXniIoWBQliCODhfjru7T3ago1q2FAti_jCU4IO4rG2zOuFHu0QQQEUdXzN4ovMVwXuz1oj6rvoFdtiNcs6Rp-YQ">
+</div>
+<div>
+<p class="text-body-md font-body-md font-semibold">Business Manager</p>
+<p class="text-label-caps font-label-caps text-on-surface-variant">Administrator • HQ Office</p>
+</div>
+</div>
+<ul class="flex flex-col gap-sm p-md flex-grow">
+<li class="">
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-highest px-md py-sm rounded-lg transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-body-md font-body-md">Dashboard</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-md bg-primary-container text-on-primary-container rounded-lg px-md py-sm transition-all duration-200 ease-in-out shadow-sm font-bold" href="#">
+<span class="material-symbols-outlined">point_of_sale</span>
+<span class="text-body-md font-body-md">POS Terminal</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-highest px-md py-sm rounded-lg transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="text-body-md font-body-md">Inventory Control</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-highest px-md py-sm rounded-lg transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="text-body-md font-body-md">Analytics</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-md text-on-surface-variant hover:bg-surface-container-highest px-md py-sm rounded-lg transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="text-body-md font-body-md">Team Management</span>
+</a>
+</li>
+</ul>
+<div class="p-md mt-auto">
+<button class="flex items-center gap-md text-on-surface-variant hover:bg-error-container hover:text-on-error-container px-md py-sm rounded-lg transition-all w-full">
+<span class="material-symbols-outlined">logout</span>
+<span class="text-body-md font-body-md">Sign Out</span>
+</button>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-grow flex flex-col h-screen relative bg-surface-bright">
+<!-- TopAppBar (Mobile/Tablet fallback if needed, but primary interaction is here) -->
+<header class="flex justify-between items-center w-full px-lg py-md bg-surface-bright shadow-sm z-20 flex-shrink-0 lg:hidden">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-[28px]">point_of_sale</span>
+<h1 class="text-headline-md font-headline-md font-bold text-primary">NexusHub</h1>
+</div>
+<button class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</header>
+<div class="flex-grow flex flex-col md:flex-row overflow-hidden relative">
+<!-- Left Side: Products Catalog -->
+<section class="flex-grow flex flex-col h-full bg-surface w-full md:w-2/3 lg:w-3/4 p-md lg:p-lg gap-md overflow-hidden relative">
+<!-- Search & Filters -->
+<div class="flex flex-col gap-md flex-shrink-0 relative z-10">
+<div class="relative w-full shadow-sm rounded-lg">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline px-sm">search</span>
+<input class="w-full pl-xl pr-xl py-sm bg-surface-container-lowest border border-outline-variant rounded-lg text-body-lg font-body-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow placeholder:text-outline h-14" placeholder="Search products by name, SKU, or brand..." type="text">
+<button class="absolute right-sm top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-primary bg-primary-container/20 rounded-md hover:bg-primary-container/40 transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">barcode_scanner</span>
+</button>
+</div>
+<!-- Category Chips - Horizontal Scroll -->
+<div class="flex gap-sm overflow-x-auto pb-xs scrollbar-hide snap-x">
+<button class="snap-start flex-shrink-0 px-md py-sm rounded-full bg-primary text-on-primary text-label-caps font-label-caps whitespace-nowrap shadow-sm active:scale-95 transition-transform">
+                            All Items
+                        </button>
+<button class="snap-start flex-shrink-0 px-md py-sm rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high text-label-caps font-label-caps whitespace-nowrap border border-outline-variant/30 active:scale-95 transition-transform">
+                            Electronics
+                        </button>
+<button class="snap-start flex-shrink-0 px-md py-sm rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high text-label-caps font-label-caps whitespace-nowrap border border-outline-variant/30 active:scale-95 transition-transform">
+                            Groceries
+                        </button>
+<button class="snap-start flex-shrink-0 px-md py-sm rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high text-label-caps font-label-caps whitespace-nowrap border border-outline-variant/30 active:scale-95 transition-transform">
+                            Apparel
+                        </button>
+<button class="snap-start flex-shrink-0 px-md py-sm rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high text-label-caps font-label-caps whitespace-nowrap border border-outline-variant/30 active:scale-95 transition-transform">
+                            Home &amp; Garden
+                        </button>
+<button class="snap-start flex-shrink-0 px-md py-sm rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high text-label-caps font-label-caps whitespace-nowrap border border-outline-variant/30 active:scale-95 transition-transform">
+                            Automotive
+                        </button>
+<button class="snap-start flex-shrink-0 px-md py-sm rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high text-label-caps font-label-caps whitespace-nowrap border border-outline-variant/30 active:scale-95 transition-transform">
+                            Toys &amp; Games
+                        </button>
+</div>
+</div>
+<!-- Product Grid - Bento Style -->
+<div class="flex-grow overflow-y-auto pr-sm pb-24 md:pb-0">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-md">
+<!-- Product Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/50 overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer group relative">
+<div class="absolute top-sm right-sm z-10">
+<span class="bg-secondary/10 text-secondary text-label-caps font-label-caps px-2 py-1 rounded-full border border-secondary/20">In Stock: 42</span>
+</div>
+<div class="h-32 bg-surface-variant flex items-center justify-center overflow-hidden relative">
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent z-0"></div>
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="A sleek, modern wireless noise-canceling headphone in a minimalist matte black finish. The headphone is resting on a clean, light-colored surface with soft, diffused studio lighting highlighting its premium build quality. The aesthetic is high-tech corporate commerce, sharp and professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCS6rncFP_c6ZCaxUWePa9me8sTzsBr6TJP7KakU5aq4HNJifLbgmhClhaH7kBJN6d5OUIB9Rtwqag9JNTht29xDPE1qrwQckR67CR7cc7sBqBzK1M9gb_alMq7OkI1yOho3t_i0hiCJnL7kD-7se7ORPigVVryOGMX6fFzXACED3X3TxshN11PQ7OppBfhmvzK7_AimL4ex7zeP9YsSJX0rBqCwDfnMCvX4spad4h7CcB54XiQh6j_BQ">
+</div>
+<div class="p-sm flex flex-col flex-grow">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 leading-tight mb-xs">SonicWave Pro Wireless Headphones</h3>
+<p class="text-outline text-label-caps font-label-caps mb-sm">Electronics</p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-data-mono font-data-mono font-bold text-primary">$249.99</span>
+</div>
+</div>
+</div>
+<!-- Product Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/50 overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer group relative">
+<div class="absolute top-sm right-sm z-10">
+<span class="bg-secondary/10 text-secondary text-label-caps font-label-caps px-2 py-1 rounded-full border border-secondary/20">In Stock: 15</span>
+</div>
+<div class="h-32 bg-surface-variant flex items-center justify-center overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="A high-end smart home security camera with a sleek, white cylindrical design. It is positioned against a neutral grey background with crisp, directional lighting that emphasizes its sophisticated lens and modern corporate aesthetic. Professional product photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDl_wgN3ziSSZkewylNVoyGcmSGmwrXcZuVAoqv_-3YnrBh5N2yi71ZUkehuvjkv4nyMoINjNCeMiNp8zvotwNWBAzQN8N299ODrzBYKCUbEXk-KstW25k0b2BX51p-V2F3rHSu576OsLuJyIxMSaQnP9LsuinwpbEDzN41SQKcAnrWIZOnDDQOPG-iFPmk5mXSuPD4FMnEVzReXz9MAeQ7d5751pcfkZFKVX8WETSqWdzoJFz2Wxuy8w">
+</div>
+<div class="p-sm flex flex-col flex-grow">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 leading-tight mb-xs">SecureVision 360 Smart Cam</h3>
+<p class="text-outline text-label-caps font-label-caps mb-sm">Electronics</p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-data-mono font-data-mono font-bold text-primary">$129.50</span>
+</div>
+</div>
+</div>
+<!-- Product Card 3 (Low Stock Warning) -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/50 overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer group relative">
+<div class="absolute top-sm right-sm z-10">
+<span class="bg-error/10 text-error text-label-caps font-label-caps px-2 py-1 rounded-full border border-error/20">Low Stock: 3</span>
+</div>
+<div class="h-32 bg-surface-variant flex items-center justify-center overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="A premium mechanical keyboard with RGB backlighting, featuring tactile switches and a brushed aluminum frame. The keyboard is photographed from a slight angle on a dark, textured surface to highlight its gamer-yet-professional aesthetic. Crisp, high-contrast lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAchCmwFWl4fgbDehvH2ZgyKp91gpYsh5taOGZpJKt-y-18Fe4IzVsMQrPZw_Ox9NT2bMuzZGcS1ZK_JbB5sjKhJdfvt1fGfI4JnhR1WxX3spxqhRQknpZO2IG_AzyVefVPQmYTrtxCLcjFJuSvD9ilhcgodqJptVL8SN3Mzf_yASVHRmO7a8oh98bON2FDifJ4Ecj_ycR5qT3329M2g6D8mRMQcUV1_2BCk5w5TlE_bIAfRppN7tvfnA">
+</div>
+<div class="p-sm flex flex-col flex-grow">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 leading-tight mb-xs">MechTypist RGB Keyboard</h3>
+<p class="text-outline text-label-caps font-label-caps mb-sm">Electronics</p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-data-mono font-data-mono font-bold text-primary">$189.00</span>
+</div>
+</div>
+</div>
+<!-- Product Card 4 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/50 overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer group relative">
+<div class="absolute top-sm right-sm z-10">
+<span class="bg-secondary/10 text-secondary text-label-caps font-label-caps px-2 py-1 rounded-full border border-secondary/20">In Stock: 88</span>
+</div>
+<div class="h-32 bg-surface-variant flex items-center justify-center overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="A collection of artisanal, organic coffee beans spilling out of a rustic burlap sack onto a clean, white marble countertop. The lighting is warm and inviting, suggesting premium quality and organic origins. High-end culinary photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBjq5AKW55OJMtBCSeZ5KvA2qkRorCsIdIfN5aZSfcp3BqlIXnFzpcHC2EDehHFASHcX4WJP9bvYyq5SqnmutthXDfWIo2Anw0yP1wIvwt5ijtNdxOmbbQJ5Ex4cUGRfoV0LE6osY3cSTo9LkMnw-W0ncX0M9DPGKyMqRZFPz8rpoZWAKrFGFCJk1AXyNrmzxYzz0D2AgwSUQqs3-sRKpJtu6_o9O8d4g6DIYA4T4o3whpIRhoFX3m3kw">
+</div>
+<div class="p-sm flex flex-col flex-grow">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 leading-tight mb-xs">Artisan Reserve Coffee Blend</h3>
+<p class="text-outline text-label-caps font-label-caps mb-sm">Groceries</p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-data-mono font-data-mono font-bold text-primary">$18.99</span>
+</div>
+</div>
+</div>
+<!-- Product Card 5 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/50 overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer group relative ring-2 ring-primary ring-offset-1">
+<div class="absolute top-sm right-sm z-10">
+<span class="bg-secondary/10 text-secondary text-label-caps font-label-caps px-2 py-1 rounded-full border border-secondary/20">In Stock: 120</span>
+</div>
+<!-- Active State Indicator -->
+<div class="absolute inset-0 bg-primary/5 z-0 pointer-events-none"></div>
+<div class="h-32 bg-surface-variant flex items-center justify-center overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="A modern, insulated stainless steel water bottle in a sleek matte navy blue color. The bottle is standing upright against a light grey background with soft studio lighting reflecting off its curved surface, emphasizing its durability and premium design." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiuTEp4NBKEUDUIXxHkO6KLusMlgNAalJwKX0UVzB5MIhUPV-7Ibx8m6JPrMgGV7K7xcdpoaKbd2lCLb5fzMG80SEttODxENG2DD7iqewVkpBukQB4E4Zv2_9wG0X8MqE4F5T-TqO4G4T04qT5sXfXaQwxQ-wIv2qh40xPnzYp1cqg0HopO_ISMT03vfO7FafiGKTkH9ppfiUcGTp6iuNakV8zlbLwENAU2_rhb1_H8NaD7SSZYa9ceg">
+</div>
+<div class="p-sm flex flex-col flex-grow relative z-10">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 leading-tight mb-xs">HydroTech Insulated Flask 32oz</h3>
+<p class="text-outline text-label-caps font-label-caps mb-sm">Home &amp; Garden</p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-data-mono font-data-mono font-bold text-primary">$34.50</span>
+</div>
+</div>
+</div>
+<!-- Product Card 6 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/50 overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer group relative">
+<div class="absolute top-sm right-sm z-10">
+<span class="bg-secondary/10 text-secondary text-label-caps font-label-caps px-2 py-1 rounded-full border border-secondary/20">In Stock: 5</span>
+</div>
+<div class="h-32 bg-surface-variant flex items-center justify-center overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="A professional-grade digital multimeter with a robust, yellow and black protective casing. It is displayed alongside its test leads on a clean, industrial workbench surface. The lighting is crisp and technical, highlighting the precision instrument aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCS-4jZACUDGCKKB_NmZOPnIUE4n43dddpW8hK-sX8sP6C7kPPiSoVDXT-wdO55OFytuU66MdJldoJHTSf0V7FyBV8D4UJQGhU23wiGpnml-eCzgFrm3Mmey1tGj4KiB_id-lc2NxrWDc2CB8aaB0DyF3t5juuSTCNBZI_deP_O8Y08gvg1ZeYnoyoROliHItEKRiwPAsFkNWeBIf_un54a7OyghCb395o8g4KSj01VhUQ1UnzEO9AIXA">
+</div>
+<div class="p-sm flex flex-col flex-grow">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 leading-tight mb-xs">Pro-Measure Digital Multimeter</h3>
+<p class="text-outline text-label-caps font-label-caps mb-sm">Automotive</p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-data-mono font-data-mono font-bold text-primary">$85.00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Side: Cart Drawer (Desktop Default Open, Mobile Toggleable) -->
+<aside class="md:flex flex-col w-full md:w-1/3 lg:w-1/4 bg-surface-container-lowest border-l border-outline-variant/30 absolute md:relative top-0 z-40 transform transition-transform duration-300 shadow-xl md:shadow-none hidden right-0 h-full" id="cartDrawer">
+<!-- Cart Header -->
+<div class="p-md border-b border-outline-variant/30 flex justify-between items-center bg-surface flex-shrink-0">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-[24px]">shopping_cart</span>
+<h2 class="text-headline-md font-headline-md font-bold text-on-surface">Current Order</h2>
+</div>
+<div class="flex items-center gap-sm">
+<span class="bg-primary-container text-on-primary-container text-label-caps font-label-caps px-2 py-1 rounded-full font-bold">4 Items</span>
+<button class="md:hidden w-8 h-8 flex items-center justify-center rounded-full bg-surface-variant text-on-surface hover:bg-outline-variant/50" id="closeCartBtn">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</div>
+<!-- Customer Selection (Optional for POS) -->
+<div class="p-md border-b border-outline-variant/30 bg-surface-bright flex-shrink-0">
+<div class="flex items-center justify-between p-sm border border-outline-variant/50 rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-outline">person_add</span>
+<span class="text-body-md font-body-md text-on-surface-variant">Add Customer</span>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+</div>
+<!-- Cart Items List -->
+<div class="flex-grow overflow-y-auto p-md flex flex-col gap-sm bg-surface-container-lowest">
+<!-- Cart Item 1 -->
+<div class="flex flex-col gap-sm p-sm border border-outline-variant/30 rounded-lg hover:border-outline-variant/60 transition-colors bg-surface relative group">
+<div class="flex justify-between items-start">
+<h4 class="text-body-md font-body-md font-semibold text-on-surface pr-6">SonicWave Pro Wireless Headphones</h4>
+<button class="absolute top-sm right-sm text-outline hover:text-error transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+<div class="flex justify-between items-center mt-1">
+<div class="flex items-center border border-outline-variant/50 rounded-md overflow-hidden bg-surface-container-lowest h-8">
+<button class="w-8 h-full flex items-center justify-center hover:bg-surface-variant text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="w-10 text-center text-data-mono font-data-mono text-body-md font-semibold border-x border-outline-variant/50 leading-8">1</span>
+<button class="w-8 h-full flex items-center justify-center hover:bg-surface-variant text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<span class="text-data-mono font-data-mono font-bold text-on-surface">$249.99</span>
+</div>
+</div>
+<!-- Cart Item 2 -->
+<div class="flex flex-col gap-sm p-sm border border-outline-variant/30 rounded-lg hover:border-outline-variant/60 transition-colors bg-surface relative group">
+<div class="flex justify-between items-start">
+<h4 class="text-body-md font-body-md font-semibold text-on-surface pr-6">HydroTech Insulated Flask 32oz</h4>
+<button class="absolute top-sm right-sm text-outline hover:text-error transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+<div class="flex justify-between items-center mt-1">
+<div class="flex items-center border border-outline-variant/50 rounded-md overflow-hidden bg-surface-container-lowest h-8">
+<button class="w-8 h-full flex items-center justify-center hover:bg-surface-variant text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="w-10 text-center text-data-mono font-data-mono text-body-md font-semibold border-x border-outline-variant/50 leading-8">2</span>
+<button class="w-8 h-full flex items-center justify-center hover:bg-surface-variant text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<span class="text-data-mono font-data-mono font-bold text-on-surface">$69.00</span>
+</div>
+</div>
+<!-- Cart Item 3 -->
+<div class="flex flex-col gap-sm p-sm border border-outline-variant/30 rounded-lg hover:border-outline-variant/60 transition-colors bg-surface relative group">
+<div class="flex justify-between items-start">
+<h4 class="text-body-md font-body-md font-semibold text-on-surface pr-6">Artisan Reserve Coffee Blend</h4>
+<button class="absolute top-sm right-sm text-outline hover:text-error transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+<div class="flex justify-between items-center mt-1">
+<div class="flex items-center border border-outline-variant/50 rounded-md overflow-hidden bg-surface-container-lowest h-8">
+<button class="w-8 h-full flex items-center justify-center hover:bg-surface-variant text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="w-10 text-center text-data-mono font-data-mono text-body-md font-semibold border-x border-outline-variant/50 leading-8">1</span>
+<button class="w-8 h-full flex items-center justify-center hover:bg-surface-variant text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<span class="text-data-mono font-data-mono font-bold text-on-surface">$18.99</span>
+</div>
+</div>
+</div>
+<!-- Totals & Checkout (Anchored to Bottom) -->
+<div class="p-md border-t border-outline-variant/40 bg-surface-container-low flex-shrink-0">
+<div class="flex flex-col gap-xs mb-md">
+<div class="flex justify-between text-body-md font-body-md text-on-surface-variant">
+<span class="">Subtotal</span>
+<span class="text-data-mono font-data-mono">$337.98</span>
+</div>
+<div class="flex justify-between text-body-md font-body-md text-on-surface-variant">
+<span class="">Tax (8.5%)</span>
+<span class="text-data-mono font-data-mono">$28.73</span>
+</div>
+<div class="flex justify-between text-body-md font-body-md text-secondary font-semibold mt-xs pt-xs border-t border-outline-variant/20">
+<span class="">Discount</span>
+<span class="text-data-mono font-data-mono">-$0.00</span>
+</div>
+<div class="flex justify-between items-center mt-sm pt-sm border-t border-outline-variant/50">
+<span class="text-headline-md font-headline-md font-bold text-on-surface">Total</span>
+<span class="text-headline-md font-headline-md font-bold text-primary text-data-mono font-data-mono">$366.71</span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="grid grid-cols-2 gap-sm mb-sm">
+<button class="py-sm px-md rounded-lg border border-outline text-on-surface hover:bg-surface-variant transition-colors text-body-md font-body-md font-semibold">
+                            Hold Order
+                        </button>
+<button class="py-sm px-md rounded-lg border border-error text-error hover:bg-error-container transition-colors text-body-md font-body-md font-semibold">
+                            Cancel
+                        </button>
+</div>
+<button class="w-full py-md px-md rounded-xl bg-primary text-on-primary hover:bg-on-primary-fixed-variant transition-colors text-headline-lg-mobile font-headline-lg-mobile font-bold flex items-center justify-center gap-sm shadow-md active:scale-[0.98] duration-150">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">payments</span>
+                        Pay $366.71
+                    </button>
+</div>
+</aside>
+<!-- Mobile Cart Overlay Background -->
+<div class="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-sm transition-opacity hidden" id="cartOverlay"></div>
+</div>
+</main>
+<!-- Mobile Floating Checkout Bar (Hidden on Desktop) -->
+<!-- BottomNavBar (Mobile Only) -->
+
+<script>
+        // Simple drawer toggle logic for mobile
+        document.addEventListener('DOMContentLoaded', () => {
+            const openBtn = document.getElementById('openCartBtn');
+            const closeBtn = document.getElementById('closeCartBtn');
+            const drawer = document.getElementById('cartDrawer');
+            const overlay = document.getElementById('cartOverlay');
+
+            function toggleCart() {
+                if(window.innerWidth < 768) {
+                    drawer.classList.toggle('hidden');
+                    drawer.classList.toggle('fixed');
+                    drawer.classList.toggle('right-0');
+                    drawer.classList.toggle('bottom-0');
+                    drawer.classList.toggle('h-full');
+                    drawer.classList.toggle('z-50');
+                    
+                    overlay.classList.toggle('hidden');
+                }
+            }
+
+            if(openBtn) openBtn.addEventListener('click', toggleCart);
+            if(closeBtn) closeBtn.addEventListener('click', toggleCart);
+            if(overlay) overlay.addEventListener('click', toggleCart);
+        });
+    </script>
+
+
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex justify-around items-center gap-md px-md py-xs bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg rounded-full w-max max-w-[90%]">
+<a class="flex flex-col items-center justify-center text-primary transition-colors active:scale-90 duration-100 w-14 py-1" href="#">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="text-[10px] font-label-caps mt-1 font-bold">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-100 w-14 py-1" href="#">
+<span class="material-symbols-outlined text-[24px]">shopping_bag</span>
+<span class="text-[10px] font-label-caps mt-1">POS</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-100 w-14 py-1" href="#">
+<span class="material-symbols-outlined text-[24px]">inventory_2</span>
+<span class="text-[10px] font-label-caps mt-1">Items</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-100 w-14 py-1" href="#">
+<span class="material-symbols-outlined text-[24px]">analytics</span>
+<span class="text-[10px] font-label-caps mt-1">Stats</span>
+</a>
+</nav></body></html>

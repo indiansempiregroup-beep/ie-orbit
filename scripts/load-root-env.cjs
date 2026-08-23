@@ -34,14 +34,17 @@ function loadRootEnv(fromDir = __dirname) {
     process.env[key] = stripQuotes(line.slice(eq + 1).trim());
   }
 
-  // Optional single Places key → fill both frontend prefixes when unset.
-  const places = process.env.GOOGLE_PLACES_API_KEY;
+  // One unrestricted Maps key: copy into Vite/Expo names when those vars are missing or blank.
+  const places = (process.env.GOOGLE_PLACES_API_KEY || '').trim();
   if (places) {
-    if (process.env.VITE_GOOGLE_PLACES_API_KEY === undefined) {
+    if (!(process.env.VITE_GOOGLE_PLACES_API_KEY || '').trim()) {
       process.env.VITE_GOOGLE_PLACES_API_KEY = places;
     }
-    if (process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY === undefined) {
+    if (!(process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '').trim()) {
       process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = places;
+    }
+    if (!(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '').trim()) {
+      process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY = places;
     }
   }
 

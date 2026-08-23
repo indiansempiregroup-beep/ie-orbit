@@ -21,7 +21,7 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
-import type { ShopGodown, ShopProduct } from '@ie-platform/sdk';
+import type { ShopGodown, ShopProduct, ShopProductOfficeStock } from '@ie-platform/sdk';
 import { formatMoney } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';
@@ -53,13 +53,35 @@ export function ShopStockAdjustScreen() {
   const [quantityDelta, setQuantityDelta] = useState('');
   const [reason, setReason] = useState('');
   const [movementType, setMovementType] = useState('adjust');
+  const [officeStock, setOfficeStock] = useState<ShopProductOfficeStock[]>([]);
 
   const closeForm = useCallback(() => {
     setSelected(null);
     setQuantityDelta('');
     setReason('');
     setMovementType('adjust');
+    setOfficeStock([]);
   }, []);
+
+  const selectProduct = useCallback(
+    async (product: ShopProduct) => {
+      setSelected(product);
+      setOfficeStock([]);
+      if (!client) return;
+      try {
+        const response = await client.shop.listProductOfficeStock(product.id);
+        const rows = response.data ?? [];
+        setOfficeStock(rows);
+        // Adjustments should land at the office the merchant is standing in, so
+        // default to the one already holding stock.
+        const holding = rows.find((row) => Number(row.quantity) > 0) ?? rows[0];
+        if (holding) setGodownId(holding.godown_id);
+      } catch {
+        setOfficeStock([]);
+      }
+    },
+    [client],
+  );
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -156,7 +178,37 @@ export function ShopStockAdjustScreen() {
           {selected.sku ? ` · SKU ${selected.sku}` : ''}
         </Text>
 
-        {showGodowns && godowns.length ? (
+        {officeStock.length > 1 ? (
+          <View style={styles.officeBreakdown}>
+            <Text style={styles.officeHeading}>Stock by office</Text>
+            {officeStock.map((office) => (
+              <View key={office.branch_id} style={styles.officeRow}>
+                <Text style={styles.officeName}>
+                  {office.branch_name}
+                  {office.is_primary ? ' · primary' : ''}
+                </Text>
+                <Text
+                  style={Number(office.quantity) > 0 ? styles.officeQty : styles.officeQtyEmpty}
+                >
+                  {office.quantity}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {officeStock.length > 1 ? (
+          <SelectField
+            label="Office to adjust"
+            value={godownId}
+            options={officeStock.map((office) => ({
+              value: office.godown_id,
+              label: office.is_primary ? `${office.branch_name} (primary)` : office.branch_name,
+            }))}
+            onChange={setGodownId}
+            placeholder="Select office"
+          />
+        ) : showGodowns && godowns.length ? (
           <SelectField
             label="Godown"
             value={godownId}
@@ -223,7 +275,7 @@ export function ShopStockAdjustScreen() {
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => setSelected(item)}>
+            <Pressable style={styles.row} onPress={() => void selectProduct(item)}>
               <View style={styles.rowTop}>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.stock}>{item.stock_on_hand}</Text>
@@ -283,6 +335,19 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground, flex: 1 },
   stock: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
   meta: { color: colors.mutedForeground, fontSize: 13 },
+  officeBreakdown: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  officeHeading: { ...typography.label, color: colors.mutedForeground },
+  officeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  officeName: { color: colors.foreground, fontSize: 13 },
+  officeQty: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.success },
+  officeQtyEmpty: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.destructive },
   hintText: { color: colors.primary, fontSize: 12, fontWeight: '600' },
   error: { color: colors.destructive, marginBottom: spacing.sm },
   label: { ...typography.label, color: colors.foreground },

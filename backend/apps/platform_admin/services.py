@@ -5,14 +5,20 @@ from typing import Any
 from uuid import uuid4
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Count, F, Prefetch, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.audit.services.audit import record_audit
-from apps.authentication.models import RefreshTokenRecord, User, UserSession, UserStatus
+from apps.authentication.models import (
+    RefreshTokenRecord,
+    Role,
+    User,
+    UserSession,
+    UserStatus,
+)
 from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.roles import RoleService
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
@@ -303,36 +309,144 @@ class PlatformAdminService:
 
     # --- users ---------------------------------------------------------------------
 
-    def search_users(self, *, email: str) -> list[dict[str, Any]]:
-        q = (email or "").strip()
-        if len(q) < 2:
-            raise ValidationError({"email": "Provide at least 2 characters."})
-        users = User.objects.filter(email__icontains=q).order_by("email")[:25]
-        rows = []
-        for user in users:
-            owned = list(
-                Tenant.active_objects.filter(owner=user).values("id", "slug", "display_name", "status")
+    USER_SORTS: dict[str, tuple[Any, ...]] = {
+        "recent": (F("created_at").desc(nulls_last=True),),
+        "oldest": (F("created_at").asc(nulls_last=True),),
+        "email": ("email",),
+        "name": ("first_name", "last_name", "email"),
+        "last_login": (F("last_login").desc(nulls_last=True),),
+        "stale": (F("last_login").asc(nulls_last=True),),
+    }
+
+    def _user_status_filter(self, status: str, now: Any) -> Q | None:
+        if status == "active":
+            return Q(is_active=True, status=UserStatus.ACTIVE)
+        if status == "disabled":
+            return Q(is_active=False)
+        if status == "locked":
+            return Q(locked_until__gt=now)
+        if status == "unverified":
+            return Q(email_verified_at__isnull=True)
+        if status == "suspended":
+            return Q(status=UserStatus.SUSPENDED)
+        if status == "never_logged_in":
+            return Q(last_login__isnull=True)
+        return None
+
+    def search_users(
+        self,
+        *,
+        query: str = "",
+        status: str = "all",
+        role: str = "all",
+        tenants: str = "all",
+        joined_within_days: int | None = None,
+        sort: str = "recent",
+        limit: int = 25,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        needle = (query or "").strip()
+        limit = max(1, min(int(limit or 25), 100))
+        offset = max(0, int(offset or 0))
+        now = timezone.now()
+
+        base = User.objects.all()
+        if needle:
+            base = base.filter(
+                Q(email__icontains=needle)
+                | Q(first_name__icontains=needle)
+                | Q(last_name__icontains=needle)
+                | Q(phone_number__icontains=needle)
             )
-            roles = list(user.user_roles.values_list("role__code", flat=True))
+        if role and role != "all":
+            base = base.filter(user_roles__role__code=role).distinct()
+        if joined_within_days:
+            try:
+                days = max(1, min(int(joined_within_days), 3650))
+            except (TypeError, ValueError):
+                raise ValidationError({"joined_within_days": "Must be a number of days."}) from None
+            base = base.filter(created_at__gte=now - timedelta(days=days))
+
+        base = base.annotate(
+            owned_tenant_count=Count(
+                "owned_tenants",
+                filter=Q(owned_tenants__deleted_at__isnull=True),
+                distinct=True,
+            )
+        )
+        if tenants == "owners":
+            base = base.filter(owned_tenant_count__gt=0)
+        elif tenants == "none":
+            base = base.filter(owned_tenant_count=0)
+
+        counts = base.aggregate(
+            all=Count("id", distinct=True),
+            **{
+                key: Count("id", filter=condition, distinct=True)
+                for key, condition in {
+                    "active": Q(is_active=True, status=UserStatus.ACTIVE),
+                    "disabled": Q(is_active=False),
+                    "locked": Q(locked_until__gt=now),
+                    "unverified": Q(email_verified_at__isnull=True),
+                    "suspended": Q(status=UserStatus.SUSPENDED),
+                    "never_logged_in": Q(last_login__isnull=True),
+                }.items()
+            },
+        )
+
+        status_q = self._user_status_filter(status, now)
+        filtered = base.filter(status_q) if status_q is not None else base
+
+        ordering = self.USER_SORTS.get(sort) or self.USER_SORTS["recent"]
+        total = filtered.count()
+        page = list(
+            filtered.order_by(*ordering).prefetch_related(
+                "user_roles__role",
+                Prefetch(
+                    "owned_tenants",
+                    queryset=Tenant.active_objects.all(),
+                    to_attr="active_owned_tenants",
+                ),
+            )[offset : offset + limit]
+        )
+
+        rows = []
+        for user in page:
             rows.append(
                 {
                     "id": str(user.id),
                     "email": user.email,
                     "full_name": user.full_name,
+                    "phone_number": user.phone_number,
                     "is_active": user.is_active,
-                    "roles": roles,
+                    "status": user.status,
+                    "is_locked": user.is_locked,
+                    "email_verified": bool(user.email_verified_at),
+                    "created_at": user.created_at.isoformat() if user.created_at else None,
+                    "last_login": user.last_login.isoformat() if user.last_login else None,
+                    "roles": [link.role.code for link in user.user_roles.all()],
                     "owned_tenants": [
                         {
-                            "id": str(t["id"]),
-                            "slug": t["slug"],
-                            "display_name": t["display_name"],
-                            "status": t["status"],
+                            "id": str(tenant.id),
+                            "slug": tenant.slug,
+                            "display_name": tenant.display_name,
+                            "status": tenant.status,
                         }
-                        for t in owned
+                        for tenant in user.active_owned_tenants
                     ],
                 }
             )
-        return rows
+
+        return {
+            "users": rows,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "counts": counts,
+            "roles": sorted(
+                Role.objects.filter(user_roles__isnull=False).values_list("code", flat=True).distinct()
+            ),
+        }
 
     def tenant_users(self, *, tenant: Tenant) -> list[dict[str, Any]]:
         owner = tenant.owner

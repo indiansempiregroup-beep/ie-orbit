@@ -21,6 +21,13 @@ from apps.shopie.api.compliance_views import (
     ShopVoucherEInvoiceView,
     ShopVoucherEWayView,
 )
+from apps.shopie.api.delivery_views import (
+    ShopDeliveryQuoteView,
+    ShopDeliverySettingsView,
+    ShopDeliveryWebhookView,
+    ShopOrderDeliveryLiveView,
+    ShopOrderDispatchView,
+)
 from apps.shopie.api.extended_books_views import (
     ShopBooksDocumentConvertView,
     ShopBooksDocumentListCreateView,
@@ -64,6 +71,7 @@ from apps.shopie.api.views import (
     ShopPackagingAnalyzeView,
     ShopProductDetailView,
     ShopProductListCreateView,
+    ShopProductOfficeStockView,
     ShopQuotationListCreateView,
     ShopStockAdjustView,
     ShopStockMovementListView,
@@ -76,6 +84,11 @@ urlpatterns = [
         "shop/products/<uuid:product_id>/stock-adjust",
         ShopStockAdjustView.as_view(),
         name="shop-stock-adjust",
+    ),
+    path(
+        "shop/products/<uuid:product_id>/office-stock",
+        ShopProductOfficeStockView.as_view(),
+        name="shop-product-office-stock",
     ),
     path("shop/barcodes/lookup", ShopBarcodeLookupView.as_view(), name="shop-barcode-lookup"),
     path("shop/barcodes/lookup-bulk", ShopBarcodeBulkLookupView.as_view(), name="shop-barcode-lookup-bulk"),
@@ -93,6 +106,16 @@ urlpatterns = [
     path("shop/stock-movements", ShopStockMovementListView.as_view(), name="shop-stock-movements"),
     path("shop/orders", ShopOrderListCreateView.as_view(), name="shop-order-list-create"),
     path("shop/orders/<uuid:order_id>", ShopOrderDetailView.as_view(), name="shop-order-detail"),
+    path(
+        "shop/orders/<uuid:order_id>/dispatch",
+        ShopOrderDispatchView.as_view(),
+        name="shop-order-dispatch",
+    ),
+    path(
+        "shop/orders/<uuid:order_id>/delivery-live",
+        ShopOrderDeliveryLiveView.as_view(),
+        name="shop-order-delivery-live",
+    ),
     path(
         "shop/orders/<uuid:order_id>/status",
         ShopOrderStatusView.as_view(),
@@ -122,6 +145,17 @@ urlpatterns = [
         name="shop-delivery-zone-detail",
     ),
     path("shop/settings", ShopSettingsView.as_view(), name="shop-settings"),
+    path(
+        "shop/delivery-settings",
+        ShopDeliverySettingsView.as_view(),
+        name="shop-delivery-settings",
+    ),
+    path("shop/delivery/quote", ShopDeliveryQuoteView.as_view(), name="shop-delivery-quote"),
+    path(
+        "shop/delivery/webhooks/<str:provider>/<uuid:business_id>",
+        ShopDeliveryWebhookView.as_view(),
+        name="shop-delivery-webhook",
+    ),
     path("shop/coupons", ShopCouponListCreateView.as_view(), name="shop-coupon-list-create"),
     path(
         "shop/coupons/<uuid:coupon_id>",

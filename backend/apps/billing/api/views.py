@@ -4,13 +4,14 @@ import csv
 import io
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.cache import cache
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -18,10 +19,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import Count
 
-from apps.audit.services.audit import record_audit
 from apps.audit.models import AuditLogEntry, DomainEvent
+from apps.audit.services.audit import record_audit
+from apps.authentication.api.utils import client_ip, user_agent
+from apps.authentication.permissions import HasPlatformPermission
 from apps.billing.api.serializers import (
     BillingCheckoutSerializer,
     BillingWebhookBulkReprocessSerializer,
@@ -34,7 +36,6 @@ from apps.billing.services.ops_digest import build_ops_digest
 from apps.billing.services.platform_revenue import build_platform_revenue_insights
 from apps.billing.services.reconciliation import BillingReconciliationService
 from apps.billing.services.webhooks import WebhookService
-from apps.authentication.permissions import HasPlatformPermission
 from apps.businesses.api.permissions import BusinessAccessPermission
 from apps.businesses.models import Business, BusinessProductSubscription
 from apps.common.api.responses import success_response
@@ -50,6 +51,31 @@ def _ensure_platform_admin(user) -> None:
     )
     if not is_platform_admin:
         raise PermissionDenied("Platform admin role is required.")
+
+
+def _record_platform_billing_audit(
+    request: Request,
+    *,
+    action: str,
+    resource_id: str,
+    reason: str,
+    tenant: Tenant | None = None,
+    metadata: dict | None = None,
+) -> None:
+    # Imported lazily because the platform service also depends on billing services.
+    from apps.platform_admin.services import PlatformAdminService
+
+    PlatformAdminService().audit(
+        actor=request.user,
+        tenant=tenant,
+        action=action,
+        resource_type="billing_webhook_event",
+        resource_id=resource_id,
+        reason=reason,
+        metadata=metadata or {},
+        ip_address=client_ip(request),
+        user_agent=user_agent(request),
+    )
 
 
 class BillingStatusView(APIView):
@@ -914,14 +940,34 @@ class BillingPlatformMonitoringView(APIView):
         window_hours = int(request.query_params.get("window_hours", "24"))
         window_hours = max(1, min(window_hours, 24 * 30))
         since = timezone.now() - timedelta(hours=window_hours)
-        failed_events = DomainEvent.objects.filter(
-            created_at__gte=since,
-            event_type="billing.webhook.failed",
-        ).count()
-        dead_letter_events = DomainEvent.objects.filter(
-            created_at__gte=since,
-            event_type="billing.webhook.dead_letter",
-        ).count()
+        webhook_counts = BillingWebhookEvent.objects.filter(created_at__gte=since).aggregate(
+            total_events=Count("id"),
+            processed_events=Count("id", filter=Q(status=WebhookEventStatus.PROCESSED)),
+            failed_events=Count("id", filter=Q(status=WebhookEventStatus.FAILED)),
+            dead_letter_events=Count("id", filter=Q(status=WebhookEventStatus.DEAD_LETTER)),
+            received_events=Count("id", filter=Q(status=WebhookEventStatus.RECEIVED)),
+            ignored_events=Count("id", filter=Q(status=WebhookEventStatus.IGNORED)),
+            scheduled_retries=Count(
+                "id",
+                filter=Q(
+                    status=WebhookEventStatus.FAILED,
+                    next_retry_at__isnull=False,
+                    next_retry_at__gt=timezone.now(),
+                ),
+            ),
+            overdue_retries=Count(
+                "id",
+                filter=Q(
+                    status=WebhookEventStatus.FAILED,
+                    next_retry_at__isnull=False,
+                    next_retry_at__lte=timezone.now(),
+                ),
+            ),
+        )
+        total_events = webhook_counts["total_events"] or 0
+        processed_events = webhook_counts["processed_events"] or 0
+        failed_events = webhook_counts["failed_events"] or 0
+        dead_letter_events = webhook_counts["dead_letter_events"] or 0
         reprocess_actions = AuditLogEntry.objects.filter(
             created_at__gte=since,
             action="billing.webhook.bulk_reprocess",
@@ -931,9 +977,9 @@ class BillingPlatformMonitoringView(APIView):
             action="billing.reconciliation.run",
         ).count()
         tenants_impacted = (
-            DomainEvent.objects.filter(
+            BillingWebhookEvent.objects.filter(
                 created_at__gte=since,
-                event_type__in=["billing.webhook.failed", "billing.webhook.dead_letter"],
+                status__in=[WebhookEventStatus.FAILED, WebhookEventStatus.DEAD_LETTER],
             )
             .values("tenant_id")
             .distinct()
@@ -942,8 +988,17 @@ class BillingPlatformMonitoringView(APIView):
         return success_response(
             {
                 "window_hours": window_hours,
+                "total_events": total_events,
+                "processed_events": processed_events,
                 "failed_events": failed_events,
                 "dead_letter_events": dead_letter_events,
+                "received_events": webhook_counts["received_events"] or 0,
+                "ignored_events": webhook_counts["ignored_events"] or 0,
+                "scheduled_retries": webhook_counts["scheduled_retries"] or 0,
+                "overdue_retries": webhook_counts["overdue_retries"] or 0,
+                "success_rate": round((processed_events / total_events * 100), 1)
+                if total_events
+                else 100.0,
                 "reprocess_actions": reprocess_actions,
                 "reconciliation_runs": reconciliation_runs,
                 "tenants_impacted": tenants_impacted,
@@ -964,19 +1019,61 @@ class BillingPlatformWebhookEventsView(APIView):
         window_hours = max(1, min(int(request.query_params.get("window_hours") or 24), 24 * 30))
         since = timezone.now() - timedelta(hours=window_hours)
         status_filter = (request.query_params.get("status") or "").strip().lower()
-        queryset = BillingWebhookEvent.objects.select_related("tenant").filter(created_at__gte=since)
+        queryset = BillingWebhookEvent.objects.select_related("tenant").filter(
+            created_at__gte=since
+        )
+        query = (request.query_params.get("q") or "").strip()
+        tenant_id = (request.query_params.get("tenant_id") or "").strip()
+        provider = (request.query_params.get("provider") or "").strip()
+        event_type = (request.query_params.get("event_type") or "").strip()
+        if query:
+            queryset = queryset.filter(
+                Q(external_event_id__icontains=query)
+                | Q(event_type__icontains=query)
+                | Q(error_message__icontains=query)
+                | Q(tenant__display_name__icontains=query)
+                | Q(tenant__slug__icontains=query)
+            )
+        if tenant_id:
+            queryset = queryset.filter(tenant_id=tenant_id)
+        if provider:
+            queryset = queryset.filter(provider=provider)
+        if event_type:
+            queryset = queryset.filter(event_type=event_type)
         if status_filter in {choice.value for choice in WebhookEventStatus}:
             queryset = queryset.filter(status=status_filter)
         else:
             queryset = queryset.filter(
                 status__in=[WebhookEventStatus.FAILED, WebhookEventStatus.DEAD_LETTER]
             )
-        limit = max(1, min(int(request.query_params.get("limit") or 100), 200))
-        events = queryset.order_by("-created_at")[:limit]
+        limit = max(1, min(int(request.query_params.get("limit") or 50), 200))
+        offset = max(0, int(request.query_params.get("offset") or 0))
+        total = queryset.count()
+        facets = {
+            "providers": list(
+                BillingWebhookEvent.objects.filter(created_at__gte=since)
+                .exclude(provider="")
+                .order_by("provider")
+                .values_list("provider", flat=True)
+                .distinct()
+            ),
+            "event_types": list(
+                BillingWebhookEvent.objects.filter(created_at__gte=since)
+                .exclude(event_type="")
+                .order_by("event_type")
+                .values_list("event_type", flat=True)
+                .distinct()
+            ),
+        }
+        events = list(queryset.order_by("-created_at")[offset : offset + limit])
         return success_response(
             {
                 "window_hours": window_hours,
                 "count": len(events),
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                **facets,
                 "events": BillingWebhookEventSerializer(events, many=True).data,
             },
             request_id=getattr(request, "request_id", None),
@@ -990,7 +1087,20 @@ class BillingPlatformWebhookReprocessView(APIView):
     def post(self, request: Request, event_id: str) -> Response:
         _ensure_platform_admin(request.user)
         webhook_event = get_object_or_404(BillingWebhookEvent, id=event_id)
+        previous_status = webhook_event.status
         result = WebhookService().reprocess_webhook_event(webhook_event=webhook_event)
+        _record_platform_billing_audit(
+            request,
+            action="platform.billing.webhook.reprocess",
+            resource_id=str(webhook_event.id),
+            reason=(request.data.get("reason") or "manual webhook reprocess").strip(),
+            tenant=webhook_event.tenant,
+            metadata={
+                "external_event_id": webhook_event.external_event_id,
+                "previous_status": previous_status,
+                **result,
+            },
+        )
         return success_response(result, request_id=getattr(request, "request_id", None))
 
 
@@ -1023,6 +1133,29 @@ class BillingPlatformWebhookBulkReprocessView(APIView):
             WebhookEventStatus.FAILED if scope == "failed" else WebhookEventStatus.DEAD_LETTER
         )
         queryset = BillingWebhookEvent.objects.filter(status=target_status).order_by("created_at")
+        window_hours = serializer.validated_data.get("window_hours")
+        tenant_id = serializer.validated_data.get("tenant_id")
+        provider = (serializer.validated_data.get("provider") or "").strip()
+        event_type = (serializer.validated_data.get("event_type") or "").strip()
+        query = (serializer.validated_data.get("q") or "").strip()
+        if window_hours:
+            queryset = queryset.filter(
+                created_at__gte=timezone.now() - timedelta(hours=window_hours)
+            )
+        if tenant_id:
+            queryset = queryset.filter(tenant_id=tenant_id)
+        if provider:
+            queryset = queryset.filter(provider=provider)
+        if event_type:
+            queryset = queryset.filter(event_type=event_type)
+        if query:
+            queryset = queryset.filter(
+                Q(external_event_id__icontains=query)
+                | Q(event_type__icontains=query)
+                | Q(error_message__icontains=query)
+                | Q(tenant__display_name__icontains=query)
+                | Q(tenant__slug__icontains=query)
+            )
         result = WebhookService().reprocess_webhook_events_bulk(queryset=queryset, limit=limit)
         cache.set(cache_key, BULK_REPROCESS_COOLDOWN_SECONDS, timeout=BULK_REPROCESS_COOLDOWN_SECONDS)
         record_audit(
@@ -1032,6 +1165,25 @@ class BillingPlatformWebhookBulkReprocessView(APIView):
             resource_id="platform",
             actor_id=str(request.user.id),
             metadata={"scope": scope, "limit": limit, **result},
+        )
+        filters = {
+            "window_hours": window_hours,
+            "tenant_id": str(tenant_id) if tenant_id else None,
+            "provider": provider or None,
+            "event_type": event_type or None,
+            "q": query or None,
+        }
+        _record_platform_billing_audit(
+            request,
+            action="platform.billing.webhook.bulk_reprocess",
+            resource_id="platform",
+            reason=(request.data.get("reason") or f"bulk reprocess {scope} webhooks").strip(),
+            metadata={
+                "scope": scope,
+                "limit": limit,
+                "filters": {key: value for key, value in filters.items() if value is not None},
+                **result,
+            },
         )
         return success_response(result, request_id=getattr(request, "request_id", None))
 

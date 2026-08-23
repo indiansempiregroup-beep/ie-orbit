@@ -25,3 +25,14 @@ def send_pet_birthday_reminders_task(lead_days: int = 5) -> dict[str, int]:
     from apps.shopie.services.pets import PetsService
 
     return PetsService().send_birthday_reminders(lead_days=lead_days)
+
+
+@shared_task(name="shopie.reprocess_delivery_webhook_event")
+def reprocess_delivery_webhook_event_task(event_id: str) -> dict:
+    from apps.shopie.models import ShopDeliveryWebhookEvent
+    from apps.shopie.services.delivery import DeliveryService
+
+    event = ShopDeliveryWebhookEvent.objects.select_related(
+        "tenant", "business", "order"
+    ).get(id=event_id)
+    return DeliveryService().reprocess_webhook_event(event=event)

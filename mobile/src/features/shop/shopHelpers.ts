@@ -189,7 +189,7 @@ export function isShopOrderUnpaid(order: Pick<ShopOrder, 'payment_status'>): boo
 export function shopOrderStatusTone(status?: string | null): ShopOrderStatusTone {
   const value = String(status || '').toLowerCase();
   if (value === 'completed') return 'success';
-  if (value === 'ready' || value === 'confirmed') return 'info';
+  if (value === 'ready' || value === 'confirmed' || value === 'out_for_delivery') return 'info';
   if (value === 'pending') return 'warning';
   if (value === 'cancelled') return 'danger';
   return 'muted';
@@ -230,8 +230,17 @@ export function shopOrderHeadline(order: Pick<ShopOrder, 'status' | 'fulfillment
   }
   if (status === 'ready') {
     return {
-      title: delivery ? 'Out for delivery' : 'Ready for pickup',
-      subtitle: delivery ? 'Your order is on the way.' : 'You can collect this order from the shop.',
+      title: delivery ? 'Packed and ready' : 'Ready for pickup',
+      subtitle: delivery
+        ? 'The shop will request your rider when the parcel is ready to hand over.'
+        : 'You can collect this order from the shop.',
+      tone,
+    };
+  }
+  if (status === 'out_for_delivery') {
+    return {
+      title: 'Out for delivery',
+      subtitle: 'Your order is with the rider and on the way.',
       tone,
     };
   }
@@ -311,14 +320,16 @@ export function shopOrderTimeline(order: Pick<ShopOrder, 'status' | 'fulfillment
     pending: 0,
     confirmed: 1,
     ready: 2,
-    completed: 3,
+    out_for_delivery: 3,
+    completed: delivery ? 4 : 3,
     cancelled: -1,
   };
   const rank = rankByStatus[status] ?? 0;
   const steps = [
     { key: 'pending', label: 'Ordered' },
     { key: 'confirmed', label: 'Confirmed' },
-    { key: 'ready', label: delivery ? 'Shipped' : 'Ready' },
+    { key: 'ready', label: delivery ? 'Packed' : 'Ready' },
+    ...(delivery ? [{ key: 'out_for_delivery', label: 'On the way' }] : []),
     { key: 'completed', label: delivery ? 'Delivered' : 'Picked up' },
   ];
   return steps.map((step, index) => ({

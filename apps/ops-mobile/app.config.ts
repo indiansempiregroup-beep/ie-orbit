@@ -36,6 +36,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      'expo-location',
+      {
+        locationWhenInUsePermission:
+          'Allow IE Platform to use your location to set accurate business, office, customer, and warehouse addresses.',
+      },
+    ],
+    [
       'expo-splash-screen',
       {
         backgroundColor: '#0B1F3A',
@@ -62,6 +69,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...config.android,
     package: 'com.ieplatform.ops',
     softwareKeyboardLayoutMode: 'resize',
+    config: {
+      ...config.android?.config,
+      googleMaps: {
+        apiKey:
+          process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
+          process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ||
+          process.env.GOOGLE_PLACES_API_KEY ||
+          '',
+      },
+    },
     adaptiveIcon: {
       foregroundImage: './assets/icon.png',
       backgroundColor: '#0B1F3A',

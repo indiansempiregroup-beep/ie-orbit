@@ -19,6 +19,7 @@ from apps.customers.models import Customer
 from apps.shopie.api.access import (
     require_any_shopie_feature,
     require_business as _business,
+    require_business_with_offices as _stock_location_business,
     require_document_feature,
 )
 from apps.shopie.api.permissions import ShopAccessPermission
@@ -144,7 +145,9 @@ class ShopGodownListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
+        business = _stock_location_business(
+            request, business_id, feature=FEATURE_SHOPIE_BOOKS_GODOWNS
+        )
         qs = self.godowns.list_godowns(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopGodownSerializer)
 
@@ -152,7 +155,9 @@ class ShopGodownListCreateView(APIView):
         serializer = ShopGodownCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
+        business = _stock_location_business(
+            request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_GODOWNS
+        )
         try:
             godown = self.godowns.create_godown(
                 tenant=request.current_tenant,
@@ -160,6 +165,16 @@ class ShopGodownListCreateView(APIView):
                 name=data["name"],
                 code=data.get("code") or "",
                 is_default=bool(data.get("is_default")),
+                phone_number=data.get("phone_number") or "",
+                address_line1=data["address_line1"],
+                address_line2=data.get("address_line2") or "",
+                city=data["city"],
+                state=data.get("state") or "",
+                country=data["country"],
+                postal_code=data.get("postal_code") or "",
+                latitude=data["latitude"],
+                longitude=data["longitude"],
+                require_address=True,
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
@@ -174,7 +189,9 @@ class ShopStockTransferListCreateView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
+        business = _stock_location_business(
+            request, business_id, feature=FEATURE_SHOPIE_BOOKS_GODOWNS
+        )
         qs = self.godowns.list_transfers(tenant=request.current_tenant, business=business)
         return paginated_list_response(request, qs, ShopStockTransferSerializer)
 
@@ -182,7 +199,9 @@ class ShopStockTransferListCreateView(APIView):
         serializer = ShopStockTransferCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_GODOWNS)
+        business = _stock_location_business(
+            request, data["business_id"], feature=FEATURE_SHOPIE_BOOKS_GODOWNS
+        )
         try:
             transfer = self.godowns.transfer_stock(
                 tenant=request.current_tenant,

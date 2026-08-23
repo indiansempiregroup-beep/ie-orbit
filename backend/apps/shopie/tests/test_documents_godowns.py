@@ -143,9 +143,15 @@ def test_initial_stock_goes_to_selected_godown(shop_business: Business) -> None:
 
 
 @pytest.mark.django_db
-def test_catalog_stock_skips_godown_when_none_exist(shop_business: Business) -> None:
+def test_catalog_stock_skips_godown_when_none_exist(
+    shop_business: Business, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apps.businesses.services.entitlements import EntitlementService
     from apps.shopie.models import ShopGodownStock
     from apps.shopie.services.catalog import CatalogService
+
+    # Single-office shop with no godowns entitlement: stock stays product-level.
+    monkeypatch.setattr(EntitlementService, "has_feature", lambda *args, **kwargs: False)
 
     CatalogService().create_product(
         tenant=shop_business.tenant,

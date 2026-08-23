@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
+import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
@@ -29,6 +30,8 @@ export function BusinessEditScreen() {
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [country, setCountry] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [currency, setCurrency] = useState('INR');
   const [gstTaxNumber, setGstTaxNumber] = useState('');
@@ -53,6 +56,8 @@ export function BusinessEditScreen() {
     setState(activeBusiness.state ?? '');
     setPostalCode(activeBusiness.postal_code ?? '');
     setCountry(activeBusiness.country ?? '');
+    setLatitude(activeBusiness.latitude != null ? Number(activeBusiness.latitude) : null);
+    setLongitude(activeBusiness.longitude != null ? Number(activeBusiness.longitude) : null);
     setTimezone(activeBusiness.timezone || 'Asia/Kolkata');
     setCurrency(activeBusiness.currency || 'INR');
     setGstTaxNumber((activeBusiness as { gst_tax_number?: string }).gst_tax_number || '');
@@ -128,6 +133,8 @@ export function BusinessEditScreen() {
                 state: state || undefined,
                 postal_code: postalCode || undefined,
                 country: country || undefined,
+                latitude,
+                longitude,
                 upi_vpa: upiVpa || '',
                 payment_qr_url: paymentQrUrl || '',
                 ...(logo ? { logo } : {}),
@@ -176,7 +183,21 @@ export function BusinessEditScreen() {
       </FormSection>
 
       <FormSection title="Location">
-        <Input label="Address" value={addressLine1} onChangeText={setAddressLine1} />
+        <AddressLocationPicker
+          value={addressLine1}
+          latitude={latitude}
+          longitude={longitude}
+          onChangeText={setAddressLine1}
+          onPlaceSelected={(place) => {
+            setAddressLine1(place.line1 || place.formattedAddress);
+            setCity(place.city || '');
+            setState(place.state || '');
+            setCountry(place.country || '');
+            setPostalCode(place.postalCode || '');
+            setLatitude(place.latitude ?? null);
+            setLongitude(place.longitude ?? null);
+          }}
+        />
         <Input label="City" value={city} onChangeText={setCity} />
         <Input label="State" value={state} onChangeText={setState} />
         <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} />

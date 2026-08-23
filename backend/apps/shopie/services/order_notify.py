@@ -104,14 +104,39 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
     if status == OrderStatus.READY:
         if delivery:
             return (
-                f"Out for delivery · #{number}",
-                f"Hi {name},\n\nOrder #{number} is packed and on the way. Keep an eye out for your delivery.",
-                "On the way",
+                f"Packed and ready · #{number}",
+                f"Hi {name},\n\nOrder #{number} is packed. {shop} will request your rider when it is ready to hand over.",
+                "Packed",
             )
         return (
             f"Ready for pickup · #{number}",
             f"Hi {name},\n\nOrder #{number} is ready. You can collect it from {shop} whenever you're nearby.",
             "Ready for pickup",
+        )
+    if status in {"finding_rider", "rider_assigned", "at_pickup"}:
+        labels = {
+            "finding_rider": "Finding your rider",
+            "rider_assigned": "Rider assigned",
+            "at_pickup": "Rider at the shop",
+        }
+        label = labels[status]
+        return (
+            f"{label} · #{number}",
+            f"Hi {name},\n\n{label} for order #{number}. Open the order to see the latest ETA and rider details.",
+            label,
+        )
+    if status in {OrderStatus.OUT_FOR_DELIVERY, "picked_up", "nearby"}:
+        label = "Your delivery is nearby" if status == "nearby" else "Your order is on the way"
+        return (
+            f"{label} · #{number}",
+            f"Hi {name},\n\nOrder #{number} is with your rider. Open the order for live delivery updates.",
+            "On the way",
+        )
+    if status in {"failed", "cancelled"} and delivery:
+        return (
+            f"Delivery update needed · #{number}",
+            f"Hi {name},\n\nThe delivery for order #{number} needs attention. {shop} will contact you with the next step.",
+            "Delivery issue",
         )
     if status == OrderStatus.COMPLETED:
         if delivery:

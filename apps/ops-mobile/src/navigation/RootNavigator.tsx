@@ -49,6 +49,7 @@ import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopPosScreen } from '../features/shop/ShopPosScreen';
 import { ShopReturnsScreen } from '../features/shop/ShopReturnsScreen';
 import { ShopDeliveryZonesScreen } from '../features/shop/ShopDeliveryZonesScreen';
+import { ShopDeliverySettingsScreen } from '../features/shop/ShopDeliverySettingsScreen';
 import { ShopCouponsScreen } from '../features/shop/ShopCouponsScreen';
 import { ShopPetsScreen } from '../features/shop/ShopPetsScreen';
 import { ShopPetFormScreen } from '../features/shop/ShopPetFormScreen';
@@ -76,6 +77,7 @@ import { UtilitiesScreen } from '../features/grow/UtilitiesScreen';
 import { GrowAdsScreen } from '../features/grow/GrowAdsScreen';
 import { GrowReferralScreen } from '../features/grow/GrowReferralScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
+import { BranchFormScreen } from '../features/branches/BranchFormScreen';
 import { BIScreen } from '../features/bi/BIScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
 import { TeamScreen } from '../features/team/TeamScreen';
@@ -229,6 +231,11 @@ export function RootNavigator() {
             {stackScreen('BarcodeScanner', LazyBarcodeScanner, t('nav.scanBarcode'))}
             {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
             {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
+            {stackScreen(
+              'ShopDeliverySettings',
+              ShopDeliverySettingsScreen,
+              t('nav.shopInstantDelivery'),
+            )}
             {stackScreen('ShopCoupons', ShopCouponsScreen, t('nav.shopCoupons'))}
             {stackScreen('ShopPets', ShopPetsScreen, t('nav.shopPets'))}
             {stackScreen('ShopPetForm', ShopPetFormScreen, 'Pet')}
@@ -256,6 +263,7 @@ export function RootNavigator() {
             {stackScreen('GrowAds', GrowAdsScreen, 'Ads')}
             {stackScreen('GrowReferral', GrowReferralScreen, 'Referrals')}
             {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
+            {stackScreen('BranchForm', BranchFormScreen, 'Office')}
             {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
             {stackScreen('Reports', ReportsScreen, t('nav.reports'))}
             {stackScreen('Team', TeamScreen, t('settings.team'))}

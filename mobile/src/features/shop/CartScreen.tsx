@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Animated,
   Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -11,10 +14,11 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
@@ -26,6 +30,7 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { buildUpiPayUrl } from '../../utils/upi';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { useCart } from './CartContext';
+import { addressSingleLine, addressTypeMeta } from './addressUtils';
 import { QtyStepper } from './QtyStepper';
 import { formatShopMoney, formatShopDateIso, formatShopDateLabel, formatShopTimeLabel, isPickupTimeAfterNow, nextAvailablePickupTime, shopLinePayable } from './shopHelpers';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
@@ -49,9 +54,26 @@ function couponHeadline(offer: ShopCouponOffer, currency: string) {
   return `${formatShopMoney(value, currency)} OFF`;
 }
 
+type DeliveryMethod = 'instant' | 'standard';
+
+type InstantDeliveryOption = {
+  fee: number;
+  providerLabel: string;
+  quoteId: string;
+  etaMinutes: number | null;
+};
+
+type StandardDeliveryOption = {
+  fee: number;
+  zoneName: string;
+  sameDay: boolean;
+};
+
 export function CartScreen() {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'Cart'>>();
   const { bootstrap, branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { lines, setQuantity, clear, total, itemCount } = useCart();
@@ -68,12 +90,13 @@ export function CartScreen() {
   const [couponOffers, setCouponOffers] = useState<ShopCouponOffer[]>([]);
   const [couponSheetOpen, setCouponSheetOpen] = useState(false);
   const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup');
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('instant');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi'>('cash');
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [deliveryFee, setDeliveryFee] = useState(0);
-  const [zoneLabel, setZoneLabel] = useState<string | null>(null);
-  const [sameDay, setSameDay] = useState(false);
+  const [instantDelivery, setInstantDelivery] = useState<InstantDeliveryOption | null>(null);
+  const [standardDelivery, setStandardDelivery] = useState<StandardDeliveryOption | null>(null);
+  const [deliveryOptionsLoading, setDeliveryOptionsLoading] = useState(false);
   const [preferredDate, setPreferredDate] = useState(() => formatShopDateIso(new Date()));
   const [preferredTime, setPreferredTime] = useState(() => nextAvailablePickupTime() || '11:00');
   const [fulfillmentNote, setFulfillmentNote] = useState('');
@@ -98,6 +121,21 @@ export function CartScreen() {
     () => addresses.find((item) => item.id === selectedAddressId) || addresses.find((item) => item.is_default) || null,
     [addresses, selectedAddressId],
   );
+  const chosenAddressId = route.params?.selectedAddressId;
+  useEffect(() => {
+    if (chosenAddressId) setSelectedAddressId(chosenAddressId);
+  }, [chosenAddressId]);
+
+  const openAddressPicker = useCallback(() => {
+    navigation.navigate('AddressBook', { mode: 'select', selectedAddressId: selectedAddress?.id });
+  }, [navigation, selectedAddress?.id]);
+  const openAddressForm = useCallback(() => {
+    navigation.navigate('AddressForm', { selectOnSave: true });
+  }, [navigation]);
+
+  const selectedDelivery = deliveryMethod === 'instant' ? instantDelivery : standardDelivery;
+  const deliveryFee = selectedDelivery?.fee ?? 0;
+  const deliveryQuoteId = deliveryMethod === 'instant' ? instantDelivery?.quoteId ?? '' : '';
 
   const couponDiscount = appliedCoupon?.discount ?? 0;
   const merchandiseAfterCoupon = Math.max(0, total - couponDiscount);
@@ -187,37 +225,167 @@ export function CartScreen() {
     };
   }, []);
 
+  // Coupon sheet is drag-resizable between two snap points so long offer lists
+  // can be opened to nearly full screen instead of a fixed short panel.
+  const sheetBounds = useMemo(() => {
+    const ceiling = windowHeight - insets.top - spacing.xl - keyboardHeight;
+    const max = Math.max(280, Math.round(ceiling));
+    const collapsed = Math.min(max, Math.max(300, Math.round(windowHeight * 0.5)));
+    return { collapsed, max };
+  }, [windowHeight, insets.top, keyboardHeight]);
+
+  const sheetHeight = useRef(new Animated.Value(sheetBounds.collapsed)).current;
+  const sheetHeightRef = useRef(sheetBounds.collapsed);
+  const sheetExpandedRef = useRef(false);
+  const dragStartRef = useRef(sheetBounds.collapsed);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+
   useEffect(() => {
+    const id = sheetHeight.addListener(({ value }) => {
+      sheetHeightRef.current = value;
+    });
+    return () => sheetHeight.removeListener(id);
+  }, [sheetHeight]);
+
+  const snapSheet = useCallback(
+    (to: 'collapsed' | 'expanded') => {
+      sheetExpandedRef.current = to === 'expanded';
+      setSheetExpanded(to === 'expanded');
+      Animated.spring(sheetHeight, {
+        toValue: to === 'expanded' ? sheetBounds.max : sheetBounds.collapsed,
+        useNativeDriver: false,
+        bounciness: 0,
+        speed: 14,
+      }).start();
+    },
+    [sheetBounds.collapsed, sheetBounds.max, sheetHeight],
+  );
+
+  // Always open at the collapsed snap point.
+  useEffect(() => {
+    if (!couponSheetOpen) return;
+    sheetExpandedRef.current = false;
+    setSheetExpanded(false);
+    sheetHeight.setValue(sheetBounds.collapsed);
+    // Opening should not re-run when bounds shift mid-drag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couponSheetOpen]);
+
+  // Keep the sheet on its snap point when the keyboard or orientation changes.
+  useEffect(() => {
+    if (!couponSheetOpen) return;
+    snapSheet(sheetExpandedRef.current ? 'expanded' : 'collapsed');
+  }, [couponSheetOpen, snapSheet]);
+
+  const sheetPan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dy) > 3,
+        onPanResponderGrant: () => {
+          dragStartRef.current = sheetHeightRef.current;
+        },
+        onPanResponderMove: (_event, gesture) => {
+          const next = Math.min(sheetBounds.max, dragStartRef.current - gesture.dy);
+          sheetHeight.setValue(Math.max(120, next));
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          // Treat a press without travel as a toggle of the grabber.
+          if (Math.abs(gesture.dy) < 4) {
+            snapSheet(sheetExpandedRef.current ? 'collapsed' : 'expanded');
+            return;
+          }
+          const flickDown = gesture.vy > 0.75;
+          const flickUp = gesture.vy < -0.75;
+          const current = sheetHeightRef.current;
+          if (!flickUp && (flickDown || current < sheetBounds.collapsed * 0.6)) {
+            setCouponSheetOpen(false);
+            return;
+          }
+          const midpoint = (sheetBounds.collapsed + sheetBounds.max) / 2;
+          snapSheet(flickUp || current > midpoint ? 'expanded' : 'collapsed');
+        },
+      }),
+    [sheetBounds.collapsed, sheetBounds.max, sheetHeight, snapSheet],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
     void (async () => {
       if (fulfillment !== 'delivery' || !selectedAddress || !tenantSlug || !businessCode) {
-        setDeliveryFee(0);
-        setZoneLabel(null);
-        setSameDay(false);
+        setInstantDelivery(null);
+        setStandardDelivery(null);
+        setDeliveryOptionsLoading(false);
         return;
       }
-      try {
-        const res = await mobileClient.mobile.matchDeliveryZone({
+      setDeliveryOptionsLoading(true);
+      setInstantDelivery(null);
+      setStandardDelivery(null);
+
+      const instantRequest =
+        selectedAddress.latitude != null && selectedAddress.longitude != null
+          ? mobileClient.mobile
+              .quoteShopDelivery({
+                tenant_slug: tenantSlug,
+                business_code: businessCode,
+                latitude: selectedAddress.latitude,
+                longitude: selectedAddress.longitude,
+                address: [selectedAddress.line1, selectedAddress.line2].filter(Boolean).join(', '),
+                city: selectedAddress.city || '',
+                state: selectedAddress.state || '',
+                postal_code: selectedAddress.postal_code || '',
+                subtotal: merchandiseAfterCoupon,
+                lines: lines.map((line) => ({
+                  product_id: line.product.id,
+                  quantity: line.quantity,
+                })),
+              })
+              .then((response) =>
+                response.data.available
+                  ? {
+                      fee: Number(response.data.customer_fee || 0),
+                      providerLabel: response.data.provider_label || 'Instant delivery',
+                      quoteId: response.data.quote_id || '',
+                      etaMinutes: response.data.eta_minutes ?? null,
+                    }
+                  : null,
+              )
+              .catch(() => null)
+          : Promise.resolve(null);
+
+      const standardRequest = mobileClient.mobile
+        .matchDeliveryZone({
           tenant_slug: tenantSlug,
           business_code: businessCode,
           city: selectedAddress.city || '',
           postal_code: selectedAddress.postal_code || '',
-        });
-        if (res.data.matched && res.data.zone) {
-          setDeliveryFee(Number(res.data.zone.fee || 0));
-          setZoneLabel(res.data.zone.name);
-          setSameDay(Boolean(res.data.zone.same_day));
-        } else {
-          setDeliveryFee(0);
-          setZoneLabel(null);
-          setSameDay(false);
-        }
-      } catch {
-        setDeliveryFee(0);
-        setZoneLabel(null);
-        setSameDay(false);
-      }
+        })
+        .then((response) =>
+          response.data.matched && response.data.zone
+            ? {
+                fee: Number(response.data.zone.fee || 0),
+                zoneName: response.data.zone.name,
+                sameDay: Boolean(response.data.zone.same_day),
+              }
+            : null,
+        )
+        .catch(() => null);
+
+      const [instant, standard] = await Promise.all([instantRequest, standardRequest]);
+      if (cancelled) return;
+      setInstantDelivery(instant);
+      setStandardDelivery(standard);
+      setDeliveryMethod((current) => {
+        if (current === 'instant' && instant) return current;
+        if (current === 'standard' && standard) return current;
+        return instant ? 'instant' : 'standard';
+      });
+      setDeliveryOptionsLoading(false);
     })();
-  }, [businessCode, fulfillment, selectedAddress, tenantSlug]);
+    return () => {
+      cancelled = true;
+    };
+  }, [businessCode, fulfillment, merchandiseAfterCoupon, selectedAddress, tenantSlug]);
 
   const applyCoupon = useCallback(
     async (code: string, closeSheet = false) => {
@@ -326,8 +494,12 @@ export function CartScreen() {
       setError('Add or select a delivery address.');
       return;
     }
-    if (fulfillment === 'delivery' && !zoneLabel) {
-      setError('Delivery is not available for this address.');
+    if (fulfillment === 'delivery' && deliveryOptionsLoading) {
+      setError('Please wait while we check delivery options.');
+      return;
+    }
+    if (fulfillment === 'delivery' && !selectedDelivery) {
+      setError('The selected delivery option is not available for this address.');
       return;
     }
     if (paymentMethod === 'upi' && !canPayQr) {
@@ -349,7 +521,13 @@ export function CartScreen() {
             ? [selectedAddress?.line1, selectedAddress?.line2].filter(Boolean).join(', ')
             : '',
         delivery_city: fulfillment === 'delivery' ? selectedAddress?.city || '' : '',
+        delivery_state: fulfillment === 'delivery' ? selectedAddress?.state || '' : '',
         delivery_postal_code: fulfillment === 'delivery' ? selectedAddress?.postal_code || '' : '',
+        delivery_latitude: fulfillment === 'delivery' ? selectedAddress?.latitude : undefined,
+        delivery_longitude: fulfillment === 'delivery' ? selectedAddress?.longitude : undefined,
+        delivery_method: fulfillment === 'delivery' ? deliveryMethod : undefined,
+        delivery_quote_id: fulfillment === 'delivery' ? deliveryQuoteId : undefined,
+        displayed_delivery_fee: fulfillment === 'delivery' ? deliveryFee : undefined,
         payment_method: paymentMethod,
         coupon_code: appliedCoupon?.code || undefined,
         points_to_redeem: pointsToRedeem > 0 ? pointsToRedeem : undefined,
@@ -537,51 +715,146 @@ export function CartScreen() {
                 </View>
                 {selectedAddress ? (
                   <View style={[styles.addressCard, { borderColor: primary, backgroundColor: `${primary}10` }]}>
-                    <Text style={styles.name}>
-                      {selectedAddress.address_type || 'Address'}
-                      {selectedAddress.is_default ? ' · Default' : ''}
-                    </Text>
-                    <Text style={styles.meta}>
-                      {[selectedAddress.line1, selectedAddress.city, selectedAddress.postal_code].filter(Boolean).join(', ')}
-                    </Text>
+                    <View style={styles.addressCardHead}>
+                      <Feather
+                        name={addressTypeMeta(selectedAddress.address_type).icon}
+                        size={14}
+                        color={primary}
+                      />
+                      <Text style={[styles.name, styles.addressCardTitle]}>
+                        {addressTypeMeta(selectedAddress.address_type).label}
+                        {selectedAddress.is_default ? ' · Default' : ''}
+                      </Text>
+                      {addresses.length > 1 ? (
+                        <Pressable onPress={openAddressPicker} hitSlop={8}>
+                          <Text style={[styles.addressAction, { color: primary }]}>Change</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <Text style={styles.meta}>{addressSingleLine(selectedAddress)}</Text>
                   </View>
                 ) : (
                   <Text style={styles.meta}>Add an address so we can check delivery for your area.</Text>
                 )}
-                {addresses.length > 1 ? (
-                  <View style={{ gap: 8 }}>
-                    {addresses
-                      .filter((item) => item.id !== selectedAddress?.id)
-                      .map((address, index) => (
-                        <Pressable
-                          key={address.id || `address-${index}`}
-                          style={styles.addressCard}
-                          onPress={() => {
-                            if (address.id) setSelectedAddressId(address.id);
-                          }}
-                        >
-                          <Text style={styles.name}>{address.address_type || 'Address'}</Text>
-                          <Text style={styles.meta}>
-                            {[address.line1, address.city, address.postal_code].filter(Boolean).join(', ')}
-                          </Text>
-                        </Pressable>
-                      ))}
-                  </View>
-                ) : null}
-                <Pressable onPress={() => navigation.navigate('AddressBook')}>
+                <Pressable onPress={addresses.length ? openAddressPicker : openAddressForm}>
                   <Text style={{ color: primary, fontWeight: '700' }}>
-                    {addresses.length ? 'Change or add address' : 'Add a delivery address'}
+                    {addresses.length ? 'Add or manage addresses' : 'Add a delivery address'}
                   </Text>
                 </Pressable>
-                {zoneLabel ? (
-                  <View style={styles.zoneBox}>
-                    <Text style={styles.zoneTitle}>
-                      {zoneLabel} · {deliveryFee > 0 ? formatShopMoney(deliveryFee, currency) : 'Free delivery'}
-                    </Text>
-                    <Text style={styles.meta}>{sameDay ? 'Same-day delivery is available for this area.' : 'We’ll confirm the delivery slot after you place the order.'}</Text>
+                {selectedAddress ? (
+                  <View style={styles.deliveryOptions}>
+                    <View style={styles.deliveryOptionsHead}>
+                      <Text style={styles.fieldLabel}>Delivery speed</Text>
+                      {deliveryOptionsLoading ? <ActivityIndicator size="small" color={primary} /> : null}
+                    </View>
+
+                    <Pressable
+                      disabled={!instantDelivery || deliveryOptionsLoading}
+                      onPress={() => setDeliveryMethod('instant')}
+                      style={[
+                        styles.deliveryOption,
+                        deliveryMethod === 'instant' && instantDelivery
+                          ? { borderColor: primary, backgroundColor: `${primary}0D` }
+                          : null,
+                        !instantDelivery ? styles.deliveryOptionDisabled : null,
+                      ]}
+                    >
+                      <View style={[styles.deliveryOptionIcon, { backgroundColor: `${primary}14` }]}>
+                        <Feather name="zap" size={18} color={primary} />
+                      </View>
+                      <View style={styles.deliveryOptionBody}>
+                        <View style={styles.deliveryOptionTitleRow}>
+                          <Text style={styles.deliveryOptionTitle}>Deliver now</Text>
+                          {instantDelivery?.etaMinutes ? (
+                            <Text style={[styles.deliveryBadge, { color: primary }]}>
+                              ~{instantDelivery.etaMinutes} min
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.meta}>
+                          {instantDelivery
+                            ? `${instantDelivery.providerLabel} · ${
+                                instantDelivery.fee > 0
+                                  ? formatShopMoney(instantDelivery.fee, currency)
+                                  : 'Free delivery'
+                              }`
+                            : selectedAddress.latitude == null || selectedAddress.longitude == null
+                              ? 'Add a map pin to this address for an instant quote.'
+                              : 'Instant delivery is unavailable for this address.'}
+                        </Text>
+                        {instantDelivery ? (
+                          <Text style={styles.deliveryHint}>
+                            Rider requested after the shop finishes packing.
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Feather
+                        name={
+                          deliveryMethod === 'instant' && instantDelivery
+                            ? 'check-circle'
+                            : 'circle'
+                        }
+                        size={20}
+                        color={
+                          deliveryMethod === 'instant' && instantDelivery
+                            ? primary
+                            : colors.mutedForeground
+                        }
+                      />
+                    </Pressable>
+
+                    <Pressable
+                      disabled={!standardDelivery || deliveryOptionsLoading}
+                      onPress={() => setDeliveryMethod('standard')}
+                      style={[
+                        styles.deliveryOption,
+                        deliveryMethod === 'standard' && standardDelivery
+                          ? { borderColor: primary, backgroundColor: `${primary}0D` }
+                          : null,
+                        !standardDelivery ? styles.deliveryOptionDisabled : null,
+                      ]}
+                    >
+                      <View style={[styles.deliveryOptionIcon, { backgroundColor: colors.muted }]}>
+                        <Feather name="truck" size={18} color={colors.foreground} />
+                      </View>
+                      <View style={styles.deliveryOptionBody}>
+                        <Text style={styles.deliveryOptionTitle}>Standard delivery</Text>
+                        <Text style={styles.meta}>
+                          {standardDelivery
+                            ? `${standardDelivery.zoneName} · ${
+                                standardDelivery.fee > 0
+                                  ? formatShopMoney(standardDelivery.fee, currency)
+                                  : 'Free delivery'
+                              }`
+                            : 'No delivery zone matches this address.'}
+                        </Text>
+                        {standardDelivery ? (
+                          <Text style={styles.deliveryHint}>
+                            {standardDelivery.sameDay
+                              ? 'Same-day delivery is available.'
+                              : 'The shop will confirm the delivery schedule.'}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Feather
+                        name={
+                          deliveryMethod === 'standard' && standardDelivery
+                            ? 'check-circle'
+                            : 'circle'
+                        }
+                        size={20}
+                        color={
+                          deliveryMethod === 'standard' && standardDelivery
+                            ? primary
+                            : colors.mutedForeground
+                        }
+                      />
+                    </Pressable>
+
+                    {!deliveryOptionsLoading && !instantDelivery && !standardDelivery ? (
+                      <Text style={styles.error}>Delivery is not available for this address.</Text>
+                    ) : null}
                   </View>
-                ) : selectedAddress ? (
-                  <Text style={styles.error}>No delivery zone matched for this address.</Text>
                 ) : null}
                 <TextInput
                   style={styles.noteInput}
@@ -685,7 +958,9 @@ export function CartScreen() {
               </View>
               {fulfillment === 'delivery' ? (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.meta}>Delivery</Text>
+                  <Text style={styles.meta}>
+                    {deliveryMethod === 'instant' ? 'Deliver now' : 'Standard delivery'}
+                  </Text>
                   <Text style={styles.meta}>{deliveryFee > 0 ? formatShopMoney(deliveryFee, currency) : 'Free'}</Text>
                 </View>
               ) : (
@@ -758,13 +1033,24 @@ export function CartScreen() {
         <View style={styles.overlay}>
           <Pressable style={styles.backdrop} onPress={() => setCouponSheetOpen(false)} accessibilityLabel="Close coupons" />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View
+            <Animated.View
               style={[
                 styles.couponSheet,
-                { paddingBottom: Math.max(insets.bottom, spacing.lg) + (keyboardHeight && Platform.OS !== 'ios' ? keyboardHeight : 0) },
+                {
+                  height: sheetHeight,
+                  paddingBottom: Math.max(insets.bottom, spacing.lg) + (keyboardHeight && Platform.OS !== 'ios' ? keyboardHeight : 0),
+                },
               ]}
             >
-              <View style={styles.handle} />
+              <View
+                style={styles.grabArea}
+                {...sheetPan.panHandlers}
+                accessibilityRole="adjustable"
+                accessibilityLabel={sheetExpanded ? 'Collapse coupons' : 'Expand coupons'}
+                accessibilityHint="Drag up or down to resize the coupon list"
+              >
+                <View style={styles.handle} />
+              </View>
               <View style={styles.sheetHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sheetTitle}>Coupons</Text>
@@ -774,6 +1060,18 @@ export function CartScreen() {
                       : 'Enter a coupon code if you have one'}
                   </Text>
                 </View>
+                <Pressable
+                  style={styles.closeBtn}
+                  onPress={() => snapSheet(sheetExpanded ? 'collapsed' : 'expanded')}
+                  hitSlop={8}
+                  accessibilityLabel={sheetExpanded ? 'Collapse coupon list' : 'Expand coupon list'}
+                >
+                  <Feather
+                    name={sheetExpanded ? 'chevron-down' : 'chevron-up'}
+                    size={18}
+                    color={colors.foreground}
+                  />
+                </Pressable>
                 <Pressable style={styles.closeBtn} onPress={() => setCouponSheetOpen(false)} hitSlop={8}>
                   <Feather name="x" size={18} color={colors.foreground} />
                 </Pressable>
@@ -884,7 +1182,7 @@ export function CartScreen() {
                   <Text style={styles.meta}>No coupons to show for this cart yet.</Text>
                 )}
               </ScrollView>
-            </View>
+            </Animated.View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -958,14 +1256,45 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     backgroundColor: colors.background,
-  },
-  zoneBox: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: radius.md,
-    padding: spacing.md,
     gap: 4,
   },
-  zoneTitle: { ...typography.label, fontWeight: '700', color: colors.success },
+  addressCardHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addressCardTitle: { flex: 1 },
+  addressAction: { ...typography.caption, fontWeight: '700' },
+  deliveryOptions: { gap: spacing.sm },
+  deliveryOptionsHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  deliveryOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    backgroundColor: colors.background,
+  },
+  deliveryOptionDisabled: { opacity: 0.55 },
+  deliveryOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliveryOptionBody: { flex: 1, minWidth: 0, gap: 2 },
+  deliveryOptionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  deliveryOptionTitle: { ...typography.label, fontWeight: '700', color: colors.foreground },
+  deliveryBadge: { ...typography.tiny, fontWeight: '800' },
+  deliveryHint: { ...typography.tiny, color: colors.mutedForeground },
   qrWrap: { alignItems: 'center', gap: 10, marginTop: spacing.md, padding: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg },
   summary: {
     marginTop: spacing.xl,
@@ -1011,15 +1340,19 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    maxHeight: '88%',
+    overflow: 'hidden',
+  },
+  grabArea: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.md,
   },
   handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
+    width: 44,
+    height: 5,
     borderRadius: radius.full,
     backgroundColor: colors.muted,
-    marginBottom: spacing.md,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -1038,7 +1371,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetList: { maxHeight: 420 },
+  sheetList: { flex: 1 },
   offerCard: {
     flexDirection: 'row',
     alignItems: 'center',

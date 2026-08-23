@@ -111,6 +111,18 @@ function pickGodownId(godowns: ShopGodown[], productId?: string) {
   return godowns.find((godown) => godown.is_default)?.id || godowns[0]?.id || '';
 }
 
+/** Per-office quantities for a product, read from the godowns already loaded. */
+function officeStockFor(godowns: ShopGodown[], productId: string) {
+  return godowns
+    .filter((godown) => Boolean(godown.branch))
+    .map((godown) => ({
+      office: godown.branch_name || godown.name,
+      quantity: Number(
+        (godown.stocks ?? []).find((row) => row.product === productId)?.quantity ?? 0,
+      ),
+    }));
+}
+
 export function ShopProductsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -473,6 +485,29 @@ export function ShopProductsPage() {
                       return count ? ` · ${count}/${MAX_PRODUCT_IMAGES} photos` : '';
                     })()}
                   </div>
+                  {(() => {
+                    const offices = officeStockFor(godowns, product.id);
+                    if (offices.length < 2) return null;
+                    return (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                        {offices.map((office) => (
+                          <span
+                            key={office.office}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              background: office.quantity > 0 ? '#ecfdf5' : '#fef2f2',
+                              color: office.quantity > 0 ? '#047857' : '#b91c1c',
+                            }}
+                          >
+                            {office.office}: {office.quantity}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <Button type="button" variant="neutral" onClick={() => openEditDialog(product)}>

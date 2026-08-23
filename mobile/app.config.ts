@@ -47,6 +47,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: selectedFlavor?.bundleIdAndroid ?? 'com.ieplatform.mobile.dev',
     softwareKeyboardLayoutMode: 'resize',
+    config: {
+      googleMaps: {
+        apiKey:
+          process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
+          process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ||
+          process.env.GOOGLE_PLACES_API_KEY ||
+          '',
+      },
+    },
   },
   extra: {
     flavorKey,

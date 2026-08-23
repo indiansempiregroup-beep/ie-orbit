@@ -3,8 +3,10 @@ from __future__ import annotations
 import csv
 import io
 import re
+from datetime import timedelta
 from uuid import uuid4
 
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -16,8 +18,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.authentication.api.utils import client_ip, user_agent
 from apps.authentication.api.serializers import UserProfileSerializer
+from apps.authentication.api.utils import client_ip, user_agent
 from apps.authentication.models import User
 from apps.authentication.permissions import IsPlatformAdmin
 from apps.businesses.models import Business
@@ -42,6 +44,13 @@ from apps.tenancy.services.tenants import TenantService
 
 def _svc() -> PlatformAdminService:
     return PlatformAdminService()
+
+
+def _int_param(value: str | None) -> int | None:
+    try:
+        return int(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _serialize_ticket(ticket: SupportTicket, *, include_notes: bool = False) -> dict:
@@ -188,10 +197,18 @@ class PlatformUserSearchView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request) -> Response:
-        return success_response(
-            {"users": _svc().search_users(email=request.query_params.get("email", ""))},
-            request_id=getattr(request, "request_id", None),
+        params = request.query_params
+        result = _svc().search_users(
+            query=params.get("q", params.get("email", "")),
+            status=params.get("status", "all"),
+            role=params.get("role", "all"),
+            tenants=params.get("tenants", "all"),
+            joined_within_days=_int_param(params.get("joined_within_days")),
+            sort=params.get("sort", "recent"),
+            limit=_int_param(params.get("limit")) or 25,
+            offset=_int_param(params.get("offset")) or 0,
         )
+        return success_response(result, request_id=getattr(request, "request_id", None))
 
 
 class PlatformUserActionView(APIView):
@@ -534,13 +551,56 @@ class PlatformAuditFeedView(APIView):
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request) -> Response:
         qs = PlatformAuditEvent.objects.select_related("actor", "tenant").all()
-        tenant_id = request.query_params.get("tenant_id")
-        action = request.query_params.get("action")
+        params = request.query_params
+        tenant_id = params.get("tenant_id")
+        action = (params.get("action") or "").strip()
+        actor = (params.get("actor") or "").strip()
+        resource_type = (params.get("resource_type") or "").strip()
+        query = (params.get("q") or "").strip()
+        window_days = _int_param(params.get("window_days"))
         if tenant_id:
             qs = qs.filter(tenant_id=tenant_id)
         if action:
             qs = qs.filter(action__icontains=action)
-        limit = min(int(request.query_params.get("limit") or 100), 500)
+        if actor:
+            qs = qs.filter(actor__email__icontains=actor)
+        if resource_type:
+            qs = qs.filter(resource_type=resource_type)
+        if query:
+            qs = qs.filter(
+                Q(action__icontains=query)
+                | Q(resource_type__icontains=query)
+                | Q(resource_id__icontains=query)
+                | Q(reason__icontains=query)
+                | Q(actor__email__icontains=query)
+                | Q(tenant__display_name__icontains=query)
+                | Q(tenant__slug__icontains=query)
+            )
+        if window_days:
+            qs = qs.filter(created_at__gte=timezone.now() - timedelta(days=max(1, window_days)))
+
+        counts = qs.aggregate(
+            total=Count("id"),
+            with_reason=Count("id", filter=~Q(reason="")),
+            tenant_scoped=Count("id", filter=Q(tenant_id__isnull=False)),
+            global_events=Count("id", filter=Q(tenant_id__isnull=True)),
+        )
+        total = counts["total"] or 0
+        limit = max(1, min(_int_param(params.get("limit")) or 50, 500))
+        offset = max(0, _int_param(params.get("offset")) or 0)
+        facets = {
+            "actions": list(
+                PlatformAuditEvent.objects.order_by("action")
+                .values_list("action", flat=True)
+                .distinct()
+            ),
+            "resource_types": list(
+                PlatformAuditEvent.objects.exclude(resource_type="")
+                .order_by("resource_type")
+                .values_list("resource_type", flat=True)
+                .distinct()
+            ),
+        }
         rows = [
             {
                 "id": str(e.id),
@@ -552,11 +612,22 @@ class PlatformAuditFeedView(APIView):
                 "tenant_id": str(e.tenant_id) if e.tenant_id else None,
                 "tenant_name": e.tenant.display_name if e.tenant else None,
                 "metadata": e.metadata,
+                "ip_address": str(e.ip_address) if e.ip_address else None,
+                "user_agent": e.user_agent,
                 "created_at": e.created_at.isoformat(),
             }
-            for e in qs[:limit]
+            for e in qs[offset : offset + limit]
         ]
-        return success_response({"events": rows})
+        return success_response(
+            {
+                "events": rows,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "counts": counts,
+                **facets,
+            }
+        )
 
 
 class PlatformTicketsView(APIView):
@@ -825,14 +896,50 @@ class PlatformExportView(APIView):
             for t in Tenant.objects.all().order_by("display_name"):
                 writer.writerow([t.id, t.slug, t.display_name, t.status, t.created_at.isoformat()])
         elif export_type == "audit":
-            writer.writerow(["id", "action", "actor", "tenant", "reason", "created_at"])
+            writer.writerow(
+                [
+                    "id",
+                    "action",
+                    "actor",
+                    "tenant",
+                    "resource_type",
+                    "resource_id",
+                    "reason",
+                    "ip_address",
+                    "metadata",
+                    "created_at",
+                ]
+            )
             qs = PlatformAuditEvent.objects.select_related("actor", "tenant").all()
-            tenant_id = request.query_params.get("tenant_id")
-            action = request.query_params.get("action")
+            params = request.query_params
+            tenant_id = params.get("tenant_id")
+            action = (params.get("action") or "").strip()
+            actor = (params.get("actor") or "").strip()
+            resource_type = (params.get("resource_type") or "").strip()
+            query = (params.get("q") or "").strip()
+            window_days = _int_param(params.get("window_days"))
             if tenant_id:
                 qs = qs.filter(tenant_id=tenant_id)
             if action:
                 qs = qs.filter(action__icontains=action)
+            if actor:
+                qs = qs.filter(actor__email__icontains=actor)
+            if resource_type:
+                qs = qs.filter(resource_type=resource_type)
+            if query:
+                qs = qs.filter(
+                    Q(action__icontains=query)
+                    | Q(resource_type__icontains=query)
+                    | Q(resource_id__icontains=query)
+                    | Q(reason__icontains=query)
+                    | Q(actor__email__icontains=query)
+                    | Q(tenant__display_name__icontains=query)
+                    | Q(tenant__slug__icontains=query)
+                )
+            if window_days:
+                qs = qs.filter(
+                    created_at__gte=timezone.now() - timedelta(days=max(1, window_days))
+                )
             for e in qs[:1000]:
                 writer.writerow(
                     [
@@ -840,7 +947,11 @@ class PlatformExportView(APIView):
                         e.action,
                         e.actor.email if e.actor else "",
                         e.tenant.slug if e.tenant else "",
+                        e.resource_type,
+                        e.resource_id,
                         e.reason,
+                        str(e.ip_address) if e.ip_address else "",
+                        e.metadata,
                         e.created_at.isoformat(),
                     ]
                 )

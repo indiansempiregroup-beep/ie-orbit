@@ -1,0 +1,277 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>NexusHub Shop</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-on-surface": "#ecf1ff",
+                      "surface-dim": "#cfdaf2",
+                      "inverse-surface": "#263143",
+                      "outline-variant": "#c5c5d4",
+                      "surface-bright": "#f9f9ff",
+                      "on-primary-container": "#cacfff",
+                      "secondary-container": "#6cf8bb",
+                      "surface-tint": "#4355b9",
+                      "on-tertiary": "#ffffff",
+                      "on-primary-fixed": "#00105c",
+                      "on-tertiary-fixed": "#2a1700",
+                      "secondary-fixed-dim": "#4edea3",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#bac3ff",
+                      "error-container": "#ffdad6",
+                      "secondary-fixed": "#6ffbbe",
+                      "on-error": "#ffffff",
+                      "surface": "#f9f9ff",
+                      "primary": "#24389c",
+                      "on-secondary-fixed-variant": "#005236",
+                      "on-surface-variant": "#454652",
+                      "error": "#ba1a1a",
+                      "tertiary-container": "#805000",
+                      "on-primary": "#ffffff",
+                      "on-secondary-fixed": "#002113",
+                      "on-primary-fixed-variant": "#293ca0",
+                      "on-secondary-container": "#00714d",
+                      "secondary": "#006c49",
+                      "tertiary-fixed": "#ffddb8",
+                      "surface-container": "#e7eeff",
+                      "surface-container-lowest": "#ffffff",
+                      "on-surface": "#111c2d",
+                      "tertiary": "#603b00",
+                      "primary-fixed": "#dee0ff",
+                      "on-tertiary-container": "#ffc988",
+                      "inverse-primary": "#bac3ff",
+                      "outline": "#757684",
+                      "surface-container-high": "#dee8ff",
+                      "tertiary-fixed-dim": "#ffb95f",
+                      "on-background": "#111c2d",
+                      "primary-container": "#3f51b5",
+                      "surface-container-low": "#f0f3ff",
+                      "background": "#f9f9ff",
+                      "on-tertiary-fixed-variant": "#653e00",
+                      "on-error-container": "#93000a",
+                      "surface-container-highest": "#d8e3fb",
+                      "surface-variant": "#d8e3fb"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "container-max": "1280px",
+                      "md": "16px",
+                      "xl": "40px",
+                      "lg": "24px",
+                      "sm": "8px",
+                      "xs": "4px",
+                      "base": "4px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "body-sm": ["Inter"],
+                      "data-mono": ["JetBrains Mono"],
+                      "headline-lg-mobile": ["Inter"],
+                      "body-md": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "headline-md": ["Inter"]
+              },
+              "fontSize": {
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "data-mono": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md min-h-screen md:pb-0 pb-lg">
+<!-- TopAppBar -->
+<header class="docked full-width top-0 bg-surface dark:bg-inverse-surface shadow-sm sticky z-40">
+<div class="flex justify-between items-center w-full px-lg py-md max-w-container-max mx-auto">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="business_logo" data-weight="fill">business_center</span>
+<span class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed-dim">NexusHub</span>
+</div>
+<!-- Desktop Nav Cluster -->
+<nav class="hidden md:flex items-center gap-md">
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-md py-sm rounded-lg flex items-center gap-sm" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span> Home
+                </a>
+<a class="text-primary font-bold hover:bg-surface-container-high transition-colors px-md py-sm rounded-lg flex items-center gap-sm" href="#">
+<span class="material-symbols-outlined" data-icon="shopping_bag" data-weight="fill">shopping_bag</span> Shop
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-md py-sm rounded-lg flex items-center gap-sm" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span> Book
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-md py-sm rounded-lg flex items-center gap-sm" href="#">
+<span class="material-symbols-outlined" data-icon="stars">stars</span> Rewards
+                </a>
+</nav>
+<div class="flex items-center gap-md">
+<button class="relative p-sm rounded-full hover:bg-surface-container-high transition-colors text-primary dark:text-inverse-primary active:scale-95 duration-150">
+<span class="material-symbols-outlined" data-icon="shopping_cart">shopping_cart</span>
+<span class="absolute top-0 right-0 bg-error text-on-error font-label-caps text-label-caps w-4 h-4 rounded-full flex items-center justify-center -mt-1 -mr-1">3</span>
+</button>
+<button class="p-sm rounded-full hover:bg-surface-container-high transition-colors text-primary dark:text-inverse-primary active:scale-95 duration-150">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+</div>
+</header>
+<main class="max-w-container-max mx-auto px-5 lg:px-lg py-lg md:flex">
+<!-- Main Content Area -->
+<div class="flex-1 md:ml-lg">
+<!-- Page Header & Filter Bar -->
+<div class="flex flex-col md:flex-row md:items-center justify-between mb-lg gap-md">
+<div>
+<h1 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-on-surface">Shop Essentials</h1>
+<p class="text-body-md font-body-md text-on-surface-variant mt-1">Discover tools to power your business.</p>
+</div>
+<div class="flex items-center gap-sm overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+<button class="flex items-center gap-xs px-md py-sm bg-surface-container rounded-full text-on-surface text-body-sm font-body-sm whitespace-nowrap hover:bg-surface-container-high transition-colors border border-outline-variant">
+<span class="material-symbols-outlined text-[18px]" data-icon="filter_list">filter_list</span> Filters
+                    </button>
+<button class="flex items-center gap-xs px-md py-sm bg-surface-container rounded-full text-on-surface text-body-sm font-body-sm whitespace-nowrap hover:bg-surface-container-high transition-colors border border-outline-variant">
+                        Sort: Popular <span class="material-symbols-outlined text-[18px]" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+<!-- Product Grid -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-md md:gap-lg">
+<!-- Product Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col group hover:shadow-md transition-shadow">
+<div class="relative w-full aspect-square bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A sleek, modern point-of-sale terminal device sitting on a clean, light-colored surface in a bright, modern corporate environment. The device features a crisp, high-resolution screen displaying a simple, elegant UI. Lighting is soft and even, highlighting the premium matte finish of the hardware. The aesthetic is clean, professional, and trustworthy, with subtle indigo and white tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuClpmWGVjqpsQWNbeJjXPqxnzGkg_33B9hbVlMDgQ6BsfvH2ekHqDaIZ9UdTrn4BeEGd0V-v4vq8mB2qwhxurlz27Ag_0uIIR_twQqKRJZE3x4xD-6sQ0HHXp4SalDc_fNsKzvCRm_cEmTuVXjeTFuk0ej4zlDReaqX7HclBzueT3aD-40JpoOyBVpAIBvSOs87kUIVfwolTlUa7vd3FLjNLNcZNDPqv9m3iTl-EEUfi-31i4MSz-gB3w">
+<div class="absolute top-2 left-2 bg-secondary/10 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full text-label-caps font-label-caps flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="stars">stars</span> Earn 500 pts
+                        </div>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 mb-1 group-hover:text-primary transition-colors">NexusHub Pro Terminal</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-3 flex-1 line-clamp-2">High-performance POS system for rapid transactions.</p>
+<div class="flex items-center justify-between mt-auto">
+<span class="text-body-lg font-body-lg font-bold text-on-surface">$299.00</span>
+<button aria-label="Add to cart" class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:bg-primary-fixed-variant transition-colors active:scale-95">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col group hover:shadow-md transition-shadow">
+<div class="relative w-full aspect-square bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A premium wireless barcode scanner resting on a minimalist white desk in a well-lit warehouse office setting. The scanner has a dark gray and indigo color scheme with subtle glowing indicator lights. The background is slightly blurred, showing neatly organized inventory racks. The lighting is bright and even, conveying efficiency and modern logistics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCoaIsdBxscFV4MC1ooteVLTu_hjWilt7nPGGVfSGcLrfb6j76L5AUfLeNnU1Wgjkh85AtsSQTB1FOUZVvdDEwzjDorYlA25KebkABI99OqDi1Xwo4Nj2GZlM0vqLHwwdRYKD9APFeq0B-pmf_9F9Dpa8I3GE8iZnPYblwdpVTPK-Dlw23jlU_YSEpTNuRydpkpnr_4YWg4R8wKFFyT1nfjdMqGFTmUv58M8ea9aA7zMKQEL7YP0fOWUw">
+<div class="absolute top-2 left-2 bg-secondary/10 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full text-label-caps font-label-caps flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="stars">stars</span> Earn 150 pts
+                        </div>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 mb-1 group-hover:text-primary transition-colors">Wireless Inventory Scanner</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-3 flex-1 line-clamp-2">Ergonomic scanner with long-range bluetooth.</p>
+<div class="flex items-center justify-between mt-auto">
+<span class="text-body-lg font-body-lg font-bold text-on-surface">$89.99</span>
+<button aria-label="Add to cart" class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:bg-primary-fixed-variant transition-colors active:scale-95">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col group hover:shadow-md transition-shadow">
+<div class="relative w-full aspect-square bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A sleek desktop receipt printer sitting next to a stack of crisp white paper rolls on a minimalist wooden counter. The printer is modern, compact, and features a combination of matte black and silver finishes. The setting suggests a clean, high-end retail environment with soft natural lighting coming from a nearby window. The aesthetic is organized and professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0i1PeycLlTIBbmn5-O9wIXJGkBvjtO8mTNLoQrTvG5Mw7mQYZE67Jd_HRYwSxlWFaCckYjG_lO3aY34Gt3ZfBZ696EuTimzHVMOuqNyZFSbCd4HhnZbQSfqoWq5urrMeTFfocG8X0JGM15zDw4qU54M8EkpbC_U5GlegSm4-rBViLkdo3idTXGi-7Vs_xd_B6PC1aBXmz4HtFkXPvJJ2JKjADjRAbnqLJlEIgBg87s1U9HeItqKTiDQ">
+<div class="absolute top-2 left-2 bg-secondary/10 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full text-label-caps font-label-caps flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="stars">stars</span> Earn 200 pts
+                        </div>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 mb-1 group-hover:text-primary transition-colors">Thermal Receipt Printer</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-3 flex-1 line-clamp-2">Fast, quiet printing for retail environments.</p>
+<div class="flex items-center justify-between mt-auto">
+<span class="text-body-lg font-body-lg font-bold text-on-surface">$129.50</span>
+<button aria-label="Add to cart" class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:bg-primary-fixed-variant transition-colors active:scale-95">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Card 4 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col group hover:shadow-md transition-shadow">
+<div class="relative w-full aspect-square bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A stack of premium, branded RFID smart cards resting on a polished white surface. The cards feature a minimalist geometric design with subtle indigo and silver accents. The lighting is crisp and cool, highlighting the smooth texture and high-quality finish of the cards. The background is simple and uncluttered, emphasizing a secure and modern corporate toolset." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2P-1vDZmWcvj6ph0Myv0dtnbynNJO2frDC9ZMufYSOpe9jev7JwEyS0JemYNc6RGKUaEBIFGryc4B7IixYjTf9xhe8fl01gkaJlp5KjxYX4MK1Nj2Wejwh-AhFIPE3A8KjUMxpqDw6eD8myhKy7kWTwZqlJ7Ly4VeIQ0hQ9zJLyVrJCBQRP2LZuasIvgcVYFJgkKo6FFSLUbm0q7eJWfjQuwRAzpI_RZ1N4QxFnpu2nrNF9Fo6QkeVA">
+<div class="absolute top-2 left-2 bg-secondary/10 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full text-label-caps font-label-caps flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="stars">stars</span> Earn 50 pts
+                        </div>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h3 class="text-body-md font-body-md font-semibold text-on-surface line-clamp-2 mb-1 group-hover:text-primary transition-colors">RFID Employee Badges (50-Pack)</h3>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-3 flex-1 line-clamp-2">Secure access cards for team management.</p>
+<div class="flex items-center justify-between mt-auto">
+<span class="text-body-lg font-body-lg font-bold text-on-surface">$45.00</span>
+<button aria-label="Add to cart" class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:bg-primary-fixed-variant transition-colors active:scale-95">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex justify-around items-center gap-md px-md py-xs bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg rounded-full w-max max-w-[90%]"><a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-100" href="#"><span class="material-symbols-outlined mb-1" data-icon="home">home</span><span class="text-label-caps font-label-caps">Home</span></a><a class="flex flex-col items-center justify-center text-primary transition-colors active:scale-90 duration-100" href="#"><span class="material-symbols-outlined mb-1" data-icon="shopping_bag" data-weight="fill">shopping_bag</span><span class="text-label-caps font-label-caps font-bold">Shop</span></a><a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-100" href="#"><span class="material-symbols-outlined mb-1" data-icon="calendar_today">calendar_today</span><span class="text-label-caps font-label-caps">Book</span></a><a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-100" href="#"><span class="material-symbols-outlined mb-1" data-icon="stars">stars</span><span class="text-label-caps font-label-caps">Rewards</span></a></nav>
+<style>
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body></html>
