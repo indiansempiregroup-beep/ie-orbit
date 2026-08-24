@@ -3,6 +3,7 @@ import type { ShopOrder } from '@ie-platform/sdk';
 type PosMeta = {
   payment_method?: string;
   payment_status?: string;
+  amount_due?: string | number;
 };
 
 export function getShopOrderPosMeta(order: ShopOrder): PosMeta {

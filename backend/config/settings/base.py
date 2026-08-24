@@ -134,10 +134,22 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
-PLATFORM_MEDIA_STORAGE_PROVIDER = "local"
+PLATFORM_MEDIA_STORAGE_PROVIDER = (
+    os.getenv("PLATFORM_MEDIA_STORAGE_PROVIDER", "local").strip().lower()
+)
 PLATFORM_MEDIA_LOCAL_ROOT = MEDIA_ROOT / "uploads"
 PLATFORM_MEDIA_LOCAL_URL = f"/{MEDIA_URL.rstrip('/')}/uploads/"
 MEDIA_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+R2_ENDPOINT = os.getenv("R2_ENDPOINT", "").strip()
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "").strip()
+R2_REGION = os.getenv("R2_REGION", "auto").strip() or "auto"
+R2_PUBLIC_BASE_URL = os.getenv("R2_PUBLIC_BASE_URL", "").strip().rstrip("/")
+R2_SIGNED_URL_TTL_PUBLIC = int(os.getenv("R2_SIGNED_URL_TTL_PUBLIC", "86400"))
+R2_SIGNED_URL_TTL_PRIVATE = int(os.getenv("R2_SIGNED_URL_TTL_PRIVATE", "900"))
+BACKUP_S3_PREFIX = os.getenv("BACKUP_S3_PREFIX", "backups/postgres").strip()
+BACKUP_LOCAL_RETENTION_DAYS = os.getenv("BACKUP_LOCAL_RETENTION_DAYS", "").strip()
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DEFAULT_FROM_EMAIL = ENV.default_from_email
 AUTH_USER_MODEL = "authentication.User"
@@ -289,7 +301,11 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
 LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+try:
+    LOG_DIR.mkdir(exist_ok=True)
+except OSError:
+    LOG_DIR = Path("/tmp/ie-platform-logs")
+    LOG_DIR.mkdir(exist_ok=True)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

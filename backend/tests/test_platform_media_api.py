@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from io import BytesIO
+
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserStatus
@@ -120,3 +123,81 @@ def test_media_upload_duplicate_patch_and_delete(
     assert delete_response.status_code == 204
     assert not Media.objects.filter(id=media_id).exists()
     assert Media.all_objects.filter(id=media_id, deleted_at__isnull=False).exists()
+
+
+def _png_bytes() -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (32, 32), "red").save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+@pytest.mark.django_db
+def test_media_file_endpoint_public_and_private(
+    api_client: APIClient,
+    user: User,
+    tmp_path: object,
+    settings,
+) -> None:
+    settings.PLATFORM_MEDIA_LOCAL_ROOT = tmp_path
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_id = create_business(api_client)
+
+    private_upload = api_client.post(
+        reverse("media-upload"),
+        {
+            "file": SimpleUploadedFile(
+                "secret.txt",
+                b"private-bytes",
+                content_type="text/plain",
+            ),
+            "business": business_id,
+            "folder_type": "documents",
+            "visibility": "private",
+        },
+        format="multipart",
+    )
+    public_upload = api_client.post(
+        reverse("media-upload"),
+        {
+            "file": SimpleUploadedFile("logo.png", _png_bytes(), content_type="image/png"),
+            "business": business_id,
+            "folder_type": "business",
+            "visibility": "public",
+            "tags": ["logo"],
+        },
+        format="multipart",
+    )
+
+    assert private_upload.status_code == 201
+    assert public_upload.status_code == 201
+    private_id = private_upload.json()["data"]["id"]
+    public_id = public_upload.json()["data"]["id"]
+    assert public_upload.json()["data"]["public_url"] == f"/api/v1/media/{public_id}/file"
+    public_media = Media.objects.get(id=public_id)
+    private_media = Media.objects.get(id=private_id)
+    assert public_media.storage_path.startswith(
+        f"tenants/{tenant_id}/businesses/{business_id}/business/"
+    )
+    assert private_media.storage_path.startswith(
+        f"tenants/{tenant_id}/businesses/{business_id}/documents/"
+    )
+    assert public_media.metadata.get("thumbnail_path")
+    assert public_media.metadata.get("display_path")
+    assert str(public_media.metadata["thumbnail_path"]).startswith(
+        f"tenants/{tenant_id}/businesses/{business_id}/business/"
+    )
+    assert not private_media.metadata.get("thumbnail_path")
+
+    anonymous = APIClient()
+    public_file = anonymous.get(reverse("media-file", kwargs={"media_id": public_id}))
+    private_file = anonymous.get(reverse("media-file", kwargs={"media_id": private_id}))
+    assert public_file.status_code == 200
+    assert private_file.status_code in {401, 403}
+
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    authorized_private = api_client.get(reverse("media-file", kwargs={"media_id": private_id}))
+    assert authorized_private.status_code == 200
+    private_body = b"".join(authorized_private.streaming_content)
+    assert private_body == b"private-bytes"

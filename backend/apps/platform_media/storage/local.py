@@ -52,6 +52,12 @@ class LocalStorageProvider(StorageProviderInterface):
     def private_url(self, *, path: str) -> str:
         return self.public_url(path=path)
 
+    def read_bytes(self, *, path: str) -> bytes:
+        target = self._safe_path(path)
+        if not target.exists() or not target.is_file():
+            raise FileNotFoundError(path)
+        return target.read_bytes()
+
     def _safe_path(self, path: str) -> Path:
         target = (self.root / path).resolve()
         root = self.root.resolve()

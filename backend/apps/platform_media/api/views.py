@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from io import BytesIO
+
 from django.db import connection
+from django.http import FileResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotAuthenticated, NotFound, PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,9 +22,10 @@ from apps.platform_media.api.serializers import (
     MediaUploadMultipleSerializer,
     MediaUploadSerializer,
 )
-from apps.platform_media.models import Media, MediaFolder
+from apps.platform_media.models import Media, MediaFolder, MediaVisibility
 from apps.platform_media.repositories import MediaRepository
 from apps.platform_media.services import MediaService
+from apps.platform_media.storage import get_storage_provider
 
 
 class MediaListView(APIView):
@@ -220,3 +225,63 @@ class MediaDetailView(APIView):
             raise NotFound("Media was not found.") from exc
         self.check_object_permissions(request, media)
         return media
+
+
+class MediaFileView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Media"],
+        parameters=[
+            OpenApiParameter(
+                "variant",
+                str,
+                description="Optional image variant: thumb or display.",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description="Local file bytes."),
+            302: OpenApiResponse(description="Redirect to a signed object-storage URL."),
+        },
+        description="Deliver a media file. Public files are anonymous; private files need auth.",
+    )
+    def get(self, request: Request, media_id: str) -> Response:
+        media = get_object_or_404(Media.objects.all(), id=media_id)
+        if media.visibility == MediaVisibility.PRIVATE:
+            if not request.user or not request.user.is_authenticated:
+                raise NotAuthenticated()
+            tenant = getattr(request, "current_tenant", None)
+            if tenant is None:
+                raise PermissionDenied("Private media requires tenant context.")
+            try:
+                MediaRepository().get_for_request(
+                    media_id=str(media.id),
+                    tenant=tenant,
+                    user=request.user,
+                )
+            except Media.DoesNotExist as exc:
+                raise PermissionDenied("You do not have access to this media.") from exc
+
+        variant = (request.query_params.get("variant") or "").strip().lower()
+        storage_path = media.storage_path
+        content_type = media.mime_type
+        if variant == "thumb" and media.metadata.get("thumbnail_path"):
+            storage_path = str(media.metadata["thumbnail_path"])
+            content_type = "image/webp"
+        elif variant == "display" and media.metadata.get("display_path"):
+            storage_path = str(media.metadata["display_path"])
+            content_type = "image/webp"
+
+        provider = get_storage_provider(media.storage_provider)
+        if getattr(provider, "code", media.storage_provider) in {"s3", "r2"}:
+            if media.visibility == MediaVisibility.PUBLIC:
+                return HttpResponseRedirect(provider.public_url(path=storage_path))
+            return HttpResponseRedirect(provider.private_url(path=storage_path))
+
+        try:
+            payload = BytesIO(provider.read_bytes(path=storage_path))
+        except FileNotFoundError as exc:
+            raise NotFound("Media file was not found.") from exc
+        response = FileResponse(payload, content_type=content_type or "application/octet-stream")
+        response["Content-Disposition"] = f'inline; filename="{media.original_filename}"'
+        return response

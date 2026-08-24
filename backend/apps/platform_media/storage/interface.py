@@ -35,3 +35,7 @@ class StorageProviderInterface(ABC):
     @abstractmethod
     def private_url(self, *, path: str) -> str:
         raise NotImplementedError
+
+    @abstractmethod
+    def read_bytes(self, *, path: str) -> bytes:
+        raise NotImplementedError

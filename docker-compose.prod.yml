@@ -1,0 +1,260 @@
+name: ie-platform-prod
+
+x-backend-environment: &backend-environment
+  DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
+  DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api.ieplatform.com,app.ieplatform.com}
+  DJANGO_LOG_LEVEL: ${DJANGO_LOG_LEVEL:-INFO}
+  DATABASE_URL: ${DATABASE_URL:-postgresql://ie_platform:change-me-in-production@postgres:5432/ie_platform}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@ieplatform.com}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.ieplatform.com}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api.ieplatform.com,https://app.ieplatform.com}
+  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://app.ieplatform.com}
+  PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-https://api.ieplatform.com}
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+  EMAIL_HOST: ${EMAIL_HOST:-}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+  EMAIL_USE_SSL: ${EMAIL_USE_SSL:-false}
+  CELERY_TASK_ALWAYS_EAGER: "false"
+  PYTHONPATH: /app/backend
+  GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+  GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
+  CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-1}
+  PLATFORM_MEDIA_STORAGE_PROVIDER: ${PLATFORM_MEDIA_STORAGE_PROVIDER:-r2}
+  R2_ENDPOINT: ${R2_ENDPOINT:-}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+  R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+  R2_REGION: ${R2_REGION:-auto}
+  R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+  R2_SIGNED_URL_TTL_PUBLIC: ${R2_SIGNED_URL_TTL_PUBLIC:-86400}
+  R2_SIGNED_URL_TTL_PRIVATE: ${R2_SIGNED_URL_TTL_PRIVATE:-900}
+  BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-backups/postgres}
+  GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+  RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+  RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+  RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+  CASHFREE_APP_ID: ${CASHFREE_APP_ID:-}
+  CASHFREE_SECRET_KEY: ${CASHFREE_SECRET_KEY:-}
+  CASHFREE_ENV: ${CASHFREE_ENV:-production}
+  PLATFORM_UPI_VPA: ${PLATFORM_UPI_VPA:-}
+  PLATFORM_UPI_NAME: ${PLATFORM_UPI_NAME:-IE Platform}
+  PLATFORM_PAYMENT_QR_URL: ${PLATFORM_PAYMENT_QR_URL:-}
+  EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+  ADMIN_HOST: ${ADMIN_HOST:-}
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+      args:
+        VITE_GOOGLE_PLACES_API_KEY: ${VITE_GOOGLE_PLACES_API_KEY:-}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_HOST: ${API_HOST:-api.ieplatform.com}
+      WEB_HOST: ${WEB_HOST:-app.ieplatform.com}
+    volumes:
+      - ./certs:/etc/nginx/certs
+      - backend-static:/var/www/static:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      edge:
+      app:
+        aliases:
+          - nginx
+    mem_limit: 128m
+    cpus: 0.20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: production
+    working_dir: /app/backend
+    command: ["web"]
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+    volumes:
+      - backend-static:/app/backend/staticfiles
+      - backend-logs:/app/backend/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=5).read()",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      app:
+        aliases:
+          - backend
+    mem_limit: 512m
+    cpus: 0.50
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: production
+    working_dir: /app/backend
+    command: ["worker"]
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "sh",
+          "-c",
+          "celery -A config.celery inspect ping >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 40s
+    networks:
+      app:
+        aliases:
+          - celery-worker
+    mem_limit: 384m
+    cpus: 0.25
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: production
+    working_dir: /app/backend
+    command: ["beat"]
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+    volumes:
+      - celerybeat-data:/var/lib/celery
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "test -f /var/lib/celery/celerybeat-schedule || pgrep -f 'celery.*beat' >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      app:
+        aliases:
+          - celery-beat
+    mem_limit: 128m
+    cpus: 0.10
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ie_platform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+      POSTGRES_DB: ${POSTGRES_DB:-ie_platform}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ie_platform} -d ${POSTGRES_DB:-ie_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      app:
+        aliases:
+          - postgres
+    mem_limit: 512m
+    cpus: 0.40
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      app:
+        aliases:
+          - redis
+    mem_limit: 128m
+    cpus: 0.10
+
+volumes:
+  postgres-data:
+  redis-data:
+  backend-static:
+  backend-logs:
+  celerybeat-data:
+
+networks:
+  edge:
+    driver: bridge
+  app:
+    driver: bridge
+    internal: false

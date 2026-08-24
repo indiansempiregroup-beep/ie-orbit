@@ -59,3 +59,26 @@ Use `localhost` instead of `host.docker.internal` if you run Django on the host 
 - If the backend cannot connect to the database, confirm local Postgres is running on port 5432 and `DATABASE_URL` uses `host.docker.internal` from Compose (or `localhost` on the host).
 - If the web app does not hot reload, ensure Docker Desktop file sharing is enabled and the repository is mounted correctly.
 - If the web container exits early, inspect logs with docker compose logs web.
+
+## Production
+
+Local Compose is unchanged. Production uses a separate file and does not publish Postgres or Redis:
+
+```bash
+cp .env.production.example .env
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+Canonical runbooks live in the sibling `ie-platform-docs` repository under `docs/09-devops/`:
+
+- IE-0901 Production Infrastructure Architecture
+- OPS-001 InterServer Deployment
+- OPS-002 PostgreSQL Backup and Restore
+- OPS-003 VPS Security Baseline
+- OPS-004 Compute Provider Migration
+
+Backup helpers:
+
+- `scripts/backup-postgres.sh`
+- `scripts/restore-postgres.sh` (requires `CONFIRM=YES`)
+

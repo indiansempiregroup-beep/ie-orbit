@@ -36,6 +36,7 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !.env.docker.example
+!.env.production.example
 
 ############################################################
 # Python
@@ -185,7 +186,10 @@ temp/
 # Local Certificates
 ############################################################
 
-certs/
+certs/*
+!certs/.gitkeep
+backups/*.sql.gz
+backups/*.dump
 
 ############################################################
 # Generated Reports

@@ -372,6 +372,10 @@ class PackagingAnalysisService:
             except OSError as exc:
                 logger.info("Unable to read local packaging image %s: %s", local, exc)
 
+        stored = self._read_stored_media_bytes(url)
+        if stored:
+            return stored
+
         if url.startswith(("http://", "https://")):
             try:
                 request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -379,6 +383,26 @@ class PackagingAnalysisService:
                     return response.read()
             except (urllib.error.URLError, TimeoutError, ValueError) as exc:
                 logger.info("Unable to download packaging image %s: %s", url, exc)
+        return None
+
+    def _read_stored_media_bytes(self, url: str) -> bytes | None:
+        from apps.platform_media.models import Media
+        from apps.platform_media.storage import get_storage_provider
+
+        match = re.search(r"/api/v1/media/([0-9a-fA-F-]+)/file", url)
+        try:
+            if match:
+                media = Media.objects.filter(id=match.group(1)).first()
+                if media:
+                    return get_storage_provider(media.storage_provider).read_bytes(
+                        path=media.storage_path
+                    )
+            stored = normalize_stored_asset_url(url)
+            if stored.startswith("/media/uploads/"):
+                relative = stored[len("/media/uploads/") :]
+                return get_storage_provider().read_bytes(path=relative)
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Unable to read stored packaging image %s: %s", url, exc)
         return None
 
     def _local_media_path(self, url: str) -> Path | None:

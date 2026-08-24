@@ -89,13 +89,15 @@ class MediaSerializer(serializers.ModelSerializer):
         ]
 
     def get_public_url(self, media: Media) -> str:
-        return str(media.metadata.get("public_url", ""))
+        return f"/api/v1/media/{media.id}/file"
 
     def get_private_url(self, media: Media) -> str:
-        return str(media.metadata.get("private_url", ""))
+        return f"/api/v1/media/{media.id}/file"
 
     def get_thumbnail_url(self, media: Media) -> str:
-        return str(media.metadata.get("thumbnail_url", media.metadata.get("public_url", "")))
+        if media.metadata.get("thumbnail_path"):
+            return f"/api/v1/media/{media.id}/file?variant=thumb"
+        return f"/api/v1/media/{media.id}/file"
 
 
 class MediaUploadSerializer(serializers.Serializer):

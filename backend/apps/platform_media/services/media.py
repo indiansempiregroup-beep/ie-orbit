@@ -20,9 +20,8 @@ from apps.platform_media.repositories import MediaRepository
 from apps.platform_media.services.security import VirusScanService
 from apps.platform_media.storage import get_storage_provider
 from apps.platform_media.utils.files import calculate_checksum, normalize_filename, storage_filename
-from apps.platform_media.utils.images import extract_image_metadata
+from apps.platform_media.utils.images import export_webp_variant, extract_image_metadata
 from apps.platform_media.validators import validate_file_upload
-from apps.common.utils.urls import normalize_stored_asset_url
 
 logger = logging.getLogger("ie_platform.media")
 
@@ -95,14 +94,19 @@ class MediaService:
         )
         uploaded_file.seek(0)
         image_metadata = self._image_metadata(uploaded_file, media_type)
+        variant_metadata = self._store_image_variants(
+            provider=provider,
+            uploaded_file=uploaded_file,
+            storage_path=storage_path,
+            media_type=media_type,
+        )
         payload_metadata = {
             **(metadata or {}),
-            "public_url": normalize_stored_asset_url(stored.public_url),
-            "private_url": normalize_stored_asset_url(stored.private_url),
             "virus_scan": {
                 "provider": scan_result.provider,
                 "details": scan_result.details,
             },
+            **variant_metadata,
         }
         if image_metadata:
             payload_metadata["image"] = image_metadata.as_dict()
@@ -132,9 +136,16 @@ class MediaService:
             media.mark_created(actor_id=uploaded_by.id)
         media.full_clean()
         media.save()
+        file_url = f"/api/v1/media/{media.id}/file"
+        payload_metadata["public_url"] = file_url
+        payload_metadata["private_url"] = file_url
+        if payload_metadata.get("thumbnail_path"):
+            payload_metadata["thumbnail_url"] = f"{file_url}?variant=thumb"
+        media.metadata = payload_metadata
+        media.save(update_fields=["metadata", "updated_at"])
         if business and "logo" in media.tags:
-            logo_url = str(media.metadata.get("public_url", ""))
-            if logo_url and getattr(business, "logo", "") != logo_url:
+            logo_url = file_url
+            if getattr(business, "logo", "") != logo_url:
                 business.logo = logo_url
                 business.save(update_fields=["logo", "updated_at"])
         logger.info(
@@ -176,8 +187,20 @@ class MediaService:
         business: Any | None,
         folder_type: str,
     ) -> MediaFolder:
-        business_part = str(getattr(business, "id", "shared"))
-        path = f"businesses/{business_part}/{folder_type}"
+        existing = MediaFolder.objects.filter(tenant=tenant, folder_type=folder_type)
+        existing = (
+            existing.filter(business__isnull=True)
+            if business is None
+            else existing.filter(business=business)
+        )
+        folder = existing.first()
+        if folder:
+            return folder
+        path = self._object_prefix(
+            tenant=tenant,
+            business=business,
+            folder_type=folder_type,
+        )
         folder, _ = MediaFolder.objects.get_or_create(
             tenant=tenant,
             path=path,
@@ -213,6 +236,17 @@ class MediaService:
         media.restore(restored_by=getattr(actor, "id", None))
         return media
 
+    def _object_prefix(
+        self,
+        *,
+        tenant: Any,
+        business: Any | None,
+        folder_type: str,
+    ) -> str:
+        business_part = str(getattr(business, "id", "shared"))
+        kind = (folder_type or MediaFolderType.BUSINESS).strip().strip("/")
+        return f"tenants/{tenant.id}/businesses/{business_part}/{kind}"
+
     def _storage_path(
         self,
         *,
@@ -222,9 +256,8 @@ class MediaService:
         folder_type: str,
         filename: str,
     ) -> str:
-        folder_path = folder.path if folder else folder_type
-        business_part = str(getattr(business, "id", "shared"))
-        return f"tenants/{tenant.id}/businesses/{business_part}/{folder_path}/{filename}"
+        kind = folder.folder_type if folder else folder_type
+        return f"{self._object_prefix(tenant=tenant, business=business, folder_type=kind)}/{filename}"
 
     def _media_type(self, mime_type: str, extension: str) -> str:
         if mime_type.startswith("image/"):
@@ -238,6 +271,33 @@ class MediaService:
         if mime_type.startswith("text/") or "document" in mime_type or "sheet" in mime_type:
             return MediaType.DOCUMENT
         return MediaType.OTHER
+
+    def _store_image_variants(
+        self,
+        *,
+        provider: Any,
+        uploaded_file: UploadedFile,
+        storage_path: str,
+        media_type: str,
+    ) -> dict[str, Any]:
+        if media_type != MediaType.IMAGE:
+            return {}
+        stem = storage_path.rsplit(".", 1)[0]
+        variants: dict[str, Any] = {}
+        try:
+            uploaded_file.seek(0)
+            display = export_webp_variant(uploaded_file, max_size=(1600, 1600))
+            display_path = f"{stem}.display.webp"
+            provider.save(path=display_path, file_obj=display, content_type="image/webp")
+            variants["display_path"] = display_path
+            uploaded_file.seek(0)
+            thumb = export_webp_variant(uploaded_file, max_size=(400, 400))
+            thumb_path = f"{stem}.thumb.webp"
+            provider.save(path=thumb_path, file_obj=thumb, content_type="image/webp")
+            variants["thumbnail_path"] = thumb_path
+        except Exception:
+            logger.debug("Unable to generate image variants", exc_info=True)
+        return variants
 
     def _image_metadata(self, uploaded_file: UploadedFile, media_type: str) -> Any | None:
         if media_type != MediaType.IMAGE:

@@ -63,6 +63,31 @@ def compress_image(file_obj: object, *, quality: int = 85) -> BytesIO:
     return _to_buffer(image, image.format or "JPEG", quality=quality, optimize=True)
 
 
+def export_webp_variant(
+    file_obj: object,
+    *,
+    max_size: tuple[int, int],
+    quality: int = 80,
+) -> BytesIO:
+    Image = _image_module()
+    position = file_obj.tell() if hasattr(file_obj, "tell") else None
+    try:
+        image = Image.open(file_obj)
+        image.thumbnail(max_size)
+        if image.mode not in {"RGB", "RGBA"}:
+            image = image.convert("RGB")
+        buffer = BytesIO()
+        save_options: dict[str, object] = {"quality": quality, "method": 6}
+        if image.mode == "RGB":
+            save_options["optimize"] = True
+        image.save(buffer, format="WEBP", **save_options)
+        buffer.seek(0)
+        return buffer
+    finally:
+        if position is not None:
+            file_obj.seek(position)
+
+
 def _to_buffer(image: object, image_format: str, **save_options: object) -> BytesIO:
     buffer = BytesIO()
     if image.mode in {"RGBA", "P"} and image_format.upper() in {"JPG", "JPEG"}:

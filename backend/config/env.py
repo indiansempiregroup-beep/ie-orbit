@@ -43,7 +43,7 @@ def load_environment(base_dir: Path) -> Environment:
 
     database_url = _required("DATABASE_URL", True)
     redis_url = _required("REDIS_URL", True)
-    _validate_database_url("DATABASE_URL", database_url)
+    _validate_database_url("DATABASE_URL", database_url, production_like=production_like)
     _validate_url("REDIS_URL", redis_url, {"redis", "rediss"})
 
     return Environment(
@@ -85,7 +85,7 @@ def _csv(name: str, *, default: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def _validate_database_url(name: str, value: str) -> None:
+def _validate_database_url(name: str, value: str, *, production_like: bool = False) -> None:
     parsed = urlparse(value)
     allowed_schemes = {"postgres", "postgresql", "sqlite"}
     if parsed.scheme not in allowed_schemes:
@@ -93,6 +93,10 @@ def _validate_database_url(name: str, value: str) -> None:
         raise EnvironmentConfigurationError(f"{name} must be a valid URL using: {schemes}")
 
     if parsed.scheme == "sqlite":
+        if production_like:
+            raise EnvironmentConfigurationError(
+                f"{name} must use PostgreSQL in production and staging; SQLite is not allowed"
+            )
         return
 
     if not parsed.netloc:
