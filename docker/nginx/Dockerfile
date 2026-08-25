@@ -15,7 +15,7 @@ RUN corepack enable \
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY web/package.json ./web/package.json
 COPY mobile/package.json ./mobile/package.json
 COPY apps/ops-mobile/package.json ./apps/ops-mobile/package.json
