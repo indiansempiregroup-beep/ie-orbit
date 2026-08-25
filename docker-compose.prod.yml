@@ -76,6 +76,7 @@ services:
       WWW_HOST: ${WWW_HOST:-www.ie-orbit.com}
     volumes:
       - ./certs:/etc/nginx/certs
+      - ./certbot-www:/var/www/certbot:ro
       - backend-static:/var/www/static:ro
     depends_on:
       backend:
