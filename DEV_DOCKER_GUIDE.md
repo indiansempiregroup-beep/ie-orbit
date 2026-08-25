@@ -11,7 +11,9 @@ docker compose up --build
 - Backend: http://localhost:8000
 - API docs: http://localhost:8000/api/docs/
 - Health: http://localhost:8000/api/health/
-- Web app: http://localhost:3000
+- Web app (public site): http://localhost:3000
+- Platform Admin: http://127.0.0.1:3000 (after platform-admin sign-in)
+- Ops Expo web: http://localhost:8082 (`cd apps/ops-mobile && corepack pnpm web`)
 - Mailpit UI: http://localhost:8025
 - Postgres: host Postgres on localhost:5432 (`postgres` / `admin` / `ie_orbit`)
 

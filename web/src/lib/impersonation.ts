@@ -1,3 +1,5 @@
+import { getAdminAppOrigin } from './hosts';
+
 export const IMPERSONATOR_ID_KEY = 'ie:auth:impersonator_id';
 export const IMPERSONATION_TENANT_ID_KEY = 'ie:auth:impersonation_tenant_id';
 export const ADMIN_TOKENS_BACKUP_KEY = 'ie_admin_tokens_backup';
@@ -160,10 +162,7 @@ export function buildOpsMobileImpersonationUrl(params: {
   tenantId: string;
   impersonatorId: string;
 }): string {
-  const returnTo =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/admin/tenants/${params.tenantId}`
-      : `/admin/tenants/${params.tenantId}`;
+  const returnTo = `${getAdminAppOrigin()}/admin/tenants/${params.tenantId}`;
   const encoded = toBase64Url(
     JSON.stringify({
       access: params.access,

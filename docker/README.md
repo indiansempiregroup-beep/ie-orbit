@@ -11,7 +11,9 @@ docker compose up --build
 The stack includes:
 
 - Django backend on http://localhost:8000
-- Vite web app on http://localhost:3000
+- Vite public site on http://localhost:3000
+- Platform Admin on http://127.0.0.1:3000 (after platform-admin sign-in)
+- Expo ops web (host, not Compose): http://localhost:8082
 - Host PostgreSQL on localhost:5432 (not run in Compose)
 - Redis on localhost:6379
 - Mailpit web UI on http://localhost:8025
@@ -68,6 +70,15 @@ Local Compose is unchanged. Production uses a separate file and does not publish
 cp .env.production.example .env
 docker compose -f docker-compose.prod.yml up --build -d
 ```
+
+Production nginx serves:
+
+- https://ie-orbit.com — public marketing / register / sign-in
+- https://app.ie-orbit.com — Platform Admin (after platform-admin login)
+- https://ops.ie-orbit.com — Expo ops workspace (owners and staff)
+- https://api.ie-orbit.com — Django API
+
+Add DNS A records for `@`, `www`, `app`, `ops`, and `api` to the VPS. `www` redirects to the apex site.
 
 Canonical runbooks live in the sibling `ie-orbit-docs` repository under `docs/09-devops/`:
 

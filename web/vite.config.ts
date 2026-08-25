@@ -19,6 +19,9 @@ function resolveApiProxyTarget(env: Record<string, string>) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
   const places = env.VITE_GOOGLE_PLACES_API_KEY || env.GOOGLE_PLACES_API_KEY || '';
+  const opsWebUrl = (env.VITE_OPS_MOBILE_WEB_URL || process.env.VITE_OPS_MOBILE_WEB_URL || '').trim();
+  const publicSiteUrl = (env.VITE_PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || '').trim();
+  const adminAppUrl = (env.VITE_ADMIN_APP_URL || process.env.VITE_ADMIN_APP_URL || '').trim();
   const apiProxyTarget = resolveApiProxyTarget(env);
 
   return {
@@ -49,10 +52,19 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    define: places
-      ? {
-          'import.meta.env.VITE_GOOGLE_PLACES_API_KEY': JSON.stringify(places),
-        }
-      : undefined,
+    define: {
+      ...(places
+        ? { 'import.meta.env.VITE_GOOGLE_PLACES_API_KEY': JSON.stringify(places) }
+        : {}),
+      ...(opsWebUrl
+        ? { 'import.meta.env.VITE_OPS_MOBILE_WEB_URL': JSON.stringify(opsWebUrl) }
+        : {}),
+      ...(publicSiteUrl
+        ? { 'import.meta.env.VITE_PUBLIC_SITE_URL': JSON.stringify(publicSiteUrl) }
+        : {}),
+      ...(adminAppUrl
+        ? { 'import.meta.env.VITE_ADMIN_APP_URL': JSON.stringify(adminAppUrl) }
+        : {}),
+    },
   };
 });

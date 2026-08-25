@@ -38,7 +38,7 @@ export function isPlatformAdminOnly(user: UserProfile | null | undefined): boole
   return isPlatformAdmin(user) && !hasTenantOpsRole(user);
 }
 
-/** Default landing route after sign-in. Platform admins stay on this app; tenant ops use Expo web. */
+/** Default landing route after sign-in. Platform admins use the admin host; tenant ops use Expo web. */
 export function getPostLoginPath(user: UserProfile | null | undefined): string {
   return isPlatformAdmin(user) ? '/admin' : '/dashboard';
 }

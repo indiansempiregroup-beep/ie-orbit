@@ -7,7 +7,9 @@ import { Input } from '../../components/Input';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useEmailVerification } from '../../hooks/useEmailVerification';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getPostLoginPath, hasTenantOpsRole, isPlatformAdmin } from '../../utils/roles';
+import { hasTenantOpsRole, isPlatformAdmin } from '../../utils/roles';
+import { continueAfterAuth, redirectToAdminApp } from '../../lib/authRedirect';
+import { getAdminAppOrigin } from '../../lib/hosts';
 import { redirectToOpsMobileWeb } from '../../lib/impersonation';
 
 type VerifyEmailPageProps = {
@@ -78,16 +80,16 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
   const profilePath = isPlatformAdmin(auth.user) ? '/admin/profile' : '/profile';
 
   function goToApp() {
-    if (tenantOps) {
-      redirectToOpsMobileWeb();
-      return;
-    }
-    navigate(getPostLoginPath(auth.user));
+    continueAfterAuth(auth.user, navigate);
   }
 
   function goToProfile() {
     if (tenantOps) {
       redirectToOpsMobileWeb();
+      return;
+    }
+    if (isPlatformAdmin(auth.user) && window.location.origin !== getAdminAppOrigin()) {
+      redirectToAdminApp(profilePath);
       return;
     }
     navigate(profilePath);

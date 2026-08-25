@@ -8,6 +8,7 @@ import { PlatformAdminGuard } from './guards/PlatformAdminGuard';
 import { TenantOpsGuard } from './guards/TenantOpsGuard';
 import { PublicLayout } from './features/public/PublicLayout';
 import { AuthLayout } from './features/auth/AuthLayout';
+import { HostGate } from './components/HostGate';
 
 const HomePage = lazy(() => import('./features/public/HomePage').then((m) => ({ default: m.HomePage })));
 const FeaturesPage = lazy(() => import('./features/public/FeaturesPage').then((m) => ({ default: m.FeaturesPage })));
@@ -161,8 +162,9 @@ function PageFallback() {
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<PageFallback />}>
-        <Routes>
+      <HostGate>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
           <Route element={<PublicLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/features" element={<FeaturesPage />} />
@@ -300,7 +302,8 @@ function App() {
           <Route path="/404" element={<NotFoundPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
-      </Suspense>
+        </Suspense>
+      </HostGate>
     </BrowserRouter>
   );
 }

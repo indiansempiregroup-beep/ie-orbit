@@ -66,9 +66,13 @@ corepack pnpm web
 # Open the URL Expo prints (often http://localhost:8082)
 # Login with the same credentials as before (e.g. pilot-owner@ieorbit.local / PilotPass123!)
 #
-# Platform-admin-only accounts now open Platform Admin inside Expo (Tenants / Coupons / Audit).
-# Vite web/ (:3000) is still used for marketing/register and remaining admin pages
-# (subscriptions, packages, tickets, branding, etc.) until those are fully ported.
+# Production (after deploy + DNS):
+#   https://ie-orbit.com        public website / register / sign-in
+#   https://app.ie-orbit.com    Platform Admin (after platform-admin login)
+#   https://ops.ie-orbit.com    Expo ops workspace (owners and staff)
+#
+# Local Vite web/ (:3000) is the public site. Platform admin is sent to
+# http://127.0.0.1:3000/admin. Owners/staff open Expo at :8082.
 
 
 To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not localhost)

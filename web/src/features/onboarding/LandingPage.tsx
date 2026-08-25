@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { captureAffiliateCodeFromLocation, registerStartPath } from './affiliateCode';
-import { getOpsMobileWebOrigin } from '../../lib/impersonation';
 
 export function LandingPage() {
   const navigate = useNavigate();
@@ -30,7 +29,7 @@ export function LandingPage() {
         <Card style={{ padding: 24 }}>
           <h3 style={{ margin: 0 }}>Already have an account?</h3>
           <div style={{ marginTop: 12 }}>
-            <Button variant="ghost" onClick={() => { window.location.assign(`${getOpsMobileWebOrigin()}/`); }}>Sign in</Button>
+            <Button variant="ghost" onClick={() => navigate('/auth')}>Sign in</Button>
           </div>
         </Card>
       </div>

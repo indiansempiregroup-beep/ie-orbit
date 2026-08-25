@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node ./start-expo.cjs start --port 8082",
     "web": "node ./start-expo.cjs start --port 8082 --web",
+    "export:web": "expo export --platform web --output-dir dist",
     "android": "node ./start-expo.cjs run:android",
     "ios": "node ./start-expo.cjs run:ios",
     "postinstall": "node ./scripts/patch-metro-windows.cjs",
