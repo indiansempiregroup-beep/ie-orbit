@@ -80,7 +80,7 @@ import { GrowReferralScreen } from '../features/grow/GrowReferralScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
 import { BranchFormScreen } from '../features/branches/BranchFormScreen';
 import { BIScreen } from '../features/bi/BIScreen';
-import { ReportsScreen } from '../features/reports/ReportsScreen';
+import { ReportsRedirectScreen } from '../features/bi/ReportsRedirectScreen';
 import { TeamScreen } from '../features/team/TeamScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
 import { ProfileEditScreen } from '../features/profile/ProfileEditScreen';
@@ -267,7 +267,7 @@ export function RootNavigator() {
             {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
             {stackScreen('BranchForm', BranchFormScreen, 'Office')}
             {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}
-            {stackScreen('Reports', ReportsScreen, t('nav.reports'))}
+            {stackScreen('Reports', ReportsRedirectScreen, t('nav.reports'))}
             {stackScreen('Team', TeamScreen, t('settings.team'))}
             {stackScreen('Profile', ProfileScreen, t('profile.title'))}
             {stackScreen('ProfileEdit', ProfileEditScreen, t('profile.editTitle'))}
