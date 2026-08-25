@@ -1,4 +1,4 @@
-import type { UserProfile } from '@ie-platform/sdk';
+import type { UserProfile } from '@ie-orbit/sdk';
 
 const OPS_ROLES = new Set(['business_owner', 'manager', 'staff', 'platform_admin', 'super_admin']);
 const MANAGER_OR_ABOVE = new Set(['business_owner', 'manager', 'platform_admin', 'super_admin']);

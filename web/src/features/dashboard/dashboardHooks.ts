@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { type TenantSettingsResponse } from '@ie-platform/sdk';
+import { type TenantSettingsResponse } from '@ie-orbit/sdk';
 import {
   AvailabilitySlot,
   Booking,

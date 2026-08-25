@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { StaffWeeklyScheduleBulkInput } from '@ie-platform/sdk';
+import type { StaffWeeklyScheduleBulkInput } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
 import { invalidateWorkspaceData } from '../../lib/workspace';

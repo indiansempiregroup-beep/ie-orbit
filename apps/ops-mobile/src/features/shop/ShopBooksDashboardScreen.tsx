@@ -17,7 +17,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksDashboard } from '@ie-platform/sdk';
+import type { ShopBooksDashboard } from '@ie-orbit/sdk';
 import { formatMoney } from './shopBooksHelpers';
 import { PlanFeature } from '../../utils/planFeatures';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';

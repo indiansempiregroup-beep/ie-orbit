@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import type { MobileBootstrapResponse } from '@ie-platform/sdk';
+import type { MobileBootstrapResponse } from '@ie-orbit/sdk';
 import { useMobileBootstrap } from '../hooks/useMobileBootstrap';
 import { applyMobileBranding, type BrandTheme } from '../theme/brandTheme';
 import { mobileRuntime, resolveFlavorBranding } from '../config/flavors';

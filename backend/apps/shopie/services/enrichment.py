@@ -13,7 +13,7 @@ from django.core.cache import cache
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 60 * 60 * 24 * 7
-USER_AGENT = "IE-Platform-ShopIE/1.0 (product enrichment)"
+USER_AGENT = "IE-Orbit-ShopIE/1.0 (product enrichment)"
 BARCODE_RE = re.compile(r"\b(\d{8}|\d{12,14})\b")
 
 # Common retail brand tokens that should prefer pet / specialty catalogs.

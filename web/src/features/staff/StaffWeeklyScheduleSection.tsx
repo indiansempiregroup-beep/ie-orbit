@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { StaffWeeklyScheduleInput } from '@ie-platform/sdk';
+import type { StaffWeeklyScheduleInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';

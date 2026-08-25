@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { createApiClient, type LoginResponse, type UserProfile, type WorkspaceProvisionResponse } from '@ie-platform/sdk';
+import { createApiClient, type LoginResponse, type UserProfile, type WorkspaceProvisionResponse } from '@ie-orbit/sdk';
 import {
   clearImpersonationMarkers,
   getImpersonationTenantId,

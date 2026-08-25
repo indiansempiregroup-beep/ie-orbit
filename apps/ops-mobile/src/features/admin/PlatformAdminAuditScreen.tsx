@@ -13,7 +13,7 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
-import type { PlatformAuditEvent } from '@ie-platform/sdk';
+import type { PlatformAuditEvent } from '@ie-orbit/sdk';
 import { shopListRefreshControl } from '../shop/shopRefreshControl';
 
 export function PlatformAdminAuditScreen() {

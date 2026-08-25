@@ -1,4 +1,4 @@
-import type { ShopDeliveryLive } from '@ie-platform/sdk';
+import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 
 export type DeliveryPoint = { latitude: number; longitude: number };
 

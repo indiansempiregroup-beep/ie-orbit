@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { StaffInvitationCreateInput } from '@ie-platform/sdk';
+import type { StaffInvitationCreateInput } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 

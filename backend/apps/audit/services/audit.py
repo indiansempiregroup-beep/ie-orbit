@@ -6,7 +6,7 @@ from typing import Any
 from apps.audit.models import AuditLogEntry
 from apps.tenancy.models import Tenant
 
-logger = logging.getLogger("ie_platform.audit")
+logger = logging.getLogger("ie_orbit.audit")
 
 
 def record_audit(

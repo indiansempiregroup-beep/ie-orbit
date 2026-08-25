@@ -167,7 +167,7 @@ def test_resend_verification_invalid_jwt_falls_back_to_email(api_client: APIClie
     assert response.status_code == 200
     assert response.json()["data"]["sent"] is True
     assert mail.outbox
-    assert "IE Platform" in mail.outbox[-1].subject
+    assert "IE Orbit" in mail.outbox[-1].subject
 
 
 @pytest.mark.django_db

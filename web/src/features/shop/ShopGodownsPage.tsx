@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeftRight, Pencil, Plus, Warehouse } from 'lucide-react';
-import type { ShopGodown } from '@ie-platform/sdk';
+import type { ShopGodown } from '@ie-orbit/sdk';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';

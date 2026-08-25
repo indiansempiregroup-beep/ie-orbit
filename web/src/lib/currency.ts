@@ -1,4 +1,4 @@
-import { getActiveIntlLocale } from '@ie-platform/i18n';
+import { getActiveIntlLocale } from '@ie-orbit/i18n';
 
 const FALLBACK_CURRENCY = 'USD';
 

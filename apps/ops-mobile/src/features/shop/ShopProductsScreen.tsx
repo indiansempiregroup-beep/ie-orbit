@@ -21,8 +21,8 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { RemoteImage } from '../../components/RemoteImage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopProduct } from '@ie-platform/sdk';
-import { SHOP_PRODUCT_CATEGORIES } from '@ie-platform/sdk';
+import type { ShopProduct } from '@ie-orbit/sdk';
+import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
 import {
   MAX_PRODUCT_IMAGES,
   galleryFromProduct,

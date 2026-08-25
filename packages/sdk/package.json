@@ -1,5 +1,5 @@
 {
-  "name": "@ie-platform/sdk",
+  "name": "@ie-orbit/sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -11,7 +11,7 @@ import { registerStartPath } from '../onboarding/affiliateCode';
 
 export function AuthPage() {
   const { t } = useTranslation();
-  usePageMeta({ title: 'Sign in — IE Platform' });
+  usePageMeta({ title: 'Sign in — IE Orbit' });
   const auth = useAuthContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +40,7 @@ export function AuthPage() {
 
   return (
     <>
-      <h1>{t('auth.signIn')} — IE Platform</h1>
+      <h1>{t('auth.signIn')} — IE Orbit</h1>
       <p className="auth-lead">{t('auth.welcomeBack')}</p>
       <form onSubmit={handleSubmit}>
         <Input

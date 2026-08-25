@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { AvailabilitySlot, Booking } from '@ie-platform/sdk';
+import type { AvailabilitySlot, Booking } from '@ie-orbit/sdk';
 import { formatTime } from '../../lib/datetime';
 import {
   PX_PER_MINUTE,

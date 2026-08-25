@@ -1,6 +1,6 @@
 # Bookings
 
-Milestone M8 implements the IE Platform scheduling and booking engine foundation.
+Milestone M8 implements the IE Orbit scheduling and booking engine foundation.
 
 ## Scope
 

@@ -9,7 +9,7 @@ cd "$ROOT_DIR"
 
 if [ "${CONFIRM:-}" != "YES" ]; then
   echo "Refusing to restore. Re-run with CONFIRM=YES and a backup file:"
-  echo "  CONFIRM=YES ./scripts/restore-postgres.sh backups/ie_platform_YYYYMMDDTHHMMSSZ.sql.gz"
+  echo "  CONFIRM=YES ./scripts/restore-postgres.sh backups/ie_orbit_YYYYMMDDTHHMMSSZ.sql.gz"
   exit 1
 fi
 
@@ -26,8 +26,8 @@ if [ -f .env ]; then
   set +a
 fi
 
-POSTGRES_USER="${POSTGRES_USER:-ie_platform}"
-POSTGRES_DB="${POSTGRES_DB:-ie_platform}"
+POSTGRES_USER="${POSTGRES_USER:-ie_orbit}"
+POSTGRES_DB="${POSTGRES_DB:-ie_orbit}"
 
 echo "Stopping application processes that write to the database..."
 docker compose -f "$COMPOSE_FILE" stop backend celery-worker celery-beat || true

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
-import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-platform/sdk';
-import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-platform/sdk';
+import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-orbit/sdk';
+import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';

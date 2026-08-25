@@ -10,7 +10,7 @@ import { PostAuthRedirect } from '../../components/PostAuthRedirect';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function ResetPasswordPage() {
-  usePageMeta({ title: 'Reset password — IE Platform' });
+  usePageMeta({ title: 'Reset password — IE Orbit' });
   const auth = useAuthContext();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';

@@ -23,7 +23,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopPartyStatement, ShopSupplier } from '@ie-platform/sdk';
+import type { ShopPartyStatement, ShopSupplier } from '@ie-orbit/sdk';
 import { formatMoney, supplierLabel } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 

@@ -8,7 +8,7 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { colors, fonts, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopProduct } from '@ie-platform/sdk';
+import type { ShopProduct } from '@ie-orbit/sdk';
 import { addProductToPosSession, readPosSession } from './posSession';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BarcodeScanner'>;

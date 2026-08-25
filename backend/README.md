@@ -1,6 +1,6 @@
 # Backend
 
-Django backend workspace for IE Platform.
+Django backend workspace for IE Orbit.
 
 ## Milestone Scope
 

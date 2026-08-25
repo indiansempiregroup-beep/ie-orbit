@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { BusinessBillingSnapshot, PlatformPaymentRow, PlatformTenantBusiness } from '@ie-platform/sdk';
+import type { BusinessBillingSnapshot, PlatformPaymentRow, PlatformTenantBusiness } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { buildOpsMobileImpersonationUrl } from '../../lib/impersonation';

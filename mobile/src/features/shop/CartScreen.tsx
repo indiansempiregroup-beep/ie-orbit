@@ -34,7 +34,7 @@ import { addressSingleLine, addressTypeMeta, deliveryAddressLine } from './addre
 import { QtyStepper } from './QtyStepper';
 import { formatShopMoney, formatShopDateIso, formatShopDateLabel, formatShopTimeLabel, isPickupTimeAfterNow, nextAvailablePickupTime, shopLinePayable } from './shopHelpers';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import type { CustomerAddress, ShopCouponOffer } from '@ie-platform/sdk';
+import type { CustomerAddress, ShopCouponOffer } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 function tomorrowIso() {

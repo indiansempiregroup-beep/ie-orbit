@@ -5,7 +5,7 @@ import { useEditFormInit } from '../../hooks/useEditFormInit';
 import { useAuth } from '../../hooks/useAuth';
 import { useServiceDetail, useServiceUpdate } from '../management/managementHooks';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import type { Service, ServiceUpdateInput } from '@ie-platform/sdk';
+import type { Service, ServiceUpdateInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';

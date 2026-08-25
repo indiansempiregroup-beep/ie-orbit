@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { type Business, type TenantSummary } from '@ie-platform/sdk';
+import { type Business, type TenantSummary } from '@ie-orbit/sdk';
 import { createAuthenticatedClient } from '../lib/apiClient';
 import { invalidateWorkspaceData } from '../lib/workspace';
 import { useAuth } from '../hooks/useAuth';

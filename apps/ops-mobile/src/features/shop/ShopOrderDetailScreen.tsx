@@ -18,7 +18,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
 import { colors, fonts, spacing } from '../../theme/tokens';
-import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
+import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';

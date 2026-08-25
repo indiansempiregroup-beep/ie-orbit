@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The platform media engine is a reusable foundation service for every IE Platform product. It
+The platform media engine is a reusable foundation service for every IE Orbit product. It
 centralizes upload validation, storage abstraction, metadata capture, and media access rules.
 
 ## Provider Strategy
@@ -23,7 +23,7 @@ Future providers:
 
 Production objects stay in a private bucket. The API stores stable `/api/v1/media/{id}/file`
 URLs and issues signed GET URLs at read time. Optional `R2_PUBLIC_BASE_URL` may keep absolute
-CDN URLs. See IE-0901 in ie-platform-docs.
+CDN URLs. See IE-0901 in ie-orbit-docs.
 
 Product modules depend on `MediaService`, `MediaRepository`, and URL helpers rather than storage
 provider details.
@@ -59,7 +59,7 @@ Object keys use a single prefix layout (no nested `businesses/{id}` duplication)
 tenants/{tenant_id}/businesses/{business_id}/{folder_type}/{uuid}-{filename}
 tenants/{tenant_id}/businesses/{business_id}/{folder_type}/{uuid}-{stem}.display.webp
 tenants/{tenant_id}/businesses/{business_id}/{folder_type}/{uuid}-{stem}.thumb.webp
-backups/postgres/ie_platform_{timestamp}.sql.gz
+backups/postgres/ie_orbit_{timestamp}.sql.gz
 ```
 
 `folder_type` is one of: business, staff, customers, services, documents, temp, archive.

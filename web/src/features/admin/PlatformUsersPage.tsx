@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { PlatformUserFilter, PlatformUserRow, PlatformUserSearchParams } from '@ie-platform/sdk';
+import type { PlatformUserFilter, PlatformUserRow, PlatformUserSearchParams } from '@ie-orbit/sdk';
 import { KeyRound, Lock, MailWarning, ShieldCheck, UserCheck, UserX, Users } from 'lucide-react';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useDebounce } from '../../hooks/useDebounce';

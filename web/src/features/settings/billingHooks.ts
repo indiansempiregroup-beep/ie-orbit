@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { BillingCheckoutInput } from '@ie-platform/sdk';
+import type { BillingCheckoutInput } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 

@@ -29,7 +29,7 @@ import type {
   StaffWeeklyScheduleInput,
   TenantMember,
   TenantSettingsResponse,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { filterFutureSlots } from '../utils/format';
 import { createScopedClient } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';

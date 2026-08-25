@@ -16,7 +16,7 @@ export function LandingPage() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#f5f7fb' }}>
       <div style={{ maxWidth: 960, width: '100%', display: 'grid', gap: 20 }}>
         <Card style={{ padding: 32 }}>
-          <h1 style={{ marginTop: 0 }}>Get started with IE Platform</h1>
+          <h1 style={{ marginTop: 0 }}>Get started with IE Orbit</h1>
           <p style={{ color: '#6b7280' }}>
             Create your workspace and start AppointIE bookings, ShopIE retail, or both in minutes.
           </p>

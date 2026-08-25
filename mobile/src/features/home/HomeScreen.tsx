@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { CompositeNavigationProp, useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { MobileDiscoverService, PlatformAnnouncement, ShopDashboardAd, ShopOrder, ShopProduct } from '@ie-platform/sdk';
+import type { MobileDiscoverService, PlatformAnnouncement, ShopDashboardAd, ShopOrder, ShopProduct } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { PromoCarousel, openPromoAd } from '../../components/PromoCarousel';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';

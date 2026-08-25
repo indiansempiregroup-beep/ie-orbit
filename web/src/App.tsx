@@ -78,7 +78,6 @@ const ShopDeliveryChallansPage = lazy(() =>
   import('./features/shop/ShopDeliveryChallansPage').then((m) => ({ default: m.ShopDeliveryChallansPage })),
 );
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
-const ReportsPage = lazy(() => import('./features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const BIOverviewPage = lazy(() => import('./features/bi/BIOverviewPage').then((m) => ({ default: m.BIOverviewPage })));
 const BIGrowthPage = lazy(() => import('./features/bi/BIGrowthPage').then((m) => ({ default: m.BIGrowthPage })));
 const BIRevenuePage = lazy(() => import('./features/bi/BIRevenuePage').then((m) => ({ default: m.BIRevenuePage })));
@@ -270,7 +269,7 @@ function App() {
                 </Route>
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route element={<PermissionGuard anyPermissions={['booking:manage', 'business:manage', 'business:update']} />}>
-                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/reports" element={<Navigate to="/bi/reports" replace />} />
                   <Route path="/bi" element={<BILayout />}>
                     <Route index element={<Navigate to="/bi/overview" replace />} />
                     <Route path="overview" element={<BIOverviewPage />} />

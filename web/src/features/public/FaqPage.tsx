@@ -3,8 +3,8 @@ import { Card } from '../../components/Card';
 
 const faqs = [
   {
-    q: 'What is IE Platform?',
-    a: 'IE Platform is one workspace for two products: AppointIE for appointments and ShopIE for retail, POS, and GST books. You can subscribe to one product or both.',
+    q: 'What is IE Orbit?',
+    a: 'IE Orbit is one workspace for two products: AppointIE for appointments and ShopIE for retail, POS, and GST books. You can subscribe to one product or both.',
   },
   {
     q: 'Can I use AppointIE and ShopIE together?',
@@ -34,7 +34,7 @@ const faqs = [
 
 export function FaqPage() {
   usePageMeta({
-    title: 'FAQ — IE Platform',
+    title: 'FAQ — IE Orbit',
     description: 'Frequently asked questions about AppointIE, ShopIE, trials, plans, and UPI billing.',
   });
 

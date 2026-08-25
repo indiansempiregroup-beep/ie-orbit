@@ -35,7 +35,7 @@ import {
   stockLabel,
   type ShopSortKey,
 } from './shopHelpers';
-import type { ShopProduct } from '@ie-platform/sdk';
+import type { ShopProduct } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function ShopScreen() {

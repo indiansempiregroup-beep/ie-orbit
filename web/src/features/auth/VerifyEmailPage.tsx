@@ -15,7 +15,7 @@ type VerifyEmailPageProps = {
 };
 
 export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
-  usePageMeta({ title: 'Verify email — IE Platform' });
+  usePageMeta({ title: 'Verify email — IE Orbit' });
   const auth = useAuthContext();
   const navigate = useNavigate();
   const { resendState, message: resendMessage, debugToken, resendVerification } = useEmailVerification();

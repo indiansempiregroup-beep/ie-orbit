@@ -6,8 +6,8 @@ import { Button } from '../../components/Button';
 
 export function ContactPage() {
   usePageMeta({
-    title: 'Contact — IE Platform',
-    description: 'Contact the IE Platform team for support and sales inquiries.',
+    title: 'Contact — IE Orbit',
+    description: 'Contact the IE Orbit team for support and sales inquiries.',
   });
 
   const [submitted, setSubmitted] = useState(false);

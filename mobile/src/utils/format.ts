@@ -1,5 +1,5 @@
-import { getActiveIntlLocale } from '@ie-platform/i18n';
-import { ApiClientError } from '@ie-platform/sdk';
+import { getActiveIntlLocale } from '@ie-orbit/i18n';
+import { ApiClientError } from '@ie-orbit/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 
 type DateTimeZoneConfig = {

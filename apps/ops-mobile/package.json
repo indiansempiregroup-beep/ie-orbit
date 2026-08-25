@@ -1,5 +1,5 @@
 {
-  "name": "@ie-platform/ops-mobile",
+  "name": "@ie-orbit/ops-mobile",
   "version": "0.1.0",
   "private": true,
   "main": "index.js",
@@ -16,8 +16,8 @@
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo-google-fonts/fraunces": "^0.4.1",
     "@expo/vector-icons": "^15.1.1",
-    "@ie-platform/i18n": "workspace:*",
-    "@ie-platform/sdk": "workspace:*",
+    "@ie-orbit/i18n": "workspace:*",
+    "@ie-orbit/sdk": "workspace:*",
     "@react-navigation/bottom-tabs": "^7.18.7",
     "@react-navigation/native": "^7.3.7",
     "@react-navigation/native-stack": "^7.17.9",

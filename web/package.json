@@ -1,5 +1,5 @@
 {
-  "name": "@ie-platform/web",
+  "name": "@ie-orbit/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
-    "@ie-platform/i18n": "workspace:*",
-    "@ie-platform/sdk": "workspace:*",
+    "@ie-orbit/i18n": "workspace:*",
+    "@ie-orbit/sdk": "workspace:*",
     "@tanstack/react-query": "^5.4.2",
     "i18next": "^25.3.2",
     "lucide-react": "^0.487.0",

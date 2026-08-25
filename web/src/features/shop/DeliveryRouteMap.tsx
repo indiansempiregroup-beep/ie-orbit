@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ShopDeliveryLive } from '@ie-platform/sdk';
+import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { loadGoogleMaps, type GoogleMapsWindow } from '../../lib/googleMaps';
 

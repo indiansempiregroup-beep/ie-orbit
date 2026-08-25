@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { BillingWebhookEvent } from '@ie-platform/sdk';
+import type { BillingWebhookEvent } from '@ie-orbit/sdk';
 import {
   Activity,
   CheckCircle2,

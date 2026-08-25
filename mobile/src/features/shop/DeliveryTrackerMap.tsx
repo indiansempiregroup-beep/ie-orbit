@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import type { ShopDeliveryLive } from '@ie-platform/sdk';
+import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 import { colors, typography } from '../../theme/tokens';
 import { deliveryMapPoints } from './deliveryMapPoints';
 

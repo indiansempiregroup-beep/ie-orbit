@@ -1,6 +1,6 @@
 # Identity and Access Management
 
-Milestone M4 implements reusable IAM infrastructure for IE Platform products.
+Milestone M4 implements reusable IAM infrastructure for IE Orbit products.
 
 ## Scope
 
@@ -71,7 +71,7 @@ Tenant workspaces (for example a white-label business such as Rupali’s) may st
 ```bash
 backend/.venv/bin/python backend/manage.py check
 backend/.venv/bin/python backend/manage.py migrate
-backend/.venv/bin/python backend/manage.py spectacular --file /tmp/ie-platform-schema.yml
+backend/.venv/bin/python backend/manage.py spectacular --file /tmp/ie-orbit-schema.yml
 backend/.venv/bin/ruff check backend
 backend/.venv/bin/black --check backend
 backend/.venv/bin/pytest backend

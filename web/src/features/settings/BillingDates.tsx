@@ -1,4 +1,4 @@
-import type { BusinessBillingSnapshot } from '@ie-platform/sdk';
+import type { BusinessBillingSnapshot } from '@ie-orbit/sdk';
 import { formatDate } from '../../lib/datetime';
 
 type Props = {

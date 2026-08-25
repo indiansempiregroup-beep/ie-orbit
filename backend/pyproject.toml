@@ -3,9 +3,9 @@ requires = ["setuptools>=70", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ie-platform-backend"
+name = "ie-orbit-backend"
 version = "0.1.0"
-description = "Django backend for the IE Platform"
+description = "Django backend for IE Orbit"
 requires-python = ">=3.13"
 dependencies = [
   "black>=24.10,<25",

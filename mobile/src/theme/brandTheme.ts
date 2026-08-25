@@ -1,4 +1,4 @@
-import type { MobileBootstrapResponse } from '@ie-platform/sdk';
+import type { MobileBootstrapResponse } from '@ie-orbit/sdk';
 import { colors } from './tokens';
 
 export type BrandTheme = {

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCustomerDetail, useCustomerUpdate } from '../management/managementHooks';
 import { useDialog } from '../../hooks/useDialog';
 import { useEditFormInit } from '../../hooks/useEditFormInit';
-import type { Customer, CustomerUpdateInput } from '@ie-platform/sdk';
+import type { Customer, CustomerUpdateInput } from '@ie-orbit/sdk';
 import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Card } from '../../components/Card';

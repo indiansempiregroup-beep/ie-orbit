@@ -66,7 +66,7 @@ def send_billing_ops_digest_task(window_hours: int = 24) -> dict[str, object]:
         )
     message = "\n".join(lines)
     send_mail(
-        subject=f"[IE Platform] Billing Ops Digest ({window_hours}h)",
+        subject=f"[IE Orbit] Billing Ops Digest ({window_hours}h)",
         message=message,
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=recipients,

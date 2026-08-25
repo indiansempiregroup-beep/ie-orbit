@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Heart, Pencil, Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import type { ShopPet } from '@ie-platform/sdk';
+import type { ShopPet } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';

@@ -1,4 +1,4 @@
-import type { StaffWeeklySchedule } from '@ie-platform/sdk';
+import type { StaffWeeklySchedule } from '@ie-orbit/sdk';
 
 export type LeaveDayKind = 'full_day' | 'half_day';
 

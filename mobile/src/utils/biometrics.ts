@@ -170,7 +170,7 @@ function biometricFailureMessage(
     if (Platform.OS === 'ios') {
       return (
         `This app host can’t open ${label}. ` +
-        `Open Settings → Expo Go → turn on Face ID, or install a development build of IE Platform.`
+        `Open Settings → Expo Go → turn on Face ID, or install a development build of IE Orbit.`
       );
     }
     return `${label} is not configured in this app build. Please update the app and try again.`;

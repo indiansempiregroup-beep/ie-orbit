@@ -19,7 +19,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.local/api/v1",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieorbit.local/api/v1",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "",
         "EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID": "ca-app-pub-1258778965386332~9504363579",
         "EXPO_PUBLIC_ADMOB_OPS_IOS_APP_ID": "ca-app-pub-1258778965386332~8402095545",
@@ -30,7 +30,7 @@
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.ieplatform.com/api/v1",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "",
         "EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID": "ca-app-pub-1258778965386332~9504363579",
         "EXPO_PUBLIC_ADMOB_OPS_IOS_APP_ID": "ca-app-pub-1258778965386332~8402095545",

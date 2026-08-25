@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, Booking } from '@ie-platform/sdk';
+import type { AvailabilitySlot, Booking } from '@ie-orbit/sdk';
 
 export const PX_PER_MINUTE = 1.4;
 export const FALLBACK_START_HOUR = 8;

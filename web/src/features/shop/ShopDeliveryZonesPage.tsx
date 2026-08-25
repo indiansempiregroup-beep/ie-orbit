@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { MapPin, Pencil, Plus } from 'lucide-react';
-import type { ShopDeliveryZone } from '@ie-platform/sdk';
+import type { ShopDeliveryZone } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';

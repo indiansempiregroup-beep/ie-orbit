@@ -1,4 +1,4 @@
-import { getActiveIntlLocale } from '@ie-platform/i18n';
+import { getActiveIntlLocale } from '@ie-orbit/i18n';
 
 type DateTimeZoneConfig = {
   userTimezone?: string | null;
@@ -132,7 +132,7 @@ export function mapBookingStatus(status: string): 'confirmed' | 'pending' | 'can
   }
 }
 
-import { ApiClientError } from '@ie-platform/sdk';
+import { ApiClientError } from '@ie-orbit/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 
 function formatErrorDetails(details: unknown, prefix = ''): string {

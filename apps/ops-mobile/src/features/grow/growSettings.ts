@@ -1,4 +1,4 @@
-import type { ShopGrowSettings } from '@ie-platform/sdk';
+import type { ShopGrowSettings } from '@ie-orbit/sdk';
 
 export function readGrowMetadata(metadata?: Record<string, unknown> | null): ShopGrowSettings {
   const grow = metadata?.grow;

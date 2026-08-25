@@ -1,5 +1,5 @@
-import type { IEPlatformClient } from '@ie-platform/sdk';
-import { type AvailabilitySlot, type Booking, type BookingCreateInput } from '@ie-platform/sdk';
+import type { IEOrbitClient } from '@ie-orbit/sdk';
+import { type AvailabilitySlot, type Booking, type BookingCreateInput } from '@ie-orbit/sdk';
 import { normalizeQuery, type QueryParams } from '../../lib/apiQuery';
 import { businessQueryParam } from '../../lib/workspace';
 
@@ -17,43 +17,43 @@ function scopedQuery(businessId: string | null | undefined, query?: QueryParams)
   return normalizeQuery({ ...businessQueryParam(businessId), ...query });
 }
 
-export async function listBookings(client: IEPlatformClient, businessId?: string | null, query?: QueryParams) {
+export async function listBookings(client: IEOrbitClient, businessId?: string | null, query?: QueryParams) {
   const response = await client.bookings.list(scopedQuery(businessId, query));
   return response.data;
 }
 
-export async function createBooking(client: IEPlatformClient, booking: BookingCreateInput) {
+export async function createBooking(client: IEOrbitClient, booking: BookingCreateInput) {
   const response = await client.bookings.create(booking);
   return response.data;
 }
 
-export async function getBooking(client: IEPlatformClient, bookingId: string) {
+export async function getBooking(client: IEOrbitClient, bookingId: string) {
   const response = await client.bookings.get(bookingId);
   return response.data;
 }
 
-export async function confirmBooking(client: IEPlatformClient, bookingId: string, reason?: string) {
+export async function confirmBooking(client: IEOrbitClient, bookingId: string, reason?: string) {
   const response = await client.bookings.confirm(bookingId, reason ? { reason } : undefined);
   return response.data;
 }
 
-export async function cancelBooking(client: IEPlatformClient, bookingId: string, reason?: string) {
+export async function cancelBooking(client: IEOrbitClient, bookingId: string, reason?: string) {
   const response = await client.bookings.cancel(bookingId, reason ? { reason } : undefined);
   return response.data;
 }
 
-export async function checkInBooking(client: IEPlatformClient, bookingId: string, reason?: string) {
+export async function checkInBooking(client: IEOrbitClient, bookingId: string, reason?: string) {
   const response = await client.bookings.checkIn(bookingId, reason ? { reason } : undefined);
   return response.data;
 }
 
-export async function completeBooking(client: IEPlatformClient, bookingId: string, reason?: string) {
+export async function completeBooking(client: IEOrbitClient, bookingId: string, reason?: string) {
   const response = await client.bookings.complete(bookingId, reason ? { reason } : undefined);
   return response.data;
 }
 
 export async function rescheduleBooking(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   bookingId: string,
   input: { start_at: string; reason?: string },
 ) {
@@ -62,7 +62,7 @@ export async function rescheduleBooking(
 }
 
 export async function getAvailability(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   businessId: string | null | undefined,
   query: AvailabilityQuery,
 ) {

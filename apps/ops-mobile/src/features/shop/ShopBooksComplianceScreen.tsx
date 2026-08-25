@@ -11,7 +11,7 @@ import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { getApiErrorMessage } from '../../utils/format';
 import { colors, spacing, typography } from '../../theme/tokens';
-import type { ShopComplianceSettings, ShopGstCompliance, ShopGstComplianceProvider } from '@ie-platform/sdk';
+import type { ShopComplianceSettings, ShopGstCompliance, ShopGstComplianceProvider } from '@ie-orbit/sdk';
 
 const PROVIDER_OPTIONS = [
   { value: 'mock', label: 'Mock (demo, no credentials)' },

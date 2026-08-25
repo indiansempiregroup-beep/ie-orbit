@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { MobileDiscoverCategory, MobileDiscoverService } from '@ie-platform/sdk';
+import type { MobileDiscoverCategory, MobileDiscoverService } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';

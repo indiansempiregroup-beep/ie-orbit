@@ -1,6 +1,6 @@
 import React, { createElement, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import type { ShopDeliveryLive } from '@ie-platform/sdk';
+import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 import { colors, typography } from '../../theme/tokens';
 import {
   dotIcon,

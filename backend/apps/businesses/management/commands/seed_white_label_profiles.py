@@ -46,7 +46,7 @@ class Command(BaseCommand):
                 )
             self.stdout.write(
                 self.style.WARNING(
-                    "Pilot owner login: pilot-owner@ieplatform.local / PilotPass123! "
+                    "Pilot owner login: pilot-owner@ieorbit.local / PilotPass123! "
                     f"({len(PILOT_FLAVORS)} flavors configured)"
                 )
             )

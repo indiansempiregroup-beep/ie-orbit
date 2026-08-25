@@ -17,7 +17,7 @@ import {
   useBusinessProductUpdate,
   useProductPlansQuery,
 } from './businessSettingsHooks';
-import type { BusinessProductSubscription, ProductPlan } from '@ie-platform/sdk';
+import type { BusinessProductSubscription, ProductPlan } from '@ie-orbit/sdk';
 import { RewardPointsSettingsPanel } from './RewardPointsSettingsPanel';
 
 function formatDate(value?: string | null) {

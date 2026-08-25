@@ -1,6 +1,6 @@
-# IE Platform — Web Foundation
+# IE Orbit — Web Foundation
 
-This folder contains the foundational React workspace for the IE Platform web dashboard.
+This folder contains the foundational React workspace for the IE Orbit web dashboard.
 
 Quick start:
 
@@ -22,7 +22,7 @@ What's included:
 
 Notes:
 - Use the Shared SDK only for API access; do not call APIs directly.
-- Follow the design tokens and component mapping in the `ie-platform-design` repository.
+- Follow the design tokens and component mapping in the `ie-orbit-design` repository.
 
 ## M11.7 — Self-Service Onboarding
 

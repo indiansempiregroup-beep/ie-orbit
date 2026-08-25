@@ -14,9 +14,9 @@ import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { CommonActions, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-platform/sdk';
-import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-platform/sdk';
-import type { IEPlatformClient } from '@ie-platform/sdk';
+import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-orbit/sdk';
+import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-orbit/sdk';
+import type { IEOrbitClient } from '@ie-orbit/sdk';
 import { createScopedClient } from '../../api/client';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -369,7 +369,7 @@ export function ShopProductAddScreen() {
     });
   }
 
-  async function getFreshClient(): Promise<IEPlatformClient> {
+  async function getFreshClient(): Promise<IEOrbitClient> {
     const access = (await ensureFreshAccess()) || token;
     if (!access || !businessId) {
       throw new Error('Your session expired. Please sign out and sign in again, then retry.');

@@ -1,18 +1,18 @@
-name: ie-platform-prod
+name: ie-orbit-prod
 
 x-backend-environment: &backend-environment
   DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
   DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
-  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api.ieplatform.com,app.ieplatform.com}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api.ie-orbit.com,app.ie-orbit.com,127.0.0.1,localhost,backend}
   DJANGO_LOG_LEVEL: ${DJANGO_LOG_LEVEL:-INFO}
-  DATABASE_URL: ${DATABASE_URL:-postgresql://ie_platform:change-me-in-production@postgres:5432/ie_platform}
+  DATABASE_URL: ${DATABASE_URL:-postgresql://ie_orbit:change-me-in-production@postgres:5432/ie_orbit}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@ieplatform.com}
-  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.ieplatform.com}
-  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api.ieplatform.com,https://app.ieplatform.com}
-  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://app.ieplatform.com}
-  PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-https://api.ieplatform.com}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@ie-orbit.com}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.ie-orbit.com}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api.ie-orbit.com,https://app.ie-orbit.com}
+  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://app.ie-orbit.com}
+  PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-https://api.ie-orbit.com}
   EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
   EMAIL_HOST: ${EMAIL_HOST:-}
   EMAIL_PORT: ${EMAIL_PORT:-587}
@@ -43,7 +43,7 @@ x-backend-environment: &backend-environment
   CASHFREE_SECRET_KEY: ${CASHFREE_SECRET_KEY:-}
   CASHFREE_ENV: ${CASHFREE_ENV:-production}
   PLATFORM_UPI_VPA: ${PLATFORM_UPI_VPA:-}
-  PLATFORM_UPI_NAME: ${PLATFORM_UPI_NAME:-IE Platform}
+  PLATFORM_UPI_NAME: ${PLATFORM_UPI_NAME:-IE Orbit}
   PLATFORM_PAYMENT_QR_URL: ${PLATFORM_PAYMENT_QR_URL:-}
   EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
   ADMIN_HOST: ${ADMIN_HOST:-}
@@ -60,8 +60,8 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      API_HOST: ${API_HOST:-api.ieplatform.com}
-      WEB_HOST: ${WEB_HOST:-app.ieplatform.com}
+      API_HOST: ${API_HOST:-api.ie-orbit.com}
+      WEB_HOST: ${WEB_HOST:-app.ie-orbit.com}
     volumes:
       - ./certs:/etc/nginx/certs
       - backend-static:/var/www/static:ro
@@ -106,7 +106,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=5).read()",
+          "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/api/v1/health/', headers={'X-Forwarded-Proto': 'https'}), timeout=5).read()",
         ]
       interval: 20s
       timeout: 5s
@@ -195,9 +195,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-ie_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-ie_orbit}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
-      POSTGRES_DB: ${POSTGRES_DB:-ie_platform}
+      POSTGRES_DB: ${POSTGRES_DB:-ie_orbit}
     command:
       - postgres
       - -c
@@ -207,7 +207,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ie_platform} -d ${POSTGRES_DB:-ie_platform}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ie_orbit} -d ${POSTGRES_DB:-ie_orbit}"]
       interval: 10s
       timeout: 5s
       retries: 10

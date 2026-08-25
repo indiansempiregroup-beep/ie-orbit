@@ -11,7 +11,7 @@ import { useStaffMember, useStaffSchedule, useStaffScheduleMutations } from '../
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
-import type { StaffWeeklyScheduleInput } from '@ie-platform/sdk';
+import type { StaffWeeklyScheduleInput } from '@ie-orbit/sdk';
 
 const WEEKDAYS = [
   { value: 0, label: 'Monday' },

@@ -1,4 +1,4 @@
-import type { ShopOrder } from '@ie-platform/sdk';
+import type { ShopOrder } from '@ie-orbit/sdk';
 
 const PARTNER_STATUS_LABELS: Record<string, string> = {
   packing: 'Preparing delivery',

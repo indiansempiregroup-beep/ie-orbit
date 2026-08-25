@@ -35,7 +35,7 @@ from apps.notifications.models import Notification, NotificationChannel, Notific
 from apps.services.models import Service, ServiceDuration
 from apps.staff.models import EmploymentStatus, Staff
 DEFAULT_FLAVOR_KEY = "demo-MAIN"
-PILOT_OWNER_EMAIL = "pilot-owner@ieplatform.local"
+PILOT_OWNER_EMAIL = "pilot-owner@ieorbit.local"
 DEMO_TZ = ZoneInfo("Asia/Kolkata")
 
 
@@ -487,7 +487,7 @@ def _ensure_notifications(*, business: Business, owner: User) -> int:
 
 
 def _ensure_manager_teammate(*, business: Business) -> dict[str, Any] | None:
-    email = "demo-manager@ieplatform.local"
+    email = "demo-manager@ieorbit.local"
     user = User.objects.filter(email__iexact=email).first()
     if user is None:
         try:

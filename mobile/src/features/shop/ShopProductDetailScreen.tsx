@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Tex
 import { Feather } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { ShopProduct, ShopProductReview } from '@ie-platform/sdk';
+import type { ShopProduct, ShopProductReview } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { HtmlContent } from '../../components/HtmlContent';
 import { ScreenHeader } from '../../components/ProfileMenuScreen';

@@ -3,7 +3,7 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { StatCard } from './components/StatCard';
 import { TrendChart } from './components/TrendChart';
 import { useBIOverviewQuery } from './biHooks';
-import type { BIOverviewResponse, BIReportsBundle, BIShopieOverview, DashboardPetsSummary } from '@ie-platform/sdk';
+import type { BIOverviewResponse, BIReportsBundle, BIShopieOverview, DashboardPetsSummary } from '@ie-orbit/sdk';
 
 function changeHint(value?: number | null) {
   if (value == null) return undefined;
@@ -204,7 +204,7 @@ function resolveAppointie(data?: BIOverviewResponse | null): BIReportsBundle | n
 }
 
 export function BIOverviewPage() {
-  usePageMeta({ title: 'BI Overview — IE Platform' });
+  usePageMeta({ title: 'BI Overview — IE Orbit' });
   const overviewQuery = useBIOverviewQuery();
   const data = overviewQuery.data as BIOverviewResponse | undefined;
   const appointie = resolveAppointie(data);

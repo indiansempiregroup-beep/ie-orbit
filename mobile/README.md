@@ -1,4 +1,4 @@
-# IE Platform Mobile (White-label)
+# IE Orbit Mobile (White-label)
 
 Expo SDK 54 customer app with per-business flavor builds.
 
@@ -17,7 +17,7 @@ docker compose exec backend python manage.py seed_white_label_profiles --create-
 bash scripts/seed-white-label.sh
 ```
 
-Pilot owner: `pilot-owner@ieplatform.local` / `PilotPass123!`
+Pilot owner: `pilot-owner@ieorbit.local` / `PilotPass123!`
 
 ## Local flavor run
 
@@ -25,14 +25,14 @@ Pilot owner: `pilot-owner@ieplatform.local` / `PilotPass123!`
 EXPO_PUBLIC_FLAVOR_KEY=demo-MAIN \
 EXPO_PUBLIC_APP_NAME="Demo Salon" \
 EXPO_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 \
-pnpm --filter @ie-platform/mobile start
+pnpm --filter @ie-orbit/mobile start
 ```
 
 Shortcut scripts:
 
 ```bash
-pnpm --filter @ie-platform/mobile start:demo
-pnpm --filter @ie-platform/mobile start:empire
+pnpm --filter @ie-orbit/mobile start:demo
+pnpm --filter @ie-orbit/mobile start:empire
 ```
 
 ## Dev mode (manual tenant/business context)
@@ -42,7 +42,7 @@ EXPO_PUBLIC_MOBILE_DEV_MODE=true \
 EXPO_PUBLIC_TENANT_SLUG=demo \
 EXPO_PUBLIC_BUSINESS_CODE=MAIN \
 EXPO_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 \
-pnpm --filter @ie-platform/mobile start
+pnpm --filter @ie-orbit/mobile start
 ```
 
 ## EAS build profiles
@@ -55,8 +55,8 @@ Configured in `mobile/eas.json`:
 Build commands:
 
 ```bash
-pnpm --filter @ie-platform/mobile eas:build:demo:preview
-pnpm --filter @ie-platform/mobile eas:build:empire:preview
+pnpm --filter @ie-orbit/mobile eas:build:demo:preview
+pnpm --filter @ie-orbit/mobile eas:build:empire:preview
 ```
 
 Or directly:

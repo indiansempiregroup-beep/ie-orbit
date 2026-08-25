@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { HelpArticleSummary } from '@ie-platform/sdk';
+import type { HelpArticleSummary } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import {

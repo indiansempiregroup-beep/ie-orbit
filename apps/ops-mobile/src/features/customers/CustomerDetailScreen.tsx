@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { CustomerBorrowLedgerEntry } from '@ie-platform/sdk';
+import type { CustomerBorrowLedgerEntry } from '@ie-orbit/sdk';
 import { FormScreen } from '../../components/FormScreen';
 import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';

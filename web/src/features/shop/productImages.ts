@@ -1,4 +1,4 @@
-import type { ShopProduct } from '@ie-platform/sdk';
+import type { ShopProduct } from '@ie-orbit/sdk';
 
 export const MAX_PRODUCT_IMAGES = 5;
 

@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Branch } from '@ie-platform/sdk';
+import type { Branch } from '@ie-orbit/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
 import { SelectField } from '../../components/SelectField';
 import { EmptyState } from '../../components/ui/EmptyState';

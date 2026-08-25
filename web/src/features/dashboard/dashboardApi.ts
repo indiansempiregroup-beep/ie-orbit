@@ -1,4 +1,4 @@
-import { type AvailabilitySlot, type Booking, type Customer, type Notification, type Service, type StaffMember, type Business, type BusinessCreateInput } from '@ie-platform/sdk';
+import { type AvailabilitySlot, type Booking, type Customer, type Notification, type Service, type StaffMember, type Business, type BusinessCreateInput } from '@ie-orbit/sdk';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { businessQueryParam } from '../../lib/workspace';
 

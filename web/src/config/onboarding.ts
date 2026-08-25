@@ -1,4 +1,4 @@
-import { APP_LANGUAGES, languageSelectOptions as sharedLanguageSelectOptions } from '@ie-platform/i18n';
+import { APP_LANGUAGES, languageSelectOptions as sharedLanguageSelectOptions } from '@ie-orbit/i18n';
 
 export const BUSINESS_CATEGORIES = [
   'Salon & Spa',

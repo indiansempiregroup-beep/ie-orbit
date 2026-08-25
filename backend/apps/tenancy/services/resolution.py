@@ -9,7 +9,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from apps.tenancy.models import Tenant
 from apps.tenancy.repositories import TenantRepository
 
-logger = logging.getLogger("ie_platform.tenancy")
+logger = logging.getLogger("ie_orbit.tenancy")
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 BACKUP_DIR="${BACKUP_DIR:-$ROOT_DIR/backups}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-BACKUP_NAME="ie_platform_${TIMESTAMP}.sql.gz"
+BACKUP_NAME="ie_orbit_${TIMESTAMP}.sql.gz"
 BACKUP_PATH="$BACKUP_DIR/$BACKUP_NAME"
 
 cd "$ROOT_DIR"
@@ -18,8 +18,8 @@ if [ -f .env ]; then
   set +a
 fi
 
-POSTGRES_USER="${POSTGRES_USER:-ie_platform}"
-POSTGRES_DB="${POSTGRES_DB:-ie_platform}"
+POSTGRES_USER="${POSTGRES_USER:-ie_orbit}"
+POSTGRES_DB="${POSTGRES_DB:-ie_orbit}"
 BACKUP_S3_PREFIX="${BACKUP_S3_PREFIX:-backups/postgres}"
 
 mkdir -p "$BACKUP_DIR"
@@ -32,7 +32,7 @@ docker compose -f "$COMPOSE_FILE" exec -T postgres \
 echo "Wrote local backup $BACKUP_PATH"
 
 if [ -n "${BACKUP_LOCAL_RETENTION_DAYS:-}" ]; then
-  find "$BACKUP_DIR" -name 'ie_platform_*.sql.gz' -type f -mtime "+${BACKUP_LOCAL_RETENTION_DAYS}" -delete
+  find "$BACKUP_DIR" -name 'ie_orbit_*.sql.gz' -type f -mtime "+${BACKUP_LOCAL_RETENTION_DAYS}" -delete
   echo "Pruned local backups older than ${BACKUP_LOCAL_RETENTION_DAYS} days. Remote backups are never deleted."
 fi
 

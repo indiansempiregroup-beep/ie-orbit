@@ -1097,7 +1097,7 @@ class PlatformInvoicePdfView(APIView):
             id=invoice_id,
         )
         lines = [
-            "IE Platform Invoice",
+            "IE Orbit Invoice",
             f"Invoice: {invoice.invoice_number}",
             f"Tenant: {invoice.tenant.display_name if invoice.tenant else '-'}",
             f"Business: {invoice.business.display_name if invoice.business else '-'}",

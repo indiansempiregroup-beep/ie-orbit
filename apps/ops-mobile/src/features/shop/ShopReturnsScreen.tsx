@@ -18,7 +18,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomers } from '../../hooks/useOpsData';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, spacing } from '../../theme/tokens';
-import type { ShopOrder, ShopReturn } from '@ie-platform/sdk';
+import type { ShopOrder, ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime } from '../../utils/format';

@@ -1,4 +1,4 @@
-import { createApiClient } from '@ie-platform/sdk';
+import { createApiClient } from '@ie-orbit/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 
 const REQUEST_TIMEOUT_MS = 15_000;

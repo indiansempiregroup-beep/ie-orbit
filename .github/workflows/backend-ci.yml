@@ -38,17 +38,17 @@ jobs:
       - name: Django system checks
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
-          SECRET_KEY: ci-secret-key-for-ie-platform-validation-32-bytes-min
+          SECRET_KEY: ci-secret-key-for-ie-orbit-validation-32-bytes-min
         run: python manage.py check
 
       - name: Migration check
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
-          SECRET_KEY: ci-secret-key-for-ie-platform-validation-32-bytes-min
+          SECRET_KEY: ci-secret-key-for-ie-orbit-validation-32-bytes-min
         run: python manage.py makemigrations --check --dry-run
 
       - name: Pytest
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
-          SECRET_KEY: ci-secret-key-for-ie-platform-validation-32-bytes-min
+          SECRET_KEY: ci-secret-key-for-ie-orbit-validation-32-bytes-min
         run: pytest

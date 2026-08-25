@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import QRCodeSvg from 'react-native-qrcode-svg';
-import type { ApiClient } from '@ie-platform/sdk';
+import type { ApiClient } from '@ie-orbit/sdk';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { uploadMedia } from '../../api/media';
@@ -178,7 +178,7 @@ export function SubscriptionUpiPaySheet({
           >
             {status === 'idle' ? (
               <Text style={styles.body}>
-                Pay IE Platform via UPI for the exact amount, then submit your UTR for confirmation.
+                Pay IE Orbit via UPI for the exact amount, then submit your UTR for confirmation.
               </Text>
             ) : null}
 

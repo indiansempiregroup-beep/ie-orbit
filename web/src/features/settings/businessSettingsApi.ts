@@ -4,7 +4,7 @@ import type {
   BusinessCreateInput,
   BusinessUpdateInput,
   ProductPlan,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 
 export async function getBusinessProfile(
   token: string | null,

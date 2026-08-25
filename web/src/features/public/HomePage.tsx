@@ -37,7 +37,7 @@ const sharedBenefits = [
 
 export function HomePage() {
   usePageMeta({
-    title: 'IE Platform — AppointIE and ShopIE for Indian businesses',
+    title: 'IE Orbit — AppointIE and ShopIE for Indian businesses',
     description:
       'One workspace for appointments and retail. AppointIE for bookings, ShopIE for POS, GST books, and Grow. Start a 15-day free trial.',
   });
@@ -45,7 +45,7 @@ export function HomePage() {
   return (
     <div className="public-page">
       <section className="public-hero">
-        <p className="public-kicker">IE Platform</p>
+        <p className="public-kicker">IE Orbit</p>
         <h1>One workspace for appointments and retail</h1>
         <p className="public-lead">
           AppointIE runs bookings and staff. ShopIE runs the counter, catalog, and GST books. Start with a 15-day

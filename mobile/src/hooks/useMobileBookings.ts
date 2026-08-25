@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { MobileBooking } from '@ie-platform/sdk';
+import type { MobileBooking } from '@ie-orbit/sdk';
 import { mobileClient } from '../api/client';
 import { useBusinessContext } from '../contexts/BootstrapContext';
 

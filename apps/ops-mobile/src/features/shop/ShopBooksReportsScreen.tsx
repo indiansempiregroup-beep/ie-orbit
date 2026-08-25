@@ -12,7 +12,7 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { DesktopPage } from '../../components/DesktopPage';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
-import type { ShopBooksReportSlug } from '@ie-platform/sdk';
+import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
 
 type ReportOption = {
   value: ShopBooksReportSlug;

@@ -47,8 +47,8 @@ PILOT_FLAVORS: tuple[PilotFlavorSeed, ...] = (
         primary_color="#1A56DB",
         secondary_color="#111827",
         accent_color="#60A5FA",
-        bundle_id_ios="com.ieplatform.demo.salon",
-        bundle_id_android="com.ieplatform.demo.salon",
+        bundle_id_ios="com.ieorbit.demo.salon",
+        bundle_id_android="com.ieorbit.demo.salon",
     ),
     PilotFlavorSeed(
         tenant_slug="empire-salon",
@@ -59,8 +59,8 @@ PILOT_FLAVORS: tuple[PilotFlavorSeed, ...] = (
         primary_color="#7C3AED",
         secondary_color="#1F2937",
         accent_color="#C4B5FD",
-        bundle_id_ios="com.ieplatform.empiresalon",
-        bundle_id_android="com.ieplatform.empiresalon",
+        bundle_id_ios="com.ieorbit.empiresalon",
+        bundle_id_android="com.ieorbit.empiresalon",
     ),
 )
 
@@ -70,7 +70,7 @@ def _flavor_key(tenant_slug: str, business_code: str) -> str:
 
 
 def _get_or_create_owner() -> User:
-    email = "pilot-owner@ieplatform.local"
+    email = "pilot-owner@ieorbit.local"
     user = User.objects.filter(email__iexact=email).first()
     if user is not None:
         return user

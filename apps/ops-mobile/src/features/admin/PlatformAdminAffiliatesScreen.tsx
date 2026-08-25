@@ -7,7 +7,7 @@ import type {
   PlatformAffiliateInsights,
   PlatformAffiliateLedgerEntry,
   PlatformAffiliateReferral,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';

@@ -11,7 +11,7 @@ export function AuthLayout() {
     <div className="auth-layout">
       <div className="auth-layout-panel">
         <Link to="/" className="auth-layout-brand">
-          IE Platform
+          IE Orbit
         </Link>
         <Outlet />
         <p className="auth-layout-footer">

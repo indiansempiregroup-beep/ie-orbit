@@ -9,7 +9,7 @@ import { StaffSpecialAvailabilitySection } from './StaffSpecialAvailabilitySecti
 import { StaffSlotBlocksSection } from './StaffSlotBlocksSection';
 import { StaffEmergencySlotsSection } from './StaffEmergencySlotsSection';
 import { StaffServiceAssignmentsSection } from './StaffServiceAssignmentsSection';
-import type { StaffMember, StaffUpdateInput } from '@ie-platform/sdk';
+import type { StaffMember, StaffUpdateInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';

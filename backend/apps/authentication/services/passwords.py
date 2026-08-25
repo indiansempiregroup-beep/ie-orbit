@@ -61,7 +61,7 @@ class PasswordService:
         reset_url = f"{frontend_base}/auth/reset-password?token={token}"
         minutes = settings.IAM_SETTINGS["PASSWORD_RESET_TOKEN_MINUTES"]
         send_mail(
-            subject="Reset your IE Platform password",
+            subject="Reset your IE Orbit password",
             message=(
                 f"Use this link to reset your password:\n{reset_url}\n\n"
                 f"This link expires in {minutes} minutes.\n\n"

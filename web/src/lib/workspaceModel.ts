@@ -1,4 +1,4 @@
-import type { Business } from '@ie-platform/sdk';
+import type { Business } from '@ie-orbit/sdk';
 import { getProductName } from '../config/products';
 
 /**

@@ -1,6 +1,6 @@
 # Database Foundation
 
-This package contains reusable database infrastructure for IE Platform.
+This package contains reusable database infrastructure for IE Orbit.
 
 It provides:
 

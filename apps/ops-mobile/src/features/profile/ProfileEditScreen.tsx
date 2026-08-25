@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
-import { applyAppLanguage, setActiveIntlLocale } from '@ie-platform/i18n';
+import { applyAppLanguage, setActiveIntlLocale } from '@ie-orbit/i18n';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';

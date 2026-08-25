@@ -38,7 +38,7 @@ LOGGING = {
             "level": _LOG_LEVEL,
             "propagate": False,
         },
-        "ie_platform": {
+        "ie_orbit": {
             "handlers": ["console"],
             "level": _LOG_LEVEL,
             "propagate": False,

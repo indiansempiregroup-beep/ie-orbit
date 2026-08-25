@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
-import type { Customer } from '@ie-platform/sdk';
+import type { Customer } from '@ie-orbit/sdk';
 import { customerLabel, formatMoney } from './shopBooksHelpers';
 import { readLoyaltyPrefs } from '../../utils/loyalty';
 

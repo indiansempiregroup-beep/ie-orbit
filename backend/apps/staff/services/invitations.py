@@ -16,7 +16,7 @@ from apps.businesses.models import Business
 from apps.staff.models import INVITABLE_PLATFORM_ROLES, InvitationStatus, Staff, StaffInvitation
 from apps.tenancy.models import Tenant
 
-logger = logging.getLogger("ie_platform.staff.invitations")
+logger = logging.getLogger("ie_orbit.staff.invitations")
 
 INVITATION_TTL_DAYS = 7
 
@@ -209,7 +209,7 @@ class StaffInvitationService:
         accept_url = f"{frontend_base.rstrip('/')}/auth/accept-invitation?token={invitation.token}"
         business_name = invitation.business.display_name
         send_mail(
-            subject=f"You are invited to join {business_name} on IE Platform",
+            subject=f"You are invited to join {business_name} on IE Orbit",
             message=(
                 f"You have been invited to join {business_name} as {invitation.platform_role_code}.\n\n"
                 f"Accept your invitation: {accept_url}\n\n"

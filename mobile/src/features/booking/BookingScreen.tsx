@@ -3,7 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
-import type { MobileBranch, MobileDiscoverService } from '@ie-platform/sdk';
+import type { MobileBranch, MobileDiscoverService } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';

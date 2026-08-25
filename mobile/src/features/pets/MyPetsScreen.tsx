@@ -20,7 +20,7 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { birthdayLabel, upcomingBirthdayPets } from './petHelpers';
-import type { ShopPet } from '@ie-platform/sdk';
+import type { ShopPet } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function MyPetsScreen() {

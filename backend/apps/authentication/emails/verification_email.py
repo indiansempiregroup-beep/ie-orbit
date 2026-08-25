@@ -26,7 +26,7 @@ def _format_expiry_label() -> str:
 def build_verification_email(*, user: User, token: str) -> VerificationEmailContent:
     frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
     verify_url = f"{frontend_base}/auth/verify-email?token={token}"
-    product_name = "IE Platform"
+    product_name = "IE Orbit"
     greeting_name = user.first_name.strip() or user.email.split("@")[0]
     expiry_label = _format_expiry_label()
 
@@ -57,7 +57,7 @@ def build_verification_email(*, user: User, token: str) -> VerificationEmailCont
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid rgba(15,22,35,0.08);">
             <tr>
               <td style="padding:28px 28px 12px;background:linear-gradient(135deg,#1a56db,#0f3d99);color:#ffffff;">
-                <div style="font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;opacity:0.9;">IE Platform</div>
+                <div style="font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;opacity:0.9;">IE Orbit</div>
                 <h1 style="margin:10px 0 0;font-size:28px;line-height:1.25;font-weight:800;">Verify your email</h1>
               </td>
             </tr>
@@ -99,7 +99,7 @@ def build_verification_email(*, user: User, token: str) -> VerificationEmailCont
               </td>
             </tr>
           </table>
-          <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">© IE Platform · AppointIE and ShopIE for your business</p>
+          <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">© IE Orbit · AppointIE and ShopIE for your business</p>
         </td>
       </tr>
     </table>

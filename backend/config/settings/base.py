@@ -100,7 +100,7 @@ if DATABASES["default"].get("ENGINE") == "django.db.backends.postgresql":
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "ie-platform-local",
+        "LOCATION": "ie-orbit-local",
     }
 }
 
@@ -114,7 +114,7 @@ if not DEBUG:
                 "SOCKET_CONNECT_TIMEOUT": 5,
                 "SOCKET_TIMEOUT": 5,
             },
-            "KEY_PREFIX": "ie_platform",
+            "KEY_PREFIX": "ie_orbit",
         }
     }
 
@@ -178,8 +178,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "IE Platform API",
-    "DESCRIPTION": "IE Platform API.",
+    "TITLE": "IE Orbit API",
+    "DESCRIPTION": "IE Orbit API.",
     "VERSION": "0.4.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }
@@ -277,7 +277,7 @@ CASHFREE_APP_ID = os.getenv("CASHFREE_APP_ID", "")
 CASHFREE_SECRET_KEY = os.getenv("CASHFREE_SECRET_KEY", "")
 CASHFREE_ENV = os.getenv("CASHFREE_ENV", "sandbox")
 PLATFORM_UPI_VPA = os.getenv("PLATFORM_UPI_VPA", "")
-PLATFORM_UPI_NAME = os.getenv("PLATFORM_UPI_NAME", "IE Platform")
+PLATFORM_UPI_NAME = os.getenv("PLATFORM_UPI_NAME", "IE Orbit")
 PLATFORM_PAYMENT_QR_URL = os.getenv("PLATFORM_PAYMENT_QR_URL", "")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 PUBLIC_API_ORIGIN = os.getenv("PUBLIC_API_ORIGIN", "http://localhost:8000")
@@ -304,7 +304,7 @@ LOG_DIR = BASE_DIR / "logs"
 try:
     LOG_DIR.mkdir(exist_ok=True)
 except OSError:
-    LOG_DIR = Path("/tmp/ie-platform-logs")
+    LOG_DIR = Path("/tmp/ie-orbit-logs")
     LOG_DIR.mkdir(exist_ok=True)
 LOGGING = {
     "version": 1,
@@ -344,7 +344,7 @@ LOGGING = {
             "level": ENV.log_level,
             "propagate": False,
         },
-        "ie_platform": {
+        "ie_orbit": {
             "handlers": ["console", "application_file", "error_file"],
             "level": ENV.log_level,
             "propagate": False,

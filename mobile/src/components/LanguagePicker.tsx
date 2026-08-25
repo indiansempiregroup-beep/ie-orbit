@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { APP_LANGUAGES, type AppLanguageCode } from '@ie-platform/i18n';
+import { APP_LANGUAGES, type AppLanguageCode } from '@ie-orbit/i18n';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 
 type Props = {

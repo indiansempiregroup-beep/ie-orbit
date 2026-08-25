@@ -20,7 +20,7 @@ from apps.notifications.models import (
 from apps.notifications.services.realtime import publish_notification_created
 from apps.tenancy.models import Tenant
 
-logger = logging.getLogger("ie_platform.notifications")
+logger = logging.getLogger("ie_orbit.notifications")
 
 
 class StaffDirectNotifier:

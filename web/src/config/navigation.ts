@@ -28,7 +28,7 @@ import {
   Warehouse,
 } from 'lucide-react';
 import { getSubscribedProductIds, hasPetsPack, type ProductSubscriptionLike } from './products';
-import type { UserProfile } from '@ie-platform/sdk';
+import type { UserProfile } from '@ie-orbit/sdk';
 import {
   canAccessReports,
   canManageBusinessSettings,

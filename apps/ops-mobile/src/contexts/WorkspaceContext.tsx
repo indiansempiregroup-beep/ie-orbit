@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { Business, TenantSummary } from '@ie-platform/sdk';
+import type { Business, TenantSummary } from '@ie-orbit/sdk';
 import { createScopedClient } from '../api/client';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 import { isPlatformAdminOnly } from '../utils/roles';

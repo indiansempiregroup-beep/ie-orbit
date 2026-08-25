@@ -12,7 +12,7 @@ from apps.businesses.models import Branch, BranchStatus, Business
 from apps.businesses.repositories.branches import BranchRepository
 from apps.businesses.services.entitlements import EntitlementService
 
-logger = logging.getLogger("ie_platform.businesses")
+logger = logging.getLogger("ie_orbit.businesses")
 
 
 class BranchService:

@@ -30,7 +30,7 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { getApiErrorMessage } from '../../utils/format';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import { ApiClientError } from '@ie-platform/sdk';
+import { ApiClientError } from '@ie-orbit/sdk';
 import type {
   Customer,
   ShopBooksVoucher,
@@ -40,7 +40,7 @@ import type {
   ShopOrder,
   ShopProduct,
   ShopReturn,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import {
   filterSaleVouchers,
   formatMoney,

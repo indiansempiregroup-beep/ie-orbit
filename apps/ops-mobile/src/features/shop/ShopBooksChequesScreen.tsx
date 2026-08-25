@@ -25,7 +25,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Customer, ShopCashAccount, ShopCheque, ShopSupplier } from '@ie-platform/sdk';
+import type { Customer, ShopCashAccount, ShopCheque, ShopSupplier } from '@ie-orbit/sdk';
 import {
   customerLabel,
   formatMoney,

@@ -26,7 +26,7 @@ from apps.notifications.services.branding import absolute_public_url
 from apps.notifications.services.providers import EmailProvider, FirebasePushProvider, NotificationProvider
 from apps.notifications.services.realtime import publish_notification_created
 
-logger = logging.getLogger("ie_platform.notifications")
+logger = logging.getLogger("ie_orbit.notifications")
 
 
 def _escape_html(value: object) -> str:

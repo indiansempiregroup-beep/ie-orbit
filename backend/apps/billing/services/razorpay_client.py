@@ -12,7 +12,7 @@ from urllib import error, request
 
 from django.conf import settings
 
-logger = logging.getLogger("ie_platform.billing.razorpay")
+logger = logging.getLogger("ie_orbit.billing.razorpay")
 
 RAZORPAY_API_BASE = "https://api.razorpay.com/v1"
 

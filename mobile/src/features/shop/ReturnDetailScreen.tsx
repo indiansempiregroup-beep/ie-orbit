@@ -8,7 +8,7 @@ import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatShopMoney, formatShopOrderPlaced, formatShopQty } from './shopHelpers';
-import type { ShopReturn } from '@ie-platform/sdk';
+import type { ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReturnDetail'>;

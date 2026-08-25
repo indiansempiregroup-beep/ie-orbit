@@ -1,6 +1,6 @@
 # Platform Media
 
-Milestone M6.5 implements the reusable IE Platform media engine.
+Milestone M6.5 implements the reusable IE Orbit media engine.
 
 ## Scope
 

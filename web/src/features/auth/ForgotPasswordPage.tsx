@@ -9,7 +9,7 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { PostAuthRedirect } from '../../components/PostAuthRedirect';
 
 export function ForgotPasswordPage() {
-  usePageMeta({ title: 'Forgot password — IE Platform' });
+  usePageMeta({ title: 'Forgot password — IE Orbit' });
   const auth = useAuthContext();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);

@@ -6,7 +6,7 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { redirectToOpsMobileWeb } from '../../lib/impersonation';
 
 export function OnboardingSuccess() {
-  usePageMeta({ title: 'Workspace created — IE Platform' });
+  usePageMeta({ title: 'Workspace created — IE Orbit' });
   const navigate = useNavigate();
 
   useEffect(() => {

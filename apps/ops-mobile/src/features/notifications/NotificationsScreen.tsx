@@ -2,7 +2,7 @@ import React, { useCallback, useLayoutEffect } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { Notification } from '@ie-platform/sdk';
+import type { Notification } from '@ie-orbit/sdk';
 import { Feather } from '@expo/vector-icons';
 import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';

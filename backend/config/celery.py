@@ -4,6 +4,6 @@ from celery import Celery
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.development")
 
-app = Celery("ie_platform")
+app = Celery("ie_orbit")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()

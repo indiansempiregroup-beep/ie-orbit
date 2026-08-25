@@ -28,7 +28,7 @@ import { TileGrid } from '../../components/ui/TileGrid';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopGodown, ShopGodownStock, ShopProduct, ShopStockTransfer } from '@ie-platform/sdk';
+import type { ShopGodown, ShopGodownStock, ShopProduct, ShopStockTransfer } from '@ie-orbit/sdk';
 import { formatMoney, todayIso } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 

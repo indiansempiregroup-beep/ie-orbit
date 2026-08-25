@@ -26,7 +26,7 @@ from apps.common.utils.business_context import resolve_business_id
 from apps.customers.emails.registration_invite import build_customer_registration_invite
 from apps.customers.repositories import CustomerRepository
 
-logger = logging.getLogger("ie_platform.customers")
+logger = logging.getLogger("ie_orbit.customers")
 
 _COORDINATE_QUANTUM = Decimal("0.000001")
 

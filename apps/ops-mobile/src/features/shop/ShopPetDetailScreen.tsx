@@ -18,7 +18,7 @@ import { useCustomers } from '../../hooks/useOpsData';
 import { colors, spacing } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopPet } from '@ie-platform/sdk';
+import type { ShopPet } from '@ie-orbit/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopPetDetail'>;

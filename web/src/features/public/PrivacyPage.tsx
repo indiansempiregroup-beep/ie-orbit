@@ -2,8 +2,8 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function PrivacyPage() {
   usePageMeta({
-    title: 'Privacy Policy — IE Platform',
-    description: 'IE Platform privacy policy.',
+    title: 'Privacy Policy — IE Orbit',
+    description: 'IE Orbit privacy policy.',
   });
 
   return (
@@ -12,7 +12,7 @@ export function PrivacyPage() {
       <p>Last updated: August 2026</p>
       <h2>Information we collect</h2>
       <p>
-        We collect account, business, and usage information required to operate your IE Platform workspace, including
+        We collect account, business, and usage information required to operate your IE Orbit workspace, including
         AppointIE booking data and ShopIE commerce, books, and customer records you enter.
       </p>
       <h2>How we use information</h2>

@@ -28,8 +28,8 @@ export default defineConfig(({ mode }) => {
     resolve: {
       // Explicit aliases avoid Windows/Docker junction issues for workspace packages.
       alias: {
-        '@ie-platform/i18n': path.resolve(repoRoot, 'packages/i18n/src/index.ts'),
-        '@ie-platform/sdk': path.resolve(repoRoot, 'packages/sdk/src/index.ts'),
+        '@ie-orbit/i18n': path.resolve(repoRoot, 'packages/i18n/src/index.ts'),
+        '@ie-orbit/sdk': path.resolve(repoRoot, 'packages/sdk/src/index.ts'),
       },
     },
     server: {

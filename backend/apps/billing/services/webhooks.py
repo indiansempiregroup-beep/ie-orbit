@@ -18,7 +18,7 @@ from apps.billing.services.razorpay_client import RazorpayClient
 from apps.businesses.models import BusinessProductSubscription
 from apps.businesses.services.product_billing import ProductBillingHooks, ProductBillingService
 
-logger = logging.getLogger("ie_platform.billing.webhooks")
+logger = logging.getLogger("ie_orbit.billing.webhooks")
 
 
 class RazorpayProductBillingHooks(ProductBillingHooks):

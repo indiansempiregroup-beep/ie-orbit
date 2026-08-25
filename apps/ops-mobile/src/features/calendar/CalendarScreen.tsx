@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
-import type { BookingStatus } from '@ie-platform/sdk';
+import type { BookingStatus } from '@ie-orbit/sdk';
 import { BookingRow } from '../../components/BookingRow';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { DesktopPage } from '../../components/DesktopPage';

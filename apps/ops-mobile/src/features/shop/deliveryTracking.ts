@@ -3,7 +3,7 @@ import type {
   ShopDeliveryLive,
   ShopOrder,
   ShopTrackingEvent,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 
 export type DeliveryPoint = {
   latitude: number;

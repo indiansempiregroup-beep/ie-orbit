@@ -20,7 +20,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, spacing } from '../../theme/tokens';
-import type { Customer, ShopOrder } from '@ie-platform/sdk';
+import type { Customer, ShopOrder } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime } from '../../utils/format';

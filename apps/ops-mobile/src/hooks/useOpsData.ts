@@ -7,7 +7,7 @@ import {
   type DashboardSummary,
   type Service,
   type StaffMember,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { getApiErrorMessage } from '../utils/format';
 import { useOpsClient } from './useOpsClient';

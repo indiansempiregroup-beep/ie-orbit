@@ -42,7 +42,7 @@ docker compose up -d
 
 
 
-cd "D:\Indians Empire\IE Platform\ie-platform"
+cd "D:\Indians Empire\IE Orbit\ie-orbit"
 
 
 
@@ -64,7 +64,7 @@ cd apps/ops-mobile
 corepack pnpm web
 # or: corepack pnpm start  then press "w"
 # Open the URL Expo prints (often http://localhost:8082)
-# Login with the same credentials as before (e.g. pilot-owner@ieplatform.local / PilotPass123!)
+# Login with the same credentials as before (e.g. pilot-owner@ieorbit.local / PilotPass123!)
 #
 # Platform-admin-only accounts now open Platform Admin inside Expo (Tenants / Coupons / Audit).
 # Vite web/ (:3000) is still used for marketing/register and remaining admin pages
@@ -92,10 +92,10 @@ To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not
 
 
 # If you ever see "expo not found" / missing @expo/cli, repair install first:
-# cd "D:\Indians Empire\IE Platform\ie-platform"
-# corepack pnpm install --filter @ie-platform/ops-mobile...
+# cd "D:\Indians Empire\IE Orbit\ie-orbit"
+# corepack pnpm install --filter @ie-orbit/ops-mobile...
 
-cd "D:\Indians Empire\IE Platform\ie-platform\apps\ops-mobile"
+cd "D:\Indians Empire\IE Orbit\ie-orbit\apps\ops-mobile"
 $env:REACT_NATIVE_PACKAGER_HOSTNAME="192.168.1.11"
 $env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.11:8000/api/v1"
 $env:EXPO_NO_METRO_WORKSPACE_ROOT="1"
@@ -123,7 +123,7 @@ To run the Customer-Mobile (phone on same Wi-Fi / hotspot)
 
 
 
-cd "D:\Indians Empire\IE Platform\ie-platform\mobile"
+cd "D:\Indians Empire\IE Orbit\ie-orbit\mobile"
 $env:REACT_NATIVE_PACKAGER_HOSTNAME="192.168.1.11"
 $env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.11:8000/api/v1"
 $env:EXPO_PUBLIC_FLAVOR_KEY="enjoy-pet-hub-and-kennels-enjoy-pet-hub-and-kennels"
@@ -160,15 +160,15 @@ pnpm.cmd exec expo start --port 8083 --clear --lan
 
 
 
-#    New-NetFirewallRule -DisplayName "IE Platform Backend 8000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Any
+#    New-NetFirewallRule -DisplayName "IE Orbit Backend 8000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Any
 
 
 
-#    New-NetFirewallRule -DisplayName "IE Platform Expo Ops 8082" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8082 -Profile Any
+#    New-NetFirewallRule -DisplayName "IE Orbit Expo Ops 8082" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8082 -Profile Any
 
 
 
-#    New-NetFirewallRule -DisplayName "IE Platform Expo Customer 8083" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8083 -Profile Any
+#    New-NetFirewallRule -DisplayName "IE Orbit Expo Customer 8083" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8083 -Profile Any
 
 
 
@@ -215,7 +215,7 @@ git push origin main
 Superuser is ready.
 
 Email
-platform-admin@ieplatform.local
+platform-admin@ieorbit.local
 Password
 PlatformAdmin123!
 Role

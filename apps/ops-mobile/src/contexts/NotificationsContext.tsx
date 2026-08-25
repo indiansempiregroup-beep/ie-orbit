@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { Notification } from '@ie-platform/sdk';
-import { subscribeToNotificationStream } from '@ie-platform/sdk';
+import type { Notification } from '@ie-orbit/sdk';
+import { subscribeToNotificationStream } from '@ie-orbit/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 import { useOpsClient } from '../hooks/useOpsClient';
 import { useAuth } from './AuthContext';

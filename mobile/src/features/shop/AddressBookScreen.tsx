@@ -11,7 +11,7 @@ import { FormAlert } from '../../components/ui/FormAlert';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { addressLines, addressTypeMeta, hasMapPin } from './addressUtils';
-import type { CustomerAddress } from '@ie-platform/sdk';
+import type { CustomerAddress } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type AddressBookRoute = RouteProp<RootStackParamList, 'AddressBook'>;

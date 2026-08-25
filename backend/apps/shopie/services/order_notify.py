@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from apps.shopie.models import FulfillmentMode, OrderStatus, ShopOrder, ShopReturn
 
-logger = logging.getLogger("ie_platform.shopie.notify")
+logger = logging.getLogger("ie_orbit.shopie.notify")
 
 ONLINE_FULFILLMENT = {FulfillmentMode.PICKUP, FulfillmentMode.DELIVERY}
 

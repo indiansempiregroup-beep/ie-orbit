@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import type { BookingReviewSummary, MobileBooking } from '@ie-platform/sdk';
+import type { BookingReviewSummary, MobileBooking } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { Button } from '../../components/ui/Button';

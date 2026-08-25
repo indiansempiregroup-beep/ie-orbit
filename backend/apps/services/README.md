@@ -1,6 +1,6 @@
 # Service Catalog
 
-Milestone M7 service catalog provides reusable service definitions for appointment-based IE Platform products.
+Milestone M7 service catalog provides reusable service definitions for appointment-based IE Orbit products.
 
 ## Scope
 

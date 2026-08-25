@@ -4858,7 +4858,7 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
   return new ApiClient(config);
 }
 
-export type IEPlatformClient = ReturnType<typeof createApiClient>;
+export type IEOrbitClient = ReturnType<typeof createApiClient>;
 
 export {
   consumeNotificationStream,

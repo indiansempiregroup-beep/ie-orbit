@@ -23,7 +23,7 @@ from apps.businesses.constants import DEFAULT_TRIAL_DAYS, VALID_PRODUCT_CODES, g
 from apps.businesses.models import Business
 from apps.tenancy.models import Tenant
 
-logger = logging.getLogger("ie_platform.billing.checkout")
+logger = logging.getLogger("ie_orbit.billing.checkout")
 
 
 class CheckoutService:
@@ -415,7 +415,7 @@ class CheckoutService:
         amount_rupees = total / 100
         pay_url = build_upi_pay_url(
             vpa=vpa,
-            payee_name=str(getattr(settings, "PLATFORM_UPI_NAME", "") or "IE Platform"),
+            payee_name=str(getattr(settings, "PLATFORM_UPI_NAME", "") or "IE Orbit"),
             amount=amount_rupees,
             note=f"{normalized_product}-{normalized_plan}",
             currency=DEFAULT_CHECKOUT_CURRENCY,

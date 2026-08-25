@@ -43,7 +43,7 @@ import {
   shopPaymentStatusLabel,
   shopRefundPlan,
 } from './shopHelpers';
-import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-platform/sdk';
+import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;

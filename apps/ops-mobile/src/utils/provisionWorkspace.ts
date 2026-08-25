@@ -1,5 +1,5 @@
 import type { ImagePickerAsset } from 'expo-image-picker';
-import type { RegisterBusinessInput, WorkspaceProvisionResponse } from '@ie-platform/sdk';
+import type { RegisterBusinessInput, WorkspaceProvisionResponse } from '@ie-orbit/sdk';
 import { opsClient } from '../api/client';
 import { uploadBrandingLogo } from '../api/media';
 

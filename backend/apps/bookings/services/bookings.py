@@ -22,7 +22,7 @@ from apps.businesses.models import Branch, BranchStatus
 from apps.businesses.services.entitlements import EntitlementService
 from apps.staff.models import Staff
 
-logger = logging.getLogger("ie_platform.bookings")
+logger = logging.getLogger("ie_orbit.bookings")
 
 
 class BookingService:

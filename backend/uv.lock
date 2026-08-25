@@ -402,7 +402,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ie-platform-backend"
+name = "ie-orbit-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

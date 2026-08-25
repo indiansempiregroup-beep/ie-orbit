@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiClientError } from '@ie-platform/sdk';
+import { ApiClientError } from '@ie-orbit/sdk';
 import type {
   ShopBooksReportSlug,
   ShopBooksDocumentCreateInput,
@@ -17,7 +17,7 @@ import type {
   ShopProductWriteInput,
   ShopReturnCreateInput,
   ShopSupplierWriteInput,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 

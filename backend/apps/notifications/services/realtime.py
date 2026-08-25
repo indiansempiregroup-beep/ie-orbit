@@ -6,7 +6,7 @@ from typing import Any
 
 from django.conf import settings
 
-logger = logging.getLogger("ie_platform.notifications.realtime")
+logger = logging.getLogger("ie_orbit.notifications.realtime")
 
 CHANNEL_PREFIX = "notifications:user:"
 

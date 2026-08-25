@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-The IE Platform **already implements most Platform Core responsibilities** in separate Django apps. This milestone formalizes the architecture without rewriting code. Safe changes applied: workspace UX, domain registries, ADRs, reports placeholder, SDK type.
+The IE Orbit **already implements most Platform Core responsibilities** in separate Django apps. This milestone formalizes the architecture without rewriting code. Safe changes applied: workspace UX, domain registries, ADRs, reports placeholder, SDK type.
 
 ---
 

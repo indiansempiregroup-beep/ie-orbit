@@ -1,5 +1,5 @@
 import type { RegisterWizardFormValues } from './schemas/registerWizardSchema';
-import type { WorkspaceProvisionResponse } from '@ie-platform/sdk';
+import type { WorkspaceProvisionResponse } from '@ie-orbit/sdk';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { uploadBrandingLogo } from './uploadBrandingLogo';
 import { normalizeAffiliateCode } from './affiliateCode';

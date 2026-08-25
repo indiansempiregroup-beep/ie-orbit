@@ -24,7 +24,7 @@ COPY web ./web
 ARG VITE_GOOGLE_PLACES_API_KEY=
 ENV VITE_GOOGLE_PLACES_API_KEY=${VITE_GOOGLE_PLACES_API_KEY}
 
-RUN pnpm install --frozen-lockfile --filter @ie-platform/web... \
+RUN pnpm install --frozen-lockfile --filter @ie-orbit/web... \
     && pnpm --dir web build
 
 

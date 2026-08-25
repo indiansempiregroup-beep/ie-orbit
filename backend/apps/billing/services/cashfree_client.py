@@ -12,7 +12,7 @@ from urllib import error, request
 
 from django.conf import settings
 
-logger = logging.getLogger("ie_platform.billing.cashfree")
+logger = logging.getLogger("ie_orbit.billing.cashfree")
 
 CASHFREE_API_VERSION = "2023-08-01"
 CASHFREE_SANDBOX_BASE = "https://sandbox.cashfree.com/pg"
@@ -116,7 +116,7 @@ class CashfreeClient:
         if not self.is_configured:
             return False
         try:
-            self._request("GET", "/orders/ie-platform-connection-test")
+            self._request("GET", "/orders/ie-orbit-connection-test")
         except RuntimeError as exc:
             # Cashfree has no credential-introspection endpoint. A missing
             # synthetic order proves authentication succeeded; any other

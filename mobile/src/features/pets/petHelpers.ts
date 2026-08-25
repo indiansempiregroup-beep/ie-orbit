@@ -1,4 +1,4 @@
-import type { ShopPet } from '@ie-platform/sdk';
+import type { ShopPet } from '@ie-orbit/sdk';
 
 export const PET_SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other'] as const;
 export const PET_SEX = ['Male', 'Female', 'Unknown'] as const;

@@ -1,4 +1,4 @@
-import type { IEPlatformClient } from '@ie-platform/sdk';
+import type { IEOrbitClient } from '@ie-orbit/sdk';
 import {
   type Customer,
   type CustomerCreateInput,
@@ -9,7 +9,7 @@ import {
   type StaffMember,
   type StaffCreateInput,
   type StaffUpdateInput,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { businessQueryParam } from '../../lib/workspace';
 import { normalizeCustomer, normalizeService, normalizeStaff } from '../../lib/managementEntities';
 
@@ -28,36 +28,36 @@ function scopedQuery(businessId: string | null | undefined, query?: QueryParams)
   return normalizeQuery({ ...businessQueryParam(businessId), ...query });
 }
 
-export async function listCustomers(client: IEPlatformClient, businessId?: string | null, query?: QueryParams) {
+export async function listCustomers(client: IEOrbitClient, businessId?: string | null, query?: QueryParams) {
   const response = await client.customers.list(scopedQuery(businessId, query));
   return response.data.map((row) => normalizeCustomer(row as Record<string, unknown>));
 }
 
-export async function getCustomer(client: IEPlatformClient, customerId: string) {
+export async function getCustomer(client: IEOrbitClient, customerId: string) {
   const response = await client.customers.get(customerId);
   return normalizeCustomer(response.data as Record<string, unknown>);
 }
 
-export async function createCustomer(client: IEPlatformClient, customer: CustomerCreateInput) {
+export async function createCustomer(client: IEOrbitClient, customer: CustomerCreateInput) {
   const response = await client.customers.create(customer);
   return normalizeCustomer(response.data as Record<string, unknown>);
 }
 
-export async function updateCustomer(client: IEPlatformClient, customerId: string, customer: CustomerUpdateInput) {
+export async function updateCustomer(client: IEOrbitClient, customerId: string, customer: CustomerUpdateInput) {
   const response = await client.customers.patch(customerId, customer);
   return normalizeCustomer(response.data as Record<string, unknown>);
 }
 
-export async function archiveCustomer(client: IEPlatformClient, customerId: string) {
+export async function archiveCustomer(client: IEOrbitClient, customerId: string) {
   await client.customers.delete(customerId);
 }
 
-export async function restoreCustomer(client: IEPlatformClient, customerId: string) {
+export async function restoreCustomer(client: IEOrbitClient, customerId: string) {
   const response = await client.customers.restore(customerId);
   return normalizeCustomer(response.data as Record<string, unknown>);
 }
 
-export async function searchCustomers(client: IEPlatformClient, businessId: string | null | undefined, term: string) {
+export async function searchCustomers(client: IEOrbitClient, businessId: string | null | undefined, term: string) {
   const customers = await listCustomers(client, businessId);
   const lower = term.trim().toLowerCase();
   if (!lower) return customers;
@@ -68,27 +68,27 @@ export async function searchCustomers(client: IEPlatformClient, businessId: stri
   });
 }
 
-export async function listServices(client: IEPlatformClient, businessId?: string | null, query?: QueryParams) {
+export async function listServices(client: IEOrbitClient, businessId?: string | null, query?: QueryParams) {
   const response = await client.services.list(scopedQuery(businessId, query));
   return response.data.map((row) => normalizeService(row as Record<string, unknown>));
 }
 
-export async function getService(client: IEPlatformClient, serviceId: string) {
+export async function getService(client: IEOrbitClient, serviceId: string) {
   const response = await client.services.get(serviceId);
   return normalizeService(response.data as Record<string, unknown>);
 }
 
-export async function createService(client: IEPlatformClient, service: ServiceCreateInput) {
+export async function createService(client: IEOrbitClient, service: ServiceCreateInput) {
   const response = await client.services.create(service);
   return normalizeService(response.data as Record<string, unknown>);
 }
 
-export async function updateService(client: IEPlatformClient, serviceId: string, service: ServiceUpdateInput) {
+export async function updateService(client: IEOrbitClient, serviceId: string, service: ServiceUpdateInput) {
   const response = await client.services.patch(serviceId, service);
   return normalizeService(response.data as Record<string, unknown>);
 }
 
-export async function searchServices(client: IEPlatformClient, businessId: string | null | undefined, term: string) {
+export async function searchServices(client: IEOrbitClient, businessId: string | null | undefined, term: string) {
   const services = await listServices(client, businessId);
   const lower = term.trim().toLowerCase();
   if (!lower) return services;
@@ -99,27 +99,27 @@ export async function searchServices(client: IEPlatformClient, businessId: strin
   });
 }
 
-export async function listStaff(client: IEPlatformClient, businessId?: string | null, query?: QueryParams) {
+export async function listStaff(client: IEOrbitClient, businessId?: string | null, query?: QueryParams) {
   const response = await client.staff.list(scopedQuery(businessId, query));
   return response.data.map((row) => normalizeStaff(row as Record<string, unknown>));
 }
 
-export async function getStaff(client: IEPlatformClient, staffId: string) {
+export async function getStaff(client: IEOrbitClient, staffId: string) {
   const response = await client.staff.get(staffId);
   return normalizeStaff(response.data as Record<string, unknown>);
 }
 
-export async function createStaff(client: IEPlatformClient, staff: StaffCreateInput) {
+export async function createStaff(client: IEOrbitClient, staff: StaffCreateInput) {
   const response = await client.staff.create(staff);
   return normalizeStaff(response.data as Record<string, unknown>);
 }
 
-export async function updateStaff(client: IEPlatformClient, staffId: string, staff: StaffUpdateInput) {
+export async function updateStaff(client: IEOrbitClient, staffId: string, staff: StaffUpdateInput) {
   const response = await client.staff.patch(staffId, staff);
   return normalizeStaff(response.data as Record<string, unknown>);
 }
 
-export async function searchStaff(client: IEPlatformClient, businessId: string | null | undefined, term: string) {
+export async function searchStaff(client: IEOrbitClient, businessId: string | null | undefined, term: string) {
   const staff = await listStaff(client, businessId);
   const lower = term.trim().toLowerCase();
   if (!lower) return staff;

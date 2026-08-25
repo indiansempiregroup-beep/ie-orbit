@@ -25,7 +25,7 @@ import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopDeliveryZone } from '@ie-platform/sdk';
+import type { ShopDeliveryZone } from '@ie-orbit/sdk';
 import { shopListRefreshControl } from './shopRefreshControl';
 
 type ZoneForm = {

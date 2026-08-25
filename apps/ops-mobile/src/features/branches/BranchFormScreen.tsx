@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { Branch } from '@ie-platform/sdk';
+import type { Branch } from '@ie-orbit/sdk';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';

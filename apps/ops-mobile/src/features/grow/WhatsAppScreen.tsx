@@ -25,7 +25,7 @@ import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { uploadMedia } from '../../api/media';
-import type { Customer, ShopSupplier } from '@ie-platform/sdk';
+import type { Customer, ShopSupplier } from '@ie-orbit/sdk';
 import { readGrowMetadata, withGrowMetadata } from './growSettings';
 import {
   DIAL_CODES,

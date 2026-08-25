@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MobileBootstrapResponse } from '@ie-platform/sdk';
+import type { MobileBootstrapResponse } from '@ie-orbit/sdk';
 import { mobileClient } from '../api/client';
 import { resolveBootstrapQuery } from '../config/flavors';
 

@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ImagePickerAsset } from 'expo-image-picker';
-import type { BillingPlanCatalogItem } from '@ie-platform/sdk';
+import type { BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Button } from '../../components/ui/Button';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { FormAlert } from '../../components/ui/FormAlert';

@@ -1,5 +1,5 @@
 import type {
-  IEPlatformClient,
+  IEOrbitClient,
   StaffLeave,
   StaffLeaveInput,
   StaffServiceAssignment,
@@ -10,11 +10,11 @@ import type {
   StaffSlotBlockInput,
   StaffEmergencySlot,
   StaffEmergencySlotInput,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { businessQueryParam } from '../../lib/workspace';
 
 export async function listStaffLeaves(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   staffId: string,
   businessId?: string | null,
 ) {
@@ -25,13 +25,13 @@ export async function listStaffLeaves(
   return response.data;
 }
 
-export async function createStaffLeave(client: IEPlatformClient, input: StaffLeaveInput) {
+export async function createStaffLeave(client: IEOrbitClient, input: StaffLeaveInput) {
   const response = await client.bookings.staffLeaves.create(input);
   return response.data;
 }
 
 export async function patchStaffLeave(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   leaveId: string,
   input: Partial<StaffLeaveInput>,
 ) {
@@ -39,12 +39,12 @@ export async function patchStaffLeave(
   return response.data;
 }
 
-export async function deleteStaffLeave(client: IEPlatformClient, leaveId: string) {
+export async function deleteStaffLeave(client: IEOrbitClient, leaveId: string) {
   await client.bookings.staffLeaves.delete(leaveId);
 }
 
 export async function listStaffSpecialAvailability(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   staffId: string,
   businessId?: string | null,
 ) {
@@ -56,7 +56,7 @@ export async function listStaffSpecialAvailability(
 }
 
 export async function createStaffSpecialAvailability(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   input: StaffSpecialAvailabilityInput,
 ) {
   const response = await client.bookings.staffSpecialAvailability.create(input);
@@ -64,7 +64,7 @@ export async function createStaffSpecialAvailability(
 }
 
 export async function patchStaffSpecialAvailability(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   specialId: string,
   input: Partial<StaffSpecialAvailabilityInput>,
 ) {
@@ -72,12 +72,12 @@ export async function patchStaffSpecialAvailability(
   return response.data;
 }
 
-export async function deleteStaffSpecialAvailability(client: IEPlatformClient, specialId: string) {
+export async function deleteStaffSpecialAvailability(client: IEOrbitClient, specialId: string) {
   await client.bookings.staffSpecialAvailability.delete(specialId);
 }
 
 export async function listStaffSlotBlocks(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   staffId: string,
   businessId?: string | null,
 ) {
@@ -88,17 +88,17 @@ export async function listStaffSlotBlocks(
   return response.data;
 }
 
-export async function createStaffSlotBlock(client: IEPlatformClient, input: StaffSlotBlockInput) {
+export async function createStaffSlotBlock(client: IEOrbitClient, input: StaffSlotBlockInput) {
   const response = await client.bookings.staffSlotBlocks.create(input);
   return response.data;
 }
 
-export async function deleteStaffSlotBlock(client: IEPlatformClient, blockId: string) {
+export async function deleteStaffSlotBlock(client: IEOrbitClient, blockId: string) {
   await client.bookings.staffSlotBlocks.delete(blockId);
 }
 
 export async function listStaffEmergencySlots(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   staffId: string,
   businessId?: string | null,
 ) {
@@ -109,22 +109,22 @@ export async function listStaffEmergencySlots(
   return response.data;
 }
 
-export async function createStaffEmergencySlot(client: IEPlatformClient, input: StaffEmergencySlotInput) {
+export async function createStaffEmergencySlot(client: IEOrbitClient, input: StaffEmergencySlotInput) {
   const response = await client.bookings.staffEmergencySlots.create(input);
   return response.data;
 }
 
-export async function deleteStaffEmergencySlot(client: IEPlatformClient, slotId: string) {
+export async function deleteStaffEmergencySlot(client: IEOrbitClient, slotId: string) {
   await client.bookings.staffEmergencySlots.delete(slotId);
 }
 
-export async function listStaffAssignments(client: IEPlatformClient, staffId: string) {
+export async function listStaffAssignments(client: IEOrbitClient, staffId: string) {
   const response = await client.staff.assignments.list({ staff: staffId });
   return response.data;
 }
 
 export async function createStaffAssignment(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   input: StaffServiceAssignmentInput,
 ) {
   const response = await client.staff.assignments.create(input);
@@ -132,7 +132,7 @@ export async function createStaffAssignment(
 }
 
 export async function patchStaffAssignment(
-  client: IEPlatformClient,
+  client: IEOrbitClient,
   assignmentId: string,
   input: Partial<StaffServiceAssignmentInput>,
 ) {
@@ -140,7 +140,7 @@ export async function patchStaffAssignment(
   return response.data;
 }
 
-export async function deleteStaffAssignment(client: IEPlatformClient, assignmentId: string) {
+export async function deleteStaffAssignment(client: IEOrbitClient, assignmentId: string) {
   await client.staff.assignments.delete(assignmentId);
 }
 

@@ -6,7 +6,7 @@ import type {
   BIReportsBundle,
   BIRevenueReport,
   BITrendsReport,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 
 function defaultRange() {

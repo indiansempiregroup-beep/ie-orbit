@@ -1,5 +1,5 @@
-import { createApiClient } from '@ie-platform/sdk';
-import { ApiClientError } from '@ie-platform/sdk';
+import { createApiClient } from '@ie-orbit/sdk';
+import { ApiClientError } from '@ie-orbit/sdk';
 
 const FIELD_LABELS: Record<string, string> = {
   email: 'Email',

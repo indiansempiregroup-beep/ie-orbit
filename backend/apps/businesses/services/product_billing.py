@@ -17,7 +17,7 @@ from apps.businesses.constants import (
 from apps.businesses.models import BusinessProductSubscription
 from apps.tenancy.models import SubscriptionPlan
 
-logger = logging.getLogger("ie_platform.businesses.billing")
+logger = logging.getLogger("ie_orbit.businesses.billing")
 
 
 @dataclass

@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import type { CustomerAddress } from '@ie-platform/sdk';
+import type { CustomerAddress } from '@ie-orbit/sdk';
 
 export type AddressTypeKey = 'home' | 'work' | 'other';
 

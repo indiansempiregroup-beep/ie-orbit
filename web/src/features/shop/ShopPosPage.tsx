@@ -9,7 +9,7 @@ import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
-import type { Customer, MerchantCashfreeCheckout, MerchantRazorpayCheckout, ShopProduct } from '@ie-platform/sdk';
+import type { Customer, MerchantCashfreeCheckout, MerchantRazorpayCheckout, ShopProduct } from '@ie-orbit/sdk';
 
 type BasketLine = {
   product: ShopProduct;

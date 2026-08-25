@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Eye, Plus } from 'lucide-react';
-import type { ShopBooksVoucher, ShopEWayGenerateInput } from '@ie-platform/sdk';
+import type { ShopBooksVoucher, ShopEWayGenerateInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "IE Platform Mobile",
-    "slug": "ie-platform-mobile",
+    "name": "IE Orbit Mobile",
+    "slug": "ie-orbit-mobile",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",

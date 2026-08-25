@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { Business } from '@ie-platform/sdk';
+import type { Business } from '@ie-orbit/sdk';
 import { useAuth } from './useAuth';
 import { useApiClient } from './useApiClient';
 import { useWorkspaceScope } from './useWorkspaceScope';

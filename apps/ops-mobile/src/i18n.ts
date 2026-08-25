@@ -1,6 +1,6 @@
 import * as Localization from 'expo-localization';
 import * as SecureStore from 'expo-secure-store';
-import { createAppI18n, normalizeLanguageCode } from '@ie-platform/i18n';
+import { createAppI18n, normalizeLanguageCode } from '@ie-orbit/i18n';
 
 const STORAGE_KEY = 'ie.ops.i18n.language';
 

@@ -2,15 +2,15 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function AboutPage() {
   usePageMeta({
-    title: 'About — IE Platform',
-    description: 'About Indians Empire Technologies and IE Platform — AppointIE and ShopIE.',
+    title: 'About — IE Orbit',
+    description: 'About Indians Empire Technologies and IE Orbit — AppointIE and ShopIE.',
   });
 
   return (
     <div className="public-page public-page-narrow">
-      <h1>About IE Platform</h1>
+      <h1>About IE Orbit</h1>
       <p>
-        IE Platform is built by Indians Empire Technologies. We help service and retail businesses run daily operations
+        IE Orbit is built by Indians Empire Technologies. We help service and retail businesses run daily operations
         from a single workspace — without stitching together separate tools for bookings, the counter, and books.
       </p>
       <p>

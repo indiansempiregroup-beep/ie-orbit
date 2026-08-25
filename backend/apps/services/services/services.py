@@ -10,7 +10,7 @@ from apps.platform_media.models import Media
 from apps.services.models import Service, ServiceCategory, ServiceDuration, ServiceImage, ServicePricing
 from apps.services.repositories import ServiceRepository
 
-logger = logging.getLogger("ie_platform.services")
+logger = logging.getLogger("ie_orbit.services")
 
 
 class ServiceCatalogService:

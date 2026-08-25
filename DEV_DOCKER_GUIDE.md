@@ -13,7 +13,7 @@ docker compose up --build
 - Health: http://localhost:8000/api/health/
 - Web app: http://localhost:3000
 - Mailpit UI: http://localhost:8025
-- Postgres: host Postgres on localhost:5432 (`postgres` / `admin` / `ie_platform`)
+- Postgres: host Postgres on localhost:5432 (`postgres` / `admin` / `ie_orbit`)
 
 ## Notes
 
@@ -26,8 +26,8 @@ docker compose up --build
 
 ## Switch database
 
-- Local (default): `DATABASE_URL=postgresql://postgres:admin@host.docker.internal:5432/ie_platform`
-- Host Django (outside Docker): `DATABASE_URL=postgresql://postgres:admin@localhost:5432/ie_platform`
+- Local (default): `DATABASE_URL=postgresql://postgres:admin@host.docker.internal:5432/ie_orbit`
+- Host Django (outside Docker): `DATABASE_URL=postgresql://postgres:admin@localhost:5432/ie_orbit`
 - Neon: paste your Neon pooler URL into `.env` as `DATABASE_URL`
 - After changing `DATABASE_URL`, restart with `docker compose up -d`
 

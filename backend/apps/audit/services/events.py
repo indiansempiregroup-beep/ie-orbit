@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.audit.models import DomainEvent, DomainEventStatus
 from apps.tenancy.models import Tenant
 
-logger = logging.getLogger("ie_platform.events")
+logger = logging.getLogger("ie_orbit.events")
 
 
 def publish_domain_event(

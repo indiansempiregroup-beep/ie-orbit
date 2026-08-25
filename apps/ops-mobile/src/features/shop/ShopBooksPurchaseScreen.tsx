@@ -22,7 +22,7 @@ import { SelectField } from '../../components/SelectField';
 import { SearchBar } from '../../components/SearchBar';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksVoucher } from '@ie-platform/sdk';
+import type { ShopBooksVoucher } from '@ie-orbit/sdk';
 import {
   filterSaleVouchers,
   formatMoney,

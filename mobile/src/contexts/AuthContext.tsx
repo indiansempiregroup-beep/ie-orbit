@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import type { LoginResponse, UserProfile } from '@ie-platform/sdk';
+import type { LoginResponse, UserProfile } from '@ie-orbit/sdk';
 import { mobileClient } from '../api/client';
 import {
   authenticateForBiometricLogin,

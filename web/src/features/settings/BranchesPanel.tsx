@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { MapPin } from 'lucide-react';
-import type { Branch } from '@ie-platform/sdk';
+import type { Branch } from '@ie-orbit/sdk';
 import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Button } from '../../components/Button';

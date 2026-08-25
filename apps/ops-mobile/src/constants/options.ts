@@ -1,4 +1,4 @@
-import { languageSelectOptions } from '@ie-platform/i18n';
+import { languageSelectOptions } from '@ie-orbit/i18n';
 
 export const TIMEZONES = [
   { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },

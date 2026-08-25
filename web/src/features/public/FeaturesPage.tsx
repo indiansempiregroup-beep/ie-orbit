@@ -73,7 +73,7 @@ const featureGroups = [
 
 export function FeaturesPage() {
   usePageMeta({
-    title: 'Features — IE Platform',
+    title: 'Features — IE Orbit',
     description:
       'AppointIE bookings and ShopIE commerce, GST books, Grow tools, and Pets pack — one workspace for service and retail businesses.',
   });

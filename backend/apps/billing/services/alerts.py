@@ -8,7 +8,7 @@ from django.core.mail import send_mail
 
 from apps.billing.models import BillingWebhookEvent
 
-logger = logging.getLogger("ie_platform.billing.alerts")
+logger = logging.getLogger("ie_orbit.billing.alerts")
 
 
 class BillingAlertService:
@@ -33,7 +33,7 @@ class BillingAlertService:
         )
         if recipients:
             send_mail(
-                subject=f"[IE Platform] Billing webhook failed: {webhook_event.event_type}",
+                subject=f"[IE Orbit] Billing webhook failed: {webhook_event.event_type}",
                 message=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=list(recipients),

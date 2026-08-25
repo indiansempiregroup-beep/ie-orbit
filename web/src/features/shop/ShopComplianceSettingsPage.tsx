@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { ShopGstCompliance, ShopGstComplianceProvider } from '@ie-platform/sdk';
+import type { ShopGstCompliance, ShopGstComplianceProvider } from '@ie-orbit/sdk';
 import { AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';

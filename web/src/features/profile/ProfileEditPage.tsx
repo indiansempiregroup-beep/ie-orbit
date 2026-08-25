@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { applyAppLanguage, setActiveIntlLocale } from '@ie-platform/i18n';
-import { createApiClient, type PatchAuthMeRequest, type UserProfile } from '@ie-platform/sdk';
+import { applyAppLanguage, setActiveIntlLocale } from '@ie-orbit/i18n';
+import { createApiClient, type PatchAuthMeRequest, type UserProfile } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { LogoUploadField } from '../../components/LogoUploadField';

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { applyAppLanguage, setActiveIntlLocale } from '@ie-platform/i18n';
+import { applyAppLanguage, setActiveIntlLocale } from '@ie-orbit/i18n';
 import { useAuth } from '../hooks/useAuth';
 import { persistLanguagePreference } from '../i18n';
 

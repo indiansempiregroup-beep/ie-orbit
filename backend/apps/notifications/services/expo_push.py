@@ -9,7 +9,7 @@ from typing import Any
 from django.conf import settings
 from django.utils import timezone
 
-logger = logging.getLogger("ie_platform.notifications.expo_push")
+logger = logging.getLogger("ie_orbit.notifications.expo_push")
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 EXPO_CHUNK_SIZE = 100

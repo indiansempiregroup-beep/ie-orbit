@@ -23,7 +23,7 @@ from apps.platform_media.utils.files import calculate_checksum, normalize_filena
 from apps.platform_media.utils.images import export_webp_variant, extract_image_metadata
 from apps.platform_media.validators import validate_file_upload
 
-logger = logging.getLogger("ie_platform.media")
+logger = logging.getLogger("ie_orbit.media")
 
 
 @dataclass(frozen=True)

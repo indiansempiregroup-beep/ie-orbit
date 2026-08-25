@@ -1,4 +1,4 @@
-import type { Customer, Service, StaffMember } from '@ie-platform/sdk';
+import type { Customer, Service, StaffMember } from '@ie-orbit/sdk';
 
 type RawRecord = Record<string, unknown>;
 

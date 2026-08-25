@@ -33,4 +33,4 @@ class OptionalAdminHostMiddleware:
         )
         if path == "/" or any(path.startswith(prefix) for prefix in allowed_prefixes):
             return self.get_response(request)
-        return HttpResponseForbidden("This host is reserved for IE Platform Admin.")
+        return HttpResponseForbidden("This host is reserved for IE Orbit Admin.")

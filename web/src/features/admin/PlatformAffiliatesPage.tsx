@@ -22,7 +22,7 @@ import type {
   PlatformAffiliateCode,
   PlatformAffiliateLedgerEntry,
   PlatformAffiliateReferral,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 
 function paiseToInr(paise?: number | null) {
   return `₹${((paise || 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;

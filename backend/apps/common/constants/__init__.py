@@ -1,3 +1,3 @@
-APPLICATION_NAME = "IE Platform"
+APPLICATION_NAME = "IE Orbit"
 API_VERSION = "v1"
-SERVICE_NAME = "ie-platform-api"
+SERVICE_NAME = "ie-orbit-api"

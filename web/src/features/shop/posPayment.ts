@@ -1,4 +1,4 @@
-import type { ShopOrder } from '@ie-platform/sdk';
+import type { ShopOrder } from '@ie-orbit/sdk';
 
 type PosMeta = {
   payment_method?: string;

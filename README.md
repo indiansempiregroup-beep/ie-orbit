@@ -1,8 +1,8 @@
-# IE Platform
+# IE Orbit
 
-Production source code for the IE Platform by Indians Empire Technologies.
+Production source code for the IE Orbit by Indians Empire Technologies.
 
-IE Platform is a multi-tenant, API-first, event-driven, white-label SaaS foundation for appointment-based businesses. AppointIE is the first product built on this platform.
+IE Orbit is a multi-tenant, API-first, event-driven, white-label SaaS foundation for appointment-based businesses. AppointIE is the first product built on this platform.
 
 ## Repository Layout
 
@@ -18,8 +18,8 @@ scripts/      Repository automation scripts
 
 Documentation and design source-of-truth repositories live outside this production repository:
 
-- `../ie-platform-docs`
-- `../ie-platform-design`
+- `../ie-orbit-docs`
+- `../ie-orbit-design`
 
 Do not modify those repositories from product implementation work.
 

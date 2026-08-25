@@ -4,7 +4,7 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { applyAppLanguage, setActiveIntlLocale } from '@ie-platform/i18n';
+import { applyAppLanguage, setActiveIntlLocale } from '@ie-orbit/i18n';
 import { mobileClient } from '../../api/client';
 import { uploadCustomerProfilePhoto } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';

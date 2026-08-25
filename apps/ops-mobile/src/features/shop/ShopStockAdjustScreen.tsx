@@ -21,7 +21,7 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
-import type { ShopGodown, ShopProduct, ShopProductOfficeStock } from '@ie-platform/sdk';
+import type { ShopGodown, ShopProduct, ShopProductOfficeStock } from '@ie-orbit/sdk';
 import { formatMoney } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';

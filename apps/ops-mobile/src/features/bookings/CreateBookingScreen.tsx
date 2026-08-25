@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { StaffServiceAssignment } from '@ie-platform/sdk';
+import type { StaffServiceAssignment } from '@ie-orbit/sdk';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { FormScreen } from '../../components/FormScreen';
 import { SelectField } from '../../components/SelectField';

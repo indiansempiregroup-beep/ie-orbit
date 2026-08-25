@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { CustomerBorrowLedgerEntry } from '@ie-platform/sdk';
+import type { CustomerBorrowLedgerEntry } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useSnackbar } from '../../hooks/useSnackbar';

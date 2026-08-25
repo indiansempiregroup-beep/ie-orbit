@@ -26,7 +26,7 @@ const isDevMode = process.env.EXPO_PUBLIC_MOBILE_DEV_MODE === 'true';
 
 export const mobileRuntime = {
   flavorKey,
-  appSlug: process.env.EXPO_PUBLIC_APP_SLUG ?? selectedFlavor?.appSlug ?? 'ie-platform-mobile',
+  appSlug: process.env.EXPO_PUBLIC_APP_SLUG ?? selectedFlavor?.appSlug ?? 'ie-orbit-mobile',
   isDevMode,
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1',
   referralLinkBaseUrl: process.env.EXPO_PUBLIC_REFERRAL_LINK_BASE_URL ?? '',

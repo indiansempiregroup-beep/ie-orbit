@@ -18,7 +18,7 @@ from apps.businesses.services.product_billing import ProductBillingService
 from apps.common.utils.workspace_access import resolve_business_manager_users
 from apps.notifications.models import Notification, NotificationChannel, NotificationStatus
 
-logger = logging.getLogger("ie_platform.businesses")
+logger = logging.getLogger("ie_orbit.businesses")
 
 REMINDER_WINDOW_DAYS = 5
 

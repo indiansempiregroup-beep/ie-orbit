@@ -1,4 +1,4 @@
-# IE Platform Ops Mobile
+# IE Orbit Ops Mobile
 
 Operations app for business owners, managers, and staff. Separate from the white-label **customer** app in `/mobile`.
 
@@ -38,5 +38,5 @@ Sign in with a **business owner** or **invited staff** account.
 
 ## App identity
 
-- iOS/Android: `com.ieplatform.ops`
-- Branding: **IE Platform** (not white-label)
+- iOS/Android: `com.ieorbit.ops`
+- Branding: **IE Orbit** (not white-label)

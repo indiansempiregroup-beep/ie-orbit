@@ -1,6 +1,6 @@
 # Tenancy
 
-Milestone M5 implements the IE Platform tenant and organization foundation.
+Milestone M5 implements the IE Orbit tenant and organization foundation.
 
 ## Scope
 

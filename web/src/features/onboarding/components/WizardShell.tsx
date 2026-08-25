@@ -17,8 +17,8 @@ export function WizardShell({ title, subtitle, currentStep, children }: WizardSh
       <div className="wizard-shell-inner">
         <Card className="wizard-card">
           <div className="wizard-card-header">
-            <Link to="/" className="wizard-brand" aria-label="IE Platform home">
-              IE Platform
+            <Link to="/" className="wizard-brand" aria-label="IE Orbit home">
+              IE Orbit
             </Link>
             <h1>{title}</h1>
             {subtitle ? <p className="wizard-subtitle">{subtitle}</p> : null}

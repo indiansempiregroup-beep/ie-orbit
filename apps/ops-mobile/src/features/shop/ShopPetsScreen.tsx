@@ -25,7 +25,7 @@ import { useUpdateBusinessAddons, useBusinessBillingSnapshot } from '../../hooks
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopPet } from '@ie-platform/sdk';
+import type { ShopPet } from '@ie-orbit/sdk';
 import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../utils/products';
 import { shopListRefreshControl } from './shopRefreshControl';
 

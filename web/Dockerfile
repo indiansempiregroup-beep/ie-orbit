@@ -20,7 +20,7 @@ COPY packages/i18n/tsconfig.json ./packages/i18n/tsconfig.json
 COPY packages/i18n/src ./packages/i18n/src
 COPY web ./web
 
-RUN pnpm install --frozen-lockfile --filter @ie-platform/web...
+RUN pnpm install --frozen-lockfile --filter @ie-orbit/web...
 
 ARG APP_ENV=development
 ENV APP_ENV=${APP_ENV}

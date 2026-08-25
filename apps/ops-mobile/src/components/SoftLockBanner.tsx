@@ -39,7 +39,7 @@ export function SoftLockBanner() {
         <View style={styles.copy}>
           <Text style={styles.title}>Payment under review</Text>
           <Text style={styles.meta}>
-            Your UPI payment was submitted. Trial lock clears after IE Platform confirms the payment.
+            Your UPI payment was submitted. Trial lock clears after IE Orbit confirms the payment.
           </Text>
         </View>
         <Pressable style={styles.cta} onPress={() => navigation.navigate('ProductSettings')}>

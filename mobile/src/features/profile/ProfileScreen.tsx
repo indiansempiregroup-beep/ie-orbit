@@ -16,7 +16,7 @@ import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopOrder } from '@ie-platform/sdk';
+import type { ShopOrder } from '@ie-orbit/sdk';
 
 const menuItems = [
   { icon: 'calendar', labelKey: 'bookings.myAppointments', route: 'BookingHistory' as const, feature: 'mobile_booking' as const },

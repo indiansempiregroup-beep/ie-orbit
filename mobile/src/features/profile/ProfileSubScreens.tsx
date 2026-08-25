@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import type { HelpArticleSummary, MobileReview } from '@ie-platform/sdk';
+import type { HelpArticleSummary, MobileReview } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';

@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
-// Monorepo-wide env: ie-platform/.env (not mobile/.env)
+// Monorepo-wide env: ie-orbit/.env (not mobile/.env)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../scripts/load-root-env.cjs').loadRootEnv();
 
@@ -28,8 +28,8 @@ const manifest = require('./flavors/manifest.json') as FlavorManifest;
 
 const flavorKey = process.env.EXPO_PUBLIC_FLAVOR_KEY ?? 'dev';
 const selectedFlavor = manifest.flavors.find((entry) => entry.key === flavorKey);
-const appName = process.env.EXPO_PUBLIC_APP_NAME ?? selectedFlavor?.appName ?? 'IE Platform Mobile';
-const appSlug = process.env.EXPO_PUBLIC_APP_SLUG ?? selectedFlavor?.appSlug ?? 'ie-platform-mobile';
+const appName = process.env.EXPO_PUBLIC_APP_NAME ?? selectedFlavor?.appName ?? 'IE Orbit Mobile';
+const appSlug = process.env.EXPO_PUBLIC_APP_SLUG ?? selectedFlavor?.appSlug ?? 'ie-orbit-mobile';
 const referralLinkBaseUrl = process.env.EXPO_PUBLIC_REFERRAL_LINK_BASE_URL ?? '';
 let referralHost = '';
 try {
@@ -39,7 +39,7 @@ try {
 }
 
 const FACE_ID_USAGE = 'Allow $(PRODUCT_NAME) to use Face ID for quick sign-in.';
-const androidPackage = selectedFlavor?.bundleIdAndroid ?? 'com.ieplatform.mobile.dev';
+const androidPackage = selectedFlavor?.bundleIdAndroid ?? 'com.ieorbit.mobile.dev';
 const googleServicesFile = `./credentials/google-services/${androidPackage}.json`;
 const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services', `${androidPackage}.json`);
 const adMobAndroidAppId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID;
@@ -67,7 +67,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: 'portrait',
   userInterfaceStyle: 'light',
   ios: {
-    bundleIdentifier: selectedFlavor?.bundleIdIos ?? 'com.ieplatform.mobile.dev',
+    bundleIdentifier: selectedFlavor?.bundleIdIos ?? 'com.ieorbit.mobile.dev',
     associatedDomains: referralHost ? [`applinks:${referralHost}`] : undefined,
     infoPlist: {
       ...config.ios?.infoPlist,

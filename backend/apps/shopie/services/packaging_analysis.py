@@ -21,7 +21,7 @@ from apps.shopie.services.enrichment import BARCODE_RE, PET_BRAND_HINTS, Product
 logger = logging.getLogger(__name__)
 
 JOB_TTL_SECONDS = 60 * 30
-USER_AGENT = "IE-Platform-ShopIE/1.0 (packaging analysis)"
+USER_AGENT = "IE-Orbit-ShopIE/1.0 (packaging analysis)"
 QUANTITY_RE = re.compile(
     r"\b(\d+(?:[.,]\d+)?\s?(?:ml|mL|ML|l|L|g|G|kg|KG|pcs|pack|x\s?\d+))\b",
     re.IGNORECASE,

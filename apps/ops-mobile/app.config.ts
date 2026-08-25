@@ -3,16 +3,16 @@ import path from 'node:path';
 
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
-// Monorepo-wide env: ie-platform/.env (not apps/ops-mobile/.env)
+// Monorepo-wide env: ie-orbit/.env (not apps/ops-mobile/.env)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../../scripts/load-root-env.cjs').loadRootEnv();
 
 const FACE_ID_USAGE =
-  'Allow IE Platform to use Face ID for quick sign-in.';
+  'Allow IE Orbit to use Face ID for quick sign-in.';
 const CAMERA_USAGE =
-  'Allow IE Platform to use the camera for barcode scanning and profile photos.';
+  'Allow IE Orbit to use the camera for barcode scanning and profile photos.';
 const PHOTOS_USAGE =
-  'Allow IE Platform to access your photos for profile and business images.';
+  'Allow IE Orbit to access your photos for profile and business images.';
 
 const googleServicesFile = './credentials/google-services.json';
 const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services.json');
@@ -34,8 +34,8 @@ const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'IE Platform',
-  slug: 'ie-platform-ops',
+  name: 'IE Orbit',
+  slug: 'ie-orbit-ops',
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
@@ -65,7 +65,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-location',
       {
         locationWhenInUsePermission:
-          'Allow IE Platform to use your location to set accurate business, office, customer, and warehouse addresses.',
+          'Allow IE Orbit to use your location to set accurate business, office, customer, and warehouse addresses.',
       },
     ],
     [
@@ -80,7 +80,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   ios: {
     ...config.ios,
-    bundleIdentifier: 'com.ieplatform.ops',
+    bundleIdentifier: 'com.ieorbit.ops',
     infoPlist: {
       ...config.ios?.infoPlist,
       NSFaceIDUsageDescription: FACE_ID_USAGE,
@@ -94,7 +94,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     ...config.android,
-    package: 'com.ieplatform.ops',
+    package: 'com.ieorbit.ops',
     ...(fs.existsSync(googleServicesFileAbs) ? { googleServicesFile } : {}),
     softwareKeyboardLayoutMode: 'resize',
     config: {

@@ -58,7 +58,7 @@ export function ProfileScreen() {
     if (faceIdBlockedInExpoGo) {
       Alert.alert(
         `${biometricLabel} needs a development build`,
-        `${biometricLabel} cannot run inside Expo Go. Use a development or production build of IE Platform later to enable it.`,
+        `${biometricLabel} cannot run inside Expo Go. Use a development or production build of IE Orbit later to enable it.`,
       );
       return;
     }

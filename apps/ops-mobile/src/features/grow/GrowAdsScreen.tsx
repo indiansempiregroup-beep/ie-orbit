@@ -12,7 +12,7 @@ import {
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
-import type { ShopDashboardAd } from '@ie-platform/sdk';
+import type { ShopDashboardAd } from '@ie-orbit/sdk';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useAuth } from '../../contexts/AuthContext';

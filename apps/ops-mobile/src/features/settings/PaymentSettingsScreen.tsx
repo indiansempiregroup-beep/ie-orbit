@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
-import type { MerchantPaymentSettings } from '@ie-platform/sdk';
+import type { MerchantPaymentSettings } from '@ie-orbit/sdk';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';

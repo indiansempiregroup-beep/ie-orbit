@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { BusinessBillingSnapshot, PlatformTenantBusiness, PlatformTenantDetail } from '@ie-platform/sdk';
+import type { BusinessBillingSnapshot, PlatformTenantBusiness, PlatformTenantDetail } from '@ie-orbit/sdk';
 import { voucherStatusStyle } from '../shop/shopBooksHelpers';
 import { getProductName } from '../../utils/products';
 import { formatDate } from '../../utils/format';

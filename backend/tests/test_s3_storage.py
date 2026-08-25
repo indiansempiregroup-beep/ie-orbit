@@ -14,7 +14,7 @@ R2_SETTINGS = {
     "R2_ENDPOINT": "https://abc123.r2.cloudflarestorage.com",
     "R2_ACCESS_KEY_ID": "access-key",
     "R2_SECRET_ACCESS_KEY": "secret-key",
-    "R2_BUCKET_NAME": "ie-platform-media",
+    "R2_BUCKET_NAME": "ie-orbit-media",
     "R2_REGION": "auto",
     "R2_PUBLIC_BASE_URL": "",
     "R2_SIGNED_URL_TTL_PUBLIC": 3600,

@@ -1,6 +1,6 @@
 # Businesses
 
-Milestone M6 implements Business Domain Management for the IE Platform.
+Milestone M6 implements Business Domain Management for the IE Orbit.
 
 ## Scope
 

@@ -3,7 +3,7 @@
 ## Docker compose fails to start
 
 - Ensure Docker Desktop is running and the repository is mounted into the Docker engine.
-- Confirm `DATABASE_URL` is set (local default: `postgresql://postgres:admin@host.docker.internal:5432/ie_platform`).
+- Confirm `DATABASE_URL` is set (local default: `postgresql://postgres:admin@host.docker.internal:5432/ie_orbit`).
 - Confirm host Postgres is running on port 5432.
 - Rebuild from scratch with `docker compose down -v && docker compose up --build`.
 

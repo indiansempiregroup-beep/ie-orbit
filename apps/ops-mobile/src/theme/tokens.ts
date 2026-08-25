@@ -1,6 +1,6 @@
-/** IE Platform ops app branding — fixed, not white-label. Deep Navy. */
+/** IE Orbit ops app branding — fixed, not white-label. Deep Navy. */
 export const brand = {
-  appName: 'IE Platform',
+  appName: 'IE Orbit',
   tagline: 'Manage your business on the go',
   primary: '#123A6B',
   primaryDark: '#0B1F3A',

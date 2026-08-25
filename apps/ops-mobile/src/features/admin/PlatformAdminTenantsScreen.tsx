@@ -16,7 +16,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { PlatformTenantSummary } from '@ie-platform/sdk';
+import type { PlatformTenantSummary } from '@ie-orbit/sdk';
 import { voucherStatusStyle } from '../shop/shopBooksHelpers';
 import { shopListRefreshControl } from '../shop/shopRefreshControl';
 import { getProductName } from '../../utils/products';

@@ -10,7 +10,7 @@ Django still sends push through Expo (`exp.host`). These files let the **EAS APK
 
    `credentials/google-services/<androidPackage>.json`
 
-   Example: `credentials/google-services/com.ieplatform.demo.salon.json`
+   Example: `credentials/google-services/com.ieorbit.demo.salon.json`
 
 4. Copy `google-services.example.json` as a template if needed. Do not commit real files (gitignored).
 5. Upload the Firebase **FCM V1** service-account JSON with `eas credentials` (Android). Never commit `*-firebase-adminsdk-*.json`.
@@ -18,6 +18,6 @@ Django still sends push through Expo (`exp.host`). These files let the **EAS APK
 
 ## Ops app (`apps/ops-mobile/`)
 
-Package: `com.ieplatform.ops`. Place the real file at:
+Package: `com.ieorbit.ops`. Place the real file at:
 
 `apps/ops-mobile/credentials/google-services.json`

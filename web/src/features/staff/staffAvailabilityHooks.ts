@@ -10,7 +10,7 @@ import type {
   StaffSlotBlockInput,
   StaffEmergencySlot,
   StaffEmergencySlotInput,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
 import { invalidateWorkspaceData } from '../../lib/workspace';

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MerchantPaymentSettings } from '@ie-platform/sdk';
+import type { MerchantPaymentSettings } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';

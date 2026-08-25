@@ -7,7 +7,7 @@ import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useShopCouponMutations, useShopCoupons } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
-import type { ShopCoupon } from '@ie-platform/sdk';
+import type { ShopCoupon } from '@ie-orbit/sdk';
 
 type FormState = {
   code: string;

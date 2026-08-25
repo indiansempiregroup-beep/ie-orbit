@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from django.http import HttpRequest, HttpResponse
 
-logger = logging.getLogger("ie_platform.request")
+logger = logging.getLogger("ie_orbit.request")
 
 
 class RequestLoggingMiddleware:

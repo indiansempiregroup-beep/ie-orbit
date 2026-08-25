@@ -1,4 +1,4 @@
-import { createAppI18n } from '@ie-platform/i18n';
+import { createAppI18n } from '@ie-orbit/i18n';
 
 const STORAGE_KEY = 'ie:i18n:language';
 

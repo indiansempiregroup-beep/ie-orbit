@@ -7,7 +7,7 @@ import type {
   StaffSpecialAvailability,
   StaffSlotBlock,
   StaffEmergencySlot,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { DateField } from '../../components/DateField';
 import { DateTimeField } from '../../components/DateTimeField';

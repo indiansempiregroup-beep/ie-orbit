@@ -2,8 +2,8 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 
 export function TermsPage() {
   usePageMeta({
-    title: 'Terms & Conditions — IE Platform',
-    description: 'IE Platform terms and conditions.',
+    title: 'Terms & Conditions — IE Orbit',
+    description: 'IE Orbit terms and conditions.',
   });
 
   return (
@@ -12,7 +12,7 @@ export function TermsPage() {
       <p>Last updated: August 2026</p>
       <h2>Service</h2>
       <p>
-        IE Platform, including AppointIE and ShopIE, is provided on an as-available basis during the trial and on paid
+        IE Orbit, including AppointIE and ShopIE, is provided on an as-available basis during the trial and on paid
         subscription plans after you upgrade.
       </p>
       <h2>Accounts</h2>

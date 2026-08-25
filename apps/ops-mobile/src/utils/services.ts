@@ -1,4 +1,4 @@
-import type { Service } from '@ie-platform/sdk';
+import type { Service } from '@ie-orbit/sdk';
 
 type ServiceLike = Service & {
   prices?: Array<{ base_price?: string | number; currency?: string; is_default?: boolean }>;

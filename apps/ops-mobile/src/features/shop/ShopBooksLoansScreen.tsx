@@ -24,7 +24,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Customer, ShopLoan } from '@ie-platform/sdk';
+import type { Customer, ShopLoan } from '@ie-orbit/sdk';
 import { customerLabel, formatMoney, todayIso, voucherStatusStyle } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 

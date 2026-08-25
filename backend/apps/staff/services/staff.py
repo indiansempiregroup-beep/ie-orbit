@@ -18,7 +18,7 @@ from apps.staff.models import (
 )
 from apps.staff.repositories import StaffRepository
 
-logger = logging.getLogger("ie_platform.staff")
+logger = logging.getLogger("ie_orbit.staff")
 
 
 class StaffManagementService:

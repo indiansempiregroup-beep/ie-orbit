@@ -1,5 +1,5 @@
-import { getActiveIntlLocale } from '@ie-platform/i18n';
-import { SHOP_PRODUCT_CATEGORIES, type ShopOrder, type ShopProduct } from '@ie-platform/sdk';
+import { getActiveIntlLocale } from '@ie-orbit/i18n';
+import { SHOP_PRODUCT_CATEGORIES, type ShopOrder, type ShopProduct } from '@ie-orbit/sdk';
 import { colors } from '../../theme/tokens';
 
 const NONE = '__none__';

@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { createApiClient } from '@ie-platform/sdk';
+import { createApiClient } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
 
 export function HelpCenterPage() {
-  usePageMeta({ title: 'Help Center — IE Platform' });
+  usePageMeta({ title: 'Help Center — IE Orbit' });
   const [q, setQ] = useState('');
   const [slug, setSlug] = useState<string | null>(null);
   const listQuery = useQuery({

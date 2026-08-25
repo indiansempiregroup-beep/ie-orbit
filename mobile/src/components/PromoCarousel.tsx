@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import type { ShopDashboardAd } from '@ie-platform/sdk';
+import type { ShopDashboardAd } from '@ie-orbit/sdk';
 import { radius, spacing, typography } from '../theme/tokens';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 

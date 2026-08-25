@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { subscribeToNotificationStream } from '@ie-platform/sdk';
+import { subscribeToNotificationStream } from '@ie-orbit/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 import { useBusinessContext } from '../contexts/BootstrapContext';
 import { useAuth } from '../contexts/AuthContext';

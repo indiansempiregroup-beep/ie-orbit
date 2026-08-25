@@ -4,7 +4,7 @@ import type {
   PlatformAuditQuery,
   PlatformUserSearchParams,
   WhiteLabelProfile,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 
 export function usePlatformTenantsQuery() {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import type { BusinessProductSubscription } from '@ie-platform/sdk';
+import type { BusinessProductSubscription } from '@ie-orbit/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';

@@ -14,7 +14,7 @@ import {
   updateActiveBusinessProfile,
   updateBusinessProfile,
 } from './businessSettingsApi';
-import type { Business, BusinessCreateInput, BusinessUpdateInput, ProductPlan } from '@ie-platform/sdk';
+import type { Business, BusinessCreateInput, BusinessUpdateInput, ProductPlan } from '@ie-orbit/sdk';
 
 import { useActiveBusiness } from '../../hooks/useActiveBusiness';
 

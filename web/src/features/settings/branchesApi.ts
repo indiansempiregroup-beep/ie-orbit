@@ -1,4 +1,4 @@
-import type { Branch, BranchCreateInput, BranchUpdateInput } from '@ie-platform/sdk';
+import type { Branch, BranchCreateInput, BranchUpdateInput } from '@ie-orbit/sdk';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 
 export async function listBranches(

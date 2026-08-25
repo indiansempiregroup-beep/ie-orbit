@@ -24,7 +24,7 @@ import { Button } from '../../components/ui/Button';
 import { ScreenState } from '../../components/ScreenState';
 import { colors } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopPet } from '@ie-platform/sdk';
+import type { ShopPet } from '@ie-orbit/sdk';
 
 const SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other'];
 const SEX_OPTIONS = ['Male', 'Female', 'Unknown'];

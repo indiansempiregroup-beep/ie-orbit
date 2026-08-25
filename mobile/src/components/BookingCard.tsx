@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import type { MobileBooking } from '@ie-platform/sdk';
+import type { MobileBooking } from '@ie-orbit/sdk';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { formatTime, mapBookingStatus } from '../utils/format';
 

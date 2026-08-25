@@ -1,4 +1,4 @@
-import type { Business, BusinessUpdateInput } from '@ie-platform/sdk';
+import type { Business, BusinessUpdateInput } from '@ie-orbit/sdk';
 import { getProductName } from '../../config/products';
 import {
   createDefaultWeeklyHours,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createApiClient } from '@ie-platform/sdk';
+import { createApiClient } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../hooks/useAuth';

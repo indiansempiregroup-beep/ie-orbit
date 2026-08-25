@@ -1,6 +1,6 @@
 # Docker Development Platform
 
-This repository now includes a Docker-based local development platform for the full IE Platform stack.
+This repository now includes a Docker-based local development platform for the full IE Orbit stack.
 
 ## Quick start
 
@@ -37,7 +37,7 @@ cp .env.example .env
 For the default development workflow, the compose stack uses the project `.env` file. Host Postgres is the default:
 
 ```text
-DATABASE_URL=postgresql://postgres:admin@host.docker.internal:5432/ie_platform
+DATABASE_URL=postgresql://postgres:admin@host.docker.internal:5432/ie_orbit
 ```
 
 Use `localhost` instead of `host.docker.internal` if you run Django on the host outside Docker. To use Neon instead, replace `DATABASE_URL` with your Neon pooler connection string.
@@ -69,7 +69,7 @@ cp .env.production.example .env
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-Canonical runbooks live in the sibling `ie-platform-docs` repository under `docs/09-devops/`:
+Canonical runbooks live in the sibling `ie-orbit-docs` repository under `docs/09-devops/`:
 
 - IE-0901 Production Infrastructure Architecture
 - OPS-001 InterServer Deployment

@@ -47,7 +47,7 @@ def _request_json(
         headers={
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "ie-platform-places/1.0",
+            "User-Agent": "ie-orbit-places/1.0",
             **(headers or {}),
         },
     )

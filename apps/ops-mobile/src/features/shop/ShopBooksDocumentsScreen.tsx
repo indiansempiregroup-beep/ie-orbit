@@ -31,7 +31,7 @@ import type {
   ShopBooksDocumentType,
   ShopProduct,
   ShopSupplier,
-} from '@ie-platform/sdk';
+} from '@ie-orbit/sdk';
 import {
   customerLabel,
   formatMoney,

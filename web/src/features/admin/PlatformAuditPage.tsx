@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { PlatformAuditEvent, PlatformAuditQuery } from '@ie-platform/sdk';
+import type { PlatformAuditEvent, PlatformAuditQuery } from '@ie-orbit/sdk';
 import { Building2, Download, FileClock, Globe2, MessageSquareText, RefreshCw } from 'lucide-react';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useDebounce } from '../../hooks/useDebounce';

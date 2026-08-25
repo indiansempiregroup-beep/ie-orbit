@@ -10,7 +10,7 @@ from django.utils import timezone
 from apps.bookings.models import Booking, BookingStatus
 from apps.bookings.services.events import BookingEventPublisher
 
-logger = logging.getLogger("ie_platform.notifications")
+logger = logging.getLogger("ie_orbit.notifications")
 
 REMINDER_METADATA_KEY = "reminder_15m_start_at"
 REMINDER_LEAD_MINUTES = 15

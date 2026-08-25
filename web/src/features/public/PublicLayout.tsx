@@ -26,10 +26,10 @@ export function PublicLayout() {
     <div className="public-layout">
       <header className="public-header">
         <div className="public-header-inner">
-          <Link to="/" className="public-brand" aria-label="IE Platform home">
+          <Link to="/" className="public-brand" aria-label="IE Orbit home">
             <span className="public-brand-mark" aria-hidden="true">IE</span>
             <span>
-              <strong>IE Platform</strong>
+              <strong>IE Orbit</strong>
               <small>by Indians Empire</small>
             </span>
           </Link>
@@ -61,7 +61,7 @@ export function PublicLayout() {
       <footer className="public-footer">
         <div className="public-footer-inner">
           <div>
-            <strong>IE Platform</strong>
+            <strong>IE Orbit</strong>
             <p>One workspace for appointments and retail — AppointIE and ShopIE.</p>
           </div>
           <nav aria-label="Footer navigation">

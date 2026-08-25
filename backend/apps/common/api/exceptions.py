@@ -10,7 +10,7 @@ from rest_framework.views import exception_handler
 
 from apps.common.api.responses import error_response, validation_response
 
-logger = logging.getLogger("ie_platform.exceptions")
+logger = logging.getLogger("ie_orbit.exceptions")
 
 
 def global_exception_handler(exc: Exception, context: dict[str, Any]) -> Any:

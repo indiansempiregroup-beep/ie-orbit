@@ -49,7 +49,7 @@ function failMissingExpo() {
 This usually means a broken/incomplete install (common on Windows with AV).
 From the monorepo root, run:
 
-  corepack pnpm install --filter @ie-platform/ops-mobile...
+  corepack pnpm install --filter @ie-orbit/ops-mobile...
 
 Then start again with:
 

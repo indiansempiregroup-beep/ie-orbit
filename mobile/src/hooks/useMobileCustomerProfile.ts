@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { MobileCustomerProfile } from '@ie-platform/sdk';
+import type { MobileCustomerProfile } from '@ie-orbit/sdk';
 import { mobileClient } from '../api/client';
 import { useBusinessContext } from '../contexts/BootstrapContext';
 

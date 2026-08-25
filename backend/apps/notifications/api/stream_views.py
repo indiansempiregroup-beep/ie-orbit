@@ -20,7 +20,7 @@ from apps.api.mobile_serializers import MobileScopedQuerySerializer
 from apps.api.mobile_views import _resolve_tenant_business
 from apps.notifications.services.realtime import realtime_redis, user_notification_channel
 
-logger = logging.getLogger("ie_platform.notifications.realtime")
+logger = logging.getLogger("ie_orbit.notifications.realtime")
 
 KEEPALIVE_SECONDS = 25
 POLL_TIMEOUT_SECONDS = 1.0

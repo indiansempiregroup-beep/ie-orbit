@@ -8,7 +8,7 @@ from django.db import transaction
 from apps.tenancy.models import Tenant
 from apps.tenancy.repositories import TenantRepository
 
-logger = logging.getLogger("ie_platform.tenancy")
+logger = logging.getLogger("ie_orbit.tenancy")
 
 
 class TenantService:

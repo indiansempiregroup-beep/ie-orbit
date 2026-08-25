@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { PlatformPlanPackage } from '@ie-platform/sdk';
+import type { PlatformPlanPackage } from '@ie-orbit/sdk';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import {
   AdminDrawer,

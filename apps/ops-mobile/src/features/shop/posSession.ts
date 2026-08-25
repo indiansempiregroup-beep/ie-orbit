@@ -1,4 +1,4 @@
-import type { ShopProduct } from '@ie-platform/sdk';
+import type { ShopProduct } from '@ie-orbit/sdk';
 import type { DiscountType } from './posPricing';
 
 export type PosSessionBasketLine = {

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
-import type { BillingPlanCatalogItem } from '@ie-platform/sdk';
+import type { BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Check, CalendarDays, ShoppingBag } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
@@ -114,7 +114,7 @@ function planTitle(plan: Pick<BillingPlanCatalogItem, 'name'> | string) {
 
 export function RegisterWizard() {
   usePageMeta({
-    title: 'Create workspace — IE Platform',
+    title: 'Create workspace — IE Orbit',
     description: 'Self-service business onboarding wizard for AppointIE and ShopIE.',
   });
 
@@ -624,7 +624,7 @@ export function RegisterWizard() {
   return (
     <WizardShell
       title="Create your workspace"
-      subtitle="Complete each step to provision your IE Platform workspace."
+      subtitle="Complete each step to provision your IE Orbit workspace."
       currentStep={currentStep}
     >
       {stepContent[currentStep]()}

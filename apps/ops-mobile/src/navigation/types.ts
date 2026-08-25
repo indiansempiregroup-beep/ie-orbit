@@ -1,5 +1,5 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { Booking } from '@ie-platform/sdk';
+import type { Booking } from '@ie-orbit/sdk';
 
 export type AuthStackParamList = {
   Login: undefined;

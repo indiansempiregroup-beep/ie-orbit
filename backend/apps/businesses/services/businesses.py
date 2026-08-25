@@ -21,7 +21,7 @@ from apps.businesses.services.entitlements import EntitlementService
 from apps.businesses.services.product_billing import ProductBillingService
 from apps.businesses.services.subscription_lifecycle import SubscriptionLifecycleService
 
-logger = logging.getLogger("ie_platform.businesses")
+logger = logging.getLogger("ie_orbit.businesses")
 
 ACTIVE_SUBSCRIPTION_STATUSES = {
     BusinessProductSubscriptionStatus.TRIALING,

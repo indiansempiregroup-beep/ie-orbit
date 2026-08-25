@@ -13,7 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import type { MobileReferralSnapshot } from '@ie-platform/sdk';
+import type { MobileReferralSnapshot } from '@ie-orbit/sdk';
 import * as Clipboard from 'expo-clipboard';
 import { mobileClient } from '../../api/client';
 import { Button } from '../../components/ui/Button';

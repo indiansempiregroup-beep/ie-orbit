@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { subscribeToNotificationStream } from '@ie-platform/sdk';
+import { subscribeToNotificationStream } from '@ie-orbit/sdk';
 import { useAuth } from './useAuth';
 import { useWorkspaceScope } from './useWorkspaceScope';
 import { invalidateWorkspaceData } from '../lib/workspace';

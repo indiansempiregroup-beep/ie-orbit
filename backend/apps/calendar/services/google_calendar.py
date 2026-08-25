@@ -5,7 +5,7 @@ from typing import Any
 
 from django.conf import settings
 
-logger = logging.getLogger("ie_platform.calendar")
+logger = logging.getLogger("ie_orbit.calendar")
 
 
 class GoogleCalendarService:

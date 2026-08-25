@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Branch, BranchCreateInput, BranchUpdateInput } from '@ie-platform/sdk';
+import type { Branch, BranchCreateInput, BranchUpdateInput } from '@ie-orbit/sdk';
 import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { createBranch, listBranches, updateBranch } from './branchesApi';

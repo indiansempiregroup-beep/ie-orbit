@@ -7,7 +7,7 @@ from django.db import transaction
 
 from apps.bookings.models import Booking, BookingEvent
 
-logger = logging.getLogger("ie_platform.bookings")
+logger = logging.getLogger("ie_orbit.bookings")
 
 
 class BookingEventPublisher:

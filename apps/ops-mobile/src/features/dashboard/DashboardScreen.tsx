@@ -29,7 +29,7 @@ import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksDashboard } from '@ie-platform/sdk';
+import type { ShopBooksDashboard } from '@ie-orbit/sdk';
 import { formatMoney } from '../shop/shopBooksHelpers';
 
 function greeting() {

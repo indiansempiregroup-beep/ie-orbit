@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { OperationsSearchResult } from '@ie-platform/sdk';
+import type { OperationsSearchResult } from '@ie-orbit/sdk';
 import { useApiClient } from './useApiClient';
 import { useWorkspaceScope } from './useWorkspaceScope';
 

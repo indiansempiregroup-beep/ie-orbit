@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { createApiClient, type BillingPlanCatalogItem } from '@ie-platform/sdk';
+import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -78,7 +78,7 @@ export function PricingPage() {
   const petsAddon = catalog?.addon_pets_price_paise;
 
   usePageMeta({
-    title: 'Pricing — IE Platform',
+    title: 'Pricing — IE Orbit',
     description: `AppointIE and ShopIE plans: ${trialDays}-day trial, Starter, and Pro with staff, office, and Pets pack add-ons.`,
   });
 

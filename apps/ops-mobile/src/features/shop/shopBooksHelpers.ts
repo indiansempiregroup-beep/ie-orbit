@@ -1,4 +1,4 @@
-import type { Customer, ShopBooksVoucher, ShopSupplier } from '@ie-platform/sdk';
+import type { Customer, ShopBooksVoucher, ShopSupplier } from '@ie-orbit/sdk';
 
 export { formatMoney } from './posPayment';
 

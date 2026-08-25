@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import type { MobileDiscoverServiceDetail } from '@ie-platform/sdk';
+import type { MobileDiscoverServiceDetail } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { Button } from '../../components/ui/Button';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';

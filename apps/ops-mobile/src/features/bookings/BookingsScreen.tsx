@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import type { BookingStatus } from '@ie-platform/sdk';
+import type { BookingStatus } from '@ie-orbit/sdk';
 import { BookingRow } from '../../components/BookingRow';
 import { DesktopPage } from '../../components/DesktopPage';
 import { OpsHeader } from '../../components/OpsHeader';
