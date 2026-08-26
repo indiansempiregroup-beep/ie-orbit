@@ -74,7 +74,7 @@ const navGroups: Array<{
 ];
 
 export function AdminLayout() {
-  usePageMeta({ title: 'Platform Admin — AppointIE' });
+  usePageMeta({ title: 'Platform Admin — IE Orbit' });
   const auth = useAuth();
   const navigate = useNavigate();
   const { exitWorkspaceMode, loading } = useWorkspace();
@@ -115,7 +115,7 @@ export function AdminLayout() {
           </div>
           <div>
             <p className="admin-brand__title">Platform Admin</p>
-            <p className="admin-brand__subtitle">AppointIE control plane</p>
+            <p className="admin-brand__subtitle">IE Orbit control plane</p>
           </div>
         </div>
 

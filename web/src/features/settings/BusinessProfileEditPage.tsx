@@ -251,7 +251,7 @@ export function BusinessProfileEditPage() {
             {formState.selected_product === 'appointie' ? (
               <>
                 <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
-                  AppointIE booking defaults. Set these after you pick a package; they are not used by ShopIE.
+                  Orbit Appoint booking defaults. Set these after you pick a package; they are not used by Orbit Mart.
                 </p>
                 <div style={fieldGridStyle}>
                   <Select label="Appointment interval (minutes)" options={APPOINTMENT_INTERVALS.map((v) => ({ value: String(v), label: String(v) }))} value={String(formState.appointment_interval)} onChange={(e) => updateField('appointment_interval', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />

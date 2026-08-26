@@ -2,7 +2,7 @@
 
 Production source code for the IE Orbit by Indians Empire Technologies.
 
-IE Orbit is a multi-tenant, API-first, event-driven, white-label SaaS foundation for appointment-based businesses. AppointIE is the first product built on this platform.
+IE Orbit is a multi-tenant, API-first, event-driven, white-label SaaS foundation for appointment-based and retail businesses. Orbit Appoint and Orbit Mart are the products built on this platform.
 
 ## Repository Layout
 

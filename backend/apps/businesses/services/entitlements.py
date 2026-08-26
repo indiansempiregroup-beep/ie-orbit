@@ -21,6 +21,8 @@ from apps.businesses.constants import (
     FEATURE_SHOPIE_LOYALTY,
     PLAN_FEATURES_FULL,
     PLAN_FEATURES_LIMITED,
+    PRODUCT_APPOINTIE,
+    PRODUCT_DISPLAY_NAMES,
     get_default_plan_code,
     get_plan_definition,
     product_code_for_feature,
@@ -464,7 +466,7 @@ class EntitlementService:
         entitlements = self.resolve(business=business)
         if feature not in entitlements.bi_features:
             raise PermissionDenied(
-                f"'{feature}' analytics require AppointIE Pro. Upgrade to unlock full BI."
+                f"'{feature}' analytics require {PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]} Pro. Upgrade to unlock full BI."
             )
 
     def loyalty_program_access(self, *, business: Business) -> tuple[bool, bool]:

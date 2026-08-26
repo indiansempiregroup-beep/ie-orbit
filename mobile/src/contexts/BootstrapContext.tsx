@@ -45,7 +45,7 @@ export function useBusinessContext() {
 
 export function useAppTitle() {
   const { branding } = useBootstrap();
-  return branding?.appName ?? 'AppointIE';
+  return branding?.appName ?? 'Orbit Appoint';
 }
 
 export function isBootstrapRequired() {

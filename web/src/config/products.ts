@@ -14,13 +14,13 @@ export type ProductSubscriptionLike = {
 export const PRODUCT_CATALOG: ProductDefinition[] = [
   {
     id: 'appointie',
-    name: 'AppointIE',
+    name: 'Orbit Appoint',
     description: 'Booking, scheduling, and customer operations for service businesses.',
     highlights: ['Online bookings and calendar', 'Staff schedules and availability', 'Customers, reminders, and visits'],
   },
   {
     id: 'shopie',
-    name: 'ShopIE',
+    name: 'Orbit Mart',
     description: 'Catalog, POS, inventory, and billing for retail businesses.',
     highlights: ['POS, catalog, and inventory', 'GST books, e-invoice, and reports', 'WhatsApp, ads, and online orders'],
   },
@@ -33,7 +33,12 @@ export function getProductById(productId: string | null | undefined): ProductDef
 }
 
 export function getProductName(productId: string | null | undefined): string {
-  return getProductById(productId)?.name ?? productId?.replace(/-/g, ' ') ?? 'AppointIE';
+  return getProductById(productId)?.name ?? productId?.replace(/-/g, ' ') ?? 'Orbit Appoint';
+}
+
+/** Strip the product prefix from plan names. Legacy AppointIE/ShopIE prefixes remain for stored rows. */
+export function stripPlanProductPrefix(name: string): string {
+  return name.replace(/^(Orbit Appoint|Orbit Mart|AppointIE|ShopIE)\s+/i, '') || name;
 }
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['trialing', 'active', 'soft_locked']);

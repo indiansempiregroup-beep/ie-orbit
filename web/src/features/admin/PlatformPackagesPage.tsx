@@ -15,8 +15,8 @@ import {
 import { usePlatformAddonPricingQuery, usePlatformPlanPackagesQuery, useUpdateAddonPricingMutation, useUpsertPlanPackageMutation } from './adminHooks';
 
 const PRODUCT_LABELS: Record<string, string> = {
-  appointie: 'AppointIE',
-  shopie: 'ShopIE',
+  appointie: 'Orbit Appoint',
+  shopie: 'Orbit Mart',
 };
 
 const PRODUCT_CODES = ['appointie', 'shopie'];
@@ -35,7 +35,7 @@ const FEATURE_GROUPS: Array<{
   options: Array<{ value: string; label: string }>;
 }> = [
   {
-    title: 'AppointIE',
+    title: 'Orbit Appoint',
     products: ['appointie'],
     options: [
       { value: 'appointie_bookings', label: 'Bookings' },
@@ -390,7 +390,7 @@ export function PlatformPackagesPage() {
 
       <AdminSection
         title="Add-on prices"
-        description="Monthly unit prices charged when a tenant adds extra staff, extra offices, or the ShopIE Pets pack. Yearly billing uses 10× monthly."
+        description="Monthly unit prices charged when a tenant adds extra staff, extra offices, or the Orbit Mart Pets pack. Yearly billing uses 10× monthly."
       >
         <div className="admin-action-bar" style={{ alignItems: 'end', flexWrap: 'wrap' }}>
           <AdminField label="Extra staff (₹ / month)">

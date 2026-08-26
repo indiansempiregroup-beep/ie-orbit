@@ -27,7 +27,7 @@ function AppointieBlock({ data }: { data: BIReportsBundle }) {
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="AppointIE" subtitle="Bookings, estimated revenue, and demand" />
+      <SectionHeading title="Orbit Appoint" subtitle="Bookings, estimated revenue, and demand" />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <StatCard label="Total bookings" value={summary?.bookings ?? 0} hint={changeHint(summary?.comparison?.bookings_change_pct)} />
         <StatCard
@@ -130,7 +130,7 @@ function ShopieBlock({ data }: { data: BIShopieOverview }) {
   const currency = data.currency ?? '';
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="ShopIE" subtitle="Orders, GMV, returns, and delivery fees" />
+      <SectionHeading title="Orbit Mart" subtitle="Orders, GMV, returns, and delivery fees" />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <StatCard label="Orders" value={data.orders} />
         <StatCard label="GMV" value={`${currency} ${data.gmv}`} />

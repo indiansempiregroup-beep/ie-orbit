@@ -4,7 +4,7 @@ import { StatCard } from './components/StatCard';
 import { useBIGrowthQuery } from './biHooks';
 
 export function BIGrowthPage() {
-  usePageMeta({ title: 'BI Growth — AppointIE' });
+  usePageMeta({ title: 'BI Growth — Orbit Appoint' });
   const growthQuery = useBIGrowthQuery();
   const data = growthQuery.data;
 

@@ -97,7 +97,7 @@ export const APPLICATION_DOMAINS: Record<string, PlatformDomain[]> = {
   shopie: [
     {
       id: 'shop_commerce',
-      label: 'ShopIE Commerce',
+      label: 'Orbit Mart Commerce',
       layer: 'application',
       backendApps: ['shopie'],
       owns: ['products', 'barcodes', 'orders', 'stock', 'invoices', 'quotations'],

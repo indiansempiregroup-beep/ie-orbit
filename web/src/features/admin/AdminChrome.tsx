@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 
 export const ADMIN_PRODUCT_LABELS: Record<string, string> = {
-  appointie: 'AppointIE',
-  shopie: 'ShopIE',
+  appointie: 'Orbit Appoint',
+  shopie: 'Orbit Mart',
 };
 
 export function productLabel(code?: string | null) {

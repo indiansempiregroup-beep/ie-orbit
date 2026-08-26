@@ -99,7 +99,7 @@ export const registerWizardSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['planCodes'],
-          message: `Select a package for ${product === 'shopie' ? 'ShopIE' : 'AppointIE'}.`,
+          message: `Select a package for ${product === 'shopie' ? 'Orbit Mart' : 'Orbit Appoint'}.`,
         });
       }
     }

@@ -99,7 +99,7 @@ def build_verification_email(*, user: User, token: str) -> VerificationEmailCont
               </td>
             </tr>
           </table>
-          <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">© IE Orbit · AppointIE and ShopIE for your business</p>
+          <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">© IE Orbit · Orbit Appoint and Orbit Mart for your business</p>
         </td>
       </tr>
     </table>

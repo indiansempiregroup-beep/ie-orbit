@@ -57,11 +57,11 @@ def test_tenant_detail_returns_all_product_billings(
     )
     appointie_plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     shopie_plan, _ = SubscriptionPlan.objects.get_or_create(
         code="shopie-starter",
-        defaults={"name": "ShopIE Starter", "is_public": True},
+        defaults={"name": "Orbit Mart Starter", "is_public": True},
     )
     now = timezone.now()
     BusinessProductSubscription.objects.create(

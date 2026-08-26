@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 
 class ShopAccessPermission(BasePermission):
-    message = "ShopIE access requires an authenticated workspace user."
+    message = "Orbit Mart access requires an authenticated workspace user."
     read_permissions = {
         "business:read",
         "business:write",

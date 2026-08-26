@@ -72,7 +72,7 @@ export function SplashScreen({ branding, businessName, tagline }: SplashScreenPr
 
   const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
   const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.28, 0.05] });
-  const title = businessName || branding.appName || 'AppointIE';
+  const title = businessName || branding.appName || 'Orbit Appoint';
   const showLogo = Boolean(logoUri) && !logoFailed;
 
   return (

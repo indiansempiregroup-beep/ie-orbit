@@ -60,7 +60,7 @@ export function ShopBillingPage() {
           <h2 style={{ margin: 0 }}>GST sales now live under Books</h2>
           <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
             For GST-compliant invoices (CGST/SGST/IGST, HSN/SAC, place of supply) plus purchases, expenses,
-            and party ledgers, use ShopIE Books.
+            and party ledgers, use Orbit Mart Books.
           </p>
         </div>
         <Link to="/shop/books/sale">
@@ -79,11 +79,11 @@ export function ShopBillingPage() {
           </li>
           <li>
             <strong>GST sales &amp; purchases</strong>: recorded in{' '}
-            <Link to="/shop/books">ShopIE Books</Link> with CGST/SGST/IGST split, HSN/SAC, and GSTR-1/3B
+            <Link to="/shop/books">Orbit Mart Books</Link> with CGST/SGST/IGST split, HSN/SAC, and GSTR-1/3B
             reports.
           </li>
           <li>
-            <strong>Your ShopIE plan</strong> (SaaS subscription):{' '}
+            <strong>Your Orbit Mart plan</strong> (SaaS subscription):{' '}
             <Link to="/settings/products">Settings → Products &amp; billing</Link>.
           </li>
           <li>
@@ -127,7 +127,7 @@ export function ShopBillingPage() {
           action={
             <Link to="/settings/products">
               <Button type="button" variant="neutral">
-                ShopIE plan
+                Orbit Mart plan
               </Button>
             </Link>
           }

@@ -149,7 +149,7 @@ export function ShopPetsPage() {
         (subscription.status === 'active' || subscription.status === 'trialing'),
     );
     if (!shopie) {
-      setMessage('Subscribe to ShopIE first, then add the Pets pack.');
+      setMessage('Subscribe to Orbit Mart first, then add the Pets pack.');
       return;
     }
     try {

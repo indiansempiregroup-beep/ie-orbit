@@ -4,7 +4,7 @@ import { StatCard } from './components/StatCard';
 import { useBIRevenueQuery } from './biHooks';
 
 export function BIRevenuePage() {
-  usePageMeta({ title: 'BI Revenue — AppointIE' });
+  usePageMeta({ title: 'BI Revenue — Orbit Appoint' });
   const revenueQuery = useBIRevenueQuery();
   const revenue = revenueQuery.data;
 

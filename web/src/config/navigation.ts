@@ -44,7 +44,7 @@ export type AppNavItem = {
   group?: 'operations' | 'settings' | 'account';
   /** When set, nav item is visible only for these product codes. Omit = platform core (always visible). */
   products?: string[];
-  /** Require ShopIE Pets pack add-on. */
+  /** Require Orbit Mart Pets pack add-on. */
   requiresPetsPack?: boolean;
   /** Any one of these permissions allows the item. */
   anyPermissions?: string[];

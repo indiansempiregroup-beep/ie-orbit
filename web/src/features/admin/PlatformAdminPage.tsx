@@ -11,7 +11,7 @@ import {
 import { useState } from 'react';
 
 export function PlatformAdminPage() {
-  usePageMeta({ title: 'Platform Admin — AppointIE' });
+  usePageMeta({ title: 'Platform Admin — IE Orbit' });
   const [enabled, setEnabled] = useState(false);
   const opsQuery = useBillingPlatformOpsSummaryQuery(24, 100, enabled);
   const subsQuery = useBillingPlatformSubscriptionsQuery(enabled);

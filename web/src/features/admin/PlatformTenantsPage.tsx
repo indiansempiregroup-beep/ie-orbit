@@ -204,7 +204,7 @@ export function PlatformTenantsPage() {
       <AdminDrawer
         open={createOpen}
         title="Create tenant"
-        description="The owner must already exist. A starter AppointIE business is provisioned automatically."
+        description="The owner must already exist. A starter Orbit Appoint business is provisioned automatically."
         onClose={() => {
           setCreateOpen(false);
           resetCreateForm();

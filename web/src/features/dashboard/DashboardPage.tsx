@@ -231,7 +231,7 @@ export function DashboardPage() {
 
             {appointieKpis.length ? (
               <div style={{ marginBottom: 24 }}>
-                <SectionHeading title="AppointIE" subtitle="Bookings and service operations" />
+                <SectionHeading title="Orbit Appoint" subtitle="Bookings and service operations" />
                 <div className="dashboard-kpi-grid">
                   {appointieKpis.map((item) => (
                     <KpiCard key={item.label} label={item.label} value={item.value} />
@@ -242,7 +242,7 @@ export function DashboardPage() {
 
             {shopieKpis.length ? (
               <div style={{ marginBottom: 24 }}>
-                <SectionHeading title="ShopIE" subtitle="Orders, returns, and delivery" />
+                <SectionHeading title="Orbit Mart" subtitle="Orders, returns, and delivery" />
                 <div className="dashboard-kpi-grid">
                   {shopieKpis.map((item) => (
                     <KpiCard key={item.label} label={item.label} value={item.value} />

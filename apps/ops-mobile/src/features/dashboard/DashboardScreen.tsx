@@ -281,7 +281,7 @@ export function DashboardScreen() {
             </View>
           ) : shopieEnabled ? (
             <View style={styles.nextCard}>
-              <Text style={styles.nextLabel}>ShopIE today</Text>
+              <Text style={styles.nextLabel}>Orbit Mart today</Text>
               <Text style={styles.nextTitle}>{shopie?.orders_today ?? 0} orders</Text>
               <Text style={styles.nextHint}>
                 {shopie?.pending_returns ?? 0} pending returns · {shopie?.open_orders ?? 0} open
@@ -298,7 +298,7 @@ export function DashboardScreen() {
             <View style={styles.nextCard}>
               <Text style={styles.nextLabel}>Workspace</Text>
               <Text style={styles.nextTitle}>Ready when you are</Text>
-              <Text style={styles.nextHint}>Subscribe to AppointIE or ShopIE to see live ops metrics here.</Text>
+              <Text style={styles.nextHint}>Subscribe to Orbit Appoint or Orbit Mart to see live ops metrics here.</Text>
             </View>
           )}
         </OpsHeader>

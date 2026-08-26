@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { createApiClient } from '@ie-orbit/sdk';
-import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
@@ -22,57 +21,57 @@ export function HelpCenterPage() {
   });
 
   return (
-    <div style={{ maxWidth: 800, margin: '24px auto', display: 'grid', gap: 16, padding: 16 }}>
-      <Card>
-        <p style={{ marginTop: 0 }}>
-          <Link to="/">← Home</Link>
-        </p>
-        <h1 style={{ marginTop: 8 }}>Help Center</h1>
+    <div className="public-page public-page-narrow">
+      <section className="public-hero public-hero-compact">
+        <p className="public-kicker">Support</p>
+        <h1>Help Center</h1>
+        <p className="public-lead">Search published guides for Orbit Appoint and Orbit Mart.</p>
+      </section>
+      <article className="public-card" style={{ marginBottom: 16 }}>
         <input
+          className="public-help-search"
           placeholder="Search articles"
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
             setSlug(null);
           }}
-          style={{ width: '100%', maxWidth: 420 }}
+          aria-label="Search help articles"
         />
-      </Card>
+      </article>
       {slug && articleQuery.data?.title ? (
-        <Card>
-          <button type="button" onClick={() => setSlug(null)}>
+        <article className="public-card">
+          <button type="button" className="public-back-link" onClick={() => setSlug(null)}>
             ← All articles
           </button>
           <h2>{articleQuery.data.title}</h2>
-          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{articleQuery.data.body}</pre>
-        </Card>
+          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', marginBottom: 0 }}>{articleQuery.data.body}</pre>
+        </article>
       ) : (
-        <Card>
-          <div style={{ display: 'grid', gap: 8 }}>
+        <article className="public-card">
+          <div className="public-help-list">
             {(listQuery.data?.articles ?? []).map((article) => (
               <button
                 key={article.id}
                 type="button"
+                className="public-help-item"
                 onClick={() => setSlug(article.slug)}
-                style={{
-                  textAlign: 'left',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: 10,
-                  background: 'transparent',
-                  cursor: 'pointer',
-                }}
               >
                 <strong>{article.title}</strong>
                 <div style={{ color: 'var(--muted-foreground)', fontSize: 13 }}>{article.category}</div>
               </button>
             ))}
             {(listQuery.data?.articles ?? []).length === 0 ? (
-              <p style={{ color: 'var(--muted-foreground)' }}>No published articles yet.</p>
+              <p style={{ color: 'var(--muted-foreground)', margin: 0 }}>No published articles yet.</p>
             ) : null}
           </div>
-        </Card>
+        </article>
       )}
+      <p style={{ marginTop: 20 }}>
+        <Link className="public-back-link" to="/contact">
+          Contact support →
+        </Link>
+      </p>
     </div>
   );
 }

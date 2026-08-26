@@ -18,7 +18,7 @@ def build_customer_registration_invite(*, customer: Customer, business_name: str
     frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
     register_url = f"{frontend_base}/auth/register?email={customer.email}"
     greeting = customer.display_name or customer.first_name or "there"
-    product_name = business_name or "AppointIE"
+    product_name = business_name or "Orbit Appoint"
     subject = f"You're invited to book with {product_name}"
 
     plain_text = (

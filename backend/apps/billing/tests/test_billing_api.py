@@ -817,7 +817,7 @@ def test_platform_revenue_insights_for_platform_admin(api_client: APIClient) -> 
     )
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=tenant,
@@ -945,7 +945,7 @@ def test_platform_tenant_directory_includes_billing_state(api_client: APIClient)
     )
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=tenant,

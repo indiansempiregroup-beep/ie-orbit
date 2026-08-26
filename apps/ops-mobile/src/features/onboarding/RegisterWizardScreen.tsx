@@ -19,7 +19,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { brand, colors, radius, spacing, typography } from '../../theme/tokens';
 import { layout } from '../../theme/layout';
 import { getApiErrorMessage } from '../../utils/format';
-import { PRODUCT_CATALOG, getProductName } from '../../utils/products';
+import { PRODUCT_CATALOG, getProductName, stripPlanProductPrefix } from '../../utils/products';
 import { opsClient } from '../../api/client';
 import {
   defaultWeeklyHours,
@@ -56,7 +56,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'appointie',
       plan_code: 'appointie-starter',
-      name: 'AppointIE Starter',
+      name: 'Orbit Appoint Starter',
       description: 'Scheduling and bookings for a single location.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -68,7 +68,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'appointie',
       plan_code: 'appointie-pro',
-      name: 'AppointIE Pro',
+      name: 'Orbit Appoint Pro',
       description: 'Multi-location scheduling with full business intelligence.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -82,7 +82,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'shopie',
       plan_code: 'shopie-starter',
-      name: 'ShopIE Starter',
+      name: 'Orbit Mart Starter',
       description: 'Catalog, POS, inventory, and billing for a single location.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -94,7 +94,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'shopie',
       plan_code: 'shopie-pro',
-      name: 'ShopIE Pro',
+      name: 'Orbit Mart Pro',
       description: 'Multi-location commerce with advanced inventory and billing.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -388,7 +388,7 @@ export function RegisterWizardScreen() {
                       }}
                       style={[styles.packageCard, planSelected ? styles.packageCardSelected : null]}
                     >
-                      <Text style={styles.packageTitle}>{plan.name.replace(/^(AppointIE|ShopIE)\s+/i, '')}</Text>
+                      <Text style={styles.packageTitle}>{stripPlanProductPrefix(plan.name)}</Text>
                       <Text style={styles.hint}>{plan.description}</Text>
                       <Text style={styles.packageMeta}>
                         {plan.max_staff ?? 1} staff · {plan.max_branches ?? 1} office

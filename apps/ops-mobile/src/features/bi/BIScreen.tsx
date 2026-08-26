@@ -232,7 +232,7 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
 
       {appointieBundle ? (
         <View style={styles.stack}>
-          <SectionTitle title="AppointIE" subtitle="Bookings and estimated revenue." />
+          <SectionTitle title="Orbit Appoint" subtitle="Bookings and estimated revenue." />
           <View style={styles.grid}>
             <Metric
               label="Bookings"
@@ -298,7 +298,7 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
 
       {shopie ? (
         <View style={styles.stack}>
-          <SectionTitle title="ShopIE" subtitle="Orders, GMV, returns, and delivery." />
+          <SectionTitle title="Orbit Mart" subtitle="Orders, GMV, returns, and delivery." />
           <View style={styles.grid}>
             <Metric label="Orders" value={shopie.orders} icon="shopping-cart" />
             <Metric label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" />

@@ -2,12 +2,13 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { stripPlanProductPrefix } from '../../config/products';
+import { PublicCtaBand } from './PublicCtaBand';
 
 const PRODUCT_LABELS: Record<string, string> = {
-  appointie: 'AppointIE',
-  shopie: 'ShopIE',
+  appointie: 'Orbit Appoint',
+  shopie: 'Orbit Mart',
 };
 
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
@@ -18,7 +19,7 @@ function formatInr(paise?: number | null) {
 }
 
 function planTitle(plan: BillingPlanCatalogItem) {
-  return plan.name.replace(/^(AppointIE|ShopIE)\s+/i, '');
+  return stripPlanProductPrefix(plan.name);
 }
 
 function planKicker(plan: BillingPlanCatalogItem) {
@@ -26,6 +27,10 @@ function planKicker(plan: BillingPlanCatalogItem) {
   if (code.includes('starter')) return 'Solo & micro';
   if (code.includes('pro')) return 'Growing teams';
   return plan.product_code;
+}
+
+function isProPlan(plan: BillingPlanCatalogItem) {
+  return plan.plan_code.toLowerCase().includes('pro');
 }
 
 function planFeatures(plan: BillingPlanCatalogItem): string[] {
@@ -79,57 +84,70 @@ export function PricingPage() {
 
   usePageMeta({
     title: 'Pricing — IE Orbit',
-    description: `AppointIE and ShopIE plans: ${trialDays}-day trial, Starter, and Pro with staff, office, and Pets pack add-ons.`,
+    description: `Orbit Appoint and Orbit Mart plans: ${trialDays}-day trial, Starter, and Pro with staff, office, and Pets pack add-ons.`,
   });
 
   return (
-    <div className="public-page">
-      <section className="public-hero public-hero-compact">
-        <h1>Simple, scalable pricing</h1>
-        <p className="public-lead">
-          Pick AppointIE, ShopIE, or both in one workspace. Start with a {trialDays}-day free trial, then add staff and
-          offices when you grow.
-        </p>
-      </section>
-      {catalogQuery.isLoading ? (
-        <p className="public-lead">Loading current prices…</p>
-      ) : (
-        <>
-          {appointie.length > 0 ? (
-            <>
-              <section className="public-hero public-hero-compact">
-                <h2>{PRODUCT_LABELS.appointie}</h2>
-                <p className="public-lead">Bookings, calendar, staff, and customers for service businesses.</p>
-              </section>
-              <PlanGrid
-                trialDays={trialDays}
-                plans={appointie}
-                productLabel={PRODUCT_LABELS.appointie}
-              />
-            </>
-          ) : null}
-          {shopie.length > 0 ? (
-            <>
-              <section className="public-hero public-hero-compact">
-                <h2>{PRODUCT_LABELS.shopie}</h2>
-                <p className="public-lead">Commerce, books, and GST on the same workspace.</p>
-              </section>
-              <PlanGrid trialDays={trialDays} plans={shopie} productLabel={PRODUCT_LABELS.shopie} />
-            </>
-          ) : null}
-          <p className="public-lead" style={{ marginTop: 24 }}>
-            Extra staff {formatInr(staffAddon)}/month · extra office {formatInr(officeAddon)}/month
-            {petsAddon ? ` · Pets pack ${formatInr(petsAddon)}/month` : ''}
-            . Yearly billing is 10× monthly (two months free).
-          </p>
-          {petsAddon ? (
-            <p className="public-lead" style={{ marginTop: 8 }}>
-              Pets pack is an optional ShopIE add-on for pet records. It is not included in the base ShopIE plan.
+    <>
+      <section className="public-hero-band">
+        <div className="public-hero-inner public-hero-inner--solo">
+          <div>
+            <p className="public-badge">Transparent INR pricing</p>
+            <h1>
+              Simple, scalable <span className="public-gradient-text">pricing</span>
+            </h1>
+            <p className="public-lead">
+              Pick Orbit Appoint, Orbit Mart, or both in one workspace. Start with a {trialDays}-day free trial, then add
+              staff and offices when you grow.
             </p>
-          ) : null}
-        </>
-      )}
-    </div>
+            <div className="public-chip-row">
+              <span className="public-chip">No credit card to start</span>
+              <span className="public-chip">UPI billing</span>
+              <span className="public-chip">Yearly is 10× monthly</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="public-page">
+        {catalogQuery.isLoading ? (
+          <p className="public-lead">Loading current prices…</p>
+        ) : (
+          <>
+            {appointie.length > 0 ? (
+              <section className="public-section" style={{ marginTop: 0 }}>
+                <div className="public-section__head">
+                  <p className="public-kicker">{PRODUCT_LABELS.appointie}</p>
+                  <h2>Bookings, calendar, staff, and customers</h2>
+                  <p className="public-lead">For salons, clinics, trainers, and other appointment-based teams.</p>
+                </div>
+                <PlanGrid trialDays={trialDays} plans={appointie} productLabel={PRODUCT_LABELS.appointie} />
+              </section>
+            ) : null}
+            {shopie.length > 0 ? (
+              <section className="public-section">
+                <div className="public-section__head">
+                  <p className="public-kicker">{PRODUCT_LABELS.shopie}</p>
+                  <h2>Commerce, books, and GST</h2>
+                  <p className="public-lead">Counter, catalog, and GST books on the same workspace.</p>
+                </div>
+                <PlanGrid trialDays={trialDays} plans={shopie} productLabel={PRODUCT_LABELS.shopie} />
+              </section>
+            ) : null}
+            <p className="public-lead" style={{ marginTop: 28 }}>
+              Extra staff {formatInr(staffAddon)}/month · extra office {formatInr(officeAddon)}/month
+              {petsAddon ? ` · Pets pack ${formatInr(petsAddon)}/month` : ''}. Yearly billing is 10× monthly (two months
+              free).
+            </p>
+            {petsAddon ? (
+              <p className="public-lead" style={{ marginTop: 8 }}>
+                Pets pack is an optional Orbit Mart add-on for pet records. It is not included in the base Orbit Mart plan.
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
+      <PublicCtaBand title="Start with full Pro access" />
+    </>
   );
 }
 
@@ -147,13 +165,13 @@ function PlanGrid({
   return (
     <div className="public-pricing-grid">
       {showTrial ? (
-        <Card>
+        <article className="public-card public-price-card">
           <p className="public-kicker">Try first</p>
-          <h2 style={{ margin: '8px 0' }}>Free</h2>
-          <p style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{trialDays} days</p>
-          <p style={{ color: 'var(--muted-foreground)' }}>
-            Full {productLabel} Pro access, then soft lock until you upgrade.
+          <h2>Free</h2>
+          <p className="public-price-amount">
+            {trialDays} days
           </p>
+          <p>Full {productLabel} Pro access, then soft lock until you upgrade.</p>
           <ul className="public-list">
             <li>Full Pro features during trial</li>
             <li>No credit card required to start</li>
@@ -162,32 +180,36 @@ function PlanGrid({
           <Link to="/auth/register/start">
             <Button variant="primary">Start free trial</Button>
           </Link>
-        </Card>
+        </article>
       ) : null}
-      {plans.map((plan) => (
-        <Card key={plan.plan_code}>
-          <p className="public-kicker">{planKicker(plan)}</p>
-          <h2 style={{ margin: '8px 0' }}>{planTitle(plan)}</h2>
-          <p style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>
-            {formatInr(plan.amount_paise)}
-            <span style={{ fontSize: 14, fontWeight: 500 }}>/month</span>
-          </p>
-          {plan.yearly_amount_paise ? (
-            <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
-              or {formatInr(plan.yearly_amount_paise)}/year (10× monthly)
+      {plans.map((plan) => {
+        const featured = isProPlan(plan);
+        return (
+          <article key={plan.plan_code} className={`public-card public-price-card${featured ? ' is-featured' : ''}`}>
+            {featured ? <span className="public-popular">Most popular</span> : null}
+            <p className="public-kicker">{planKicker(plan)}</p>
+            <h2>{planTitle(plan)}</h2>
+            <p className="public-price-amount">
+              {formatInr(plan.amount_paise)}
+              <span>/month</span>
             </p>
-          ) : null}
-          <p style={{ color: 'var(--muted-foreground)' }}>{plan.description}</p>
-          <ul className="public-list">
-            {planFeatures(plan).map((feature) => (
-              <li key={feature}>{feature}</li>
-            ))}
-          </ul>
-          <Link to="/auth/register/start">
-            <Button variant="neutral">Choose {planTitle(plan)}</Button>
-          </Link>
-        </Card>
-      ))}
+            {plan.yearly_amount_paise ? (
+              <p style={{ margin: '4px 0 0', fontSize: 13 }}>
+                or {formatInr(plan.yearly_amount_paise)}/year (10× monthly)
+              </p>
+            ) : null}
+            <p>{plan.description}</p>
+            <ul className="public-list">
+              {planFeatures(plan).map((feature) => (
+                <li key={feature}>{feature}</li>
+              ))}
+            </ul>
+            <Link to="/auth/register/start">
+              <Button variant={featured ? 'primary' : 'neutral'}>Choose {planTitle(plan)}</Button>
+            </Link>
+          </article>
+        );
+      })}
     </div>
   );
 }

@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.businesses.constants import VALID_PRODUCT_CODES, is_plan_upgrade
+from apps.businesses.constants import PRODUCT_DISPLAY_NAMES, PRODUCT_SHOPIE, VALID_PRODUCT_CODES, is_plan_upgrade
 from apps.businesses.models import (
     Business,
     BusinessProductSubscription,
@@ -581,7 +581,9 @@ class BusinessService:
             else bool(getattr(subscription, "pets_pack_enabled", False))
         )
         if next_pets and normalized_code != "shopie":
-            raise ValidationError({"pets_pack_enabled": "Pets pack is only available with ShopIE."})
+            raise ValidationError(
+                {"pets_pack_enabled": f"Pets pack is only available with {PRODUCT_DISPLAY_NAMES[PRODUCT_SHOPIE]}."}
+            )
 
         # Reducing add-ons must still fit current usage.
         self.entitlements.ensure_can_downgrade(

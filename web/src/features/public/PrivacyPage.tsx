@@ -8,16 +8,17 @@ export function PrivacyPage() {
 
   return (
     <div className="public-page public-page-narrow public-legal">
+      <p className="public-kicker">Legal</p>
       <h1>Privacy Policy</h1>
       <p>Last updated: August 2026</p>
       <h2>Information we collect</h2>
       <p>
         We collect account, business, and usage information required to operate your IE Orbit workspace, including
-        AppointIE booking data and ShopIE commerce, books, and customer records you enter.
+        Orbit Appoint booking data and Orbit Mart commerce, books, and customer records you enter.
       </p>
       <h2>How we use information</h2>
       <p>
-        Data is used to provide AppointIE and ShopIE, authentication, notifications, billing (including UPI payment
+        Data is used to provide Orbit Appoint and Orbit Mart, authentication, notifications, billing (including UPI payment
         claims), and platform improvements.
       </p>
       <h2>Your choices</h2>

@@ -104,7 +104,7 @@ APPLICATION_DOMAINS: dict[str, tuple[DomainEntry, ...]] = {
     "shopie": (
         DomainEntry(
             id="shop_commerce",
-            label="ShopIE Commerce",
+            label="Orbit Mart Commerce",
             layer="application",
             django_apps=("shopie",),
             owns=(

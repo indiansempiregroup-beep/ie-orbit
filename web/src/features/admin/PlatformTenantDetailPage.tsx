@@ -87,7 +87,7 @@ const LIFECYCLE_CONFIRM: Record<
   suspend: {
     title: 'Confirm suspend',
     description:
-      'Users on this workspace will be blocked from AppointIE and ShopIE until you reactivate it. Type the tenant slug to continue.',
+      'Users on this workspace will be blocked from Orbit Appoint and Orbit Mart until you reactivate it. Type the tenant slug to continue.',
     confirmLabel: 'Suspend workspace',
     runLabel: 'Suspend',
     danger: true,

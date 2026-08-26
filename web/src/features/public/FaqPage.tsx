@@ -1,13 +1,12 @@
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { Card } from '../../components/Card';
 
 const faqs = [
   {
     q: 'What is IE Orbit?',
-    a: 'IE Orbit is one workspace for two products: AppointIE for appointments and ShopIE for retail, POS, and GST books. You can subscribe to one product or both.',
+    a: 'IE Orbit is one workspace for two products: Orbit Appoint for appointments and Orbit Mart for retail, POS, and GST books. You can subscribe to one product or both.',
   },
   {
-    q: 'Can I use AppointIE and ShopIE together?',
+    q: 'Can I use Orbit Appoint and Orbit Mart together?',
     a: 'Yes. Both products share the same business, staff, customers, and billing. Add the second product from your workspace when you need it.',
   },
   {
@@ -24,7 +23,7 @@ const faqs = [
   },
   {
     q: 'Can I add extra staff, offices, or a Pets pack?',
-    a: 'Yes. Extra staff and offices are self-serve add-ons on both products. Pets pack is an optional ShopIE add-on for pet records and is not included in the base ShopIE plan.',
+    a: 'Yes. Extra staff and offices are self-serve add-ons on both products. Pets pack is an optional Orbit Mart add-on for pet records and is not included in the base Orbit Mart plan.',
   },
   {
     q: 'Which currencies are supported?',
@@ -35,22 +34,34 @@ const faqs = [
 export function FaqPage() {
   usePageMeta({
     title: 'FAQ — IE Orbit',
-    description: 'Frequently asked questions about AppointIE, ShopIE, trials, plans, and UPI billing.',
+    description: 'Frequently asked questions about Orbit Appoint, Orbit Mart, trials, plans, and UPI billing.',
   });
 
   return (
-    <div className="public-page">
-      <section className="public-hero public-hero-compact">
-        <h1>Frequently asked questions</h1>
+    <>
+      <section className="public-hero-band">
+        <div className="public-hero-inner public-hero-inner--solo">
+          <div>
+            <p className="public-badge">Help</p>
+            <h1>
+              Frequently asked <span className="public-gradient-text">questions</span>
+            </h1>
+            <p className="public-lead">Trials, plans, products, and UPI billing — the short answers.</p>
+          </div>
+        </div>
       </section>
-      <div className="public-faq-list">
-        {faqs.map((item) => (
-          <Card key={item.q}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>{item.q}</h2>
-            <p style={{ marginBottom: 0, color: 'var(--muted-foreground)' }}>{item.a}</p>
-          </Card>
-        ))}
+      <div className="public-page public-page-narrow">
+        <div className="public-faq-list">
+          {faqs.map((item) => (
+            <div key={item.q} className="public-faq">
+              <details>
+                <summary>{item.q}</summary>
+                <p>{item.a}</p>
+              </details>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

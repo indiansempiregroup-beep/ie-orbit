@@ -56,7 +56,7 @@ def test_default_trial_days_is_fifteen() -> None:
 def test_trial_uses_pro_limits(business: Business) -> None:
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -81,7 +81,7 @@ def test_trial_uses_pro_limits(business: Business) -> None:
 def test_starter_shows_ads_and_pro_is_ad_free(business: Business) -> None:
     starter, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     subscription = BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -95,7 +95,7 @@ def test_starter_shows_ads_and_pro_is_ad_free(business: Business) -> None:
 
     pro, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     subscription.plan = pro
     subscription.save(update_fields=["plan"])
@@ -110,7 +110,7 @@ def test_platform_admin_can_disable_google_ads(business: Business) -> None:
 
     starter, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -131,7 +131,7 @@ def test_platform_admin_can_disable_google_ads(business: Business) -> None:
 def test_missing_plan_feature_is_blocked(business: Business) -> None:
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -150,7 +150,7 @@ def test_missing_plan_feature_is_blocked(business: Business) -> None:
 def test_soft_lock_blocks_mutations(business: Business) -> None:
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -172,7 +172,7 @@ def test_soft_lock_blocks_mutations(business: Business) -> None:
 def test_staff_limit_counts_bookable_only(business: Business) -> None:
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -209,7 +209,7 @@ def test_staff_limit_counts_bookable_only(business: Business) -> None:
 def test_addon_increases_effective_limits(business: Business) -> None:
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -232,7 +232,7 @@ def test_addon_prices_follow_platform_admin_settings(business: Business) -> None
 
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,
@@ -262,7 +262,7 @@ def test_addon_prices_follow_platform_admin_settings(business: Business) -> None
 def test_downgrade_blocked_when_over_limit(business: Business) -> None:
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=business.tenant,

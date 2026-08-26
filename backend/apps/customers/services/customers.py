@@ -78,7 +78,7 @@ class CustomerService:
 
     def _send_registration_invite(self, *, customer: Customer) -> None:
         business_name = getattr(customer.business, "display_name", None) or getattr(
-            customer.business, "business_name", "AppointIE"
+            customer.business, "business_name", "Orbit Appoint"
         )
         email_content = build_customer_registration_invite(customer=customer, business_name=business_name)
         send_mail(

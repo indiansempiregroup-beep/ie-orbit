@@ -47,7 +47,7 @@ def business() -> Business:
 def _active_pro(business: Business, *, days_left: int = 2) -> BusinessProductSubscription:
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     now = timezone.now()
     return BusinessProductSubscription.objects.create(
@@ -66,7 +66,7 @@ def test_downgrade_during_paid_period_is_scheduled(business: Business) -> None:
     subscription = _active_pro(business, days_left=2)
     starter, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     Branch.objects.create(
         tenant=business.tenant,
@@ -104,7 +104,7 @@ def test_period_end_applies_pending_plan(business: Business) -> None:
     subscription = _active_pro(business, days_left=0)
     starter, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     Branch.objects.create(
         tenant=business.tenant,
@@ -161,7 +161,7 @@ def test_renewal_reminder_dedupes_same_day(business: Business) -> None:
 def test_upgrade_applies_immediately(business: Business) -> None:
     starter, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     now = timezone.now()
     BusinessProductSubscription.objects.create(
@@ -190,7 +190,7 @@ def test_cancel_pending_plan_change(business: Business) -> None:
     subscription = _active_pro(business, days_left=5)
     starter, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     Branch.objects.create(
         tenant=business.tenant,

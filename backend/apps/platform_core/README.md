@@ -4,7 +4,7 @@ This package documents the **Platform Core** bounded context. It does not replac
 
 ## Purpose
 
-Platform Core owns shared master data consumed by all product applications (AppointIE, ShopIE, etc.).
+Platform Core owns shared master data consumed by all product applications (Orbit Appoint, Orbit Mart, etc.).
 
 ## Current implementation mapping
 
@@ -30,8 +30,8 @@ Platform Core owns shared master data consumed by all product applications (Appo
 
 | Product | Django app(s) | Operational data |
 |---------|---------------|------------------|
-| AppointIE | `bookings`, `calendar` | Bookings, availability, schedules |
-| ShopIE | `shopie` | Catalog, POS, inventory, billing |
+| Orbit Appoint | `bookings`, `calendar` | Bookings, availability, schedules |
+| Orbit Mart | `shopie` | Catalog, POS, inventory, billing |
 | InventoryIE | — | Not implemented |
 | HRIE | — | Not implemented |
 

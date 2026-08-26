@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
 import { Button } from '../../components/Button';
 
 const navLinks = [
@@ -10,30 +12,75 @@ const navLinks = [
   { to: '/faq', label: 'FAQ' },
 ];
 
-const footerLinks = [
-  { to: '/features', label: 'Features' },
-  { to: '/pricing', label: 'Pricing' },
-  { to: '/help', label: 'Help' },
-  { to: '/privacy', label: 'Privacy' },
-  { to: '/terms', label: 'Terms' },
-  { to: '/contact', label: 'Contact' },
+const footerColumns = [
+  {
+    title: 'Product',
+    links: [
+      { to: '/features', label: 'Features' },
+      { to: '/pricing', label: 'Pricing' },
+      { to: '/faq', label: 'FAQ' },
+      { to: '/help', label: 'Help Center' },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { to: '/about', label: 'About' },
+      { to: '/contact', label: 'Contact' },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { to: '/privacy', label: 'Privacy' },
+      { to: '/terms', label: 'Terms' },
+    ],
+  },
 ];
 
 export function PublicLayout() {
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [menuOpen]);
 
   return (
     <div className="public-layout">
-      <header className="public-header">
+      <a className="public-skip" href="#public-main">
+        Skip to content
+      </a>
+      <header className={`public-header${menuOpen ? ' is-open' : ''}`}>
         <div className="public-header-inner">
           <Link to="/" className="public-brand" aria-label="IE Orbit home">
-            <span className="public-brand-mark" aria-hidden="true">IE</span>
+            <span className="public-brand-mark" aria-hidden="true">
+              IE
+            </span>
             <span>
               <strong>IE Orbit</strong>
               <small>by Indians Empire</small>
             </span>
           </Link>
-          <nav className="public-nav" aria-label="Main navigation">
+          <button
+            type="button"
+            className="public-menu-toggle"
+            aria-expanded={menuOpen}
+            aria-controls="public-nav"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          <nav className="public-nav" id="public-nav" aria-label="Main navigation">
             {navLinks.map((link) => (
               <Link
                 key={link.to}
@@ -55,22 +102,25 @@ export function PublicLayout() {
           </div>
         </div>
       </header>
-      <main className="public-main">
+      <main className="public-main" id="public-main">
         <Outlet />
       </main>
       <footer className="public-footer">
         <div className="public-footer-inner">
           <div>
             <strong>IE Orbit</strong>
-            <p>One workspace for appointments and retail — AppointIE and ShopIE.</p>
+            <p>One workspace for appointments and retail — Orbit Appoint and Orbit Mart, built for Indian businesses.</p>
           </div>
-          <nav aria-label="Footer navigation">
-            {footerLinks.map((link) => (
-              <Link key={link.to} to={link.to}>
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          {footerColumns.map((column) => (
+            <nav key={column.title} aria-label={column.title}>
+              <strong>{column.title}</strong>
+              {column.links.map((link) => (
+                <Link key={link.to} to={link.to}>
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          ))}
           <p className="public-footer-copy">© {new Date().getFullYear()} Indians Empire Technologies</p>
         </div>
       </footer>

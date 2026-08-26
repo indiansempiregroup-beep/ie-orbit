@@ -5,7 +5,7 @@ import { TrendChart } from './components/TrendChart';
 import { useBIReportsQuery } from './biHooks';
 
 export function BIReportsPage() {
-  usePageMeta({ title: 'BI Reports — AppointIE' });
+  usePageMeta({ title: 'BI Reports — Orbit Appoint' });
   const reportsQuery = useBIReportsQuery();
   const data = reportsQuery.data;
   const operations = data?.operations;

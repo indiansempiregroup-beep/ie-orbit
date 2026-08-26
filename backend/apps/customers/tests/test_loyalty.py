@@ -59,7 +59,7 @@ def loyalty_setup(db):
     )
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-pro",
-        defaults={"name": "AppointIE Pro", "is_public": True},
+        defaults={"name": "Orbit Appoint Pro", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=tenant,
@@ -229,7 +229,7 @@ def test_trial_entitles_reward_points(loyalty_setup):
     subscription = setup["business"].product_subscriptions.get(product_code="appointie")
     starter, _ = SubscriptionPlan.objects.get_or_create(
         code="appointie-starter",
-        defaults={"name": "AppointIE Starter", "is_public": True},
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
     )
     subscription.plan = starter
     subscription.status = BusinessProductSubscriptionStatus.TRIALING
@@ -262,7 +262,7 @@ def test_shopie_starter_entitles_reward_points_without_appointie_pro(db):
     )
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="shopie-starter",
-        defaults={"name": "ShopIE Starter", "is_public": True},
+        defaults={"name": "Orbit Mart Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=tenant,

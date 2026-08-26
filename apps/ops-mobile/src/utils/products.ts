@@ -13,12 +13,12 @@ export type ProductSubscriptionLike = {
 export const PRODUCT_CATALOG: ProductDefinition[] = [
   {
     id: 'appointie',
-    name: 'AppointIE',
+    name: 'Orbit Appoint',
     description: 'Booking, scheduling, and customer operations for service businesses.',
   },
   {
     id: 'shopie',
-    name: 'ShopIE',
+    name: 'Orbit Mart',
     description: 'Catalog, POS, inventory, and billing for retail businesses.',
   },
 ];
@@ -28,7 +28,11 @@ export const PETS_PACK_PRICE_INR = 500;
 const ACTIVE = new Set(['trialing', 'active']);
 
 export function getProductName(productId?: string | null) {
-  return PRODUCT_CATALOG.find((p) => p.id === productId)?.name ?? productId ?? 'AppointIE';
+  return PRODUCT_CATALOG.find((p) => p.id === productId)?.name ?? productId ?? 'Orbit Appoint';
+}
+
+export function stripPlanProductPrefix(name: string) {
+  return name.replace(/^(Orbit Appoint|Orbit Mart|AppointIE|ShopIE)\s+/i, '') || name;
 }
 
 export function getSubscribedProducts(subscriptions?: ProductSubscriptionLike[] | null) {

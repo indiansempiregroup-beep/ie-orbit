@@ -12,6 +12,12 @@ VALID_PRODUCT_CODES = frozenset(
 
 DEFAULT_PRODUCT_CODE = PRODUCT_APPOINTIE
 
+PRODUCT_DISPLAY_NAMES: dict[str, str] = {
+    PRODUCT_APPOINTIE: "Orbit Appoint",
+    PRODUCT_SHOPIE: "Orbit Mart",
+}
+DEFAULT_PRODUCT_DISPLAY_NAME = PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]
+
 BILLING_INTERVAL_MONTHLY = "monthly"
 BILLING_INTERVAL_YEARLY = "yearly"
 
@@ -179,7 +185,7 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
     PRODUCT_APPOINTIE: [
         {
             "code": "appointie-starter",
-            "name": "AppointIE Starter",
+            "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]} Starter",
             "description": "Scheduling and bookings for a single location.",
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
@@ -191,7 +197,7 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
         },
         {
             "code": "appointie-pro",
-            "name": "AppointIE Pro",
+            "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]} Pro",
             "description": "Multi-location scheduling with full business intelligence.",
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
@@ -210,7 +216,7 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
     PRODUCT_SHOPIE: [
         {
             "code": "shopie-starter",
-            "name": "ShopIE Starter",
+            "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_SHOPIE]} Starter",
             "description": "Catalog, POS, inventory, and billing for a single location.",
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
@@ -222,7 +228,7 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
         },
         {
             "code": "shopie-pro",
-            "name": "ShopIE Pro",
+            "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_SHOPIE]} Pro",
             "description": "Multi-location commerce with advanced inventory and billing.",
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,

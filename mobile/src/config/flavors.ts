@@ -54,7 +54,7 @@ export function resolveBootstrapQuery(): {
 export function resolveFlavorBranding(): BrandTheme {
   const entry = manifest.flavors.find((row) => row.key === flavorKey);
   return {
-    appName: process.env.EXPO_PUBLIC_APP_NAME ?? entry?.appName ?? 'AppointIE',
+    appName: process.env.EXPO_PUBLIC_APP_NAME ?? entry?.appName ?? 'Orbit Appoint',
     primaryColor: entry?.primaryColor ?? colors.primary,
     secondaryColor: entry?.secondaryColor ?? colors.secondaryForeground,
     logo: null,

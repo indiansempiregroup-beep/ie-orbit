@@ -170,7 +170,7 @@ export function ShopDeliverySettingsScreen() {
         <Text style={styles.title}>Instant delivery</Text>
         <Text style={styles.help}>
           Connect your own Porter or Shiprocket Quick account. The provider bills your account
-          directly. ShopIE quotes the customer at checkout and books a rider only when you tap
+          directly. Orbit Mart quotes the customer at checkout and books a rider only when you tap
           Dispatch on a packed order.
         </Text>
       </View>
@@ -311,7 +311,7 @@ export function ShopDeliverySettingsScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Webhook URL</Text>
             <Text style={styles.cardHint}>
-              Paste this into your provider dashboard so rider status reaches ShopIE live.
+              Paste this into your provider dashboard so rider status reaches Orbit Mart live.
             </Text>
             <Text style={styles.mono} selectable>
               {webhookUrl || 'Select a business to see the URL'}

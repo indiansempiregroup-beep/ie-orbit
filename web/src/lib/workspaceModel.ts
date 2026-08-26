@@ -39,7 +39,7 @@ export function buildWorkspaceSnapshot(args: {
   };
 }
 
-/** User-facing workspace label, e.g. "AppointIE · Empire Salon" */
+/** User-facing workspace label, e.g. "Orbit Appoint · Empire Salon" */
 export function formatWorkspaceLabel(snapshot: WorkspaceSnapshot): string {
   return `${snapshot.productName} · ${snapshot.businessName}`;
 }

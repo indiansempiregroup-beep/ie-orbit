@@ -4,7 +4,7 @@ import { StatCard } from './components/StatCard';
 import { useBIForecastQuery } from './biHooks';
 
 export function BIForecastPage() {
-  usePageMeta({ title: 'BI Forecast — AppointIE' });
+  usePageMeta({ title: 'BI Forecast — Orbit Appoint' });
   const forecastQuery = useBIForecastQuery(30);
   const forecast = forecastQuery.data;
 

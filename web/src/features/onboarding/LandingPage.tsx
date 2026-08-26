@@ -17,7 +17,7 @@ export function LandingPage() {
         <Card style={{ padding: 32 }}>
           <h1 style={{ marginTop: 0 }}>Get started with IE Orbit</h1>
           <p style={{ color: '#6b7280' }}>
-            Create your workspace and start AppointIE bookings, ShopIE retail, or both in minutes.
+            Create your workspace and start Orbit Appoint bookings, Orbit Mart retail, or both in minutes.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
             <Button variant="primary" onClick={() => navigate(registerStartPath())}>Start Free Trial</Button>

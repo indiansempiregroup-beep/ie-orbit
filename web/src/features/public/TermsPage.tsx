@@ -8,11 +8,12 @@ export function TermsPage() {
 
   return (
     <div className="public-page public-page-narrow public-legal">
+      <p className="public-kicker">Legal</p>
       <h1>Terms &amp; Conditions</h1>
       <p>Last updated: August 2026</p>
       <h2>Service</h2>
       <p>
-        IE Orbit, including AppointIE and ShopIE, is provided on an as-available basis during the trial and on paid
+        IE Orbit, including Orbit Appoint and Orbit Mart, is provided on an as-available basis during the trial and on paid
         subscription plans after you upgrade.
       </p>
       <h2>Accounts</h2>

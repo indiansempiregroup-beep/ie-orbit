@@ -20,7 +20,7 @@ export function BrandMark({ size = 'md' }: { size?: 'sm' | 'md' }) {
           <Feather name="calendar" size={size === 'sm' ? 16 : 18} color="#fff" />
         </View>
       )}
-      <Text style={[styles.name, size === 'sm' ? styles.nameSm : null]}>{branding?.appName ?? 'AppointIE'}</Text>
+      <Text style={[styles.name, size === 'sm' ? styles.nameSm : null]}>{branding?.appName ?? 'Orbit Appoint'}</Text>
     </View>
   );
 }

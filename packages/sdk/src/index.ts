@@ -1473,7 +1473,7 @@ export type BIOverviewResponse = {
   appointie?: BIReportsBundle;
   shopie?: BIShopieOverview;
   pets?: DashboardPetsSummary;
-  /** Present when AppointIE is subscribed (backward-compatible aliases). */
+  /** Present when Orbit Appoint is subscribed (backward-compatible aliases). */
   summary?: AnalyticsSummary;
   revenue?: BIRevenueReport;
   trends?: BITrendsReport;

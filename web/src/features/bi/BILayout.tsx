@@ -99,7 +99,7 @@ export function BILayout() {
         ) : null}
         {!hasAppointie ? (
           <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--muted-foreground, #6b7280)' }}>
-            Growth, Revenue, Forecast, and Reports are available with AppointIE.
+            Growth, Revenue, Forecast, and Reports are available with Orbit Appoint.
           </p>
         ) : null}
       </aside>
@@ -114,10 +114,10 @@ export function BILayout() {
             gap: 12,
           }}
         >
-          <h2 style={{ margin: 0 }}>{productBlocked ? 'AppointIE feature' : 'Pro feature'}</h2>
+          <h2 style={{ margin: 0 }}>{productBlocked ? 'Orbit Appoint feature' : 'Pro feature'}</h2>
           <p style={{ margin: 0, color: 'var(--muted-foreground, #6b7280)' }}>
             {productBlocked
-              ? 'This BI tab is available when AppointIE is subscribed. Overview covers ShopIE analytics.'
+              ? 'This BI tab is available when Orbit Appoint is subscribed. Overview covers Orbit Mart analytics.'
               : 'Your current plan includes BI Overview only. Upgrade to Pro for Growth, Revenue, Forecast, and Reports.'}
           </p>
           <Link to="/settings" style={{ color: 'var(--primary)', fontWeight: 600, width: 'fit-content' }}>

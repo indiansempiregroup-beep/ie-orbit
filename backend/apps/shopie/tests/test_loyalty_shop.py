@@ -65,7 +65,7 @@ def shop_loyalty_ctx():
     )
     plan, _ = SubscriptionPlan.objects.get_or_create(
         code="shopie-starter",
-        defaults={"name": "ShopIE Starter", "is_public": True},
+        defaults={"name": "Orbit Mart Starter", "is_public": True},
     )
     BusinessProductSubscription.objects.create(
         tenant=tenant,

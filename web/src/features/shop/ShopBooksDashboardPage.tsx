@@ -118,7 +118,7 @@ export function ShopBooksDashboardPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
-            <h2 style={{ margin: 0 }}>ShopIE Books</h2>
+            <h2 style={{ margin: 0 }}>Orbit Mart Books</h2>
             <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
               Cash, GST sales/purchases, party ledgers, and compliance reports for your shop.
             </p>

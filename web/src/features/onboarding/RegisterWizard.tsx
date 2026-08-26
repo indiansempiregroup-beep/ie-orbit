@@ -41,7 +41,7 @@ import {
   WEEK_START_DAYS,
   type RegisterWizardStepId,
 } from '../../config/onboarding';
-import { PRODUCT_CATALOG, getProductName } from '../../config/products';
+import { PRODUCT_CATALOG, getProductName, stripPlanProductPrefix } from '../../config/products';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { createAuthenticatedClient, getApiErrorMessage } from '../../lib/apiClient';
 import { summarizeWeeklyHours } from '../../lib/businessHours';
@@ -52,7 +52,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'appointie',
       plan_code: 'appointie-starter',
-      name: 'AppointIE Starter',
+      name: 'Orbit Appoint Starter',
       description: 'Scheduling and bookings for a single location.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -64,7 +64,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'appointie',
       plan_code: 'appointie-pro',
-      name: 'AppointIE Pro',
+      name: 'Orbit Appoint Pro',
       description: 'Multi-location scheduling with full business intelligence.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -78,7 +78,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'shopie',
       plan_code: 'shopie-starter',
-      name: 'ShopIE Starter',
+      name: 'Orbit Mart Starter',
       description: 'Catalog, POS, inventory, and billing for a single location.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -90,7 +90,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
     {
       product_code: 'shopie',
       plan_code: 'shopie-pro',
-      name: 'ShopIE Pro',
+      name: 'Orbit Mart Pro',
       description: 'Multi-location commerce with advanced inventory and billing.',
       billing_interval: 'monthly',
       trial_days: 15,
@@ -109,13 +109,13 @@ function formatInr(paise?: number | null) {
 
 function planTitle(plan: Pick<BillingPlanCatalogItem, 'name'> | string) {
   const name = typeof plan === 'string' ? plan : plan.name;
-  return name.replace(/^(AppointIE|ShopIE)\s+/i, '') || name;
+  return stripPlanProductPrefix(name);
 }
 
 export function RegisterWizard() {
   usePageMeta({
     title: 'Create workspace — IE Orbit',
-    description: 'Self-service business onboarding wizard for AppointIE and ShopIE.',
+    description: 'Self-service business onboarding wizard for Orbit Appoint and Orbit Mart.',
   });
 
   const navigate = useNavigate();

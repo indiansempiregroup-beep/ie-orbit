@@ -14,6 +14,8 @@ from apps.businesses.constants import (
     FEATURE_SHOPIE_DELIVERY_ZONES,
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_RETURNS,
+    PRODUCT_DISPLAY_NAMES,
+    PRODUCT_SHOPIE,
 )
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
@@ -202,7 +204,8 @@ class ShopSettingsView(APIView):
                 raise ValidationError(
                     {
                         "enable_pets": (
-                            "Pets pack requires a ₹500/month ShopIE add-on. "
+                            "Pets pack requires a ₹500/month "
+                            f"{PRODUCT_DISPLAY_NAMES[PRODUCT_SHOPIE]} add-on. "
                             "Subscribe from Product settings."
                         )
                     }

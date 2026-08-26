@@ -1,13 +1,22 @@
 import { Link } from 'react-router-dom';
+import {
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  PawPrint,
+  Sparkles,
+  Store,
+} from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { PublicCtaBand } from './PublicCtaBand';
 
 const featureGroups = [
   {
-    kicker: 'AppointIE',
+    kicker: 'Orbit Appoint',
     title: 'Bookings and daily operations',
     lead: 'Built for salons, clinics, trainers, and other appointment-based teams.',
+    icon: CalendarDays,
     items: [
       'Online bookings from any device',
       'Calendar and staff scheduling',
@@ -16,9 +25,11 @@ const featureGroups = [
     ],
   },
   {
-    kicker: 'ShopIE Commerce',
+    kicker: 'Orbit Mart Commerce',
     title: 'Counter, catalog, and orders',
     lead: 'Run the shop floor and online orders from the same workspace.',
+    icon: Store,
+    teal: true,
     items: [
       'POS / GST counter sales',
       'Product catalog and inventory',
@@ -27,9 +38,11 @@ const featureGroups = [
     ],
   },
   {
-    kicker: 'ShopIE Books',
+    kicker: 'Orbit Mart Books',
     title: 'Accounting and GST compliance',
     lead: 'Keep sales, purchases, and GST in one books suite — not a separate product.',
+    icon: BookOpen,
+    teal: true,
     items: [
       'Sales, purchases, cash and bank, expenses',
       'Parties, quotations, stock, godowns, and challans',
@@ -38,9 +51,11 @@ const featureGroups = [
     ],
   },
   {
-    kicker: 'ShopIE Grow',
+    kicker: 'Orbit Mart Grow',
     title: 'Marketing helpers for the shop',
     lead: 'Share, list, and calculate without leaving operations.',
+    icon: Sparkles,
+    teal: true,
     items: [
       'WhatsApp default message and share links',
       'AI promo poster and share',
@@ -51,17 +66,19 @@ const featureGroups = [
   {
     kicker: 'Pets pack',
     title: 'Optional add-on for pet retailers',
-    lead: 'Not included in the ShopIE base plan — add it when you keep pet records.',
+    lead: 'Not included in the Orbit Mart base plan — add it when you keep pet records.',
+    icon: PawPrint,
     items: [
       'Pet records for shops that need them',
-      'Priced as a monthly ShopIE add-on',
+      'Priced as a monthly Orbit Mart add-on',
       'Works alongside catalog, POS, and orders',
     ],
   },
   {
     kicker: 'Platform',
-    title: 'Shared across AppointIE and ShopIE',
+    title: 'Shared across Orbit Appoint and Orbit Mart',
     lead: 'One workspace, one trial, and the same billing for both products.',
+    icon: BarChart3,
     items: [
       '15-day full-Pro trial, then upgrade to keep running',
       'Starter and Pro plans, with extra staff and office add-ons',
@@ -75,40 +92,56 @@ export function FeaturesPage() {
   usePageMeta({
     title: 'Features — IE Orbit',
     description:
-      'AppointIE bookings and ShopIE commerce, GST books, Grow tools, and Pets pack — one workspace for service and retail businesses.',
+      'Orbit Appoint bookings and Orbit Mart commerce, GST books, Grow tools, and Pets pack — one workspace for service and retail businesses.',
   });
 
   return (
-    <div className="public-page">
-      <section className="public-hero public-hero-compact">
-        <h1>Features for service and retail businesses</h1>
-        <p className="public-lead">
-          AppointIE covers appointments. ShopIE covers the counter, books, and Grow. Use one product or both in the same
-          workspace.
-        </p>
+    <>
+      <section className="public-hero-band">
+        <div className="public-hero-inner public-hero-inner--solo">
+          <div>
+            <p className="public-badge">Orbit Appoint · Orbit Mart</p>
+            <h1>
+              Features for <span className="public-gradient-text">service and retail</span> businesses
+            </h1>
+            <p className="public-lead">
+              Orbit Appoint covers appointments. Orbit Mart covers the counter, books, and Grow. Use one product or both
+              in the same workspace.
+            </p>
+            <div className="public-hero-actions">
+              <Link to="/pricing">
+                <Button variant="primary">See pricing</Button>
+              </Link>
+              <Link to="/auth/register/start">
+                <Button variant="neutral">Start free trial</Button>
+              </Link>
+            </div>
+          </div>
+        </div>
       </section>
-      <div className="public-product-grid">
-        {featureGroups.map((group) => (
-          <Card key={group.title}>
-            <p className="public-kicker">{group.kicker}</p>
-            <h2 style={{ marginTop: 0, fontSize: '1.2rem' }}>{group.title}</h2>
-            <p style={{ color: 'var(--muted-foreground)' }}>{group.lead}</p>
-            <ul className="public-list" style={{ marginBottom: 0 }}>
-              {group.items.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </Card>
-        ))}
+      <div className="public-page">
+        <div className="public-product-grid">
+          {featureGroups.map((group) => {
+            const Icon = group.icon;
+            return (
+              <article key={group.title} className="public-card">
+                <div className={`public-card-icon${group.teal ? ' public-card-icon--teal' : ''}`}>
+                  <Icon size={22} />
+                </div>
+                <p className="public-kicker">{group.kicker}</p>
+                <h2 style={{ fontSize: '1.25rem' }}>{group.title}</h2>
+                <p>{group.lead}</p>
+                <ul className="public-list">
+                  {group.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </article>
+            );
+          })}
+        </div>
       </div>
-      <div className="public-hero-actions">
-        <Link to="/pricing">
-          <Button variant="primary">See pricing</Button>
-        </Link>
-        <Link to="/auth/register/start">
-          <Button variant="neutral">Start free trial</Button>
-        </Link>
-      </div>
-    </div>
+      <PublicCtaBand title="Try every Pro feature for 15 days" />
+    </>
   );
 }

@@ -91,7 +91,7 @@ export function ShopDeliverySettingsPage() {
       <Card>
         <h2 style={{ margin: 0 }}>Instant delivery</h2>
         <p style={{ margin: '6px 0 0', color: 'var(--muted-foreground)' }}>
-          Connect your own Porter or Shiprocket Quick account. The provider bills your account; ShopIE
+          Connect your own Porter or Shiprocket Quick account. The provider bills your account; Orbit Mart
           quotes the customer and requests a rider only when you tap Dispatch.
         </p>
       </Card>
