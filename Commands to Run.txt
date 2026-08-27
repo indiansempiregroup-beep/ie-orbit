@@ -251,6 +251,9 @@ corepack pnpm exec expo start --port 8083 --clear --lan
 #     platform Android, profile rupali-sirsat-production-preview, base dir mobile
 #   Ops project → Builds → Build from GitHub
 #     platform Android, profile production-preview, base dir apps/ops-mobile
+#   Ops iOS Simulator (no Apple Developer account):
+#     platform iOS, profile production-preview-ios-simulator, base dir apps/ops-mobile
+#   Physical iPhone without Apple account: https://ops.ie-orbit.com in Safari
 
 # Option B — local CLI (uses uncommitted files; run once per app, let Expo generate the keystore)
 cd mobile

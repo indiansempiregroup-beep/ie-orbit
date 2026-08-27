@@ -59,6 +59,7 @@ Configured in `apps/ops-mobile/eas.json`:
 |---|---|---|
 | `preview` | Internal | `https://api.ieorbit.local/api/v1` |
 | `production-preview` | Internal APK | `https://api.ie-orbit.com/api/v1` |
+| `production-preview-ios-simulator` | iOS Simulator (no Apple Developer account) | `https://api.ie-orbit.com/api/v1` |
 | `production` | Store | `https://api.ie-orbit.com/api/v1` |
 
 Sideload a live-API Android APK (no Play Store account):
@@ -68,7 +69,14 @@ cd apps/ops-mobile
 corepack pnpm eas:build:production-preview
 ```
 
-iOS internal/TestFlight still requires a paid Apple Developer account.
+iOS on a Mac Simulator (no Apple Developer account):
+
+```bash
+cd apps/ops-mobile
+corepack pnpm eas:build:production-preview:ios-simulator
+```
+
+On a physical iPhone, use **https://ops.ie-orbit.com** in Safari until you buy an Apple Developer account. TestFlight / device IPA still requires that account.
 
 ## App identity
 

@@ -1,0 +1,22 @@
+---
+description: Keep secrets and important ops files in ~/Sanket/IMP, never in git
+alwaysApply: true
+---
+
+# Important files live in Sanket/IMP
+
+Canonical local vault for credentials, SSH keys, and ops notes:
+
+`/Users/sanketpathak/Sanket/IMP`
+
+## Do
+
+- Read that folder first when you need SSH keys, VPS access, tokens, or other secrets.
+- Write new important files there (keys, connection notes, credential backups, runbooks with secrets).
+- Keep OpenSSH working copies in `~/.ssh` as required; treat IMP as the durable backup.
+- Never commit IMP contents, private keys, or production `.env` files to git.
+
+## Do not
+
+- Put secrets in the ie-orbit repo, docs repos, chat dumps, or scratch files in the project tree.
+- Print private key material in replies.

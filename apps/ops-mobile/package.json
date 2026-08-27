@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "eas:build:preview": "eas build --profile preview --platform android",
     "eas:build:production-preview": "eas build --profile production-preview --platform android",
+    "eas:build:production-preview:ios-simulator": "eas build --profile production-preview-ios-simulator --platform ios",
     "eas:build:production": "eas build --profile production --platform all"
   },
   "dependencies": {

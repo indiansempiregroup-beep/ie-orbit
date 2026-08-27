@@ -34,7 +34,7 @@
     "demo-main-production-preview": {
       "distribution": "internal",
       "android": {
-        "image": "latest",
+        "image": "sdk-54",
         "buildType": "apk"
       },
       "env": {
@@ -80,7 +80,7 @@
     "empire-salon-production-preview": {
       "distribution": "internal",
       "android": {
-        "image": "latest",
+        "image": "sdk-54",
         "buildType": "apk"
       },
       "env": {
@@ -126,7 +126,7 @@
     "rupali-sirsat-production-preview": {
       "distribution": "internal",
       "android": {
-        "image": "latest",
+        "image": "sdk-54",
         "buildType": "apk"
       },
       "env": {
