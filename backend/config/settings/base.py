@@ -152,6 +152,16 @@ BACKUP_S3_PREFIX = os.getenv("BACKUP_S3_PREFIX", "backups/postgres").strip()
 BACKUP_LOCAL_RETENTION_DAYS = os.getenv("BACKUP_LOCAL_RETENTION_DAYS", "").strip()
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DEFAULT_FROM_EMAIL = ENV.default_from_email
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
 AUTH_USER_MODEL = "authentication.User"
 
 REST_FRAMEWORK = {

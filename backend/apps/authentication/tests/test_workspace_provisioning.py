@@ -36,6 +36,47 @@ def _payload(**overrides: object) -> dict[str, object]:
 
 
 @pytest.mark.django_db
+def test_register_business_succeeds_when_verification_email_fails(
+    api_client: APIClient, monkeypatch: pytest.MonkeyPatch, settings
+) -> None:
+    settings.DEBUG = False
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise ConnectionRefusedError("smtp down")
+
+    monkeypatch.setattr("apps.authentication.services.verification.send_mail", _boom)
+
+    response = api_client.post(
+        reverse("auth-register-business"),
+        _payload(email="owner-mailfail@example.com", slug="mailfail-salon"),
+        format="json",
+    )
+
+    assert response.status_code == 201, response.content
+    assert Tenant.objects.filter(slug="mailfail-salon").exists()
+    assert User.objects.filter(email="owner-mailfail@example.com").exists()
+
+
+@pytest.mark.django_db
+def test_register_business_accepts_high_precision_map_pin(api_client: APIClient) -> None:
+    response = api_client.post(
+        reverse("auth-register-business"),
+        _payload(
+            email="mappin@example.com",
+            slug="map-pin-salon",
+            latitude=18.4590741234,
+            longitude=73.8462491234,
+        ),
+        format="json",
+    )
+
+    assert response.status_code == 201, response.content
+    business = response.json()["data"]["business"]
+    assert str(business["latitude"]).startswith("18.459074")
+    assert str(business["longitude"]).startswith("73.846249")
+
+
+@pytest.mark.django_db
 def test_register_business_provisions_workspace_and_session(api_client: APIClient) -> None:
     response = api_client.post(
         reverse("auth-register-business"),

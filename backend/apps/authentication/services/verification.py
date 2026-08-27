@@ -47,8 +47,6 @@ class EmailVerificationService:
             )
         except Exception:
             logger.exception("Failed to send verification email to %s", user.email)
-            if not settings.DEBUG:
-                raise
         return VerificationRequest(token=token, user=user)
 
     def verify(self, *, token: str) -> User:

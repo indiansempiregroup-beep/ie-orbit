@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from django.core.exceptions import PermissionDenied
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from rest_framework import exceptions, status
 from rest_framework.views import exception_handler
@@ -18,6 +19,9 @@ def global_exception_handler(exc: Exception, context: dict[str, Any]) -> Any:
 
     if isinstance(exc, exceptions.ValidationError):
         return validation_response(response.data if response else _detail(exc))
+
+    if isinstance(exc, DjangoValidationError):
+        return validation_response(_django_validation_details(exc))
 
     if isinstance(exc, exceptions.AuthenticationFailed):
         return error_response(
@@ -73,6 +77,14 @@ def _response_details(response: Any) -> Any:
 
 def _detail(exc: Exception) -> Any:
     return getattr(exc, "detail", str(exc))
+
+
+def _django_validation_details(exc: DjangoValidationError) -> Any:
+    if hasattr(exc, "message_dict"):
+        return exc.message_dict
+    if hasattr(exc, "messages"):
+        return list(exc.messages)
+    return str(exc)
 
 
 def _message_from_detail(detail: Any) -> str:

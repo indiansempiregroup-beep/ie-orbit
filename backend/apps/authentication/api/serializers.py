@@ -6,6 +6,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from apps.authentication.models import User
+from apps.common.api.fields import CoordinateField
 from apps.common.utils.urls import normalize_stored_asset_url
 
 
@@ -85,8 +86,8 @@ class RegisterBusinessSerializer(serializers.Serializer):
     city = serializers.CharField(required=False, allow_blank=True)
     postal_code = serializers.CharField(required=False, allow_blank=True)
     address_line1 = serializers.CharField(required=False, allow_blank=True)
-    latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
-    longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
+    latitude = CoordinateField(min_value=-90, max_value=90)
+    longitude = CoordinateField(min_value=-180, max_value=180)
     timezone = serializers.CharField(required=False, allow_blank=True, default="UTC")
     currency = serializers.CharField(required=False, allow_blank=True, default="USD")
     language = serializers.CharField(required=False, allow_blank=True, default="en")
