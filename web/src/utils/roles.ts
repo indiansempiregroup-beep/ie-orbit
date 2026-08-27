@@ -38,8 +38,15 @@ export function isPlatformAdminOnly(user: UserProfile | null | undefined): boole
   return isPlatformAdmin(user) && !hasTenantOpsRole(user);
 }
 
+export const VERIFY_EMAIL_PATH = '/auth/verify-email';
+
+export function needsEmailVerification(user: UserProfile | null | undefined): boolean {
+  return Boolean(user && !user.email_verified_at);
+}
+
 /** Default landing route after sign-in. Platform admins use the admin host; tenant ops use Expo web. */
 export function getPostLoginPath(user: UserProfile | null | undefined): string {
+  if (needsEmailVerification(user)) return VERIFY_EMAIL_PATH;
   return isPlatformAdmin(user) ? '/admin' : '/dashboard';
 }
 

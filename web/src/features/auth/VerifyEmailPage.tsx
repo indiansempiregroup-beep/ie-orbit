@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { Button } from '../../components/Button';
@@ -7,25 +7,30 @@ import { Input } from '../../components/Input';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useEmailVerification } from '../../hooks/useEmailVerification';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { hasTenantOpsRole, isPlatformAdmin } from '../../utils/roles';
-import { continueAfterAuth, redirectToAdminApp } from '../../lib/authRedirect';
-import { getAdminAppOrigin } from '../../lib/hosts';
-import { redirectToOpsMobileWeb } from '../../lib/impersonation';
+import { continueAfterAuth } from '../../lib/authRedirect';
+import { needsEmailVerification } from '../../utils/roles';
 
 type VerifyEmailPageProps = {
   token?: string;
+};
+
+type LocationState = {
+  fromOnboarding?: boolean;
 };
 
 export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
   usePageMeta({ title: 'Verify email — IE Orbit' });
   const auth = useAuthContext();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromOnboarding = Boolean((location.state as LocationState | null)?.fromOnboarding);
   const { resendState, message: resendMessage, debugToken, resendVerification } = useEmailVerification();
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(token ? 'loading' : 'idle');
   const [message, setMessage] = useState('');
   const [code, setCode] = useState(token ?? '');
   const accessToken = auth.token;
   const restore = auth.restore;
+  const continuedRef = useRef(false);
 
   async function submitToken(verificationToken: string) {
     const trimmed = verificationToken.trim();
@@ -76,23 +81,14 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const tenantOps = hasTenantOpsRole(auth.user);
-  const profilePath = isPlatformAdmin(auth.user) ? '/admin/profile' : '/profile';
+  useEffect(() => {
+    if (auth.loading || needsEmailVerification(auth.user) || !auth.user || continuedRef.current) return;
+    continuedRef.current = true;
+    continueAfterAuth(auth.user, (path) => navigate(path, { replace: true }));
+  }, [auth.loading, auth.user, navigate]);
 
   function goToApp() {
-    continueAfterAuth(auth.user, navigate);
-  }
-
-  function goToProfile() {
-    if (tenantOps) {
-      redirectToOpsMobileWeb();
-      return;
-    }
-    if (isPlatformAdmin(auth.user) && window.location.origin !== getAdminAppOrigin()) {
-      redirectToAdminApp(profilePath);
-      return;
-    }
-    navigate(profilePath);
+    continueAfterAuth(auth.user, (path) => navigate(path, { replace: true }));
   }
 
   if (token && status === 'loading') {
@@ -105,10 +101,7 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
         <h1>Email verified</h1>
         <p role="status">{message}</p>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Button variant="primary" type="button" onClick={goToProfile}>
-            View profile
-          </Button>
-          <Button variant="ghost" type="button" onClick={goToApp}>
+          <Button variant="primary" type="button" onClick={goToApp}>
             Continue
           </Button>
         </div>
@@ -118,8 +111,13 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
 
   return (
     <>
-      <h1>Email verification</h1>
+      <h1>{fromOnboarding ? 'Workspace created' : 'Verify your email'}</h1>
       <p className="auth-lead">
+        {fromOnboarding
+          ? 'Confirm your email to open your workspace. This step is required.'
+          : 'Confirm your email to continue. This step is required.'}
+      </p>
+      <p className="auth-lead" style={{ marginTop: 8 }}>
         {auth.user?.email
           ? `We sent a 6-digit code to ${auth.user.email}. Enter it below, or open the link from the email.`
           : 'Enter the 6-digit code from your email, or resend it below.'}
@@ -163,11 +161,6 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
         >
           {resendState === 'loading' ? 'Sending…' : resendState === 'sent' ? 'Email sent' : 'Resend verification email'}
         </Button>
-        {auth.token ? (
-          <Button variant="ghost" type="button" onClick={goToProfile}>
-            Back to profile
-          </Button>
-        ) : null}
       </div>
       {resendMessage ? <p role="status" style={{ marginTop: 16 }}>{resendMessage}</p> : null}
       {debugToken ? (
@@ -185,8 +178,15 @@ export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
       ) : null}
       {auth.token ? (
         <p className="auth-links">
-          <button type="button" className="auth-links" onClick={goToApp} style={{ background: 'none', border: 0, padding: 0, color: 'inherit', cursor: 'pointer' }}>
-            Go to workspace
+          <button
+            type="button"
+            className="auth-links"
+            onClick={() => {
+              void auth.logout();
+            }}
+            style={{ background: 'none', border: 0, padding: 0, color: 'inherit', cursor: 'pointer' }}
+          >
+            Sign out
           </button>
         </p>
       ) : (

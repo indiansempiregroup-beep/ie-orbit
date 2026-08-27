@@ -8,7 +8,7 @@ import {
   isPublicMarketingPath,
 } from '../lib/hosts';
 import { continueAfterAuth, redirectToAdminApp } from '../lib/authRedirect';
-import { isPlatformAdmin } from '../utils/roles';
+import { isPlatformAdmin, needsEmailVerification, VERIFY_EMAIL_PATH } from '../utils/roles';
 
 function Status({ children }: { children: string }) {
   return <p role="status">{children}</p>;
@@ -25,7 +25,7 @@ export function HostGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!separate) return;
-    if (onAdmin && path === '/' && auth.user && !isPlatformAdmin(auth.user)) {
+    if (onAdmin && path === '/' && auth.user && !isPlatformAdmin(auth.user) && !needsEmailVerification(auth.user)) {
       continueAfterAuth(auth.user, (next) => {
         window.location.assign(next);
       });
@@ -46,6 +46,9 @@ export function HostGate({ children }: { children: ReactNode }) {
 
   if (onAdmin && path === '/') {
     if (auth.loading) return <Status>Opening admin…</Status>;
+    if (auth.user && needsEmailVerification(auth.user)) {
+      return <Navigate to={VERIFY_EMAIL_PATH} replace />;
+    }
     if (auth.user && isPlatformAdmin(auth.user)) {
       return <Navigate to="/admin" replace />;
     }

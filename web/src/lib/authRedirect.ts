@@ -2,7 +2,14 @@ import type { UserProfile } from '@ie-orbit/sdk';
 import { getAdminAppOrigin, isAdminAppHost } from './hosts';
 import { redirectToOpsMobileWeb } from './impersonation';
 import { encodeSessionHandoff } from './sessionHandoff';
-import { getPostLoginPath, hasTenantOpsRole, isPlatformAdmin, isPlatformAdminOnly } from '../utils/roles';
+import {
+  getPostLoginPath,
+  hasTenantOpsRole,
+  isPlatformAdmin,
+  isPlatformAdminOnly,
+  needsEmailVerification,
+  VERIFY_EMAIL_PATH,
+} from '../utils/roles';
 
 const ACCESS_KEY = 'ie:auth:access';
 const REFRESH_KEY = 'ie:auth:refresh';
@@ -38,6 +45,11 @@ export function continueAfterAuth(
   navigate: (path: string) => void,
 ) {
   if (typeof window === 'undefined') return;
+
+  if (needsEmailVerification(user)) {
+    navigate(VERIFY_EMAIL_PATH);
+    return;
+  }
 
   if (isAdminAppHost() && isPlatformAdmin(user)) {
     navigate(getPostLoginPath(user));

@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { hasTenantOpsRole } from '../utils/roles';
+import { hasTenantOpsRole, needsEmailVerification, VERIFY_EMAIL_PATH } from '../utils/roles';
 import { OpsMobileRedirect } from '../components/OpsMobileRedirect';
 
 export function ProtectedRoute() {
@@ -21,6 +21,10 @@ export function ProtectedRoute() {
 
   if (!auth.token) {
     return <Navigate to="/auth" replace />;
+  }
+
+  if (needsEmailVerification(auth.user)) {
+    return <Navigate to={VERIFY_EMAIL_PATH} replace />;
   }
 
   if (hasTenantOpsRole(auth.user)) {

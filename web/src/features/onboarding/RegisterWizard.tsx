@@ -46,6 +46,7 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { createAuthenticatedClient, getApiErrorMessage } from '../../lib/apiClient';
 import { summarizeWeeklyHours } from '../../lib/businessHours';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { VERIFY_EMAIL_PATH } from '../../utils/roles';
 
 const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
   appointie: [
@@ -241,7 +242,7 @@ export function RegisterWizard() {
       await auth.bootstrapSession(payload);
       clearStoredAffiliateCode();
       clearDraft();
-      navigate('/onboarding/success');
+      navigate(VERIFY_EMAIL_PATH, { replace: true, state: { fromOnboarding: true } });
     } catch (err) {
       setProvisionError(getApiErrorMessage(err, 'Provisioning failed.'));
       setStepIndex(REGISTER_WIZARD_STEPS.findIndex((step) => step.id === 'review'));

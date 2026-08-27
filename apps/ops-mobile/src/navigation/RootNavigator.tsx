@@ -143,7 +143,7 @@ const stackScreen = (
 
 export function RootNavigator() {
   const { t } = useTranslation();
-  const { user, token, loading: authLoading } = useAuth();
+  const { user, token, loading: authLoading, isImpersonating } = useAuth();
   const { ready } = useWorkspace();
   const [bootstrapped, setBootstrapped] = useState(false);
   const [activeRoute, setActiveRoute] = useState<string | undefined>();
@@ -152,6 +152,7 @@ export function RootNavigator() {
   const platformAdminOnly = isPlatformAdminOnly(user);
   const tenantOps = hasTenantOpsRole(user);
   const opsAccess = hasOpsAccess(user) && tenantOps;
+  const needsEmailVerification = Boolean(isAuthenticated && !user?.email_verified_at && !isImpersonating);
 
   useEffect(() => {
     // Don't gate the tree on workspace fetch — picker handles loading/errors.
@@ -195,6 +196,10 @@ export function RootNavigator() {
       ) : !opsAccess ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="NoAccess" component={NoAccessScreen} />
+        </Stack.Navigator>
+      ) : needsEmailVerification ? (
+        <Stack.Navigator key="verify-email" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
         </Stack.Navigator>
       ) : showWorkspacePicker ? (
         <Stack.Navigator key="workspace-picker" screenOptions={{ headerShown: false }}>
