@@ -51,6 +51,25 @@ The ops workspace is also a static Expo web build at **https://ops.ie-orbit.com*
 
 `cd apps/ops-mobile && corepack pnpm export:web` writes `dist/` for that build; production nginx builds it inside `docker/nginx/Dockerfile`.
 
+## EAS native builds
+
+Configured in `apps/ops-mobile/eas.json`:
+
+| Profile | Distribution | API |
+|---|---|---|
+| `preview` | Internal | `https://api.ieorbit.local/api/v1` |
+| `production-preview` | Internal APK | `https://api.ie-orbit.com/api/v1` |
+| `production` | Store | `https://api.ie-orbit.com/api/v1` |
+
+Sideload a live-API Android APK (no Play Store account):
+
+```bash
+cd apps/ops-mobile
+corepack pnpm eas:build:production-preview
+```
+
+iOS internal/TestFlight still requires a paid Apple Developer account.
+
 ## App identity
 
 - iOS/Android: `com.ieorbit.ops`

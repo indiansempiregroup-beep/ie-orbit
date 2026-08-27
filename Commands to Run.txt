@@ -239,3 +239,25 @@ export EXPO_PUBLIC_FLAVOR_KEY="rupali-s-business-rupali-s-business"
 export EXPO_PUBLIC_APP_NAME="Rupali Sirsat"
 export EXPO_NO_METRO_WORKSPACE_ROOT="1"
 corepack pnpm exec expo start --port 8083 --clear --lan
+
+
+# Live Interserver APK (no Play / Apple account)
+# Customer EAS: d3605998-b92a-497d-a72f-8028df3ca64d  (base directory: mobile)
+# Ops EAS:      b897b310-e21b-49ab-b58f-56b8da1867f3  (base directory: apps/ops-mobile)
+# Do NOT run create-expo-app.
+
+# Option A — Expo dashboard (after committing/pushing these EAS config changes):
+#   Customer project → Builds → Build from GitHub
+#     platform Android, profile rupali-sirsat-production-preview, base dir mobile
+#   Ops project → Builds → Build from GitHub
+#     platform Android, profile production-preview, base dir apps/ops-mobile
+
+# Option B — local CLI (uses uncommitted files; run once per app, let Expo generate the keystore)
+cd mobile
+corepack pnpm exec eas login
+corepack pnpm exec eas init --id d3605998-b92a-497d-a72f-8028df3ca64d --force --non-interactive
+corepack pnpm eas:build:rupali:production-preview
+
+cd ../apps/ops-mobile
+corepack pnpm exec eas init --id b897b310-e21b-49ab-b58f-56b8da1867f3 --force --non-interactive
+corepack pnpm eas:build:production-preview

@@ -129,7 +129,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       '',
     eas: {
       ...(typeof config.extra?.eas === 'object' && config.extra.eas ? config.extra.eas : {}),
-      projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '',
+      projectId:
+        (process.env.EXPO_PUBLIC_OPS_EAS_PROJECT_ID || '').trim() ||
+        'b897b310-e21b-49ab-b58f-56b8da1867f3',
     },
   },
 });

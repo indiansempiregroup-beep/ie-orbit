@@ -103,7 +103,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     tenantSlug: selectedFlavor?.tenantSlug,
     businessCode: selectedFlavor?.businessCode,
     eas: {
-      projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '',
+      projectId:
+        (process.env.EXPO_PUBLIC_EAS_PROJECT_ID || '').trim() ||
+        'd3605998-b92a-497d-a72f-8028df3ca64d',
     },
   },
   plugins: [

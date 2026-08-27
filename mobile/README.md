@@ -49,12 +49,21 @@ pnpm --filter @ie-orbit/mobile start
 
 Configured in `mobile/eas.json`:
 
-- `demo-main-preview` / `demo-main-production`
-- `empire-salon-preview` / `empire-salon-production`
+| Profile suffix | Distribution | API |
+|---|---|---|
+| `*-preview` | Internal | `http://localhost:8000/api/v1` |
+| `*-production-preview` | Internal APK | `https://api.ie-orbit.com/api/v1` |
+| `*-production` | Store | `https://api.ie-orbit.com/api/v1` |
 
-Build commands:
+Use `production-preview` to sideload an Android APK against the live Interserver API. No Play Store or Apple Developer account is required for Android. iOS internal/TestFlight builds still need a paid Apple account.
 
 ```bash
+# Live-API APK (recommended before buying store accounts)
+pnpm --filter @ie-orbit/mobile eas:build:rupali:production-preview
+pnpm --filter @ie-orbit/mobile eas:build:demo:production-preview
+pnpm --filter @ie-orbit/mobile eas:build:empire:production-preview
+
+# Local-API preview / store builds
 pnpm --filter @ie-orbit/mobile eas:build:demo:preview
 pnpm --filter @ie-orbit/mobile eas:build:empire:preview
 ```
@@ -62,10 +71,11 @@ pnpm --filter @ie-orbit/mobile eas:build:empire:preview
 Or directly:
 
 ```bash
+cd mobile && ./scripts/build-flavor.sh rupali-sirsat-production-preview android
 cd mobile && ./scripts/build-flavor.sh demo-main-preview ios
 ```
 
-Set `EXPO_PUBLIC_EAS_PROJECT_ID` after `eas init`.
+Install the APK from the EAS page (allow “Install unknown apps”). Set `EXPO_PUBLIC_EAS_PROJECT_ID` after `eas init`.
 
 ## API contract
 

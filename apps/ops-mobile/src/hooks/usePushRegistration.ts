@@ -11,7 +11,7 @@ function resolveEasProjectId(): string {
   if (typeof fromExtra === 'string' && fromExtra.trim()) {
     return fromExtra.trim();
   }
-  return (process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '').trim();
+  return (process.env.EXPO_PUBLIC_OPS_EAS_PROJECT_ID ?? '').trim();
 }
 
 Notifications.setNotificationHandler({

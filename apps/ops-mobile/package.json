@@ -10,7 +10,10 @@
     "android": "node ./start-expo.cjs run:android",
     "ios": "node ./start-expo.cjs run:ios",
     "postinstall": "node ./scripts/patch-metro-windows.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eas:build:preview": "eas build --profile preview --platform android",
+    "eas:build:production-preview": "eas build --profile production-preview --platform android",
+    "eas:build:production": "eas build --profile production --platform all"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",
