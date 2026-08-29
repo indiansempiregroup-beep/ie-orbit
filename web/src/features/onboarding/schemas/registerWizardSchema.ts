@@ -58,7 +58,7 @@ export const registerWizardSchema = z
     mobile: z.string().min(6, 'Enter a valid mobile number'),
     password: z.string(),
     confirmPassword: z.string(),
-    googleIdToken: z.string().optional().default(''),
+    googleIdToken: z.string(),
     acceptTerms: z.boolean().refine((value) => value, 'Accept the terms to continue'),
     acceptPrivacy: z.boolean().refine((value) => value, 'Accept the privacy policy to continue'),
     currency: z.string().length(3, 'Select a currency'),
