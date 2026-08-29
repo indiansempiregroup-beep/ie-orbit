@@ -14,6 +14,8 @@ import type {
   ShopEWayGenerateInput,
   ShopOrderCreateInput,
   ShopPetWriteInput,
+  ShopProductBulkCreateInput,
+  ShopProductBulkPatchInput,
   ShopProductWriteInput,
   ShopReturnCreateInput,
   ShopSupplierWriteInput,
@@ -278,6 +280,28 @@ export function useShopProductMutations() {
     },
   });
 
+  const createBulk = useMutation({
+    mutationFn: async (body: Omit<ShopProductBulkCreateInput, 'business_id'>) => {
+      const response = await client.shop.createProductsBulk({ ...body, business_id: businessId });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shop-products'] });
+      queryClient.invalidateQueries({ queryKey: ['shop-godowns'] });
+    },
+  });
+
+  const patchBulk = useMutation({
+    mutationFn: async (body: Omit<ShopProductBulkPatchInput, 'business_id'>) => {
+      const response = await client.shop.patchProductsBulk({ ...body, business_id: businessId });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shop-products'] });
+      queryClient.invalidateQueries({ queryKey: ['shop-godowns'] });
+    },
+  });
+
   const lookup = useMutation({
     mutationFn: async (code: string) => {
       const response = await client.shop.lookupBarcode({ business_id: businessId, code });
@@ -358,6 +382,8 @@ export function useShopProductMutations() {
   return {
     create,
     update,
+    createBulk,
+    patchBulk,
     lookup,
     lookupBulk,
     enrich,

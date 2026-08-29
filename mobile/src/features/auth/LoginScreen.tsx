@@ -26,6 +26,7 @@ import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/b
 import { getApiErrorMessage } from '../../utils/format';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { AuthStackParamList } from '../../navigation/types';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -33,6 +34,7 @@ export function LoginScreen({ navigation }: Props) {
   const { t } = useTranslation();
   const {
     login,
+    loginWithGoogle,
     loginWithBiometrics,
     enableBiometrics,
     loading,
@@ -201,6 +203,13 @@ export function LoginScreen({ navigation }: Props) {
             loading={(submitting || loading) && !biometricBusy}
             primaryColor={primary}
             onPress={onSubmit}
+          />
+          <GoogleSignInButton
+            disabled={loading || submitting || biometricBusy}
+            onIdToken={async (idToken) => {
+              await loginWithGoogle(idToken, remember);
+              await offerBiometricEnrollment();
+            }}
           />
         </View>
 

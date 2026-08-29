@@ -153,6 +153,67 @@ class ShopProductPatchSerializer(ShopProductWriteSerializer):
     business_id = serializers.UUIDField(required=False)
 
 
+BULK_PRODUCT_LIMIT = 200
+
+
+class ShopProductBulkItemSerializer(ShopProductWriteSerializer):
+    business_id = serializers.UUIDField(required=False)
+    category = serializers.CharField(required=False, allow_blank=True, max_length=64)
+
+
+class ShopProductBulkCreateSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    godown_id = serializers.UUIDField(required=False, allow_null=True)
+    items = ShopProductBulkItemSerializer(many=True)
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("Provide at least one product.")
+        if len(value) > BULK_PRODUCT_LIMIT:
+            raise serializers.ValidationError(
+                f"A maximum of {BULK_PRODUCT_LIMIT} products can be created at once."
+            )
+        return value
+
+
+class ShopProductBulkPriceUpdateSerializer(serializers.Serializer):
+    set = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    percent = serializers.DecimalField(max_digits=7, decimal_places=2, required=False)
+
+    def validate(self, attrs):
+        if attrs.get("set") is None and attrs.get("percent") is None:
+            raise serializers.ValidationError("Provide set or percent.")
+        if attrs.get("set") is not None and attrs.get("percent") is not None:
+            raise serializers.ValidationError("Provide only one of set or percent.")
+        return attrs
+
+
+class ShopProductBulkUpdatesSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=ProductStatus.choices, required=False)
+    category = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    gst_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+    tax_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+    price = ShopProductBulkPriceUpdateSerializer(required=False)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("Provide at least one update.")
+        return attrs
+
+
+class ShopProductBulkPatchSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+    updates = ShopProductBulkUpdatesSerializer()
+
+    def validate_ids(self, value):
+        if len(value) > BULK_PRODUCT_LIMIT:
+            raise serializers.ValidationError(
+                f"A maximum of {BULK_PRODUCT_LIMIT} products can be updated at once."
+            )
+        return value
+
+
 class BarcodeLookupSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     code = serializers.CharField(max_length=128)

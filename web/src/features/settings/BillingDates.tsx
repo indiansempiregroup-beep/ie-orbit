@@ -1,5 +1,6 @@
 import type { BusinessBillingSnapshot } from '@ie-orbit/sdk';
 import { formatDate } from '../../lib/datetime';
+import { formatPlanDisplayName } from '../../config/products';
 
 type Props = {
   billing: Pick<
@@ -36,7 +37,7 @@ export function BillingDates({ billing, className }: Props) {
     rows.push({ label: 'Current plan locked until', value: formatDate(billing.plan_locked_until) });
   }
   if (billing.pending_plan_code) {
-    rows.push({ label: 'Next plan', value: billing.pending_plan_code });
+    rows.push({ label: 'Next plan', value: formatPlanDisplayName(undefined, billing.pending_plan_code) });
     rows.push({ label: 'Next plan starts', value: formatDate(billing.plan_change_effective_at) });
   }
 

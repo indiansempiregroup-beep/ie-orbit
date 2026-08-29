@@ -36,6 +36,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'IE Orbit',
   slug: 'ie-orbit-ops',
+  owner: 'indians-empire',
+  scheme: 'ieorbitops',
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
@@ -127,6 +129,20 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ||
       process.env.GOOGLE_PLACES_API_KEY ||
       '',
+    googleOAuth: {
+      clientId:
+        process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID ||
+        process.env.GOOGLE_OAUTH_CLIENT_ID ||
+        '',
+      iosClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_OAUTH_OPS_IOS_CLIENT_ID ||
+        process.env.GOOGLE_OAUTH_OPS_IOS_CLIENT_ID ||
+        '',
+      androidClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID ||
+        process.env.GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID ||
+        '',
+    },
     eas: {
       ...(typeof config.extra?.eas === 'object' && config.extra.eas ? config.extra.eas : {}),
       projectId:

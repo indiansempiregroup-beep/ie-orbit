@@ -19,7 +19,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { PlatformTenantSummary } from '@ie-orbit/sdk';
 import { voucherStatusStyle } from '../shop/shopBooksHelpers';
 import { shopListRefreshControl } from '../shop/shopRefreshControl';
-import { getProductName } from '../../utils/products';
+import { formatPlanDisplayName, getProductName } from '../../utils/products';
 
 export function PlatformAdminTenantsScreen() {
   const insets = useSafeAreaInsets();
@@ -65,10 +65,10 @@ export function PlatformAdminTenantsScreen() {
             const badge = voucherStatusStyle(item.status);
             const products = item.products?.length
               ? item.products
-                  .map((product) => `${getProductName(product.product_code)} ${product.plan_code || ''}`.trim())
+                  .map((product) => `${getProductName(product.product_code)} ${formatPlanDisplayName(undefined, product.plan_code)}`.trim())
                   .join(' · ')
               : item.plan_code
-                ? `${item.product_code ? getProductName(item.product_code) : ''} ${item.plan_code}`.trim()
+                ? `${item.product_code ? getProductName(item.product_code) : ''} ${formatPlanDisplayName(undefined, item.plan_code)}`.trim()
                 : '';
             return (
               <Pressable

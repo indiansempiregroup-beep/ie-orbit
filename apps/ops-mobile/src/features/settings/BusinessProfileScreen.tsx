@@ -10,6 +10,7 @@ import { DetailRow } from '../../components/ui/DetailRow';
 import { ScreenState } from '../../components/ScreenState';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBillingStatus, useTenantSettings } from '../../hooks/useOpsExtended';
+import { getProductName } from '../../utils/products';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -41,7 +42,14 @@ export function BusinessProfileScreen() {
         <DetailRow label="Website" value={activeBusiness?.website ?? '—'} />
         <DetailRow label="Address" value={activeBusiness?.address_line1 ?? '—'} />
         <DetailRow label="Location" value={location} />
-        <DetailRow label="Product" value={activeBusiness?.selected_product ?? settings?.product_name ?? '—'} />
+        <DetailRow
+          label="Product"
+          value={
+            activeBusiness?.selected_product
+              ? getProductName(activeBusiness.selected_product)
+              : settings?.product_name ?? '—'
+          }
+        />
         <DetailRow label="Timezone" value={activeBusiness?.timezone ?? '—'} />
         <DetailRow label="Currency" value={activeBusiness?.currency ?? '—'} />
         <DetailRow

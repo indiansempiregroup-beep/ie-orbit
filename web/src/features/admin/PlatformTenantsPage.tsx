@@ -15,6 +15,7 @@ import {
   AdminStatus,
   AdminTable,
   downloadTextFile,
+  planLabel,
   productLabel,
 } from './AdminChrome';
 import { useInvalidatePlatform, usePlatformTenantsQuery } from './adminHooks';
@@ -161,7 +162,7 @@ export function PlatformTenantsPage() {
                     <div style={{ display: 'grid', gap: 8 }}>
                       {(tenant.products ?? []).map((product) => (
                         <div key={product.product_code}>
-                          {product.plan_code || '—'}
+                          {planLabel(product.plan_code)}
                           <div className="admin-table__muted">
                             {productLabel(product.product_code)}
                             {product.billing_state ? ` · ${product.billing_state.replace(/_/g, ' ')}` : ''}
@@ -171,7 +172,7 @@ export function PlatformTenantsPage() {
                     </div>
                   ) : (
                     <>
-                      {tenant.plan_code || '—'}
+                      {planLabel(tenant.plan_code)}
                       {tenant.product_code ? (
                         <div className="admin-table__muted">{productLabel(tenant.product_code)}</div>
                       ) : null}

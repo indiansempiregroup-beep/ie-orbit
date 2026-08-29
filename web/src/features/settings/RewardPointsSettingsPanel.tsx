@@ -88,7 +88,7 @@ export function RewardPointsSettingsPanel() {
         {!planEntitled ? (
           <div className="reward-points-notice reward-points-notice--warn">
             <strong>Plan upgrade required.</strong>{' '}
-            <Link to="/settings/billing">Upgrade in billing</Link> to unlock reward points.
+            <Link to="/settings/products">Upgrade in Products & billing</Link> to unlock reward points.
           </div>
         ) : null}
         {planEntitled && softLocked ? (

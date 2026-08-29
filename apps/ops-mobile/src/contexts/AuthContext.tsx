@@ -70,6 +70,7 @@ type AuthState = {
   biometricAvailable: boolean;
   biometricLabel: string;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  loginWithGoogle: (idToken: string, rememberMe?: boolean) => Promise<void>;
   loginWithBiometrics: () => Promise<void>;
   /** Enable Face ID / fingerprint using the current session (Face ID only — no password). */
   enableBiometrics: () => Promise<void>;
@@ -361,6 +362,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applySession, refreshBiometricState]);
 
+  const loginWithGoogle = useCallback(async (idToken: string, rememberMe = true) => {
+    setLoading(true);
+    try {
+      await clearImpersonationHandoff();
+      setIsImpersonating(false);
+      const response = await opsClient.auth.loginWithGoogle({
+        id_token: idToken,
+        client: 'ops',
+        remember_me: rememberMe,
+      });
+      await applySession(response.data);
+      await refreshBiometricState();
+    } finally {
+      setLoading(false);
+    }
+  }, [applySession, refreshBiometricState]);
+
   const loginWithBiometrics = useCallback(async () => {
     setLoading(true);
     try {
@@ -541,6 +559,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       biometricAvailable,
       biometricLabel,
       login,
+      loginWithGoogle,
       loginWithBiometrics,
       enableBiometrics,
       disableBiometrics,
@@ -560,6 +579,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       biometricAvailable,
       biometricLabel,
       login,
+      loginWithGoogle,
       loginWithBiometrics,
       enableBiometrics,
       disableBiometrics,

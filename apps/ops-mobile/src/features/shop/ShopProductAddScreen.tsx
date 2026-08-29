@@ -665,7 +665,6 @@ export function ShopProductAddScreen() {
           ['stock_on_hand', 'Stock on hand'],
           ['low_stock_threshold', 'Low stock alert'],
           ['pack_size', 'Pack size / quantity'],
-          ['barcode', 'Barcode / RFID EPC'],
         ] as const
       ).map(([key, label]) => (
         <View key={key} style={styles.field}>
@@ -683,6 +682,31 @@ export function ShopProductAddScreen() {
           />
         </View>
       ))}
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Barcode / RFID EPC</Text>
+        <View style={styles.row}>
+          <TextInput
+            style={styles.input}
+            value={form.barcode}
+            onChangeText={(value) => setField('barcode', value)}
+            placeholder="Scan or type barcode"
+            placeholderTextColor={colors.mutedForeground}
+          />
+          <Pressable
+            style={styles.lookupBtn}
+            onPress={() =>
+              navigation.navigate('BarcodeScanner', {
+                target: 'addProduct',
+                ...(productId ? { productId } : {}),
+              })
+            }
+            accessibilityLabel="Scan barcode with camera"
+          >
+            <Feather name="camera" size={18} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
 
       {showGodowns && godowns.length ? (
         <SelectField

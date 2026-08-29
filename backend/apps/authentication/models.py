@@ -102,6 +102,36 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         self.save(update_fields=["email_verified_at", "status", "updated_at"])
 
 
+class SocialAccount(BaseModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="social_accounts",
+    )
+    provider = models.CharField(max_length=40, db_index=True)
+    subject = models.CharField(max_length=255)
+    email = models.EmailField(blank=True)
+
+    class Meta:
+        db_table = "social_accounts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "subject"],
+                name="uq_social_account_provider_subject",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "provider"],
+                name="uq_social_account_user_provider",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["provider", "email"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.provider}:{self.subject}"
+
+
 class Role(BaseModel):
     code = models.SlugField(max_length=80, unique=True)
     name = models.CharField(max_length=120)

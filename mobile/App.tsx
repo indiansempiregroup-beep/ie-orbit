@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
 import React from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -10,6 +11,8 @@ import { CartProvider } from './src/features/shop/CartContext';
 import { SplashGate } from './src/components/SplashGate';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { i18n } from './src/i18n';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function App() {
   return (

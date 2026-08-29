@@ -280,6 +280,24 @@ GOOGLE_PLACES_API_KEY = (
     os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
     or os.getenv("GOOGLE_MAPS_SERVER_API_KEY", "").strip()
 )
+
+
+def _google_oauth_client_ids() -> tuple[str, ...]:
+    seen: set[str] = set()
+    client_ids: list[str] = []
+    for key in (
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "GOOGLE_OAUTH_OPS_IOS_CLIENT_ID",
+        "GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID",
+    ):
+        value = os.getenv(key, "").strip()
+        if value and value not in seen:
+            seen.add(value)
+            client_ids.append(value)
+    return tuple(client_ids)
+
+
+GOOGLE_OAUTH_CLIENT_IDS = _google_oauth_client_ids()
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")

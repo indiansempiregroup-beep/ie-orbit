@@ -15,6 +15,7 @@ class BusinessRepository:
         queryset = Business.objects.require_tenant(tenant).select_related("organization").prefetch_related(
             "product_subscriptions",
             "product_subscriptions__plan",
+            "product_subscriptions__pending_plan",
         )
         if not user or not getattr(user, "is_authenticated", False):
             return queryset.none()

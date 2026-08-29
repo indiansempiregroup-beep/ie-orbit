@@ -20,6 +20,7 @@ type AuthState = {
   loading: boolean;
   isImpersonating: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<string>;
+  loginWithGoogle: (idToken: string, remember?: boolean) => Promise<string>;
   bootstrapSession: (payload: WorkspaceProvisionResponse) => Promise<void>;
   logout: (allSessions?: boolean) => Promise<void>;
   restore: () => Promise<void>;
@@ -76,6 +77,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearImpersonationMarkers();
       setIsImpersonating(false);
       const res = await client.auth.login({ email, password, remember_me: remember });
+      const payload = res.data;
+      setToken(payload.access);
+      setUser(payload.user);
+      try {
+        localStorage.setItem(STORAGE_KEY, payload.access);
+        localStorage.setItem(STORAGE_REFRESH, payload.refresh);
+        localStorage.setItem(STORAGE_STARTED, new Date().toISOString());
+      } catch {
+        // ignore storage failures
+      }
+      scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
+      return payload.access;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loginWithGoogle(idToken: string, remember = true) {
+    setLoading(true);
+    try {
+      clearImpersonationMarkers();
+      setIsImpersonating(false);
+      const res = await client.auth.loginWithGoogle({
+        id_token: idToken,
+        client: 'ops',
+        remember_me: remember,
+      });
       const payload = res.data;
       setToken(payload.access);
       setUser(payload.user);
@@ -288,7 +316,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const value = useMemo(
-    () => ({ token, user, loading, isImpersonating, login, bootstrapSession, logout, restore, endImpersonation }),
+    () => ({
+      token,
+      user,
+      loading,
+      isImpersonating,
+      login,
+      loginWithGoogle,
+      bootstrapSession,
+      logout,
+      restore,
+      endImpersonation,
+    }),
     [token, user, loading, isImpersonating],
   );
 

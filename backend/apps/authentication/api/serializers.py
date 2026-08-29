@@ -16,6 +16,12 @@ class LoginSerializer(serializers.Serializer):
     remember_me = serializers.BooleanField(default=False)
 
 
+class GoogleLoginSerializer(serializers.Serializer):
+    id_token = serializers.CharField(write_only=True, trim_whitespace=False)
+    client = serializers.ChoiceField(choices=("customer", "ops"), default="customer")
+    remember_me = serializers.BooleanField(default=True)
+
+
 class RefreshSerializer(serializers.Serializer):
     refresh = serializers.CharField()
 
@@ -68,7 +74,10 @@ class ResendVerificationSerializer(serializers.Serializer):
 
 class RegisterBusinessSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    password = serializers.CharField(
+        write_only=True, trim_whitespace=False, required=False, allow_blank=True
+    )
+    google_id_token = serializers.CharField(write_only=True, required=False, allow_blank=True)
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
     phone_number = serializers.CharField(required=False, allow_blank=True)
@@ -101,6 +110,8 @@ class RegisterBusinessSerializer(serializers.Serializer):
     affiliate_code = serializers.CharField(required=False, allow_blank=True, max_length=40)
 
     def validate_password(self, value: str) -> str:
+        if not value:
+            return value
         validate_password(value)
         return value
 
@@ -116,6 +127,14 @@ class RegisterBusinessSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         from apps.businesses.constants import VALID_PRODUCT_CODES
         from apps.businesses.services.plan_catalog import get_plan_definition_resolved
+
+        google_id_token = str(attrs.get("google_id_token") or "").strip()
+        password = str(attrs.get("password") or "")
+        if not google_id_token and not password:
+            raise serializers.ValidationError(
+                {"password": "Password or Google sign-in is required."}
+            )
+        attrs["google_id_token"] = google_id_token
 
         products: list[str] = []
         for code in attrs.get("selected_products") or []:

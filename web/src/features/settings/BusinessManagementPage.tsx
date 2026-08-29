@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { PRODUCT_CATALOG } from '../../config/products';
+import { PRODUCT_CATALOG, getProductName } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { slugifyBusinessCode } from '../../lib/workspace';
@@ -139,7 +139,7 @@ export function BusinessManagementPage() {
                 <div>
                   <strong>{item.display_name ?? item.business_name}</strong>
                   <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 13 }}>
-                    {item.business_code} · Product: {item.selected_product || 'not set'}
+                    {item.business_code} · Product: {item.selected_product ? getProductName(item.selected_product) : 'not set'}
                   </p>
                 </div>
                 {!isActive ? (

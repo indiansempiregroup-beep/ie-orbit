@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Button } from '../../components/ui/Button';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
@@ -19,7 +19,8 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { brand, colors, radius, spacing, typography } from '../../theme/tokens';
 import { layout } from '../../theme/layout';
 import { getApiErrorMessage } from '../../utils/format';
-import { PRODUCT_CATALOG, getProductName, stripPlanProductPrefix } from '../../utils/products';
+import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../utils/googleAuth';
+import { PRODUCT_CATALOG, formatInrFromPaise, formatPlanDisplayName, getProductName, getRecommendedPlanCode, isRecommendedPlanCode } from '../../utils/products';
 import { opsClient } from '../../api/client';
 import {
   defaultWeeklyHours,
@@ -128,24 +129,39 @@ function defaultValues(): RegisterWizardValues {
     currency: 'INR',
     language: 'en',
     selectedProducts: ['appointie'],
-    planCodes: { appointie: 'appointie-starter' },
+    planCodes: { appointie: 'appointie-pro' },
     skipHours: false,
     businessHours: defaultWeeklyHours(),
     primaryColor: '#0f766e',
     secondaryColor: '#14b8a6',
     logoAsset: null,
     affiliateCode: '',
+    googleIdToken: '',
   };
 }
 
-export function RegisterWizardScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
+function initialValues(params?: AuthStackParamList['RegisterWizard']): RegisterWizardValues {
+  const values = defaultValues();
+  if (!params?.googleIdToken) return values;
+  return {
+    ...values,
+    googleIdToken: params.googleIdToken,
+    email: params.email || '',
+    firstName: params.firstName || '',
+    lastName: params.lastName || '',
+    businessEmail: params.email || '',
+  };
+}
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'RegisterWizard'>;
+
+export function RegisterWizardScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { isDesktop } = useBreakpoint();
-  const { bootstrapSession } = useAuth();
+  const { bootstrapSession, loginWithGoogle } = useAuth();
   const { initializeWorkspace } = useWorkspace();
   const [step, setStep] = useState(0);
-  const [values, setValues] = useState<RegisterWizardValues>(defaultValues);
+  const [values, setValues] = useState<RegisterWizardValues>(() => initialValues(route.params));
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +194,8 @@ export function RegisterWizardScreen() {
       const plans = plansForProduct(productId);
       if (!plans.length) continue;
       if (plans.some((plan) => plan.plan_code === next[productId])) continue;
-      const fallback = plans.find((plan) => plan.is_default) ?? plans[0];
+      const fallbackCode = getRecommendedPlanCode(plans);
+      const fallback = plans.find((plan) => plan.plan_code === fallbackCode) ?? plans[0];
       if (fallback) {
         next[productId] = fallback.plan_code;
         changed = true;
@@ -203,9 +220,12 @@ export function RegisterWizardScreen() {
 
   function validateStep(): string | null {
     if (step === 0) {
-      if (!values.firstName.trim() || !values.email.trim() || !values.password) return 'Fill in account details.';
-      if (values.password.length < 8) return 'Password must be at least 8 characters.';
-      if (values.password !== confirmPassword) return 'Passwords do not match.';
+      if (!values.firstName.trim() || !values.email.trim()) return 'Fill in account details.';
+      if (!values.googleIdToken) {
+        if (!values.password) return 'Fill in account details.';
+        if (values.password.length < 8) return 'Password must be at least 8 characters.';
+        if (values.password !== confirmPassword) return 'Passwords do not match.';
+      }
     }
     if (step === 1) {
       if (!values.businessName.trim() || !values.businessEmail.trim()) return 'Business name and email are required.';
@@ -247,6 +267,30 @@ export function RegisterWizardScreen() {
     <>
       {step === 0 ? (
         <>
+          {!values.googleIdToken ? (
+            <GoogleSignInButton
+              onIdToken={async (idToken) => {
+                try {
+                  await loginWithGoogle(idToken);
+                } catch (err) {
+                  if (!isGoogleAccountNotRegistered(err)) throw err;
+                  const claims = decodeGoogleIdToken(idToken);
+                  patch({
+                    googleIdToken: idToken,
+                    email: claims.email || values.email,
+                    firstName: claims.given_name || values.firstName,
+                    lastName: claims.family_name || values.lastName,
+                    businessEmail: values.businessEmail || claims.email || '',
+                  });
+                }
+              }}
+            />
+          ) : (
+            <View style={styles.googleLinked}>
+              <Text style={styles.googleLinkedTitle}>Continuing with Google</Text>
+              <Text style={styles.googleLinkedCopy}>{values.email}</Text>
+            </View>
+          )}
           <Input label="First name" value={values.firstName} onChangeText={(v) => patch({ firstName: v })} />
           <Input label="Last name" value={values.lastName} onChangeText={(v) => patch({ lastName: v })} />
           <Input
@@ -254,6 +298,7 @@ export function RegisterWizardScreen() {
             autoCapitalize="none"
             keyboardType="email-address"
             value={values.email}
+            editable={!values.googleIdToken}
             onChangeText={(v) => patch({ email: v })}
           />
           <Input
@@ -262,18 +307,22 @@ export function RegisterWizardScreen() {
             value={values.mobile}
             onChangeText={(v) => patch({ mobile: v })}
           />
-          <Input
-            label="Password"
-            secureTextEntry
-            value={values.password}
-            onChangeText={(v) => patch({ password: v })}
-          />
-          <Input
-            label="Confirm password"
-            secureTextEntry
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
+          {!values.googleIdToken ? (
+            <>
+              <Input
+                label="Password"
+                secureTextEntry
+                value={values.password}
+                onChangeText={(v) => patch({ password: v })}
+              />
+              <Input
+                label="Confirm password"
+                secureTextEntry
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+            </>
+          ) : null}
           <Input
             label="Affiliate code (optional)"
             autoCapitalize="characters"
@@ -388,7 +437,13 @@ export function RegisterWizardScreen() {
                       }}
                       style={[styles.packageCard, planSelected ? styles.packageCardSelected : null]}
                     >
-                      <Text style={styles.packageTitle}>{stripPlanProductPrefix(plan.name)}</Text>
+                      <Text style={styles.packageTitle}>
+                        {formatPlanDisplayName(plan.name, plan.plan_code)}
+                        {isRecommendedPlanCode(plan.plan_code) ? ' · Recommended' : ''}
+                      </Text>
+                      <Text style={styles.packageMeta}>
+                        {formatInrFromPaise(plan.amount_paise) ? `${formatInrFromPaise(plan.amount_paise)}/month` : 'Trial first'}
+                      </Text>
                       <Text style={styles.hint}>{plan.description}</Text>
                       <Text style={styles.packageMeta}>
                         {plan.max_staff ?? 1} staff · {plan.max_branches ?? 1} office
@@ -541,6 +596,16 @@ const styles = StyleSheet.create({
   stepLabel: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginTop: spacing.sm },
   content: { padding: spacing.xxl, gap: spacing.md, paddingBottom: spacing.xxxl },
   hint: { ...typography.caption, color: colors.mutedForeground },
+  googleLinked: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    padding: spacing.md,
+    gap: 2,
+  },
+  googleLinkedTitle: { ...typography.label, color: colors.foreground },
+  googleLinkedCopy: { ...typography.caption, color: colors.mutedForeground },
   sectionLabel: { ...typography.body, color: colors.foreground, fontWeight: '600', marginTop: spacing.sm },
   productCard: {
     borderWidth: 1,

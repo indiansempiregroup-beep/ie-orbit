@@ -1,18 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import type { BusinessProductSubscription } from '@ie-orbit/sdk';
+import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import type { BillingPlanCatalogItem, BusinessProductSubscription } from '@ie-orbit/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
-import { SelectField } from '../../components/SelectField';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { Input } from '../../components/ui/Input';
-import { createScopedClient } from '../../api/client';
+import { createScopedClient, opsClient } from '../../api/client';
 import { SoftLockBanner, PENDING_UPI_CLAIM_KEY } from '../../components/SoftLockBanner';
 import { setPersistentItem } from '../../utils/persistentStore';
 import {
@@ -20,7 +18,6 @@ import {
   type SubscriptionUpiPayRequest,
 } from './SubscriptionUpiPaySheet';
 import {
-  useBillingStatus,
   useBusinessBillingSnapshot,
   useProductMutations,
   useProductPlans,
@@ -30,11 +27,16 @@ import {
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDate, getApiErrorMessage } from '../../utils/format';
 import { isLoyaltyEntitled, readLoyaltyPrefs as parseLoyaltyPrefs } from '../../utils/loyalty';
-import { getAvailableProducts, getProductName, getSubscribedProducts, PETS_PACK_PRICE_INR, PRODUCT_CATALOG } from '../../utils/products';
-
-function getDefaultPlanCode(plans: { code?: string; is_default?: boolean }[]) {
-  return plans.find((plan) => plan.is_default)?.code ?? plans[0]?.code ?? '';
-}
+import {
+  formatInrFromPaise,
+  formatPlanDisplayName,
+  getProductName,
+  getRecommendedPlanCode,
+  getSubscribedProducts,
+  isRecommendedPlanCode,
+  PETS_PACK_PRICE_INR,
+  PRODUCT_CATALOG,
+} from '../../utils/products';
 
 function StatusChip({ label, tone = 'muted' }: { label: string; tone?: 'muted' | 'success' | 'warning' | 'info' }) {
   return (
@@ -60,6 +62,73 @@ function subscriptionTone(status?: string | null): 'muted' | 'success' | 'warnin
   return 'muted';
 }
 
+function estimateProductTotalPaise(
+  subscription: BusinessProductSubscription,
+  catalog: BillingPlanCatalogItem | undefined,
+  addons: { staff: number; office: number; pets: number },
+) {
+  const yearly = subscription.billing_interval === 'yearly';
+  const base = yearly
+    ? catalog?.yearly_amount_paise ?? (catalog?.amount_paise ?? 0) * 10
+    : catalog?.amount_paise ?? 0;
+  const multiplier = yearly ? 10 : 1;
+  return (
+    (base ?? 0) +
+    (subscription.extra_staff ?? 0) * addons.staff * multiplier +
+    (subscription.extra_offices ?? 0) * addons.office * multiplier +
+    (subscription.product_code === 'shopie' && subscription.pets_pack_enabled ? addons.pets * multiplier : 0)
+  );
+}
+
+function ProductCycleDates({
+  subscription,
+  amountLabel,
+}: {
+  subscription: BusinessProductSubscription;
+  amountLabel?: string | null;
+}) {
+  const isTrial = subscription.status === 'trialing';
+  const due = subscription.current_period_ends_at;
+  return (
+    <View style={styles.cycleBox}>
+      <View style={styles.cycleGrid}>
+        <View style={styles.cycleCell}>
+          <Text style={styles.cycleLabel}>Started</Text>
+          <Text style={styles.cycleValue}>{formatDate(subscription.subscribed_at)}</Text>
+        </View>
+        {isTrial ? (
+          <View style={styles.cycleCell}>
+            <Text style={styles.cycleLabel}>Trial ends</Text>
+            <Text style={styles.cycleValue}>{formatDate(subscription.trial_ends_at)}</Text>
+          </View>
+        ) : (
+          <View style={styles.cycleCell}>
+            <Text style={styles.cycleLabel}>This period</Text>
+            <Text style={styles.cycleValue}>
+              {formatDate(subscription.current_period_starts_at)} – {formatDate(due)}
+            </Text>
+          </View>
+        )}
+        <View style={styles.cycleCell}>
+          <Text style={styles.cycleLabel}>{isTrial ? 'Pay by' : 'Renews on'}</Text>
+          <Text style={styles.cycleValue}>{formatDate(isTrial ? subscription.trial_ends_at : due)}</Text>
+        </View>
+        {amountLabel ? (
+          <View style={styles.cycleCell}>
+            <Text style={styles.cycleLabel}>This product</Text>
+            <Text style={styles.cycleValue}>{amountLabel}</Text>
+          </View>
+        ) : null}
+      </View>
+      <Text style={styles.cycleNote}>
+        Billed on its own cycle{subscription.billing_interval ? ` · ${subscription.billing_interval}` : ''}.
+        We do not auto-charge{isTrial ? ' after the trial.' : '.'} Pay this product by the date above to keep it
+        unlocked.
+      </Text>
+    </View>
+  );
+}
+
 function readLoyaltyPrefs(business: { settings?: Record<string, unknown> | null } | null | undefined) {
   const prefs = parseLoyaltyPrefs(business?.settings as Record<string, unknown> | undefined);
   return {
@@ -76,13 +145,13 @@ export function ProductSettingsScreen() {
   const { token } = useAuth();
   const { activeBusiness, refreshWorkspace, businessId, tenantId } = useWorkspace();
   const { settings, loading } = useTenantSettings();
-  const { status: billing } = useBillingStatus();
-  const { billing: snapshot, reload: reloadSnapshot } = useBusinessBillingSnapshot();
+  const [billingFocus, setBillingFocus] = useState(activeBusiness?.selected_product ?? 'appointie');
+  const { billing: snapshot, reload: reloadSnapshot } = useBusinessBillingSnapshot(billingFocus);
   const addons = useUpdateBusinessAddons();
   const { plans } = useProductPlans();
   const mutations = useProductMutations();
-  const [extraStaff, setExtraStaff] = useState('0');
-  const [extraOffices, setExtraOffices] = useState('0');
+  const [extraStaff, setExtraStaff] = useState(0);
+  const [extraOffices, setExtraOffices] = useState(0);
   const [petsPackEnabled, setPetsPackEnabled] = useState(false);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const [pointsPerUnit, setPointsPerUnit] = useState('10');
@@ -95,15 +164,11 @@ export function ProductSettingsScreen() {
     () => getSubscribedProducts(activeBusiness?.product_subscriptions),
     [activeBusiness?.product_subscriptions],
   );
-  const availableProducts = useMemo(
-    () => getAvailableProducts(activeBusiness?.product_subscriptions),
-    [activeBusiness?.product_subscriptions],
-  );
 
   const subscriptionByProduct = useMemo(() => {
     const map = new Map<string, BusinessProductSubscription>();
     activeBusiness?.product_subscriptions?.forEach((subscription) => {
-      if (subscription.status === 'trialing' || subscription.status === 'active') {
+      if (subscription.status === 'trialing' || subscription.status === 'active' || subscription.status === 'soft_locked') {
         map.set(subscription.product_code, subscription);
       }
     });
@@ -122,15 +187,43 @@ export function ProductSettingsScreen() {
     return map;
   }, [plans]);
 
-  const [selectedProduct, setSelectedProduct] = useState(activeBusiness?.selected_product ?? subscribedProducts[0]?.id ?? '');
   const [pendingPlanByProduct, setPendingPlanByProduct] = useState<Record<string, string>>({});
+  const [catalogPlans, setCatalogPlans] = useState<BillingPlanCatalogItem[]>([]);
+  const [catalogAddons, setCatalogAddons] = useState({
+    staff: 19900,
+    office: 29900,
+    pets: PETS_PACK_PRICE_INR * 100,
+  });
   const [busy, setBusy] = useState<string | null>(null);
   const [upiPayRequest, setUpiPayRequest] = useState<SubscriptionUpiPayRequest | null>(null);
   const [lockBannerKey, setLockBannerKey] = useState(0);
 
   useEffect(() => {
-    setSelectedProduct(activeBusiness?.selected_product ?? subscribedProducts[0]?.id ?? '');
-  }, [activeBusiness?.selected_product, subscribedProducts]);
+    if (subscribedProducts.some((product) => product.id === billingFocus)) return;
+    setBillingFocus(subscribedProducts[0]?.id ?? 'appointie');
+  }, [subscribedProducts, billingFocus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    opsClient.billing
+      .publicPlans()
+      .then((response) => {
+        if (!cancelled) {
+          setCatalogPlans(response.data.plans ?? []);
+          setCatalogAddons({
+            staff: response.data.addon_staff_price_paise ?? 19900,
+            office: response.data.addon_office_price_paise ?? 29900,
+            pets: response.data.addon_pets_price_paise ?? PETS_PACK_PRICE_INR * 100,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogPlans([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const prefs = readLoyaltyPrefs(activeBusiness as { settings?: Record<string, unknown> } | null);
@@ -148,18 +241,22 @@ export function ProductSettingsScreen() {
   const canConfigureLoyalty = rewardPointsEntitled && !snapshot?.soft_locked;
 
   useEffect(() => {
-    const next: Record<string, string> = {};
-    availableProducts.forEach((product) => {
-      const productPlans = plansByProduct.get(product.id) ?? [];
-      next[product.id] = getDefaultPlanCode(productPlans);
+    setPendingPlanByProduct((current) => {
+      const next = { ...current };
+      PRODUCT_CATALOG.forEach((product) => {
+        if (next[product.id]) return;
+        const subscription = subscriptionByProduct.get(product.id);
+        const productPlans = plansByProduct.get(product.id) ?? [];
+        next[product.id] = subscription?.plan_code || getRecommendedPlanCode(productPlans);
+      });
+      return next;
     });
-    setPendingPlanByProduct((current) => ({ ...next, ...current }));
-  }, [availableProducts, plansByProduct]);
+  }, [subscriptionByProduct, plansByProduct]);
 
   useEffect(() => {
     if (!snapshot) return;
-    setExtraStaff(String(snapshot.extra_staff ?? 0));
-    setExtraOffices(String(snapshot.extra_offices ?? 0));
+    setExtraStaff(snapshot.extra_staff ?? 0);
+    setExtraOffices(snapshot.extra_offices ?? 0);
     setPetsPackEnabled(Boolean(snapshot.pets_pack_enabled));
     if (!snapshot.soft_locked) {
       void setPersistentItem(PENDING_UPI_CLAIM_KEY, null);
@@ -183,7 +280,7 @@ export function ProductSettingsScreen() {
     toast.push(getApiErrorMessage(err, fallback), 'error');
   }
 
-  const checkoutProductCode = selectedProduct || subscribedProducts[0]?.id || 'appointie';
+  const checkoutProductCode = billingFocus || subscribedProducts[0]?.id || 'appointie';
   const scopedClient =
     token && tenantId && businessId ? createScopedClient(token, tenantId, businessId) : null;
 
@@ -216,327 +313,460 @@ export function ProductSettingsScreen() {
       ) : null}
 
       <Card>
-        <SectionHeader title="Active product" />
-        <View style={styles.stack}>
-          <SelectField
-            label="Selected product"
-            value={selectedProduct}
-            options={subscribedProducts.map((p) => ({ value: p.id, label: p.name }))}
-            onChange={setSelectedProduct}
-            placeholder="Choose product"
-          />
-          <Button
-            label="Save active product"
-            loading={busy === 'active'}
-            fullWidth
-            onPress={async () => {
-              if (!selectedProduct) return;
-              setBusy('active');
-              try {
-                await mutations.setActiveProduct(selectedProduct);
-                await afterMutation(`Active product set to ${getProductName(selectedProduct)}.`);
-              } catch (err) {
-                showError(err, 'Unable to save product selection.');
-              } finally {
-                setBusy(null);
-              }
-            }}
-          />
-        </View>
-        <View style={styles.detailList}>
-          <Detail label="Plan" value={settings?.subscription?.plan_name ?? settings?.subscription?.plan ?? '—'} />
-          <Detail label="Status" value={settings?.subscription?.status ?? '—'} />
-        </View>
-      </Card>
-
-      <Card>
-        <SectionHeader title="Subscribed products" />
-        {subscribedProducts.length === 0 ? (
-          <Text style={styles.meta}>No active subscriptions.</Text>
-        ) : (
-          subscribedProducts.map((product, index) => {
-            const subscription = subscriptionByProduct.get(product.id);
-            const productPlans = plansByProduct.get(product.id) ?? [];
-            const currentPlan = subscription?.plan_code ?? getDefaultPlanCode(productPlans);
-            const isActive = activeBusiness?.selected_product === product.id;
-            return (
-              <View key={product.id} style={[styles.productBlock, index === 0 && styles.productBlockFirst]}>
-                <View style={styles.productHeader}>
-                  <Text style={styles.productName}>{product.name}</Text>
-                  <View style={styles.chipRow}>
-                    {isActive ? <StatusChip label="Active" tone="info" /> : null}
-                    <StatusChip
-                      label={subscription?.status === 'trialing' ? 'Trial' : subscription?.status ?? '—'}
-                      tone={subscriptionTone(subscription?.status)}
-                    />
-                  </View>
-                </View>
-                <Text style={styles.meta}>
-                  {subscription?.plan_name ?? subscription?.plan_code ?? 'Trial'}
-                  {subscription?.billing_interval ? ` · ${subscription.billing_interval}` : ''}
-                </Text>
-                {productPlans.length > 0 ? (
-                  <SelectField
-                    label="Change plan"
-                    value={pendingPlanByProduct[product.id] ?? currentPlan}
-                    options={productPlans.map((plan) => ({ value: plan.code, label: plan.name ?? plan.code }))}
-                    onChange={(value) => setPendingPlanByProduct((current) => ({ ...current, [product.id]: value }))}
+        <SectionHeader title="Products & billing" />
+        <Text style={styles.meta}>
+          Subscribe to Orbit Appoint, Orbit Mart, or both. Each product has its own bill and due date. If you
+          start them on different days, you pay them on different days — we never merge them into one charge.
+        </Text>
+        {PRODUCT_CATALOG.map((product, index) => {
+          const subscription = subscriptionByProduct.get(product.id);
+          const productPlans = plansByProduct.get(product.id) ?? [];
+          const selectedPlanCode =
+            pendingPlanByProduct[product.id] ||
+            subscription?.plan_code ||
+            getRecommendedPlanCode(productPlans);
+          const isSubscribed = Boolean(subscription);
+          const isSoftLocked = subscription?.status === 'soft_locked';
+          const pendingPlanCode = subscription?.pending_cancel
+            ? 'canceled'
+            : subscription?.pending_plan_code ?? null;
+          const selectedTitle = formatPlanDisplayName(
+            productPlans.find((plan) => plan.code === selectedPlanCode)?.name,
+            selectedPlanCode,
+          );
+          return (
+            <View key={product.id} style={[styles.productBlock, index === 0 && styles.productBlockFirst]}>
+              <View style={styles.productHeader}>
+                <Text style={styles.productName}>{product.name}</Text>
+                <View style={styles.chipRow}>
+                  <StatusChip
+                    label={
+                      isSoftLocked
+                        ? 'Locked'
+                        : subscription?.status === 'trialing'
+                          ? 'Trial'
+                          : isSubscribed
+                            ? 'Your plan'
+                            : 'Not subscribed'
+                    }
+                    tone={isSubscribed ? subscriptionTone(subscription?.status) : 'muted'}
                   />
-                ) : null}
-                <View style={styles.row}>
-                  {productPlans.length > 0 ? (
-                    <Button
-                      label="Pay & update plan"
-                      variant="outline"
-                      loading={busy === `plan-${product.id}`}
+                  {subscription?.plan_code ? (
+                    <StatusChip
+                      label={formatPlanDisplayName(subscription.plan_name, subscription.plan_code)}
+                      tone="info"
+                    />
+                  ) : null}
+                </View>
+              </View>
+              <Text style={styles.meta}>{product.description}</Text>
+              {subscription ? (
+                <ProductCycleDates
+                  subscription={subscription}
+                  amountLabel={`${formatInrFromPaise(
+                    estimateProductTotalPaise(
+                      subscription,
+                      catalogPlans.find((item) => item.plan_code === subscription.plan_code),
+                      catalogAddons,
+                    ),
+                  ) ?? '—'}/${subscription.billing_interval === 'yearly' ? 'year' : 'month'}`}
+                />
+              ) : (
+                <Text style={styles.meta}>
+                  Trial starts the day you subscribe. After that, this product renews on its own 30-day cycle.
+                </Text>
+              )}
+              {pendingPlanCode ? (
+                <View style={styles.pendingBox}>
+                  <Text style={styles.pendingTitle}>
+                    {pendingPlanCode === 'canceled'
+                      ? 'Cancellation scheduled'
+                      : `${formatPlanDisplayName(subscription?.plan_name, subscription?.plan_code)} until ${formatDate(
+                          subscription?.current_period_ends_at,
+                        )}, then ${formatPlanDisplayName(subscription?.pending_plan_name, pendingPlanCode)}`}
+                  </Text>
+                  <Button
+                    label="Keep current plan"
+                    variant="outline"
+                    loading={busy === `cancel-${product.id}`}
+                    onPress={async () => {
+                      setBusy(`cancel-${product.id}`);
+                      try {
+                        await mutations.cancelPendingPlan(product.id);
+                        await afterMutation(`Kept the current ${product.name} plan.`);
+                      } catch (err) {
+                        showError(err, 'Unable to cancel the scheduled plan change.');
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  />
+                </View>
+              ) : null}
+              {isSoftLocked ? (
+                <View style={styles.pendingBox}>
+                  <Text style={styles.pendingTitle}>Upgrade to unlock</Text>
+                  <Text style={styles.meta}>New bookings, staff, and offices stay locked until you upgrade.</Text>
+                </View>
+              ) : null}
+              <View style={styles.planGrid}>
+                {productPlans.map((plan) => {
+                  const catalog = catalogPlans.find((item) => item.plan_code === plan.code);
+                  const selected = selectedPlanCode === plan.code;
+                  const recommended = isRecommendedPlanCode(plan.code);
+                  const price = formatInrFromPaise(catalog?.amount_paise);
+                  return (
+                    <Pressable
+                      key={plan.code}
                       onPress={() => {
-                        const planCode = pendingPlanByProduct[product.id] ?? currentPlan;
-                        if (!planCode) return;
-                        const plan = productPlans.find((item) => item.code === planCode);
+                        setBillingFocus(product.id);
+                        setPendingPlanByProduct((current) => ({ ...current, [product.id]: plan.code }));
+                      }}
+                      style={[styles.planCard, selected ? styles.planCardSelected : null]}
+                    >
+                      <Text style={styles.planBadge}>{recommended ? 'Recommended' : 'Starter'}</Text>
+                      <Text style={styles.productName}>{formatPlanDisplayName(catalog?.name ?? plan.name, plan.code)}</Text>
+                      <Text style={styles.planPrice}>{price ? `${price}/month` : 'Trial first'}</Text>
+                      <Text style={styles.meta}>
+                        {catalog?.max_staff ?? plan.max_staff ?? 1} staff · {catalog?.max_branches ?? plan.max_branches ?? 1}{' '}
+                        office{(catalog?.max_branches ?? plan.max_branches ?? 1) === 1 ? '' : 's'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.stack}>
+                {isSubscribed ? (
+                  <>
+                    <Button
+                      label={
+                        selectedPlanCode === subscription?.plan_code
+                          ? 'Current plan'
+                          : isSoftLocked
+                            ? `Upgrade to ${selectedTitle}`
+                            : `Switch to ${selectedTitle}`
+                      }
+                      loading={busy === `plan-${product.id}`}
+                      disabled={selectedPlanCode === subscription?.plan_code || selectedPlanCode === pendingPlanCode}
+                      fullWidth
+                      onPress={() => {
+                        const runChange = async () => {
+                          setBusy(`plan-${product.id}`);
+                          try {
+                            await mutations.changePlan(product.id, selectedPlanCode);
+                            await afterMutation(
+                              selectedPlanCode.includes('starter') && (subscription?.plan_code ?? '').includes('pro')
+                                ? `${product.name} will switch to ${selectedTitle} at period end.`
+                                : `${product.name} is now on ${selectedTitle}.`,
+                            );
+                          } catch (err) {
+                            showError(err, 'Unable to change plan. Check staff and office limits.');
+                          } finally {
+                            setBusy(null);
+                          }
+                        };
+                        if ((subscription?.plan_code ?? '').includes('pro') && selectedPlanCode.includes('starter')) {
+                          Alert.alert(
+                            'Schedule plan change',
+                            'This takes effect at the end of your current billing period. You keep your current plan until then.',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Continue', onPress: () => void runChange() },
+                            ],
+                          );
+                          return;
+                        }
+                        void runChange();
+                      }}
+                    />
+                    <Button
+                      label="Pay with UPI to update"
+                      variant="outline"
+                      fullWidth
+                      onPress={() => {
+                        const plan = productPlans.find((item) => item.code === selectedPlanCode);
+                        setBillingFocus(product.id);
                         setUpiPayRequest({
                           productCode: product.id,
-                          planCode,
+                          planCode: selectedPlanCode,
                           productName: product.name,
-                          planName: plan?.name ?? planCode,
-                          extraStaff: Math.max(0, Number(extraStaff) || 0),
-                          extraOffices: Math.max(0, Number(extraOffices) || 0),
-                          petsPackEnabled: checkoutProductCode === 'shopie' ? petsPackEnabled : false,
+                          planName: formatPlanDisplayName(plan?.name, selectedPlanCode),
+                          extraStaff,
+                          extraOffices,
+                          petsPackEnabled: product.id === 'shopie' ? petsPackEnabled : false,
                           mode: 'change_plan',
                         });
                       }}
                     />
-                  ) : null}
-                  <Button
-                    label="Unsubscribe"
-                    variant="outline"
-                    loading={busy === `unsub-${product.id}`}
-                    onPress={async () => {
-                      setBusy(`unsub-${product.id}`);
-                      try {
-                        await mutations.unsubscribe(product.id);
-                        await afterMutation(`Unsubscribed from ${product.name}.`);
-                      } catch (err) {
-                        showError(err, 'Unable to unsubscribe.');
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                  />
-                </View>
+                    <Button
+                      label="Unsubscribe"
+                      variant="outline"
+                      loading={busy === `unsub-${product.id}`}
+                      fullWidth
+                      onPress={() => {
+                        Alert.alert(
+                          `Unsubscribe ${product.name}?`,
+                          'Billing for this product stops immediately.',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Unsubscribe',
+                              style: 'destructive',
+                              onPress: async () => {
+                                setBusy(`unsub-${product.id}`);
+                                try {
+                                  await mutations.unsubscribe(product.id);
+                                  await afterMutation(`Unsubscribed from ${product.name}.`);
+                                } catch (err) {
+                                  showError(err, 'Unable to unsubscribe.');
+                                } finally {
+                                  setBusy(null);
+                                }
+                              },
+                            },
+                          ],
+                        );
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      label={`Start ${selectedTitle} trial`}
+                      loading={busy === `sub-${product.id}`}
+                      fullWidth
+                      onPress={async () => {
+                        if (!selectedPlanCode) {
+                          showError(new Error('Select a plan first.'), 'Select a plan first.');
+                          return;
+                        }
+                        setBusy(`sub-${product.id}`);
+                        try {
+                          await mutations.subscribe(product.id, selectedPlanCode, subscribedProducts.length === 0);
+                          await afterMutation(`Subscribed to ${product.name}.`);
+                        } catch (err) {
+                          showError(err, 'Unable to subscribe to product.');
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                    />
+                    <Button
+                      label="Pay with UPI to subscribe"
+                      variant="outline"
+                      fullWidth
+                      onPress={() => {
+                        if (!selectedPlanCode) {
+                          showError(new Error('Select a plan first.'), 'Select a plan first.');
+                          return;
+                        }
+                        const plan = productPlans.find((item) => item.code === selectedPlanCode);
+                        setBillingFocus(product.id);
+                        setUpiPayRequest({
+                          productCode: product.id,
+                          planCode: selectedPlanCode,
+                          productName: product.name,
+                          planName: formatPlanDisplayName(plan?.name, selectedPlanCode),
+                          extraStaff: 0,
+                          extraOffices: 0,
+                          petsPackEnabled: false,
+                          mode: 'subscribe',
+                        });
+                      }}
+                    />
+                  </>
+                )}
               </View>
-            );
-          })
-        )}
+            </View>
+          );
+        })}
+        {subscriptionByProduct.size > 1 ? (
+          <View style={styles.splitBill}>
+            <Text style={styles.splitBillTitle}>Two products, two bills</Text>
+            {[...subscriptionByProduct.values()].map((item) => (
+              <Text key={item.product_code} style={styles.splitBillRow}>
+                {getProductName(item.product_code)} · {item.status === 'trialing' ? 'trial ends' : 'pay by'}{' '}
+                {formatDate(item.status === 'trialing' ? item.trial_ends_at : item.current_period_ends_at)} ·{' '}
+                {formatInrFromPaise(
+                  estimateProductTotalPaise(
+                    item,
+                    catalogPlans.find((plan) => plan.plan_code === item.plan_code),
+                    catalogAddons,
+                  ),
+                ) ?? '—'}
+                /{item.billing_interval === 'yearly' ? 'year' : 'month'}
+              </Text>
+            ))}
+            <Text style={styles.cycleNote}>
+              Pay each product on its own date. A late Orbit Mart payment does not lock Orbit Appoint, and the reverse.
+            </Text>
+          </View>
+        ) : null}
       </Card>
 
-      {availableProducts.length > 0 ? (
-        <Card>
-          <SectionHeader title="Add product" />
-          <Text style={styles.meta}>Choose a plan to start a trial, or pay with UPI to subscribe immediately.</Text>
-          {availableProducts.map((product, index) => {
-            const productPlans = plansByProduct.get(product.id) ?? [];
-            const planCode =
-              pendingPlanByProduct[product.id] ?? getDefaultPlanCode(productPlans);
-            const resolvePlanCode = (): string | null => {
-              if (planCode) return planCode;
-              if (productPlans.length === 0) {
-                showError(
-                  new Error('Plans still loading.'),
-                  'Plans are still loading. Pull to refresh, then try again.',
-                );
-                return null;
-              }
-              showError(new Error('Select a plan first.'), 'Select a plan first.');
-              return null;
-            };
-            return (
-              <View key={product.id} style={[styles.productBlock, index === 0 && styles.productBlockFirst]}>
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text style={styles.meta}>{product.description}</Text>
-                {productPlans.length > 0 ? (
-                  <SelectField
-                    label="Plan"
-                    value={planCode}
-                    options={productPlans.map((plan) => ({ value: plan.code, label: plan.name ?? plan.code }))}
-                    onChange={(value) => setPendingPlanByProduct((current) => ({ ...current, [product.id]: value }))}
-                  />
-                ) : (
-                  <Text style={styles.meta}>Loading plans…</Text>
-                )}
-                <View style={styles.stack}>
-                  <Button
-                    label="Start trial"
-                    loading={busy === `sub-${product.id}`}
-                    fullWidth
-                    onPress={async () => {
-                      const selectedPlanCode = resolvePlanCode();
-                      if (!selectedPlanCode) return;
-                      setBusy(`sub-${product.id}`);
-                      try {
-                        await mutations.subscribe(
-                          product.id,
-                          selectedPlanCode,
-                          subscribedProducts.length === 0,
-                        );
-                        await afterMutation(`Subscribed to ${product.name}.`);
-                      } catch (err) {
-                        showError(err, 'Unable to subscribe to product.');
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                  />
-                  <Button
-                    label="Pay with UPI to subscribe"
-                    variant="outline"
-                    loading={busy === `upi-sub-${product.id}`}
-                    fullWidth
-                    onPress={() => {
-                      const selectedPlanCode = resolvePlanCode();
-                      if (!selectedPlanCode) return;
-                      const plan = productPlans.find((item) => item.code === selectedPlanCode);
-                      setUpiPayRequest({
-                        productCode: product.id,
-                        planCode: selectedPlanCode,
-                        productName: product.name,
-                        planName: plan?.name ?? selectedPlanCode,
-                        extraStaff: 0,
-                        extraOffices: 0,
-                        petsPackEnabled: false,
-                        mode: 'subscribe',
-                      });
-                    }}
-                  />
-                </View>
-              </View>
-            );
-          })}
-        </Card>
-      ) : null}
-
       <Card>
-        <SectionHeader title="Plan & usage" />
-        {snapshot ? (
+        <SectionHeader title="Staff, offices & add-ons" />
+        <Text style={styles.meta}>
+          Your plan includes a set number of people and locations. Add more only if you need them.
+        </Text>
+        {subscribedProducts.length > 1 ? (
+          <View style={styles.productSwitch}>
+            {subscribedProducts.map((product) => (
+              <Pressable
+                key={product.id}
+                onPress={() => setBillingFocus(product.id)}
+                style={[styles.productSwitchChip, billingFocus === product.id && styles.productSwitchChipOn]}
+              >
+                <Text style={[styles.productSwitchText, billingFocus === product.id && styles.productSwitchTextOn]}>
+                  {product.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {snapshot && subscribedProducts.length > 0 ? (
           <View style={styles.stack}>
-            <View style={styles.chipRow}>
-              <StatusChip label={`Plan: ${snapshot.plan_code}`} tone="info" />
-              <StatusChip
-                label={snapshot.status.replace('_', ' ')}
-                tone={subscriptionTone(snapshot.status)}
-              />
-              <StatusChip label={snapshot.billing_interval} />
-              {snapshot.soft_locked ? <StatusChip label="Soft locked" tone="warning" /> : null}
+            <View style={styles.usageHero}>
+              <View>
+                <Text style={styles.usageHeroKicker}>
+                  {getProductName(snapshot.product_code || checkoutProductCode)} ·{' '}
+                  {formatPlanDisplayName(undefined, snapshot.plan_code)}
+                </Text>
+                <Text style={styles.usageHeroTitle}>
+                  {formatInrFromPaise(snapshot.pricing.total_amount_paise) ?? '—'}
+                  <Text style={styles.usageHeroPeriod}>
+                    /{snapshot.billing_interval === 'yearly' ? 'year' : 'month'}
+                  </Text>
+                </Text>
+                <Text style={styles.meta}>
+                  {snapshot.soft_locked
+                    ? 'Locked until you upgrade or renew.'
+                    : snapshot.status === 'trialing'
+                      ? `This product's trial ends ${formatDate(snapshot.trial_ends_at)}. Pay it separately — we do not charge automatically.`
+                      : `This product renews ${formatDate(snapshot.renews_at ?? snapshot.current_period_ends_at)}. Other products keep their own due date.`}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.meta}>
-              Staff {snapshot.used_staff}/{snapshot.effective_max_staff} · Offices {snapshot.used_offices}/
-              {snapshot.effective_max_branches} · Total ₹{(snapshot.pricing.total_amount_paise / 100).toFixed(0)}
-              {snapshot.billing_interval === 'yearly' ? '/year' : '/month'}
-            </Text>
-            <Text style={styles.meta}>
-              Included {snapshot.included_staff} staff / {snapshot.included_offices} offices · Add-ons +
-              {snapshot.extra_staff} staff (+₹{(snapshot.pricing.addon_staff_unit_paise / 100).toFixed(0)}) · +
-              {snapshot.extra_offices} offices (+₹{(snapshot.pricing.addon_office_unit_paise / 100).toFixed(0)})
-              {checkoutProductCode === 'shopie'
-                ? ` · Pets ${snapshot.pets_pack_enabled ? 'on' : 'off'} (+₹${((snapshot.pricing.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100) / 100).toFixed(0)})`
-                : ''}
-            </Text>
-            <View style={styles.detailListTight}>
-              <Detail label="Started" value={formatDate(snapshot.subscribed_at)} />
-              <Detail
-                label={String(snapshot.status || '').includes('trial') ? 'Trial ends' : 'Trial ended'}
-                value={formatDate(snapshot.trial_ends_at)}
-              />
-              <Detail label="Period start" value={formatDate(snapshot.current_period_starts_at)} />
-              <Detail label="Period end" value={formatDate(snapshot.current_period_ends_at)} />
-              <Detail label="Renews on" value={formatDate(snapshot.renews_at)} />
-              {snapshot.canceled_at ? (
-                <Detail label="Canceled" value={formatDate(snapshot.canceled_at)} />
-              ) : null}
-            </View>
-            <View style={styles.stack}>
-              <Input
-                label="Extra staff"
-                value={extraStaff}
-                onChangeText={setExtraStaff}
-                keyboardType="number-pad"
-              />
-              <Input
-                label="Extra offices"
-                value={extraOffices}
-                onChangeText={setExtraOffices}
-                keyboardType="number-pad"
-              />
-              {checkoutProductCode === 'shopie' ? (
-                <View style={styles.switchRow}>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.label}>Pets pack</Text>
-                    <Text style={styles.meta}>
-                      ₹
-                      {Math.round(
-                        (snapshot.pricing.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100) / 100,
-                      )}
-                      /month · profiles, birthdays, owner alerts
-                    </Text>
-                  </View>
-                  <Switch value={petsPackEnabled} onValueChange={setPetsPackEnabled} />
+
+            <UsageMeter
+              label="Staff in use"
+              used={snapshot.used_staff}
+              max={snapshot.effective_max_staff}
+              hint={`${snapshot.included_staff} included in this plan${snapshot.extra_staff ? ` · ${snapshot.extra_staff} extra` : ''}`}
+            />
+            <UsageMeter
+              label="Offices in use"
+              used={snapshot.used_offices}
+              max={snapshot.effective_max_branches}
+              hint={`${snapshot.included_offices} included in this plan${snapshot.extra_offices ? ` · ${snapshot.extra_offices} extra` : ''}`}
+            />
+
+            <Text style={styles.addonSectionTitle}>Need more?</Text>
+            <AddonStepper
+              label="Extra staff"
+              hint={`${formatInrFromPaise(snapshot.pricing.addon_staff_unit_paise) ?? '₹199'} each / month`}
+              value={extraStaff}
+              onChange={setExtraStaff}
+              disabled={snapshot.soft_locked}
+            />
+            <AddonStepper
+              label="Extra offices"
+              hint={`${formatInrFromPaise(snapshot.pricing.addon_office_unit_paise) ?? '₹299'} each / month`}
+              value={extraOffices}
+              onChange={setExtraOffices}
+              disabled={snapshot.soft_locked}
+            />
+            {checkoutProductCode === 'shopie' ? (
+              <View style={styles.addonRow}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.label}>Pets pack</Text>
+                  <Text style={styles.meta}>
+                    {formatInrFromPaise(snapshot.pricing.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100)} / month ·
+                    pet profiles and owner alerts
+                  </Text>
                 </View>
-              ) : null}
-              <Button
-                label="Update add-ons"
-                loading={busy === 'addons'}
-                fullWidth
-                onPress={async () => {
-                  setBusy('addons');
-                  try {
-                    await addons.update(checkoutProductCode, {
-                      extra_staff: Math.max(0, Number(extraStaff) || 0),
-                      extra_offices: Math.max(0, Number(extraOffices) || 0),
-                      ...(checkoutProductCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
-                    });
-                    await afterMutation('Add-ons updated. Billing total refreshed.');
-                  } catch (err) {
-                    showError(err, 'Unable to update add-ons. Check usage limits.');
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
-              />
-              <Button
-                label="Pay current total via UPI"
-                variant="outline"
-                fullWidth
-                onPress={() => {
-                  const planCode =
-                    snapshot?.plan_code ||
-                    subscriptionByProduct.get(checkoutProductCode)?.plan_code ||
-                    getDefaultPlanCode(plansByProduct.get(checkoutProductCode) ?? []);
-                  if (!planCode) {
-                    showError(new Error('No plan selected.'), 'No plan selected.');
-                    return;
-                  }
-                  setUpiPayRequest({
-                    productCode: checkoutProductCode,
-                    planCode,
-                    productName: getProductName(checkoutProductCode),
-                    planName: planCode,
-                    extraStaff: Math.max(0, Number(extraStaff) || 0),
-                    extraOffices: Math.max(0, Number(extraOffices) || 0),
-                    petsPackEnabled: checkoutProductCode === 'shopie' ? petsPackEnabled : false,
-                    mode: 'addons',
-                    autoStart: true,
-                  });
-                }}
-              />
+                <Switch
+                  value={petsPackEnabled}
+                  onValueChange={setPetsPackEnabled}
+                  disabled={snapshot.soft_locked}
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.totalBox}>
+              <Text style={styles.totalLabel}>Estimated total</Text>
+              <Text style={styles.totalValue}>
+                {formatInrFromPaise(
+                  (snapshot.pricing.base_amount_paise ?? 0) +
+                    extraStaff * (snapshot.pricing.addon_staff_unit_paise ?? 0) +
+                    extraOffices * (snapshot.pricing.addon_office_unit_paise ?? 0) +
+                    (checkoutProductCode === 'shopie' && petsPackEnabled
+                      ? snapshot.pricing.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100
+                      : 0),
+                )}
+                <Text style={styles.usageHeroPeriod}>/{snapshot.billing_interval === 'yearly' ? 'year' : 'month'}</Text>
+              </Text>
+              <Text style={styles.meta}>
+                Plan {formatInrFromPaise(snapshot.pricing.base_amount_paise)}
+                {extraStaff || extraOffices || (checkoutProductCode === 'shopie' && petsPackEnabled)
+                  ? ' plus the extras above'
+                  : ''}
+                .
+              </Text>
             </View>
+
+            <Button
+              label="Save extras"
+              loading={busy === 'addons'}
+              disabled={snapshot.soft_locked}
+              fullWidth
+              onPress={async () => {
+                setBusy('addons');
+                try {
+                  await addons.update(checkoutProductCode, {
+                    extra_staff: extraStaff,
+                    extra_offices: extraOffices,
+                    ...(checkoutProductCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
+                  });
+                  await afterMutation('Extras saved. Your next total is updated.');
+                } catch (err) {
+                  showError(err, 'Unable to save extras. Reduce staff or offices first if you are over the limit.');
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            />
+            <Button
+              label="Pay this total with UPI"
+              variant="outline"
+              disabled={snapshot.soft_locked === false && snapshot.status === 'canceled'}
+              fullWidth
+              onPress={() => {
+                const planCode =
+                  snapshot.plan_code ||
+                  subscriptionByProduct.get(checkoutProductCode)?.plan_code ||
+                  getRecommendedPlanCode(plansByProduct.get(checkoutProductCode) ?? []);
+                if (!planCode) {
+                  showError(new Error('No plan selected.'), 'Choose a plan above first.');
+                  return;
+                }
+                setUpiPayRequest({
+                  productCode: checkoutProductCode,
+                  planCode,
+                  productName: getProductName(checkoutProductCode),
+                  planName: formatPlanDisplayName(undefined, planCode),
+                  extraStaff,
+                  extraOffices,
+                  petsPackEnabled: checkoutProductCode === 'shopie' ? petsPackEnabled : false,
+                  mode: 'addons',
+                  autoStart: true,
+                });
+              }}
+            />
           </View>
         ) : (
-          <Text style={styles.meta}>Loading current entitlements…</Text>
+          <Text style={styles.meta}>Subscribe to a product above to see seats and add extras.</Text>
         )}
-        <View style={styles.detailList}>
-          <Detail label="Provider" value={billing?.provider ?? '—'} />
-          <Detail label="Currency" value={billing?.currency ?? '—'} />
-          <Detail label="Mock mode" value={billing?.mock_mode ? 'Yes' : 'No'} />
-        </View>
       </Card>
 
       <Card>
@@ -656,25 +886,79 @@ export function ProductSettingsScreen() {
         )}
       </Card>
 
-      <Card style={styles.catalogCard}>
-        <SectionHeader title="Catalog" />
-        {PRODUCT_CATALOG.map((product, index) => (
-          <View key={product.id} style={[styles.catalogRow, index === 0 && styles.catalogRowFirst]}>
-            <Text style={styles.catalogName}>{product.name}</Text>
-            <Text style={styles.catalogDesc}>{product.description}</Text>
-          </View>
-        ))}
-      </Card>
     </RefreshableScrollView>
     </DesktopPage>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function usagePercent(used: number, max: number) {
+  if (max <= 0) return 0;
+  return Math.min(100, Math.round((used / max) * 100));
+}
+
+function UsageMeter({
+  label,
+  used,
+  max,
+  hint,
+}: {
+  label: string;
+  used: number;
+  max: number;
+  hint: string;
+}) {
   return (
-    <View style={styles.detail}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+    <View style={styles.meter}>
+      <View style={styles.meterHead}>
+        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.meterCount}>
+          {used} of {max}
+        </Text>
+      </View>
+      <View style={styles.meterTrack}>
+        <View style={[styles.meterFill, { width: `${usagePercent(used, max)}%` }]} />
+      </View>
+      <Text style={styles.meta}>{hint}</Text>
+    </View>
+  );
+}
+
+function AddonStepper({
+  label,
+  hint,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={styles.addonRow}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.meta}>{hint}</Text>
+      </View>
+      <View style={styles.stepper}>
+        <Pressable
+          onPress={() => onChange(Math.max(0, value - 1))}
+          disabled={disabled || value <= 0}
+          style={[styles.stepperBtn, (disabled || value <= 0) && styles.stepperBtnOff]}
+        >
+          <Text style={styles.stepperBtnText}>−</Text>
+        </Pressable>
+        <Text style={styles.stepperValue}>{value}</Text>
+        <Pressable
+          onPress={() => onChange(value + 1)}
+          disabled={disabled}
+          style={[styles.stepperBtn, disabled && styles.stepperBtnOff]}
+        >
+          <Text style={styles.stepperBtnText}>+</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -748,6 +1032,150 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   productName: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground, flex: 1 },
+  productSwitch: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  productSwitchChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  productSwitchChipOn: { borderColor: colors.primary, backgroundColor: colors.muted },
+  productSwitchText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.mutedForeground },
+  productSwitchTextOn: { color: colors.primary },
+  usageHero: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.muted,
+    gap: spacing.xs,
+  },
+  usageHeroKicker: {
+    ...typography.caption,
+    fontFamily: fonts.bodySemi,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  usageHeroTitle: { ...typography.title, fontFamily: fonts.displayMedium, color: colors.foreground },
+  usageHeroPeriod: { ...typography.body, color: colors.mutedForeground, fontFamily: fonts.bodySemi },
+  meter: { gap: 6 },
+  meterHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  meterCount: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },
+  meterTrack: {
+    height: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+  },
+  meterFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.primary },
+  addonSectionTitle: {
+    ...typography.body,
+    fontFamily: fonts.bodySemi,
+    color: colors.foreground,
+    marginTop: spacing.xs,
+  },
+  addonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stepperBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+  },
+  stepperBtnOff: { opacity: 0.45 },
+  stepperBtnText: { ...typography.title, color: colors.foreground, lineHeight: 22 },
+  stepperValue: { minWidth: 24, textAlign: 'center', ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },
+  totalBox: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  totalLabel: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.mutedForeground, textTransform: 'uppercase' },
+  totalValue: { ...typography.title, fontFamily: fonts.displayMedium, color: colors.foreground },
+  cycleBox: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.muted,
+    gap: spacing.sm,
+  },
+  cycleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  cycleCell: {
+    flexGrow: 1,
+    flexBasis: '42%',
+    minWidth: 120,
+    gap: 2,
+  },
+  cycleLabel: {
+    ...typography.tiny,
+    fontFamily: fonts.bodySemi,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cycleValue: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground },
+  cycleNote: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
+  splitBill: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.muted,
+    gap: 6,
+  },
+  splitBillTitle: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },
+  splitBillRow: { ...typography.caption, color: colors.foreground, lineHeight: 18 },
+  pendingBox: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    backgroundColor: '#FFF7ED',
+    gap: spacing.sm,
+  },
+  pendingTitle: { ...typography.body, fontFamily: fonts.bodySemi, color: '#9A3412' },
+  planGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  planCard: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    minWidth: 140,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    gap: 4,
+  },
+  planCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.muted,
+  },
+  planBadge: {
+    ...typography.tiny,
+    fontFamily: fonts.bodySemi,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  planPrice: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' },
   chip: {
     paddingHorizontal: 8,

@@ -10,6 +10,7 @@ import { colors, fonts, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-orbit/sdk';
 import { addProductToPosSession, readPosSession } from './posSession';
+import { addBulkScanItem, hasBulkScanCode } from './bulkScanSession';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BarcodeScanner'>;
 type ScanHandler = (event: { data: string }) => void;
@@ -67,9 +68,13 @@ export function BarcodeScannerScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [lastProduct, setLastProduct] = useState<ShopProduct | null>(null);
   const [addedCount, setAddedCount] = useState(0);
+  const [lastScanName, setLastScanName] = useState<string | null>(null);
   const [billLines, setBillLines] = useState(() => readPosSession().basket.length);
   const forPos = route.params?.target === 'pos';
   const forAddProduct = route.params?.target === 'addProduct';
+  const forAddMany = route.params?.target === 'addMany';
+  const forAddManyRow = route.params?.target === 'addManyRow';
+  const addManyRowId = route.params?.rowId;
 
   const suppressCodeRef = useRef<string | null>(null);
   const busyRef = useRef(false);
@@ -103,8 +108,57 @@ export function BarcodeScannerScreen() {
           );
           return;
         }
+        if (forAddMany) {
+          if (hasBulkScanCode(code) || suppressCodeRef.current === code) {
+            setMessage('Already in this batch. Point at the next product.');
+            return;
+          }
+          const response = await client.shop.enrichBarcode({ code });
+          const result = addBulkScanItem({
+            code,
+            enrichment: { ...response.data, code: response.data.code || code },
+          });
+          suppressCodeRef.current = code;
+          setAddedCount(result.count);
+          const name = response.data.name || code;
+          setLastScanName(name);
+          setMessage(
+            result.added
+              ? `Added ${name}. Point at the next.`
+              : 'Already in this batch. Point at the next product.',
+          );
+          return;
+        }
+        if (forAddManyRow && addManyRowId) {
+          navigation.dispatch((state) => {
+            const formIndex = state.routes.findIndex((entry) => entry.name === 'ShopProductsAddMany');
+            if (formIndex >= 0) {
+              const routes = state.routes.slice(0, formIndex + 1).map((entry, index) => {
+                if (index !== formIndex) return entry;
+                const previous = (entry.params ?? {}) as { enrichCode?: string; enrichRowId?: string };
+                return {
+                  ...entry,
+                  params: {
+                    ...previous,
+                    enrichCode: code,
+                    enrichRowId: addManyRowId,
+                  },
+                };
+              });
+              return CommonActions.reset({
+                ...state,
+                routes,
+                index: formIndex,
+              });
+            }
+            return CommonActions.navigate({
+              name: 'ShopProductsAddMany',
+              params: { enrichCode: code, enrichRowId: addManyRowId },
+            });
+          });
+          return;
+        }
         if (forAddProduct) {
-          // Return to the existing product form (edit or add) — never open a blank new form.
           navigation.dispatch((state) => {
             const formIndex = state.routes.findIndex((entry) => entry.name === 'ShopProductAdd');
             if (formIndex >= 0) {
@@ -188,11 +242,15 @@ export function BarcodeScannerScreen() {
           <Text style={styles.titleLight}>
             {forPos
               ? 'Scan into sale basket'
-              : forAddProduct
-                ? 'Scan barcode to add product'
-                : 'Scan barcode / RFID'}
+              : forAddMany
+                ? 'Scan products into Add many'
+                : forAddManyRow
+                  ? 'Scan barcode into this row'
+                  : forAddProduct
+                    ? 'Scan barcode to add product'
+                    : 'Scan barcode / RFID'}
           </Text>
-          {forPos ? (
+          {forPos || forAddMany ? (
             <Text style={styles.metaLight}>
               Move to the next product after each add. Holding still won’t add the same item again.
             </Text>
@@ -202,11 +260,17 @@ export function BarcodeScannerScreen() {
               Scanned {addedCount} · bill has {billLines} line{billLines === 1 ? '' : 's'}
             </Text>
           ) : null}
+          {forAddMany ? (
+            <Text style={styles.statLine}>
+              Scanned {addedCount} product{addedCount === 1 ? '' : 's'}
+            </Text>
+          ) : null}
           {lastProduct ? (
             <Text style={styles.statLine}>
               Last: {lastProduct.name} · {lastProduct.price}
             </Text>
           ) : null}
+          {forAddMany && lastScanName ? <Text style={styles.statLine}>Last: {lastScanName}</Text> : null}
           {message ? <Text style={styles.messageLine}>{message}</Text> : null}
           {forPos && lastProduct ? (
             <Pressable
@@ -232,7 +296,7 @@ export function BarcodeScannerScreen() {
               }
             }}
           >
-            <Text style={styles.buttonText}>{forPos ? 'Back to bill' : 'Done'}</Text>
+            <Text style={styles.buttonText}>{forPos ? 'Back to bill' : forAddMany ? 'Done' : 'Done'}</Text>
           </Pressable>
         </View>
       </View>

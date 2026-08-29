@@ -13,7 +13,7 @@ import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { BusinessBillingSnapshot, PlatformTenantBusiness, PlatformTenantDetail } from '@ie-orbit/sdk';
 import { voucherStatusStyle } from '../shop/shopBooksHelpers';
-import { getProductName } from '../../utils/products';
+import { formatPlanDisplayName, getProductName } from '../../utils/products';
 import { formatDate } from '../../utils/format';
 
 function businessBillings(business: PlatformTenantBusiness): BusinessBillingSnapshot[] {
@@ -155,7 +155,7 @@ export function PlatformAdminTenantDetailScreen() {
                   billings.map((billing) => (
                     <View key={billing.product_code || billing.plan_code} style={styles.billingCard}>
                       <Text style={styles.billingTitle}>
-                        {getProductName(billing.product_code)} · {billing.plan_code || '—'}
+                        {getProductName(billing.product_code)} · {formatPlanDisplayName(undefined, billing.plan_code)}
                       </Text>
                       <Text style={styles.meta}>
                         {(billing.billing_state || billing.status || 'unknown').replace(/_/g, ' ')}

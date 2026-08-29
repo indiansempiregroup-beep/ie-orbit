@@ -15,6 +15,7 @@ import {
   AdminSection,
   AdminStatus,
   AdminTable,
+  planLabel,
   productLabel,
 } from './AdminChrome';
 import {
@@ -283,7 +284,7 @@ export function PlatformTenantDetailPage() {
                             <AdminStatus status={String(billing.billing_state || billing.status)} />
                           </div>
                           <div className="admin-billing-grid" style={{ marginTop: 0 }}>
-                            <BillingFact label="Plan" value={String(billing.plan_code ?? '—')} />
+                            <BillingFact label="Plan" value={planLabel(billing.plan_code)} />
                             <BillingFact label="Interval" value={String(billing.billing_interval || 'monthly')} />
                             <BillingFact
                               label="Period end"
@@ -438,7 +439,7 @@ export function PlatformTenantDetailPage() {
                               <strong>{productName}</strong>
                               <div className="admin-list-row__meta">
                                 {billing.billing_interval || 'monthly'}
-                                {billing.pending_plan_code ? ` · next: ${billing.pending_plan_code}` : ''}
+                                {billing.pending_plan_code ? ` · next: ${planLabel(billing.pending_plan_code)}` : ''}
                               </div>
                             </div>
                             <AdminStatus status={String(billing.billing_state || billing.status)} />
@@ -756,7 +757,7 @@ export function PlatformTenantDetailPage() {
                     <div className="admin-claim-card__meta">
                       <strong>
                         {formatInrFromPaise(payment.amount_paise)} · {productLabel(payment.product_code)}{' '}
-                        {payment.plan_code}
+                        {planLabel(payment.plan_code)}
                       </strong>
                       <p>{payment.business_name || 'Business'} · UTR {payment.upi_utr || 'not provided'}</p>
                       <p>Submitted {formatTimestamp(payment.claimed_at || payment.created_at)}</p>
@@ -822,7 +823,7 @@ export function PlatformTenantDetailPage() {
                       ) : null}
                     </td>
                     <td className="admin-table__muted">
-                      {productLabel(payment.product_code)} · {payment.plan_code || '—'}
+                      {productLabel(payment.product_code)} · {planLabel(payment.plan_code)}
                     </td>
                     <td>
                       <AdminStatus status={payment.payment_status || payment.status} />

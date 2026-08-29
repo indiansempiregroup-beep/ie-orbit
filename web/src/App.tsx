@@ -38,6 +38,9 @@ const BookingsPage = lazy(() => import('./features/bookings/BookingsPage').then(
 const BookingDetailPage = lazy(() => import('./features/bookings/BookingDetailPage').then((m) => ({ default: m.BookingDetailPage })));
 const ShopPosPage = lazy(() => import('./features/shop/ShopPosPage').then((m) => ({ default: m.ShopPosPage })));
 const ShopProductsPage = lazy(() => import('./features/shop/ShopProductsPage').then((m) => ({ default: m.ShopProductsPage })));
+const ShopProductsAddManyPage = lazy(() =>
+  import('./features/shop/ShopProductsAddManyPage').then((m) => ({ default: m.ShopProductsAddManyPage })),
+);
 const ShopOrdersPage = lazy(() => import('./features/shop/ShopOrdersPage').then((m) => ({ default: m.ShopOrdersPage })));
 const ShopOrderDetailPage = lazy(() => import('./features/shop/ShopOrderDetailPage').then((m) => ({ default: m.ShopOrderDetailPage })));
 const ShopReturnsPage = lazy(() => import('./features/shop/ShopReturnsPage').then((m) => ({ default: m.ShopReturnsPage })));
@@ -247,6 +250,7 @@ function App() {
                   <Route element={<PermissionGuard anyPermissions={['business:read', 'business:write', 'booking:write', 'service:read']} />}>
                     <Route path="/shop/pos" element={<ShopPosPage />} />
                     <Route path="/shop/products" element={<ShopProductsPage />} />
+                    <Route path="/shop/products/add-many" element={<ShopProductsAddManyPage />} />
                     <Route path="/shop/orders" element={<ShopOrdersPage />} />
                     <Route path="/shop/orders/:orderId" element={<ShopOrderDetailPage />} />
                     <Route path="/shop/billing" element={<ShopBillingPage />} />

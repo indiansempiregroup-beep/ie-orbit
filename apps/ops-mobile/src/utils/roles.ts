@@ -82,6 +82,19 @@ export function canWriteServices(user: UserProfile | null | undefined): boolean 
   );
 }
 
+/** Shop catalog create/edit — owners, managers, and staff with business/booking write. */
+export function canWriteShopCatalog(user: UserProfile | null | undefined): boolean {
+  return (
+    isManagerOrAbove(user) ||
+    hasPermission(user, 'business:write') ||
+    hasPermission(user, 'business:manage') ||
+    hasPermission(user, 'booking:write') ||
+    hasPermission(user, 'booking:manage') ||
+    hasPermission(user, 'service:write') ||
+    hasPermission(user, 'service:manage')
+  );
+}
+
 function roleCode(role: unknown): string {
   if (typeof role === 'string') return role;
   if (role && typeof role === 'object' && 'code' in role) {

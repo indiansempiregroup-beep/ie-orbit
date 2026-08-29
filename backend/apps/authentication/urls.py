@@ -10,6 +10,7 @@ from apps.authentication.api.iam_views import (
 from apps.authentication.api.views import (
     ChangePasswordView,
     ForgotPasswordView,
+    GoogleLoginView,
     LoginView,
     LogoutView,
     MeProfilePhotoView,
@@ -21,11 +22,11 @@ from apps.authentication.api.views import (
     ResetPasswordView,
     VerifyEmailView,
 )
-
 from apps.staff.api.invitation_views import AcceptInvitationView
 
 urlpatterns = [
     path("login", LoginView.as_view(), name="auth-login"),
+    path("google", GoogleLoginView.as_view(), name="auth-google"),
     path("refresh", RefreshView.as_view(), name="auth-refresh"),
     path("logout", LogoutView.as_view(), name="auth-logout"),
     path("register", RegisterView.as_view(), name="auth-register"),

@@ -61,6 +61,7 @@ export type RegisterWizardValues = {
   secondaryColor: string;
   logoAsset?: ImagePickerAsset | null;
   affiliateCode?: string;
+  googleIdToken?: string;
 };
 
 function slugify(value: string) {
@@ -104,7 +105,8 @@ export async function provisionWorkspace(values: RegisterWizardValues): Promise<
 
   const body: RegisterBusinessInput = {
     email: values.email,
-    password: values.password,
+    password: values.googleIdToken ? undefined : values.password,
+    google_id_token: values.googleIdToken,
     first_name: values.firstName,
     last_name: values.lastName,
     phone_number: values.mobile,

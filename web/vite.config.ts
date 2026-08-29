@@ -19,6 +19,8 @@ function resolveApiProxyTarget(env: Record<string, string>) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
   const places = env.VITE_GOOGLE_PLACES_API_KEY || env.GOOGLE_PLACES_API_KEY || '';
+  const googleOAuthClientId =
+    env.VITE_GOOGLE_OAUTH_CLIENT_ID || env.GOOGLE_OAUTH_CLIENT_ID || '';
   const opsWebUrl = (env.VITE_OPS_MOBILE_WEB_URL || process.env.VITE_OPS_MOBILE_WEB_URL || '').trim();
   const publicSiteUrl = (env.VITE_PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || '').trim();
   const adminAppUrl = (env.VITE_ADMIN_APP_URL || process.env.VITE_ADMIN_APP_URL || '').trim();
@@ -38,6 +40,10 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: 3000,
+      headers: {
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      },
       fs: {
         allow: [repoRoot],
       },
@@ -55,6 +61,9 @@ export default defineConfig(({ mode }) => {
     define: {
       ...(places
         ? { 'import.meta.env.VITE_GOOGLE_PLACES_API_KEY': JSON.stringify(places) }
+        : {}),
+      ...(googleOAuthClientId
+        ? { 'import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID': JSON.stringify(googleOAuthClientId) }
         : {}),
       ...(opsWebUrl
         ? { 'import.meta.env.VITE_OPS_MOBILE_WEB_URL': JSON.stringify(opsWebUrl) }

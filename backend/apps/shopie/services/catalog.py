@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Avg, Count, Q, QuerySet
 
 from apps.businesses.models import Business
@@ -23,8 +23,12 @@ from apps.shopie.services.html_sanitize import sanitize_product_html
 from apps.tenancy.models import Tenant
 
 
+BULK_PRODUCT_LIMIT = 200
+
+
 class CatalogService:
     enrichment = ProductEnrichmentService()
+    bulk_limit = BULK_PRODUCT_LIMIT
 
     def list_products(
         self,
@@ -379,3 +383,95 @@ class CatalogService:
             barcode_type=barcode_type,
             is_primary=bool(row.get("is_primary")),
         )
+
+    def create_products_bulk(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        items: list[dict[str, Any]],
+        godown_id: UUID | None = None,
+    ) -> tuple[list[ShopProduct], list[dict[str, Any]]]:
+        created: list[ShopProduct] = []
+        errors: list[dict[str, Any]] = []
+        for index, raw in enumerate(items):
+            row = dict(raw)
+            barcodes = row.pop("barcodes", None)
+            row.pop("business_id", None)
+            if godown_id and not row.get("godown_id"):
+                row["godown_id"] = godown_id
+            try:
+                created.append(
+                    self.create_product(
+                        tenant=tenant,
+                        business=business,
+                        data=row,
+                        barcodes=barcodes,
+                    )
+                )
+            except (ValidationError, IntegrityError) as exc:
+                errors.append(_bulk_row_error(index, exc))
+        return created, errors
+
+    def update_products_bulk(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        ids: list[UUID],
+        updates: dict[str, Any],
+    ) -> tuple[list[ShopProduct], list[dict[str, Any]]]:
+        updated: list[ShopProduct] = []
+        errors: list[dict[str, Any]] = []
+        price_update = updates.get("price") if isinstance(updates.get("price"), dict) else None
+        base = {
+            key: value
+            for key, value in updates.items()
+            if key != "price" and value is not None
+        }
+        if "gst_rate" in base and "tax_rate" not in base:
+            base["tax_rate"] = base["gst_rate"]
+        for index, product_id in enumerate(ids):
+            product = (
+                ShopProduct.objects.filter(tenant=tenant, business=business, id=product_id)
+                .prefetch_related("barcodes")
+                .first()
+            )
+            if not product:
+                errors.append({"index": index, "code": "not_found", "message": "Product not found."})
+                continue
+            data = dict(base)
+            if price_update:
+                if price_update.get("set") is not None:
+                    data["price"] = price_update["set"]
+                elif price_update.get("percent") is not None:
+                    factor = Decimal("1") + (Decimal(str(price_update["percent"])) / Decimal("100"))
+                    data["price"] = (product.price * factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if not data:
+                errors.append({"index": index, "code": "invalid", "message": "No updates were provided."})
+                continue
+            try:
+                updated.append(
+                    self.update_product(
+                        tenant=tenant,
+                        business=business,
+                        product=product,
+                        data=data,
+                    )
+                )
+            except (ValidationError, IntegrityError) as exc:
+                errors.append(_bulk_row_error(index, exc))
+        return updated, errors
+
+
+def _bulk_row_error(index: int, exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, ValidationError) and getattr(exc, "message_dict", None):
+        field, messages = next(iter(exc.message_dict.items()))
+        if isinstance(messages, (list, tuple)) and messages:
+            message = str(messages[0])
+        else:
+            message = str(messages)
+        return {"index": index, "code": str(field), "message": message}
+    if isinstance(exc, ValidationError) and getattr(exc, "messages", None):
+        return {"index": index, "code": "invalid", "message": str(exc.messages[0])}
+    return {"index": index, "code": "invalid", "message": str(exc)}

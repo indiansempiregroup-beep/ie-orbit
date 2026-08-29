@@ -86,7 +86,8 @@ server {
 
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options DENY always;
-    add_header Referrer-Policy same-origin always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     root /usr/share/nginx/html;
@@ -134,7 +135,8 @@ server {
 
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options DENY always;
-    add_header Referrer-Policy same-origin always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     root /usr/share/nginx/html;
@@ -151,16 +153,6 @@ server {
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
         client_max_body_size 15m;
-    }
-
-    location /admin/ {
-        proxy_pass http://django_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
     }
 
     location /static/ {
@@ -192,7 +184,8 @@ server {
 
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options DENY always;
-    add_header Referrer-Policy same-origin always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     root /usr/share/nginx/ops;

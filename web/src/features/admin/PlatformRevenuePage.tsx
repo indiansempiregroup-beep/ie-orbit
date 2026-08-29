@@ -10,6 +10,7 @@ import {
   AdminPageHeader,
   AdminSection,
   AdminTable,
+  planLabel,
   productLabel,
 } from './AdminChrome';
 
@@ -135,7 +136,7 @@ export function PlatformRevenuePage() {
               {(data?.by_plan ?? []).map((row) => (
                 <div key={row.plan_code} className="admin-mix-row">
                   <div className="admin-mix-row__head">
-                    <strong>{row.plan_code}</strong>
+                    <strong>{planLabel(row.plan_code)}</strong>
                     <span>
                       {row.count} · {formatInr(row.mrr_paise)}
                     </span>
@@ -204,7 +205,7 @@ export function PlatformRevenuePage() {
                       row.tenant_name
                     )}
                   </td>
-                  <td className="admin-table__muted">{row.plan_code}</td>
+                  <td className="admin-table__muted">{planLabel(row.plan_code)}</td>
                   <td>{formatInr(row.amount_paise)}</td>
                 </tr>
               ))}

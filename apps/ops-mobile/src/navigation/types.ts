@@ -3,7 +3,14 @@ import type { Booking } from '@ie-orbit/sdk';
 
 export type AuthStackParamList = {
   Login: undefined;
-  RegisterWizard: undefined;
+  RegisterWizard:
+    | {
+        googleIdToken?: string;
+        email?: string;
+        firstName?: string;
+        lastName?: string;
+      }
+    | undefined;
   ForgotPassword: undefined;
   ResetPassword: { token?: string };
   VerifyEmail: undefined;
@@ -60,6 +67,7 @@ export type RootStackParamList = {
   ProductSettings: undefined;
   ShopProducts: undefined;
   ShopProductAdd: { enrichCode?: string; productId?: string; returnTo?: 'pos' } | undefined;
+  ShopProductsAddMany: { enrichCode?: string; enrichRowId?: string } | undefined;
   ShopOrders: undefined;
   ShopOrderDetail: { orderId: string };
   ShopPos:
@@ -80,7 +88,11 @@ export type RootStackParamList = {
         selectedCustomerId?: string;
       }
     | undefined;
-  BarcodeScanner: { target?: 'pos' | 'addProduct'; productId?: string } | undefined;
+  BarcodeScanner: {
+    target?: 'pos' | 'addProduct' | 'addMany' | 'addManyRow';
+    productId?: string;
+    rowId?: string;
+  } | undefined;
   ShopReturns: undefined;
   ShopDeliveryZones: undefined;
   ShopDeliverySettings: undefined;

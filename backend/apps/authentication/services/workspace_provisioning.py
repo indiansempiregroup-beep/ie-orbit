@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.authentication.api.serializers import UserProfileSerializer
 from apps.authentication.services.authentication import AuthenticationService, TokenPair
+from apps.authentication.services.google import verify_google_id_token
 from apps.businesses.api.serializers import BusinessSerializer
 from apps.businesses.services import BusinessService
 from apps.tenancy.api.serializers import TenantSerializer, TenantSettingsSerializer
@@ -51,15 +52,30 @@ class WorkspaceProvisioningService:
             raise ValidationError({"slug": "This workspace code is already taken."})
 
         affiliate_code = str(data.get("affiliate_code") or "").strip()
+        google_id_token = str(data.get("google_id_token") or "").strip()
 
-        user = self.auth_service.register(
-            email=data["email"],
-            password=data["password"],
-            first_name=data.get("first_name", ""),
-            last_name=data.get("last_name", ""),
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+        if google_id_token:
+            identity = verify_google_id_token(google_id_token)
+            email = str(data.get("email") or "").strip().lower()
+            if email and email != identity.email:
+                raise ValidationError({"email": "Email must match the Google account."})
+            data["email"] = identity.email
+            user = self.auth_service.register_from_google(
+                identity=identity,
+                first_name=data.get("first_name", "") or identity.given_name,
+                last_name=data.get("last_name", "") or identity.family_name,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        else:
+            user = self.auth_service.register(
+                email=data["email"],
+                password=data["password"],
+                first_name=data.get("first_name", ""),
+                last_name=data.get("last_name", ""),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         tenant_data = {
             "slug": slug,
@@ -130,13 +146,22 @@ class WorkspaceProvisioningService:
                 code=affiliate_code,
             )
 
-        login_result = self.auth_service.login(
-            email=data["email"],
-            password=data["password"],
-            remember_me=True,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+        if google_id_token:
+            login_result = self.auth_service.issue_session(
+                user=user,
+                remember_me=True,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                event_type="google_login_succeeded",
+            )
+        else:
+            login_result = self.auth_service.login(
+                email=data["email"],
+                password=data["password"],
+                remember_me=True,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return WorkspaceProvisionResult(
             user=login_result.user,

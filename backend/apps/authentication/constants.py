@@ -176,3 +176,5 @@ DEFAULT_ROLE_PERMISSION_CODES: dict[str, tuple[str, ...]] = {
 }
 
 DEFAULT_OWNER_ROLE_CODE = "business_owner"
+DEFAULT_CUSTOMER_ROLE_CODE = "customer"
+GOOGLE_SOCIAL_PROVIDER = "google"

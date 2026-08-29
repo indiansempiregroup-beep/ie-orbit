@@ -12,6 +12,18 @@ export function productLabel(code?: string | null) {
   return ADMIN_PRODUCT_LABELS[code] ?? code.replace(/-/g, ' ');
 }
 
+export function planLabel(code?: string | null, name?: string | null) {
+  if (name) {
+    const stripped = name.replace(/^(Orbit Appoint|Orbit Mart|AppointIE|ShopIE)\s+/i, '').trim();
+    if (stripped && !/appointie|shopie/i.test(stripped)) return stripped;
+  }
+  const value = (code ?? '').toLowerCase();
+  if (value.includes('pro')) return 'Pro';
+  if (value.includes('starter')) return 'Starter';
+  if (!code) return '—';
+  return code.replace(/^(appointie|shopie)[-_]/i, '').replace(/-/g, ' ');
+}
+
 export function AdminPage({ children }: { children: ReactNode }) {
   return <div className="admin-page">{children}</div>;
 }

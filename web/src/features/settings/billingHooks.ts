@@ -19,11 +19,21 @@ export function useBillingPlansQuery() {
   });
 }
 
-export function useBusinessBillingSnapshotQuery(businessId: string | undefined) {
+export function usePublicBillingPlansQuery() {
   const client = useApiClient();
   return useQuery({
-    queryKey: ['business', businessId, 'billing'],
-    queryFn: async () => (await client.businesses.billingSnapshot(businessId!)).data,
+    queryKey: ['public', 'plans'],
+    queryFn: async () => (await client.billing.publicPlans()).data,
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+export function useBusinessBillingSnapshotQuery(businessId: string | undefined, productCode?: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['business', businessId, 'billing', productCode ?? 'default'],
+    queryFn: async () =>
+      (await client.businesses.billingSnapshot(businessId!, productCode ? { product_code: productCode } : undefined)).data,
     enabled: Boolean(businessId),
   });
 }

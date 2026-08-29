@@ -32,7 +32,7 @@ export function SoftLockBanner() {
         </span>
       </div>
       <Link
-        to="/settings"
+        to="/settings/products"
         style={{
           padding: '8px 14px',
           borderRadius: 10,

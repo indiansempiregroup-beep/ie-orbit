@@ -1,22 +1,31 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { PostAuthRedirect } from '../../components/PostAuthRedirect';
 import { registerStartPath } from '../onboarding/affiliateCode';
+import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../lib/googleAuth';
 
 export function AuthPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   usePageMeta({ title: 'Sign in — IE Orbit' });
   const auth = useAuthContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [googleSignup, setGoogleSignup] = useState<{
+    googleIdToken: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  } | null>(null);
 
   if (auth.loading) {
     return <p role="status">{t('common.loading')}</p>;
@@ -70,6 +79,42 @@ export function AuthPage() {
           {auth.loading ? t('auth.signingIn') : t('auth.signIn')}
         </Button>
       </form>
+      <GoogleSignInButton
+        disabled={auth.loading}
+        onIdToken={async (idToken) => {
+          try {
+            setGoogleSignup(null);
+            setError(null);
+            await auth.loginWithGoogle(idToken, remember);
+          } catch (err) {
+            if (!isGoogleAccountNotRegistered(err)) {
+              setError(getApiErrorMessage(err, 'Google sign-in failed. Please try again.'));
+              return;
+            }
+            const claims = decodeGoogleIdToken(idToken);
+            setGoogleSignup({
+              googleIdToken: idToken,
+              email: claims.email,
+              firstName: claims.given_name,
+              lastName: claims.family_name,
+            });
+          }
+        }}
+      />
+      {googleSignup ? (
+        <div className="auth-signup-prompt">
+          <strong>No business on this Google account</strong>
+          <p>
+            You need to create your business before you can sign in. Use the link below to register.
+          </p>
+          <Link
+            to={registerStartPath()}
+            state={googleSignup}
+          >
+            Create your business
+          </Link>
+        </div>
+      ) : null}
       <p className="auth-links">
         <Link to="/auth/forgot-password">{t('auth.forgotPassword')}</Link>
         <span aria-hidden="true"> · </span>

@@ -10,10 +10,25 @@ from rest_framework import exceptions
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.authentication.models import RefreshTokenRecord, User, UserSession, UserStatus
+from apps.authentication.constants import (
+    DEFAULT_CUSTOMER_ROLE_CODE,
+    DEFAULT_OWNER_ROLE_CODE,
+    GOOGLE_SOCIAL_PROVIDER,
+)
+from apps.authentication.models import (
+    RefreshTokenRecord,
+    SocialAccount,
+    User,
+    UserSession,
+    UserStatus,
+)
 from apps.authentication.repositories.users import UserRepository
 from apps.authentication.services.audit import SecurityAuditService
-from apps.authentication.constants import DEFAULT_OWNER_ROLE_CODE
+from apps.authentication.services.google import (
+    GoogleAccountNotRegistered,
+    GoogleIdentity,
+    verify_google_id_token,
+)
 from apps.authentication.services.roles import RoleService
 from apps.authentication.services.verification import EmailVerificationService
 
@@ -70,8 +85,35 @@ class AuthenticationService:
                 "That email or password doesn't look right. Please try again."
             )
 
+        return self.issue_session(
+            user=user,
+            remember_me=remember_me,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            event_type="login_succeeded",
+        )
+
+    def issue_session(
+        self,
+        *,
+        user: User,
+        remember_me: bool,
+        ip_address: str | None,
+        user_agent: str,
+        event_type: str = "login_succeeded",
+    ) -> LoginResult:
+        if user.status in {UserStatus.SUSPENDED, UserStatus.ARCHIVED}:
+            raise exceptions.AuthenticationFailed(
+                "This account is disabled. Contact support if you need access."
+            )
+        if user.is_locked:
+            raise exceptions.AuthenticationFailed(
+                "This account is temporarily locked. Try again in a few minutes."
+            )
+        if user.status == UserStatus.LOCKED:
+            user.status = UserStatus.ACTIVE
         if user.status not in {UserStatus.ACTIVE, UserStatus.PENDING_VERIFICATION}:
-            raise exceptions.PermissionDenied("User account is not active.")
+            raise exceptions.AuthenticationFailed("This account is not active.")
 
         user.failed_login_count = 0
         user.locked_until = None
@@ -80,6 +122,7 @@ class AuthenticationService:
         user.last_login_user_agent = user_agent
         user.save(
             update_fields=[
+                "status",
                 "failed_login_count",
                 "locked_until",
                 "last_login",
@@ -108,7 +151,7 @@ class AuthenticationService:
             expires_at=session.expires_at,
         )
         self.audit_service.record(
-            event_type="login_succeeded",
+            event_type=event_type,
             user=user,
             ip_address=ip_address,
             user_agent=user_agent,
@@ -122,6 +165,76 @@ class AuthenticationService:
                 token_type="Bearer",
                 expires_in=int(access["exp"] - timezone.now().timestamp()),
             ),
+        )
+
+    def login_with_google(
+        self,
+        *,
+        id_token: str,
+        client: str,
+        remember_me: bool,
+        ip_address: str | None,
+        user_agent: str,
+    ) -> LoginResult:
+        identity = verify_google_id_token(id_token)
+        user = self._resolve_google_user(identity)
+        if user is None:
+            if client != "customer":
+                raise GoogleAccountNotRegistered()
+            user = self._create_google_user(
+                identity=identity,
+                role_code=DEFAULT_CUSTOMER_ROLE_CODE,
+                first_name=identity.given_name,
+                last_name=identity.family_name,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        else:
+            self._link_google_account(user=user, identity=identity)
+            self._activate_verified_google_user(user=user, identity=identity)
+            if client == "ops" and not self._user_has_ops_workspace(user):
+                raise GoogleAccountNotRegistered()
+        return self.issue_session(
+            user=user,
+            remember_me=remember_me,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            event_type="google_login_succeeded",
+        )
+
+    def register_from_google(
+        self,
+        *,
+        identity: GoogleIdentity,
+        role_code: str = DEFAULT_OWNER_ROLE_CODE,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> User:
+        existing_social = SocialAccount.objects.filter(
+            provider=GOOGLE_SOCIAL_PROVIDER, subject=identity.subject
+        ).first()
+        if existing_social:
+            if self._user_has_ops_workspace(existing_social.user):
+                raise exceptions.ValidationError(
+                    {"google_id_token": "This Google account is already registered."}
+                )
+            return existing_social.user
+        existing_user = self.user_repository.get_by_email(identity.email)
+        if existing_user:
+            if self._user_has_ops_workspace(existing_user):
+                raise exceptions.ValidationError({"email": "A user with this email already exists."})
+            self._link_google_account(user=existing_user, identity=identity)
+            self._activate_verified_google_user(user=existing_user, identity=identity)
+            return existing_user
+        return self._create_google_user(
+            identity=identity,
+            role_code=role_code,
+            first_name=first_name or identity.given_name,
+            last_name=last_name or identity.family_name,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
 
     def register(
@@ -202,6 +315,115 @@ class AuthenticationService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+
+    def _user_has_ops_workspace(self, user: User) -> bool:
+        if getattr(user, "is_superuser", False):
+            return True
+        role_codes = set(
+            user.user_roles.filter(role__is_active=True).values_list("role__code", flat=True)
+        )
+        if role_codes & {"platform_admin", "super_admin"}:
+            return True
+        from apps.tenancy.repositories.tenancy import TenantRepository
+
+        return TenantRepository().list_for_user(user).exists()
+
+    def _resolve_google_user(self, identity: GoogleIdentity) -> User | None:
+        social = (
+            SocialAccount.objects.filter(provider=GOOGLE_SOCIAL_PROVIDER, subject=identity.subject)
+            .select_related("user")
+            .first()
+        )
+        if social and social.user and social.user.deleted_at is None:
+            return social.user
+        return self.user_repository.get_active_by_email(identity.email)
+
+    def _link_google_account(self, *, user: User, identity: GoogleIdentity) -> SocialAccount:
+        existing = (
+            SocialAccount.objects.filter(provider=GOOGLE_SOCIAL_PROVIDER, subject=identity.subject)
+            .select_related("user")
+            .first()
+        )
+        if existing and existing.user_id != user.id:
+            raise exceptions.AuthenticationFailed(
+                "This Google account is already linked to another user."
+            )
+        linked = SocialAccount.objects.filter(user=user, provider=GOOGLE_SOCIAL_PROVIDER).first()
+        if linked and linked.subject != identity.subject:
+            raise exceptions.AuthenticationFailed(
+                "This email is already linked to a different Google account."
+            )
+        social, _created = SocialAccount.objects.get_or_create(
+            provider=GOOGLE_SOCIAL_PROVIDER,
+            subject=identity.subject,
+            defaults={"user": user, "email": identity.email},
+        )
+        if social.email != identity.email:
+            social.email = identity.email
+            social.save(update_fields=["email", "updated_at"])
+        return social
+
+    def _activate_verified_google_user(self, *, user: User, identity: GoogleIdentity) -> None:
+        update_fields: list[str] = []
+        if identity.picture and not user.profile_photo:
+            user.profile_photo = identity.picture
+            update_fields.append("profile_photo")
+        if not user.first_name and identity.given_name:
+            user.first_name = identity.given_name
+            update_fields.append("first_name")
+        if not user.last_name and identity.family_name:
+            user.last_name = identity.family_name
+            update_fields.append("last_name")
+        if not user.email_verified_at:
+            user.email_verified_at = timezone.now()
+            update_fields.append("email_verified_at")
+        if user.status in {UserStatus.PENDING_VERIFICATION, UserStatus.LOCKED}:
+            user.status = UserStatus.ACTIVE
+            update_fields.append("status")
+        if user.locked_until:
+            user.locked_until = None
+            update_fields.append("locked_until")
+        if user.failed_login_count:
+            user.failed_login_count = 0
+            update_fields.append("failed_login_count")
+        if update_fields:
+            update_fields.append("updated_at")
+            user.save(update_fields=update_fields)
+
+    def _create_google_user(
+        self,
+        *,
+        identity: GoogleIdentity,
+        role_code: str,
+        first_name: str | None,
+        last_name: str | None,
+        ip_address: str | None,
+        user_agent: str,
+    ) -> User:
+        user = User.objects.create_user(
+            email=identity.email,
+            password=None,
+            first_name=first_name or "",
+            last_name=last_name or "",
+            profile_photo=identity.picture,
+            status=UserStatus.ACTIVE,
+            email_verified_at=timezone.now(),
+        )
+        RoleService().assign_role(user=user, role_code=role_code)
+        SocialAccount.objects.create(
+            user=user,
+            provider=GOOGLE_SOCIAL_PROVIDER,
+            subject=identity.subject,
+            email=identity.email,
+        )
+        self.audit_service.record(
+            event_type="google_user_registered",
+            user=user,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"provider": GOOGLE_SOCIAL_PROVIDER, "role": role_code},
+        )
+        return user
 
     def _record_failed_login(self, *, user: User, ip_address: str | None, user_agent: str) -> None:
         user.failed_login_count += 1

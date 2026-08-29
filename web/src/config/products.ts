@@ -33,12 +33,48 @@ export function getProductById(productId: string | null | undefined): ProductDef
 }
 
 export function getProductName(productId: string | null | undefined): string {
-  return getProductById(productId)?.name ?? productId?.replace(/-/g, ' ') ?? 'Orbit Appoint';
+  const known = getProductById(productId);
+  if (known) return known.name;
+  if (productId === 'shopie') return 'Orbit Mart';
+  if (!productId || productId === 'appointie') return 'Orbit Appoint';
+  return productId.replace(/-/g, ' ');
 }
 
 /** Strip the product prefix from plan names. Legacy AppointIE/ShopIE prefixes remain for stored rows. */
 export function stripPlanProductPrefix(name: string): string {
   return name.replace(/^(Orbit Appoint|Orbit Mart|AppointIE|ShopIE)\s+/i, '') || name;
+}
+
+export function isRecommendedPlanCode(code?: string | null): boolean {
+  const value = (code ?? '').toLowerCase();
+  return value.includes('pro') && !value.includes('starter');
+}
+
+export function getRecommendedPlanCode(plans: Array<{ code?: string; plan_code?: string }>): string {
+  const recommended = plans.find((plan) => isRecommendedPlanCode(plan.code ?? plan.plan_code));
+  return recommended?.code ?? recommended?.plan_code ?? plans[0]?.code ?? plans[0]?.plan_code ?? '';
+}
+
+export function formatPlanDisplayName(name?: string | null, code?: string | null): string {
+  if (name) {
+    const stripped = stripPlanProductPrefix(name);
+    if (stripped && !/appointie|shopie/i.test(stripped)) return stripped;
+  }
+  const value = (code ?? '').toLowerCase();
+  if (value.includes('pro')) return 'Pro';
+  if (value.includes('starter')) return 'Starter';
+  if (value === 'canceled') return 'Canceled';
+  return strippedOrCode(name, code);
+}
+
+function strippedOrCode(name?: string | null, code?: string | null): string {
+  if (name) return stripPlanProductPrefix(name);
+  return (code ?? '').replace(/^(appointie|shopie)[-_]/i, '') || 'Plan';
+}
+
+export function formatInrFromPaise(paise?: number | null): string | null {
+  if (paise == null) return null;
+  return `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
 }
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['trialing', 'active', 'soft_locked']);

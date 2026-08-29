@@ -62,6 +62,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: appName,
   slug: appSlug,
+  owner: 'indians-empire',
   scheme: appSlug,
   version: '0.1.0',
   orientation: 'portrait',
@@ -102,6 +103,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     flavorKey,
     tenantSlug: selectedFlavor?.tenantSlug,
     businessCode: selectedFlavor?.businessCode,
+    googleOAuth: {
+      clientId:
+        process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID ||
+        process.env.GOOGLE_OAUTH_CLIENT_ID ||
+        '',
+    },
     eas: {
       projectId:
         (process.env.EXPO_PUBLIC_EAS_PROJECT_ID || '').trim() ||

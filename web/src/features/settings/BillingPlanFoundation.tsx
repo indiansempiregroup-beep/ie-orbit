@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { formatInrFromPaise, formatPlanDisplayName } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatTimestamp } from '../../lib/datetime';
@@ -95,7 +96,7 @@ export function BillingPlanFoundation() {
         {billing ? (
           <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
             <div className="billing-foundation-chips">
-              <span className="billing-chip billing-chip--ok">Plan: {billing.plan_code}</span>
+              <span className="billing-chip billing-chip--ok">Plan: {formatPlanDisplayName(undefined, billing.plan_code)}</span>
               <span className="billing-chip billing-chip--muted" style={{ textTransform: 'capitalize' }}>
                 {billing.status.replace('_', ' ')}
               </span>
@@ -110,14 +111,14 @@ export function BillingPlanFoundation() {
               ) : null}
               {billing.pending_plan_code ? (
                 <span className="billing-chip billing-chip--warn">
-                  Next: {billing.pending_plan_code}
+                  Next: {formatPlanDisplayName(undefined, billing.pending_plan_code)}
                 </span>
               ) : null}
             </div>
             <BillingDates billing={billing} />
             {billing.pending_plan_code ? (
               <p className="billing-section-meta" style={{ margin: 0 }}>
-                Downgrades take effect on the renewal date. You keep {billing.plan_code} until then.
+                Downgrades take effect on the renewal date. You keep {formatPlanDisplayName(undefined, billing.plan_code)} until then.
                 {businessId ? (
                   <>
                     {' '}
@@ -250,7 +251,7 @@ export function BillingPlanFoundation() {
             >
               {plans.map((plan) => (
                 <option key={plan.plan_code} value={plan.plan_code}>
-                  {plan.name} ({plan.currency} {((plan.amount_paise ?? 0) / 100).toFixed(2)})
+                  {formatPlanDisplayName(plan.name, plan.plan_code)} ({formatInrFromPaise(plan.amount_paise) ?? '—'})
                 </option>
               ))}
             </select>

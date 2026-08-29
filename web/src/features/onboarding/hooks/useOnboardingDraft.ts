@@ -53,7 +53,8 @@ export function useOnboardingDraft() {
       const current = raw
         ? { ...getDefaultRegisterValues(), ...JSON.parse(raw) }
         : getDefaultRegisterValues();
-      localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify({ ...current, ...values }));
+      const { googleIdToken: _googleIdToken, ...safeValues } = { ...current, ...values };
+      localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(safeValues));
     } catch {
       // ignore
     }

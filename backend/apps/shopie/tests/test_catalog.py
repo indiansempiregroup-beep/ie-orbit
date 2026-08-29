@@ -95,3 +95,81 @@ def test_duplicate_barcode_rejected(shop_business: Business) -> None:
             data={"name": "B", "price": "10"},
             barcodes=[{"code": "DUP-1", "barcode_type": BarcodeType.INTERNAL}],
         )
+
+
+@pytest.mark.django_db
+def test_create_products_bulk_partial_success(shop_business: Business) -> None:
+    service = CatalogService()
+    created, errors = service.create_products_bulk(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        items=[
+            {
+                "name": "Rice 5kg",
+                "price": "249.00",
+                "gst_rate": "5",
+                "category": "food_grocery",
+                "barcodes": [{"code": "BULK-OK-1", "barcode_type": BarcodeType.INTERNAL, "is_primary": True}],
+            },
+            {
+                "name": "Duplicate rice",
+                "price": "199.00",
+                "barcodes": [{"code": "BULK-OK-1", "barcode_type": BarcodeType.INTERNAL}],
+            },
+            {
+                "name": "Atta 10kg",
+                "price": "399.00",
+                "stock_on_hand": "12",
+            },
+        ],
+    )
+    assert [row.name for row in created] == ["Rice 5kg", "Atta 10kg"]
+    assert created[1].stock_on_hand == Decimal("12")
+    assert len(errors) == 1
+    assert errors[0]["index"] == 1
+    assert "already assigned" in errors[0]["message"]
+
+
+@pytest.mark.django_db
+def test_update_products_bulk_price_and_status(shop_business: Business) -> None:
+    service = CatalogService()
+    first = service.create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={"name": "Oil", "price": "100.00", "gst_rate": "5", "status": ProductStatus.ACTIVE},
+    )
+    second = service.create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={"name": "Soap", "price": "40.00", "gst_rate": "18", "status": ProductStatus.ACTIVE},
+    )
+    updated, errors = service.update_products_bulk(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        ids=[first.id, second.id],
+        updates={"status": ProductStatus.INACTIVE, "gst_rate": Decimal("12"), "price": {"percent": Decimal("10")}},
+    )
+    assert errors == []
+    assert len(updated) == 2
+    by_id = {row.id: row for row in updated}
+    assert by_id[first.id].status == ProductStatus.INACTIVE
+    assert by_id[first.id].price == Decimal("110.00")
+    assert by_id[first.id].gst_rate == Decimal("12")
+    assert by_id[first.id].tax_rate == Decimal("12")
+    assert by_id[second.id].price == Decimal("44.00")
+
+
+@pytest.mark.django_db
+def test_update_products_bulk_missing_id(shop_business: Business) -> None:
+    from uuid import uuid4
+
+    service = CatalogService()
+    missing = uuid4()
+    updated, errors = service.update_products_bulk(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        ids=[missing],
+        updates={"status": ProductStatus.ARCHIVED},
+    )
+    assert updated == []
+    assert errors == [{"index": 0, "code": "not_found", "message": "Product not found."}]

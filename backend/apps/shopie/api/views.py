@@ -47,6 +47,8 @@ from apps.shopie.api.serializers import (
     ShopOrderSerializer,
     ShopOrderSettlePaymentSerializer,
     ShopOrderStatusSerializer,
+    ShopProductBulkCreateSerializer,
+    ShopProductBulkPatchSerializer,
     ShopProductPatchSerializer,
     ShopProductSerializer,
     ShopProductWriteSerializer,
@@ -145,6 +147,49 @@ class ShopProductDetailView(APIView):
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
         return success_response(ShopProductSerializer(product).data)
+
+
+class ShopProductBulkView(APIView):
+    permission_classes = [ShopAccessPermission]
+    catalog = CatalogService()
+
+    @extend_schema(request=ShopProductBulkCreateSerializer)
+    def post(self, request: Request) -> Response:
+        serializer = ShopProductBulkCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = _business(request, data["business_id"], features=CATALOG_FEATURES)
+        created, errors = self.catalog.create_products_bulk(
+            tenant=request.current_tenant,
+            business=business,
+            items=list(data["items"]),
+            godown_id=data.get("godown_id"),
+        )
+        return success_response(
+            {
+                "created": ShopProductSerializer(created, many=True).data,
+                "errors": errors,
+            }
+        )
+
+    @extend_schema(request=ShopProductBulkPatchSerializer)
+    def patch(self, request: Request) -> Response:
+        serializer = ShopProductBulkPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = _business(request, data["business_id"], features=CATALOG_FEATURES)
+        updated, errors = self.catalog.update_products_bulk(
+            tenant=request.current_tenant,
+            business=business,
+            ids=list(data["ids"]),
+            updates=dict(data["updates"]),
+        )
+        return success_response(
+            {
+                "updated": ShopProductSerializer(updated, many=True).data,
+                "errors": errors,
+            }
+        )
 
 
 class ShopBarcodeLookupView(APIView):

@@ -37,6 +37,8 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
 class BusinessProductSubscriptionSerializer(serializers.ModelSerializer):
     plan_code = serializers.CharField(source="plan.code", read_only=True)
     plan_name = serializers.CharField(source="plan.name", read_only=True)
+    pending_plan_code = serializers.SerializerMethodField()
+    pending_plan_name = serializers.SerializerMethodField()
 
     class Meta:
         model = BusinessProductSubscription
@@ -56,10 +58,27 @@ class BusinessProductSubscriptionSerializer(serializers.ModelSerializer):
             "extra_staff",
             "extra_offices",
             "pets_pack_enabled",
+            "pending_plan_code",
+            "pending_plan_name",
+            "pending_billing_interval",
+            "pending_cancel",
+            "pending_plan_scheduled_at",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_pending_plan_code(self, obj: BusinessProductSubscription) -> str | None:
+        if obj.pending_cancel:
+            return "canceled"
+        if obj.pending_plan_id and obj.pending_plan:
+            return obj.pending_plan.code
+        return None
+
+    def get_pending_plan_name(self, obj: BusinessProductSubscription) -> str | None:
+        if obj.pending_cancel or not obj.pending_plan_id or not obj.pending_plan:
+            return None
+        return obj.pending_plan.name
 
 
 class BusinessSettingsSerializer(serializers.ModelSerializer):

@@ -11,14 +11,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
+from apps.audit.services.audit import record_audit
+from apps.audit.services.events import publish_domain_event
 from apps.authentication.api.serializers import (
     ChangePasswordSerializer,
     ForgotPasswordSerializer,
+    GoogleLoginSerializer,
     LoginSerializer,
     LogoutSerializer,
+    RefreshSerializer,
     RegisterBusinessSerializer,
     RegisterSerializer,
-    RefreshSerializer,
     ResendVerificationSerializer,
     ResetPasswordSerializer,
     UserProfileSerializer,
@@ -31,8 +34,6 @@ from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.roles import RoleService
 from apps.authentication.services.verification import EmailVerificationService
 from apps.authentication.services.workspace_provisioning import WorkspaceProvisioningService
-from apps.audit.services.audit import record_audit
-from apps.audit.services.events import publish_domain_event
 from apps.businesses.models import Business
 from apps.common.api.responses import success_response
 from apps.common.utils.request_auth import resolve_authenticated_user
@@ -53,6 +54,36 @@ class LoginView(APIView):
         result = AuthenticationService().login(
             email=serializer.validated_data["email"],
             password=serializer.validated_data["password"],
+            remember_me=serializer.validated_data["remember_me"],
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        user = RoleService().ensure_superuser_platform_role(user=result.user)
+        return success_response(
+            {
+                "access": result.tokens.access,
+                "refresh": result.tokens.refresh,
+                "token_type": result.tokens.token_type,
+                "expires_in": result.tokens.expires_in,
+                "user": UserProfileSerializer(user).data,
+            },
+            status_code=status.HTTP_200_OK,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_scope = "auth_login"
+    serializer_class = GoogleLoginSerializer
+
+    def post(self, request: Request) -> Response:
+        serializer = GoogleLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = AuthenticationService().login_with_google(
+            id_token=serializer.validated_data["id_token"],
+            client=serializer.validated_data["client"],
             remember_me=serializer.validated_data["remember_me"],
             ip_address=client_ip(request),
             user_agent=user_agent(request),

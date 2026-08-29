@@ -10,6 +10,7 @@ import {
   AdminPage,
   AdminPageHeader,
   AdminSection,
+  planLabel,
   productLabel,
 } from './AdminChrome';
 import { useInvalidatePlatform, usePlatformUpiClaimsQuery } from './adminHooks';
@@ -71,7 +72,7 @@ export function PlatformClaimsPage() {
               <article key={payment.id} className="admin-claim-card">
                 <div className="admin-claim-card__meta">
                   <strong>
-                    {formatInr(payment.amount_paise)} · {productLabel(payment.product_code)} {payment.plan_code}
+                    {formatInr(payment.amount_paise)} · {productLabel(payment.product_code)} {planLabel(payment.plan_code)}
                   </strong>
                   <p>
                     {payment.tenant_id ? (

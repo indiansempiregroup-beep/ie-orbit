@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Camera, Pencil, Plus, Rows3 } from 'lucide-react';
+import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-orbit/sdk';
 import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
@@ -130,6 +132,7 @@ export function ShopProductsPage() {
   const [stockFilter, setStockFilter] = useState('');
   const [barcodeLookup, setBarcodeLookup] = useState('');
   const [nameLookup, setNameLookup] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
   const dialog = useDialog();
   const auth = useAuth();
   const snackbar = useSnackbar();
@@ -138,13 +141,26 @@ export function ShopProductsPage() {
   const products = useShopProducts(search, status, category);
   const godownsQuery = useShopGodowns();
   const godowns = godownsQuery.data ?? [];
-  const { create, update, enrich, analyzePackaging, getPackagingAnalysis, businessId } =
+  const { create, update, patchBulk, enrich, analyzePackaging, getPackagingAnalysis, businessId } =
     useShopProductMutations();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkGst, setBulkGst] = useState('');
+  const [bulkPrice, setBulkPrice] = useState('');
+  const [bulkPercent, setBulkPercent] = useState('');
+  const [showBulkHint, setShowBulkHint] = useState(() => {
+    try {
+      return window.localStorage.getItem('shop.bulkHint.dismissed') !== '1';
+    } catch {
+      return true;
+    }
+  });
 
   const filtered = useMemo(() => {
     const rows = products.data ?? [];
@@ -158,6 +174,59 @@ export function ShopProductsPage() {
       return true;
     });
   }, [products.data, stockFilter]);
+
+  const filteredIds = useMemo(() => filtered.map((product) => product.id), [filtered]);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  }
+
+  function toggleSelectFiltered() {
+    setSelectedIds((current) => {
+      if (allFilteredSelected) return current.filter((id) => !filteredIds.includes(id));
+      return Array.from(new Set([...current, ...filteredIds]));
+    });
+  }
+
+  async function applyBulkEdit() {
+    const ids = selectedIds.slice(0, 200);
+    if (!ids.length) return;
+    const updates: {
+      status?: string;
+      category?: string;
+      gst_rate?: string;
+      price?: { set?: string; percent?: string };
+    } = {};
+    if (bulkStatus) updates.status = bulkStatus;
+    if (bulkCategory) updates.category = bulkCategory;
+    if (bulkGst.trim()) updates.gst_rate = bulkGst.trim();
+    if (bulkPrice.trim()) updates.price = { set: bulkPrice.trim() };
+    else if (bulkPercent.trim()) updates.price = { percent: bulkPercent.trim() };
+    if (!Object.keys(updates).length) {
+      snackbar.push('Choose a status, category, GST, or price change.', 'error');
+      return;
+    }
+    try {
+      const result = await patchBulk.mutateAsync({ ids, updates });
+      const failed = result.errors.length;
+      if (result.updated.length && !failed) {
+        snackbar.push(`Updated ${result.updated.length} product${result.updated.length === 1 ? '' : 's'}.`, 'success');
+        setSelectedIds([]);
+        setBulkStatus('');
+        setBulkCategory('');
+        setBulkGst('');
+        setBulkPrice('');
+        setBulkPercent('');
+      } else if (result.updated.length) {
+        snackbar.push(`Updated ${result.updated.length}, ${failed} failed.`, 'info');
+      } else {
+        snackbar.push(result.errors[0]?.message || 'Unable to update the selected products.', 'error');
+      }
+    } catch (error) {
+      snackbar.push(error instanceof Error ? error.message : 'Unable to update the selected products.', 'error');
+    }
+  }
 
   const saving = create.isPending || update.isPending;
 
@@ -407,17 +476,73 @@ export function ShopProductsPage() {
             },
           ]}
           action={
-            <Button type="button" variant="primary" onClick={openAddDialog}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Plus size={16} aria-hidden="true" />
-                Add product
-              </span>
-            </Button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Link to="/shop/products/add-many">
+                <Button type="button" variant="neutral">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Rows3 size={16} aria-hidden="true" />
+                    Add many
+                  </span>
+                </Button>
+              </Link>
+              <Button type="button" variant="primary" onClick={openAddDialog}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Plus size={16} aria-hidden="true" />
+                  Add product
+                </span>
+              </Button>
+            </div>
           }
         />
 
+        {showBulkHint ? (
+          <p
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              margin: '0 0 12px',
+              padding: '10px 12px',
+              borderRadius: 12,
+              background: '#eef4ff',
+              color: '#1e3a5f',
+              fontSize: 13,
+            }}
+          >
+            <span>Need a catalog? Add many lets you paste Excel or scan barcodes.</span>
+            <button
+              type="button"
+              onClick={() => {
+                setShowBulkHint(false);
+                try {
+                  window.localStorage.setItem('shop.bulkHint.dismissed', '1');
+                } catch {
+                  /* ignore */
+                }
+              }}
+              aria-label="Dismiss hint"
+              style={{
+                border: 0,
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: 16,
+                color: '#6b7280',
+              }}
+            >
+              ×
+            </button>
+          </p>
+        ) : null}
+
         {products.isLoading ? <p>Loading…</p> : null}
         {products.error ? <p role="alert">{(products.error as Error).message}</p> : null}
+        {filtered.length ? (
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
+            <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectFiltered} />
+            Select all ({filtered.length})
+          </label>
+        ) : null}
         <div style={{ display: 'grid', gap: 8 }}>
           {filtered.map((product) => (
             <div
@@ -432,6 +557,13 @@ export function ShopProductsPage() {
               }}
             >
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', minWidth: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(product.id)}
+                  onChange={() => toggleSelected(product.id)}
+                  aria-label={`Select ${product.name}`}
+                  style={{ marginTop: 20 }}
+                />
                 {(() => {
                   const src = resolveMediaAssetUrl(primaryProductImageUrl(product));
                   return src ? (
@@ -521,16 +653,114 @@ export function ShopProductsPage() {
           {!products.isLoading && !filtered.length ? (
             <div style={{ display: 'grid', gap: 8 }}>
               <p>No products match these filters.</p>
-              <Button type="button" variant="primary" onClick={openAddDialog}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <Plus size={16} aria-hidden="true" />
-                  Add your first product
-                </span>
-              </Button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Button type="button" variant="primary" onClick={openAddDialog}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Plus size={16} aria-hidden="true" />
+                    Add your first product
+                  </span>
+                </Button>
+                <Link to="/shop/products/add-many">
+                  <Button type="button" variant="neutral">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <Rows3 size={16} aria-hidden="true" />
+                      Add many
+                    </span>
+                  </Button>
+                </Link>
+              </div>
             </div>
           ) : null}
         </div>
       </Card>
+
+      {selectedIds.length ? (
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 12,
+            zIndex: 5,
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+            alignItems: 'flex-end',
+            padding: 14,
+            borderRadius: 16,
+            border: '1px solid var(--border, #e5e7eb)',
+            background: 'var(--card, #fff)',
+            boxShadow: '0 8px 24px rgba(15, 22, 35, 0.08)',
+          }}
+        >
+          <strong style={{ alignSelf: 'center' }}>
+            {selectedIds.length} selected{selectedIds.length > 200 ? ' (first 200 will update)' : ''}
+          </strong>
+          <label style={{ display: 'grid', gap: 4, minWidth: 120 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Status</span>
+            <select
+              value={bulkStatus}
+              onChange={(event) => setBulkStatus(event.target.value)}
+              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+            >
+              <option value="">Keep</option>
+              <option value="active">Active</option>
+              <option value="draft">Draft</option>
+              <option value="inactive">Inactive</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 4, minWidth: 160 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Category</span>
+            <select
+              value={bulkCategory}
+              onChange={(event) => setBulkCategory(event.target.value)}
+              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+            >
+              <option value="">Keep</option>
+              {SHOP_PRODUCT_CATEGORIES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 4, width: 90 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>GST %</span>
+            <input
+              value={bulkGst}
+              onChange={(event) => setBulkGst(event.target.value)}
+              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 4, width: 110 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Set price</span>
+            <input
+              value={bulkPrice}
+              onChange={(event) => {
+                setBulkPrice(event.target.value);
+                if (event.target.value) setBulkPercent('');
+              }}
+              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 4, width: 90 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Price %</span>
+            <input
+              value={bulkPercent}
+              onChange={(event) => {
+                setBulkPercent(event.target.value);
+                if (event.target.value) setBulkPrice('');
+              }}
+              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+          </label>
+          <Button type="button" variant="primary" onClick={() => void applyBulkEdit()} loading={patchBulk.isPending}>
+            Apply
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setSelectedIds([])}>
+            Clear
+          </Button>
+        </div>
+      ) : null}
 
       <Dialog
         open={dialog.open}
@@ -612,7 +842,22 @@ export function ShopProductsPage() {
               >
                 {enrich.isPending ? 'Looking up…' : 'Lookup barcode'}
               </Button>
+              <Button type="button" variant="neutral" onClick={() => setCameraOpen((open) => !open)}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Camera size={16} aria-hidden="true" />
+                  {cameraOpen ? 'Hide camera' : 'Camera'}
+                </span>
+              </Button>
             </div>
+            <BarcodeCameraPanel
+              active={cameraOpen}
+              onClose={() => setCameraOpen(false)}
+              onCode={(code) => {
+                setBarcodeLookup(code);
+                void runEnrich({ code });
+                setCameraOpen(false);
+              }}
+            />
           </label>
 
           <label style={{ display: 'grid', gap: 8 }}>
@@ -654,7 +899,6 @@ export function ShopProductsPage() {
                 ['stock_on_hand', 'Stock on hand', false],
                 ['low_stock_threshold', 'Low stock alert', false],
                 ['pack_size', 'Pack size / quantity', false],
-                ['barcode', 'Barcode / RFID EPC', false],
               ] as const
             ).map(([key, label, required]) => (
               <label key={key} style={{ display: 'grid', gap: 6 }}>
@@ -667,6 +911,20 @@ export function ShopProductsPage() {
                 />
               </label>
             ))}
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Barcode / RFID EPC</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={form.barcode}
+                  onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                  placeholder="Scan or type barcode"
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                />
+                <Button type="button" variant="neutral" onClick={() => setCameraOpen(true)} aria-label="Scan barcode with camera">
+                  <Camera size={16} aria-hidden="true" />
+                </Button>
+              </div>
+            </label>
             {godowns.length ? (
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>

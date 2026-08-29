@@ -298,7 +298,7 @@ export function useBillingStatus() {
   return { status, loading, reload };
 }
 
-export function useBusinessBillingSnapshot() {
+export function useBusinessBillingSnapshot(productCode?: string) {
   const client = useOpsClient();
   const { businessId, ready } = useWorkspace();
   const [billing, setBilling] = useState<BusinessBillingSnapshot | null>(null);
@@ -308,14 +308,17 @@ export function useBusinessBillingSnapshot() {
     if (!client || !ready || !businessId) return;
     setLoading(true);
     try {
-      const response = await client.businesses.billingSnapshot(businessId);
+      const response = await client.businesses.billingSnapshot(
+        businessId,
+        productCode ? { product_code: productCode } : undefined,
+      );
       setBilling(response.data);
     } catch {
       setBilling(null);
     } finally {
       setLoading(false);
     }
-  }, [client, ready, businessId]);
+  }, [client, ready, businessId, productCode]);
 
   useEffect(() => {
     void reload();
@@ -573,6 +576,10 @@ export function useProductMutations() {
     changePlan: async (productCode: string, planCode: string) => {
       const client = await scopedClient();
       return (await client.businesses.changeProductPlan(businessId!, productCode, { plan_code: planCode })).data;
+    },
+    cancelPendingPlan: async (productCode: string) => {
+      const client = await scopedClient();
+      return (await client.businesses.cancelPendingPlanChange(businessId!, productCode)).data;
     },
   };
 }

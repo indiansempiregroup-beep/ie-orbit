@@ -10,6 +10,7 @@ import {
 } from '@expo-google-fonts/fraunces';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
@@ -30,6 +31,7 @@ import { captureImpersonationHandoff } from './src/utils/impersonationHandoff';
 import { i18n } from './src/i18n';
 import { brand } from './src/theme/tokens';
 
+WebBrowser.maybeCompleteAuthSession();
 captureImpersonationHandoff();
 
 void SplashScreen.preventAutoHideAsync().catch(() => {

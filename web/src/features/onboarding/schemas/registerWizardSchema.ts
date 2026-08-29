@@ -56,8 +56,9 @@ export const registerWizardSchema = z
     displayName: z.string().min(1, 'Display name is required'),
     email: z.string().email('Enter a valid email'),
     mobile: z.string().min(6, 'Enter a valid mobile number'),
-    password: passwordSchema,
-    confirmPassword: z.string().min(1, 'Confirm your password'),
+    password: z.string(),
+    confirmPassword: z.string(),
+    googleIdToken: z.string().optional().default(''),
     acceptTerms: z.boolean().refine((value) => value, 'Accept the terms to continue'),
     acceptPrivacy: z.boolean().refine((value) => value, 'Accept the privacy policy to continue'),
     currency: z.string().length(3, 'Select a currency'),
@@ -82,11 +83,28 @@ export const registerWizardSchema = z
     secondaryColor: z.string().min(4),
     theme: z.enum(['system', 'light', 'dark']),
   })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
-  })
   .superRefine((data, ctx) => {
+    if (!data.googleIdToken) {
+      const parsed = passwordSchema.safeParse(data.password);
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          ctx.addIssue({ ...issue, path: ['password'] });
+        }
+      }
+      if (!data.confirmPassword) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['confirmPassword'],
+          message: 'Confirm your password',
+        });
+      } else if (data.password !== data.confirmPassword) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['confirmPassword'],
+          message: 'Passwords do not match',
+        });
+      }
+    }
     if (!data.skipHours && !weeklyHoursAreValid(data.businessHours as WeeklyHours)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -171,6 +189,7 @@ export function getDefaultRegisterValues(): RegisterWizardFormValues {
     mobile: '',
     password: '',
     confirmPassword: '',
+    googleIdToken: '',
     acceptTerms: false,
     acceptPrivacy: false,
     currency: 'USD',
@@ -182,7 +201,7 @@ export function getDefaultRegisterValues(): RegisterWizardFormValues {
     dateFormat: 'DD/MM/YYYY',
     timeFormat: '12h',
     selectedProducts: ['appointie'],
-    planCodes: { appointie: 'appointie-starter' },
+    planCodes: { appointie: 'appointie-pro' },
     primaryColor: '#1A56DB',
     secondaryColor: '#111827',
     theme: 'system',

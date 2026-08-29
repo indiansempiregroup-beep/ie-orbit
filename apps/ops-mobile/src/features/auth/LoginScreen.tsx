@@ -25,7 +25,9 @@ import { layout } from '../../theme/layout';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
 import { getApiErrorMessage } from '../../utils/format';
+import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../utils/googleAuth';
 import type { AuthStackParamList } from '../../navigation/types';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 
 export function LoginScreen() {
   const { t } = useTranslation();
@@ -33,6 +35,7 @@ export function LoginScreen() {
   const { isDesktop } = useBreakpoint();
   const {
     login,
+    loginWithGoogle,
     loginWithBiometrics,
     enableBiometrics,
     loading,
@@ -46,6 +49,12 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [googleSignup, setGoogleSignup] = useState<{
+    googleIdToken: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  } | null>(null);
   const [biometricBusy, setBiometricBusy] = useState(false);
 
   useEffect(() => {
@@ -173,6 +182,39 @@ export function LoginScreen() {
         loading={loading && !biometricBusy}
         onPress={onSubmit}
       />
+      <GoogleSignInButton
+        disabled={loading || biometricBusy}
+        onIdToken={async (idToken) => {
+          try {
+            setGoogleSignup(null);
+            await loginWithGoogle(idToken, remember);
+            await offerBiometricEnrollment();
+          } catch (err) {
+            if (!isGoogleAccountNotRegistered(err)) throw err;
+            const claims = decodeGoogleIdToken(idToken);
+            setGoogleSignup({
+              googleIdToken: idToken,
+              email: claims.email,
+              firstName: claims.given_name,
+              lastName: claims.family_name,
+            });
+          }
+        }}
+      />
+      {googleSignup ? (
+        <View style={styles.signupPrompt}>
+          <Text style={styles.signupTitle}>No business on this Google account</Text>
+          <Text style={styles.signupCopy}>
+            You need to create your business before you can sign in. Use the link below to register.
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate('RegisterWizard', googleSignup)}
+            accessibilityRole="link"
+          >
+            <Text style={styles.link}>Create your business</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 
@@ -279,6 +321,16 @@ const styles = StyleSheet.create({
   },
   subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.xxl },
   form: { gap: spacing.lg },
+  signupPrompt: {
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.secondary,
+  },
+  signupTitle: { ...typography.label, color: colors.foreground },
+  signupCopy: { ...typography.body, color: colors.mutedForeground },
   biometricCard: {
     flexDirection: 'row',
     alignItems: 'center',

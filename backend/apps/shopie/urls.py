@@ -76,6 +76,7 @@ from apps.shopie.api.views import (
     ShopOrderStatusView,
     ShopPackagingAnalyzeStatusView,
     ShopPackagingAnalyzeView,
+    ShopProductBulkView,
     ShopProductDetailView,
     ShopProductListCreateView,
     ShopProductOfficeStockView,
@@ -88,6 +89,7 @@ from apps.shopie.api.views import (
 
 urlpatterns = [
     path("shop/products", ShopProductListCreateView.as_view(), name="shop-product-list-create"),
+    path("shop/products/bulk", ShopProductBulkView.as_view(), name="shop-product-bulk"),
     path("shop/products/<uuid:product_id>", ShopProductDetailView.as_view(), name="shop-product-detail"),
     path(
         "shop/products/<uuid:product_id>/stock-adjust",

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
@@ -41,9 +41,11 @@ import {
   WEEK_START_DAYS,
   type RegisterWizardStepId,
 } from '../../config/onboarding';
-import { PRODUCT_CATALOG, getProductName, stripPlanProductPrefix } from '../../config/products';
+import { PRODUCT_CATALOG, getProductName, getRecommendedPlanCode, isRecommendedPlanCode, stripPlanProductPrefix } from '../../config/products';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { createAuthenticatedClient, getApiErrorMessage } from '../../lib/apiClient';
+import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../lib/googleAuth';
 import { summarizeWeeklyHours } from '../../lib/businessHours';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { VERIFY_EMAIL_PATH } from '../../utils/roles';
@@ -120,8 +122,15 @@ export function RegisterWizard() {
   });
 
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const auth = useAuthContext();
+  const googlePrefill = (location.state ?? null) as {
+    googleIdToken?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  } | null;
   const { hydrated, loadDraft, saveDraft, clearDraft } = useOnboardingDraft();
   const [stepIndex, setStepIndex] = useState(0);
   const [provisionError, setProvisionError] = useState<string | null>(null);
@@ -183,8 +192,24 @@ export function RegisterWizard() {
       ...draft,
       currency: draft.currency || detectDefaultCurrency(),
       timezone: timezone as RegisterWizardFormValues['timezone'],
+      ...(googlePrefill?.googleIdToken
+        ? {
+            googleIdToken: googlePrefill.googleIdToken,
+            email: googlePrefill.email || draft.email,
+            firstName: googlePrefill.firstName || draft.firstName,
+            lastName: googlePrefill.lastName || draft.lastName,
+          }
+        : {}),
     });
-  }, [hydrated, form, loadDraft]);
+  }, [
+    hydrated,
+    form,
+    loadDraft,
+    googlePrefill?.googleIdToken,
+    googlePrefill?.email,
+    googlePrefill?.firstName,
+    googlePrefill?.lastName,
+  ]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -199,7 +224,8 @@ export function RegisterWizard() {
       const plans = plansForProduct(productId);
       if (!plans.length) continue;
       if (plans.some((plan) => plan.plan_code === next[productId])) continue;
-      const fallback = plans.find((plan) => plan.is_default) ?? plans[0];
+      const fallbackCode = getRecommendedPlanCode(plans);
+      const fallback = plans.find((plan) => plan.plan_code === fallbackCode) ?? plans[0];
       if (fallback) {
         next[productId] = fallback.plan_code;
         changed = true;
@@ -209,7 +235,10 @@ export function RegisterWizard() {
   }, [catalogPlans, values.selectedProducts, values.planCodes, setValue]);
 
   async function goNext() {
-    const fields = [...(stepFieldMap[currentStep as keyof typeof stepFieldMap] ?? [])] as (keyof RegisterWizardFormValues)[];
+    const fields = [...(stepFieldMap[currentStep as keyof typeof stepFieldMap] ?? [])].filter(
+      (field) =>
+        !(values.googleIdToken && (field === 'password' || field === 'confirmPassword')),
+    ) as (keyof RegisterWizardFormValues)[];
     const valid = fields.length === 0 ? true : await trigger(fields);
     if (!valid) return;
     if (currentStep === 'review') {
@@ -304,15 +333,58 @@ export function RegisterWizard() {
         <Input label="First name" {...register('firstName')} autoComplete="given-name" />
         <Input label="Last name" {...register('lastName')} autoComplete="family-name" />
         <Input label="Display name" {...register('displayName')} />
-        <Input label="Email" type="email" {...register('email')} autoComplete="email" />
+        <Input
+          label="Email"
+          type="email"
+          {...register('email')}
+          autoComplete="email"
+          readOnly={Boolean(values.googleIdToken)}
+        />
         <Input label="Mobile" {...register('mobile')} autoComplete="tel" />
-        <div className="wizard-password-field">
-          <Input label="Password" type="password" {...register('password')} autoComplete="new-password" />
-          <PasswordStrengthIndicator password={values.password} />
-          {errors.password ? <span className="field-error">{errors.password.message}</span> : null}
-        </div>
-        <Input label="Confirm password" type="password" {...register('confirmPassword')} autoComplete="new-password" />
-        {errors.confirmPassword ? <span className="field-error">{errors.confirmPassword.message}</span> : null}
+        {values.googleIdToken ? (
+          <p className="wizard-google-note">Continuing with Google. A password is not required.</p>
+        ) : (
+          <>
+            <div className="wizard-password-field">
+              <Input label="Password" type="password" {...register('password')} autoComplete="new-password" />
+              <PasswordStrengthIndicator password={values.password} />
+              {errors.password ? <span className="field-error">{errors.password.message}</span> : null}
+            </div>
+            <Input label="Confirm password" type="password" {...register('confirmPassword')} autoComplete="new-password" />
+            {errors.confirmPassword ? <span className="field-error">{errors.confirmPassword.message}</span> : null}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <GoogleSignInButton
+                disabled={auth.loading}
+                onIdToken={async (idToken) => {
+                  try {
+                    await auth.loginWithGoogle(idToken);
+                    navigate('/auth', { replace: true });
+                  } catch (err) {
+                    if (!isGoogleAccountNotRegistered(err)) throw err;
+                    const claims = decodeGoogleIdToken(idToken);
+                    setValue('googleIdToken', idToken, { shouldDirty: true });
+                    if (claims.email) {
+                      setValue('email', claims.email, { shouldDirty: true, shouldValidate: true });
+                    }
+                    if (claims.given_name) {
+                      setValue('firstName', claims.given_name, { shouldDirty: true, shouldValidate: true });
+                    }
+                    if (claims.family_name) {
+                      setValue('lastName', claims.family_name, { shouldDirty: true, shouldValidate: true });
+                    }
+                    if (!values.displayName && (claims.given_name || claims.family_name)) {
+                      setValue(
+                        'displayName',
+                        [claims.given_name, claims.family_name].filter(Boolean).join(' '),
+                        { shouldDirty: true, shouldValidate: true },
+                      );
+                    }
+                  }
+                }}
+              />
+            </div>
+          </>
+        )}
         <label className="auth-checkbox">
           <input type="checkbox" {...register('acceptTerms')} />
           <span>
@@ -476,7 +548,7 @@ export function RegisterWizard() {
                             aria-pressed={isSelected}
                           >
                             <div className="wizard-choice-card-top">
-                              <span className="wizard-recommended">{plan.is_default ? 'Recommended' : 'Upgrade'}</span>
+                              <span className="wizard-recommended">{isRecommendedPlanCode(plan.plan_code) ? 'Recommended' : 'Starter'}</span>
                               <span className={`wizard-choice-check${isSelected ? ' is-on' : ''}`} aria-hidden="true">
                                 <Check size={14} strokeWidth={3} />
                               </span>
@@ -568,6 +640,7 @@ export function RegisterWizard() {
           </div>
           <p>{values.firstName} {values.lastName} ({values.displayName})</p>
           <p>{values.email} · {values.mobile}</p>
+          {values.googleIdToken ? <p>Continuing with Google</p> : null}
           {affiliateCode ? <p>Affiliate code: {affiliateCode}</p> : null}
         </section>
         <section>

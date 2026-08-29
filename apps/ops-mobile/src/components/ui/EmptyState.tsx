@@ -10,9 +10,19 @@ type Props = {
   icon?: keyof typeof Feather.glyphMap;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 };
 
-export function EmptyState({ title, message, icon = 'inbox', actionLabel, onAction }: Props) {
+export function EmptyState({
+  title,
+  message,
+  icon = 'inbox',
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+}: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.iconWell}>
@@ -21,7 +31,12 @@ export function EmptyState({ title, message, icon = 'inbox', actionLabel, onActi
       <Text style={styles.title}>{title}</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {actionLabel && onAction ? (
-        <Button label={actionLabel} onPress={onAction} style={styles.btn} />
+        <View style={styles.actions}>
+          <Button label={actionLabel} onPress={onAction} style={styles.btn} />
+          {secondaryLabel && onSecondary ? (
+            <Button label={secondaryLabel} variant="secondary" onPress={onSecondary} style={styles.btn} />
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
@@ -51,5 +66,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 280,
   },
-  btn: { marginTop: spacing.md, minWidth: 160 },
+  actions: { marginTop: spacing.md, gap: spacing.sm, alignItems: 'center' },
+  btn: { minWidth: 160 },
 });

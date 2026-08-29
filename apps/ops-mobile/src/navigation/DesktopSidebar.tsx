@@ -154,7 +154,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               key: 'products',
               label: t('nav.shopProducts'),
               icon: 'shopping-bag',
-              match: ['ShopProducts', 'ShopProductAdd'],
+              match: ['ShopProducts', 'ShopProductAdd', 'ShopProductsAddMany'],
               onPress: () => go('ShopProducts'),
             },
             {

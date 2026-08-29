@@ -51,6 +51,12 @@ export type LoginRequest = {
   remember_me?: boolean;
 };
 
+export type GoogleLoginRequest = {
+  id_token: string;
+  client: 'customer' | 'ops';
+  remember_me?: boolean;
+};
+
 export type RefreshRequest = {
   refresh: string;
 };
@@ -218,6 +224,11 @@ export type BusinessProductSubscription = {
   extra_staff?: number;
   extra_offices?: number;
   pets_pack_enabled?: boolean;
+  pending_plan_code?: string | null;
+  pending_plan_name?: string | null;
+  pending_billing_interval?: string | null;
+  pending_cancel?: boolean;
+  pending_plan_scheduled_at?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -1722,6 +1733,40 @@ export type ShopProductWriteInput = {
     barcode_type?: string;
     is_primary?: boolean;
   }>;
+};
+
+export type ShopProductBulkError = {
+  index: number;
+  code: string;
+  message: string;
+};
+
+export type ShopProductBulkCreateInput = {
+  business_id: string;
+  godown_id?: string | null;
+  items: Array<Omit<ShopProductWriteInput, 'business_id'> & { business_id?: string }>;
+};
+
+export type ShopProductBulkCreateResult = {
+  created: ShopProduct[];
+  errors: ShopProductBulkError[];
+};
+
+export type ShopProductBulkPatchInput = {
+  business_id: string;
+  ids: string[];
+  updates: {
+    status?: string;
+    category?: string;
+    gst_rate?: string | number;
+    tax_rate?: string | number;
+    price?: { set?: string | number; percent?: string | number };
+  };
+};
+
+export type ShopProductBulkPatchResult = {
+  updated: ShopProduct[];
+  errors: ShopProductBulkError[];
 };
 
 export type ShopBarcodeEnrichment = {
@@ -3325,7 +3370,8 @@ export type TenantCreateInput = {
 
 export type RegisterRequest = {
   email: string;
-  password: string;
+  password?: string;
+  google_id_token?: string;
   first_name?: string;
   last_name?: string;
 };
@@ -3404,6 +3450,8 @@ class ApiClient {
 
   auth = {
     login: (body: LoginRequest) => this.request<LoginResponse>('/auth/login', { method: 'POST', body }),
+    loginWithGoogle: (body: GoogleLoginRequest) =>
+      this.request<LoginResponse>('/auth/google', { method: 'POST', body }),
     refresh: (body: RefreshRequest) => this.request<LoginResponse>('/auth/refresh', { method: 'POST', body }),
     logout: (body: { refresh: string; all_sessions?: boolean }) => this.request<{ logged_out: boolean }>('/auth/logout', { method: 'POST', body }),
     forgotPassword: (body: ForgotPasswordRequest) => this.request<{ accepted: boolean }>('/auth/forgot-password', { method: 'POST', body }),
@@ -3429,9 +3477,13 @@ class ApiClient {
     }) => this.request<ShopProduct[]>('/shop/products', { method: 'GET', query }),
     createProduct: (body: ShopProductWriteInput) =>
       this.request<ShopProduct>('/shop/products', { method: 'POST', body }),
+    createProductsBulk: (body: ShopProductBulkCreateInput) =>
+      this.request<ShopProductBulkCreateResult>('/shop/products/bulk', { method: 'POST', body }),
     getProduct: (productId: string) => this.request<ShopProduct>(`/shop/products/${productId}`, { method: 'GET' }),
     patchProduct: (productId: string, body: Partial<ShopProductWriteInput>) =>
       this.request<ShopProduct>(`/shop/products/${productId}`, { method: 'PATCH', body }),
+    patchProductsBulk: (body: ShopProductBulkPatchInput) =>
+      this.request<ShopProductBulkPatchResult>('/shop/products/bulk', { method: 'PATCH', body }),
     lookupBarcode: (body: { business_id: string; code: string }) =>
       this.request<ShopProduct>('/shop/barcodes/lookup', { method: 'POST', body }),
     lookupBarcodesBulk: (body: { business_id: string; codes: string[] }) =>

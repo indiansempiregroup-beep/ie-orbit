@@ -14,11 +14,12 @@ import { getApiErrorMessage } from '../../utils/format';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import { mobileClient } from '../../api/client';
 import type { AuthStackParamList } from '../../navigation/types';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 export function RegisterScreen({ navigation }: Props) {
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
@@ -45,6 +46,21 @@ export function RegisterScreen({ navigation }: Props) {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  async function applyReferralIfNeeded() {
+    const code = referralCode.trim();
+    if (code && tenantSlug && businessCode) {
+      try {
+        await mobileClient.mobile.applyReferral({
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+          referral_code: code,
+        });
+      } catch {
+        // Account is created even if the invite code is invalid; user can retry from Profile.
+      }
+    }
+  }
+
   async function onSubmit() {
     setError('');
     if (!email.trim() || !password) {
@@ -60,18 +76,7 @@ export function RegisterScreen({ navigation }: Props) {
         last_name: lastName.trim(),
         phone_number: phone.trim() || undefined,
       });
-      const code = referralCode.trim();
-      if (code && tenantSlug && businessCode) {
-        try {
-          await mobileClient.mobile.applyReferral({
-            tenant_slug: tenantSlug,
-            business_code: businessCode,
-            referral_code: code,
-          });
-        } catch {
-          // Account is created even if the invite code is invalid; user can retry from Profile.
-        }
-      }
+      await applyReferralIfNeeded();
     } catch (err) {
       setError(
         getApiErrorMessage(
@@ -151,6 +156,18 @@ export function RegisterScreen({ navigation }: Props) {
           {error ? <FormAlert message={error} /> : null}
 
           <Button label="Create account" size="lg" fullWidth loading={submitting} primaryColor={primary} onPress={onSubmit} />
+          <GoogleSignInButton
+            disabled={submitting}
+            onIdToken={async (idToken) => {
+              setSubmitting(true);
+              try {
+                await loginWithGoogle(idToken);
+                await applyReferralIfNeeded();
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+          />
         </View>
 
         <Text style={styles.footer}>

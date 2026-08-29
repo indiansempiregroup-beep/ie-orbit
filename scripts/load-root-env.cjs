@@ -48,6 +48,20 @@ function loadRootEnv(fromDir = __dirname) {
     }
   }
 
+  // Google Sign-In: copy root IDs into Expo public names when those vars are blank.
+  const googleOAuthCopies = [
+    ['GOOGLE_OAUTH_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID'],
+    ['GOOGLE_OAUTH_CLIENT_ID', 'VITE_GOOGLE_OAUTH_CLIENT_ID'],
+    ['GOOGLE_OAUTH_OPS_IOS_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_OPS_IOS_CLIENT_ID'],
+    ['GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID'],
+  ];
+  for (const [source, target] of googleOAuthCopies) {
+    const value = (process.env[source] || '').trim();
+    if (value && !(process.env[target] || '').trim()) {
+      process.env[target] = value;
+    }
+  }
+
   return envPath;
 }
 

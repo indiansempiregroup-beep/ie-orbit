@@ -70,11 +70,12 @@ export function WorkspacePickerScreen() {
 
       {noTenants ? (
         <View style={styles.alert}>
-          <Text style={styles.alertTitle}>No workspace on this account</Text>
+          <Text style={styles.alertTitle}>No business on this account</Text>
           <Text style={styles.alertCopy}>
-            This login has ops roles, but no tenant is linked yet. Create a workspace on the web app
-            (`/auth/register/start`) or sign in with the business owner account.
+            You need to create your business before you can use IE Orbit. Sign out, then tap Create
+            your business on the sign-in screen.
           </Text>
+          <Button label="Sign out and create your business" fullWidth onPress={() => void logout()} />
         </View>
       ) : (
         <>

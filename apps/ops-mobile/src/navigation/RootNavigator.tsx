@@ -45,6 +45,7 @@ import { PaymentSettingsScreen } from '../features/settings/PaymentSettingsScree
 import { ProductSettingsScreen } from '../features/settings/ProductSettingsScreen';
 import { ShopProductsScreen } from '../features/shop/ShopProductsScreen';
 import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
+import { ShopProductsAddManyScreen } from '../features/shop/ShopProductsAddManyScreen';
 import { ShopOrdersScreen } from '../features/shop/ShopOrdersScreen';
 import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopPosScreen } from '../features/shop/ShopPosScreen';
@@ -232,6 +233,7 @@ export function RootNavigator() {
             {stackScreen('ProductSettings', ProductSettingsScreen, t('settings.productsBilling'))}
             {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
             {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
+            {stackScreen('ShopProductsAddMany', ShopProductsAddManyScreen, 'Add many products')}
             {stackScreen('ShopOrders', ShopOrdersScreen, t('nav.shopOrders'))}
             {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
             {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}

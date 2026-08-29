@@ -102,6 +102,14 @@ class PlanEntitlements:
 
     @property
     def base_amount_paise(self) -> int:
+        from apps.billing.services.checkout import CheckoutService
+
+        resolved = CheckoutService()._resolve_plan_price_paise(
+            self.plan_code,
+            self.billing_interval or "monthly",
+        )
+        if resolved is not None:
+            return int(resolved)
         monthly = PLAN_PRICE_PAISE.get(self.plan_code, 0)
         if self.billing_interval == "yearly":
             return monthly * YEARLY_PRICE_MULTIPLIER
