@@ -299,8 +299,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [performRefresh, refreshBiometricState, scheduleRefresh]);
 
   useEffect(() => {
-    void restore();
-    return () => clearRefreshTimer();
+    const timeout = setTimeout(() => setLoading(false), 8000);
+    void restore().finally(() => clearTimeout(timeout));
+    return () => {
+      clearTimeout(timeout);
+      clearRefreshTimer();
+    };
     // Intentionally run once on mount; restore reads latest secure-store tokens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

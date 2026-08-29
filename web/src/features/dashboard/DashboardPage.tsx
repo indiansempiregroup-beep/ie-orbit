@@ -14,7 +14,6 @@ import { DashboardWidget } from './DashboardWidget';
 import { Button, IconButton } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { quickActionItems, filterNavigationByProduct } from '../../config/navigation';
-import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatMoney } from '../../lib/currency';
@@ -42,7 +41,6 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 
 export function DashboardPage() {
   const { t } = useTranslation();
-  const theme = useTheme();
   const navigate = useNavigate();
   const auth = useAuth();
   const workspace = useWorkspace();
@@ -176,13 +174,13 @@ export function DashboardPage() {
     : [];
 
   return (
-    <div style={{ padding: 0, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ padding: 0, background: '#f5f7fb', color: '#111827' }}>
       <div className="dashboard-shell" style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
         <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Workspace</p>
             <h1 style={{ margin: 0, fontSize: 36, lineHeight: 1.1 }}>Welcome back, {businessName}</h1>
-            <p style={{ margin: 0, color: theme.resolved === 'dark' ? '#d1d5db' : '#6b7280' }}>{welcomeSubtitle}</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{welcomeSubtitle}</p>
           </div>
           <div className="dashboard-actions">
             {quickActions.map((action) => (
@@ -203,13 +201,13 @@ export function DashboardPage() {
               onFocus={() => setSearchActive(true)}
               onBlur={() => setTimeout(() => setSearchActive(false), 200)}
               placeholder="Search customers, bookings, staff, services"
-              style={{ width: '100%', borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: theme.resolved === 'dark' ? '#1f2937' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
+              style={{ width: '100%', borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
               aria-label="Search workspace"
             />
             <select
               value={settings.preferences.refreshInterval}
               onChange={(event) => settings.setRefreshInterval(Number(event.target.value))}
-              style={{ borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: theme.resolved === 'dark' ? '#111827' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
+              style={{ borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
               aria-label="Dashboard refresh interval"
             >
               {settings.refreshIntervalOptions.map((interval) => (
@@ -274,7 +272,7 @@ export function DashboardPage() {
                 >
                   <div style={{ display: 'grid', gap: 12 }}>
                     {schedule.map((booking) => (
-                      <div key={booking.id} style={{ borderRadius: 12, padding: 14, background: theme.resolved === 'dark' ? '#111827' : '#f8fafc', display: 'grid', gap: 4 }}>
+                      <div key={booking.id} style={{ borderRadius: 12, padding: 14, background: '#f8fafc', display: 'grid', gap: 4 }}>
                         <p style={{ margin: 0, fontWeight: 700 }}>{booking.booking_number ?? 'Booking #'}</p>
                         <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{booking.status ?? 'Status unknown'}</p>
                       </div>
@@ -294,7 +292,7 @@ export function DashboardPage() {
                 >
                   <div style={{ display: 'grid', gap: 12 }}>
                     {recentOrders.map((order) => (
-                      <div key={order.id} style={{ borderRadius: 12, padding: 14, background: theme.resolved === 'dark' ? '#111827' : '#f8fafc', display: 'grid', gap: 4 }}>
+                      <div key={order.id} style={{ borderRadius: 12, padding: 14, background: '#f8fafc', display: 'grid', gap: 4 }}>
                         <p style={{ margin: 0, fontWeight: 700 }}>{order.order_number ?? 'Order'}</p>
                         <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
                           {order.status ?? 'Status'} · {formatAmount(Number(order.total ?? 0))}
@@ -318,7 +316,7 @@ export function DashboardPage() {
               >
                 <div style={{ display: 'grid', gap: 12 }}>
                   {notifications.data?.slice(0, 4).map((note) => (
-                    <div key={note.id} style={{ borderRadius: 12, padding: 14, background: note.is_read ? (theme.resolved === 'dark' ? '#0f172a' : '#f8fafc') : '#eff6ff' }}>
+                    <div key={note.id} style={{ borderRadius: 12, padding: 14, background: note.is_read ? '#f8fafc' : '#eff6ff' }}>
                       <p style={{ margin: 0, fontWeight: 700 }}>{note.subject ?? 'Notification'}</p>
                       <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{note.body ?? ''}</p>
                     </div>
@@ -334,7 +332,7 @@ export function DashboardPage() {
               <DashboardWidget title="Recent Activity" loading={false} error={null} empty={!activity.length}>
                 <div style={{ display: 'grid', gap: 12 }}>
                   {activity.map((item) => (
-                    <div key={item.id} style={{ padding: 14, borderRadius: 12, background: theme.resolved === 'dark' ? '#111827' : '#f8fafc' }}>
+                    <div key={item.id} style={{ padding: 14, borderRadius: 12, background: '#f8fafc' }}>
                       <p style={{ margin: 0, fontWeight: 700 }}>{item.title}</p>
                       <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{item.subtitle}</p>
                     </div>
@@ -380,7 +378,7 @@ export function DashboardPage() {
 
             <Card>
               <p style={{ margin: 0, fontWeight: 700 }}>Workspace</p>
-              <div style={{ marginTop: 12, display: 'grid', gap: 8, color: theme.resolved === 'dark' ? '#d1d5db' : '#6b7280', fontSize: 14 }}>
+              <div style={{ marginTop: 12, display: 'grid', gap: 8, color: '#6b7280', fontSize: 14 }}>
                 <p style={{ margin: 0 }}>
                   <strong>Business:</strong> {businessName}
                 </p>
@@ -422,7 +420,7 @@ export function DashboardPage() {
                 <div>
                   <p style={{ margin: 0, fontWeight: 700 }}>Bookings</p>
                   {(searchResults.data?.bookings ?? []).slice(0, 3).map((item) => (
-                    <div key={item.id} style={{ padding: 10, borderRadius: 12, background: theme.resolved === 'dark' ? '#0f172a' : '#f8fafc', marginTop: 6 }}>
+                    <div key={item.id} style={{ padding: 10, borderRadius: 12, background: '#f8fafc', marginTop: 6 }}>
                       <p style={{ margin: 0 }}>{item.booking_number ?? 'Booking'}</p>
                     </div>
                   ))}
@@ -430,7 +428,7 @@ export function DashboardPage() {
                 <div>
                   <p style={{ margin: 0, fontWeight: 700 }}>Customers</p>
                   {(searchResults.data?.customers ?? []).slice(0, 3).map((item) => (
-                    <div key={item.id} style={{ padding: 10, borderRadius: 12, background: theme.resolved === 'dark' ? '#0f172a' : '#f8fafc', marginTop: 6 }}>
+                    <div key={item.id} style={{ padding: 10, borderRadius: 12, background: '#f8fafc', marginTop: 6 }}>
                       <p style={{ margin: 0 }}>{item.full_name ?? 'Customer'}</p>
                     </div>
                   ))}
@@ -446,7 +444,7 @@ export function DashboardPage() {
                   <select
                     value={settings.preferences.layout}
                     onChange={(event) => settings.setLayout(event.target.value as 'grid' | 'compact')}
-                    style={{ width: '100%', borderRadius: 10, border: '1px solid #e5e7eb', padding: '12px 14px', background: theme.resolved === 'dark' ? '#111827' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
+                    style={{ width: '100%', borderRadius: 10, border: '1px solid #e5e7eb', padding: '12px 14px', background: '#fff', color: '#111827' }}
                   >
                     <option value="grid">Grid</option>
                     <option value="compact">Compact</option>

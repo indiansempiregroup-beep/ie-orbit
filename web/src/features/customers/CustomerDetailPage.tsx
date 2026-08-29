@@ -11,7 +11,6 @@ import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { formatTimestamp } from '../../lib/datetime';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
-import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { Customer360Tabs } from './Customer360Tabs';
 import { CustomerBorrowPanel } from './CustomerBorrowPanel';
@@ -27,7 +26,6 @@ type AddressFormState = {
 };
 
 export function CustomerDetailPage() {
-  const theme = useTheme();
   const snackbar = useSnackbar();
   const { customerId } = useParams();
   const navigate = useNavigate();
@@ -81,7 +79,7 @@ export function CustomerDetailPage() {
   const customerName = customerQuery.data?.full_name ?? 'Customer profile';
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <SubmitOverlay show={updateCustomer.isPending} message="Saving customer…" />
       <div style={{ maxWidth: 920, margin: '0 auto', display: 'grid', gap: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

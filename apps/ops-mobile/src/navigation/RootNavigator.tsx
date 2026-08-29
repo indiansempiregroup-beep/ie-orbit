@@ -42,7 +42,6 @@ import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { BusinessProfileScreen } from '../features/settings/BusinessProfileScreen';
 import { BusinessEditScreen } from '../features/settings/BusinessEditScreen';
 import { PaymentSettingsScreen } from '../features/settings/PaymentSettingsScreen';
-import { ProductSettingsScreen } from '../features/settings/ProductSettingsScreen';
 import { ShopProductsScreen } from '../features/shop/ShopProductsScreen';
 import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
 import { ShopProductsAddManyScreen } from '../features/shop/ShopProductsAddManyScreen';
@@ -89,25 +88,44 @@ import { SecurityScreen } from '../features/profile/SecurityScreen';
 import { SessionsScreen } from '../features/profile/SessionsScreen';
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen';
 
-/** Lazy so expo-camera is not pulled into the initial bundle (avoids Metro resolve crashes on boot). */
-const BarcodeScannerScreen = React.lazy(async () => {
-  const mod = await import('../features/shop/BarcodeScannerScreen');
-  return { default: mod.BarcodeScannerScreen };
-});
-
-function LazyBarcodeScanner(props: React.ComponentProps<typeof BarcodeScannerScreen>) {
-  return (
-    <React.Suspense
-      fallback={
-        <View style={styles.boot}>
-          <ActivityIndicator color={colors.primary} size="large" />
-        </View>
-      }
-    >
-      <BarcodeScannerScreen {...props} />
-    </React.Suspense>
-  );
+function lazyNamedScreen<TProps extends object>(
+  loader: () => Promise<{ default?: React.ComponentType<TProps> } & Record<string, React.ComponentType<TProps>>>,
+  exportName: string,
+) {
+  const Lazy = React.lazy(async () => {
+    const mod = await loader();
+    const component = mod[exportName] ?? mod.default;
+    if (!component) {
+      throw new Error(`Screen export "${exportName}" was not found.`);
+    }
+    return { default: component };
+  });
+  return function LazyScreen(props: TProps) {
+    return (
+      <React.Suspense
+        fallback={
+          <View style={styles.boot}>
+            <ActivityIndicator color={colors.primary} size="large" />
+          </View>
+        }
+      >
+        <Lazy {...props} />
+      </React.Suspense>
+    );
+  };
 }
+
+/** Lazy so expo-camera is not pulled into the initial bundle (avoids Metro resolve crashes on boot). */
+const LazyBarcodeScanner = lazyNamedScreen(
+  () => import('../features/shop/BarcodeScannerScreen'),
+  'BarcodeScannerScreen',
+);
+
+/** Lazy so a Product Settings parse error cannot take down Expo Go on first open. */
+const LazyProductSettings = lazyNamedScreen(
+  () => import('../features/settings/ProductSettingsScreen'),
+  'ProductSettingsScreen',
+);
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function getActiveRouteName(state: NavigationState | undefined): string | undefined {
@@ -230,7 +248,7 @@ export function RootNavigator() {
             {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
             {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
             {stackScreen('PaymentSettings', PaymentSettingsScreen, 'Payments')}
-            {stackScreen('ProductSettings', ProductSettingsScreen, t('settings.productsBilling'))}
+            {stackScreen('ProductSettings', LazyProductSettings, t('settings.productsBilling'))}
             {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
             {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
             {stackScreen('ShopProductsAddMany', ShopProductsAddManyScreen, 'Add many products')}

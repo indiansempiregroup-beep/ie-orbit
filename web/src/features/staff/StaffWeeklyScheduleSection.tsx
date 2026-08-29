@@ -4,7 +4,6 @@ import type { StaffWeeklyScheduleInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
-import { useTheme } from '../../hooks/useTheme';
 import { useStaffWeeklyScheduleBulkUpsert, useStaffWeeklySchedules } from './staffScheduleHooks';
 
 const WEEKDAYS = [
@@ -55,7 +54,6 @@ type StaffWeeklyScheduleSectionProps = {
 };
 
 export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSectionProps) {
-  const theme = useTheme();
   const navigate = useNavigate();
   const { businessId } = useWorkspaceScope();
   const schedulesQuery = useStaffWeeklySchedules(staffId);
@@ -118,7 +116,7 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
             display: 'grid',
             gridTemplateColumns: '1.1fr 0.6fr 0.9fr 0.9fr 0.9fr 0.9fr 0.6fr',
             padding: '12px 16px',
-            background: theme.resolved === 'dark' ? '#111827' : '#f9fafb',
+            background: '#f9fafb',
             fontWeight: 700,
             color: '#6b7280',
             gap: 8,
@@ -142,7 +140,7 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
                 display: 'grid',
                 gridTemplateColumns: '1.1fr 0.6fr 0.9fr 0.9fr 0.9fr 0.9fr 0.6fr',
                 padding: '12px 16px',
-                background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                background: '#fff',
                 gap: 8,
                 alignItems: 'center',
               }}

@@ -10,10 +10,8 @@ import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
-import { useTheme } from '../../hooks/useTheme';
 
 export function StaffPage() {
-  const theme = useTheme();
   const snackbar = useSnackbar();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
@@ -69,7 +67,7 @@ export function StaffPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <SubmitOverlay
         show={createStaff.isPending || updateStaff.isPending}
         message={createStaff.isPending ? 'Adding staff…' : 'Updating staff…'}
@@ -112,7 +110,7 @@ export function StaffPage() {
           />
 
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 1fr 1fr 0.8fr 1.2fr', padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 1fr 1fr 0.8fr 1.2fr', padding: '16px 20px', background: '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
               <span>Name</span>
               <span>Email</span>
               <span>Phone</span>
@@ -120,7 +118,7 @@ export function StaffPage() {
               <span>Status</span>
               <span>Actions</span>
             </div>
-            <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
+            <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
               {isLoading || search.isLoading ? (
                 <div style={{ padding: 28, textAlign: 'center' }}>Loading staff…</div>
               ) : error || search.error ? (
@@ -137,7 +135,7 @@ export function StaffPage() {
                         display: 'grid',
                         gridTemplateColumns: '1.5fr 1.2fr 1fr 1fr 0.8fr 1.2fr',
                         padding: '16px 20px',
-                        background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                        background: '#fff',
                         alignItems: 'center',
                         gap: 8,
                       }}

@@ -5,7 +5,6 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
-import { useTheme } from '../../hooks/useTheme';
 import { useProfileRoutes } from './profileRoutes';
 
 export function ProfileSecurityPage() {
@@ -13,7 +12,6 @@ export function ProfileSecurityPage() {
   const navigate = useNavigate();
   const routes = useProfileRoutes();
   const snackbar = useSnackbar();
-  const theme = useTheme();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -54,7 +52,7 @@ export function ProfileSecurityPage() {
       style={{
         minHeight: routes.embeddedInAdmin ? undefined : '100%',
         padding: routes.embeddedInAdmin ? 0 : 8,
-        color: theme.resolved === 'dark' ? '#f8fafc' : '#111827',
+        color: '#111827',
       }}
     >
       <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 24, width: '100%' }}>

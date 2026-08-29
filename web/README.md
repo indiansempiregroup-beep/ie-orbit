@@ -12,9 +12,8 @@ corepack pnpm dev
 
 What's included:
 
-- App bootstrap and global providers (`AppProviders`) — Query, Auth, Theme, ErrorBoundary
+- App bootstrap and global providers (`AppProviders`) — Query, Auth, ErrorBoundary
 - Authentication context wired to the Shared SDK (`AuthContext`)
-- Theme context with light/dark/system modes (`ThemeContext`)
 - Snackbar provider and hook for transient messages
 - Shared components: `Button`, `Card`, `Spinner`, `ErrorState`
 - Guards: `ProtectedRoute`, `RoleGuard`, `PermissionGuard`, `FeatureGuard`

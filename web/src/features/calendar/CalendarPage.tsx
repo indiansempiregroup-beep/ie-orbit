@@ -15,13 +15,11 @@ import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
-import { useTheme } from '../../hooks/useTheme';
 import { formatTime } from '../../lib/datetime';
 import { DayTimeline } from './DayTimeline';
 import { bookingStatusColor } from './timelineUtils';
 
 export function CalendarPage() {
-  const theme = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -96,13 +94,12 @@ export function CalendarPage() {
     [filteredBookings],
   );
 
-  const dark = theme.resolved === 'dark';
   const controlStyle: React.CSSProperties = {
     padding: 12,
     borderRadius: 12,
     border: '1px solid #e5e7eb',
-    background: dark ? '#0f172a' : '#fff',
-    color: dark ? '#f8fafc' : '#111827',
+    background: '#fff',
+    color: '#111827',
   };
 
   function openBookDialog(slot: AvailabilitySlot) {
@@ -123,8 +120,8 @@ export function CalendarPage() {
       style={{
         minHeight: '100vh',
         padding: 32,
-        background: dark ? '#0f172a' : '#f5f7fb',
-        color: dark ? '#f8fafc' : '#111827',
+        background: '#f5f7fb',
+        color: '#111827',
       }}
     >
       <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gap: 24 }}>
@@ -262,7 +259,7 @@ export function CalendarPage() {
             <div
               style={{
                 padding: '14px 20px',
-                background: dark ? '#111827' : '#f9fafb',
+                background: '#f9fafb',
                 borderBottom: '1px solid #e5e7eb',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -297,7 +294,6 @@ export function CalendarPage() {
                 customerMap={customerMap}
                 serviceMap={serviceMap}
                 staffMap={staffMap}
-                dark={dark}
                 loading={availabilityQuery.isLoading || bookingsQuery.isLoading}
                 errorMessage={
                   availabilityQuery.error?.message || bookingsQuery.error?.message || null
@@ -312,14 +308,14 @@ export function CalendarPage() {
             <div
               style={{
                 padding: '14px 20px',
-                background: dark ? '#111827' : '#f9fafb',
+                background: '#f9fafb',
                 borderBottom: '1px solid #e5e7eb',
                 fontWeight: 700,
               }}
             >
               Day agenda
             </div>
-            <div style={{ display: 'grid', gap: 1, background: dark ? '#0f172a' : '#fff' }}>
+            <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
               {bookingsQuery.isLoading ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>Loading agenda…</div>
               ) : agenda.length === 0 ? (
@@ -340,7 +336,7 @@ export function CalendarPage() {
                         display: 'grid',
                         gap: 6,
                         padding: '14px 18px',
-                        background: dark ? '#111827' : '#fff',
+                        background: '#fff',
                         border: 'none',
                         borderLeft: `3px solid ${colors.border}`,
                         textAlign: 'left',

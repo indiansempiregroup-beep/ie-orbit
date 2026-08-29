@@ -602,15 +602,6 @@ export function RegisterWizard() {
           value={values.secondaryColor}
           onChange={(color) => setValue('secondaryColor', color, { shouldValidate: true, shouldDirty: true })}
         />
-        <Select
-          label="Theme"
-          options={[
-            { value: 'system', label: 'System' },
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
-          ]}
-          {...register('theme')}
-        />
         <LogoUploadField
           value={brandingLogoFile}
           onChange={setBrandingLogoFile}
@@ -664,7 +655,7 @@ export function RegisterWizard() {
             <h2>Branding</h2>
             <Button type="button" variant="ghost" onClick={() => jumpToStep('branding')}>Edit</Button>
           </div>
-          <p>{values.primaryColor} / {values.secondaryColor} ({values.theme})</p>
+          <p>{values.primaryColor} / {values.secondaryColor}</p>
           {brandingLogoFile && logoPreviewUrl ? (
             <div className="wizard-review-logo">
               <img src={logoPreviewUrl} alt={`${brandingLogoFile.name} preview`} />

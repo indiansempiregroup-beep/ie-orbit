@@ -103,7 +103,7 @@ export function createEmptyBusinessProfileFormState(): BusinessProfileFormState 
     selected_product: 'appointie',
     primary_color: '#1A56DB',
     secondary_color: '#111827',
-    theme_mode: 'system',
+    theme_mode: 'light',
     logo: '',
     upi_vpa: '',
     payment_qr_url: '',
@@ -157,7 +157,7 @@ export function businessToFormState(
     selected_product: business.selected_product ?? 'appointie',
     primary_color: tenantBranding?.primary_color ?? asString(themeOverrides.primary_color, '#1A56DB'),
     secondary_color: tenantBranding?.secondary_color ?? asString(themeOverrides.secondary_color, '#111827'),
-    theme_mode: tenantBranding?.theme_mode ?? asString(themeOverrides.theme_mode, 'system'),
+    theme_mode: 'light',
     logo: business.logo ?? '',
     upi_vpa: business.upi_vpa ?? '',
     payment_qr_url: business.payment_qr_url ?? '',
@@ -187,7 +187,7 @@ export function formStateToBusinessUpdate(
     theme_overrides: {
       primary_color: formState.primary_color,
       secondary_color: formState.secondary_color,
-      theme_mode: formState.theme_mode,
+      theme_mode: 'light',
     },
   };
 
@@ -280,7 +280,6 @@ export function buildBusinessProfileSections(formState: BusinessProfileFormState
       items: [
         { label: 'Primary color', value: formState.primary_color || 'Not provided' },
         { label: 'Secondary color', value: formState.secondary_color || 'Not provided' },
-        { label: 'Theme', value: formState.theme_mode || 'Not provided' },
         { label: 'Logo', value: formState.logo ? 'Uploaded' : 'Not uploaded' },
       ],
     },

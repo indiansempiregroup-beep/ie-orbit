@@ -15,11 +15,9 @@ import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { formatTimestamp } from '../../lib/datetime';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
-import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../hooks/useSnackbar';
 
 export function StaffDetailPage() {
-  const theme = useTheme();
   const snackbar = useSnackbar();
   const { staffId } = useParams();
   const navigate = useNavigate();
@@ -50,7 +48,7 @@ export function StaffDetailPage() {
   const staffName = staffQuery.data?.full_name ?? 'Staff profile';
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <SubmitOverlay show={updateStaff.isPending} message="Saving staff…" />
       <div style={{ maxWidth: 920, margin: '0 auto', display: 'grid', gap: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

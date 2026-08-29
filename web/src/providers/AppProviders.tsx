@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { AuthProvider } from '../contexts/AuthContext';
 import { WorkspaceProvider } from '../contexts/WorkspaceContext';
-import { ThemeProvider } from '../contexts/ThemeContext';
 import { DateTimeZoneSync } from '../components/DateTimeZoneSync';
 import { LanguageSync } from '../components/LanguageSync';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -22,13 +21,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             <LanguageSync>
               <WorkspaceProvider>
                 <DateTimeZoneSync>
-                  <ThemeProvider>
-                    <ConfirmProvider>
-                      <SnackbarProvider>
-                        <Suspense fallback={<div>Loading…</div>}>{children}</Suspense>
-                      </SnackbarProvider>
-                    </ConfirmProvider>
-                  </ThemeProvider>
+                  <ConfirmProvider>
+                    <SnackbarProvider>
+                      <Suspense fallback={<div>Loading…</div>}>{children}</Suspense>
+                    </SnackbarProvider>
+                  </ConfirmProvider>
                 </DateTimeZoneSync>
               </WorkspaceProvider>
             </LanguageSync>

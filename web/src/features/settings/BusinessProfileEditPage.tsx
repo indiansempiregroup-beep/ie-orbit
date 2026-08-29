@@ -145,7 +145,7 @@ export function BusinessProfileEditPage() {
           branding: {
             primary_color: formState.primary_color,
             secondary_color: formState.secondary_color,
-            theme_mode: formState.theme_mode,
+            theme_mode: 'light',
           },
         });
       }
@@ -285,18 +285,6 @@ export function BusinessProfileEditPage() {
             <div style={fieldGridStyle}>
               <ColorInput label="Primary color" value={formState.primary_color} onChange={(value) => updateField('primary_color', value)} />
               <ColorInput label="Secondary color" value={formState.secondary_color} onChange={(value) => updateField('secondary_color', value)} />
-              <Select
-                label="Theme"
-                options={[
-                  { value: 'system', label: 'System' },
-                  { value: 'light', label: 'Light' },
-                  { value: 'dark', label: 'Dark' },
-                ]}
-                value={formState.theme_mode}
-                onChange={(e) => updateField('theme_mode', e.target.value)}
-                disabled={saving}
-                style={{ marginBottom: 0 }}
-              />
             </div>
             <LogoUploadField
               value={logoFile}

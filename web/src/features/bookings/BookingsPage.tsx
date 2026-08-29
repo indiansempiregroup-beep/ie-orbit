@@ -9,11 +9,9 @@ import { Dialog } from '../../components/Dialog';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
-import { useTheme } from '../../hooks/useTheme';
 import { formatDateTime } from '../../lib/datetime';
 
 export function BookingsPage() {
-  const theme = useTheme();
   const snackbar = useSnackbar();
   const [searchTerm, setSearchTerm] = useState('');
   const createBooking = useBookingCreation();
@@ -83,7 +81,7 @@ export function BookingsPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <SubmitOverlay
         show={isSubmitting}
         message={
@@ -124,7 +122,7 @@ export function BookingsPage() {
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Search bookings by number, customer, staff or status"
-              style={{ flex: 1, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: theme.resolved === 'dark' ? '#111827' : '#fff', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}
+              style={{ flex: 1, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
               aria-label="Search bookings"
             />
             <Button variant="ghost" onClick={() => setSearchTerm('')}>Clear</Button>
@@ -138,7 +136,7 @@ export function BookingsPage() {
                   gridTemplateColumns: tableColumns,
                   gap: 12,
                   padding: '16px 20px',
-                  background: theme.resolved === 'dark' ? '#111827' : '#f9fafb',
+                  background: '#f9fafb',
                   fontWeight: 700,
                   color: '#6b7280',
                   alignItems: 'center',
@@ -152,7 +150,7 @@ export function BookingsPage() {
                 <span style={tableCellStyle}>Status</span>
                 <span style={tableCellStyle}>Actions</span>
               </div>
-              <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
+              <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
                 {bookingsQuery.isLoading ? (
                   <div style={{ padding: 28, textAlign: 'center' }}>Loading bookings…</div>
                 ) : bookingsQuery.error ? (
@@ -172,7 +170,7 @@ export function BookingsPage() {
                           gridTemplateColumns: tableColumns,
                           gap: 12,
                           padding: '16px 20px',
-                          background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                          background: '#fff',
                           alignItems: 'center',
                         }}
                       >

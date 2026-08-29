@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { useTheme } from '../../hooks/useTheme';
 import { useServiceList } from '../management/managementHooks';
 import { useStaffAssignmentMutations, useStaffAssignments } from './staffAvailabilityHooks';
 
@@ -10,7 +9,6 @@ type StaffServiceAssignmentsSectionProps = {
 };
 
 export function StaffServiceAssignmentsSection({ staffId }: StaffServiceAssignmentsSectionProps) {
-  const theme = useTheme();
   const assignmentsQuery = useStaffAssignments(staffId);
   const servicesQuery = useServiceList();
   const mutations = useStaffAssignmentMutations();
@@ -86,7 +84,7 @@ export function StaffServiceAssignmentsSection({ staffId }: StaffServiceAssignme
                 gridTemplateColumns: '2fr 1fr auto auto',
                 gap: 12,
                 padding: '12px 16px',
-                background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                background: '#fff',
                 alignItems: 'center',
               }}
             >

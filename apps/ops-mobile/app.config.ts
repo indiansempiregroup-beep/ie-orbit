@@ -14,8 +14,10 @@ const CAMERA_USAGE =
 const PHOTOS_USAGE =
   'Allow IE Orbit to access your photos for profile and business images.';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { dest: googleServicesFileAbs, materializeGoogleServices } = require('./scripts/materialize-google-services.cjs');
 const googleServicesFile = './credentials/google-services.json';
-const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services.json');
+materializeGoogleServices();
 const adMobAndroidAppId = process.env.EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID;
 const adMobIosAppId = process.env.EXPO_PUBLIC_ADMOB_OPS_IOS_APP_ID;
 const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =

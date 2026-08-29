@@ -1,9 +1,8 @@
-import { Bell, Moon, Search, Shield, Sun } from 'lucide-react';
+import { Bell, Search, Shield } from 'lucide-react';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useBusinessOptions } from '../features/dashboard/dashboardHooks';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { getSubscribedProducts } from '../config/products';
@@ -16,7 +15,6 @@ export function AppShellHeader() {
   const workspace = useWorkspace();
   const { user } = useAuth();
   const businessOptions = useBusinessOptions();
-  const theme = useTheme();
   const canSearchStaff = hasPermission(user, 'staff:read') || hasPermission(user, 'staff:write') || hasPermission(user, 'staff:manage');
   const canManageWorkspace = canManageBusinessSettings(user);
   const showPlatformAdminLink = isPlatformAdminOnly(user);
@@ -147,14 +145,6 @@ export function AppShellHeader() {
         </div>
 
         <div className="app-shell-header-controls">
-          <button
-            type="button"
-            className="app-shell-icon-button"
-            aria-label="Toggle color theme"
-            onClick={() => theme.setMode(theme.mode === 'dark' ? 'light' : 'dark')}
-          >
-            {theme.resolved === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
           {showPlatformAdminLink ? (
             <Link
               to="/admin"

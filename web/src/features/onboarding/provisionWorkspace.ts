@@ -99,7 +99,7 @@ export async function provisionWorkspace({
       theme_overrides: {
         primary_color: values.primaryColor,
         secondary_color: values.secondaryColor,
-        theme_mode: values.theme,
+        theme_mode: 'light',
       },
     },
   });

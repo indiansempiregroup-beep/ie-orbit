@@ -9,7 +9,6 @@ import { LogoUploadField } from '../../components/LogoUploadField';
 import { Select } from '../../components/Select';
 import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
-import { useTheme } from '../../hooks/useTheme';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ensureSelectOption, languageSelectOptions, timezoneSelectOptions } from '../../config/onboarding';
 import { persistLanguagePreference } from '../../i18n';
@@ -64,7 +63,6 @@ export function ProfileEditPage() {
   const navigate = useNavigate();
   const routes = useProfileRoutes();
   const snackbar = useSnackbar();
-  const theme = useTheme();
   const [formState, setFormState] = useState<Partial<UserProfile>>({});
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferenceState>({});
   const [initialNotificationPreferences, setInitialNotificationPreferences] = useState<NotificationPreferenceState>({});
@@ -169,7 +167,7 @@ export function ProfileEditPage() {
       style={{
         minHeight: routes.embeddedInAdmin ? undefined : '100%',
         padding: routes.embeddedInAdmin ? 0 : 8,
-        color: theme.resolved === 'dark' ? '#f8fafc' : '#111827',
+        color: '#111827',
       }}
     >
       <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 24, width: '100%' }}>

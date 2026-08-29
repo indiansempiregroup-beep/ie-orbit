@@ -4,7 +4,6 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
-import { useTheme } from '../../hooks/useTheme';
 import { formatTimestamp } from '../../lib/datetime';
 import { useProfileRoutes } from './profileRoutes';
 
@@ -13,7 +12,6 @@ export function ProfileSessionsPage() {
   const navigate = useNavigate();
   const routes = useProfileRoutes();
   const snackbar = useSnackbar();
-  const theme = useTheme();
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sessionStarted, setSessionStarted] = useState<string | null>(null);
@@ -49,7 +47,7 @@ export function ProfileSessionsPage() {
       style={{
         minHeight: routes.embeddedInAdmin ? undefined : '100%',
         padding: routes.embeddedInAdmin ? 0 : 8,
-        color: theme.resolved === 'dark' ? '#f8fafc' : '#111827',
+        color: '#111827',
       }}
     >
       <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 24, width: '100%' }}>
@@ -61,7 +59,7 @@ export function ProfileSessionsPage() {
 
         <Card>
           <div style={{ display: 'grid', gap: 18 }}>
-            <div style={{ display: 'grid', gap: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 16, background: theme.resolved === 'dark' ? '#111827' : '#ffffff' }}>
+            <div style={{ display: 'grid', gap: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 16, background: '#ffffff' }}>
               <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>Current session</p>
               <div style={{ display: 'grid', gap: 10 }}>
                 <div style={{ display: 'grid', gap: 4 }}>

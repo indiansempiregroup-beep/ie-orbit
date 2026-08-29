@@ -2,12 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
-import { useTheme } from '../../hooks/useTheme';
 import { formatTimestamp } from '../../lib/datetime';
 import { useMarkAllNotificationsAsRead, useMarkNotificationAsRead, useNotificationList } from './notificationsHooks';
 
 export function NotificationsPage() {
-  const theme = useTheme();
   const navigate = useNavigate();
   const notifications = useNotificationList();
   const markRead = useMarkNotificationAsRead();
@@ -25,7 +23,7 @@ export function NotificationsPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <div style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gap: 24 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
@@ -79,7 +77,7 @@ export function NotificationsPage() {
                     style={{
                       display: 'grid',
                       gap: 12,
-                      background: note.is_read ? (theme.resolved === 'dark' ? '#111827' : '#f8fafc') : '#eff6ff',
+                      background: note.is_read ? '#f8fafc' : '#eff6ff',
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

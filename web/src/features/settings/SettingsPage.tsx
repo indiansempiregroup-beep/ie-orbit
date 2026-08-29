@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { useTheme } from '../../hooks/useTheme';
 import { useBusinessProfileQuery } from './businessSettingsHooks';
 import { useProfileDetails } from '../profile/profileHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
@@ -12,7 +11,6 @@ import { BillingPlanFoundation } from './BillingPlanFoundation';
 import { formatUserRole } from '../../utils/roles';
 
 export function SettingsPage() {
-  const theme = useTheme();
   const profile = useProfileDetails();
   const businessQuery = useBusinessProfileQuery();
   const businessListQuery = useBusinessListQuery();
@@ -78,7 +76,7 @@ export function SettingsPage() {
   }, [customersQuery.data, servicesQuery.data, staffQuery.data]);
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gap: 20 }}>
         <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'minmax(0, 1.25fr) minmax(280px, 0.75fr)' }}>
           <Card style={{ padding: 22 }}>

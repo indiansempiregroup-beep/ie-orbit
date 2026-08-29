@@ -2,7 +2,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } fro
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -82,6 +86,7 @@ export function ShopProductsScreen() {
   const [bulkPrice, setBulkPrice] = useState('');
   const [bulkPercent, setBulkPercent] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [showBulkHint, setShowBulkHint] = useState(false);
 
   useEffect(() => {
@@ -211,6 +216,7 @@ export function ShopProductsScreen() {
       if (result.data.updated.length && !failed) {
         toast.push(`Updated ${result.data.updated.length} product${result.data.updated.length === 1 ? '' : 's'}.`, 'success');
         setSelectedIds([]);
+        setBulkOpen(false);
         setBulkStatus('');
         setBulkCategory('');
         setBulkGst('');
@@ -297,20 +303,35 @@ export function ShopProductsScreen() {
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {canWrite && filtered.length ? (
-          <Pressable onPress={toggleSelectFiltered} style={styles.selectAll}>
-            <Feather
-              name={allFilteredSelected ? 'check-square' : 'square'}
-              size={18}
-              color={allFilteredSelected ? colors.primary : colors.mutedForeground}
-            />
-            <Text style={styles.selectAllText}>Select all ({filtered.length})</Text>
-          </Pressable>
+          <View style={styles.selectRow}>
+            <Pressable onPress={toggleSelectFiltered} style={styles.selectAll}>
+              <Feather
+                name={allFilteredSelected ? 'check-square' : 'square'}
+                size={18}
+                color={allFilteredSelected ? colors.primary : colors.mutedForeground}
+              />
+              <Text style={styles.selectAllText}>Select all ({filtered.length})</Text>
+            </Pressable>
+            {selectedIds.length ? (
+              <Pressable
+                onPress={() => setBulkOpen(true)}
+                style={styles.bulkChip}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${selectedIds.length} selected products`}
+              >
+                <Feather name="edit-3" size={14} color={colors.primary} />
+                <Text style={styles.bulkChipText}>
+                  {selectedIds.length} selected · Edit
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-          contentContainerStyle={{ paddingBottom: insets.bottom + (selectedIds.length ? 220 : spacing.xl) }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
           renderItem={({ item }) => {
             const uri = resolveMediaUrl(primaryProductImageUrl(item));
             const photoCount = normalizeProductGallery(galleryFromProduct(item)).length;
@@ -383,63 +404,84 @@ export function ShopProductsScreen() {
             ) : null
           }
         />
-        {canWrite && selectedIds.length ? (
-          <View style={[styles.bulkBar, { paddingBottom: insets.bottom + spacing.sm }]}>
-            <Text style={styles.bulkTitle}>
-              {selectedIds.length} selected{selectedIds.length > 200 ? ' (first 200 will update)' : ''}
-            </Text>
-            <View style={styles.filters}>
-              <View style={styles.filterHalf}>
-                <SelectField label="Status" value={bulkStatus} options={BULK_STATUS_OPTIONS} onChange={setBulkStatus} />
-              </View>
-              <View style={styles.filterHalf}>
-                <SelectField
-                  label="Category"
-                  value={bulkCategory}
-                  options={[{ value: '', label: 'Keep category' }, ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label }))]}
-                  onChange={setBulkCategory}
-                  searchable
-                />
-              </View>
-            </View>
-            <View style={styles.bulkFields}>
-              <TextInput
-                value={bulkGst}
-                onChangeText={setBulkGst}
-                placeholder="GST %"
-                keyboardType="decimal-pad"
-                style={styles.bulkInput}
-                placeholderTextColor={colors.mutedForeground}
-              />
-              <TextInput
-                value={bulkPrice}
-                onChangeText={(value) => {
-                  setBulkPrice(value);
-                  if (value) setBulkPercent('');
-                }}
-                placeholder="Set price"
-                keyboardType="decimal-pad"
-                style={styles.bulkInput}
-                placeholderTextColor={colors.mutedForeground}
-              />
-              <TextInput
-                value={bulkPercent}
-                onChangeText={(value) => {
-                  setBulkPercent(value);
-                  if (value) setBulkPrice('');
-                }}
-                placeholder="Price %"
-                keyboardType="decimal-pad"
-                style={styles.bulkInput}
-                placeholderTextColor={colors.mutedForeground}
-              />
-            </View>
-            <View style={styles.bulkActions}>
-              <Button label="Apply" loading={bulkBusy} onPress={() => void applyBulkEdit()} />
-              <Button label="Clear" variant="ghost" onPress={() => setSelectedIds([])} />
-            </View>
-          </View>
-        ) : null}
+        <Modal
+          visible={bulkOpen && selectedIds.length > 0}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setBulkOpen(false)}
+        >
+          <Pressable style={styles.backdrop} onPress={() => setBulkOpen(false)}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.popupWrap}>
+              <Pressable style={styles.popup} onPress={(event) => event.stopPropagation()}>
+                <View style={styles.popupHeader}>
+                  <Text style={styles.bulkTitle}>
+                    Edit {selectedIds.length} product{selectedIds.length === 1 ? '' : 's'}
+                    {selectedIds.length > 200 ? ' (first 200)' : ''}
+                  </Text>
+                  <Pressable onPress={() => setBulkOpen(false)} hitSlop={8} accessibilityLabel="Close">
+                    <Feather name="x" size={20} color={colors.mutedForeground} />
+                  </Pressable>
+                </View>
+                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.popupBody}>
+                  <SelectField label="Status" value={bulkStatus} options={BULK_STATUS_OPTIONS} onChange={setBulkStatus} />
+                  <SelectField
+                    label="Category"
+                    value={bulkCategory}
+                    options={[
+                      { value: '', label: 'Keep category' },
+                      ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
+                    ]}
+                    onChange={setBulkCategory}
+                    searchable
+                  />
+                  <View style={styles.bulkFields}>
+                    <TextInput
+                      value={bulkGst}
+                      onChangeText={setBulkGst}
+                      placeholder="GST %"
+                      keyboardType="decimal-pad"
+                      style={styles.bulkInput}
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                    <TextInput
+                      value={bulkPrice}
+                      onChangeText={(value) => {
+                        setBulkPrice(value);
+                        if (value) setBulkPercent('');
+                      }}
+                      placeholder="Set price"
+                      keyboardType="decimal-pad"
+                      style={styles.bulkInput}
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                    <TextInput
+                      value={bulkPercent}
+                      onChangeText={(value) => {
+                        setBulkPercent(value);
+                        if (value) setBulkPrice('');
+                      }}
+                      placeholder="Price %"
+                      keyboardType="decimal-pad"
+                      style={styles.bulkInput}
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                  </View>
+                  <View style={styles.bulkActions}>
+                    <Button label="Apply" loading={bulkBusy} onPress={() => void applyBulkEdit()} />
+                    <Button
+                      label="Clear selection"
+                      variant="ghost"
+                      onPress={() => {
+                        setSelectedIds([]);
+                        setBulkOpen(false);
+                      }}
+                    />
+                  </View>
+                </ScrollView>
+              </Pressable>
+            </KeyboardAvoidingView>
+          </Pressable>
+        </Modal>
       </View>
     </DesktopPage>
   );
@@ -488,20 +530,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.tint,
   },
-  selectAll: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
-  selectAllText: { color: colors.foreground, fontSize: 13, fontFamily: fonts.bodySemi },
-  bulkBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: spacing.md,
-    backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: spacing.sm,
+  selectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: spacing.sm,
   },
-  bulkTitle: { fontFamily: fonts.bodySemi, color: colors.foreground },
+  selectAll: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  selectAllText: { color: colors.foreground, fontSize: 13, fontFamily: fonts.bodySemi },
+  bulkChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.tint,
+  },
+  bulkChipText: { color: colors.primary, fontFamily: fonts.bodySemi, fontSize: 13 },
+  backdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  popupWrap: { width: '100%', maxWidth: 480, alignSelf: 'center' },
+  popup: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  popupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  popupBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.md },
+  bulkTitle: { flex: 1, fontFamily: fonts.bodySemi, fontSize: 16, color: colors.foreground },
   bulkFields: { flexDirection: 'row', gap: 8 },
   bulkInput: {
     flex: 1,

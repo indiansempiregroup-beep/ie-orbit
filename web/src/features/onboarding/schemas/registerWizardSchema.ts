@@ -81,7 +81,7 @@ export const registerWizardSchema = z
     planCodes: z.record(z.string(), z.string()),
     primaryColor: z.string().min(4),
     secondaryColor: z.string().min(4),
-    theme: z.enum(['system', 'light', 'dark']),
+    theme: z.literal('light'),
   })
   .superRefine((data, ctx) => {
     if (!data.googleIdToken) {
@@ -204,6 +204,6 @@ export function getDefaultRegisterValues(): RegisterWizardFormValues {
     planCodes: { appointie: 'appointie-pro' },
     primaryColor: '#1A56DB',
     secondaryColor: '#111827',
-    theme: 'system',
+    theme: 'light',
   };
 }

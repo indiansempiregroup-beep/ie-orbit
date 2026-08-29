@@ -154,6 +154,7 @@ export function ShopProductsPage() {
   const [bulkGst, setBulkGst] = useState('');
   const [bulkPrice, setBulkPrice] = useState('');
   const [bulkPercent, setBulkPercent] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [showBulkHint, setShowBulkHint] = useState(() => {
     try {
       return window.localStorage.getItem('shop.bulkHint.dismissed') !== '1';
@@ -213,6 +214,7 @@ export function ShopProductsPage() {
       if (result.updated.length && !failed) {
         snackbar.push(`Updated ${result.updated.length} product${result.updated.length === 1 ? '' : 's'}.`, 'success');
         setSelectedIds([]);
+        setBulkOpen(false);
         setBulkStatus('');
         setBulkCategory('');
         setBulkGst('');
@@ -538,10 +540,17 @@ export function ShopProductsPage() {
         {products.isLoading ? <p>Loading…</p> : null}
         {products.error ? <p role="alert">{(products.error as Error).message}</p> : null}
         {filtered.length ? (
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
-            <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectFiltered} />
-            Select all ({filtered.length})
-          </label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectFiltered} />
+              Select all ({filtered.length})
+            </label>
+            {selectedIds.length ? (
+              <Button type="button" variant="neutral" onClick={() => setBulkOpen(true)}>
+                {selectedIds.length} selected · Edit
+              </Button>
+            ) : null}
+          </div>
         ) : null}
         <div style={{ display: 'grid', gap: 8 }}>
           {filtered.map((product) => (
@@ -674,27 +683,16 @@ export function ShopProductsPage() {
         </div>
       </Card>
 
-      {selectedIds.length ? (
-        <div
-          style={{
-            position: 'sticky',
-            bottom: 12,
-            zIndex: 5,
-            display: 'flex',
-            gap: 10,
-            flexWrap: 'wrap',
-            alignItems: 'flex-end',
-            padding: 14,
-            borderRadius: 16,
-            border: '1px solid var(--border, #e5e7eb)',
-            background: 'var(--card, #fff)',
-            boxShadow: '0 8px 24px rgba(15, 22, 35, 0.08)',
-          }}
-        >
-          <strong style={{ alignSelf: 'center' }}>
-            {selectedIds.length} selected{selectedIds.length > 200 ? ' (first 200 will update)' : ''}
-          </strong>
-          <label style={{ display: 'grid', gap: 4, minWidth: 120 }}>
+      <Dialog
+        open={bulkOpen && selectedIds.length > 0}
+        onClose={() => setBulkOpen(false)}
+        title={`Edit ${selectedIds.length} product${selectedIds.length === 1 ? '' : 's'}${selectedIds.length > 200 ? ' (first 200)' : ''}`}
+        labelledBy="bulk-edit-dialog"
+        busy={patchBulk.isPending}
+        busyMessage="Updating products…"
+      >
+        <div style={{ display: 'grid', gap: 12, minWidth: 280, maxWidth: 420 }}>
+          <label style={{ display: 'grid', gap: 4 }}>
             <span style={{ fontSize: 12, opacity: 0.7 }}>Status</span>
             <select
               value={bulkStatus}
@@ -708,7 +706,7 @@ export function ShopProductsPage() {
               <option value="archived">Archived</option>
             </select>
           </label>
-          <label style={{ display: 'grid', gap: 4, minWidth: 160 }}>
+          <label style={{ display: 'grid', gap: 4 }}>
             <span style={{ fontSize: 12, opacity: 0.7 }}>Category</span>
             <select
               value={bulkCategory}
@@ -723,44 +721,55 @@ export function ShopProductsPage() {
               ))}
             </select>
           </label>
-          <label style={{ display: 'grid', gap: 4, width: 90 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>GST %</span>
-            <input
-              value={bulkGst}
-              onChange={(event) => setBulkGst(event.target.value)}
-              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 4, width: 110 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Set price</span>
-            <input
-              value={bulkPrice}
-              onChange={(event) => {
-                setBulkPrice(event.target.value);
-                if (event.target.value) setBulkPercent('');
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label style={{ display: 'grid', gap: 4, flex: 1 }}>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>GST %</span>
+              <input
+                value={bulkGst}
+                onChange={(event) => setBulkGst(event.target.value)}
+                style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 4, flex: 1 }}>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>Set price</span>
+              <input
+                value={bulkPrice}
+                onChange={(event) => {
+                  setBulkPrice(event.target.value);
+                  if (event.target.value) setBulkPercent('');
+                }}
+                style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 4, flex: 1 }}>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>Price %</span>
+              <input
+                value={bulkPercent}
+                onChange={(event) => {
+                  setBulkPercent(event.target.value);
+                  if (event.target.value) setBulkPrice('');
+                }}
+                style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
+              />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setSelectedIds([]);
+                setBulkOpen(false);
               }}
-              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 4, width: 90 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Price %</span>
-            <input
-              value={bulkPercent}
-              onChange={(event) => {
-                setBulkPercent(event.target.value);
-                if (event.target.value) setBulkPrice('');
-              }}
-              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <Button type="button" variant="primary" onClick={() => void applyBulkEdit()} loading={patchBulk.isPending}>
-            Apply
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setSelectedIds([])}>
-            Clear
-          </Button>
+            >
+              Clear selection
+            </Button>
+            <Button type="button" variant="primary" onClick={() => void applyBulkEdit()} loading={patchBulk.isPending}>
+              Apply
+            </Button>
+          </div>
         </div>
-      ) : null}
+      </Dialog>
 
       <Dialog
         open={dialog.open}

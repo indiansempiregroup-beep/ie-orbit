@@ -18,7 +18,6 @@ type DayTimelineProps = {
   customerMap: Map<string, string>;
   serviceMap: Map<string, string>;
   staffMap: Map<string, string>;
-  dark?: boolean;
   loading?: boolean;
   errorMessage?: string | null;
   onBookSlot: (slot: AvailabilitySlot) => void;
@@ -32,7 +31,6 @@ export function DayTimeline({
   customerMap,
   serviceMap,
   staffMap,
-  dark = false,
   loading = false,
   errorMessage = null,
   onBookSlot,
@@ -50,10 +48,10 @@ export function DayTimeline({
   const marks = useMemo(() => hourMarks(bounds), [bounds]);
   const height = (bounds.endMinutes - bounds.startMinutes) * PX_PER_MINUTE;
 
-  const surface = dark ? '#111827' : '#fff';
-  const grid = dark ? '#1f2937' : '#eef2f7';
+  const surface = '#fff';
+  const grid = '#eef2f7';
   const muted = '#6b7280';
-  const lane = dark ? '#0f172a' : '#f8fafc';
+  const lane = '#f8fafc';
 
   if (loading) {
     return <div style={{ padding: 36, textAlign: 'center', color: muted }}>Loading day schedule…</div>;
@@ -117,8 +115,8 @@ export function DayTimeline({
               right: 8,
               top: row.top,
               height: Math.max(20, row.height),
-              border: `1px dashed ${dark ? '#334155' : '#cbd5e1'}`,
-              background: dark ? 'rgba(51, 65, 85, 0.35)' : 'rgba(226, 232, 240, 0.55)',
+              border: '1px dashed #cbd5e1',
+              background: 'rgba(226, 232, 240, 0.55)',
               borderRadius: 8,
               color: muted,
               fontSize: 12,
@@ -160,13 +158,13 @@ export function DayTimeline({
                 borderRadius: 10,
                 border: `1px solid ${colors.border}`,
                 background: colors.bg,
-                color: dark ? '#f8fafc' : colors.text,
+                color: colors.text,
                 padding: '6px 8px',
                 textAlign: 'left',
                 cursor: 'pointer',
                 overflow: 'hidden',
                 zIndex: 2,
-                boxShadow: dark ? 'none' : '0 1px 2px rgba(15, 23, 42, 0.06)',
+                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
               }}
             >
               <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

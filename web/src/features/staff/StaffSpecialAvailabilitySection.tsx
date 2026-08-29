@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
-import { useTheme } from '../../hooks/useTheme';
 import { formatTimestamp } from '../../lib/datetime';
 import {
   useStaffSpecialAvailability,
@@ -19,7 +18,6 @@ function toLocalInput(value: Date) {
 }
 
 export function StaffSpecialAvailabilitySection({ staffId }: StaffSpecialAvailabilitySectionProps) {
-  const theme = useTheme();
   const { businessId } = useWorkspaceScope();
   const specialQuery = useStaffSpecialAvailability(staffId);
   const mutations = useStaffSpecialAvailabilityMutations();
@@ -102,7 +100,7 @@ export function StaffSpecialAvailabilitySection({ staffId }: StaffSpecialAvailab
                 gridTemplateColumns: '2fr 1fr auto',
                 gap: 12,
                 padding: '12px 16px',
-                background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                background: '#fff',
                 alignItems: 'center',
               }}
             >

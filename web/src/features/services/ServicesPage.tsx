@@ -10,14 +10,12 @@ import { ManagementListToolbar } from '../../components/ManagementListToolbar';
 import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
 import { useAuth } from '../../hooks/useAuth';
 import { useDialog } from '../../hooks/useDialog';
-import { useTheme } from '../../hooks/useTheme';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { canWriteServices } from '../../utils/roles';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServicesPage() {
-  const theme = useTheme();
   const auth = useAuth();
   const canManageServices = canWriteServices(auth.user);
   const workspace = useWorkspace();
@@ -107,7 +105,7 @@ export function ServicesPage() {
             borderRadius: 10,
             objectFit: 'cover',
             border: '1px solid #e5e7eb',
-            background: theme.resolved === 'dark' ? '#1f2937' : '#f3f4f6',
+            background: '#f3f4f6',
           }}
         />
       );
@@ -121,7 +119,7 @@ export function ServicesPage() {
           height: 48,
           borderRadius: 10,
           border: '1px solid #e5e7eb',
-          background: theme.resolved === 'dark' ? '#1f2937' : '#f3f4f6',
+          background: '#f3f4f6',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -136,7 +134,7 @@ export function ServicesPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <div style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gap: 24 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
@@ -177,7 +175,7 @@ export function ServicesPage() {
           />
 
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: tableColumns, padding: '16px 20px', background: theme.resolved === 'dark' ? '#111827' : '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: tableColumns, padding: '16px 20px', background: '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
               <span aria-hidden />
               <span>Service</span>
               <span>Duration</span>
@@ -185,7 +183,7 @@ export function ServicesPage() {
               <span>Status</span>
               {canManageServices ? <span>Actions</span> : null}
             </div>
-            <div style={{ display: 'grid', gap: 1, background: theme.resolved === 'dark' ? '#0f172a' : '#fff' }}>
+            <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
               {isLoading || search.isLoading ? (
                 <div style={{ padding: 28, textAlign: 'center' }}>Loading services…</div>
               ) : error || search.error ? (
@@ -203,7 +201,7 @@ export function ServicesPage() {
                         display: 'grid',
                         gridTemplateColumns: tableColumns,
                         padding: '16px 20px',
-                        background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                        background: '#fff',
                         alignItems: 'center',
                         gap: 8,
                       }}

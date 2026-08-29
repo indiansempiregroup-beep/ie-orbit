@@ -10,9 +10,10 @@
     "android": "node ./start-expo.cjs run:android",
     "ios": "node ./start-expo.cjs run:ios",
     "postinstall": "node ./scripts/patch-metro-windows.cjs",
+    "eas-build-pre-install": "node ./scripts/materialize-google-services.cjs",
     "typecheck": "tsc --noEmit",
     "eas:build:preview": "eas build --profile preview --platform android",
-    "eas:build:production-preview": "eas build --profile production-preview --platform android",
+    "eas:build:production-preview": "node ./scripts/materialize-google-services.cjs && eas build --profile production-preview --platform android",
     "eas:build:production-preview:ios-simulator": "eas build --profile production-preview-ios-simulator --platform ios",
     "eas:build:production": "eas build --profile production --platform all"
   },

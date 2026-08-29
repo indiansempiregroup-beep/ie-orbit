@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -10,11 +10,9 @@ import {
   LayoutDashboard,
   LifeBuoy,
   Megaphone,
-  Moon,
   Package,
   Palette,
   ScrollText,
-  Sun,
   TicketPercent,
   Users,
   Handshake,
@@ -24,18 +22,6 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { hasTenantOpsRole } from '../../utils/roles';
 import { redirectToOpsMobileWeb } from '../../lib/impersonation';
-
-const ADMIN_THEME_KEY = 'ie:admin:theme';
-
-function readAdminTheme(): 'light' | 'dark' {
-  try {
-    const stored = localStorage.getItem(ADMIN_THEME_KEY);
-    if (stored === 'dark' || stored === 'light') return stored;
-  } catch {
-    /* ignore */
-  }
-  return 'light';
-}
 
 const navGroups: Array<{
   label: string;
@@ -79,23 +65,10 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const { exitWorkspaceMode, loading } = useWorkspace();
   const canOpenWorkspace = hasTenantOpsRole(auth.user);
-  const [adminTheme, setAdminTheme] = useState<'light' | 'dark'>(readAdminTheme);
 
   useEffect(() => {
     exitWorkspaceMode();
   }, [exitWorkspaceMode]);
-
-  function toggleAdminTheme() {
-    setAdminTheme((current) => {
-      const next = current === 'dark' ? 'light' : 'dark';
-      try {
-        localStorage.setItem(ADMIN_THEME_KEY, next);
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }
 
   async function handleOpenWorkspace() {
     redirectToOpsMobileWeb();
@@ -107,7 +80,7 @@ export function AdminLayout() {
   }
 
   return (
-    <div className={`admin-shell${adminTheme === 'dark' ? ' admin-shell--dark' : ''}`}>
+    <div className="admin-shell">
       <aside className="admin-sidebar">
         <div className="admin-brand">
           <div className="admin-brand__mark" aria-hidden>
@@ -153,15 +126,6 @@ export function AdminLayout() {
                 {loading ? 'Opening…' : 'Open workspace'}
               </button>
             ) : null}
-            <button
-              type="button"
-              className="admin-btn admin-btn--ghost"
-              onClick={toggleAdminTheme}
-              aria-pressed={adminTheme === 'dark'}
-            >
-              {adminTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-              {adminTheme === 'dark' ? 'Light theme' : 'Dark theme'}
-            </button>
             <Link className="admin-btn admin-btn--ghost" to="/admin/profile">
               Profile
             </Link>

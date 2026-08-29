@@ -62,6 +62,8 @@ Configured in `apps/ops-mobile/eas.json`:
 | `production-preview-ios-simulator` | iOS Simulator (no Apple Developer account) | `https://api.ie-orbit.com/api/v1` |
 | `production` | Store | `https://api.ie-orbit.com/api/v1` |
 
+`production-preview` bakes Maps, Google Sign-In, AdMob, and the live API URL. Android push also needs the Firebase client file at `credentials/google-services.json` (gitignored; EAS still uploads it via `.easignore`). After the first Android build, add the EAS keystore SHA-1 to the ops Android OAuth client or Google login will fail on the APK.
+
 Sideload a live-API Android APK (no Play Store account):
 
 ```bash

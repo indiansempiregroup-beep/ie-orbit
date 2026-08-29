@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
-import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { formatDateTime } from '../../lib/datetime';
 import { useBookingActions, useBookingDetail } from './bookingDetailHooks';
@@ -11,7 +10,6 @@ import { useBookingActions, useBookingDetail } from './bookingDetailHooks';
 export function BookingDetailPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const navigate = useNavigate();
-  const theme = useTheme();
   const snackbar = useSnackbar();
   const bookingQuery = useBookingDetail(bookingId);
   const actions = useBookingActions(bookingId);
@@ -45,7 +43,7 @@ export function BookingDetailPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <SubmitOverlay show={isSubmitting} message={activeAction ? `${activeAction}…` : 'Processing…'} />
       <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>

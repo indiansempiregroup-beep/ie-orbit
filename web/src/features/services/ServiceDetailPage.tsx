@@ -12,12 +12,10 @@ import { Dialog } from '../../components/Dialog';
 import { LogoUploadField } from '../../components/LogoUploadField';
 import { formatTimestamp } from '../../lib/datetime';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
-import { useTheme } from '../../hooks/useTheme';
 import { canWriteServices } from '../../utils/roles';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServiceDetailPage() {
-  const theme = useTheme();
   const auth = useAuth();
   const canManageServices = canWriteServices(auth.user);
   const workspace = useWorkspace();
@@ -105,7 +103,7 @@ export function ServiceDetailPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 32, background: theme.resolved === 'dark' ? '#0f172a' : '#f5f7fb', color: theme.resolved === 'dark' ? '#f8fafc' : '#111827' }}>
+    <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
       <div style={{ maxWidth: 920, margin: '0 auto', display: 'grid', gap: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>

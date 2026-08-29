@@ -2,7 +2,6 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
-import { useTheme } from '../../hooks/useTheme';
 import { useEmailVerification } from '../../hooks/useEmailVerification';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { useProfileDetails } from './profileHooks';
@@ -23,7 +22,6 @@ function renderNotificationPreferenceValue(value: unknown) {
 }
 
 export function ProfilePage() {
-  const theme = useTheme();
   const profile = useProfileDetails();
   const user = profile.user;
   const navigate = useNavigate();
@@ -36,7 +34,7 @@ export function ProfilePage() {
       style={{
         minHeight: routes.embeddedInAdmin ? undefined : '100%',
         padding: routes.embeddedInAdmin ? 0 : 8,
-        color: routes.embeddedInAdmin ? undefined : theme.resolved === 'dark' ? '#f8fafc' : '#111827',
+        color: routes.embeddedInAdmin ? undefined : '#111827',
       }}
     >
       <div style={{ maxWidth: 960, margin: '0 auto', display: 'grid', gap: 24, width: '100%' }}>

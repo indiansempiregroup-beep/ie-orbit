@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
-import { useTheme } from '../../hooks/useTheme';
 import { formatTimestamp } from '../../lib/datetime';
 import { useStaffLeaveMutations, useStaffLeaves } from './staffAvailabilityHooks';
 import { useStaffWeeklySchedules } from './staffScheduleHooks';
@@ -57,7 +56,6 @@ function formatLeaveKind(leaveType: string | undefined) {
 }
 
 export function StaffLeaveSection({ staffId }: StaffLeaveSectionProps) {
-  const theme = useTheme();
   const { businessId } = useWorkspaceScope();
   const leavesQuery = useStaffLeaves(staffId);
   const schedulesQuery = useStaffWeeklySchedules(staffId);
@@ -252,7 +250,7 @@ export function StaffLeaveSection({ staffId }: StaffLeaveSectionProps) {
                       gridTemplateColumns: '2fr 1fr 1fr auto',
                       gap: 12,
                       padding: '12px 16px',
-                      background: theme.resolved === 'dark' ? '#111827' : '#fff',
+                      background: '#fff',
                       alignItems: 'center',
                     }}
                   >
