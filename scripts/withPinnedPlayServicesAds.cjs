@@ -1,11 +1,12 @@
 /**
- * Expo SDK 54 compiles Android with Kotlin 2.1.x.
- * react-native-google-mobile-ads 16.5 pulls play-services-ads 25.4.0, which
- * ships Kotlin 2.3 metadata and fails :compileReleaseKotlin on EAS.
+ * Expo SDK 54 compiles Android with Kotlin 2.1.x (can read metadata up to 2.2).
+ * react-native-google-mobile-ads 16.5 defaults to play-services-ads 25.4.0
+ * (Kotlin 2.3 metadata → compileReleaseKotlin fails) and needs
+ * AgeRestrictedTreatment (added in 25.3.0). Pin 25.3.0 to satisfy both.
  */
 const { withProjectBuildGradle } = require('expo/config-plugins');
 
-const ADS_VERSION = '24.7.0';
+const ADS_VERSION = '25.3.0';
 const MARKER = `play-services-ads:${ADS_VERSION}`;
 
 function withPinnedPlayServicesAds(config) {
