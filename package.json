@@ -9,5 +9,10 @@
   },
   "devDependencies": {
     "typescript": "^5.8.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "react-native-google-mobile-ads": "16.3.4"
+    }
   }
 }
