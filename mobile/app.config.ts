@@ -142,6 +142,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     ...(adMobPlugin ? [adMobPlugin] : []),
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../scripts/withPinnedPlayServicesAds.cjs'),
   ],
   assetBundlePatterns: ['**/*'],
 });
