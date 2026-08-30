@@ -26,6 +26,7 @@ COPY packages/i18n/package.json ./packages/i18n/package.json
 COPY packages/i18n/tsconfig.json ./packages/i18n/tsconfig.json
 COPY packages/i18n/src ./packages/i18n/src
 COPY scripts/load-root-env.cjs ./scripts/load-root-env.cjs
+COPY scripts/withPinnedPlayServicesAds.cjs ./scripts/withPinnedPlayServicesAds.cjs
 COPY web ./web
 COPY apps/ops-mobile ./apps/ops-mobile
 
