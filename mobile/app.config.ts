@@ -56,8 +56,14 @@ const urlSchemes = googleAuthSchemes({
   androidClientId: androidGoogleClientId,
 });
 const googleSignInIosScheme = googleReversedClientScheme(androidGoogleClientId);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { googleServicesDest, materializeGoogleServices } = require('./scripts/materialize-google-services.cjs') as {
+  googleServicesDest: (androidPackage?: string) => string;
+  materializeGoogleServices: (androidPackage?: string) => string | null;
+};
+materializeGoogleServices(androidPackage);
+const googleServicesFileAbs = googleServicesDest(androidPackage);
 const googleServicesFile = `./credentials/google-services/${androidPackage}.json`;
-const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services', `${androidPackage}.json`);
 const adMobAndroidAppId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID;
 const adMobIosAppId = process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID;
 const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =

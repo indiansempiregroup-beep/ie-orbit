@@ -16,6 +16,10 @@ fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
+if [[ -f ./scripts/materialize-google-services.cjs ]]; then
+  node ./scripts/materialize-google-services.cjs || echo "[customer-app] continuing without google-services.json"
+fi
+
 if [[ -f ./scripts/materialize-app-icon.cjs ]]; then
   node ./scripts/materialize-app-icon.cjs --force || echo "[customer-app] continuing without a freshly generated icon"
 fi

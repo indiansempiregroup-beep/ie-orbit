@@ -17,6 +17,7 @@
     "test:app-icon": "node --test ./scripts/app-icon-utils.test.cjs ./scripts/materialize-app-icon.test.cjs",
     "test:google-auth": "node --test ./src/utils/googleAuthRequest.test.cjs",
     "icons": "node ./scripts/materialize-app-icon.cjs",
+    "eas-build-pre-install": "node ./scripts/materialize-google-services.cjs",
     "eas-build-post-install": "node ./scripts/materialize-app-icon.cjs",
     "eas:build:demo:preview": "bash ./scripts/build-flavor.sh demo-main-preview all",
     "eas:build:demo:production-preview": "bash ./scripts/build-flavor.sh demo-main-production-preview android",

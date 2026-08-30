@@ -129,8 +129,9 @@ GoogleService-Info.plist
 *-firebase-adminsdk-*.json
 **/credentials/google-services/*.json
 !**/google-services.example.json
-# Upload the local ops FCM client file so production-preview can receive push.
+# Upload local FCM client files so production-preview can receive push.
 !apps/ops-mobile/credentials/google-services.json
+!mobile/credentials/google-services/*.json
 
 ############################################################
 # React Native
