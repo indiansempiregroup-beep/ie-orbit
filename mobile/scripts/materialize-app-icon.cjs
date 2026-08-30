@@ -158,7 +158,7 @@ async function writeIcons({ logoBuffer, primaryColor, initials, iosFlattenColor,
     adaptive = await resizeLogoAsIs(sharp, logoBuffer, ICON_SIZE);
     // Apple rejects / black-fills transparent App Icons. Flatten iOS + store icons only.
     if (await pngHasTransparency(sharp, adaptive)) {
-      console.log(`[customer-app] flattened iOS icon onto ${flattenHex} (source had transparency)`);
+      console.warn(`[customer-app] flattened iOS icon onto ${flattenHex} (source had transparency)`);
       icon = await flattenOpaqueIcon(sharp, logoBuffer, ICON_SIZE, flattenRgb);
     } else {
       icon = adaptive;
@@ -266,7 +266,7 @@ async function materializeAppIcon(options = {}) {
       fetchedAt: Date.now(),
     });
   }
-  console.log(
+  console.warn(
     `[customer-app] wrote ${source.kind} icons for ${flavor.flavorKey} → ${path.relative(MOBILE_ROOT, GENERATED_DIR)}`,
   );
   return { ...paths, reused: false, source };
