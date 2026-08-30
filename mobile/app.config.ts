@@ -41,18 +41,21 @@ try {
 const FACE_ID_USAGE = 'Allow $(PRODUCT_NAME) to use Face ID for quick sign-in.';
 const androidPackage = selectedFlavor?.bundleIdAndroid ?? 'com.ieorbit.mobile.dev';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { googleAuthSchemes } = require('./src/utils/googleAuthRequest.cjs') as {
+const { googleAuthSchemes, googleReversedClientScheme } = require('./src/utils/googleAuthRequest.cjs') as {
   googleAuthSchemes: (input: {
     appSlug?: string;
     applicationId?: string;
     androidClientId?: string;
   }) => string[];
+  googleReversedClientScheme: (clientId?: string) => string;
 };
+const androidGoogleClientId = process.env.EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID || '';
 const urlSchemes = googleAuthSchemes({
   appSlug,
   applicationId: androidPackage,
-  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID || '',
+  androidClientId: androidGoogleClientId,
 });
+const googleSignInIosScheme = googleReversedClientScheme(androidGoogleClientId);
 const googleServicesFile = `./credentials/google-services/${androidPackage}.json`;
 const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services', `${androidPackage}.json`);
 const adMobAndroidAppId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID;
@@ -70,6 +73,16 @@ const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
         },
       ]
     : null;
+
+// Bake flavor icons before Expo resolves icon/splash paths, or it locks onto assets/icon.png (IO).
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('./scripts/materialize-app-icon.cjs').materializeAppIconSync();
+} catch (error) {
+  console.warn(
+    `[customer-app] icon bake failed: ${error instanceof Error ? error.message : error}`,
+  );
+}
 
 const generatedIcon = path.join(__dirname, 'assets', 'generated', 'icon.png');
 const generatedAdaptive = path.join(__dirname, 'assets', 'generated', 'adaptive-icon.png');
@@ -132,8 +145,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     adaptiveIcon: {
       foregroundImage: adaptiveIcon,
-      // Transparent so an uploaded PNG is not sat on the brand color.
-      backgroundColor: '#00000000',
+      backgroundColor: splashBackground,
     },
   },
   web: {
@@ -146,7 +158,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     googleOAuth: {
       // Only explicit Expo public IDs — never the server/web .env key.
       clientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || '',
-      androidClientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID || '',
+      androidClientId: androidGoogleClientId,
     },
     eas: {
       projectId:
@@ -181,6 +193,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     ...(adMobPlugin ? [adMobPlugin] : []),
+    ...(googleSignInIosScheme
+      ? [
+          [
+            '@react-native-google-signin/google-signin',
+            { iosUrlScheme: googleSignInIosScheme },
+          ],
+        ]
+      : []),
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../scripts/withPinnedPlayServicesAds.cjs'),
   ],

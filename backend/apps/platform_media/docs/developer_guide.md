@@ -15,7 +15,7 @@ result = MediaService().upload(
     tenant=request.current_tenant,
     business=business,
     uploaded_by=request.user,
-    folder_type="business",
+    folder_type="branding",
     visibility="private",
     tags=["logo"],
 )

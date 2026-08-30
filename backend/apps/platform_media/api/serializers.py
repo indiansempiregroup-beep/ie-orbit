@@ -8,6 +8,7 @@ from apps.platform_media.models import (
     MediaFolderType,
     MediaVisibility,
     StorageProvider,
+    normalize_folder_type,
 )
 
 
@@ -107,7 +108,7 @@ class MediaUploadSerializer(serializers.Serializer):
     folder_type = serializers.ChoiceField(
         choices=MediaFolderType.choices,
         required=False,
-        default=MediaFolderType.BUSINESS,
+        default=MediaFolderType.BRANDING,
     )
     visibility = serializers.ChoiceField(
         choices=MediaVisibility.choices,
@@ -122,6 +123,9 @@ class MediaUploadSerializer(serializers.Serializer):
     )
     metadata = serializers.JSONField(required=False, default=dict)
 
+    def validate_folder_type(self, value: str) -> str:
+        return normalize_folder_type(value)
+
 
 class MediaUploadMultipleSerializer(serializers.Serializer):
     files = serializers.ListField(child=serializers.FileField(), allow_empty=False)
@@ -130,7 +134,7 @@ class MediaUploadMultipleSerializer(serializers.Serializer):
     folder_type = serializers.ChoiceField(
         choices=MediaFolderType.choices,
         required=False,
-        default=MediaFolderType.BUSINESS,
+        default=MediaFolderType.BRANDING,
     )
     visibility = serializers.ChoiceField(
         choices=MediaVisibility.choices,
@@ -142,3 +146,6 @@ class MediaUploadMultipleSerializer(serializers.Serializer):
         required=False,
         default=list,
     )
+
+    def validate_folder_type(self, value: str) -> str:
+        return normalize_folder_type(value)

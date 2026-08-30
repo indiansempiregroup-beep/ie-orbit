@@ -76,7 +76,10 @@ def test_media_upload_duplicate_patch_and_delete(
         content_type="text/plain",
     )
 
-    with override_settings(PLATFORM_MEDIA_LOCAL_ROOT=tmp_path):
+    with override_settings(
+        PLATFORM_MEDIA_STORAGE_PROVIDER="local",
+        PLATFORM_MEDIA_LOCAL_ROOT=tmp_path,
+    ):
         upload_response = api_client.post(
             reverse("media-upload"),
             {
@@ -138,6 +141,7 @@ def test_media_file_endpoint_public_and_private(
     tmp_path: object,
     settings,
 ) -> None:
+    settings.PLATFORM_MEDIA_STORAGE_PROVIDER = "local"
     settings.PLATFORM_MEDIA_LOCAL_ROOT = tmp_path
     access = authenticate(api_client, user)
     tenant_id = create_tenant(api_client)
@@ -163,7 +167,7 @@ def test_media_file_endpoint_public_and_private(
         {
             "file": SimpleUploadedFile("logo.png", _png_bytes(), content_type="image/png"),
             "business": business_id,
-            "folder_type": "business",
+            "folder_type": "branding",
             "visibility": "public",
             "tags": ["logo"],
         },
@@ -178,7 +182,7 @@ def test_media_file_endpoint_public_and_private(
     public_media = Media.objects.get(id=public_id)
     private_media = Media.objects.get(id=private_id)
     assert public_media.storage_path.startswith(
-        f"tenants/{tenant_id}/businesses/{business_id}/business/"
+        f"tenants/{tenant_id}/businesses/{business_id}/branding/"
     )
     assert private_media.storage_path.startswith(
         f"tenants/{tenant_id}/businesses/{business_id}/documents/"
@@ -186,7 +190,7 @@ def test_media_file_endpoint_public_and_private(
     assert public_media.metadata.get("thumbnail_path")
     assert public_media.metadata.get("display_path")
     assert str(public_media.metadata["thumbnail_path"]).startswith(
-        f"tenants/{tenant_id}/businesses/{business_id}/business/"
+        f"tenants/{tenant_id}/businesses/{business_id}/branding/"
     )
     assert not private_media.metadata.get("thumbnail_path")
 
@@ -201,3 +205,38 @@ def test_media_file_endpoint_public_and_private(
     assert authorized_private.status_code == 200
     private_body = b"".join(authorized_private.streaming_content)
     assert private_body == b"private-bytes"
+
+
+@pytest.mark.django_db
+def test_legacy_business_folder_type_is_stored_as_branding(
+    api_client: APIClient,
+    user: User,
+    tmp_path: object,
+) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_id = create_business(api_client)
+
+    with override_settings(
+        PLATFORM_MEDIA_STORAGE_PROVIDER="local",
+        PLATFORM_MEDIA_LOCAL_ROOT=tmp_path,
+    ):
+        response = api_client.post(
+            reverse("media-upload"),
+            {
+                "file": SimpleUploadedFile("logo.png", _png_bytes(), content_type="image/png"),
+                "business": business_id,
+                "folder_type": "business",
+                "visibility": "public",
+                "tags": ["logo"],
+            },
+            format="multipart",
+        )
+
+    assert response.status_code == 201
+    media = Media.objects.get(id=response.json()["data"]["id"])
+    assert "/branding/" in media.storage_path
+    assert "/business/" not in media.storage_path
+    assert media.folder.folder_type == "branding"
+

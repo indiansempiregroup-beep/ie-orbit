@@ -23,13 +23,24 @@ class MediaVisibility(models.TextChoices):
 
 
 class MediaFolderType(models.TextChoices):
-    BUSINESS = "business", "Business"
+    BRANDING = "branding", "Branding"
+    PRODUCTS = "products", "Products"
+    SERVICES = "services", "Services"
+    PETS = "pets", "Pets"
     STAFF = "staff", "Staff"
     CUSTOMERS = "customers", "Customers"
-    SERVICES = "services", "Services"
     DOCUMENTS = "documents", "Documents"
     TEMP = "temp", "Temp"
     ARCHIVE = "archive", "Archive"
+    # Deprecated alias for branding. Kept so older clients do not 400 on upload.
+    BUSINESS = "business", "Business"
+
+
+def normalize_folder_type(folder_type: str | None) -> str:
+    kind = (folder_type or MediaFolderType.BRANDING).strip().strip("/").lower()
+    if not kind or kind == MediaFolderType.BUSINESS:
+        return MediaFolderType.BRANDING
+    return kind
 
 
 class StorageProviderType(models.TextChoices):
@@ -70,7 +81,7 @@ class MediaFolder(TenantModel):
     folder_type = models.CharField(
         max_length=32,
         choices=MediaFolderType.choices,
-        default=MediaFolderType.BUSINESS,
+        default=MediaFolderType.BRANDING,
         db_index=True,
     )
     path = models.CharField(max_length=255)

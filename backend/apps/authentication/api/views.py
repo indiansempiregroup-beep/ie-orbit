@@ -370,9 +370,9 @@ class MeProfilePhotoView(APIView):
                 tenant=tenant,
                 business=business,
                 uploaded_by=request.user,
-                folder_type=MediaFolderType.BUSINESS,
+                folder_type=MediaFolderType.STAFF,
                 visibility=MediaVisibility.PUBLIC,
-                tags=["profile", "photo"],
+                tags=["profile", "photo", "staff"],
                 display_name=f"{request.user.full_name or request.user.email} profile photo",
             )
         except DjangoValidationError as exc:

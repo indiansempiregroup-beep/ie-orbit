@@ -1,19 +1,14 @@
 import { Platform } from 'react-native';
-import { ResponseType } from 'expo-auth-session';
-import * as AuthSession from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { googleNativeRedirectUri, shouldForceImplicitIdToken } = require('./googleAuthRequest.cjs') as {
-  googleNativeRedirectUri: (input?: { androidClientId?: string; applicationId?: string }) => string;
-  shouldForceImplicitIdToken: (platform: string) => boolean;
+const { googleSignInConfigured } = require('./googleAuthRequest.cjs') as {
+  googleSignInConfigured: (input?: {
+    platform?: string;
+    androidClientId?: string;
+    webClientId?: string;
+  }) => boolean;
 };
-
-WebBrowser.maybeCompleteAuthSession();
-
-const DISABLED_CLIENT_ID = '000000000000-disabled.apps.googleusercontent.com';
 
 type GoogleIdApi = {
   initialize: (config: {
@@ -132,43 +127,54 @@ export function isExpoGoRuntime(): boolean {
   return Constants.appOwnership === 'expo';
 }
 
-function googleRedirectUri(androidClientId: string): string {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  const applicationId = String(
-    Platform.OS === 'ios'
-      ? Constants.expoConfig?.ios?.bundleIdentifier || ''
-      : Constants.expoConfig?.android?.package || '',
-  ).trim();
-  const native = googleNativeRedirectUri({ androidClientId, applicationId });
-  if (native) {
-    return AuthSession.makeRedirectUri({ native });
-  }
-  const scheme = String(Constants.expoConfig?.scheme || '')
-    .split(',')[0]
-    .trim();
-  return AuthSession.makeRedirectUri({
-    native: scheme ? `${scheme}:/oauthredirect` : undefined,
+async function promptNativeGoogleIdToken(androidClientId: string): Promise<string | null> {
+  // Lazy so Expo Go can boot without the native module.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const {
+    GoogleSignin,
+    isErrorWithCode,
+    isSuccessResponse,
+    statusCodes,
+  } = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin');
+  GoogleSignin.configure({
+    webClientId: androidClientId,
+    offlineAccess: false,
+    scopes: ['openid', 'profile', 'email'],
   });
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  try {
+    const response = await GoogleSignin.signIn();
+    if (!isSuccessResponse(response)) {
+      return null;
+    }
+    const idToken = response.data.idToken || '';
+    if (!idToken) {
+      throw new Error('Google did not return a sign-in token. Please try again.');
+    }
+    return idToken;
+  } catch (error) {
+    if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
+      return null;
+    }
+    const code = isErrorWithCode(error) ? String(error.code) : '';
+    if (code === '10' || /DEVELOPER_ERROR/i.test(error instanceof Error ? error.message : '')) {
+      throw new Error(
+        'Google sign-in is misconfigured for this Android build. Add this app’s package name and EAS keystore SHA-1 to the customer Android OAuth client.',
+      );
+    }
+    throw error;
+  }
 }
 
 export function useGoogleIdTokenAuth() {
-  const clientId = getGoogleOAuthClientId();
+  const webClientId = getGoogleOAuthClientId();
   const androidClientId = getGoogleOAuthAndroidClientId();
-  const configured =
-    Platform.OS === 'android' ? Boolean(clientId && androidClientId) : Boolean(clientId);
-  const expoGo = isExpoGoRuntime();
-  const redirectUri = googleRedirectUri(androidClientId);
-  const implicitIdToken = shouldForceImplicitIdToken(Platform.OS);
-  const [, , promptAsync] = Google.useAuthRequest({
-    clientId: clientId || DISABLED_CLIENT_ID,
-    androidClientId: androidClientId || undefined,
-    webClientId: clientId || undefined,
-    redirectUri,
-    scopes: ['openid', 'profile', 'email'],
-    ...(implicitIdToken ? { responseType: ResponseType.IdToken } : {}),
+  const configured = googleSignInConfigured({
+    platform: Platform.OS,
+    androidClientId,
+    webClientId,
   });
+  const expoGo = isExpoGoRuntime();
 
   async function promptForIdToken(): Promise<string | null> {
     if (!configured) {
@@ -176,30 +182,20 @@ export function useGoogleIdTokenAuth() {
     }
     if (expoGo) {
       throw new Error(
-        'Google sign-in does not work in Expo Go. Use the customer app in the browser, or a development build.',
+        'Google sign-in does not work in Expo Go. Use a customer APK or development build.',
       );
     }
     if (Platform.OS === 'web') {
       try {
-        return await promptGoogleIdTokenOnWeb(clientId);
+        return await promptGoogleIdTokenOnWeb(webClientId);
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'GIS_UNAVAILABLE') {
           throw error;
         }
+        throw new Error('Google sign-in is unavailable in this browser. Please try again.');
       }
     }
-    const result = await promptAsync();
-    if (result.type === 'cancel' || result.type === 'dismiss') {
-      return null;
-    }
-    if (result.type !== 'success') {
-      throw new Error('Google sign-in was interrupted. Please try again.');
-    }
-    const idToken = result.params.id_token || result.authentication?.idToken || '';
-    if (!idToken) {
-      throw new Error('Google did not return a sign-in token. Please try again.');
-    }
-    return idToken;
+    return await promptNativeGoogleIdToken(androidClientId);
   }
 
   return { configured, promptForIdToken };

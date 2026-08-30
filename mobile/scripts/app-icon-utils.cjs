@@ -35,9 +35,9 @@ function hexToRgb(color, fallback = '#ffffff') {
   };
 }
 
-/** iOS app icons must be opaque. Transparent pixels are flattened onto this color. */
-function iosIconFlattenColor(envValue) {
-  return normalizeHexColor(envValue, '#ffffff');
+/** iOS app icons must be opaque. Transparent pixels flatten onto the brand color unless overridden. */
+function iosIconFlattenColor(envValue, fallback = DEFAULT_PRIMARY) {
+  return normalizeHexColor(envValue, fallback);
 }
 
 function apiOrigin(apiBaseUrl) {

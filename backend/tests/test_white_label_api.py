@@ -80,6 +80,31 @@ def test_mobile_bootstrap_by_flavor_key(api_client: APIClient, white_label_conte
 
 
 @pytest.mark.django_db
+def test_mobile_bootstrap_prefers_media_api_logo_over_stale_upload_path(
+    api_client: APIClient, white_label_context: dict[str, str]
+) -> None:
+    business = Business.objects.get(business_code=white_label_context["business_code"])
+    business.logo = "/api/v1/media/01a0537b-892b-769a-a04a-8c9b58d43b4f/file"
+    business.save(update_fields=["logo", "updated_at"])
+    profile = WhiteLabelProfile.objects.get(flavor_key=white_label_context["flavor_key"])
+    profile.logo = (
+        "/media/uploads/tenants/019f3c4f-e33e-7964-82b3-850a4ea4b435/"
+        "businesses/019f3c4f-f737-7cda-851f-5a67253d4b22/businesses/"
+        "019f3c4f-f737-7cda-851f-5a67253d4b22/business/missing-phoenix.jpg"
+    )
+    profile.save(update_fields=["logo", "updated_at"])
+
+    response = api_client.get(
+        reverse("mobile-bootstrap"),
+        {"flavor_key": white_label_context["flavor_key"]},
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["branding"]["logo"] == business.logo
+    assert payload["business"]["logo"] == business.logo
+
+
+@pytest.mark.django_db
 def test_mobile_bootstrap_by_tenant_business(api_client: APIClient, white_label_context: dict[str, str]) -> None:
     response = api_client.get(
         reverse("mobile-bootstrap"),

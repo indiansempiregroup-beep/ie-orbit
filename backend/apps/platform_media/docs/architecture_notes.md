@@ -33,8 +33,8 @@ provider details.
 `Media` is tenant-owned and may optionally link to a business. It records filename metadata, file
 type metadata, checksum, provider, storage path, visibility, tags, folder, and JSON metadata.
 
-`MediaFolder` provides canonical folder grouping for business, staff, customers, services,
-documents, temp, and archive.
+`MediaFolder` provides canonical folder grouping for branding, products, pets, staff, customers,
+services, documents, temp, and archive.
 
 `StorageProvider` stores provider configuration metadata. Secrets must remain in environment or
 secret management systems, not in database JSON.
@@ -62,5 +62,7 @@ tenants/{tenant_id}/businesses/{business_id}/{folder_type}/{uuid}-{stem}.thumb.w
 backups/postgres/ie_orbit_{timestamp}.sql.gz
 ```
 
-`folder_type` is one of: business, staff, customers, services, documents, temp, archive.
+`folder_type` is one of: branding, products, services, pets, staff, customers, documents, temp,
+archive. Ops / staff profile photos use `staff`; customer-app profile photos use `customers`.
+The legacy value `business` is accepted on upload and stored as `branding`.
 Uploads without a business use `shared` in place of `{business_id}`.

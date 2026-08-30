@@ -49,9 +49,10 @@ describe('normalizeHexColor', () => {
 });
 
 describe('ios flatten color', () => {
-  it('defaults transparent iOS icons to white', () => {
-    assert.equal(iosIconFlattenColor(''), '#ffffff');
-    assert.deepEqual(hexToRgb('#ffffff'), { r: 255, g: 255, b: 255 });
+  it('defaults transparent iOS icons to the brand color', () => {
+    assert.equal(iosIconFlattenColor(''), '#1A56DB');
+    assert.equal(iosIconFlattenColor('', '#d936bb'), '#d936bb');
+    assert.deepEqual(hexToRgb('#d936bb'), { r: 217, g: 54, b: 187 });
   });
 
   it('accepts an explicit flatten color', () => {

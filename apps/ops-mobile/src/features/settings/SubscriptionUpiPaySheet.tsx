@@ -123,7 +123,7 @@ export function SubscriptionUpiPaySheet({
         tenantId,
         businessId,
         asset: picked.assets[0],
-        folderType: 'business',
+        folderType: 'documents',
         tags: ['billing', 'upi_proof'],
         displayName: `UPI proof ${request.productCode}`,
       });

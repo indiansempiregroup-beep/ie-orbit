@@ -3,13 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import time
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
+from urllib.request import Request, urlopen
 
-from django.db import transaction
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from apps.bookings.models import BusinessSchedule, BusinessWeeklySchedule, StaffWeeklySchedule
 from apps.businesses.models import Business, BusinessProductSubscription, BusinessProfile, WhiteLabelProfile
-from apps.platform_media.models import Media, MediaType, MediaVisibility, StorageProviderType
+from apps.platform_media.models import Media, MediaVisibility, StorageProviderType
+from apps.platform_media.services import MediaService
 from apps.services.models import (
     Service,
     ServiceCategory,
@@ -434,13 +437,93 @@ ABOUT = (
 
 def _resolve_business(*, flavor_key: str) -> tuple[WhiteLabelProfile, Business]:
     profile = (
-        WhiteLabelProfile.objects.select_related("business", "tenant")
+        WhiteLabelProfile.objects.select_related("business", "tenant", "tenant__owner")
         .filter(flavor_key=flavor_key, white_label_enabled=True)
         .first()
     )
     if profile is None:
         raise ValueError(f"White-label profile not found for flavor_key={flavor_key!r}.")
     return profile, profile.business
+
+
+def _is_platform_media_url(url: str) -> bool:
+    return "/api/v1/media/" in (url or "").strip()
+
+
+def _is_placeholder_media(media: Media | None) -> bool:
+    if media is None:
+        return True
+    if media.storage_provider in {StorageProviderType.S3, "r2"}:
+        return False
+    public_url = str((media.metadata or {}).get("public_url") or "")
+    if _is_platform_media_url(public_url):
+        return False
+    return not str(media.storage_path or "").startswith("tenants/")
+
+
+def _media_file_url(media: Media) -> str:
+    return str((media.metadata or {}).get("public_url") or f"/api/v1/media/{media.id}/file")
+
+
+def _image_upload_name(filename: str, payload: bytes) -> tuple[str, str]:
+    stem = Path(filename).stem
+    if payload.startswith(b"\xff\xd8\xff"):
+        return f"{stem}.jpg", "image/jpeg"
+    if payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        return f"{stem}.png", "image/png"
+    if payload[:4] == b"RIFF" and payload[8:12] == b"WEBP":
+        return f"{stem}.webp", "image/webp"
+    return f"{stem}.jpg", "image/jpeg"
+
+
+def _fetch_image_bytes(url: str) -> bytes:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "IE-Orbit catalog seed",
+            "Accept": "image/jpeg,image/webp,image/png,image/*;q=0.8",
+        },
+    )
+    with urlopen(request, timeout=45) as response:
+        payload = response.read()
+    if not payload:
+        raise ValueError(f"Empty image downloaded from {url}")
+    return payload
+
+
+def _upload_catalog_image(
+    *,
+    business: Business,
+    source_url: str,
+    filename: str,
+    folder_type: str,
+    tags: list[str],
+    display_name: str,
+) -> Media:
+    payload = _fetch_image_bytes(source_url)
+    name, content_type = _image_upload_name(filename, payload)
+    uploaded = SimpleUploadedFile(name, payload, content_type=content_type)
+    result = MediaService().upload(
+        uploaded_file=uploaded,
+        tenant=business.tenant,
+        business=business,
+        uploaded_by=getattr(business.tenant, "owner", None),
+        folder_type=folder_type,
+        visibility=MediaVisibility.PUBLIC,
+        tags=tags,
+        display_name=display_name,
+    )
+    return result.media
+
+
+def _replace_placeholder_media(*, previous: Media | None, replacement: Media) -> None:
+    if previous is None or previous.id == replacement.id:
+        return
+    if not _is_placeholder_media(previous):
+        return
+    if ServiceImage.objects.filter(media=previous).exists():
+        return
+    previous.soft_delete()
 
 
 def _ensure_business_profile(*, business: Business) -> BusinessProfile:
@@ -595,27 +678,24 @@ def _ensure_service_images(*, business: Business, services: dict[str, Service]) 
     count = 0
     image_by_code = {spec.code: spec.image_url for spec in SERVICES}
     for code, service in services.items():
-        image_url = image_by_code.get(code)
-        if not image_url:
+        source_url = image_by_code.get(code)
+        if not source_url:
             continue
-        checksum = f"sanket-pet-shop-service-{code}"
-        media, _ = Media.objects.update_or_create(
-            tenant=business.tenant,
-            checksum=checksum,
-            storage_provider=StorageProviderType.LOCAL,
-            defaults={
-                "business": business,
-                "media_type": MediaType.IMAGE,
-                "original_filename": f"{code}.jpg",
-                "storage_filename": f"{code}.jpg",
-                "display_name": service.display_name or service.name,
-                "file_extension": "jpg",
-                "mime_type": "image/jpeg",
-                "file_size": 1,
-                "storage_path": f"sanket-pet-shop/services/{code}.jpg",
-                "visibility": MediaVisibility.PUBLIC,
-                "metadata": {"public_url": image_url},
-            },
+        existing = (
+            ServiceImage.objects.filter(tenant=business.tenant, service=service, is_primary=True)
+            .select_related("media")
+            .first()
+        )
+        if existing and not _is_placeholder_media(existing.media):
+            count += 1
+            continue
+        media = _upload_catalog_image(
+            business=business,
+            source_url=source_url,
+            filename=f"{code}.jpg",
+            folder_type="services",
+            tags=["service", "image"],
+            display_name=f"{service.display_name or service.name} image",
         )
         ServiceImage.objects.update_or_create(
             tenant=business.tenant,
@@ -626,6 +706,10 @@ def _ensure_service_images(*, business: Business, services: dict[str, Service]) 
                 "alt_text": service.display_name or service.name,
                 "display_order": 0,
             },
+        )
+        _replace_placeholder_media(
+            previous=existing.media if existing else None,
+            replacement=media,
         )
         count += 1
     return count
@@ -688,6 +772,25 @@ def _ensure_staff(*, business: Business, services: dict[str, Service]) -> list[S
     return staff_rows
 
 
+def _product_image_url(*, business: Business, product: ShopProduct | None, spec: ProductSpec) -> str:
+    if product is not None:
+        if _is_platform_media_url(product.image_url):
+            return product.image_url
+        images = (product.metadata or {}).get("images") if isinstance(product.metadata, dict) else {}
+        front = str((images or {}).get("front") or "")
+        if _is_platform_media_url(front):
+            return front
+    media = _upload_catalog_image(
+        business=business,
+        source_url=spec.image_url,
+        filename=f"{spec.sku}.jpg",
+        folder_type="products",
+        tags=["shop", "product", "image"],
+        display_name=f"{spec.name} image",
+    )
+    return _media_file_url(media)
+
+
 def _ensure_products(*, business: Business) -> list[ShopProduct]:
     catalog = CatalogService()
     products: list[ShopProduct] = []
@@ -697,6 +800,7 @@ def _ensure_products(*, business: Business) -> list[ShopProduct]:
             business=business,
             sku=spec.sku,
         ).first()
+        image_url = _product_image_url(business=business, product=existing, spec=spec)
         payload = {
             "sku": spec.sku,
             "name": spec.name,
@@ -709,12 +813,12 @@ def _ensure_products(*, business: Business) -> list[ShopProduct]:
             "hsn_sac": spec.hsn_sac,
             "currency": business.currency or "INR",
             "pack_size": spec.pack_size,
-            "image_url": spec.image_url,
+            "image_url": image_url,
             "category": spec.category,
             "low_stock_threshold": "3",
             "metadata": {
                 "tax_inclusive": True,
-                "images": {"gallery": [spec.image_url], "front": spec.image_url},
+                "images": {"gallery": [image_url], "front": image_url},
             },
         }
         if existing is None:
@@ -734,7 +838,6 @@ def _ensure_products(*, business: Business) -> list[ShopProduct]:
     return products
 
 
-@transaction.atomic
 def seed_sanket_pet_shop(*, flavor_key: str = FLAVOR_KEY) -> dict[str, Any]:
     profile, business = _resolve_business(flavor_key=flavor_key)
     _ensure_business_profile(business=business)

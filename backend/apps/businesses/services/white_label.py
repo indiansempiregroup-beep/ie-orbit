@@ -83,6 +83,39 @@ def _loyalty_program_summary(business: Business) -> dict[str, Any]:
         }
 
 
+_MEDIA_API_PREFIX = "/api/v1/media/"
+_LOCAL_UPLOAD_PREFIX = "/media/uploads/"
+
+
+def _rewrite_local_upload_logo(url: str) -> str:
+    storage_path = url[len(_LOCAL_UPLOAD_PREFIX) :] if url.startswith(_LOCAL_UPLOAD_PREFIX) else ""
+    if not storage_path:
+        return ""
+    from apps.platform_media.models import Media
+
+    media = Media.objects.filter(storage_path=storage_path).first()
+    if media is None:
+        filename = storage_path.rsplit("/", 1)[-1]
+        media = Media.objects.filter(storage_path__endswith=filename).first()
+    if media is None:
+        return ""
+    return f"{_MEDIA_API_PREFIX}{media.id}/file"
+
+
+def effective_logo(*candidates: str) -> str:
+    """Prefer a fetchable /api/v1/media/{id}/file logo over stale /media/uploads/ paths."""
+    urls = [str(candidate or "").strip() for candidate in candidates]
+    urls = [url for url in urls if url]
+    for url in urls:
+        if url.startswith(_MEDIA_API_PREFIX):
+            return url
+    for url in urls:
+        rewritten = _rewrite_local_upload_logo(url)
+        if rewritten:
+            return rewritten
+    return urls[0] if urls else ""
+
+
 def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
     business = profile.business
     tenant = business.tenant
@@ -109,6 +142,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         ]
         if part
     ]
+    logo = effective_logo(profile.logo, business.logo)
     return {
         "flavor_key": profile.flavor_key,
         "app_slug": profile.app_slug,
@@ -122,7 +156,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         "business": {
             "id": str(business.id),
             "display_name": business.display_name,
-            "logo": profile.logo or business.logo,
+            "logo": logo,
             "currency": business.currency,
             "timezone": business.timezone,
             "phone": business.primary_contact,
@@ -141,7 +175,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         },
         "branding": {
             "app_name": profile.app_name,
-            "logo": profile.logo or business.logo,
+            "logo": logo,
             "dark_logo": profile.dark_logo,
             "splash_image": profile.splash_image,
             "favicon": profile.favicon,

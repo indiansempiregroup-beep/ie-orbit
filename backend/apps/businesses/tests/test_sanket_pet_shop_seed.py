@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from io import BytesIO
+from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
+from PIL import Image
 
 from apps.authentication.models import User, UserStatus
 from apps.businesses.models import Business, BusinessProductSubscription, WhiteLabelProfile
@@ -12,6 +15,12 @@ from apps.services.models import Service, ServiceCategory, ServiceImage
 from apps.shopie.models import ShopProduct
 from apps.staff.models import StaffServiceAssignment
 from apps.tenancy.models import Organization, Tenant
+
+
+def _jpeg_bytes() -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (48, 48), "navy").save(buffer, format="JPEG")
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -62,10 +71,19 @@ def sanket_pet_shop() -> Business:
 
 
 @pytest.mark.django_db
-def test_seed_sanket_pet_shop_is_idempotent(sanket_pet_shop: Business) -> None:
-    call_command("seed_sanket_pet_shop")
-    call_command("seed_sanket_pet_shop")
+def test_seed_sanket_pet_shop_is_idempotent(sanket_pet_shop: Business, settings, tmp_path) -> None:
+    settings.PLATFORM_MEDIA_STORAGE_PROVIDER = "local"
+    settings.PLATFORM_MEDIA_LOCAL_ROOT = tmp_path
+    jpeg = _jpeg_bytes()
 
+    with patch(
+        "apps.businesses.services.sanket_pet_shop_seed._fetch_image_bytes",
+        return_value=jpeg,
+    ) as fetch_image:
+        call_command("seed_sanket_pet_shop")
+        call_command("seed_sanket_pet_shop")
+
+    assert fetch_image.call_count == len(SERVICES) + len(PRODUCTS)
     assert ServiceCategory.objects.filter(business=sanket_pet_shop).count() == len(CATEGORIES)
     assert Service.objects.filter(business=sanket_pet_shop).count() == len(SERVICES)
     assert ServiceImage.objects.filter(service__business=sanket_pet_shop, is_primary=True).count() == len(SERVICES)
@@ -75,12 +93,14 @@ def test_seed_sanket_pet_shop_is_idempotent(sanket_pet_shop: Business) -> None:
     bath = Service.objects.get(business=sanket_pet_shop, service_code="dog-bath-medium")
     assert bath.display_name == "Dog Bath — Medium"
     assert bath.prices.filter(is_default=True).first().base_price == 800
-    assert bath.images.filter(is_primary=True).first().media.metadata["public_url"]
+    media = bath.images.filter(is_primary=True).first().media
+    assert media.storage_path.startswith("tenants/")
+    assert str(media.metadata.get("public_url") or "").startswith("/api/v1/media/")
 
     product = ShopProduct.objects.get(business=sanket_pet_shop, sku="pedigree-adult-10kg")
     assert product.category == "pet_food"
     assert str(product.price) == "1878.00"
-    assert product.image_url
+    assert product.image_url.startswith("/api/v1/media/")
     assert product.stock_on_hand == Decimal("20")
 
     shopie = BusinessProductSubscription.objects.get(business=sanket_pet_shop, product_code="shopie")

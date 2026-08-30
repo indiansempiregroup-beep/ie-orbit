@@ -12,11 +12,18 @@ function isNativeGoogleAuthPlatform(platform) {
   return platform === 'ios' || platform === 'android';
 }
 
-function googleNativeRedirectUri({ androidClientId, applicationId } = {}) {
+function googleNativeRedirectUri({ androidClientId, appSlug, applicationId } = {}) {
   const reversed = googleReversedClientScheme(androidClientId);
   if (reversed) return `${reversed}:/oauthredirect`;
+  const slug = String(appSlug || '').trim();
+  if (slug) return `${slug}:/oauthredirect`;
   const appId = String(applicationId || '').trim();
   return appId ? `${appId}:/oauthredirect` : '';
+}
+
+function googleSignInConfigured({ platform, androidClientId, webClientId } = {}) {
+  if (platform === 'web') return Boolean(String(webClientId || '').trim());
+  return Boolean(String(androidClientId || '').trim());
 }
 
 function googleAuthSchemes({ appSlug, applicationId, androidClientId } = {}) {
@@ -31,13 +38,14 @@ function googleAuthSchemes({ appSlug, applicationId, androidClientId } = {}) {
 }
 
 function shouldForceImplicitIdToken(platform) {
-  return !isNativeGoogleAuthPlatform(platform);
+  return platform === 'web';
 }
 
 module.exports = {
   googleAuthSchemes,
   googleNativeRedirectUri,
   googleReversedClientScheme,
+  googleSignInConfigured,
   isNativeGoogleAuthPlatform,
   shouldForceImplicitIdToken,
 };

@@ -55,12 +55,12 @@ function selectedFlavor() {
   };
 }
 
-function generatedPaths() {
+function generatedPaths(outputDir = GENERATED_DIR) {
   return {
-    icon: path.join(GENERATED_DIR, 'icon.png'),
-    adaptiveIcon: path.join(GENERATED_DIR, 'adaptive-icon.png'),
-    splash: path.join(GENERATED_DIR, 'splash.png'),
-    playStoreIcon: path.join(GENERATED_DIR, 'play-store-icon.png'),
+    icon: path.join(outputDir, 'icon.png'),
+    adaptiveIcon: path.join(outputDir, 'adaptive-icon.png'),
+    splash: path.join(outputDir, 'splash.png'),
+    playStoreIcon: path.join(outputDir, 'play-store-icon.png'),
   };
 }
 
@@ -144,11 +144,13 @@ async function flattenOpaqueIcon(sharp, logoBuffer, size, flattenRgb) {
     .toBuffer();
 }
 
-async function writeIcons({ logoBuffer, primaryColor, initials, iosFlattenColor = '#ffffff' }) {
+async function writeIcons({ logoBuffer, primaryColor, initials, iosFlattenColor, outputDir }) {
   const sharp = require('sharp');
-  fs.mkdirSync(GENERATED_DIR, { recursive: true });
-  const paths = generatedPaths();
-  const flattenRgb = hexToRgb(iosFlattenColor, '#ffffff');
+  const destDir = outputDir || GENERATED_DIR;
+  fs.mkdirSync(destDir, { recursive: true });
+  const paths = generatedPaths(destDir);
+  const flattenHex = normalizeHexColor(iosFlattenColor, primaryColor);
+  const flattenRgb = hexToRgb(flattenHex, primaryColor);
 
   let icon;
   let adaptive;
@@ -156,7 +158,7 @@ async function writeIcons({ logoBuffer, primaryColor, initials, iosFlattenColor 
     adaptive = await resizeLogoAsIs(sharp, logoBuffer, ICON_SIZE);
     // Apple rejects / black-fills transparent App Icons. Flatten iOS + store icons only.
     if (await pngHasTransparency(sharp, adaptive)) {
-      console.log(`[customer-app] flattened iOS icon onto ${iosFlattenColor} (source had transparency)`);
+      console.log(`[customer-app] flattened iOS icon onto ${flattenHex} (source had transparency)`);
       icon = await flattenOpaqueIcon(sharp, logoBuffer, ICON_SIZE, flattenRgb);
     } else {
       icon = adaptive;
@@ -172,10 +174,19 @@ async function writeIcons({ logoBuffer, primaryColor, initials, iosFlattenColor 
       .toBuffer();
   }
 
+  // Native splash never shows initials. Logo mark if we have one; otherwise a brand-color fill.
+  const splash = logoBuffer
+    ? adaptive
+    : await sharp({
+        create: { width: ICON_SIZE, height: ICON_SIZE, channels: 3, background: hexToRgb(primaryColor, primaryColor) },
+      })
+        .png()
+        .toBuffer();
+
   await Promise.all([
     fs.promises.writeFile(paths.icon, icon),
     fs.promises.writeFile(paths.adaptiveIcon, adaptive),
-    fs.promises.writeFile(paths.splash, icon),
+    fs.promises.writeFile(paths.splash, splash),
     sharp(icon).resize(PLAY_STORE_SIZE, PLAY_STORE_SIZE).png().toFile(paths.playStoreIcon),
   ]);
   return paths;
@@ -231,21 +242,30 @@ async function materializeAppIcon(options = {}) {
     }
   }
 
-  const flattenColor = iosIconFlattenColor(process.env.EXPO_PUBLIC_IOS_ICON_BACKGROUND);
+  const flattenColor = iosIconFlattenColor(process.env.EXPO_PUBLIC_IOS_ICON_BACKGROUND, primaryColor);
   await writeIcons({
     logoBuffer,
     primaryColor,
     initials: initialsFromAppName(flavor.appName),
     iosFlattenColor: flattenColor,
   });
-  writeCache({
-    flavorKey: flavor.flavorKey,
-    sourceKind: source.kind,
-    sourceValue: source.value,
-    primaryColor,
-    iosFlattenColor: flattenColor,
-    fetchedAt: Date.now(),
-  });
+  // A failed URL download must not be cached, or the next start reuses a blank/initials splash.
+  if (source.kind === 'url' && !logoBuffer) {
+    try {
+      fs.unlinkSync(CACHE_PATH);
+    } catch {
+      // no cache to clear
+    }
+  } else {
+    writeCache({
+      flavorKey: flavor.flavorKey,
+      sourceKind: source.kind,
+      sourceValue: source.value,
+      primaryColor,
+      iosFlattenColor: flattenColor,
+      fetchedAt: Date.now(),
+    });
+  }
   console.log(
     `[customer-app] wrote ${source.kind} icons for ${flavor.flavorKey} → ${path.relative(MOBILE_ROOT, GENERATED_DIR)}`,
   );

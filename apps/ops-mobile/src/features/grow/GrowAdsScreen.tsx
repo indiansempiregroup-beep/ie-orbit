@@ -120,7 +120,7 @@ export function GrowAdsScreen() {
       tenantId,
       businessId,
       asset: pendingAsset,
-      folderType: 'business',
+      folderType: 'branding',
       tags: ['grow', 'ad'],
       displayName: title.trim() || 'Dashboard ad',
     });

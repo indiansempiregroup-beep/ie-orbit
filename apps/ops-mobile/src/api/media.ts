@@ -44,7 +44,7 @@ type UploadMediaArgs = {
   tenantId: string;
   businessId: string;
   asset: ImagePickerAsset;
-  folderType: 'business' | 'services' | 'staff';
+  folderType: 'branding' | 'products' | 'pets' | 'services' | 'staff' | 'documents';
   tags: string[];
   displayName: string;
 };
@@ -99,7 +99,7 @@ export async function uploadMedia({
 export async function uploadBrandingLogo(args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { displayName: string }) {
   return uploadMedia({
     ...args,
-    folderType: 'business',
+    folderType: 'branding',
     tags: ['branding', 'logo'],
     displayName: `${args.displayName} logo`,
   });
@@ -119,7 +119,7 @@ export async function uploadProductImage(
 ) {
   return uploadMedia({
     ...args,
-    folderType: 'business',
+    folderType: 'products',
     tags: ['shop', 'product', 'image'],
     displayName: `${args.productName?.trim() || 'Product'} image`,
   });
@@ -130,7 +130,7 @@ export async function uploadPetImage(
 ) {
   return uploadMedia({
     ...args,
-    folderType: 'business',
+    folderType: 'pets',
     tags: ['shop', 'pet', 'photo'],
     displayName: `${args.petName?.trim() || 'Pet'} photo`,
   });

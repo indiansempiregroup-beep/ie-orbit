@@ -16,7 +16,7 @@ export async function uploadProductImage({
   const uploadData = new FormData();
   uploadData.set('file', imageFile);
   uploadData.set('business', businessId);
-  uploadData.set('folder_type', 'business');
+  uploadData.set('folder_type', 'products');
   uploadData.set('visibility', 'public');
   uploadData.append('tags', 'shop');
   uploadData.append('tags', 'product');
@@ -65,7 +65,7 @@ export async function uploadPetImage({
   const uploadData = new FormData();
   uploadData.set('file', imageFile);
   uploadData.set('business', businessId);
-  uploadData.set('folder_type', 'business');
+  uploadData.set('folder_type', 'pets');
   uploadData.set('visibility', 'public');
   uploadData.append('tags', 'shop');
   uploadData.append('tags', 'pet');

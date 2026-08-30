@@ -19,7 +19,7 @@ export async function uploadBrandingLogo({
   const uploadData = new FormData();
   uploadData.set('file', logoFile);
   uploadData.set('business', businessId);
-  uploadData.set('folder_type', 'business');
+  uploadData.set('folder_type', 'branding');
   uploadData.set('visibility', 'public');
   uploadData.append('tags', 'branding');
   uploadData.append('tags', 'logo');

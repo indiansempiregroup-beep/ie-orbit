@@ -148,7 +148,6 @@ const styles = StyleSheet.create({
     height: 132,
     borderRadius: radius.lg,
     marginBottom: spacing.xl,
-    backgroundColor: '#ffffffcc',
   },
   logoFallback: {
     width: 132,

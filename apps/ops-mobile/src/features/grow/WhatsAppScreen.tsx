@@ -216,7 +216,7 @@ export function WhatsAppScreen() {
       tenantId,
       businessId,
       asset: pendingAsset,
-      folderType: 'business',
+      folderType: 'documents',
       tags: ['grow', 'whatsapp'],
       displayName: 'WhatsApp attachment',
     });

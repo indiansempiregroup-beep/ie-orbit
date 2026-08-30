@@ -15,6 +15,7 @@ from apps.platform_media.models import (
     MediaFolderType,
     MediaType,
     MediaVisibility,
+    normalize_folder_type,
 )
 from apps.platform_media.repositories import MediaRepository
 from apps.platform_media.services.security import VirusScanService
@@ -51,7 +52,7 @@ class MediaService:
         business: Any | None,
         uploaded_by: Any,
         folder: MediaFolder | None = None,
-        folder_type: str = "business",
+        folder_type: str = MediaFolderType.BRANDING,
         visibility: str = MediaVisibility.PRIVATE,
         tags: list[str] | None = None,
         display_name: str = "",
@@ -75,6 +76,7 @@ class MediaService:
         original_filename = normalize_filename(uploaded_file.name)
         generated_filename = storage_filename(original_filename)
         media_type = self._media_type(validation.mime_type, validation.extension)
+        folder_type = normalize_folder_type(folder_type)
         folder = folder or self.ensure_folder(
             tenant=tenant,
             business=business,
@@ -162,7 +164,7 @@ class MediaService:
         business: Any | None,
         uploaded_by: Any,
         folder: MediaFolder | None = None,
-        folder_type: str = "business",
+        folder_type: str = MediaFolderType.BRANDING,
         visibility: str = MediaVisibility.PRIVATE,
         tags: list[str] | None = None,
     ) -> list[UploadedMediaResult]:
@@ -187,6 +189,7 @@ class MediaService:
         business: Any | None,
         folder_type: str,
     ) -> MediaFolder:
+        folder_type = normalize_folder_type(folder_type)
         existing = MediaFolder.objects.filter(tenant=tenant, folder_type=folder_type)
         existing = (
             existing.filter(business__isnull=True)
@@ -244,7 +247,7 @@ class MediaService:
         folder_type: str,
     ) -> str:
         business_part = str(getattr(business, "id", "shared"))
-        kind = (folder_type or MediaFolderType.BUSINESS).strip().strip("/")
+        kind = normalize_folder_type(folder_type)
         return f"tenants/{tenant.id}/businesses/{business_part}/{kind}"
 
     def _storage_path(
