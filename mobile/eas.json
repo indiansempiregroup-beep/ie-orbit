@@ -154,11 +154,64 @@
         "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
         "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
       }
+    },
+    "sanket-pet-shop-preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "sanket-pet-shop-sanket-pet-shop",
+        "EXPO_PUBLIC_APP_NAME": "Sanket Pet Shop",
+        "EXPO_PUBLIC_APP_SLUG": "sanket-pet-shop",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "d3605998-b92a-497d-a72f-8028df3ca64d",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": "373269001775-3fm125kisnkfcjbvqji1vtvegm2326na.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
+      }
+    },
+    "sanket-pet-shop-production-preview": {
+      "distribution": "internal",
+      "android": {
+        "image": "sdk-54",
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "sanket-pet-shop-sanket-pet-shop",
+        "EXPO_PUBLIC_APP_NAME": "Sanket Pet Shop",
+        "EXPO_PUBLIC_APP_SLUG": "sanket-pet-shop",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "d3605998-b92a-497d-a72f-8028df3ca64d",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": "373269001775-3fm125kisnkfcjbvqji1vtvegm2326na.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
+      }
+    },
+    "sanket-pet-shop-production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_FLAVOR_KEY": "sanket-pet-shop-sanket-pet-shop",
+        "EXPO_PUBLIC_APP_NAME": "Sanket Pet Shop",
+        "EXPO_PUBLIC_APP_SLUG": "sanket-pet-shop",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "d3605998-b92a-497d-a72f-8028df3ca64d",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": "373269001775-3fm125kisnkfcjbvqji1vtvegm2326na.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
+      }
     }
   },
   "submit": {
     "demo-main-production": {},
     "empire-salon-production": {},
-    "rupali-sirsat-production": {}
+    "rupali-sirsat-production": {},
+    "sanket-pet-shop-production": {}
   }
 }

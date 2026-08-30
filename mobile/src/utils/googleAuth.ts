@@ -103,13 +103,22 @@ async function promptGoogleIdTokenOnWeb(clientId: string): Promise<string | null
   });
 }
 
+function googleOAuthExtra(): { clientId?: string; androidClientId?: string } {
+  return (
+    (Constants.expoConfig?.extra as { googleOAuth?: { clientId?: string; androidClientId?: string } } | undefined)
+      ?.googleOAuth || {}
+  );
+}
+
 export function getGoogleOAuthClientId(): string {
-  const extra = Constants.expoConfig?.extra as { googleOAuth?: { clientId?: string } } | undefined;
+  const extra = googleOAuthExtra();
+  return String(extra.clientId || process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || '').trim();
+}
+
+export function getGoogleOAuthAndroidClientId(): string {
+  const extra = googleOAuthExtra();
   return String(
-    extra?.googleOAuth?.clientId ||
-      process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID ||
-      process.env.GOOGLE_OAUTH_CLIENT_ID ||
-      '',
+    extra.androidClientId || process.env.EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID || '',
   ).trim();
 }
 
@@ -131,11 +140,13 @@ function googleRedirectUri(): string {
 
 export function useGoogleIdTokenAuth() {
   const clientId = getGoogleOAuthClientId();
+  const androidClientId = getGoogleOAuthAndroidClientId();
   const configured = Boolean(clientId);
   const expoGo = isExpoGoRuntime();
   const redirectUri = googleRedirectUri();
   const [, , promptAsync] = Google.useAuthRequest({
     clientId: clientId || DISABLED_CLIENT_ID,
+    androidClientId: androidClientId || undefined,
     webClientId: clientId || undefined,
     responseType: ResponseType.IdToken,
     redirectUri,

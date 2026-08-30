@@ -260,6 +260,7 @@ cd mobile
 corepack pnpm exec eas login
 corepack pnpm exec eas init --id d3605998-b92a-497d-a72f-8028df3ca64d --force --non-interactive
 corepack pnpm eas:build:rupali:production-preview
+corepack pnpm eas:build:sanket:production-preview
 
 cd ../apps/ops-mobile
 corepack pnpm exec eas init --id b897b310-e21b-49ab-b58f-56b8da1867f3 --force --non-interactive

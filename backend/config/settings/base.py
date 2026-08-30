@@ -289,6 +289,7 @@ def _google_oauth_client_ids() -> tuple[str, ...]:
         "GOOGLE_OAUTH_CLIENT_ID",
         "GOOGLE_OAUTH_OPS_IOS_CLIENT_ID",
         "GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID",
+        "GOOGLE_OAUTH_CUSTOMER_ANDROID_CLIENT_ID",
     ):
         value = os.getenv(key, "").strip()
         if value and value not in seen:

@@ -9,6 +9,7 @@
     "start:empire": "EXPO_PUBLIC_FLAVOR_KEY=empire-salon-main EXPO_PUBLIC_APP_NAME='Empire Salon' expo start",
     "start:rupali": "EXPO_PUBLIC_FLAVOR_KEY=rupali-s-business-rupali-s-business EXPO_PUBLIC_APP_NAME='Rupali Sirsat' expo start",
     "start:rupali:tunnel": "EXPO_PUBLIC_FLAVOR_KEY=rupali-s-business-rupali-s-business EXPO_PUBLIC_APP_NAME='Rupali Sirsat' expo start --tunnel --clear",
+    "start:sanket": "EXPO_PUBLIC_FLAVOR_KEY=sanket-pet-shop-sanket-pet-shop EXPO_PUBLIC_APP_NAME='Sanket Pet Shop' expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
@@ -21,7 +22,10 @@
     "eas:build:empire:production": "bash ./scripts/build-flavor.sh empire-salon-production all",
     "eas:build:rupali:preview": "bash ./scripts/build-flavor.sh rupali-sirsat-preview all",
     "eas:build:rupali:production-preview": "bash ./scripts/build-flavor.sh rupali-sirsat-production-preview android",
-    "eas:build:rupali:production": "bash ./scripts/build-flavor.sh rupali-sirsat-production all"
+    "eas:build:rupali:production": "bash ./scripts/build-flavor.sh rupali-sirsat-production all",
+    "eas:build:sanket:preview": "bash ./scripts/build-flavor.sh sanket-pet-shop-preview all",
+    "eas:build:sanket:production-preview": "bash ./scripts/build-flavor.sh sanket-pet-shop-production-preview android",
+    "eas:build:sanket:production": "bash ./scripts/build-flavor.sh sanket-pet-shop-production all"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",

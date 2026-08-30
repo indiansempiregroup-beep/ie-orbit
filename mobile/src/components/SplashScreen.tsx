@@ -11,6 +11,8 @@ type SplashScreenProps = {
   branding: BrandTheme;
   businessName?: string | null;
   tagline?: string | null;
+  expectingLogo?: boolean;
+  onLogoSettled?: () => void;
 };
 
 export function SplashBackdrop({ branding }: { branding: BrandTheme }) {
@@ -24,7 +26,13 @@ export function SplashBackdrop({ branding }: { branding: BrandTheme }) {
   return <LinearGradient colors={gradientColors} style={styles.backdrop} />;
 }
 
-export function SplashScreen({ branding, businessName, tagline }: SplashScreenProps) {
+export function SplashScreen({
+  branding,
+  businessName,
+  tagline,
+  expectingLogo = false,
+  onLogoSettled,
+}: SplashScreenProps) {
   const primary = branding.primaryColor ?? colors.primary;
   const secondary = branding.secondaryColor ?? colors.secondaryForeground;
   const gradientColors = useMemo(
@@ -42,7 +50,16 @@ export function SplashScreen({ branding, businessName, tagline }: SplashScreenPr
 
   useEffect(() => {
     setLogoFailed(false);
-  }, [logoUri]);
+    if (!logoUri) {
+      onLogoSettled?.();
+    }
+  }, [logoUri, onLogoSettled]);
+
+  useEffect(() => {
+    if (!logoUri) return undefined;
+    const timeout = setTimeout(() => onLogoSettled?.(), 2500);
+    return () => clearTimeout(timeout);
+  }, [logoUri, onLogoSettled]);
 
   useEffect(() => {
     const intro = Animated.sequence([
@@ -89,8 +106,14 @@ export function SplashScreen({ branding, businessName, tagline }: SplashScreenPr
             source={{ uri: logoUri }}
             style={styles.logo}
             resizeMode="contain"
-            onError={() => setLogoFailed(true)}
+            onLoad={() => onLogoSettled?.()}
+            onError={() => {
+              setLogoFailed(true);
+              onLogoSettled?.();
+            }}
           />
+        ) : expectingLogo ? (
+          <View style={styles.logo} />
         ) : (
           <View style={[styles.logoFallback, { backgroundColor: primary }]}>
             <Feather name="calendar" size={42} color="#fff" />

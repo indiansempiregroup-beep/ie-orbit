@@ -50,10 +50,12 @@ function loadRootEnv(fromDir = __dirname) {
 
   // Google Sign-In: copy root IDs into Expo public names when those vars are blank.
   const googleOAuthCopies = [
-    ['GOOGLE_OAUTH_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID'],
+    // Do not copy GOOGLE_OAUTH_CLIENT_ID into EXPO_PUBLIC_*: that would show
+    // Google sign-in on every customer EAS APK built from a machine with .env.
     ['GOOGLE_OAUTH_CLIENT_ID', 'VITE_GOOGLE_OAUTH_CLIENT_ID'],
     ['GOOGLE_OAUTH_OPS_IOS_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_OPS_IOS_CLIENT_ID'],
     ['GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID'],
+    ['GOOGLE_OAUTH_CUSTOMER_ANDROID_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID'],
   ];
   for (const [source, target] of googleOAuthCopies) {
     const value = (process.env[source] || '').trim();

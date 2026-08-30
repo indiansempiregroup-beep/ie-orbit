@@ -61,7 +61,8 @@ const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: appName,
-  slug: appSlug,
+  // One EAS project for all customer flavors; scheme/package stay per-business.
+  slug: 'ie-orbit-customer',
   owner: 'indians-empire',
   scheme: appSlug,
   version: '0.1.0',
@@ -104,10 +105,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     tenantSlug: selectedFlavor?.tenantSlug,
     businessCode: selectedFlavor?.businessCode,
     googleOAuth: {
-      clientId:
-        process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID ||
-        process.env.GOOGLE_OAUTH_CLIENT_ID ||
-        '',
+      // Only explicit Expo public IDs — never the server/web .env key.
+      clientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || '',
+      androidClientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID || '',
     },
     eas: {
       projectId:

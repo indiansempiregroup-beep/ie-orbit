@@ -15,6 +15,7 @@ Django still sends push through Expo (`exp.host`). These files let the **EAS APK
 4. Copy `google-services.example.json` as a template if needed. Do not commit real files (gitignored).
 5. Upload the Firebase **FCM V1** service-account JSON with `eas credentials` (Android). Never commit `*-firebase-adminsdk-*.json`.
 6. Set `EXPO_PUBLIC_EAS_PROJECT_ID` in `.env` and in EAS project environment variables, then rebuild.
+7. Sanket Pet Shop Google Sign-In: add the EAS keystore SHA-1 to the Android OAuth client for package `com.ieorbit.sanketpetshop`. Web + Android client IDs live in the `sanket-pet-shop-*` EAS profiles.
 
 ## Ops app (`apps/ops-mobile/`)
 

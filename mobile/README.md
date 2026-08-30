@@ -59,6 +59,7 @@ Use `production-preview` to sideload an Android APK against the live Interserver
 
 ```bash
 # Live-API APK (recommended before buying store accounts)
+pnpm --filter @ie-orbit/mobile eas:build:sanket:production-preview
 pnpm --filter @ie-orbit/mobile eas:build:rupali:production-preview
 pnpm --filter @ie-orbit/mobile eas:build:demo:production-preview
 pnpm --filter @ie-orbit/mobile eas:build:empire:production-preview

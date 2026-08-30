@@ -32,6 +32,17 @@
       "businessCode": "rupali-s-business",
       "primaryColor": "#1A56DB",
       "secondaryColor": "#111827"
+    },
+    {
+      "key": "sanket-pet-shop-sanket-pet-shop",
+      "appName": "Sanket Pet Shop",
+      "appSlug": "sanket-pet-shop",
+      "bundleIdIos": "com.ieorbit.sanketpetshop",
+      "bundleIdAndroid": "com.ieorbit.sanketpetshop",
+      "tenantSlug": "sanket-pet-shop",
+      "businessCode": "sanket-pet-shop",
+      "primaryColor": "#d936bb",
+      "secondaryColor": "#567dd2"
     }
   ]
 }
