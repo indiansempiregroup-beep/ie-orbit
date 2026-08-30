@@ -16,6 +16,19 @@ fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# EAS injects profile env on the build worker; load them locally for icon bake / app.config.
+if [[ -f ./eas.json ]]; then
+  eval "$(node -e "
+    const fs = require('fs');
+    const profile = process.argv[1];
+    const eas = JSON.parse(fs.readFileSync('./eas.json', 'utf8'));
+    const env = eas.build?.[profile]?.env || {};
+    for (const [key, value] of Object.entries(env)) {
+      process.stdout.write('export ' + key + '=' + JSON.stringify(String(value)) + ';');
+    }
+  " "$PROFILE")"
+fi
+
 if [[ -f ./scripts/materialize-google-services.cjs ]]; then
   node ./scripts/materialize-google-services.cjs || echo "[customer-app] continuing without google-services.json"
 fi
@@ -30,9 +43,9 @@ if ! command -v eas >/dev/null 2>&1; then
 fi
 
 case "$PLATFORM" in
-  ios) eas build --profile "$PROFILE" --platform ios ;;
-  android) eas build --profile "$PROFILE" --platform android ;;
-  all) eas build --profile "$PROFILE" --platform all ;;
+  ios) eas build --profile "$PROFILE" --platform ios --non-interactive ;;
+  android) eas build --profile "$PROFILE" --platform android --non-interactive ;;
+  all) eas build --profile "$PROFILE" --platform all --non-interactive ;;
   *)
     echo "Invalid platform: $PLATFORM"
     exit 1

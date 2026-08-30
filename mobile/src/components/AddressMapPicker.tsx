@@ -5,6 +5,7 @@ import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
 import { Button } from './ui/Button';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { MAPS_ENABLED, MAPS_UNAVAILABLE_MESSAGE } from '../utils/googleMapsConfig';
 
 const DEFAULT_REGION: Region = {
   latitude: 19.076,
@@ -54,18 +55,22 @@ export function AddressMapPicker({
   }, [latitude, longitude]);
 
   async function useCurrentLocation() {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Location permission', 'Enable location access to pin your address on the map.');
-      return;
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Location permission', 'Enable location access to pin your address on the map.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const next = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+      setPin(next);
+      onLocationChange(next.latitude, next.longitude);
+    } catch {
+      Alert.alert('Location unavailable', 'Unable to read your current location. Try searching or tapping the map.');
     }
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    const next = {
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-    };
-    setPin(next);
-    onLocationChange(next.latitude, next.longitude);
   }
 
   function onMapPress(event: MapPressEvent) {
@@ -88,26 +93,35 @@ export function AddressMapPicker({
         </Pressable>
       </View>
       <View style={styles.mapWrap}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          initialRegion={initialRegion}
-          onPress={onMapPress}
-        >
-          <Marker
-            coordinate={{ latitude: markerLat, longitude: markerLng }}
-            draggable
-            onDragEnd={(event) => {
-              const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
-              fromMapRef.current = true;
-              setPin({ latitude: lat, longitude: lng });
-              onLocationChange(lat, lng);
-            }}
-          />
-        </MapView>
+        {MAPS_ENABLED ? (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+            initialRegion={initialRegion}
+            onPress={onMapPress}
+          >
+            <Marker
+              coordinate={{ latitude: markerLat, longitude: markerLng }}
+              draggable
+              onDragEnd={(event) => {
+                const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
+                fromMapRef.current = true;
+                setPin({ latitude: lat, longitude: lng });
+                onLocationChange(lat, lng);
+              }}
+            />
+          </MapView>
+        ) : (
+          <View style={styles.mapFallback}>
+            <Feather name="map" size={24} color={colors.mutedForeground} />
+            <Text style={styles.mapFallbackText}>{MAPS_UNAVAILABLE_MESSAGE}</Text>
+          </View>
+        )}
       </View>
-      <Text style={styles.hint}>Tap the map or drag the pin to set your location.</Text>
+      {MAPS_ENABLED ? (
+        <Text style={styles.hint}>Tap the map or drag the pin to set your location.</Text>
+      ) : null}
       <Text style={styles.label}>Full address</Text>
       <TextInput
         value={value}
@@ -146,6 +160,20 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   map: { flex: 1 },
+  mapFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+    backgroundColor: colors.muted,
+  },
+  mapFallbackText: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   hint: { ...typography.caption, color: colors.mutedForeground },
   textarea: {
     minHeight: 110,

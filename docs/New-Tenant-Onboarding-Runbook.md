@@ -126,6 +126,8 @@ EAS does not use your local `.env` — add these to the profile `env` block when
 **Sanket-style `env` block** (Google + ads):
 
 ```json
+"EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "<platform-maps-key>",
+"EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "<platform-maps-key>",
 "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com",
 "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": "<per-tenant-android-client-id>",
 "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
