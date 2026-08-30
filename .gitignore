@@ -32,11 +32,8 @@ pnpm-debug.log*
 # Environment
 ############################################################
 
-.env
-.env.*
-!.env.example
-!.env.docker.example
-!.env.production.example
+# Private repo: live .env files are tracked for portability.
+# Templates (.env.example, .env.docker.example, .env.production.example) stay committed too.
 
 ############################################################
 # Python
@@ -122,12 +119,7 @@ web-build/
 mobile/assets/generated/*
 !mobile/assets/generated/.gitkeep
 
-# Firebase / FCM — keep *.example.json; never commit real keys or service accounts
-google-services.json
-GoogleService-Info.plist
-*-firebase-adminsdk-*.json
-**/credentials/google-services/*.json
-!**/google-services.example.json
+# Firebase / FCM — tracked in this private repo (per-flavor JSON under mobile/credentials/google-services/)
 
 ############################################################
 # React Native
@@ -188,10 +180,7 @@ temp/
 # Local Certificates
 ############################################################
 
-certs/*
-!certs/.gitkeep
-certbot-www/*
-!certbot-www/.gitkeep
+# Private repo: certs/ and certbot-www/ may contain tracked secrets.
 backups/*.sql.gz
 backups/*.dump
 
@@ -232,4 +221,10 @@ storybook-static/
 # Windows reserved device name artifacts
 NUL
 **/NUL
+
+############################################################
+# Secrets vault
+############################################################
+
+# local-backup/ (IMP, SSH keys, etc.) is intentionally tracked — do not ignore.
 

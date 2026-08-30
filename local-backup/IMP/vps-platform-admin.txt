@@ -1,0 +1,10 @@
+# Production Platform Admin (InterServer VPS)
+# Keep this file out of git.
+
+Email: indiansempiregroup@gmail.com
+Password: IeOrbit-cijtJm1ZWTNNim!
+Sign in: https://app.ie-orbit.com/auth  →  /admin
+Ops: https://ops.ie-orbit.com  (Platform Admin screens)
+
+Created as Django superuser (is_superuser, is_staff, email verified).
+platform_admin role is assigned on first login / GET /auth/me.

@@ -1,0 +1,18 @@
+# Hostinger mailbox for IE Orbit outbound mail
+# Keep this file out of git. Do not paste into the repo or chat dumps.
+
+Address: support@indiansempire.com
+Password: Support@IE12393
+SMTP host: smtp.hostinger.com
+SMTP port: 465 (SSL)  — fallback 587 (STARTTLS)
+IMAP: imap.hostinger.com:993
+Webmail: https://mail.hostinger.com
+
+VPS env ( /opt/ie-platform/.env ):
+  EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+  EMAIL_HOST=smtp.hostinger.com
+  EMAIL_PORT=465
+  EMAIL_USE_SSL=true
+  EMAIL_USE_TLS=false
+  EMAIL_HOST_USER=support@indiansempire.com
+  DEFAULT_FROM_EMAIL=no-reply@indiansempire.com

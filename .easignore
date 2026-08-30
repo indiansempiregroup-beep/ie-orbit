@@ -35,11 +35,7 @@ pnpm-debug.log*
 # Environment
 ############################################################
 
-.env
-.env.*
-!.env.example
-!.env.docker.example
-!.env.production.example
+# Private repo: .env is uploaded to EAS for cloud builds.
 
 ############################################################
 # Python
@@ -123,15 +119,7 @@ coverage/
 .expo-shared/
 web-build/
 
-# Firebase / FCM — keep *.example.json; never commit service accounts
-google-services.json
-GoogleService-Info.plist
-*-firebase-adminsdk-*.json
-**/credentials/google-services/*.json
-!**/google-services.example.json
-# Upload local FCM client files so production-preview can receive push.
-!apps/ops-mobile/credentials/google-services.json
-!mobile/credentials/google-services/*.json
+# Firebase / FCM — tracked and uploaded for EAS cloud builds.
 
 ############################################################
 # React Native
