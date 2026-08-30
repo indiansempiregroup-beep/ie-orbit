@@ -49,7 +49,7 @@ describe('googleNativeRedirectUri', () => {
 });
 
 describe('googleSignInConfigured', () => {
-  it('uses the customer Android client on Android, not the ops Web client', () => {
+  it('requires both Web and Android client IDs on Android', () => {
     assert.equal(
       googleSignInConfigured({
         platform: 'android',
@@ -62,6 +62,13 @@ describe('googleSignInConfigured', () => {
       googleSignInConfigured({
         platform: 'android',
         webClientId: '373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com',
+      }),
+      false,
+    );
+    assert.equal(
+      googleSignInConfigured({
+        platform: 'android',
+        androidClientId: ANDROID_CLIENT_ID,
       }),
       false,
     );

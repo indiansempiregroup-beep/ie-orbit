@@ -19,6 +19,10 @@ Django still sends push through Expo (`exp.host`). These files let the **EAS APK
    - Project: [`still-cipher-490712-n7`](https://console.cloud.google.com/apis/credentials?project=still-cipher-490712-n7) (number `373269001775`). **Wed360** is this project’s display name on the consent screen — rename it under [OAuth consent](https://console.cloud.google.com/auth/overview?project=still-cipher-490712-n7).
    - Customer Android client ID (already in Sanket EAS profiles):
      `373269001775-3fm125kisnkfcjbvqji1vtvegm2326na.apps.googleusercontent.com`
+   - Customer builds also need the **Web** OAuth client ID in EAS env
+     (`EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID`, same project Web client as ops/website).
+     Native `GoogleSignin.configure` uses the Web client for id tokens; the Android
+     client must still exist in Google Cloud with the package + SHA-1 below.
    - Package `com.ieorbit.sanketpetshop` and EAS keystore SHA-1:
      `70:D2:64:E9:71:3D:41:4D:CA:D6:64:EA:E5:C4:B5:CB:52:3A:7E:99`
    - If the OAuth consent screen is still **Testing**, add the Gmail you use on the phone as a test user (or publish the consent screen).

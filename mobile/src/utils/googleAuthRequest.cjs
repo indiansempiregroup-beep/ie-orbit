@@ -22,8 +22,13 @@ function googleNativeRedirectUri({ androidClientId, appSlug, applicationId } = {
 }
 
 function googleSignInConfigured({ platform, androidClientId, webClientId } = {}) {
-  if (platform === 'web') return Boolean(String(webClientId || '').trim());
-  return Boolean(String(androidClientId || '').trim());
+  const web = String(webClientId || '').trim();
+  const android = String(androidClientId || '').trim();
+  if (platform === 'web') return Boolean(web);
+  // Android needs the Web client for id tokens and the Android client in Google Cloud.
+  if (platform === 'android') return Boolean(web && android);
+  if (platform === 'ios') return Boolean(web);
+  return Boolean(web || android);
 }
 
 function googleAuthSchemes({ appSlug, applicationId, androidClientId } = {}) {

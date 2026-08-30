@@ -127,7 +127,7 @@ export function isExpoGoRuntime(): boolean {
   return Constants.appOwnership === 'expo';
 }
 
-async function promptNativeGoogleIdToken(androidClientId: string): Promise<string | null> {
+async function promptNativeGoogleIdToken(webClientId: string): Promise<string | null> {
   // Lazy so Expo Go can boot without the native module.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const {
@@ -136,8 +136,9 @@ async function promptNativeGoogleIdToken(androidClientId: string): Promise<strin
     isSuccessResponse,
     statusCodes,
   } = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin');
+  // Native Android sign-in needs the Web OAuth client ID here (not the Android client ID).
   GoogleSignin.configure({
-    webClientId: androidClientId,
+    webClientId,
     offlineAccess: false,
     scopes: ['openid', 'profile', 'email'],
   });
@@ -195,7 +196,7 @@ export function useGoogleIdTokenAuth() {
         throw new Error('Google sign-in is unavailable in this browser. Please try again.');
       }
     }
-    return await promptNativeGoogleIdToken(androidClientId);
+    return await promptNativeGoogleIdToken(webClientId);
   }
 
   return { configured, promptForIdToken };
