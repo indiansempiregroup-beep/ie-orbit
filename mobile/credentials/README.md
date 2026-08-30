@@ -15,7 +15,12 @@ Django still sends push through Expo (`exp.host`). These files let the **EAS APK
 4. Copy `google-services.example.json` as a template if needed. Do not commit real files (gitignored).
 5. Upload the Firebase **FCM V1** service-account JSON with `eas credentials` (Android). Never commit `*-firebase-adminsdk-*.json`.
 6. Set `EXPO_PUBLIC_EAS_PROJECT_ID` in `.env` and in EAS project environment variables, then rebuild.
-7. Sanket Pet Shop Google Sign-In: add the EAS keystore SHA-1 to the Android OAuth client for package `com.ieorbit.sanketpetshop`. Web + Android client IDs live in the `sanket-pet-shop-*` EAS profiles.
+7. Sanket Pet Shop Google Sign-In (required or Google shows **Access blocked**):
+   - Android OAuth client package must be `com.ieorbit.sanketpetshop`.
+   - Add this EAS upload-keystore SHA-1 to that client:
+     `70:D2:64:E9:71:3D:41:4D:CA:D6:64:EA:E5:C4:B5:CB:52:3A:7E:99`
+   - If the OAuth consent screen is still **Testing**, add the Gmail you use on the phone as a test user (or publish the consent screen).
+   - Web + Android client IDs live in the `sanket-pet-shop-*` EAS profiles. Rebuild the APK after changing Google Cloud.
 
 ## Ops app (`apps/ops-mobile/`)
 

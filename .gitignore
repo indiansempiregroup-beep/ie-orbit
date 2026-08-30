@@ -119,6 +119,8 @@ coverage/
 .expo/
 .expo-shared/
 web-build/
+mobile/assets/generated/*
+!mobile/assets/generated/.gitkeep
 
 # Firebase / FCM — keep *.example.json; never commit real keys or service accounts
 google-services.json

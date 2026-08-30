@@ -40,6 +40,19 @@ try {
 
 const FACE_ID_USAGE = 'Allow $(PRODUCT_NAME) to use Face ID for quick sign-in.';
 const androidPackage = selectedFlavor?.bundleIdAndroid ?? 'com.ieorbit.mobile.dev';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { googleAuthSchemes } = require('./src/utils/googleAuthRequest.cjs') as {
+  googleAuthSchemes: (input: {
+    appSlug?: string;
+    applicationId?: string;
+    androidClientId?: string;
+  }) => string[];
+};
+const urlSchemes = googleAuthSchemes({
+  appSlug,
+  applicationId: androidPackage,
+  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID || '',
+});
 const googleServicesFile = `./credentials/google-services/${androidPackage}.json`;
 const googleServicesFileAbs = path.join(__dirname, 'credentials', 'google-services', `${androidPackage}.json`);
 const adMobAndroidAppId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID;
@@ -58,18 +71,36 @@ const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
       ]
     : null;
 
+const generatedIcon = path.join(__dirname, 'assets', 'generated', 'icon.png');
+const generatedAdaptive = path.join(__dirname, 'assets', 'generated', 'adaptive-icon.png');
+const generatedSplash = path.join(__dirname, 'assets', 'generated', 'splash.png');
+const icon = fs.existsSync(generatedIcon) ? './assets/generated/icon.png' : './assets/icon.png';
+const adaptiveIcon = fs.existsSync(generatedAdaptive)
+  ? './assets/generated/adaptive-icon.png'
+  : './assets/icon.png';
+const splashIcon = fs.existsSync(generatedSplash) ? './assets/generated/splash.png' : './assets/icon.png';
+const splashBackground = selectedFlavor?.primaryColor ?? '#1A56DB';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: appName,
   // One EAS project for all customer flavors; scheme/package stay per-business.
   slug: 'ie-orbit-customer',
   owner: 'indians-empire',
-  scheme: appSlug,
+  scheme: urlSchemes.length > 1 ? urlSchemes : urlSchemes[0] ?? appSlug,
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
+  icon,
+  splash: {
+    image: splashIcon,
+    resizeMode: 'contain',
+    backgroundColor: splashBackground,
+  },
   ios: {
     bundleIdentifier: selectedFlavor?.bundleIdIos ?? 'com.ieorbit.mobile.dev',
+    // Flattened opaque icon — Apple does not allow transparent App Icons.
+    icon,
     associatedDomains: referralHost ? [`applinks:${referralHost}`] : undefined,
     infoPlist: {
       ...config.ios?.infoPlist,
@@ -99,6 +130,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           '',
       },
     },
+    adaptiveIcon: {
+      foregroundImage: adaptiveIcon,
+      // Transparent so an uploaded PNG is not sat on the brand color.
+      backgroundColor: '#00000000',
+    },
+  },
+  web: {
+    favicon: icon,
   },
   extra: {
     flavorKey,

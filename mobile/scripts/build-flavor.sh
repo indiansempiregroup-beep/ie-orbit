@@ -16,6 +16,10 @@ fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
+if [[ -f ./scripts/materialize-app-icon.cjs ]]; then
+  node ./scripts/materialize-app-icon.cjs --force || echo "[customer-app] continuing without a freshly generated icon"
+fi
+
 if ! command -v eas >/dev/null 2>&1; then
   echo "EAS CLI not found. Install with: pnpm add -D eas-cli"
   exit 1

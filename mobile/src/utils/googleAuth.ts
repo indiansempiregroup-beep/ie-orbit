@@ -5,6 +5,12 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { googleNativeRedirectUri, shouldForceImplicitIdToken } = require('./googleAuthRequest.cjs') as {
+  googleNativeRedirectUri: (input?: { androidClientId?: string; applicationId?: string }) => string;
+  shouldForceImplicitIdToken: (platform: string) => boolean;
+};
+
 WebBrowser.maybeCompleteAuthSession();
 
 const DISABLED_CLIENT_ID = '000000000000-disabled.apps.googleusercontent.com';
@@ -126,9 +132,18 @@ export function isExpoGoRuntime(): boolean {
   return Constants.appOwnership === 'expo';
 }
 
-function googleRedirectUri(): string {
+function googleRedirectUri(androidClientId: string): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return window.location.origin;
+  }
+  const applicationId = String(
+    Platform.OS === 'ios'
+      ? Constants.expoConfig?.ios?.bundleIdentifier || ''
+      : Constants.expoConfig?.android?.package || '',
+  ).trim();
+  const native = googleNativeRedirectUri({ androidClientId, applicationId });
+  if (native) {
+    return AuthSession.makeRedirectUri({ native });
   }
   const scheme = String(Constants.expoConfig?.scheme || '')
     .split(',')[0]
@@ -141,16 +156,18 @@ function googleRedirectUri(): string {
 export function useGoogleIdTokenAuth() {
   const clientId = getGoogleOAuthClientId();
   const androidClientId = getGoogleOAuthAndroidClientId();
-  const configured = Boolean(clientId);
+  const configured =
+    Platform.OS === 'android' ? Boolean(clientId && androidClientId) : Boolean(clientId);
   const expoGo = isExpoGoRuntime();
-  const redirectUri = googleRedirectUri();
+  const redirectUri = googleRedirectUri(androidClientId);
+  const implicitIdToken = shouldForceImplicitIdToken(Platform.OS);
   const [, , promptAsync] = Google.useAuthRequest({
     clientId: clientId || DISABLED_CLIENT_ID,
     androidClientId: androidClientId || undefined,
     webClientId: clientId || undefined,
-    responseType: ResponseType.IdToken,
     redirectUri,
     scopes: ['openid', 'profile', 'email'],
+    ...(implicitIdToken ? { responseType: ResponseType.IdToken } : {}),
   });
 
   async function promptForIdToken(): Promise<string | null> {

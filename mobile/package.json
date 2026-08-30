@@ -14,6 +14,10 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test:app-icon": "node --test ./scripts/app-icon-utils.test.cjs ./scripts/materialize-app-icon.test.cjs",
+    "test:google-auth": "node --test ./src/utils/googleAuthRequest.test.cjs",
+    "icons": "node ./scripts/materialize-app-icon.cjs",
+    "eas-build-post-install": "node ./scripts/materialize-app-icon.cjs",
     "eas:build:demo:preview": "bash ./scripts/build-flavor.sh demo-main-preview all",
     "eas:build:demo:production-preview": "bash ./scripts/build-flavor.sh demo-main-production-preview android",
     "eas:build:demo:production": "bash ./scripts/build-flavor.sh demo-main-production all",
@@ -58,7 +62,8 @@
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-svg": "^15.15.5"
+    "react-native-svg": "^15.15.5",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.0",
