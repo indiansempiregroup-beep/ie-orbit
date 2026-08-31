@@ -40,6 +40,7 @@ export function AddressMapPicker({
   const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(
     latitude != null && longitude != null ? { latitude, longitude } : null,
   );
+  const [locating, setLocating] = useState(false);
   // A tap or drag already put the pin where the customer wants it, so the
   // geocoded coordinates that come back must not yank the camera around.
   const fromMapRef = useRef(false);
@@ -55,6 +56,7 @@ export function AddressMapPicker({
   }, [latitude, longitude]);
 
   async function useCurrentLocation() {
+    setLocating(true);
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
@@ -67,9 +69,12 @@ export function AddressMapPicker({
         longitude: position.coords.longitude,
       };
       setPin(next);
+      mapRef.current?.animateCamera({ center: next }, { duration: 300 });
       onLocationChange(next.latitude, next.longitude);
     } catch {
       Alert.alert('Location unavailable', 'Unable to read your current location. Try searching or tapping the map.');
+    } finally {
+      setLocating(false);
     }
   }
 
@@ -87,9 +92,15 @@ export function AddressMapPicker({
     <View style={styles.wrap}>
       <View style={styles.mapHeader}>
         <Text style={styles.label}>Address location</Text>
-        <Pressable style={styles.locationBtn} onPress={() => void useCurrentLocation()}>
+        <Pressable
+          style={styles.locationBtn}
+          onPress={() => void useCurrentLocation()}
+          disabled={locating}
+        >
           <Feather name="crosshair" size={14} color={primaryColor} />
-          <Text style={[styles.locationBtnText, { color: primaryColor }]}>Use current location</Text>
+          <Text style={[styles.locationBtnText, { color: primaryColor }]}>
+            {locating ? 'Locating…' : 'Use current location'}
+          </Text>
         </Pressable>
       </View>
       <View style={styles.mapWrap}>

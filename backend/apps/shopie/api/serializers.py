@@ -284,6 +284,53 @@ class ShopOrderLineSerializer(serializers.ModelSerializer):
         return str(getattr(product, "image_url", "") or "")
 
 
+class ShopOrderLineListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopOrderLine
+        fields = ["id", "product_name", "quantity"]
+
+
+class ShopOrderListSerializer(serializers.ModelSerializer):
+    lines = ShopOrderLineListSerializer(many=True, read_only=True)
+    customer_id = serializers.UUIDField(source="customer.id", read_only=True, allow_null=True)
+    payment_method = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopOrder
+        fields = [
+            "id",
+            "business",
+            "customer_id",
+            "order_number",
+            "status",
+            "fulfillment_mode",
+            "currency",
+            "subtotal",
+            "discount_total",
+            "tax_total",
+            "total",
+            "delivery_address",
+            "metadata",
+            "payment_method",
+            "payment_status",
+            "lines",
+            "created_at",
+            "updated_at",
+        ]
+
+    def _pos(self, obj: ShopOrder) -> dict:
+        metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
+        pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
+        return pos
+
+    def get_payment_method(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("payment_method") or "")
+
+    def get_payment_status(self, obj: ShopOrder) -> str:
+        return str(self._pos(obj).get("payment_status") or "")
+
+
 class ShopOrderSerializer(serializers.ModelSerializer):
     lines = ShopOrderLineSerializer(many=True, read_only=True)
     customer_id = serializers.UUIDField(source="customer.id", read_only=True, allow_null=True)

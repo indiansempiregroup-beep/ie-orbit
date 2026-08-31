@@ -33,6 +33,7 @@ export function AddressMapPicker({
   primaryColor = colors.primary,
 }: AddressMapPickerProps) {
   const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(MAPS_API_KEY ? null : MISSING_KEY_MESSAGE);
 
@@ -105,13 +106,23 @@ export function AddressMapPicker({
 
   async function useCurrentLocation() {
     setError(null);
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (!permission.granted) {
-      setError('Enable location access in your browser to pin your address on the map.');
-      return;
+    setLocating(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        setError('Enable location access in your browser to pin your address on the map.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const next = { lat: position.coords.latitude, lng: position.coords.longitude };
+      markerRef.current?.setPosition(next);
+      mapRef.current?.panTo(next);
+      onLocationChange(position.coords.latitude, position.coords.longitude);
+    } catch {
+      setError('Unable to read your current location. Try clicking the map instead.');
+    } finally {
+      setLocating(false);
     }
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    onLocationChange(position.coords.latitude, position.coords.longitude);
   }
 
   const mapNode = createElement('div', {
@@ -123,9 +134,15 @@ export function AddressMapPicker({
     <View style={styles.wrap}>
       <View style={styles.mapHeader}>
         <Text style={styles.label}>Address location</Text>
-        <Pressable style={styles.locationBtn} onPress={() => void useCurrentLocation()}>
+        <Pressable
+          style={styles.locationBtn}
+          onPress={() => void useCurrentLocation()}
+          disabled={locating}
+        >
           <Feather name="crosshair" size={14} color={primaryColor} />
-          <Text style={[styles.locationBtnText, { color: primaryColor }]}>Use current location</Text>
+          <Text style={[styles.locationBtnText, { color: primaryColor }]}>
+            {locating ? 'Locating…' : 'Use current location'}
+          </Text>
         </Pressable>
       </View>
       <View style={styles.mapWrap}>

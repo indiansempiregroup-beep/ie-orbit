@@ -96,40 +96,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setBiometricEnabled(enabled);
   }, []);
 
-  const restore = useCallback(async () => {
-    setLoading(true);
-    try {
-      await refreshBiometricState();
-      const access = await readToken(ACCESS_KEY);
-      const refresh = await readToken(REFRESH_KEY);
-      refreshTokenRef.current = refresh;
-      if (!access) {
-        setToken(null);
-        setUser(null);
-        return;
-      }
-      mobileClient.setToken(access);
-      const response = await mobileClient.auth.me();
-      setToken(access);
-      setUser(response.data);
-    } catch {
-      await writeToken(ACCESS_KEY, null);
-      // Keep refresh when biometric login is enabled so Face ID can restore the session.
-      if (!(await isBiometricLoginEnabled())) {
-        await writeToken(REFRESH_KEY, null);
-        refreshTokenRef.current = null;
-      }
-      setToken(null);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [refreshBiometricState]);
-
-  useEffect(() => {
-    void restore();
-  }, [restore]);
-
   const applySession = useCallback(async (payload: LoginResponse) => {
     if (!payload.access) {
       throw new Error('Sign-in did not return an access token. Please try again.');
@@ -160,6 +126,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, []);
+
+  const restore = useCallback(async () => {
+    setLoading(true);
+    try {
+      await refreshBiometricState();
+      const access = await readToken(ACCESS_KEY);
+      const refresh = await readToken(REFRESH_KEY);
+      refreshTokenRef.current = refresh;
+
+      if (!access && !refresh) {
+        setToken(null);
+        setUser(null);
+        return;
+      }
+
+      if (access) {
+        mobileClient.setToken(access);
+        try {
+          const response = await mobileClient.auth.me();
+          setToken(access);
+          setUser(response.data);
+          return;
+        } catch {
+          // Access token expired — try silent refresh below.
+        }
+      }
+
+      if (refresh) {
+        const response = await mobileClient.auth.refresh({ refresh });
+        await applySession(response.data);
+        return;
+      }
+
+      await writeToken(ACCESS_KEY, null);
+      setToken(null);
+      setUser(null);
+    } catch {
+      await writeToken(ACCESS_KEY, null);
+      // Keep refresh when biometric login is enabled so Face ID can restore the session.
+      if (!(await isBiometricLoginEnabled())) {
+        await writeToken(REFRESH_KEY, null);
+        refreshTokenRef.current = null;
+      }
+      setToken(null);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [applySession, refreshBiometricState]);
+
+  useEffect(() => {
+    void restore();
+  }, [restore]);
 
   const login = useCallback(
     async (email: string, password: string, remember = true) => {

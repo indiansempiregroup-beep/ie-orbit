@@ -44,6 +44,7 @@ from apps.shopie.api.serializers import (
     RazorpayPaymentVerifySerializer,
     ShopInvoiceSerializer,
     ShopOrderCreateSerializer,
+    ShopOrderListSerializer,
     ShopOrderSerializer,
     ShopOrderSettlePaymentSerializer,
     ShopOrderStatusSerializer,
@@ -396,7 +397,7 @@ class ShopOrderListCreateView(APIView):
             status=request.query_params.get("status"),
             customer_id=customer_id,
         )
-        return paginated_list_response(request, qs, ShopOrderSerializer)
+        return paginated_list_response(request, qs, ShopOrderListSerializer)
 
     def post(self, request: Request) -> Response:
         serializer = ShopOrderCreateSerializer(data=request.data)

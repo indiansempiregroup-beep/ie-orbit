@@ -405,6 +405,7 @@ class ShopOrder(TenantModel):
             *TenantModel.Meta.indexes,
             models.Index(fields=["tenant", "business", "status"]),
             models.Index(fields=["tenant", "business", "order_number"]),
+            models.Index(fields=["tenant", "business", "created_at"]),
         ]
 
     def __str__(self) -> str:

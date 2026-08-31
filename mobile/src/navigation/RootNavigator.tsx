@@ -37,6 +37,10 @@ import {
 import { ReferralScreen } from '../features/profile/ReferralScreen';
 import { usePushRegistration } from '../hooks/usePushRegistration';
 import { ReferralLinkHandler } from '../components/ReferralLinkHandler';
+import {
+  NotificationNavigationHandler,
+  navigationRef,
+} from '../components/NotificationNavigationHandler';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -79,7 +83,8 @@ export function RootNavigator() {
   return (
     <BootstrapGate>
       <ReferralLinkHandler />
-      <NavigationContainer>
+      <NotificationNavigationHandler />
+      <NavigationContainer ref={navigationRef}>
         {user && !needsVerification ? (
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="MainTabs" component={MainTabs} />

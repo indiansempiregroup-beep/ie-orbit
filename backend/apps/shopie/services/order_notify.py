@@ -193,6 +193,36 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
     except Exception:
         logger.exception("Online order notify failed", extra={"order_id": str(order.id), "status": status_value})
 
+    if status_value != OrderStatus.PENDING:
+        return
+
+    mode = "Delivery" if str(order.fulfillment_mode).lower() == "delivery" else "Pickup"
+    try:
+        from apps.notifications.services.staff_direct import StaffDirectNotifier
+
+        StaffDirectNotifier().notify_managers(
+            tenant=order.tenant,
+            business=order.business,
+            subject=f"New online order · #{order.order_number}",
+            body=(
+                f"{_customer_name(order)} placed order #{order.order_number} "
+                f"({_money(order.total, order.currency or 'INR')}, {mode})."
+            ),
+            event_type="ShopOrderPendingAdmin",
+            metadata={
+                "order_id": str(order.id),
+                "order_number": order.order_number,
+                "status": status_value,
+                "fulfillment_mode": order.fulfillment_mode,
+            },
+            channels=["in_app"],
+        )
+    except Exception:
+        logger.exception(
+            "Online order staff notify failed",
+            extra={"order_id": str(order.id), "status": status_value},
+        )
+
 
 def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
     order = getattr(shop_return, "order", None)

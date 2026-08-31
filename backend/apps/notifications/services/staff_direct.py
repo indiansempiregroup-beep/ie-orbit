@@ -109,6 +109,7 @@ class StaffDirectNotifier:
                     "audience": AUDIENCE_ADMIN,
                     "pet_id": str(metadata.get("pet_id") or ""),
                     "booking_id": str(metadata.get("booking_id") or ""),
+                    "order_id": str(metadata.get("order_id") or ""),
                 },
             )
         except Exception:

@@ -398,7 +398,7 @@ def test_pet_birthday_reminder_marks_year(shop_ctx: tuple[Tenant, Business, Cust
     assert result2["sent"] == 0
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_online_order_notifies_and_pos_does_not(
     shop_ctx: tuple[Tenant, Business, Customer], monkeypatch
 ) -> None:
@@ -415,6 +415,16 @@ def test_online_order_notifies_and_pos_does_not(
         "apps.notifications.services.customer_direct.CustomerDirectNotifier.notify_customer",
         fake_notify,
     )
+    staff_calls: list[dict] = []
+
+    def fake_staff_notify(self, **kwargs):
+        staff_calls.append(kwargs)
+        return {"sent_channels": ["in_app"], "notification_ids": [], "user_ids": []}
+
+    monkeypatch.setattr(
+        "apps.notifications.services.staff_direct.StaffDirectNotifier.notify_managers",
+        fake_staff_notify,
+    )
     product = catalog.create_product(
         tenant=tenant,
         business=business,
@@ -430,6 +440,8 @@ def test_online_order_notifies_and_pos_does_not(
         confirm=False,
     )
     assert any(call.get("event_type") == "ShopOrderPending" for call in calls)
+    assert any(call.get("event_type") == "ShopOrderPendingAdmin" for call in staff_calls)
+    assert staff_calls[0]["metadata"]["order_id"] == str(online.id)
     orders.transition(tenant=tenant, business=business, order=online, status=OrderStatus.CONFIRMED)
     confirmed = next(call for call in calls if call.get("event_type") == "ShopOrderConfirmed")
     assert online.order_number in (confirmed.get("extra_html") or "")

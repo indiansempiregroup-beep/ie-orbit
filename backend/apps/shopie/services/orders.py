@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -28,6 +29,8 @@ from apps.shopie.services.catalog import CatalogService
 from apps.shopie.services.coupons import CouponService
 from apps.shopie.services.fulfillment import FulfillmentService
 from apps.shopie.services.zones import DeliveryZoneService
+
+logger = logging.getLogger("ie_orbit.shopie.orders")
 from apps.tenancy.models import Tenant
 
 DELIVERY_METHOD_STANDARD = "standard"
@@ -681,9 +684,45 @@ class OrderService:
         return refreshed
 
     def _notify_online(self, order: ShopOrder, status: str) -> None:
-        from apps.shopie.services.order_notify import notify_online_order
+        order_id = str(order.id)
+        status_value = str(status)
+        tenant_id = str(order.tenant_id)
+        business_id = str(order.business_id)
 
-        notify_online_order(order=order, status=status)
+        def enqueue() -> None:
+            from apps.notifications.tasks import process_online_order_notification_task
+
+            try:
+                process_online_order_notification_task.delay(
+                    order_id,
+                    status_value,
+                    tenant_id,
+                    business_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to enqueue online order notification; running inline",
+                    extra={
+                        "order_id": order_id,
+                        "status": status_value,
+                        "tenant_id": tenant_id,
+                        "business_id": business_id,
+                    },
+                )
+                try:
+                    process_online_order_notification_task(
+                        order_id,
+                        status_value,
+                        tenant_id,
+                        business_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Inline online order notification failed",
+                        extra={"order_id": order_id, "status": status_value},
+                    )
+
+        transaction.on_commit(enqueue)
 
     @transaction.atomic
     def settle_payment(

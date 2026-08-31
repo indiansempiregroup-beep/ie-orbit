@@ -29,7 +29,9 @@ def paginated_list_response(
     paginator = StandardCursorPagination()
     page = paginator.paginate_queryset(queryset, request, view=None)
     if page is None:
-        data = serializer(queryset, many=many).data
+        page_size = paginator.get_page_size(request) or paginator.page_size
+        limited = queryset[: min(page_size, paginator.max_page_size)]
+        data = serializer(limited, many=many).data
         return success_response(data, request_id=request_id or getattr(request, "request_id", None))
 
     data = serializer(page, many=many).data
