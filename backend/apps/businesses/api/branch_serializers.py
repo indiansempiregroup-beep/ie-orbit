@@ -35,4 +35,5 @@ class BranchSerializer(serializers.ModelSerializer):
             "updated_at",
             "is_active",
         ]
-        read_only_fields = ["id", "business", "created_at", "updated_at", "is_active"]
+        # branch_code is generated from branch_name in BranchService.create_branch.
+        read_only_fields = ["id", "business", "branch_code", "created_at", "updated_at", "is_active"]

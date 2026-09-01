@@ -45,3 +45,20 @@ def test_office_accepts_a_high_precision_map_pin() -> None:
     assert serializer.is_valid(), serializer.errors
     assert serializer.validated_data["latitude"] == Decimal("18.459074")
     assert serializer.validated_data["longitude"] == Decimal("73.846249")
+
+
+def test_office_create_payload_does_not_require_branch_code() -> None:
+    serializer = BranchSerializer(
+        data={
+            "branch_name": "Downtown clinic",
+            "display_name": "Downtown clinic",
+            "address_line1": "123 Main St",
+            "city": "Mumbai",
+            "country": "India",
+            "latitude": "18.459074",
+            "longitude": "73.846249",
+        }
+    )
+
+    assert serializer.is_valid(), serializer.errors
+    assert "branch_code" not in serializer.validated_data
