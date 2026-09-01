@@ -113,7 +113,12 @@ export function CartScreen() {
   const business = bootstrap?.business;
   const currency = lines[0]?.product.currency || business?.currency || 'INR';
   const upiVpa = business?.upi_vpa || '';
+  const codEnabled = Boolean(business?.cod_enabled ?? true);
+  const canPayCash = codEnabled;
   const canPayQr = Boolean(upiVpa || business?.payment_qr_url);
+  const cashPaymentLabel = fulfillment === 'delivery' ? 'Cash on delivery' : 'Pay at pickup';
+  const cashPaymentHint =
+    fulfillment === 'delivery' ? 'Pay when you receive your order' : 'Pay when you collect your order';
   const pickupAddress =
     business?.formatted_address ||
     [business?.address_line1, business?.city, business?.postal_code].filter(Boolean).join(', ');
@@ -166,6 +171,12 @@ export function CartScreen() {
       currency: business?.currency || 'INR',
     });
   }, [business?.currency, business?.display_name, grandTotal, paymentMethod, upiVpa]);
+
+  useEffect(() => {
+    if (!canPayCash && canPayQr && paymentMethod === 'cash') {
+      setPaymentMethod('upi');
+    }
+  }, [canPayCash, canPayQr, paymentMethod]);
 
   const loadAddresses = useCallback(async () => {
     if (!tenantSlug || !businessCode) return;
@@ -503,6 +514,14 @@ export function CartScreen() {
     }
     if (fulfillment === 'delivery' && !selectedDelivery) {
       setError('The selected delivery option is not available for this address.');
+      return;
+    }
+    if (!canPayCash && !canPayQr) {
+      setError('This shop has not set up online payments yet. Contact the shop to order.');
+      return;
+    }
+    if (paymentMethod === 'cash' && !canPayCash) {
+      setError('Cash on delivery is not available for this shop.');
       return;
     }
     if (paymentMethod === 'upi' && !canPayQr) {
@@ -873,26 +892,31 @@ export function CartScreen() {
 
             <Text style={styles.section}>Payment</Text>
             <View style={styles.modeRow}>
-              <Pressable
-                style={[styles.modeBtn, paymentMethod === 'cash' && { borderColor: primary, backgroundColor: `${primary}14` }]}
-                onPress={() => setPaymentMethod('cash')}
-              >
-                <Feather name="dollar-sign" size={16} color={paymentMethod === 'cash' ? primary : colors.mutedForeground} />
-                <Text style={styles.modeText}>Cash / Pay later</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.modeBtn,
-                  paymentMethod === 'upi' && { borderColor: primary, backgroundColor: `${primary}14` },
-                  !canPayQr && { opacity: 0.5 },
-                ]}
-                disabled={!canPayQr}
-                onPress={() => setPaymentMethod('upi')}
-              >
-                <Feather name="smartphone" size={16} color={paymentMethod === 'upi' ? primary : colors.mutedForeground} />
-                <Text style={styles.modeText}>Pay by QR</Text>
-              </Pressable>
+              {canPayCash ? (
+                <Pressable
+                  style={[styles.modeBtn, paymentMethod === 'cash' && { borderColor: primary, backgroundColor: `${primary}14` }]}
+                  onPress={() => setPaymentMethod('cash')}
+                >
+                  <Feather name="dollar-sign" size={16} color={paymentMethod === 'cash' ? primary : colors.mutedForeground} />
+                  <Text style={styles.modeText}>{cashPaymentLabel}</Text>
+                </Pressable>
+              ) : null}
+              {canPayQr ? (
+                <Pressable
+                  style={[
+                    styles.modeBtn,
+                    paymentMethod === 'upi' && { borderColor: primary, backgroundColor: `${primary}14` },
+                  ]}
+                  onPress={() => setPaymentMethod('upi')}
+                >
+                  <Feather name="smartphone" size={16} color={paymentMethod === 'upi' ? primary : colors.mutedForeground} />
+                  <Text style={styles.modeText}>Pay by QR</Text>
+                </Pressable>
+              ) : null}
             </View>
+            {canPayCash && paymentMethod === 'cash' ? (
+              <Text style={styles.meta}>{cashPaymentHint}</Text>
+            ) : null}
 
             {paymentMethod === 'upi' && previewUpiUrl ? (
               <View style={styles.qrWrap}>

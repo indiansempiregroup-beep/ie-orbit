@@ -8,6 +8,9 @@ from django.db.models import Q, QuerySet
 from apps.staff.models import Staff, StaffServiceAssignment, StaffSkill
 
 
+from apps.common.utils.workspace_access import is_workspace_manager_or_above
+
+
 class StaffRepository:
     def list_for_request(self, *, tenant: Any, user: Any) -> QuerySet[Staff]:
         queryset = Staff.objects.require_tenant(tenant).select_related("business", "user", "photo")
@@ -75,6 +78,8 @@ class StaffRepository:
         if not user or not getattr(user, "is_authenticated", False):
             return False
         if tenant is not None and getattr(tenant, "owner_id", None) == getattr(user, "id", None):
+            return True
+        if tenant is not None and is_workspace_manager_or_above(user=user, tenant=tenant):
             return True
         return user.user_roles.filter(
             role__is_active=True,

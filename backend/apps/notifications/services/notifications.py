@@ -49,7 +49,9 @@ def _resolve_zone(name: str | None) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-def format_booking_start_label(*, start_at: datetime, user: Any | None, business: Any | None) -> str:
+def format_booking_start_label(
+    *, start_at: datetime, user: Any | None = None, business: Any | None = None
+) -> str:
     """Format booking time for notifications: user timezone → business → UTC."""
     user_tz = getattr(user, "timezone", None) if user is not None else None
     business_tz = getattr(business, "timezone", None) if business is not None else None
@@ -130,6 +132,15 @@ class NotificationService:
         if not template:
             return None
         if not self._channel_enabled_for_user(user=user, channel=template.channel):
+            return None
+
+        if Notification.objects.filter(
+            tenant=event.tenant,
+            booking=event.booking,
+            user=user,
+            metadata__event_type=event.event_type,
+            metadata__audience=audience,
+        ).exists():
             return None
 
         context = self._render_context(event=event, template=template, user=user, audience=audience)
@@ -277,7 +288,7 @@ class NotificationService:
         return None
 
     def _resolve_admin_users(self, event: BookingEvent, exclude_user: User | None = None) -> list[User]:
-        """Notify owners/managers for the business, plus the staff assigned to the booking."""
+        """Notify owners/managers and every staff member assigned on the booking."""
         from apps.common.utils.workspace_access import resolve_business_manager_users
         from apps.staff.models import Staff
 
@@ -289,20 +300,46 @@ class NotificationService:
             )
         }
 
-        assigned_staff_id = event.booking.staff_id
-        if assigned_staff_id:
-            staff = (
-                Staff.objects.filter(id=assigned_staff_id, user__isnull=False, user__is_active=True)
+        staff_ids: set[Any] = set()
+        for item in event.booking.line_items.order_by("sort_order", "start_at"):
+            if item.staff_id:
+                staff_ids.add(item.staff_id)
+        if not staff_ids and event.booking.staff_id:
+            staff_ids.add(event.booking.staff_id)
+
+        if staff_ids:
+            for staff in (
+                Staff.objects.filter(
+                    id__in=staff_ids,
+                    user__isnull=False,
+                    user__is_active=True,
+                )
                 .select_related("user")
-                .first()
-            )
-            if staff and staff.user is not None:
-                users[str(staff.user_id)] = staff.user
+            ):
+                if staff.user is not None:
+                    users[str(staff.user_id)] = staff.user
 
         if exclude_user is not None:
             users.pop(str(exclude_user.id), None)
 
         return list(users.values())
+
+    def _staff_id_for_user(self, *, booking: Any, user: User) -> str | None:
+        from apps.staff.models import Staff
+
+        staff = (
+            Staff.objects.filter(user_id=user.id, business_id=booking.business_id)
+            .order_by("-updated_at")
+            .first()
+        )
+        if staff is None:
+            return None
+        for item in booking.line_items.order_by("sort_order", "start_at"):
+            if item.staff_id and str(item.staff_id) == str(staff.id):
+                return str(staff.id)
+        if booking.staff_id and str(booking.staff_id) == str(staff.id):
+            return str(staff.id)
+        return None
 
     def _render_context(
         self,
@@ -312,41 +349,26 @@ class NotificationService:
         user: User,
         audience: str,
     ) -> dict[str, Any]:
+        from apps.bookings.services.notification_context import build_booking_notification_replacements
+
         booking = event.booking
-        service_name = ""
-        if booking.service_id:
-            from apps.services.models import Service
-
-            service = Service.objects.filter(id=booking.service_id).first()
-            if service is not None:
-                service_name = service.display_name or service.name
-
-        customer_name = "Customer"
-        if booking.customer_id:
-            from apps.customers.models import Customer
-
-            customer = Customer.objects.filter(id=booking.customer_id).first()
-            if customer is not None:
-                customer_name = customer.display_name or customer_name
-
-        start_label = format_booking_start_label(
-            start_at=booking.start_at,
+        staff_id = self._staff_id_for_user(booking=booking, user=user) if audience == "admin" else None
+        replacements = build_booking_notification_replacements(
+            booking=booking,
             user=user,
-            business=booking.business,
+            staff_id=staff_id,
         )
+
         payload = event.payload or {}
         rating = payload.get("rating")
         comment = payload.get("comment") or ""
-        replacements = {
-            "{{booking_number}}": booking.booking_number,
-            "{{service_name}}": service_name,
-            "{{customer_name}}": customer_name,
-            "{{start_at}}": start_label,
-            "{{status}}": booking.status,
-            "{{rating}}": str(rating) if rating is not None else "",
-            "{{comment}}": str(comment),
-            "{{business_name}}": booking.business.display_name or booking.business.business_name or "",
-        }
+        replacements["{{rating}}"] = str(rating) if rating is not None else ""
+        replacements["{{comment}}"] = str(comment)
+
+        if audience == "admin" and staff_id:
+            replacements["{{service_name}}"] = replacements["{{assigned_service_name}}"]
+            replacements["{{service_details}}"] = replacements["{{assigned_service_details}}"]
+
         subject = template.subject
         body = template.body
         for key, value in replacements.items():
@@ -354,11 +376,14 @@ class NotificationService:
             body = body.replace(key, value)
 
         business = booking.business
+        service_name = replacements["{{service_name}}"]
+        start_label = replacements["{{start_at}}"]
         extra_html = (
             "<div style='margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;'>"
             "<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;font-weight:700;'>Appointment</div>"
             f"<div style='margin-top:4px;font-size:16px;font-weight:800;color:#0f172a;'>{_escape_html(service_name or 'Booking')}</div>"
             f"<p style='margin:8px 0 0;font-size:14px;color:#334155;'>{_escape_html(start_label)}</p>"
+            f"<p style='margin:4px 0 0;font-size:13px;color:#64748b;'>{_escape_html(replacements['{{service_details}}'])}</p>"
             f"<p style='margin:4px 0 0;font-size:13px;color:#64748b;'>#{_escape_html(booking.booking_number)} · {_escape_html(booking.status)}</p>"
             "</div>"
         )
@@ -448,6 +473,7 @@ class NotificationService:
             "BookingReminder": "booking_reminder",
             "BookingCompleted": "booking_completed",
             "BookingReviewed": "booking_reviewed",
+            "BookingStaffAssigned": "booking_staff_assigned",
         }
         base = base_mapping.get(event_type, "welcome")
         if audience == "admin":

@@ -7,7 +7,7 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Discover: undefined;
+  Services: undefined;
   Book: { serviceId?: string } | undefined;
   Shop: undefined;
   Alerts: undefined;

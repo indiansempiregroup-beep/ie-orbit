@@ -82,7 +82,7 @@ export function LoginScreen() {
             setTimeout(() => {
               void (async () => {
                 try {
-                  await enableBiometrics();
+                  await enableBiometrics(email.trim());
                 } catch (err) {
                   Alert.alert('Unable to enable', getApiErrorMessage(err, `Could not enable ${biometricLabel}.`));
                 }

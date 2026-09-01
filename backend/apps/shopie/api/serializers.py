@@ -293,6 +293,8 @@ class ShopOrderLineListSerializer(serializers.ModelSerializer):
 class ShopOrderListSerializer(serializers.ModelSerializer):
     lines = ShopOrderLineListSerializer(many=True, read_only=True)
     customer_id = serializers.UUIDField(source="customer.id", read_only=True, allow_null=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
     payment_method = serializers.SerializerMethodField()
     payment_status = serializers.SerializerMethodField()
 
@@ -302,6 +304,8 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
             "id",
             "business",
             "customer_id",
+            "customer_name",
+            "customer_phone",
             "order_number",
             "status",
             "fulfillment_mode",
@@ -330,10 +334,30 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
     def get_payment_status(self, obj: ShopOrder) -> str:
         return str(self._pos(obj).get("payment_status") or "")
 
+    def get_customer_name(self, obj: ShopOrder) -> str:
+        customer = getattr(obj, "customer", None)
+        if customer is not None:
+            return str(getattr(customer, "display_name", "") or "")
+        return ""
+
+    def get_customer_phone(self, obj: ShopOrder) -> str:
+        from apps.customers.services.contact import resolve_customer_phone
+
+        customer = getattr(obj, "customer", None)
+        delivery = obj.metadata.get("delivery") if isinstance(obj.metadata, dict) else {}
+        drop = delivery.get("drop") if isinstance(delivery, dict) else {}
+        drop_contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
+        return resolve_customer_phone(
+            customer,
+            fallback=str(drop_contact.get("phone") or ""),
+        )
+
 
 class ShopOrderSerializer(serializers.ModelSerializer):
     lines = ShopOrderLineSerializer(many=True, read_only=True)
     customer_id = serializers.UUIDField(source="customer.id", read_only=True, allow_null=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
     payment_method = serializers.SerializerMethodField()
     payment_status = serializers.SerializerMethodField()
     upi_utr = serializers.SerializerMethodField()
@@ -354,6 +378,8 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "id",
             "business",
             "customer_id",
+            "customer_name",
+            "customer_phone",
             "order_number",
             "status",
             "fulfillment_mode",
@@ -393,6 +419,24 @@ class ShopOrderSerializer(serializers.ModelSerializer):
 
     def get_payment_status(self, obj: ShopOrder) -> str:
         return str(self._pos(obj).get("payment_status") or "")
+
+    def get_customer_name(self, obj: ShopOrder) -> str:
+        customer = getattr(obj, "customer", None)
+        if customer is not None:
+            return str(getattr(customer, "display_name", "") or "")
+        return ""
+
+    def get_customer_phone(self, obj: ShopOrder) -> str:
+        from apps.customers.services.contact import resolve_customer_phone
+
+        customer = getattr(obj, "customer", None)
+        delivery = obj.metadata.get("delivery") if isinstance(obj.metadata, dict) else {}
+        drop = delivery.get("drop") if isinstance(delivery, dict) else {}
+        drop_contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
+        return resolve_customer_phone(
+            customer,
+            fallback=str(drop_contact.get("phone") or ""),
+        )
 
     def get_upi_utr(self, obj: ShopOrder) -> str:
         return str(self._pos(obj).get("upi_utr") or "")
@@ -539,6 +583,7 @@ class MerchantPaymentSettingsSerializer(serializers.Serializer):
         write_only=True,
     )
     upi_vpa = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    cod_enabled = serializers.BooleanField(required=False)
     test_connection = serializers.BooleanField(required=False, default=True)
     cashfree = serializers.DictField(required=False)
 

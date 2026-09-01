@@ -30,6 +30,11 @@ from apps.shopie.services.order_notify import notify_online_order
 from apps.shopie.services.tracking import TrackingHistoryService, canonical_order_status
 from apps.shopie.services.zones import DeliveryZoneService
 from apps.tenancy.models import Tenant
+from apps.customers.services.contact import format_contact_phone, resolve_customer_phone
+from apps.shopie.services.delivery.contact import (
+    merge_location_contact,
+    resolve_order_delivery_contact,
+)
 
 SECRET_KEYS = frozenset(
     {
@@ -206,7 +211,10 @@ class DeliveryService:
             "city": city,
             "state": state,
             "postal_code": postal_code,
-            "contact": {"name": contact_name, "phone": contact_phone},
+            "contact": {
+                "name": contact_name,
+                "phone": format_contact_phone(contact_phone),
+            },
         }
 
     @staticmethod
@@ -322,6 +330,9 @@ class DeliveryService:
         )
         pickup["branch_id"] = source["branch_id"]
         drop_contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
+        normalized_phone = format_contact_phone(
+            drop_contact.get("phone") or customer_phone
+        )
         # Coordinates arrive as Decimal from the API layer; _location casts them to
         # float so the quote can be stored on the order's JSON metadata.
         normalized_drop = self._location(
@@ -332,12 +343,12 @@ class DeliveryService:
             state=str(drop.get("state") or ""),
             postal_code=str(drop.get("postal_code") or ""),
             contact_name=str(drop_contact.get("name") or customer_name),
-            contact_phone=str(drop_contact.get("phone") or customer_phone),
+            contact_phone=normalized_phone,
         )
         return {
             "pickup": pickup,
             "drop": normalized_drop,
-            "customer": {"name": customer_name, "phone": customer_phone},
+            "customer": {"name": customer_name, "phone": normalized_phone},
         }
 
     @staticmethod
@@ -449,14 +460,28 @@ class DeliveryService:
             raise ValidationError({"delivery": "Instant delivery is not enabled for this shop."})
         config = self._decrypted_config(settings)
         provider = get_delivery_provider(config)
+        customer_name, customer_phone = resolve_order_delivery_contact(
+            order=order,
+            delivery=delivery,
+        )
+        pickup = merge_location_contact(delivery.get("pickup") or {})
+        drop = merge_location_contact(
+            delivery.get("drop") or {},
+            name=customer_name,
+            phone=customer_phone,
+        )
+        if not customer_phone:
+            raise ValidationError(
+                {"delivery": "Customer mobile number is required before dispatching a rider."}
+            )
         payload = {
             "request_id": str(order.id),
             "quote_id": delivery.get("quote_id"),
-            "pickup": delivery.get("pickup") or {},
-            "drop": delivery.get("drop") or {},
+            "pickup": pickup,
+            "drop": drop,
             "customer": {
-                "name": getattr(order.customer, "display_name", "") if order.customer else "",
-                "phone": getattr(order.customer, "phone_number", "") if order.customer else "",
+                "name": customer_name,
+                "phone": customer_phone,
             },
             "order": {
                 "id": str(order.id),

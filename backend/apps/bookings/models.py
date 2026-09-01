@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 
@@ -317,6 +319,36 @@ class Booking(TenantModel):
 
     def __str__(self) -> str:
         return self.booking_number
+
+
+class BookingLineItem(TenantModel):
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="line_items")
+    service_id = models.UUIDField(db_index=True)
+    staff_id = models.UUIDField(null=True, blank=True, db_index=True)
+    start_at = models.DateTimeField(db_index=True)
+    end_at = models.DateTimeField(db_index=True)
+    duration_minutes = models.PositiveIntegerField()
+    buffer_before_minutes = models.PositiveIntegerField(default=0)
+    buffer_after_minutes = models.PositiveIntegerField(default=0)
+    sort_order = models.PositiveIntegerField(default=0)
+    price_snapshot = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    variant_id = models.UUIDField(null=True, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "booking_line_items"
+        ordering = ["sort_order", "start_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "booking", "sort_order"]),
+            models.Index(fields=["tenant", "staff_id", "start_at", "end_at"]),
+            models.Index(fields=["tenant", "service_id", "start_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Line {self.sort_order} for {self.booking_id}"
 
 
 class BookingTimeline(TenantModel):

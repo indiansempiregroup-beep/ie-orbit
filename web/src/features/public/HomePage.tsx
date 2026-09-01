@@ -10,6 +10,8 @@ import {
 import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { PublicCtaBand } from './PublicCtaBand';
+import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
+import { registerStartPath } from '../onboarding/affiliateCode';
 
 const products = [
   {
@@ -81,8 +83,8 @@ export function HomePage() {
               15-day full-Pro trial, then pick the product — or both — that your business needs.
             </p>
             <div className="public-hero-actions">
-              <Link to="/auth/register/start">
-                <Button variant="primary">Start free trial</Button>
+              <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+                <Button variant="primary">Create account</Button>
               </Link>
               <Link to="/features">
                 <Button variant="neutral">Explore features</Button>

@@ -24,6 +24,7 @@ import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { confirmAction } from '../../utils/confirmAction';
 import { DesktopPage } from '../../components/DesktopPage';
+import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
 import {
   formatMoney,
   formatShopOrderFulfillment,
@@ -371,6 +372,8 @@ export function ShopOrderDetailScreen() {
 
   const pos = getShopOrderPosMeta(order);
   const payment = formatShopOrderPayment(order);
+  const paymentStatusValue = String(order.payment_status || pos.payment_status || '').toLowerCase();
+  const paymentMethodValue = String(order.payment_method || pos.payment_method || '').toLowerCase();
   const due = isShopOrderBorrowDue(order);
   const fulfillment =
     order.metadata && typeof order.metadata === 'object'
@@ -392,9 +395,15 @@ export function ShopOrderDetailScreen() {
   const isBorrow = String(pos.payment_method || '').toLowerCase() === 'borrow';
   const amountDue = Number(pos.amount_due ?? (isBorrow ? order.total : 0) ?? 0);
   const customerName = order.customer_id
-    ? entityLabel(buildNameMap(customers), order.customer_id, 'Customer')
+    ? order.customer_name?.trim() ||
+      entityLabel(buildNameMap(customers), order.customer_id, 'Customer')
     : 'Walk-in';
   const customer = order.customer_id ? customers.find((row) => row.id === order.customer_id) : null;
+  const customerPhone =
+    order.customer_phone?.trim() ||
+    customer?.phone_number?.trim() ||
+    customer?.alternate_phone?.trim() ||
+    '';
   const deliveryAddress =
     String(order.delivery_address || '').trim() ||
     customer?.full_address?.trim() ||
@@ -410,6 +419,10 @@ export function ShopOrderDetailScreen() {
       .filter(Boolean)
       .join(', ');
   const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
+  const cashPaymentDue =
+    isOnlineOrder &&
+    paymentMethodValue === 'cash' &&
+    !['paid', 'settled', 'awaiting_confirmation'].includes(paymentStatusValue);
   const nextAction = nextShopOrderAction(order.status, order.fulfillment_mode, deliveryMethod);
   const statusStyle = shopOrderBadgeStyle(order);
   const canCancel =
@@ -466,8 +479,18 @@ export function ShopOrderDetailScreen() {
               : formatShopOrderFulfillment(order.fulfillment_mode)}
             {order.created_at ? ` · ${formatDateTime(order.created_at)}` : ''}
           </Text>
-          <Text style={styles.customer}>{customerName}</Text>
-          {isOnlineOrder && deliveryAddress ? (
+          {order.customer_id ? (
+            <CustomerDetailLinkCard
+              customerId={order.customer_id}
+              customerName={customerName}
+              customerPhone={customerPhone}
+              customerEmail={customer?.email?.trim() || undefined}
+              addressPreview={deliveryAddress || undefined}
+            />
+          ) : (
+            <Text style={styles.customer}>{customerName}</Text>
+          )}
+          {isOnlineOrder && deliveryAddress && !order.customer_id ? (
             <View style={styles.addressBox}>
               <Text style={styles.addressLabel}>
                 {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'Delivery address' : 'Customer address'}
@@ -621,7 +644,34 @@ export function ShopOrderDetailScreen() {
           </View>
         ) : null}
 
-        {String(order.payment_status || pos.payment_status || '') === 'awaiting_confirmation' ? (
+        {cashPaymentDue ? (
+          <View style={styles.headerCard}>
+            <Text style={styles.section}>Cash payment pending</Text>
+            <Text style={styles.meta}>
+              Mark cash received when the customer pays on delivery or at pickup.
+            </Text>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: colors.success, marginTop: 10 }]}
+              disabled={busy}
+              onPress={() => {
+                if (!client) return;
+                setBusy(true);
+                void client.shop
+                  .confirmOrderPayment(orderId, { action: 'confirm' })
+                  .then(() => {
+                    toast.push('Cash payment recorded', 'success');
+                    return load();
+                  })
+                  .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <Text style={styles.actionBtnText}>Cash received</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {paymentStatusValue === 'awaiting_confirmation' ? (
           <View style={styles.headerCard}>
             <Text style={styles.section}>Customer UPI claim</Text>
             <Text style={styles.meta}>UTR: {String(order.upi_utr || pos.upi_utr || '—')}</Text>
@@ -737,7 +787,7 @@ export function ShopOrderDetailScreen() {
           </View>
         ) : null}
 
-        {order.delivery_address ? (
+        {order.delivery_address && !order.customer_id ? (
           <View style={styles.notesCard}>
             <Text style={styles.section}>Delivery</Text>
             <Text style={styles.meta}>{order.delivery_address}</Text>
@@ -910,6 +960,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.card,
     gap: 4,
+    alignSelf: 'stretch',
+    width: '100%',
+    overflow: 'hidden',
   },
   orderNumber: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground, flex: 1 },
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -1020,9 +1073,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     gap: 4,
+    alignSelf: 'stretch',
+    width: '100%',
+    overflow: 'hidden',
   },
   addressLabel: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, textTransform: 'uppercase' },
-  addressValue: { fontSize: 14, color: colors.foreground, lineHeight: 20 },
+  addressValue: { fontSize: 14, color: colors.foreground, lineHeight: 20, flexShrink: 1 },
   payment: { fontSize: 14, fontWeight: '600', color: colors.foreground, marginTop: 4 },
   due: { color: colors.destructive },
   section: {
@@ -1048,7 +1104,7 @@ const styles = StyleSheet.create({
   },
   lineHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   name: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground },
-  meta: { color: colors.mutedForeground, fontSize: 13 },
+  meta: { color: colors.mutedForeground, fontSize: 13, flexShrink: 1, lineHeight: 18 },
   backorder: { color: colors.warning, fontSize: 13, marginTop: 4 },
   returnedHint: { color: colors.primary, fontSize: 12, fontWeight: '600', marginTop: 2 },
   qty: { color: colors.foreground, fontWeight: '600', fontSize: 14 },
@@ -1074,6 +1130,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.card,
     gap: 4,
+    alignSelf: 'stretch',
+    width: '100%',
+    overflow: 'hidden',
   },
   returnCard: {
     borderWidth: 1,

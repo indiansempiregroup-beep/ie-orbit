@@ -92,5 +92,6 @@ def get_customer_booking(
             business=business,
             customer_id__in=customers.values_list("id", flat=True),
         )
+        .prefetch_related("line_items")
         .first()
     )

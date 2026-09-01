@@ -268,6 +268,7 @@ export function ShopOrdersScreen() {
             const customer = item.customer_id
               ? entityLabel(customerMap, item.customer_id, 'Customer')
               : 'Walk-in';
+            const customerPhone = item.customer_phone || customerRow?.phone_number || '';
             const address = orderDeliveryAddress(item, customerRow);
             const preview = (item.lines ?? [])
               .slice(0, 2)
@@ -302,6 +303,7 @@ export function ShopOrdersScreen() {
                         : 'Standard delivery'
                       : formatShopOrderFulfillment(item.fulfillment_mode)}{' '}
                     · {customer}
+                    {customerPhone ? ` · ${customerPhone}` : ''}
                   </Text>
                 </View>
                 {String(item.fulfillment_mode).toLowerCase() === 'delivery' &&

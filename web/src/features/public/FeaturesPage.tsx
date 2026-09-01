@@ -10,6 +10,8 @@ import {
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Button } from '../../components/Button';
 import { PublicCtaBand } from './PublicCtaBand';
+import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
+import { registerStartPath } from '../onboarding/affiliateCode';
 
 const featureGroups = [
   {
@@ -112,8 +114,8 @@ export function FeaturesPage() {
               <Link to="/pricing">
                 <Button variant="primary">See pricing</Button>
               </Link>
-              <Link to="/auth/register/start">
-                <Button variant="neutral">Start free trial</Button>
+              <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+                <Button variant="neutral">Create account</Button>
               </Link>
             </div>
           </div>

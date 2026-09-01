@@ -37,11 +37,13 @@ export type ApiClientConfig = {
   headers?: HeadersInit;
 };
 
+export type QueryParamValue = string | number | boolean | null | undefined | Array<string | number | boolean>;
+
 export type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   headers?: HeadersInit;
-  query?: Record<string, string | number | boolean | null | undefined>;
+  query?: Record<string, QueryParamValue>;
   auth?: boolean;
 };
 
@@ -127,6 +129,59 @@ export type BookingStatus =
   | 'expired'
   | 'rescheduled';
 
+export type BookingLineItem = {
+  id: string;
+  service_id: string;
+  service_name?: string;
+  staff_id?: string | null;
+  staff_name?: string;
+  start_at: string;
+  end_at: string;
+  duration_minutes: number;
+  buffer_before_minutes?: number;
+  buffer_after_minutes?: number;
+  sort_order: number;
+  price_snapshot?: string | number;
+  variant_id?: string | null;
+};
+
+export type BookingLineItemInput = {
+  service_id: string;
+  duration_minutes?: number;
+  sort_order?: number;
+};
+
+export type BookingLineItemStaffInput = {
+  line_item_id: string;
+  staff_id?: string | null;
+};
+
+export type BookingPatchInput = {
+  staff_id?: string | null;
+  line_item_staff?: BookingLineItemStaffInput[];
+  start_at?: string;
+  duration_minutes?: number;
+  buffer_before_minutes?: number;
+  buffer_after_minutes?: number;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ReassignableStaffOption = {
+  id: string;
+  display_name: string;
+};
+
+export type BookingReassignableStaffResponse =
+  | {
+      mode: 'single';
+      staff_options: ReassignableStaffOption[];
+    }
+  | {
+      mode: 'per_line';
+      line_item_options: Record<string, ReassignableStaffOption[]>;
+    };
+
 export type BookingReview = {
   id: string;
   business?: string;
@@ -156,8 +211,12 @@ export type Booking = {
   branch?: string | null;
   booking_number?: string;
   customer_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
   staff_id?: string | null;
+  staff_name?: string;
   service_id?: string;
+  service_label?: string;
   appointment_date?: string;
   start_at?: string;
   end_at?: string;
@@ -178,6 +237,7 @@ export type Booking = {
   booking_notes?: Array<Record<string, unknown>>;
   attachments?: Array<Record<string, unknown>>;
   review?: BookingReviewSummary | null;
+  line_items?: BookingLineItem[];
   created_at?: string;
   updated_at?: string;
   is_active?: boolean;
@@ -188,9 +248,10 @@ export type BookingCreateInput = {
   branch_id?: string | null;
   customer_id: string;
   staff_id?: string | null;
-  service_id: string;
+  service_id?: string;
+  items?: BookingLineItemInput[];
   start_at: string;
-  duration_minutes: number;
+  duration_minutes?: number;
   buffer_before_minutes?: number;
   buffer_after_minutes?: number;
   source?: string;
@@ -784,14 +845,20 @@ export type MobileAvailabilityResponse = {
   message?: string | null;
 };
 
+export type MobileBookingLineItem = BookingLineItem & {
+  service_name?: string;
+  staff_name?: string;
+};
+
 export type MobileBookingRequestInput = {
   tenant_slug: string;
   business_code: string;
-  service_id: string;
+  service_id?: string;
+  items?: BookingLineItemInput[];
   branch_id?: string | null;
   staff_id?: string | null;
   start_at: string;
-  duration_minutes: number;
+  duration_minutes?: number;
   customer_name?: string;
   phone_number?: string;
   email?: string;
@@ -840,8 +907,10 @@ export type MobileBooking = {
   status: string;
   service_id: string;
   service_name: string;
+  service_names?: string[];
   staff_id?: string | null;
   staff_name?: string;
+  items?: MobileBookingLineItem[];
   branch?: MobileBookingBranch | null;
   appointment_date: string;
   start_at: string;
@@ -895,6 +964,7 @@ export type MobileBootstrapResponse = {
     rescheduling_policy?: string;
     upi_vpa?: string;
     payment_qr_url?: string;
+    cod_enabled?: boolean;
   };
   branding: MobileBootstrapBranding;
   enabled_products: string[];
@@ -1824,6 +1894,8 @@ export type ShopOrder = {
   id: string;
   business: string;
   customer_id?: string | null;
+  customer_name?: string;
+  customer_phone?: string;
   order_number: string;
   status: string;
   fulfillment_mode: string;
@@ -2042,6 +2114,7 @@ export type MerchantPaymentSettings = {
   last_tested_at?: string | null;
   webhook_url: string;
   upi_vpa: string;
+  cod_enabled: boolean;
   cashfree?: MerchantCashfreeSettings;
 };
 
@@ -3518,6 +3591,7 @@ class ApiClient {
       key_secret?: string;
       webhook_secret?: string;
       upi_vpa?: string;
+      cod_enabled?: boolean;
       test_connection?: boolean;
       cashfree?: {
         app_id?: string;
@@ -3799,12 +3873,16 @@ class ApiClient {
     list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<Booking[]>('/bookings', { method: 'GET', query }),
     create: (body: BookingCreateInput) => this.request<Booking>('/bookings', { method: 'POST', body }),
     get: (bookingId: string) => this.request<Booking>(`/bookings/${bookingId}`, { method: 'GET' }),
-    patch: (bookingId: string, body: Partial<BookingCreateInput>) => this.request<Booking>(`/bookings/${bookingId}`, { method: 'PATCH', body }),
+    patch: (bookingId: string, body: BookingPatchInput) => this.request<Booking>(`/bookings/${bookingId}`, { method: 'PATCH', body }),
     confirm: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/confirm`, { method: 'POST', body }),
     cancel: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/cancel`, { method: 'POST', body }),
     checkIn: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/check-in`, { method: 'POST', body }),
     complete: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/complete`, { method: 'POST', body }),
     reschedule: (bookingId: string, body: { start_at: string; reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/reschedule`, { method: 'POST', body }),
+    reassignableStaff: (bookingId: string) =>
+      this.request<BookingReassignableStaffResponse>(`/bookings/${bookingId}/reassignable-staff`, {
+        method: 'GET',
+      }),
     listReviews: (query?: {
       business?: string;
       customer?: string;
@@ -3815,6 +3893,8 @@ class ApiClient {
       business?: string;
       staff_id?: string;
       service_id?: string;
+      service_ids?: string[];
+      items?: BookingLineItemInput[];
       date: string;
       duration_minutes?: number;
       interval_minutes?: number;
@@ -4483,6 +4563,7 @@ class ApiClient {
       buffer_minutes?: number;
       staff_id?: string | null;
       service_id?: string | null;
+      service_ids?: string[];
     }) => this.request<MobileAvailabilityResponse>('/mobile/availability', { method: 'GET', query }),
     requestBooking: (body: MobileBookingRequestInput) =>
       this.request<MobileBookingRequestResponse>('/mobile/bookings/request', { method: 'POST', body }),
@@ -4864,7 +4945,7 @@ class ApiClient {
     };
   }
 
-  private buildUrl(path: string, query?: Record<string, string | number | boolean | null | undefined>): string {
+  private buildUrl(path: string, query?: Record<string, QueryParamValue>): string {
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     const cleanBaseUrl = this.resolveBaseUrl().replace(/\/$/, '');
 
@@ -4879,6 +4960,15 @@ class ApiClient {
 
     Object.entries(query ?? {}).forEach(([key, value]) => {
       if (value === undefined || value === null) {
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (item === undefined || item === null) {
+            return;
+          }
+          url.searchParams.append(key, String(item));
+        });
         return;
       }
       url.searchParams.set(key, String(value));

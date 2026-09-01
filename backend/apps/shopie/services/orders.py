@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from apps.businesses.models import Business
 from apps.customers.models import Customer
+from apps.customers.services.contact import resolve_customer_phone
 from apps.shopie.models import (
     DiscountType,
     FulfillmentMode,
@@ -242,6 +243,18 @@ class OrderService:
                 raise ValidationError(
                     {"payment_method": "Test and verify the saved Cashfree credentials first."}
                 )
+        if payment == "cash" and mode in {FulfillmentMode.PICKUP, FulfillmentMode.DELIVERY}:
+            from apps.shopie.services.merchant_payments import MerchantPaymentService
+
+            shop_settings = MerchantPaymentService().ensure_settings(business=business)
+            if not shop_settings.cod_enabled:
+                raise ValidationError(
+                    {
+                        "payment_method": (
+                            "Cash on delivery is not available for this shop. Pay with UPI instead."
+                        )
+                    }
+                )
         bill_dtype = str(bill_discount_type or "").strip().lower()
         bill_dvalue = Decimal(str(bill_discount_value or "0"))
         coupon_code = str(coupon_code or "").strip()
@@ -441,9 +454,7 @@ class OrderService:
             customer_name = (
                 str(getattr(customer, "display_name", "") or "") if customer is not None else ""
             )
-            customer_phone = (
-                str(getattr(customer, "phone_number", "") or "") if customer is not None else ""
-            )
+            customer_phone = resolve_customer_phone(customer) if customer is not None else ""
             quoted = DeliveryService().quote(
                 tenant=tenant,
                 business=business,
@@ -678,9 +689,54 @@ class OrderService:
                     godown_id=source_godown_id,
                 )
         refreshed = self.get_order(tenant=tenant, business=business, order_id=order.id)
+        if status == OrderStatus.COMPLETED:
+            refreshed = self._maybe_auto_mark_cash_paid(
+                tenant=tenant,
+                business=business,
+                order=refreshed,
+            )
         if status in {OrderStatus.CONFIRMED, OrderStatus.COMPLETED}:
             self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
         self._notify_online(refreshed, status)
+        return refreshed
+
+    @transaction.atomic
+    def _maybe_auto_mark_cash_paid(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+    ) -> ShopOrder:
+        if order.fulfillment_mode not in {FulfillmentMode.PICKUP, FulfillmentMode.DELIVERY}:
+            return order
+        locked = (
+            ShopOrder.objects.select_for_update()
+            .filter(tenant=tenant, business=business, id=order.id)
+            .first()
+        )
+        if locked is None:
+            return order
+        metadata = dict(locked.metadata or {})
+        pos = dict(metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {})
+        method = str(pos.get("payment_method") or "").strip().lower()
+        status_value = str(pos.get("payment_status") or "").strip().lower()
+        if method != "cash" or status_value in {"paid", "settled"}:
+            return self.get_order(tenant=tenant, business=business, order_id=locked.id)
+        pos.update(
+            {
+                "payment_status": "paid",
+                "amount_paid": str(locked.total),
+                "amount_due": "0.00",
+                "confirmed_at": timezone.now().isoformat(),
+            }
+        )
+        metadata["pos"] = pos
+        locked.metadata = metadata
+        locked.save(update_fields=["metadata", "updated_at", "version"])
+        refreshed = self.get_order(tenant=tenant, business=business, order_id=locked.id)
+        self._maybe_award_referral_on_paid(order=refreshed)
+        self._maybe_award_loyalty_on_paid(order=refreshed)
         return refreshed
 
     def _notify_online(self, order: ShopOrder, status: str) -> None:

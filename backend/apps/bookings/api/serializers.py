@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.common.api.fields import QueryUUIDListField
 from apps.bookings.models import (
     Booking,
     BookingAttachment,
     BookingChannel,
     BookingHistory,
+    BookingLineItem,
     BookingNote,
     BookingReview,
     BookingSource,
@@ -96,12 +98,65 @@ class BookingReviewSummarySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class BookingLineItemSerializer(serializers.ModelSerializer):
+    service_name = serializers.SerializerMethodField()
+    staff_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BookingLineItem
+        fields = [
+            "id",
+            "service_id",
+            "service_name",
+            "staff_id",
+            "staff_name",
+            "start_at",
+            "end_at",
+            "duration_minutes",
+            "buffer_before_minutes",
+            "buffer_after_minutes",
+            "sort_order",
+            "price_snapshot",
+            "variant_id",
+        ]
+        read_only_fields = fields
+
+    def get_service_name(self, obj: BookingLineItem) -> str:
+        from apps.bookings.api.display import service_label
+
+        service_map = self.context.get("service_map") or {}
+        return service_label(service_map=service_map, service_id=obj.service_id)
+
+    def get_staff_name(self, obj: BookingLineItem) -> str:
+        staff_map = self.context.get("staff_map") or {}
+        staff = staff_map.get(str(obj.staff_id)) if obj.staff_id else None
+        if staff is not None:
+            return staff.display_name or ""
+        return ""
+
+
+class BookingLineItemInputSerializer(serializers.Serializer):
+    service_id = serializers.UUIDField()
+    duration_minutes = serializers.IntegerField(min_value=1, required=False)
+    sort_order = serializers.IntegerField(min_value=0, required=False)
+
+
+class BookingLineItemStaffInputSerializer(serializers.Serializer):
+    line_item_id = serializers.UUIDField()
+    staff_id = serializers.UUIDField(allow_null=True)
+
+
 class BookingSerializer(serializers.ModelSerializer):
     timeline = BookingTimelineSerializer(many=True, read_only=True)
     history = BookingHistorySerializer(many=True, read_only=True)
     booking_notes = BookingNoteSerializer(many=True, read_only=True)
     attachments = BookingAttachmentSerializer(many=True, read_only=True)
     review = BookingReviewSummarySerializer(read_only=True, allow_null=True)
+    line_items = BookingLineItemSerializer(many=True, read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+    staff_name = serializers.SerializerMethodField()
+    service_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -112,8 +167,12 @@ class BookingSerializer(serializers.ModelSerializer):
             "branch",
             "booking_number",
             "customer_id",
+            "customer_name",
+            "customer_phone",
             "staff_id",
+            "staff_name",
             "service_id",
+            "service_label",
             "appointment_date",
             "start_at",
             "end_at",
@@ -129,6 +188,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "recurrence_frequency",
             "recurrence_rule",
             "metadata",
+            "line_items",
             "timeline",
             "history",
             "booking_notes",
@@ -158,15 +218,42 @@ class BookingSerializer(serializers.ModelSerializer):
             "is_active",
         ]
 
+    def get_customer_name(self, obj: Booking) -> str:
+        customer_map = self.context.get("customer_map") or {}
+        customer = customer_map.get(str(obj.customer_id))
+        if customer is not None:
+            return customer.display_name or "Customer"
+        return ""
+
+    def get_customer_phone(self, obj: Booking) -> str:
+        from apps.customers.services.contact import resolve_customer_phone
+
+        customer_map = self.context.get("customer_map") or {}
+        customer = customer_map.get(str(obj.customer_id))
+        return resolve_customer_phone(customer)
+
+    def get_staff_name(self, obj: Booking) -> str:
+        from apps.bookings.services.notification_context import booking_staff_summary
+
+        staff_map = self.context.get("staff_map") or {}
+        return booking_staff_summary(booking=obj, staff_map=staff_map)
+
+    def get_service_label(self, obj: Booking) -> str:
+        from apps.bookings.api.display import booking_service_summary
+
+        service_map = self.context.get("service_map") or {}
+        return booking_service_summary(booking=obj, service_map=service_map)
+
 
 class BookingCreateSerializer(serializers.Serializer):
     business = serializers.UUIDField(required=False)
     branch_id = serializers.UUIDField(required=False, allow_null=True)
     customer_id = serializers.UUIDField()
     staff_id = serializers.UUIDField(required=False, allow_null=True)
-    service_id = serializers.UUIDField()
+    service_id = serializers.UUIDField(required=False)
+    items = BookingLineItemInputSerializer(many=True, required=False)
     start_at = serializers.DateTimeField()
-    duration_minutes = serializers.IntegerField(min_value=1)
+    duration_minutes = serializers.IntegerField(min_value=1, required=False)
     buffer_before_minutes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
     buffer_after_minutes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
     source = serializers.ChoiceField(choices=BookingSource.choices, required=False)
@@ -180,9 +267,21 @@ class BookingCreateSerializer(serializers.Serializer):
     metadata = serializers.JSONField(required=False, default=dict)
     points_to_redeem = serializers.IntegerField(min_value=1, required=False)
 
+    def validate(self, attrs: dict) -> dict:
+        has_service = bool(attrs.get("service_id"))
+        has_items = bool(attrs.get("items"))
+        if has_service and has_items:
+            raise serializers.ValidationError("Provide either service_id or items, not both.")
+        if not has_service and not has_items:
+            raise serializers.ValidationError("Provide service_id or items.")
+        if has_service and not attrs.get("duration_minutes"):
+            raise serializers.ValidationError({"duration_minutes": "Required when using service_id."})
+        return attrs
+
 
 class BookingPatchSerializer(serializers.Serializer):
     staff_id = serializers.UUIDField(required=False, allow_null=True)
+    line_item_staff = BookingLineItemStaffInputSerializer(many=True, required=False)
     start_at = serializers.DateTimeField(required=False)
     duration_minutes = serializers.IntegerField(min_value=1, required=False)
     buffer_before_minutes = serializers.IntegerField(min_value=0, required=False)
@@ -204,8 +303,10 @@ class AvailabilityQuerySerializer(serializers.Serializer):
     business = serializers.UUIDField(required=False)
     staff_id = serializers.UUIDField(required=False)
     service_id = serializers.UUIDField(required=False)
+    service_ids = QueryUUIDListField()
+    items = BookingLineItemInputSerializer(many=True, required=False)
     date = serializers.DateField()
-    duration_minutes = serializers.IntegerField(min_value=1, default=30)
+    duration_minutes = serializers.IntegerField(min_value=1, default=30, required=False)
     interval_minutes = serializers.IntegerField(min_value=1, default=15)
     buffer_minutes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
 

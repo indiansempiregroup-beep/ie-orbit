@@ -13,6 +13,13 @@ from apps.businesses.services.entitlements import EntitlementService
 from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, tenant_feature_enabled
 
 
+def _cod_enabled_for_business(business: Business) -> bool:
+    shop_settings = getattr(business, "shop_settings", None)
+    if shop_settings is not None:
+        return bool(shop_settings.cod_enabled)
+    return True
+
+
 PRODUCT_FEATURES: dict[str, list[str]] = {
     "appointie": ["mobile_booking", "mobile_discover", "mobile_availability"],
     "shopie": ["mobile_shop", "mobile_cart", "mobile_orders"],
@@ -172,6 +179,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
             "rescheduling_policy": rescheduling_policy,
             "upi_vpa": getattr(business, "upi_vpa", "") or "",
             "payment_qr_url": getattr(business, "payment_qr_url", "") or "",
+            "cod_enabled": _cod_enabled_for_business(business),
         },
         "branding": {
             "app_name": profile.app_name,

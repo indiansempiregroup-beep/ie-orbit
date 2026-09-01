@@ -1,0 +1,37 @@
+---
+description: QA findings backlog — triage and fix bugs from docs/qa
+globs: docs/qa/**
+alwaysApply: false
+---
+
+# QA findings
+
+Canonical backlog: `docs/qa/FINDINGS.md`
+
+## When to use
+
+- User mentions QA, bugs, test failures, triage, or a `QA-###` ID
+- User references `docs/qa` or attaches files from that folder
+- Fixing sign-up, onboarding, marketing home, or forgot-password flows covered by current QA pass
+
+## Workflow
+
+1. Read `docs/qa/FINDINGS.md` first — not PDF/XLSX binaries
+2. For test coverage context, read `docs/qa/scenarios/test-scenarios.md`
+3. Fix by ID when user asks (e.g. "fix QA-004")
+4. After resolving, update the finding: status → `resolved`, add brief note under **Notes**
+5. Raw daily dumps live in `docs/qa/findings/YYYY-MM-DD.md` — normalize new items into `FINDINGS.md` with the next `QA-###` ID
+
+## Finding format
+
+```markdown
+## QA-### | P2 | open | Area
+- **Area:** …
+- **Steps:** …
+- **Expected:** …
+- **Actual:** …
+- **Source:** …
+- **Notes:** —
+```
+
+Severity: `P0` · `P1` · `P2` · `suggestion` — Status: `open` · `in_progress` · `resolved` · `won't_fix`

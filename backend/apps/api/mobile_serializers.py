@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.common.api.fields import CoordinateField
+from apps.common.api.fields import CoordinateField, QueryUUIDListField
 
 
 class MobileDiscoverQuerySerializer(serializers.Serializer):
@@ -35,25 +35,34 @@ class MobileAvailabilityQuerySerializer(serializers.Serializer):
     tenant_slug = serializers.SlugField()
     business_code = serializers.SlugField()
     date = serializers.DateField()
-    duration_minutes = serializers.IntegerField(min_value=1, default=30)
+    duration_minutes = serializers.IntegerField(min_value=1, required=False)
     interval_minutes = serializers.IntegerField(min_value=1, default=15)
     buffer_minutes = serializers.IntegerField(min_value=0, required=False, allow_null=True)
     staff_id = serializers.UUIDField(required=False, allow_null=True)
     service_id = serializers.UUIDField(required=False, allow_null=True)
+    service_ids = QueryUUIDListField()
+
+
+class MobileBookingLineItemInputSerializer(serializers.Serializer):
+    service_id = serializers.UUIDField()
+    duration_minutes = serializers.IntegerField(min_value=1, required=False)
+    sort_order = serializers.IntegerField(min_value=0, required=False)
 
 
 class MobileStaffQuerySerializer(MobileScopedQuerySerializer):
     service_id = serializers.UUIDField(required=False, allow_null=True)
+    service_ids = QueryUUIDListField()
 
 
 class MobileBookingRequestSerializer(serializers.Serializer):
     tenant_slug = serializers.SlugField()
     business_code = serializers.SlugField()
-    service_id = serializers.UUIDField()
+    service_id = serializers.UUIDField(required=False)
+    items = MobileBookingLineItemInputSerializer(many=True, required=False)
     branch_id = serializers.UUIDField(required=False, allow_null=True)
     staff_id = serializers.UUIDField(required=False, allow_null=True)
     start_at = serializers.DateTimeField()
-    duration_minutes = serializers.IntegerField(min_value=1)
+    duration_minutes = serializers.IntegerField(min_value=1, required=False)
     customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
     phone_number = serializers.CharField(max_length=32, required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
@@ -64,6 +73,17 @@ class MobileBookingRequestSerializer(serializers.Serializer):
         default="pay_at_venue",
     )
     points_to_redeem = serializers.IntegerField(min_value=1, required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        has_service = bool(attrs.get("service_id"))
+        has_items = bool(attrs.get("items"))
+        if has_service and has_items:
+            raise serializers.ValidationError("Provide either service_id or items, not both.")
+        if not has_service and not has_items:
+            raise serializers.ValidationError("Provide service_id or items.")
+        if has_service and not attrs.get("duration_minutes"):
+            raise serializers.ValidationError({"duration_minutes": "Required when using service_id."})
+        return attrs
 
 
 class MobileLoyaltyQuoteSerializer(serializers.Serializer):
@@ -122,14 +142,29 @@ class MobileBookingReviewSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
+class MobileBookingLineItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    service_id = serializers.UUIDField()
+    service_name = serializers.CharField()
+    staff_id = serializers.UUIDField(allow_null=True)
+    staff_name = serializers.CharField(allow_blank=True)
+    start_at = serializers.DateTimeField()
+    end_at = serializers.DateTimeField()
+    duration_minutes = serializers.IntegerField()
+    sort_order = serializers.IntegerField()
+    price_snapshot = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
 class MobileBookingSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     booking_number = serializers.CharField()
     status = serializers.CharField()
     service_id = serializers.UUIDField()
     service_name = serializers.CharField()
+    service_names = serializers.ListField(child=serializers.CharField(), required=False)
     staff_id = serializers.UUIDField(allow_null=True)
     staff_name = serializers.CharField(allow_blank=True)
+    items = MobileBookingLineItemSerializer(many=True, required=False)
     appointment_date = serializers.DateField()
     start_at = serializers.DateTimeField()
     end_at = serializers.DateTimeField()

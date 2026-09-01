@@ -18,6 +18,7 @@ export function PaymentSettingsPage() {
   const [webhookSecret, setWebhookSecret] = useState('');
   const [upiVpa, setUpiVpa] = useState('');
   const [enabled, setEnabled] = useState(true);
+  const [codEnabled, setCodEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [cashfreeAppId, setCashfreeAppId] = useState('');
@@ -35,6 +36,7 @@ export function PaymentSettingsPage() {
         setKeyId(response.data.key_id);
         setUpiVpa(response.data.upi_vpa);
         setEnabled(response.data.enabled);
+        setCodEnabled(response.data.cod_enabled ?? true);
         setCashfreeAppId(response.data.cashfree?.app_id ?? '');
         setCashfreeEnabled(response.data.cashfree?.enabled ?? true);
       })
@@ -52,6 +54,7 @@ export function PaymentSettingsPage() {
         key_secret: keySecret.trim() || undefined,
         webhook_secret: webhookSecret.trim() || undefined,
         upi_vpa: upiVpa.trim(),
+        cod_enabled: codEnabled,
         enabled,
         test_connection: enabled && Boolean(keyId.trim()),
       });
@@ -76,6 +79,7 @@ export function PaymentSettingsPage() {
       const response = await client.shop.updateMerchantPaymentSettings({
         business_id: workspace.businessId,
         upi_vpa: upiVpa.trim(),
+        cod_enabled: codEnabled,
         cashfree: {
           app_id: cashfreeAppId.trim(),
           secret_key: cashfreeSecret.trim() || undefined,
@@ -233,6 +237,23 @@ export function PaymentSettingsPage() {
           placeholder="shop@okaxis"
         />
         <p style={{ margin: 0, color: '#6b7280' }}>Used for manual QR collection when online checkout is unavailable.</p>
+      </Card>
+
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+          <div>
+            <strong>Allow cash on delivery / pay at pickup</strong>
+            <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
+              Customers pay in cash when they collect or receive the order. Turn off to require UPI only.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={codEnabled}
+            onChange={(event) => setCodEnabled(event.target.checked)}
+            aria-label="Allow cash on delivery"
+          />
+        </div>
       </Card>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

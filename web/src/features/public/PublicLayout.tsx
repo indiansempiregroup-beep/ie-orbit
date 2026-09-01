@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Button } from '../../components/Button';
+import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
+import { registerStartPath } from '../onboarding/affiliateCode';
 
 const navLinks = [
   { to: '/', label: 'Home' },
@@ -96,8 +98,8 @@ export function PublicLayout() {
             <Link to="/auth">
               <Button variant="ghost">Sign in</Button>
             </Link>
-            <Link to="/auth/register/start">
-              <Button variant="primary">Start free trial</Button>
+            <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+              <Button variant="primary">Create account</Button>
             </Link>
           </div>
         </div>

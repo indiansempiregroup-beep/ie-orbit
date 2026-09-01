@@ -233,6 +233,15 @@
   padding-bottom: 52px;
 }
 
+.public-hero-eyebrow {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #99f6e4;
+}
+
 .public-kicker,
 .public-badge {
   margin: 0 0 14px;
@@ -768,6 +777,24 @@
 .public-faq p {
   margin: 0 0 16px;
   color: var(--pub-muted);
+}
+
+.public-faq details .public-list {
+  margin: 0 0 16px;
+  padding-left: 1.2rem;
+}
+
+.public-faq details .public-list li + li {
+  margin-top: 6px;
+}
+
+.public-faq details p + p {
+  margin-top: 10px;
+}
+
+.public-faq details p + .public-list,
+.public-faq details .public-list + p {
+  margin-top: 10px;
 }
 
 .public-contact-grid {

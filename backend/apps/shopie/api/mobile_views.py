@@ -19,6 +19,7 @@ from apps.common.api.responses import success_response
 from apps.common.upi import build_upi_pay_url
 from apps.platform_media.models import MediaFolderType, MediaVisibility
 from apps.platform_media.services import MediaService
+from apps.shopie.services.merchant_payments import MerchantPaymentService
 from apps.shopie.api.serializers import (
     CustomerReferralSerializer,
     MobileShopOrderSerializer,
@@ -75,6 +76,37 @@ def _scope_from_request(request: Request) -> tuple[Tenant, Business]:
     return _resolve_tenant_business(
         tenant_slug=serializer.validated_data["tenant_slug"],
         business_code=serializer.validated_data["business_code"],
+    )
+
+
+def _resolve_mobile_shop_payment_method(
+    *,
+    request: Request,
+    business: Business,
+    fulfillment_mode: str,
+) -> str:
+    raw = str(request.data.get("payment_method") or "").strip().lower()
+    if raw:
+        return raw
+    mode = str(fulfillment_mode or "").strip().lower()
+    if mode not in {FulfillmentMode.PICKUP, FulfillmentMode.DELIVERY}:
+        return "cash"
+    shop_settings = MerchantPaymentService().ensure_settings(business=business)
+    upi_available = bool(
+        str(getattr(business, "upi_vpa", "") or "").strip()
+        or str(getattr(business, "payment_qr_url", "") or "").strip()
+    )
+    if shop_settings.cod_enabled:
+        return "cash"
+    if upi_available:
+        return "upi"
+    raise DjangoValidationError(
+        {
+            "payment_method": (
+                "This shop has not configured online payment options yet. "
+                "Contact the shop to complete your order."
+            )
+        }
     )
 
 
@@ -301,6 +333,11 @@ class MobileShopOrderListCreateView(APIView):
             points_to_redeem = int(request.data.get("points_to_redeem") or 0)
         except (TypeError, ValueError):
             points_to_redeem = 0
+        payment_method = _resolve_mobile_shop_payment_method(
+            request=request,
+            business=business,
+            fulfillment_mode=mode,
+        )
         try:
             order = self.orders.create_order(
                 tenant=tenant,
@@ -318,7 +355,7 @@ class MobileShopOrderListCreateView(APIView):
                 delivery_method=str(request.data.get("delivery_method") or ""),
                 delivery_quote_id=str(request.data.get("delivery_quote_id") or ""),
                 displayed_delivery_fee=request.data.get("displayed_delivery_fee"),
-                payment_method=str(request.data.get("payment_method") or "cash"),
+                payment_method=payment_method,
                 coupon_code=str(request.data.get("coupon_code") or ""),
                 points_to_redeem=points_to_redeem,
                 confirm=False,

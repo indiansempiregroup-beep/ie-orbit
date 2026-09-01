@@ -9,6 +9,8 @@ import type {
   BillingStatus,
   Booking,
   BookingCreateInput,
+  BookingLineItemStaffInput,
+  BookingReassignableStaffResponse,
   Branch,
   BranchCreateInput,
   BranchUpdateInput,
@@ -60,6 +62,7 @@ export function useAvailability(
   staffId?: string,
   durationMinutes = 30,
   serviceId?: string,
+  serviceIds?: string[],
 ) {
   const client = useOpsClient();
   const { businessId, ready } = useWorkspace();
@@ -77,8 +80,9 @@ export function useAvailability(
         business: businessId ?? undefined,
         date,
         staff_id: staffId,
-        service_id: serviceId,
-        duration_minutes: durationMinutes,
+        service_id: serviceIds && serviceIds.length > 1 ? undefined : serviceId,
+        service_ids: serviceIds && serviceIds.length > 1 ? serviceIds : undefined,
+        duration_minutes: serviceIds && serviceIds.length > 1 ? undefined : durationMinutes,
         interval_minutes: 30,
       });
       if (seq !== requestSeq.current) return;
@@ -88,13 +92,46 @@ export function useAvailability(
         setLoading(false);
       }
     }
-  }, [client, ready, date, staffId, durationMinutes, serviceId, businessId]);
+  }, [client, ready, date, staffId, durationMinutes, serviceId, serviceIds, businessId]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
   return { slots, loading, reload };
+}
+
+export function useReassignableStaff(bookingId?: string, enabled = false) {
+  const client = useOpsClient();
+  const [data, setData] = useState<BookingReassignableStaffResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!client || !bookingId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await client.bookings.reassignableStaff(bookingId);
+      setData(response.data);
+    } catch (err) {
+      setData(null);
+      setError(err instanceof Error ? err.message : 'Unable to load available staff.');
+    } finally {
+      setLoading(false);
+    }
+  }, [client, bookingId]);
+
+  useEffect(() => {
+    if (!enabled || !bookingId) {
+      setData(null);
+      setError(null);
+      return;
+    }
+    void reload();
+  }, [enabled, bookingId, reload]);
+
+  return { data, loading, error, reload };
 }
 
 export function useGlobalSearch(term: string) {
@@ -611,6 +648,14 @@ export function useBookingMutations() {
     reschedule: async (id: string, start_at: string, reason?: string) => {
       if (!client) throw new Error('Not ready');
       return (await client.bookings.reschedule(id, { start_at, reason })).data;
+    },
+    updateStaff: async (id: string, staff_id: string | null) => {
+      if (!client) throw new Error('Not ready');
+      return (await client.bookings.patch(id, { staff_id })).data;
+    },
+    updateLineItemStaff: async (id: string, line_item_staff: BookingLineItemStaffInput[]) => {
+      if (!client) throw new Error('Not ready');
+      return (await client.bookings.patch(id, { line_item_staff })).data;
     },
   };
 }

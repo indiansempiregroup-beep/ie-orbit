@@ -21,6 +21,21 @@ type Props = {
   height?: number;
 };
 
+function placesErrorMessage(err: unknown, fallback: string): string {
+  const message = err instanceof Error ? err.message : fallback;
+  if (/not configured/i.test(message)) {
+    return 'Address search is temporarily unavailable. Contact support@indiansempire.com.';
+  }
+  return message || fallback;
+}
+
+function geolocationErrorMessage(error: GeolocationPositionError): string {
+  if (error.code === 1) return 'Allow location access in your browser settings and try again.';
+  if (error.code === 2) return 'Unable to determine your location. Try searching instead.';
+  if (error.code === 3) return 'Location request timed out. Try again.';
+  return error.message || 'Allow location access and try again.';
+}
+
 function newSessionToken() {
   return globalThis.crypto?.randomUUID?.() ?? `sess-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -101,7 +116,7 @@ export function AddressLocationPicker({
           setPredictions(response.data.predictions);
         } catch (err) {
           setPredictions([]);
-          setError(err instanceof Error ? err.message : 'Unable to search addresses.');
+          setError(placesErrorMessage(err, 'Unable to search addresses.'));
         } finally {
           setLoading(false);
         }
@@ -134,7 +149,7 @@ export function AddressLocationPicker({
       sessionTokenRef.current = newSessionToken();
       onPlaceSelected(asPlace(response.data));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load this place.');
+      setError(placesErrorMessage(err, 'Unable to load this place.'));
     } finally {
       setLoading(false);
     }
@@ -155,7 +170,7 @@ export function AddressLocationPicker({
       setPredictions([]);
       onPlaceSelected(place);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to identify this map location.');
+      setError(placesErrorMessage(err, 'Unable to identify this map location.'));
     } finally {
       setLoading(false);
     }
@@ -173,7 +188,7 @@ export function AddressLocationPicker({
       },
       (locationError) => {
         setLoading(false);
-        setError(locationError.message || 'Allow location access and try again.');
+        setError(geolocationErrorMessage(locationError));
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
     );
@@ -215,6 +230,11 @@ export function AddressLocationPicker({
               </button>
             ))}
           </div>
+        ) : null}
+        {!loading && typedTerm.trim().length > 0 && typedTerm.trim().length < 3 ? (
+          <span style={{ display: 'block', marginTop: 6, color: '#6b7280', fontSize: 12 }}>
+            Type at least 3 characters to search.
+          </span>
         ) : null}
       </div>
       <AddressMapPin

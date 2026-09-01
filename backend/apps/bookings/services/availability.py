@@ -390,6 +390,202 @@ class AvailabilityService:
             after_minutes=after,
         )
 
+    def default_service_duration_minutes(self, *, service_id: Any) -> int:
+        from apps.services.models import ServiceDuration
+
+        duration = (
+            ServiceDuration.objects.filter(service_id=service_id, is_default=True)
+            .order_by("id")
+            .first()
+        )
+        if duration is None:
+            duration = ServiceDuration.objects.filter(service_id=service_id).order_by("id").first()
+        if duration is None:
+            return 30
+        return int(duration.duration_minutes or 30)
+
+    def resolve_multi_service_buffers(self, *, service_ids: list[Any]) -> BufferPair:
+        if not service_ids:
+            return BufferPair()
+        first = self.service_buffer_defaults(service_id=service_ids[0])
+        last = self.service_buffer_defaults(service_id=service_ids[-1])
+        return BufferPair(before_minutes=first.before_minutes, after_minutes=last.after_minutes)
+
+    def staff_eligible_for_all_services(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        service_ids: list[Any],
+    ) -> list[Any]:
+        if not service_ids:
+            return []
+        candidates = self._eligible_staff_ids(
+            tenant=tenant, business=business, service_id=service_ids[0]
+        )
+        eligible: list[Any] = []
+        for staff_id in candidates:
+            if all(
+                self.staff_can_perform_service(
+                    tenant=tenant, staff_id=staff_id, service_id=service_id
+                )
+                for service_id in service_ids
+            ):
+                eligible.append(staff_id)
+        return eligible
+
+    def staff_segment_is_available(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        staff_id: Any,
+        start_at: datetime,
+        end_at: datetime,
+        exclude_booking: Any | None = None,
+        buffer_before_minutes: int | None = None,
+        buffer_after_minutes: int | None = None,
+    ) -> bool:
+        buffers = BufferPair(
+            before_minutes=int(buffer_before_minutes or 0),
+            after_minutes=int(buffer_after_minutes or 0),
+        )
+        return self._staff_is_available(
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            start_at=start_at,
+            end_at=end_at,
+            exclude_booking=exclude_booking,
+            buffers=buffers,
+        )
+
+    def list_available_staff_for_segment(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        service_id: Any,
+        start_at: datetime,
+        end_at: datetime,
+        exclude_booking: Any | None = None,
+        buffer_before_minutes: int = 0,
+        buffer_after_minutes: int = 0,
+    ) -> list[Any]:
+        """Staff who can perform the service and are free for the requested window."""
+        available: list[Any] = []
+        for staff_id in self._eligible_staff_ids(
+            tenant=tenant,
+            business=business,
+            service_id=service_id,
+        ):
+            if not self.staff_can_perform_service(
+                tenant=tenant,
+                staff_id=staff_id,
+                service_id=service_id,
+            ):
+                continue
+            if self.staff_segment_is_available(
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+                start_at=start_at,
+                end_at=end_at,
+                exclude_booking=exclude_booking,
+                buffer_before_minutes=buffer_before_minutes,
+                buffer_after_minutes=buffer_after_minutes,
+            ):
+                available.append(staff_id)
+        return available
+
+    def available_slots_for_items(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        target_date: date,
+        items: list[dict[str, Any]],
+        interval_minutes: int = 15,
+        staff_id: Any | None = None,
+        exclude_booking: Any | None = None,
+    ) -> list[AvailabilitySlot]:
+        from apps.bookings.services.multi_service_scheduler import MultiServiceScheduler
+
+        scheduler = MultiServiceScheduler(availability_service=self)
+        normalized = scheduler.normalize_items(tenant=tenant, items=items)
+        service_ids = [item.service_id for item in normalized]
+        total_duration = sum(int(item.duration_minutes or 0) for item in normalized)
+        buffers = self.resolve_multi_service_buffers(service_ids=service_ids)
+
+        if len(normalized) == 1 and staff_id:
+            return self.staff_slots(
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+                target_date=target_date,
+                duration_minutes=total_duration,
+                interval_minutes=interval_minutes,
+                buffers=buffers,
+                service_id=service_ids[0],
+            )
+
+        if len(normalized) == 1:
+            return self.any_staff_slots(
+                tenant=tenant,
+                business=business,
+                target_date=target_date,
+                duration_minutes=total_duration,
+                interval_minutes=interval_minutes,
+                buffers=buffers,
+                service_id=service_ids[0],
+            )
+
+        first_item = normalized[0]
+        first_duration = int(first_item.duration_minutes or 0)
+        first_buffers = self.service_buffer_defaults(service_id=service_ids[0])
+        if staff_id:
+            base_slots = self.staff_slots(
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+                target_date=target_date,
+                duration_minutes=first_duration,
+                interval_minutes=interval_minutes,
+                buffers=first_buffers,
+                service_id=service_ids[0],
+            )
+        else:
+            base_slots = self.any_staff_slots(
+                tenant=tenant,
+                business=business,
+                target_date=target_date,
+                duration_minutes=first_duration,
+                interval_minutes=interval_minutes,
+                buffers=first_buffers,
+                service_id=service_ids[0],
+            )
+
+        total_duration_delta = timedelta(minutes=total_duration)
+        viable: list[AvailabilitySlot] = []
+        for slot in base_slots:
+            if scheduler.can_plan_at(
+                tenant=tenant,
+                business=business,
+                items=normalized,
+                start_at=slot.start_at,
+                preferred_staff_id=staff_id,
+                exclude_booking=exclude_booking,
+            ):
+                viable.append(
+                    AvailabilitySlot(
+                        start_at=slot.start_at,
+                        end_at=slot.start_at + total_duration_delta,
+                        staff_id=slot.staff_id,
+                        capacity=slot.capacity,
+                    )
+                )
+        return viable
+
     def _staff_is_available(
         self,
         *,

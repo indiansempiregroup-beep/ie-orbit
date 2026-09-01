@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
@@ -9,6 +11,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.bookings.api.display import build_booking_display_context
 from apps.bookings.api.permissions import BookingAccessPermission
 from apps.bookings.api.serializers import (
     AvailabilityQuerySerializer,
@@ -41,13 +44,49 @@ from apps.services.models import Service
 from apps.bookings.repositories import BookingRepository
 from apps.bookings.services import AvailabilityService, BookingService
 from apps.businesses.models import Business
-from apps.common.api.responses import success_response
-from apps.common.pagination.helpers import paginated_list_response
+from apps.common.api.responses import pagination_meta, success_response
+from apps.common.pagination.cursor import StandardCursorPagination
+from apps.common.pagination.helpers import _cursor_from_link
 from apps.common.utils.workspace_access import (
     is_workspace_manager_or_above,
     linked_staff_ids_for_user,
 )
 from apps.staff.repositories import StaffRepository
+
+
+def _serialize_booking(*, tenant, booking: Booking, status_code: int = status.HTTP_200_OK, request: Request) -> Response:
+    context = build_booking_display_context(tenant=tenant, bookings=[booking])
+    return success_response(
+        BookingSerializer(booking, context=context).data,
+        status_code=status_code,
+        request_id=getattr(request, "request_id", None),
+    )
+
+
+def _serialize_booking_page(*, tenant, bookings: list[Booking], request: Request) -> Response:
+    paginator = StandardCursorPagination()
+    queryset = bookings
+    page = paginator.paginate_queryset(queryset, request, view=None)
+    if page is None:
+        page_size = paginator.get_page_size(request) or paginator.page_size
+        page = list(queryset[: min(page_size, paginator.max_page_size)])
+    else:
+        page = list(page)
+    context = build_booking_display_context(tenant=tenant, bookings=page)
+    data = BookingSerializer(page, many=True, context=context).data
+    next_link = paginator.get_next_link()
+    previous_link = paginator.get_previous_link()
+    if next_link or previous_link:
+        return success_response(
+            data,
+            request_id=getattr(request, "request_id", None),
+            meta=pagination_meta(
+                next_cursor=_cursor_from_link(next_link),
+                previous_cursor=_cursor_from_link(previous_link),
+                page_size=paginator.get_page_size(request),
+            ),
+        )
+    return success_response(data, request_id=getattr(request, "request_id", None))
 
 _staff_repository = StaffRepository()
 
@@ -104,11 +143,10 @@ class BookingListCreateView(APIView):
             user=request.user,
             params=request.query_params,
         )
-        return paginated_list_response(
-            request,
-            bookings,
-            BookingSerializer,
-            request_id=getattr(request, "request_id", None),
+        return _serialize_booking_page(
+            tenant=request.current_tenant,
+            bookings=bookings,
+            request=request,
         )
 
     @extend_schema(
@@ -141,10 +179,11 @@ class BookingListCreateView(APIView):
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc)) from exc
-        return success_response(
-            BookingSerializer(booking).data,
+        return _serialize_booking(
+            tenant=request.current_tenant,
+            booking=booking,
             status_code=status.HTTP_201_CREATED,
-            request_id=getattr(request, "request_id", None),
+            request=request,
         )
 
     def _business(self, request: Request, business_id: object | None) -> Business:
@@ -237,10 +276,7 @@ class BookingDetailView(APIView):
     @extend_schema(tags=["Bookings"], responses={200: BookingSerializer})
     def get(self, request: Request, booking_id: str) -> Response:
         booking = self._booking(request, booking_id)
-        return success_response(
-            BookingSerializer(booking).data,
-            request_id=getattr(request, "request_id", None),
-        )
+        return _serialize_booking(tenant=request.current_tenant, booking=booking, request=request)
 
     @extend_schema(
         tags=["Bookings"], request=BookingPatchSerializer, responses={200: BookingSerializer}
@@ -257,10 +293,12 @@ class BookingDetailView(APIView):
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc)) from exc
-        return success_response(
-            BookingSerializer(booking).data,
-            request_id=getattr(request, "request_id", None),
+        booking = self.repository.get_for_request(
+            booking_id=booking.id,
+            tenant=request.current_tenant,
+            user=request.user,
         )
+        return _serialize_booking(tenant=request.current_tenant, booking=booking, request=request)
 
     @extend_schema(
         tags=["Bookings"],
@@ -306,10 +344,12 @@ class BookingActionView(BookingDetailView):
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc)) from exc
-        return success_response(
-            BookingSerializer(booking).data,
-            request_id=getattr(request, "request_id", None),
+        booking = self.repository.get_for_request(
+            booking_id=booking.id,
+            tenant=request.current_tenant,
+            user=request.user,
         )
+        return _serialize_booking(tenant=request.current_tenant, booking=booking, request=request)
 
 
 class BookingConfirmView(BookingActionView):
@@ -347,8 +387,82 @@ class BookingRescheduleView(BookingDetailView):
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc)) from exc
+        booking = self.repository.get_for_request(
+            booking_id=booking.id,
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return _serialize_booking(tenant=request.current_tenant, booking=booking, request=request)
+
+
+class BookingReassignableStaffView(BookingDetailView):
+    @extend_schema(tags=["Bookings"])
+    def get(self, request: Request, booking_id: str) -> Response:
+        booking = self._booking(request, booking_id)
+        from apps.bookings.services.multi_service_scheduler import MultiServiceScheduler
+        from apps.staff.models import Staff
+
+        availability = AvailabilityService()
+        scheduler = MultiServiceScheduler(availability_service=availability)
+        line_items = list(booking.line_items.order_by("sort_order", "start_at"))
+
+        def staff_payload(staff_ids: list[Any]) -> list[dict[str, str]]:
+            rows = Staff.objects.require_tenant(booking.tenant).filter(id__in=staff_ids)
+            by_id = {str(row.id): row for row in rows}
+            payload: list[dict[str, str]] = []
+            for staff_id in staff_ids:
+                member = by_id.get(str(staff_id))
+                if member is None:
+                    continue
+                payload.append(
+                    {
+                        "id": str(member.id),
+                        "display_name": member.display_name or member.full_name or str(member.id),
+                    }
+                )
+            return payload
+
+        if len(line_items) > 1:
+            line_item_options: dict[str, list[dict[str, str]]] = {}
+            for item in line_items:
+                staff_ids = availability._eligible_staff_ids(
+                    tenant=booking.tenant,
+                    business=booking.business,
+                    service_id=item.service_id,
+                )
+                line_item_options[str(item.id)] = staff_payload(staff_ids)
+            return success_response(
+                {"mode": "per_line", "line_item_options": line_item_options},
+                request_id=getattr(request, "request_id", None),
+            )
+
+        if line_items:
+            raw_items = [
+                {
+                    "service_id": item.service_id,
+                    "duration_minutes": item.duration_minutes,
+                    "sort_order": item.sort_order,
+                }
+                for item in line_items
+            ]
+            normalized_items = scheduler.normalize_items(tenant=booking.tenant, items=raw_items)
+            service_ids = [item.service_id for item in normalized_items]
+        else:
+            normalized_items = None
+            service_ids = [booking.service_id] if booking.service_id else []
+
+        eligible = (
+            availability.staff_eligible_for_all_services(
+                tenant=booking.tenant,
+                business=booking.business,
+                service_ids=service_ids,
+            )
+            if service_ids
+            else []
+        )
+
         return success_response(
-            BookingSerializer(booking).data,
+            {"mode": "single", "staff_options": staff_payload(eligible)},
             request_id=getattr(request, "request_id", None),
         )
 
@@ -382,16 +496,47 @@ class AvailabilityView(APIView):
             request,
             serializer.validated_data.get("staff_id"),
         )
-        slots = self.service.available_slots(
-            tenant=request.current_tenant,
-            business=business,
-            staff_id=staff_id,
-            service_id=serializer.validated_data.get("service_id"),
-            target_date=serializer.validated_data["date"],
-            duration_minutes=serializer.validated_data["duration_minutes"],
-            interval_minutes=serializer.validated_data["interval_minutes"],
-            buffer_minutes=serializer.validated_data.get("buffer_minutes"),
-        )
+        items = serializer.validated_data.get("items")
+        service_ids = serializer.validated_data.get("service_ids") or []
+        service_id = serializer.validated_data.get("service_id")
+        if service_id and not service_ids:
+            service_ids = [service_id]
+
+        if items:
+            slots = self.service.available_slots_for_items(
+                tenant=request.current_tenant,
+                business=business,
+                target_date=serializer.validated_data["date"],
+                items=items,
+                interval_minutes=serializer.validated_data["interval_minutes"],
+                staff_id=staff_id,
+            )
+        elif len(service_ids) > 1:
+            slots = self.service.available_slots_for_items(
+                tenant=request.current_tenant,
+                business=business,
+                target_date=serializer.validated_data["date"],
+                items=[{"service_id": sid} for sid in service_ids],
+                interval_minutes=serializer.validated_data["interval_minutes"],
+                staff_id=staff_id,
+            )
+        else:
+            duration_minutes = serializer.validated_data.get("duration_minutes")
+            if duration_minutes is None and service_ids:
+                duration_minutes = self.service.default_service_duration_minutes(
+                    service_id=service_ids[0]
+                )
+            duration_minutes = duration_minutes or 30
+            slots = self.service.available_slots(
+                tenant=request.current_tenant,
+                business=business,
+                staff_id=staff_id,
+                service_id=service_ids[0] if service_ids else service_id,
+                target_date=serializer.validated_data["date"],
+                duration_minutes=duration_minutes,
+                interval_minutes=serializer.validated_data["interval_minutes"],
+                buffer_minutes=serializer.validated_data.get("buffer_minutes"),
+            )
         return success_response(
             [slot.as_dict() for slot in slots],
             request_id=getattr(request, "request_id", None),

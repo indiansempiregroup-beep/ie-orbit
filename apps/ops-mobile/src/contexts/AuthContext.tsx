@@ -73,7 +73,7 @@ type AuthState = {
   loginWithGoogle: (idToken: string, rememberMe?: boolean) => Promise<void>;
   loginWithBiometrics: () => Promise<void>;
   /** Enable Face ID / fingerprint using the current session (Face ID only — no password). */
-  enableBiometrics: () => Promise<void>;
+  enableBiometrics: (emailOverride?: string) => Promise<void>;
   disableBiometrics: () => Promise<void>;
   refreshBiometricState: () => Promise<void>;
   bootstrapSession: (payload: WorkspaceProvisionResponse) => Promise<void>;
@@ -118,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
   const refreshTokenRef = useRef<string | null>(null);
+  const userEmailRef = useRef<string | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
   const accessIssuedAtRef = useRef<number>(0);
@@ -236,6 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(handoff.access);
         setUser(me.data);
         refreshTokenRef.current = handoff.refresh;
+        userEmailRef.current = me.data.email?.trim() || null;
         accessIssuedAtRef.current = Date.now();
         await writeToken(ACCESS_KEY, handoff.access);
         await writeToken(REFRESH_KEY, handoff.refresh);
@@ -251,6 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!access && !migrated.refresh) {
         setToken(null);
         setUser(null);
+        userEmailRef.current = null;
         return;
       }
 
@@ -261,6 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const response = await opsClient.auth.me();
           setToken(access);
           setUser(response.data);
+          userEmailRef.current = response.data.email?.trim() || null;
           // Align issued-at with JWT remaining lifetime (not "now" for a stale stored token).
           accessIssuedAtRef.current = Date.now() - (ACCESS_TTL_SECONDS - remaining) * 1000;
           scheduleRefresh(remaining);
@@ -279,10 +283,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setToken(null);
         setUser(null);
+        userEmailRef.current = null;
         return;
       }
       const me = await opsClient.auth.me();
       setUser(me.data);
+      userEmailRef.current = me.data.email?.trim() || null;
       scheduleRefresh(remainingAccessSeconds(refreshed) || ACCESS_TTL_SECONDS);
     } catch {
       await writeToken(ACCESS_KEY, null);
@@ -293,6 +299,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setToken(null);
       setUser(null);
+      userEmailRef.current = null;
     } finally {
       setLoading(false);
     }
@@ -329,6 +336,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(payload.access);
     setUser(nextUser);
     refreshTokenRef.current = refresh;
+    userEmailRef.current = nextUser.email?.trim() || null;
     accessIssuedAtRef.current = Date.now();
     await writeToken(ACCESS_KEY, payload.access);
     await writeToken(REFRESH_KEY, refresh);
@@ -420,8 +428,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applySession, refreshBiometricState]);
 
-  const enableBiometrics = useCallback(async () => {
-    const email = user?.email?.trim();
+  const enableBiometrics = useCallback(async (emailOverride?: string) => {
+    const email = emailOverride?.trim() || user?.email?.trim() || userEmailRef.current?.trim();
     let refresh = refreshTokenRef.current || (await readToken(REFRESH_KEY));
 
     // Recovery: biometric vault may already hold a refresh from a prior soft logout.
@@ -469,6 +477,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(payload.access);
       setUser(payload.user);
       refreshTokenRef.current = payload.refresh;
+      userEmailRef.current = payload.user.email?.trim() || null;
       accessIssuedAtRef.current = Date.now();
       await writeToken(ACCESS_KEY, payload.access);
       await writeToken(REFRESH_KEY, payload.refresh);
@@ -494,6 +503,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await writeToken(ACCESS_KEY, null);
       await writeToken(REFRESH_KEY, null);
       refreshTokenRef.current = null;
+      userEmailRef.current = null;
       setToken(null);
       setUser(null);
       setIsImpersonating(false);
@@ -510,14 +520,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const biometricOn = await isBiometricLoginEnabled();
       const refresh = refreshTokenRef.current || (await readToken(REFRESH_KEY));
 
-      if (biometricOn && refresh && user?.email) {
+      const email = user?.email?.trim() || userEmailRef.current?.trim();
+      if (biometricOn && refresh && email) {
         // Soft sign-out: keep refresh for Face ID / fingerprint login.
-        await storeBiometricSession(user.email, refresh);
+        await storeBiometricSession(email, refresh);
         await writeToken(ACCESS_KEY, null);
         // Keep REFRESH_KEY so a later password re-login still has a path if needed;
         // biometric vault is the primary source after soft logout.
         setToken(null);
         setUser(null);
+        userEmailRef.current = null;
         refreshTokenRef.current = null;
         await refreshBiometricState();
         return;
@@ -531,6 +543,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await writeToken(ACCESS_KEY, null);
       await writeToken(REFRESH_KEY, null);
       refreshTokenRef.current = null;
+      userEmailRef.current = null;
       setToken(null);
       setUser(null);
       await refreshBiometricState();
@@ -542,6 +555,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setToken(null);
       setUser(null);
+      userEmailRef.current = null;
       await refreshBiometricState();
     } finally {
       setLoading(false);
@@ -552,6 +566,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) return;
     const response = await opsClient.auth.me();
     setUser(response.data);
+    userEmailRef.current = response.data.email?.trim() || null;
   }, [token]);
 
   const value = useMemo(

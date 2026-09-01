@@ -57,6 +57,7 @@ export function PaymentSettingsScreen() {
   const [cashfreeSecret, setCashfreeSecret] = useState('');
   const [cashfreeWebhookUrl, setCashfreeWebhookUrl] = useState('');
   const [upiVpa, setUpiVpa] = useState('');
+  const [codEnabled, setCodEnabled] = useState(true);
   const [paymentQrAsset, setPaymentQrAsset] = useState<ImagePickerAsset | null>(null);
   const [paymentQrPreview, setPaymentQrPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -82,6 +83,7 @@ export function PaymentSettingsScreen() {
       setWebhookUrl(data.webhook_url);
       setWebhookConfigured(data.webhook_configured);
       if (data.upi_vpa) setUpiVpa(data.upi_vpa);
+      setCodEnabled(Boolean(data.cod_enabled));
       const cashfree = data.cashfree;
       if (cashfree) {
         setCashfreeConfigured(cashfree.configured);
@@ -139,6 +141,12 @@ export function PaymentSettingsScreen() {
         upi_vpa: upiVpa.trim(),
         payment_qr_url: paymentQrUrl || '',
       });
+      const codResponse = await client.shop.updateMerchantPaymentSettings({
+        business_id: businessId,
+        cod_enabled: codEnabled,
+        upi_vpa: upiVpa.trim(),
+      });
+      applySettings(codResponse.data);
       if (available && (keyId.trim() || connected)) {
         const response = await client.shop.updateMerchantPaymentSettings({
           business_id: businessId,
@@ -345,6 +353,18 @@ export function PaymentSettingsScreen() {
             ) : null}
           </View>
         ) : null}
+      </FormSection>
+
+      <FormSection title="Cash on delivery" subtitle="Online orders paid in cash at pickup or delivery.">
+        <View style={styles.statusRow}>
+          <View style={styles.statusCopy}>
+            <Text style={styles.statusTitle}>Allow cash payments</Text>
+            <Text style={styles.statusHint}>
+              When off, customers must pay with UPI before or after placing the order.
+            </Text>
+          </View>
+          <Switch value={codEnabled} onValueChange={setCodEnabled} />
+        </View>
       </FormSection>
 
       <FormSection title="UPI & QR" subtitle="Fallback for offline collection.">

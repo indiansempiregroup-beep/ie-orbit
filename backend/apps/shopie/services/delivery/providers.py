@@ -13,6 +13,8 @@ from typing import Any, Protocol
 
 from django.core.exceptions import ValidationError
 
+from apps.shopie.services.delivery.contact import porter_book_payload, porter_quote_payload
+
 
 @dataclass(frozen=True)
 class DeliveryQuote:
@@ -243,11 +245,7 @@ class PorterProvider(JsonHttpProvider):
         raw = self._request(
             "POST",
             str(self.config.get("quote_path") or "/v1/get_quote"),
-            payload={
-                "pickup_details": payload["pickup"],
-                "drop_details": payload["drop"],
-                "customer": payload.get("customer") or {},
-            },
+            payload=porter_quote_payload(payload),
         )
         fee = _value(raw, "fee", "estimated_fare", "fare.amount", "vehicles.0.fare")
         if fee is None:
@@ -264,7 +262,7 @@ class PorterProvider(JsonHttpProvider):
         raw = self._request(
             "POST",
             str(self.config.get("book_path") or "/v1/orders/create"),
-            payload=payload,
+            payload=porter_book_payload(payload),
         )
         return {
             **raw,

@@ -19,7 +19,7 @@ import type { MainTabParamList, RootStackParamList } from '../../navigation/type
 export function DiscoverScreen() {
   const navigation = useNavigation<
     CompositeNavigationProp<
-      BottomTabNavigationProp<MainTabParamList, 'Discover'>,
+      BottomTabNavigationProp<MainTabParamList, 'Services'>,
       NativeStackNavigationProp<RootStackParamList>
     >
   >();
@@ -75,7 +75,7 @@ export function DiscoverScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
-        <Text style={styles.title}>Discover</Text>
+        <Text style={styles.title}>Services</Text>
         <Input placeholder="Search services..." leftIcon="search" value={query} onChangeText={setQuery} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {categoryFilters.map((cat) => (

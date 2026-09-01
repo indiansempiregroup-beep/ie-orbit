@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useBookingCreation, useBookingList, useCancelBooking, useConfirmBooking, type BookingCreateInput } from './bookingsHooks';
+import { useBookingCreation, useBookingList, useCancelBooking, useConfirmBooking } from './bookingsHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
 import { useBranchesQuery } from '../settings/branchesHooks';
 import { buildNameMap } from '../../lib/managementEntities';
@@ -10,6 +10,8 @@ import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { formatDateTime } from '../../lib/datetime';
+import { ServiceMultiPicker } from './ServiceMultiPicker';
+import { bookingServiceLabel, buildBookingCreateInput } from './bookingHelpers';
 
 export function BookingsPage() {
   const snackbar = useSnackbar();
@@ -23,12 +25,12 @@ export function BookingsPage() {
   const staffQuery = useStaffList();
   const branchesQuery = useBranchesQuery();
   const dialog = useDialog();
-  const [formState, setFormState] = useState<BookingCreateInput>({
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [formState, setFormState] = useState({
     customer_id: '',
-    service_id: '',
-    branch_id: null,
+    staff_id: null as string | null,
+    branch_id: null as string | null,
     start_at: new Date().toISOString(),
-    duration_minutes: 30,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
   const offices = branchesQuery.data ?? [];
@@ -51,6 +53,13 @@ export function BookingsPage() {
   const customerMap = useMemo(() => buildNameMap(customersQuery.data), [customersQuery.data]);
   const serviceMap = useMemo(() => buildNameMap(servicesQuery.data), [servicesQuery.data]);
   const staffMap = useMemo(() => buildNameMap(staffQuery.data), [staffQuery.data]);
+  const selectedServices = useMemo(
+    () =>
+      selectedServiceIds
+        .map((id) => servicesQuery.data?.find((service) => service.id === id))
+        .filter((service): service is NonNullable<typeof service> => Boolean(service)),
+    [selectedServiceIds, servicesQuery.data],
+  );
 
   const filteredBookings = useMemo(() => {
     const bookings = bookingsQuery.data ?? [];
@@ -58,7 +67,7 @@ export function BookingsPage() {
     if (!lower) return bookings;
     return bookings.filter((booking) => {
       const customerName = customerMap.get(String(booking.customer_id)) ?? '';
-      const serviceName = serviceMap.get(String(booking.service_id)) ?? '';
+      const serviceName = bookingServiceLabel(booking, serviceMap);
       const staffName = booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '' : '';
       return [booking.booking_number, customerName, serviceName, staffName, booking.status]
         .filter(Boolean)
@@ -180,8 +189,8 @@ export function BookingsPage() {
                         <span style={tableCellStyle} title={customerMap.get(String(booking.customer_id)) ?? '—'}>
                           {customerMap.get(String(booking.customer_id)) ?? '—'}
                         </span>
-                        <span style={tableCellStyle} title={serviceMap.get(String(booking.service_id)) ?? '—'}>
-                          {serviceMap.get(String(booking.service_id)) ?? '—'}
+                        <span style={tableCellStyle} title={bookingServiceLabel(booking, serviceMap)}>
+                          {bookingServiceLabel(booking, serviceMap)}
                         </span>
                         <span
                           style={tableCellStyle}
@@ -273,16 +282,28 @@ export function BookingsPage() {
               setCreationError('Select an office for this booking.');
               return;
             }
-            createBooking.mutate(formState, {
+            if (!selectedServices.length) {
+              setCreationError('Select at least one service.');
+              return;
+            }
+            createBooking.mutate(
+              buildBookingCreateInput({
+                customerId: formState.customer_id,
+                staffId: formState.staff_id,
+                branchId: formState.branch_id,
+                startAt: formState.start_at,
+                selectedServices,
+              }),
+              {
               onSuccess: () => {
                 snackbar.push('Booking created.', 'success');
                 dialog.hide();
+                setSelectedServiceIds([]);
                 setFormState({
                   customer_id: '',
-                  service_id: '',
+                  staff_id: null,
                   branch_id: offices.length === 1 ? offices[0].id : offices.find((o) => o.is_primary)?.id ?? null,
                   start_at: new Date().toISOString(),
-                  duration_minutes: 30,
                 });
               },
               onError: (err) => {
@@ -304,17 +325,11 @@ export function BookingsPage() {
             ))}
           </select>
 
-          <select
-            required
-            value={formState.service_id}
-            onChange={(event) => setFormState({ ...formState, service_id: event.target.value })}
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-          >
-            <option value="">Select service</option>
-            {servicesQuery.data?.map((service) => (
-              <option key={service.id} value={service.id}>{service.name ?? service.id}</option>
-            ))}
-          </select>
+          <ServiceMultiPicker
+            services={servicesQuery.data ?? []}
+            selectedIds={selectedServiceIds}
+            onChange={setSelectedServiceIds}
+          />
 
           {needsOfficePicker ? (
             <select
@@ -353,19 +368,6 @@ export function BookingsPage() {
               type="datetime-local"
               value={formState.start_at.slice(0, 16)}
               onChange={(event) => setFormState({ ...formState, start_at: new Date(event.target.value).toISOString() })}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-
-          <label style={{ display: 'grid', gap: 8 }}>
-            Duration (minutes)
-            <input
-              required
-              type="number"
-              min={15}
-              step={15}
-              value={formState.duration_minutes}
-              onChange={(event) => setFormState({ ...formState, duration_minutes: Number(event.target.value) })}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
           </label>

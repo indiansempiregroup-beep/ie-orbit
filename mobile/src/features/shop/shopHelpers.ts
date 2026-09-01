@@ -163,22 +163,53 @@ export function shopFulfillmentLabel(mode?: string | null): string {
   return 'Pickup';
 }
 
-export function shopPaymentMethodLabel(method?: string | null): string {
+export function shopPaymentMethodLabel(
+  method?: string | null,
+  fulfillmentMode?: string | null,
+): string {
   const value = String(method || '').toLowerCase();
   if (value === 'upi') return 'UPI';
   if (value === 'card') return 'Card';
   if (value === 'borrow') return 'On account';
-  if (value === 'cash') return 'Cash';
+  if (value === 'cash') {
+    const mode = String(fulfillmentMode || '').toLowerCase();
+    return mode === 'delivery' ? 'Cash on delivery' : 'Pay at pickup';
+  }
   return 'Payment';
 }
 
-export function shopPaymentStatusLabel(status?: string | null): string {
+export function shopPaymentStatusLabel(
+  status?: string | null,
+  paymentMethod?: string | null,
+  fulfillmentMode?: string | null,
+): string {
   const value = String(status || '').toLowerCase();
   if (value === 'paid' || value === 'settled') return 'Paid';
   if (value === 'awaiting_confirmation') return 'Awaiting confirmation';
   if (value === 'rejected') return 'Payment rejected';
+  const method = String(paymentMethod || '').toLowerCase();
+  if (method === 'cash' && (value === 'due' || !value)) {
+    const mode = String(fulfillmentMode || '').toLowerCase();
+    return mode === 'delivery' ? 'Pay on delivery' : 'Pay at pickup';
+  }
   if (value === 'due') return 'Payment due';
   return 'Unpaid';
+}
+
+export function shopOrderNeedsAppPayment(
+  order: Pick<ShopOrder, 'payment_method' | 'payment_status'>,
+): boolean {
+  const method = String(order.payment_method || '').toLowerCase();
+  const status = String(order.payment_status || '').toLowerCase();
+  return method === 'upi' && !['paid', 'settled', 'awaiting_confirmation'].includes(status);
+}
+
+export function shopOrderIsCashOnHandover(
+  order: Pick<ShopOrder, 'payment_method' | 'payment_status'>,
+): boolean {
+  const method = String(order.payment_method || '').toLowerCase();
+  const status = String(order.payment_status || '').toLowerCase();
+  return method === 'cash' && !['paid', 'settled'].includes(status);
 }
 
 export function isShopOrderUnpaid(order: Pick<ShopOrder, 'payment_status'>): boolean {
@@ -451,7 +482,7 @@ export function shopOrderMatchesFilters(
   const mode = String(order.fulfillment_mode || '').toLowerCase();
   if (filters.fulfillment !== 'all' && mode !== filters.fulfillment) return false;
 
-  if (filters.payment === 'unpaid' && !isShopOrderUnpaid(order)) return false;
+  if (filters.payment === 'unpaid' && !shopOrderNeedsAppPayment(order)) return false;
 
   if (filters.period !== 'all') {
     const created = order.created_at ? new Date(order.created_at).getTime() : 0;

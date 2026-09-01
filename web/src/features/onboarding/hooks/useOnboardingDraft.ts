@@ -13,7 +13,7 @@ export function useOnboardingDraft() {
 
   const loadDraft = useCallback((): RegisterWizardFormValues => {
     try {
-      const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+      const raw = sessionStorage.getItem(ONBOARDING_DRAFT_KEY);
       if (!raw) return getDefaultRegisterValues();
       const parsed = JSON.parse(raw) as Partial<RegisterWizardFormValues> & {
         selectedProduct?: string;
@@ -49,12 +49,12 @@ export function useOnboardingDraft() {
 
   const saveDraft = useCallback((values: Partial<RegisterWizardFormValues>) => {
     try {
-      const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+      const raw = sessionStorage.getItem(ONBOARDING_DRAFT_KEY);
       const current = raw
         ? { ...getDefaultRegisterValues(), ...JSON.parse(raw) }
         : getDefaultRegisterValues();
       const { googleIdToken: _googleIdToken, ...safeValues } = { ...current, ...values };
-      localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(safeValues));
+      sessionStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(safeValues));
     } catch {
       // ignore
     }
@@ -62,7 +62,7 @@ export function useOnboardingDraft() {
 
   const clearDraft = useCallback(() => {
     try {
-      localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+      sessionStorage.removeItem(ONBOARDING_DRAFT_KEY);
     } catch {
       // ignore
     }

@@ -85,6 +85,82 @@ class StaffDirectNotifier:
             "user_ids": sent_user_ids,
         }
 
+    @transaction.atomic
+    def notify_staff_members(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        staff_ids: list[Any],
+        subject: str,
+        body: str,
+        event_type: str = "BookingStaffAssigned",
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        from apps.staff.models import EmploymentStatus, Staff
+
+        if not staff_ids:
+            return {"sent_channels": [], "notification_ids": [], "user_ids": []}
+
+        staff_rows = (
+            Staff.objects.require_tenant(tenant)
+            .filter(
+                id__in=staff_ids,
+                business=business,
+                employment_status=EmploymentStatus.ACTIVE,
+                user__isnull=False,
+                user__is_active=True,
+            )
+            .select_related("user")
+        )
+        sent_user_ids: list[str] = []
+        notification_ids: list[str] = []
+        meta = {
+            "event_type": event_type,
+            "audience": AUDIENCE_ADMIN,
+            **(metadata or {}),
+        }
+
+        for staff in staff_rows:
+            user = staff.user
+            if user is None:
+                continue
+            booking_id = meta.get("booking_id")
+            notification = Notification.objects.create(
+                tenant=tenant,
+                business=business,
+                user=user,
+                booking_id=booking_id or None,
+                channel=NotificationChannel.IN_APP,
+                subject=subject,
+                body=body,
+                status=NotificationStatus.SENT,
+                external_id="in_app",
+                metadata=meta,
+            )
+            NotificationQueue.objects.create(
+                tenant=tenant,
+                notification=notification,
+                next_attempt_at=timezone.now(),
+            )
+            publish_notification_created(notification=notification)
+            self._send_push(
+                notification=notification,
+                user=user,
+                subject=subject,
+                body=body,
+                event_type=event_type,
+                metadata=meta,
+            )
+            sent_user_ids.append(str(user.id))
+            notification_ids.append(str(notification.id))
+
+        return {
+            "sent_channels": ["in_app"] if notification_ids else [],
+            "notification_ids": notification_ids,
+            "user_ids": sent_user_ids,
+        }
+
     def _send_push(
         self,
         *,

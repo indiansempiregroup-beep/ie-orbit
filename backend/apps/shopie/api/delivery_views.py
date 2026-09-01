@@ -217,6 +217,8 @@ class MobileShopDeliveryQuoteView(APIView):
         customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
         source = _quote_source(tenant=tenant, business=business, data=data)
         try:
+            from apps.customers.services.contact import resolve_customer_phone
+
             result = self.delivery.quote(
                 tenant=tenant,
                 business=business,
@@ -227,10 +229,14 @@ class MobileShopDeliveryQuoteView(APIView):
                     "city": data.get("city") or "",
                     "state": data.get("state") or "",
                     "postal_code": data.get("postal_code") or "",
+                    "contact": {
+                        "name": customer.display_name,
+                        "phone": resolve_customer_phone(customer),
+                    },
                 },
                 subtotal=Decimal(data["subtotal"]),
                 customer_name=customer.display_name,
-                customer_phone=customer.phone_number,
+                customer_phone=resolve_customer_phone(customer),
                 branch=source.branch if source else None,
                 pickup_source=source.location if source else None,
             )

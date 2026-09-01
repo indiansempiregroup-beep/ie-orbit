@@ -2,6 +2,12 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { MobileBooking } from '@ie-orbit/sdk';
+import {
+  bookingServiceLabel,
+  bookingStaffLabel,
+  bookingStartsInLabel,
+  bookingTimeRangeLabel,
+} from '../utils/bookingDisplay';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { formatTime, mapBookingStatus } from '../utils/format';
 
@@ -19,38 +25,80 @@ const STATUS_COPY: Record<string, { title: string; bg: string; text: string }> =
   noshow: { title: 'No show', bg: '#FFEDD5', text: '#C2410C' },
 };
 
+const TIMING_COLORS = {
+  now: { bg: '#DCFCE7', text: '#166534' },
+  soon: { bg: '#EFF6FF', text: '#1D4ED8' },
+  later: { bg: '#F1F5F9', text: '#475569' },
+  done: { bg: '#F1F5F9', text: '#64748B' },
+} as const;
+
 export function BookingCard({ booking, onPress, primaryColor = colors.primary }: Props) {
   const mapped = mapBookingStatus(booking.status);
   const tone = STATUS_COPY[mapped] ?? STATUS_COPY.pending;
+  const timing = bookingStartsInLabel(booking.start_at, booking.end_at);
+  const timingColors = TIMING_COLORS[timing.tone];
+  const serviceName = bookingServiceLabel(booking);
+  const staffLabel = bookingStaffLabel(booking);
+  const timeRange = bookingTimeRangeLabel(booking.start_at, booking.end_at);
   const date = new Date(booking.start_at);
   const dateLabel = Number.isNaN(date.getTime())
     ? '—'
     : date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const serviceCount = booking.items?.length ?? 0;
+  const locationLabel = booking.branch?.display_name || 'Salon';
 
   const content = (
     <View style={styles.card}>
+      <View style={styles.topRow}>
+        <View style={[styles.timingChip, { backgroundColor: timingColors.bg }]}>
+          <Feather
+            name={timing.tone === 'now' ? 'activity' : 'clock'}
+            size={12}
+            color={timingColors.text}
+          />
+          <Text style={[styles.timingText, { color: timingColors.text }]}>{timing.label}</Text>
+        </View>
+        <View style={[styles.pill, { backgroundColor: tone.bg }]}>
+          <View style={[styles.dot, { backgroundColor: tone.text }]} />
+          <Text style={[styles.pillText, { color: tone.text }]}>{tone.title}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.title}>{serviceName}</Text>
+
       <View style={styles.metaRow}>
-        <View style={styles.metaCol}>
-          <Text style={styles.kicker}>APPOINTMENT</Text>
-          <Text style={styles.metaValue}>{dateLabel}</Text>
-        </View>
-        <View style={styles.metaCol}>
-          <Text style={styles.kicker}>TIME</Text>
-          <Text style={styles.metaValue}>{formatTime(booking.start_at)}</Text>
-        </View>
-        <View style={[styles.metaCol, { flex: 1 }]}>
-          <Text style={styles.kicker}>WITH</Text>
-          <Text style={styles.metaValue} numberOfLines={1}>
-            {booking.staff_name || booking.branch?.display_name || 'Shop'}
+        <Feather name="calendar" size={12} color={colors.mutedForeground} />
+        <Text style={styles.metaText}>
+          {dateLabel} · {timeRange}
+          {booking.duration_minutes ? ` · ${booking.duration_minutes} min` : ''}
+        </Text>
+      </View>
+
+      <View style={styles.metaRow}>
+        <Feather name="map-pin" size={12} color={colors.mutedForeground} />
+        <Text style={styles.metaText} numberOfLines={1}>
+          {locationLabel}
+        </Text>
+      </View>
+
+      {staffLabel ? (
+        <View style={styles.metaRow}>
+          <Feather name="user-check" size={12} color={colors.mutedForeground} />
+          <Text style={styles.metaText} numberOfLines={2}>
+            with {staffLabel}
           </Text>
         </View>
-      </View>
-      <Text style={styles.title}>{booking.service_name}</Text>
-      <View style={[styles.pill, { backgroundColor: tone.bg }]}>
-        <View style={[styles.dot, { backgroundColor: tone.text }]} />
-        <Text style={[styles.pillText, { color: tone.text }]}>{tone.title}</Text>
-      </View>
+      ) : null}
+
+      {serviceCount > 1 ? (
+        <View style={styles.metaRow}>
+          <Feather name="layers" size={12} color={colors.mutedForeground} />
+          <Text style={styles.metaText}>{serviceCount} services</Text>
+        </View>
+      ) : null}
+
       <Text style={styles.ref}>#{booking.booking_number}</Text>
+
       <View style={[styles.action, { borderColor: primaryColor }]}>
         <Text style={[styles.actionText, { color: primaryColor }]}>View details</Text>
         <Feather name="chevron-right" size={16} color={primaryColor} />
@@ -70,27 +118,39 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
-  metaRow: { flexDirection: 'row', gap: spacing.md },
-  metaCol: { minWidth: 72 },
-  kicker: { ...typography.tiny, color: colors.mutedForeground, letterSpacing: 0.4, fontWeight: '700' },
-  metaValue: { ...typography.caption, color: colors.foreground, fontWeight: '700', marginTop: 2 },
-  title: { ...typography.label, color: colors.foreground, fontWeight: '800', marginTop: spacing.md, fontSize: 16 },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  timingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  timingText: { ...typography.tiny, fontWeight: '700' },
   pill: {
-    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: spacing.sm,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.full,
   },
   dot: { width: 7, height: 7, borderRadius: 4 },
   pillText: { ...typography.caption, fontWeight: '800' },
-  ref: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
+  title: { ...typography.label, color: colors.foreground, fontWeight: '800', fontSize: 16 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaText: { ...typography.caption, color: colors.mutedForeground, flex: 1 },
+  ref: { ...typography.caption, color: colors.mutedForeground },
   action: {
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
     minHeight: 40,
     borderRadius: radius.md,
     borderWidth: 1,

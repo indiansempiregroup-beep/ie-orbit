@@ -112,9 +112,16 @@ export function formatDateTime(isoDate?: string | null) {
   );
 }
 
-export function isUpcomingBooking(status: string, startAt: string) {
+export function isUpcomingBooking(status: string, startAt: string, endAt?: string | null) {
   const inactive = new Set(['cancelled', 'completed', 'rejected', 'no_show', 'expired']);
-  return new Date(startAt) >= new Date() && !inactive.has(status);
+  if (inactive.has(String(status).toLowerCase())) return false;
+  const now = new Date();
+  if (endAt) {
+    const end = new Date(endAt);
+    if (!Number.isNaN(end.getTime()) && end >= now) return true;
+  }
+  const start = new Date(startAt);
+  return !Number.isNaN(start.getTime()) && start >= now;
 }
 
 export function mapBookingStatus(status: string): 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'noshow' {

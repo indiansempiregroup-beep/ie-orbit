@@ -117,8 +117,8 @@ function planTitle(plan: Pick<BillingPlanCatalogItem, 'name'> | string) {
 
 export function RegisterWizard() {
   usePageMeta({
-    title: 'Create workspace — IE Orbit',
-    description: 'Self-service business onboarding wizard for Orbit Appoint and Orbit Mart.',
+    title: 'Create account — IE Orbit',
+    description: 'Self-service business onboarding for Orbit Appoint and Orbit Mart.',
   });
 
   const navigate = useNavigate();
@@ -130,6 +130,7 @@ export function RegisterWizard() {
     email?: string;
     firstName?: string;
     lastName?: string;
+    freshStart?: boolean;
   } | null;
   const { hydrated, loadDraft, saveDraft, clearDraft } = useOnboardingDraft();
   const [stepIndex, setStepIndex] = useState(0);
@@ -181,6 +182,14 @@ export function RegisterWizard() {
   useEffect(() => {
     if (!hydrated || draftLoadedRef.current) return;
     draftLoadedRef.current = true;
+
+    if (googlePrefill?.freshStart) {
+      clearDraft();
+      form.reset(getDefaultRegisterValues());
+      navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: {} });
+      return;
+    }
+
     const draft = loadDraft();
     const detectedTz = detectDefaultTimezone();
     const timezone = TIMEZONES.includes(detectedTz as (typeof TIMEZONES)[number])
@@ -209,6 +218,11 @@ export function RegisterWizard() {
     googlePrefill?.email,
     googlePrefill?.firstName,
     googlePrefill?.lastName,
+    googlePrefill?.freshStart,
+    clearDraft,
+    location.pathname,
+    location.search,
+    navigate,
   ]);
 
   useEffect(() => {
@@ -257,6 +271,12 @@ export function RegisterWizard() {
     if (index >= 0) setStepIndex(index);
   }
 
+  function handleCancel() {
+    clearDraft();
+    form.reset(getDefaultRegisterValues());
+    navigate('/');
+  }
+
   async function handleProvision() {
     setProvisioning(true);
     setProvisionError(null);
@@ -281,26 +301,40 @@ export function RegisterWizard() {
   }
 
   function renderBusinessStep() {
+    const addressLocked = values.latitude != null && values.longitude != null;
+    const readOnlyFieldStyle = addressLocked ? { background: '#f9fafb' } : undefined;
+
     return (
       <div className="wizard-form-grid">
-        <Input label="Business name" {...register('businessName')} aria-invalid={Boolean(errors.businessName)} />
+        <Input label="Business name" required {...register('businessName')} aria-invalid={Boolean(errors.businessName)} />
         {errors.businessName ? <span className="field-error">{errors.businessName.message}</span> : null}
         <Select
           label="Business category"
+          required
           options={[{ value: '', label: 'Select category' }, ...BUSINESS_CATEGORIES.map((c) => ({ value: c, label: c }))]}
           {...register('businessCategory')}
           error={errors.businessCategory?.message}
         />
         <Select
           label="Industry"
+          required
           options={[{ value: '', label: 'Select industry' }, ...INDUSTRIES.map((c) => ({ value: c, label: c }))]}
           {...register('industry')}
           error={errors.industry?.message}
         />
-        <Input label="Business email" type="email" {...register('businessEmail')} />
+        <Input label="Business email" required type="email" {...register('businessEmail')} />
         {errors.businessEmail ? <span className="field-error">{errors.businessEmail.message}</span> : null}
-        <Input label="Business phone" {...register('businessPhone')} />
+        <Input
+          label="Business phone"
+          required
+          type="tel"
+          inputMode="numeric"
+          autoComplete="tel"
+          {...register('businessPhone')}
+        />
+        {errors.businessPhone ? <span className="field-error">{errors.businessPhone.message}</span> : null}
         <Input label="Website (optional)" {...register('website')} />
+        {errors.website ? <span className="field-error">{errors.website.message}</span> : null}
         <div style={{ gridColumn: '1 / -1' }}>
           <AddressLocationPicker
             label="Business address"
@@ -318,11 +352,16 @@ export function RegisterWizard() {
               setValue('longitude', place.longitude ?? null, { shouldDirty: true });
             }}
           />
+          {errors.address ? <span className="field-error">{errors.address.message}</span> : null}
         </div>
-        <Input label="Country" {...register('country')} />
-        <Input label="State" {...register('state')} />
-        <Input label="City" {...register('city')} />
-        <Input label="Postal code" {...register('postalCode')} />
+        <Input label="Country" required readOnly={addressLocked} style={readOnlyFieldStyle} {...register('country')} />
+        {errors.country ? <span className="field-error">{errors.country.message}</span> : null}
+        <Input label="State" required readOnly={addressLocked} style={readOnlyFieldStyle} {...register('state')} />
+        {errors.state ? <span className="field-error">{errors.state.message}</span> : null}
+        <Input label="City" required {...register('city')} />
+        {errors.city ? <span className="field-error">{errors.city.message}</span> : null}
+        <Input label="Postal code" required {...register('postalCode')} />
+        {errors.postalCode ? <span className="field-error">{errors.postalCode.message}</span> : null}
       </div>
     );
   }
@@ -330,27 +369,33 @@ export function RegisterWizard() {
   function renderOwnerStep() {
     return (
       <div className="wizard-form-grid">
-        <Input label="First name" {...register('firstName')} autoComplete="given-name" />
-        <Input label="Last name" {...register('lastName')} autoComplete="family-name" />
-        <Input label="Display name" {...register('displayName')} />
+        <Input label="First name" required {...register('firstName')} autoComplete="given-name" />
+        {errors.firstName ? <span className="field-error">{errors.firstName.message}</span> : null}
+        <Input label="Last name" required {...register('lastName')} autoComplete="family-name" />
+        {errors.lastName ? <span className="field-error">{errors.lastName.message}</span> : null}
+        <Input label="Display name" required {...register('displayName')} />
+        {errors.displayName ? <span className="field-error">{errors.displayName.message}</span> : null}
         <Input
           label="Email"
+          required
           type="email"
           {...register('email')}
           autoComplete="email"
           readOnly={Boolean(values.googleIdToken)}
         />
-        <Input label="Mobile" {...register('mobile')} autoComplete="tel" />
+        {errors.email ? <span className="field-error">{errors.email.message}</span> : null}
+        <Input label="Mobile" required type="tel" inputMode="numeric" {...register('mobile')} autoComplete="tel" />
+        {errors.mobile ? <span className="field-error">{errors.mobile.message}</span> : null}
         {values.googleIdToken ? (
           <p className="wizard-google-note">Continuing with Google. A password is not required.</p>
         ) : (
           <>
             <div className="wizard-password-field">
-              <Input label="Password" type="password" {...register('password')} autoComplete="new-password" />
+              <Input label="Password" required type="password" {...register('password')} autoComplete="new-password" />
               <PasswordStrengthIndicator password={values.password} />
               {errors.password ? <span className="field-error">{errors.password.message}</span> : null}
             </div>
-            <Input label="Confirm password" type="password" {...register('confirmPassword')} autoComplete="new-password" />
+            <Input label="Confirm password" required type="password" {...register('confirmPassword')} autoComplete="new-password" />
             {errors.confirmPassword ? <span className="field-error">{errors.confirmPassword.message}</span> : null}
             <div style={{ gridColumn: '1 / -1' }}>
               <GoogleSignInButton
@@ -468,7 +513,7 @@ export function RegisterWizard() {
             <span>Skip business hours for now</span>
           </label>
           {values.skipHours ? (
-            <p className="wizard-hours-hint">You can add weekly hours after your workspace is created.</p>
+            <p className="wizard-hours-hint">You can add weekly hours after your account is created.</p>
           ) : (
             <>
               <BusinessHoursEditor
@@ -671,8 +716,8 @@ export function RegisterWizard() {
     return (
       <div className="wizard-provision" role="status" aria-live="polite">
         <div className="wizard-provision-spinner" aria-hidden="true" />
-        <h2>{provisioning ? 'Provisioning your workspace…' : 'Ready to provision'}</h2>
-        <p>Creating tenant, business, owner roles, and default settings.</p>
+        <h2>{provisioning ? 'Creating your account…' : 'Ready to create your account'}</h2>
+        <p>Setting up tenant, business, owner roles, and default settings.</p>
       </div>
     );
   }
@@ -688,8 +733,8 @@ export function RegisterWizard() {
 
   return (
     <WizardShell
-      title="Create your workspace"
-      subtitle="Complete each step to provision your IE Orbit workspace."
+      title="Create your account"
+      subtitle="Complete each step to set up IE Orbit."
       currentStep={currentStep}
     >
       {stepContent[currentStep]()}
@@ -700,12 +745,12 @@ export function RegisterWizard() {
               Back
             </Button>
           ) : (
-            <Link to="/auth/register">
-              <Button type="button" variant="ghost">Cancel</Button>
-            </Link>
+            <Button type="button" variant="ghost" onClick={handleCancel}>
+              Cancel
+            </Button>
           )}
           <Button type="button" variant="primary" onClick={goNext} disabled={provisioning}>
-            {currentStep === 'review' ? (provisioning ? 'Provisioning…' : 'Create workspace') : 'Continue'}
+            {currentStep === 'review' ? (provisioning ? 'Creating account…' : 'Create account') : 'Continue'}
           </Button>
         </div>
       ) : null}

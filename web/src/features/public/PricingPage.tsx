@@ -5,6 +5,8 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { Button } from '../../components/Button';
 import { stripPlanProductPrefix } from '../../config/products';
 import { PublicCtaBand } from './PublicCtaBand';
+import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
+import { registerStartPath } from '../onboarding/affiliateCode';
 
 const PRODUCT_LABELS: Record<string, string> = {
   appointie: 'Orbit Appoint',
@@ -177,8 +179,8 @@ function PlanGrid({
             <li>No credit card required to start</li>
             <li>Upgrade any time to keep your data</li>
           </ul>
-          <Link to="/auth/register/start">
-            <Button variant="primary">Start free trial</Button>
+          <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+            <Button variant="primary">Create account</Button>
           </Link>
         </article>
       ) : null}
@@ -204,7 +206,7 @@ function PlanGrid({
                 <li key={feature}>{feature}</li>
               ))}
             </ul>
-            <Link to="/auth/register/start">
+            <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
               <Button variant={featured ? 'primary' : 'neutral'}>Choose {planTitle(plan)}</Button>
             </Link>
           </article>

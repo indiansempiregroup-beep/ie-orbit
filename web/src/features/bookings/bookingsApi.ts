@@ -1,4 +1,4 @@
-import type { IEOrbitClient } from '@ie-orbit/sdk';
+import type { IEOrbitClient, BookingLineItemStaffInput, BookingReassignableStaffResponse } from '@ie-orbit/sdk';
 import { type AvailabilitySlot, type Booking, type BookingCreateInput } from '@ie-orbit/sdk';
 import { normalizeQuery, type QueryParams } from '../../lib/apiQuery';
 import { businessQueryParam } from '../../lib/workspace';
@@ -8,6 +8,8 @@ type AvailabilityQuery = {
   business?: string;
   staff_id?: string;
   service_id?: string;
+  service_ids?: string[];
+  items?: Array<{ service_id: string; duration_minutes?: number; sort_order?: number }>;
   duration_minutes?: number;
   interval_minutes?: number;
   buffer_minutes?: number;
@@ -61,6 +63,29 @@ export async function rescheduleBooking(
   return response.data;
 }
 
+export async function updateBookingStaff(
+  client: IEOrbitClient,
+  bookingId: string,
+  staff_id: string | null,
+) {
+  const response = await client.bookings.patch(bookingId, { staff_id });
+  return response.data;
+}
+
+export async function updateBookingLineItemStaff(
+  client: IEOrbitClient,
+  bookingId: string,
+  line_item_staff: BookingLineItemStaffInput[],
+) {
+  const response = await client.bookings.patch(bookingId, { line_item_staff });
+  return response.data;
+}
+
+export async function getReassignableStaff(client: IEOrbitClient, bookingId: string) {
+  const response = await client.bookings.reassignableStaff(bookingId);
+  return response.data;
+}
+
 export async function getAvailability(
   client: IEOrbitClient,
   businessId: string | null | undefined,
@@ -73,4 +98,4 @@ export async function getAvailability(
   return response.data;
 }
 
-export type { Booking, BookingCreateInput, AvailabilitySlot };
+export type { Booking, BookingCreateInput, AvailabilitySlot, BookingReassignableStaffResponse };

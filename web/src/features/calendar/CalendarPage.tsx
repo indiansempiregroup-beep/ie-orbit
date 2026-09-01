@@ -5,7 +5,6 @@ import {
   useBookingCreation,
   useBookingList,
   type AvailabilitySlot,
-  type BookingCreateInput,
 } from '../bookings/bookingsHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
 import { useBranchesQuery } from '../settings/branchesHooks';
@@ -18,6 +17,13 @@ import { useSnackbar } from '../../hooks/useSnackbar';
 import { formatTime } from '../../lib/datetime';
 import { DayTimeline } from './DayTimeline';
 import { bookingStatusColor } from './timelineUtils';
+import { ServiceMultiPicker } from '../bookings/ServiceMultiPicker';
+import {
+  bookingMatchesServiceFilter,
+  bookingServiceLabel,
+  buildBookingCreateInput,
+  servicesTotalDurationMinutes,
+} from '../bookings/bookingHelpers';
 
 export function CalendarPage() {
   const navigate = useNavigate();
@@ -25,30 +31,42 @@ export function CalendarPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [staffId, setStaffId] = useState(() => searchParams.get('staff') ?? '');
   const [serviceId, setServiceId] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState(30);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+
+  const bookingsQuery = useBookingList(date);
+  const staffQuery = useStaffList();
+  const customersQuery = useCustomerList();
+  const servicesQuery = useServiceList();
+  const services = servicesQuery.data ?? [];
+  const selectedServices = useMemo(
+    () =>
+      selectedServiceIds
+        .map((id) => services.find((service) => service.id === id))
+        .filter((service): service is NonNullable<typeof service> => Boolean(service)),
+    [selectedServiceIds, services],
+  );
+  const durationMinutes = useMemo(
+    () => (selectedServices.length ? servicesTotalDurationMinutes(selectedServices) : 30),
+    [selectedServices],
+  );
 
   const availabilityQuery = useAvailability(
     date,
     staffId || undefined,
     durationMinutes,
-    serviceId || undefined,
+    selectedServiceIds.length === 1 ? selectedServiceIds[0] : undefined,
+    selectedServiceIds.length > 1 ? selectedServiceIds : undefined,
   );
-  const bookingsQuery = useBookingList(date);
-  const staffQuery = useStaffList();
-  const customersQuery = useCustomerList();
-  const servicesQuery = useServiceList();
   const branchesQuery = useBranchesQuery();
   const createBooking = useBookingCreation();
   const dialog = useDialog();
   const snackbar = useSnackbar();
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null);
-  const [formState, setFormState] = useState<BookingCreateInput>({
+  const [formState, setFormState] = useState({
     customer_id: '',
-    service_id: '',
-    staff_id: null,
-    branch_id: null,
+    staff_id: null as string | null,
+    branch_id: null as string | null,
     start_at: new Date().toISOString(),
-    duration_minutes: durationMinutes,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
   const offices = branchesQuery.data ?? [];
@@ -79,7 +97,7 @@ export function CalendarPage() {
   const filteredBookings = useMemo(() => {
     return bookings.filter((booking) => {
       if (staffId && String(booking.staff_id ?? '') !== staffId) return false;
-      if (serviceId && String(booking.service_id ?? '') !== serviceId) return false;
+      if (!bookingMatchesServiceFilter(booking, serviceId)) return false;
       return true;
     });
   }, [bookings, staffId, serviceId]);
@@ -106,10 +124,9 @@ export function CalendarPage() {
     setSelectedSlot(slot);
     setFormState({
       customer_id: '',
-      service_id: serviceId || '',
       staff_id: slot.staff_id ?? (staffId || null),
+      branch_id: formState.branch_id,
       start_at: slot.start_at,
-      duration_minutes: durationMinutes,
     });
     setCreationError(null);
     dialog.show();
@@ -215,14 +232,23 @@ export function CalendarPage() {
             </label>
 
             <label style={{ display: 'grid', gap: 8 }}>
-              Service
+              Services for availability
+              <ServiceMultiPicker
+                services={services}
+                selectedIds={selectedServiceIds}
+                onChange={setSelectedServiceIds}
+              />
+            </label>
+
+            <label style={{ display: 'grid', gap: 8 }}>
+              Filter bookings by service
               <select
                 value={serviceId}
                 onChange={(event) => setServiceId(event.target.value)}
                 style={controlStyle}
               >
                 <option value="">All services</option>
-                {servicesQuery.data?.map((service) => (
+                {services.map((service) => (
                   <option key={service.id} value={service.id}>
                     {service.name ?? service.id}
                   </option>
@@ -230,19 +256,11 @@ export function CalendarPage() {
               </select>
             </label>
 
-            <label style={{ display: 'grid', gap: 8 }}>
-              Duration
-              <select
-                value={durationMinutes}
-                onChange={(event) => setDurationMinutes(Number(event.target.value))}
-                style={controlStyle}
-              >
-                <option value={15}>15 minutes</option>
-                <option value={30}>30 minutes</option>
-                <option value={45}>45 minutes</option>
-                <option value={60}>60 minutes</option>
-              </select>
-            </label>
+            <div style={{ color: '#6b7280', fontSize: 13 }}>
+              {selectedServices.length
+                ? `Checking ${durationMinutes} min slots for ${selectedServices.length} service${selectedServices.length > 1 ? 's' : ''}.`
+                : 'Select services above to load matching availability.'}
+            </div>
           </div>
         </Card>
 
@@ -357,7 +375,7 @@ export function CalendarPage() {
                         {booking.end_at ? ` – ${formatTime(booking.end_at)}` : ''}
                       </div>
                       <div style={{ color: '#6b7280', fontSize: 12 }}>
-                        {serviceMap.get(String(booking.service_id)) ?? 'Service'}
+                        {bookingServiceLabel(booking, serviceMap)}
                         {' · '}
                         {booking.staff_id
                           ? staffMap.get(String(booking.staff_id)) ?? 'Staff'
@@ -394,7 +412,19 @@ export function CalendarPage() {
               setCreationError('Select an office for this booking.');
               return;
             }
-            createBooking.mutate(formState, {
+            if (!selectedServices.length) {
+              setCreationError('Select at least one service.');
+              return;
+            }
+            createBooking.mutate(
+              buildBookingCreateInput({
+                customerId: formState.customer_id,
+                staffId: formState.staff_id,
+                branchId: formState.branch_id,
+                startAt: formState.start_at,
+                selectedServices,
+              }),
+              {
               onSuccess: () => {
                 dialog.hide();
                 setSelectedSlot(null);
@@ -437,22 +467,11 @@ export function CalendarPage() {
             </select>
           </label>
 
-          <label style={{ display: 'grid', gap: 8 }}>
-            Service
-            <select
-              required
-              value={formState.service_id}
-              onChange={(event) => setFormState({ ...formState, service_id: event.target.value })}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            >
-              <option value="">Select service</option>
-              {servicesQuery.data?.map((service) => (
-                <option key={service.id} value={service.id}>
-                  {service.name ?? service.id}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ServiceMultiPicker
+            services={services}
+            selectedIds={selectedServiceIds}
+            onChange={setSelectedServiceIds}
+          />
 
           {needsOfficePicker ? (
             <label style={{ display: 'grid', gap: 8 }}>
@@ -484,21 +503,6 @@ export function CalendarPage() {
               value={formState.start_at.slice(0, 16)}
               onChange={(event) =>
                 setFormState({ ...formState, start_at: new Date(event.target.value).toISOString() })
-              }
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-
-          <label style={{ display: 'grid', gap: 8 }}>
-            Duration (minutes)
-            <input
-              required
-              type="number"
-              min={15}
-              step={15}
-              value={formState.duration_minutes}
-              onChange={(event) =>
-                setFormState({ ...formState, duration_minutes: Number(event.target.value) })
               }
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />

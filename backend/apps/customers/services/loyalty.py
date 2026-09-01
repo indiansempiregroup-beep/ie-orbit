@@ -372,6 +372,65 @@ class LoyaltyService:
         return account
 
     @transaction.atomic
+    def award_for_completed_booking_items(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        customer: Customer,
+        booking_id: Any,
+        line_items: list[Any],
+    ) -> CustomerLoyaltyAccount | None:
+        if not self.is_program_active(business=business):
+            return None
+        already = (
+            self._ledger_qs(tenant=tenant, booking_id=booking_id)
+            .filter(points_delta__gt=0, metadata__type="earn")
+            .exists()
+        )
+        if already:
+            return None
+
+        service_ids = [item.service_id for item in line_items]
+        services = {
+            str(service.id): service
+            for service in Service.objects.require_tenant(tenant).filter(
+                id__in=service_ids, business=business
+            )
+        }
+        total_points = 0
+        service_names: list[str] = []
+        for item in line_items:
+            service = services.get(str(item.service_id))
+            if service is None:
+                continue
+            points = int(service.loyalty_points_earn or 0)
+            if points > 0:
+                total_points += points
+                service_names.append(service.display_name or service.name)
+        if total_points <= 0:
+            return None
+
+        account = self.ensure_account(tenant=tenant, business=business, customer=customer)
+        account.points_balance = int(account.points_balance) + total_points
+        account.save(update_fields=["points_balance", "updated_at"])
+        if len(service_names) == 1:
+            reason = f"Completed booking — {service_names[0]}"
+        else:
+            reason = f"Completed booking — {', '.join(service_names)}"
+        CustomerLoyaltyLedger.objects.create(
+            tenant=tenant,
+            business=business,
+            account=account,
+            customer=customer,
+            points_delta=total_points,
+            reason=reason[:160],
+            booking_id=booking_id,
+            metadata={"type": "earn", "feature": FEATURE_REWARD_POINTS},
+        )
+        return account
+
+    @transaction.atomic
     def redeem_for_booking(
         self,
         *,
@@ -381,11 +440,13 @@ class LoyaltyService:
         booking_id: Any,
         service_id: Any,
         points_to_redeem: int,
+        amount: Decimal | str | int | float | None = None,
     ) -> dict[str, Any]:
         account = self._lock_account(tenant=tenant, business=business, customer=customer)
         quote = self.quote_redemption(
             business=business,
-            service_id=service_id,
+            service_id=service_id if amount is None else None,
+            amount=amount,
             points_to_redeem=points_to_redeem,
             points_balance=account.points_balance,
         )

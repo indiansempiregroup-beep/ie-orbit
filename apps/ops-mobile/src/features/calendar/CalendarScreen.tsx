@@ -18,6 +18,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useAvailability, useEntityMaps } from '../../hooks/useOpsExtended';
+import { bookingCustomerLabel, bookingCustomerPhone, bookingServiceLabel, bookingStaffLabel } from '../../utils/bookingDisplay';
 import { entityLabel } from '../../utils/entities';
 import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
@@ -159,10 +160,14 @@ export function CalendarScreen() {
           {sorted.map((booking) => (
             <BookingRow
               key={booking.id}
-              serviceName={entityLabel(serviceMap, booking.service_id, 'Booking')}
-              customerName={entityLabel(customerMap, booking.customer_id)}
-              staffName={entityLabel(staffMap, booking.staff_id, '')}
+              serviceName={bookingServiceLabel(booking, serviceMap)}
+              customerName={bookingCustomerLabel(booking, customerMap)}
+              customerPhone={bookingCustomerPhone(booking)}
+              staffName={bookingStaffLabel(booking, staffMap)}
               startAt={booking.start_at}
+              endAt={booking.end_at}
+              durationMinutes={booking.duration_minutes}
+              serviceCount={booking.line_items?.length || undefined}
               bookingNumber={booking.booking_number}
               status={booking.status}
               onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}

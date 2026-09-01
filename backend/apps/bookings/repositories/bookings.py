@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from django.db import models
 from django.db.models import QuerySet
 
-from apps.bookings.models import Booking, BookingStatus
+from apps.bookings.models import Booking, BookingLineItem, BookingStatus
 from apps.common.utils.workspace_access import (
     is_workspace_manager_or_above,
     scope_bookings_queryset_for_user,
@@ -16,7 +17,11 @@ class BookingRepository:
     permissions = {"booking:read", "booking:write", "booking:manage"}
 
     def list_for_request(self, *, tenant: Any, user: Any) -> QuerySet[Booking]:
-        queryset = Booking.objects.require_tenant(tenant).select_related("business", "review")
+        queryset = (
+            Booking.objects.require_tenant(tenant)
+            .select_related("business", "review")
+            .prefetch_related("line_items")
+        )
         if getattr(user, "is_superuser", False):
             return queryset
         if is_workspace_manager_or_above(user=user, tenant=tenant):
@@ -66,27 +71,67 @@ class BookingRepository:
         exclude_booking: Booking | None = None,
         respect_booking_buffers: bool = False,
     ) -> int:
-        """Count active bookings overlapping [start_at, end_at].
+        """Count active bookings and line items overlapping [start_at, end_at].
 
-        When respect_booking_buffers is True, each booking is expanded by its own
+        When respect_booking_buffers is True, each booking/line item is expanded by its own
         buffer_before_minutes / buffer_after_minutes before overlap is tested.
         """
-        if not respect_booking_buffers:
-            return self.conflicts(
-                tenant=tenant,
-                business=business,
-                staff_id=staff_id,
-                start_at=start_at,
-                end_at=end_at,
-                exclude_booking=exclude_booking,
-            ).count()
+        if not staff_id:
+            return 0
 
         from datetime import timedelta
 
-        # Widen the DB filter so buffered bookings just outside the window are included.
+        line_item_count = self._line_item_conflict_count(
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            start_at=start_at,
+            end_at=end_at,
+            exclude_booking=exclude_booking,
+            respect_booking_buffers=respect_booking_buffers,
+        )
+        booking_count = self._booking_conflict_count(
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            start_at=start_at,
+            end_at=end_at,
+            exclude_booking=exclude_booking,
+            respect_booking_buffers=respect_booking_buffers,
+        )
+        return line_item_count + booking_count
+
+    def _booking_conflict_count(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        staff_id: Any,
+        start_at: datetime,
+        end_at: datetime,
+        exclude_booking: Booking | None = None,
+        respect_booking_buffers: bool = False,
+    ) -> int:
+        if not respect_booking_buffers:
+            return (
+                self.conflicts(
+                    tenant=tenant,
+                    business=business,
+                    staff_id=staff_id,
+                    start_at=start_at,
+                    end_at=end_at,
+                    exclude_booking=exclude_booking,
+                )
+                .filter(line_items__isnull=True)
+                .count()
+            )
+
+        from datetime import timedelta
+
         pad = timedelta(hours=12)
         queryset = Booking.objects.require_tenant(tenant).filter(
             business=business,
+            staff_id=staff_id,
             start_at__lt=end_at + pad,
             end_at__gt=start_at - pad,
             status__in=[
@@ -96,10 +141,9 @@ class BookingRepository:
                 BookingStatus.IN_PROGRESS,
             ],
         )
-        if staff_id:
-            queryset = queryset.filter(staff_id=staff_id)
         if exclude_booking:
             queryset = queryset.exclude(id=exclude_booking.id)
+        queryset = queryset.filter(line_items__isnull=True)
 
         count = 0
         for booking in queryset.only(
@@ -111,6 +155,55 @@ class BookingRepository:
             effective_end = booking.end_at + timedelta(
                 minutes=int(booking.buffer_after_minutes or 0)
             )
+            if effective_start < end_at and effective_end > start_at:
+                count += 1
+        return count
+
+    def _line_item_conflict_count(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        staff_id: Any,
+        start_at: datetime,
+        end_at: datetime,
+        exclude_booking: Booking | None = None,
+        respect_booking_buffers: bool = False,
+    ) -> int:
+        from datetime import timedelta
+
+        pad = timedelta(hours=12)
+        queryset = (
+            BookingLineItem.objects.require_tenant(tenant)
+            .filter(
+                booking__business=business,
+                staff_id=staff_id,
+                start_at__lt=end_at + pad,
+                end_at__gt=start_at - pad,
+                booking__status__in=[
+                    BookingStatus.PENDING,
+                    BookingStatus.CONFIRMED,
+                    BookingStatus.CHECKED_IN,
+                    BookingStatus.IN_PROGRESS,
+                ],
+            )
+        )
+        if exclude_booking:
+            queryset = queryset.exclude(booking_id=exclude_booking.id)
+
+        count = 0
+        fields = ["id", "start_at", "end_at", "buffer_before_minutes", "buffer_after_minutes"]
+        for line_item in queryset.only(*fields):
+            if respect_booking_buffers:
+                effective_start = line_item.start_at - timedelta(
+                    minutes=int(line_item.buffer_before_minutes or 0)
+                )
+                effective_end = line_item.end_at + timedelta(
+                    minutes=int(line_item.buffer_after_minutes or 0)
+                )
+            else:
+                effective_start = line_item.start_at
+                effective_end = line_item.end_at
             if effective_start < end_at and effective_end > start_at:
                 count += 1
         return count
@@ -130,7 +223,10 @@ class BookingRepository:
         if params.get("staff"):
             queryset = queryset.filter(staff_id=params["staff"])
         if params.get("service"):
-            queryset = queryset.filter(service_id=params["service"])
+            queryset = queryset.filter(
+                models.Q(service_id=params["service"])
+                | models.Q(line_items__service_id=params["service"])
+            ).distinct()
         if params.get("status"):
             queryset = queryset.filter(status=params["status"])
         if params.get("booking_id"):

@@ -15,9 +15,16 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useAvailability, useBookingMutations, useBranches, useEntityMaps } from '../../hooks/useOpsExtended';
 import { canAccessStaffDirectory } from '../../utils/roles';
-import { colors, fonts, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
-import { formatServiceMeta, formatServicePrice, serviceDurationMinutes } from '../../utils/services';
+import {
+  formatServiceMeta,
+  servicesSummaryLabel,
+  servicesTotalDurationMinutes,
+  servicesTotalPriceLabel,
+  serviceDurationMinutes,
+} from '../../utils/services';
+import { ServiceMultiPicker } from '../../components/ServiceMultiPicker';
 import type { RootStackParamList } from '../../navigation/types';
 
 function dateFromIso(value?: string) {
@@ -39,7 +46,9 @@ export function CreateBookingScreen() {
   const mutations = useBookingMutations();
 
   const [customerId, setCustomerId] = useState(route.params?.customerId ?? '');
-  const [serviceId, setServiceId] = useState(route.params?.serviceId ?? '');
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
+    route.params?.serviceId ? [route.params.serviceId] : [],
+  );
   const [staffId, setStaffId] = useState(showStaffPicker ? route.params?.staffId ?? '' : '');
   const [branchId, setBranchId] = useState('');
   const [date, setDate] = useState(() => dateFromIso(route.params?.startAt));
@@ -80,40 +89,61 @@ export function CreateBookingScreen() {
     };
   }, [client, showStaffPicker]);
 
-  const selectedService = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
-  const durationMinutes = serviceDurationMinutes(selectedService, route.params?.durationMinutes ?? 30);
-  const servicePriceLabel = formatServicePrice(selectedService);
-  const serviceMetaLabel = formatServiceMeta(selectedService);
+  const selectedServices = useMemo(
+    () => services.filter((service) => selectedServiceIds.includes(service.id)),
+    [services, selectedServiceIds],
+  );
+  const durationMinutes = servicesTotalDurationMinutes(
+    selectedServices,
+    route.params?.durationMinutes ?? 30,
+  );
+  const servicePriceLabel = servicesTotalPriceLabel(selectedServices);
+  const serviceSummaryLabel = servicesSummaryLabel(selectedServices, (service) =>
+    serviceMap.get(service.id) ?? service.name ?? service.id,
+  );
 
   const eligibleStaff = useMemo(() => {
-    if (!serviceId) return staff;
-    const active = assignments.filter((row) => row.is_active_assignment !== false);
-    const assignedStaffIds = new Set(
-      active.filter((row) => String(row.service) === String(serviceId)).map((row) => String(row.staff)),
+    const activeStaff = staff.filter(
+      (member) =>
+        member.is_bookable &&
+        member.employment_status === 'active' &&
+        (member.is_active === undefined || member.is_active),
     );
+    if (!selectedServiceIds.length) return activeStaff;
+    const active = assignments.filter((row) => row.is_active_assignment !== false);
     const staffWithAnyAssignment = new Set(active.map((row) => String(row.staff)));
-    // Mirror backend: staff with zero assignments stay eligible for every service;
-    // staff with any assignment only appear for their assigned services.
-    return staff.filter((member) => {
+    return activeStaff.filter((member) => {
       const id = String(member.id);
       if (!staffWithAnyAssignment.has(id)) return true;
-      return assignedStaffIds.has(id);
+      return selectedServiceIds.every((serviceId) =>
+        active.some(
+          (row) => String(row.service) === String(serviceId) && String(row.staff) === id,
+        ),
+      );
     });
-  }, [assignments, serviceId, staff]);
+  }, [assignments, selectedServiceIds, staff]);
+
+  const requiresMultipleSpecialists =
+    selectedServiceIds.length > 1 && eligibleStaff.length === 0;
 
   useEffect(() => {
+    if (requiresMultipleSpecialists) {
+      setStaffId('');
+      return;
+    }
     if (!staffId) return;
     if (!eligibleStaff.some((member) => member.id === staffId)) {
       setStaffId('');
       setSelectedSlot('');
     }
-  }, [eligibleStaff, staffId]);
+  }, [eligibleStaff, requiresMultipleSpecialists, staffId]);
 
   const { slots, loading: slotsLoading } = useAvailability(
     date,
-    staffId || undefined,
+    requiresMultipleSpecialists ? undefined : staffId || undefined,
     durationMinutes,
-    serviceId || undefined,
+    selectedServiceIds.length === 1 ? selectedServiceIds[0] : undefined,
+    selectedServiceIds.length > 1 ? selectedServiceIds : undefined,
   );
 
   useEffect(() => {
@@ -128,25 +158,27 @@ export function CreateBookingScreen() {
     if (dateFromIso(selectedSlot) !== date) setSelectedSlot('');
   }, [date, selectedSlot]);
 
+  function updateSelectedServices(next: string[]) {
+    setSelectedServiceIds(next);
+    setStaffId('');
+    setSelectedSlot('');
+  }
+
   const customerOptions = useMemo(
     () => customers.map((c) => ({ value: c.id, label: customerMap.get(c.id) ?? c.id })),
     [customers, customerMap],
-  );
-  const serviceOptions = useMemo(
-    () => services.map((s) => ({ value: s.id, label: serviceMap.get(s.id) ?? s.name ?? s.id })),
-    [services, serviceMap],
   );
   const staffOptions = useMemo(
     () => [
       {
         value: '',
-        label: serviceId
-          ? `Any available (${eligibleStaff.length} for this service)`
+        label: selectedServiceIds.length
+          ? `Any available (${eligibleStaff.length} eligible)`
           : 'Any available',
       },
       ...eligibleStaff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id })),
     ],
-    [eligibleStaff, serviceId, staffMap],
+    [eligibleStaff, selectedServiceIds.length, staffMap],
   );
   const branchOptions = useMemo(
     () =>
@@ -175,8 +207,8 @@ export function CreateBookingScreen() {
           fullWidth
           size="lg"
           onPress={async () => {
-            if (!customerId || !serviceId) {
-              setError('Customer and service are required.');
+            if (!customerId || !selectedServiceIds.length) {
+              setError('Customer and at least one service are required.');
               return;
             }
             if (needsOfficePicker && !branchId) {
@@ -193,11 +225,14 @@ export function CreateBookingScreen() {
               const booking = await mutations.create({
                 business: businessId ?? undefined,
                 customer_id: customerId,
-                service_id: serviceId,
-                staff_id: staffId || null,
+                items: selectedServices.map((service, index) => ({
+                  service_id: service.id,
+                  duration_minutes: serviceDurationMinutes(service),
+                  sort_order: index,
+                })),
+                staff_id: requiresMultipleSpecialists ? null : staffId || null,
                 branch_id: branchId || null,
                 start_at: selectedSlot,
-                duration_minutes: durationMinutes,
                 notes: notes || undefined,
                 source: 'operations_dashboard',
                 channel: 'mobile',
@@ -225,46 +260,70 @@ export function CreateBookingScreen() {
         title="Who & what"
         subtitle={
           showStaffPicker
-            ? 'Customer, service, office, and preferred staff'
-            : 'Customer, service, and office'
+            ? 'Customer, services, office, and preferred staff'
+            : 'Customer, services, and office'
         }
       >
         <SelectField label="Customer" value={customerId} options={customerOptions} onChange={setCustomerId} />
-        <SelectField
-          label="Service"
-          value={serviceId}
-          options={serviceOptions}
-          onChange={(value) => {
-            setServiceId(value);
-            setStaffId('');
-            setSelectedSlot('');
-          }}
+
+        <ServiceMultiPicker
+          services={services}
+          selectedIds={selectedServiceIds}
+          onChange={updateSelectedServices}
+          nameFor={(service) => serviceMap.get(service.id) ?? service.name ?? service.id}
         />
+
         {needsOfficePicker ? (
           <SelectField label="Office" value={branchId} options={branchOptions} onChange={setBranchId} />
         ) : null}
+
         {showStaffPicker ? (
-          <SelectField
-            label="Staff"
-            value={staffId}
-            options={staffOptions}
-            onChange={(value) => {
-              setStaffId(value);
-              setSelectedSlot('');
-            }}
-            placeholder={serviceId ? 'Choose eligible staff' : 'Select a service first'}
-          />
+          requiresMultipleSpecialists ? (
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>Multiple specialists will be assigned</Text>
+              <Text style={styles.hint}>
+                No single staff member covers all selected services. The system will assign the best
+                available team for each service.
+              </Text>
+            </View>
+          ) : (
+            <SelectField
+              label="Staff"
+              value={staffId}
+              options={staffOptions}
+              onChange={(value) => {
+                setStaffId(value);
+                setSelectedSlot('');
+              }}
+              placeholder={selectedServiceIds.length ? 'Choose eligible staff' : 'Select services first'}
+            />
+          )
         ) : null}
-        {selectedService ? <Text style={styles.hint}>{serviceMetaLabel}</Text> : null}
-        {showStaffPicker && serviceId && eligibleStaff.length === 0 ? (
-          <Text style={styles.error}>No staff is assigned to this service. Assign services on the staff profile.</Text>
+
+        {selectedServices.length === 1 ? (
+          <Text style={styles.hint}>{formatServiceMeta(selectedServices[0])}</Text>
         ) : null}
-        {showStaffPicker && serviceId && !staffId ? (
-          <Text style={styles.hint}>Any available assigns only among staff who can perform this service.</Text>
+        {showStaffPicker && selectedServiceIds.length > 0 && eligibleStaff.length === 0 && !requiresMultipleSpecialists ? (
+          <Text style={styles.error}>
+            No staff is assigned to the selected services. Assign services on the staff profile.
+          </Text>
+        ) : null}
+        {showStaffPicker && selectedServiceIds.length > 0 && !staffId && !requiresMultipleSpecialists ? (
+          <Text style={styles.hint}>
+            Any available assigns only among staff who can perform all selected services.
+          </Text>
         ) : null}
       </FormSection>
 
-      <FormSection step={2} title="Date & time" subtitle="Only open slots for the selected service are shown">
+      <FormSection
+        step={2}
+        title="Date & time"
+        subtitle={
+          selectedServices.length > 1
+            ? `Showing slots for ${serviceSummaryLabel} (${durationMinutes} min total)`
+            : 'Only open slots for the selected service are shown'
+        }
+      >
         <CalendarPicker
           value={date}
           onChange={(next) => {
@@ -278,11 +337,13 @@ export function CreateBookingScreen() {
           onSelect={setSelectedSlot}
           loading={slotsLoading}
           emptyMessage={
-            !serviceId
-              ? 'Select a service to load available times.'
+            !selectedServiceIds.length
+              ? 'Select at least one service to load available times.'
               : staffId
                 ? 'No timeslot available for this staff on this date. Check their weekly schedule or try another day.'
-                : 'No timeslot available. No staff is free for this service on this date. Try another day or assign staff to the service.'
+                : requiresMultipleSpecialists
+                  ? 'No timeslot available for this service combination on this date. Try another day.'
+                  : 'No timeslot available. No staff is free for the selected services on this date.'
           }
         />
         {selectedSlot ? <Text style={styles.selected}>Selected · {formatDateTime(selectedSlot)}</Text> : null}
@@ -307,6 +368,14 @@ const styles = StyleSheet.create({
   intro: { gap: 4, marginBottom: spacing.sm },
   title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
   subtitle: { ...typography.body, color: colors.mutedForeground },
+  infoCard: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.secondary,
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  infoTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   hint: { ...typography.caption, color: colors.mutedForeground },
   selected: { ...typography.label, color: colors.primary },
   error: { ...typography.caption, color: colors.destructive },

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { BookingReviewSummary, MobileBooking } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { CalendarPicker } from '../../components/CalendarPicker';
+import { BookingVisitActions } from '../../components/BookingVisitActions';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -13,15 +15,23 @@ import { Input } from '../../components/ui/Input';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { filterFutureSlots, formatDateKey, formatDateTime, formatTime, mapBookingStatus } from '../../utils/format';
+import {
+  bookingDirectionsUrl,
+  bookingServiceLabel,
+  bookingStaffLabel,
+  bookingStaffNames,
+  bookingTimeRangeLabel,
+} from '../../utils/bookingDisplay';
 import type { RootStackParamList } from '../../navigation/types';
 import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 
 export function BookingDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'BookingDetail'>>();
-  const { branding } = useBootstrap();
+  const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const primary = branding?.primaryColor ?? colors.primary;
+  const businessPhone = bootstrap?.business.phone?.trim() || '';
 
   const [booking, setBooking] = useState<MobileBooking | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,13 +125,18 @@ export function BookingDetailScreen() {
 
   async function loadSlots() {
     if (!booking || !tenantSlug || !businessCode) return;
+    const serviceIds =
+      booking.items && booking.items.length > 1
+        ? booking.items.map((item) => item.service_id)
+        : undefined;
     const response = await mobileClient.mobile.availability({
       tenant_slug: tenantSlug,
       business_code: businessCode,
       date,
-      duration_minutes: booking.duration_minutes,
+      duration_minutes: serviceIds ? undefined : booking.duration_minutes,
       staff_id: booking.staff_id || undefined,
-      service_id: booking.service_id,
+      service_id: serviceIds ? undefined : booking.service_id,
+      service_ids: serviceIds,
     });
     const openSlots = filterFutureSlots(response.data.slots);
     setSlots(openSlots);
@@ -196,51 +211,67 @@ export function BookingDetailScreen() {
     );
   }
 
+  const serviceName = bookingServiceLabel(booking);
+  const staffLabel = bookingStaffLabel(booking);
+  const staffNames = bookingStaffNames(booking);
+  const directionsUrl = bookingDirectionsUrl(booking.branch);
+  const hasVisitActions = Boolean(directionsUrl || businessPhone);
+  const showStaffSummary = staffLabel && (staffNames.length > 1 || !booking.items?.length);
+
   return (
     <ProfileMenuScreen title="Appointment" onBack={() => navigation.goBack()}>
       <Card>
         <View style={styles.row}>
-          <Text style={styles.service}>{booking.service_name}</Text>
+          <Text style={styles.service}>{serviceName}</Text>
           <Badge status={mapBookingStatus(booking.status)} />
         </View>
         <DetailRow label="Reference" value={`#${booking.booking_number}`} />
         <DetailRow label="Date" value={new Date(booking.start_at).toLocaleDateString()} />
-        <DetailRow
-          label="Time"
-          value={formatTime(booking.start_at)}
-        />
+        <DetailRow label="Time" value={bookingTimeRangeLabel(booking.start_at, booking.end_at)} />
         <DetailRow label="Duration" value={`${booking.duration_minutes} minutes`} />
-        {booking.staff_name ? <DetailRow label="Staff" value={booking.staff_name} /> : null}
-        {booking.branch?.display_name ? (
-          <DetailRow label="Office" value={booking.branch.display_name} />
+        {booking.items && booking.items.length > 0 ? (
+          <View style={styles.itemsBlock}>
+            <Text style={styles.itemsLabel}>Services</Text>
+            {booking.items.map((item) => (
+              <View key={item.id} style={styles.itemRow}>
+                <Text style={styles.itemName}>{item.service_name || 'Service'}</Text>
+                <Text style={styles.itemMeta}>
+                  {formatTime(item.start_at)} · {item.duration_minutes} min
+                  {item.staff_name ? ` · with ${item.staff_name}` : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
         ) : null}
-        {booking.branch?.formatted_address ? (
-          <DetailRow label="Address" value={booking.branch.formatted_address} />
-        ) : null}
+        {showStaffSummary ? <DetailRow label="Staff" value={staffLabel} /> : null}
         <DetailRow
           label="Payment"
           value={booking.payment_mode === 'pay_at_venue' || !booking.payment_mode ? 'Pay at venue' : booking.payment_mode}
         />
-        {booking.notes ? <DetailRow label="Notes" value={booking.notes} /> : null}
-        {booking.branch && (booking.branch.latitude != null || booking.branch.formatted_address) ? (
-          <Button
-            label="Get directions"
-            variant="outline"
-            fullWidth
-            primaryColor={primary}
-            onPress={() => {
-              const { latitude, longitude, formatted_address } = booking.branch!;
-              const url =
-                latitude != null && longitude != null
-                  ? `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
-                  : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                      formatted_address || booking.branch!.display_name,
-                    )}`;
-              void Linking.openURL(url);
-            }}
-          />
-        ) : null}
+        {booking.notes ? <DetailRow label="Notes" value={booking.notes} multiline /> : null}
       </Card>
+
+      {booking.branch?.display_name || booking.branch?.formatted_address || hasVisitActions ? (
+        <Card>
+          <Text style={styles.section}>Visit location</Text>
+          {booking.branch?.display_name ? (
+            <View style={styles.locationRow}>
+              <Feather name="map-pin" size={16} color={primary} />
+              <Text style={styles.locationTitle}>{booking.branch.display_name}</Text>
+            </View>
+          ) : null}
+          {booking.branch?.formatted_address ? (
+            <Text style={styles.locationAddress}>{booking.branch.formatted_address}</Text>
+          ) : null}
+          {hasVisitActions ? (
+            <BookingVisitActions
+              directionsUrl={directionsUrl}
+              phone={businessPhone}
+              primaryColor={primary}
+            />
+          ) : null}
+        </Card>
+      ) : null}
 
       {review ? (
         <Card>
@@ -324,10 +355,26 @@ export function BookingDetailScreen() {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  multiline?: boolean;
+}) {
+  if (multiline) {
+    return (
+      <View style={styles.detailBlock}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValueBlock}>{value}</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailLabelInline}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
     </View>
   );
@@ -336,9 +383,45 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   service: { ...typography.title, color: colors.foreground, flex: 1, marginRight: spacing.md },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  detailBlock: { marginBottom: spacing.sm, gap: 4 },
   detailLabel: { ...typography.body, color: colors.mutedForeground },
-  detailValue: { ...typography.body, color: colors.foreground, fontWeight: '600' },
+  detailLabelInline: { ...typography.body, color: colors.mutedForeground, flexShrink: 0 },
+  detailValue: {
+    ...typography.body,
+    color: colors.foreground,
+    fontWeight: '600',
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    textAlign: 'right',
+  },
+  detailValueBlock: {
+    ...typography.body,
+    color: colors.foreground,
+    fontWeight: '600',
+    lineHeight: 20,
+    flexShrink: 1,
+  },
+  itemsBlock: { marginBottom: spacing.sm },
+  itemsLabel: { ...typography.caption, color: colors.mutedForeground, fontWeight: '700', marginBottom: spacing.xs },
+  itemRow: { marginBottom: spacing.sm },
+  itemName: { ...typography.body, color: colors.foreground, fontWeight: '600' },
+  itemMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  locationTitle: { ...typography.label, color: colors.foreground, fontWeight: '700', flex: 1 },
+  locationAddress: {
+    ...typography.body,
+    color: colors.mutedForeground,
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
   empty: { ...typography.body, color: colors.mutedForeground },
   section: { ...typography.label, color: colors.foreground, fontWeight: '700', marginBottom: spacing.md },
   reviewForm: { gap: spacing.lg },

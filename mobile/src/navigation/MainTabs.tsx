@@ -88,7 +88,7 @@ export function MainTabs() {
         tabBarIcon: ({ color, focused }) => {
           const icons: Record<string, keyof typeof Feather.glyphMap> = {
             Home: 'home',
-            Discover: 'search',
+            Services: 'grid',
             Book: 'calendar',
             Shop: 'shopping-bag',
             Alerts: 'bell',
@@ -109,7 +109,7 @@ export function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: t('nav.home') }} />
       {showBooking ? (
-        <Tab.Screen name="Discover" component={DiscoverScreen} options={{ title: t('nav.discover') }} />
+        <Tab.Screen name="Services" component={DiscoverScreen} options={{ title: t('nav.services') }} />
       ) : null}
       {showBooking ? (
         <Tab.Screen name="Book" component={BookingScreen} options={{ title: t('nav.book') }} />

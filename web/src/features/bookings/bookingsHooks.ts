@@ -57,17 +57,20 @@ export function useAvailability(
   staffId?: string,
   durationMinutes?: number,
   serviceId?: string,
+  serviceIds?: string[],
 ) {
   const client = useApiClient();
   const { businessId, scopeKey, workspaceReady } = useWorkspaceScope();
+  const multiService = Boolean(serviceIds && serviceIds.length > 1);
   return useQuery<AvailabilitySlot[], Error>({
-    queryKey: ['bookings', 'availability', date, staffId, durationMinutes, serviceId, ...scopeKey],
+    queryKey: ['bookings', 'availability', date, staffId, durationMinutes, serviceId, serviceIds, ...scopeKey],
     queryFn: () =>
       getAvailability(client, businessId, {
         date,
         staff_id: staffId,
-        service_id: serviceId,
-        duration_minutes: durationMinutes,
+        service_id: multiService ? undefined : serviceId,
+        service_ids: multiService ? serviceIds : undefined,
+        duration_minutes: multiService ? undefined : durationMinutes,
         interval_minutes: 30,
       }),
     enabled: workspaceReady && Boolean(date),

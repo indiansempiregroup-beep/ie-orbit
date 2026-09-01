@@ -116,8 +116,14 @@ function toBase64Url(value: string): string {
 export function getOpsMobileWebOrigin(): string {
   const configured = String(import.meta.env.VITE_OPS_MOBILE_WEB_URL ?? '').trim().replace(/\/$/, '');
   if (configured) return configured;
-  if (typeof window === 'undefined') return `http://localhost:${OPS_MOBILE_WEB_PORT}`;
-  return `${window.location.protocol}//${window.location.hostname}:${OPS_MOBILE_WEB_PORT}`;
+  if (typeof window === 'undefined') return '';
+  if (import.meta.env.DEV) {
+    const { hostname, protocol } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${protocol}//${hostname}:${OPS_MOBILE_WEB_PORT}`;
+    }
+  }
+  return window.location.origin;
 }
 
 export function buildOpsMobileSessionUrl(params: {

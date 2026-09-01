@@ -208,7 +208,7 @@ export function useServices() {
 
 export function useStaffMembers() {
   const client = useOpsClient();
-  const { ready } = useWorkspace();
+  const { ready, businessId } = useWorkspace();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -216,14 +216,17 @@ export function useStaffMembers() {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.staff.list();
+      const response = await client.staff.list({
+        business: businessId ?? undefined,
+        status: 'active',
+      });
       setStaff(asList<StaffMember>(response.data));
     } catch {
       setStaff([]);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, businessId]);
 
   useEffect(() => {
     void reload();

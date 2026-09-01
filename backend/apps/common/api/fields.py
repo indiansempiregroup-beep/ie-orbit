@@ -35,3 +35,18 @@ class CoordinateField(serializers.DecimalField):
         return super().to_internal_value(
             str(value.quantize(exponent, rounding=ROUND_HALF_UP))
         )
+
+
+class QueryUUIDListField(serializers.ListField):
+    """Accept repeated query params or a single comma-separated UUID list."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("child", serializers.UUIDField())
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_empty", False)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data: Any) -> list[Any]:
+        if isinstance(data, str):
+            data = [part.strip() for part in data.split(",") if part.strip()]
+        return super().to_internal_value(data)

@@ -9,12 +9,12 @@ export function buildNameMap<T extends NamedEntity>(items: T[] | undefined): Map
       item.name?.trim() ||
       item.email?.trim() ||
       item.id;
-    map.set(item.id, label);
+    map.set(String(item.id), label);
   }
   return map;
 }
 
 export function entityLabel(map: Map<string, string>, id?: string | null, fallback = '—') {
   if (!id) return fallback;
-  return map.get(id) ?? fallback;
+  return map.get(String(id)) ?? fallback;
 }

@@ -41,6 +41,8 @@ import {
   shopOrderTimeline,
   shopPaymentMethodLabel,
   shopPaymentStatusLabel,
+  shopOrderNeedsAppPayment,
+  shopOrderIsCashOnHandover,
   shopRefundPlan,
 } from './shopHelpers';
 import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-orbit/sdk';
@@ -330,10 +332,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
   ]);
 
   const paymentStatus = order?.payment_status || '';
-  const showQr =
-    order?.payment_method === 'upi' &&
-    !['paid', 'settled'].includes(paymentStatus) &&
-    Boolean(order.upi_pay_url);
+  const needsAppPayment = order ? shopOrderNeedsAppPayment(order) : false;
+  const cashOnHandover = order ? shopOrderIsCashOnHandover(order) : false;
+  const showQr = needsAppPayment && Boolean(order?.upi_pay_url);
   const headline = order ? shopOrderHeadline(order) : null;
   const tone = headline ? shopOrderStatusColors(headline.tone) : null;
   const timeline =
@@ -669,17 +670,23 @@ export function ShopOrderDetailScreen({ route }: Props) {
           <Text style={styles.section}>Payment</Text>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Method</Text>
-            <Text style={styles.summaryValue}>{shopPaymentMethodLabel(order.payment_method)}</Text>
+            <Text style={styles.summaryValue}>
+              {shopPaymentMethodLabel(order.payment_method, order.fulfillment_mode)}
+            </Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Status</Text>
             <Text
               style={[
                 styles.summaryValue,
-                ['paid', 'settled'].includes(paymentStatus) ? { color: colors.success } : { color: colors.warning },
+                ['paid', 'settled'].includes(paymentStatus)
+                  ? { color: colors.success }
+                  : cashOnHandover
+                    ? { color: colors.mutedForeground }
+                    : { color: colors.warning },
               ]}
             >
-              {shopPaymentStatusLabel(paymentStatus)}
+              {shopPaymentStatusLabel(paymentStatus, order.payment_method, order.fulfillment_mode)}
             </Text>
           </View>
           {order.upi_utr ? (
@@ -689,6 +696,16 @@ export function ShopOrderDetailScreen({ route }: Props) {
             </View>
           ) : null}
         </View>
+
+        {cashOnHandover ? (
+          <View style={styles.card}>
+            <Text style={styles.section}>Cash payment</Text>
+            <Text style={styles.meta}>
+              You will pay {formatShopMoney(order.total, order.currency)} in cash when you{' '}
+              {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'receive' : 'collect'} your order.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.card}>
           <Text style={styles.section}>Order summary</Text>
@@ -744,7 +761,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
           </View>
         ) : null}
 
-        {order.payment_method === 'upi' && ['due', 'rejected', ''].includes(paymentStatus) ? (
+        {needsAppPayment ? (
           <View style={styles.card}>
             <Text style={styles.section}>I’ve paid</Text>
             <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
@@ -944,6 +961,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    alignSelf: 'stretch',
+    width: '100%',
+    overflow: 'hidden',
   },
   trackingCard: {
     backgroundColor: colors.card,
@@ -1075,9 +1095,15 @@ const styles = StyleSheet.create({
   },
   refundTitle: { ...typography.label, color: colors.foreground, fontWeight: '700', marginTop: 4 },
   itemTotal: { ...typography.label, color: colors.foreground, fontWeight: '800', marginTop: 4 },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
-  infoText: { ...typography.body, color: colors.foreground, flex: 1 },
-  meta: { marginTop: 4, ...typography.caption, color: colors.mutedForeground },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    width: '100%',
+  },
+  infoText: { ...typography.body, color: colors.foreground, flex: 1, flexShrink: 1, minWidth: 0 },
+  meta: { marginTop: 4, ...typography.caption, color: colors.mutedForeground, flexShrink: 1 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, marginBottom: 8 },
   summaryLabel: { ...typography.body, color: colors.mutedForeground },
   summaryValue: { ...typography.body, color: colors.foreground, fontWeight: '600' },

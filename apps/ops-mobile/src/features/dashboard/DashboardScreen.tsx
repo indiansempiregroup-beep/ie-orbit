@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { BookingRow } from '../../components/BookingRow';
+import { UpcomingBookingHero } from '../../components/UpcomingBookingHero';
 import { OpsHeader, OpsHeaderIconButton } from '../../components/OpsHeader';
 import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
@@ -22,7 +23,13 @@ import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
 import { useBIOverview, useEntityMaps, usePlanFeatures } from '../../hooks/useOpsExtended';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { entityLabel } from '../../utils/entities';
+import {
+  bookingCustomerLabel,
+  bookingCustomerPhone,
+  bookingServiceLabel,
+  bookingStaffLabel,
+  filterUpcomingBookings,
+} from '../../utils/bookingDisplay';
 import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/products';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
 import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
@@ -103,10 +110,7 @@ export function DashboardScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const isRefreshing = refreshing || loading;
 
-  const upcoming = useMemo(
-    () => bookings.filter((b) => b.start_at && new Date(b.start_at) >= new Date()).slice(0, 5),
-    [bookings],
-  );
+  const upcoming = useMemo(() => filterUpcomingBookings(bookings).slice(0, 5), [bookings]);
   const completedToday = useMemo(
     () => bookings.filter((b) => String(b.status || '').toLowerCase() === 'completed').length,
     [bookings],
@@ -138,7 +142,7 @@ export function DashboardScreen() {
       if (nextBooking?.start_at) {
         lines.push({
           icon: 'clock',
-          text: `Next: ${entityLabel(serviceMap, nextBooking.service_id, 'Booking')} at ${formatTime(nextBooking.start_at)}`,
+          text: `Next: ${bookingServiceLabel(nextBooking, serviceMap)} · ${bookingCustomerLabel(nextBooking, customerMap)} at ${formatTime(nextBooking.start_at)}`,
         });
       }
     }
@@ -184,6 +188,7 @@ export function DashboardScreen() {
     todayCount,
     nextBooking,
     serviceMap,
+    customerMap,
     shopieEnabled,
     books,
     shopie,
@@ -240,45 +245,27 @@ export function DashboardScreen() {
           }
         >
           {hasAppointie ? (
-            <View style={styles.nextCard}>
-              <Text style={styles.nextLabel}>Next up today</Text>
-              {nextBooking ? (
-                <>
-                  <Text style={styles.nextTitle}>{entityLabel(serviceMap, nextBooking.service_id, 'Booking')}</Text>
-                  <Text style={styles.nextHint}>{entityLabel(customerMap, nextBooking.customer_id)}</Text>
-                  <View style={styles.nextMetaRow}>
-                    <View style={styles.nextMetaItem}>
-                      <Feather name="clock" size={12} color={colors.mutedForeground} />
-                      <Text style={styles.nextMetaText}>{formatTime(nextBooking.start_at)}</Text>
-                    </View>
-                    {nextBooking.staff_id ? (
-                      <View style={styles.nextMetaItem}>
-                        <Feather name="user" size={12} color={colors.mutedForeground} />
-                        <Text style={styles.nextMetaText}>{entityLabel(staffMap, nextBooking.staff_id)}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Button
-                    label="Open booking"
-                    size="sm"
-                    variant="soft"
-                    style={styles.nextBtn}
-                    onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.nextTitle}>No upcoming bookings</Text>
-                  <Text style={styles.nextHint}>Fill today&apos;s schedule with a new appointment.</Text>
-                  <Button
-                    label="New booking"
-                    size="sm"
-                    style={styles.nextBtn}
-                    onPress={() => navigation.navigate('CreateBooking', {})}
-                  />
-                </>
-              )}
-            </View>
+            nextBooking ? (
+              <UpcomingBookingHero
+                booking={nextBooking}
+                serviceMap={serviceMap}
+                customerMap={customerMap}
+                staffMap={staffMap}
+                onOpen={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
+              />
+            ) : (
+              <View style={styles.nextCard}>
+                <Text style={styles.nextLabel}>Next up today</Text>
+                <Text style={styles.nextTitle}>No upcoming bookings</Text>
+                <Text style={styles.nextHint}>Fill today&apos;s schedule with a new appointment.</Text>
+                <Button
+                  label="New booking"
+                  size="sm"
+                  style={styles.nextBtn}
+                  onPress={() => navigation.navigate('CreateBooking', {})}
+                />
+              </View>
+            )
           ) : shopieEnabled ? (
             <View style={styles.nextCard}>
               <Text style={styles.nextLabel}>Orbit Mart today</Text>
@@ -463,13 +450,18 @@ export function DashboardScreen() {
                       onAction={() => navigation.navigate('CreateBooking', {})}
                     />
                     <View style={styles.list}>
-                      {upcoming.map((booking) => (
+                      {upcoming.map((booking, index) => (
                         <BookingRow
                           key={booking.id}
-                          serviceName={entityLabel(serviceMap, booking.service_id, 'Booking')}
-                          customerName={entityLabel(customerMap, booking.customer_id)}
-                          staffName={entityLabel(staffMap, booking.staff_id, '')}
+                          highlight={index === 0}
+                          serviceName={bookingServiceLabel(booking, serviceMap)}
+                          customerName={bookingCustomerLabel(booking, customerMap)}
+                          customerPhone={bookingCustomerPhone(booking)}
+                          staffName={bookingStaffLabel(booking, staffMap)}
                           startAt={booking.start_at}
+                          endAt={booking.end_at}
+                          durationMinutes={booking.duration_minutes}
+                          serviceCount={booking.line_items?.length || undefined}
                           bookingNumber={booking.booking_number}
                           status={booking.status}
                           onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}

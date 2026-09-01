@@ -129,11 +129,17 @@ class MerchantPaymentService:
             "last_tested_at": raw.get("last_tested_at"),
             "webhook_url": webhook_url,
             "upi_vpa": business.upi_vpa or "",
+            "cod_enabled": bool(settings.cod_enabled),
             "cashfree": self.cashfree_public_settings(
                 business=business,
                 webhook_url=cashfree_webhook_url,
             ),
         }
+
+    def update_cod_enabled(self, *, business: Business, cod_enabled: bool) -> None:
+        settings = self.ensure_settings(business=business)
+        settings.cod_enabled = bool(cod_enabled)
+        settings.save(update_fields=["cod_enabled", "updated_at", "version"])
 
     def update_settings(
         self,

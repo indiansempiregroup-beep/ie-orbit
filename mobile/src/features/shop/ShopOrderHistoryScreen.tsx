@@ -30,7 +30,8 @@ import {
   formatShopMoney,
   formatShopOrderPlaced,
   formatShopQty,
-  isShopOrderUnpaid,
+  shopOrderNeedsAppPayment,
+  shopOrderIsCashOnHandover,
   shopFulfillmentLabel,
   shopOrderDeliverySummary,
   shopOrderHeadline,
@@ -169,7 +170,7 @@ export function ShopOrderHistoryScreen() {
           {deliverySummary?.etaLabel ? (
             <Text style={[styles.statusText, { color: tone.text }]}> · ETA {deliverySummary.etaLabel}</Text>
           ) : null}
-          {isShopOrderUnpaid(item) ? <Text style={styles.unpaidHint}> · Pay now</Text> : null}
+          {shopOrderNeedsAppPayment(item) ? <Text style={styles.unpaidHint}> · Pay now</Text> : null}
         </View>
 
         {preview.map((line: ShopOrderLine) => (
@@ -276,7 +277,7 @@ export function ShopOrderHistoryScreen() {
             style={[styles.payChip, payment === 'unpaid' && { backgroundColor: primary, borderColor: primary }]}
             onPress={() => setPayment((value) => (value === 'unpaid' ? 'all' : 'unpaid'))}
           >
-            <Text style={[styles.payChipText, payment === 'unpaid' && styles.payChipTextOn]}>Unpaid</Text>
+            <Text style={[styles.payChipText, payment === 'unpaid' && styles.payChipTextOn]}>Needs payment</Text>
           </Pressable>
           {filtersActive || search ? (
             <Pressable onPress={resetFilters}>

@@ -34,20 +34,20 @@ function localAdminOrigin(): string {
 export function getPublicSiteOrigin(): string {
   const configured = configuredOrigin(import.meta.env.VITE_PUBLIC_SITE_URL);
   if (configured) return configured;
-  if (typeof window !== 'undefined' && isLoopbackHost(window.location.hostname)) {
+  if (import.meta.env.DEV && typeof window !== 'undefined' && isLoopbackHost(window.location.hostname)) {
     return localPublicOrigin();
   }
-  return windowOrigin() || 'http://localhost:3000';
+  return windowOrigin();
 }
 
 /** Platform Admin SPA. Local loopback maps to 127.0.0.1 (like app.ie-orbit.com). */
 export function getAdminAppOrigin(): string {
   const configured = configuredOrigin(import.meta.env.VITE_ADMIN_APP_URL);
   if (configured) return configured;
-  if (typeof window !== 'undefined' && isLoopbackHost(window.location.hostname)) {
+  if (import.meta.env.DEV && typeof window !== 'undefined' && isLoopbackHost(window.location.hostname)) {
     return localAdminOrigin();
   }
-  return windowOrigin() || 'http://localhost:3000';
+  return windowOrigin();
 }
 
 export function adminAppIsSeparateHost(): boolean {

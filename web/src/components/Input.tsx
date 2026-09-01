@@ -1,15 +1,20 @@
 import React from 'react';
 
-type Props = React.InputHTMLAttributes<HTMLInputElement> & { label?: string };
+type Props = React.InputHTMLAttributes<HTMLInputElement> & { label?: string; required?: boolean };
 
 export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
-  { label, style, id, ...rest },
+  { label, required, style, id, ...rest },
   ref,
 ) {
   const inputId = id ?? rest.name;
   return (
     <label style={{ display: 'block', marginBottom: 12 }} htmlFor={inputId}>
-      {label && <div style={{ marginBottom: 6, fontSize: 13, color: '#374151' }}>{label}</div>}
+      {label && (
+        <div style={{ marginBottom: 6, fontSize: 13, color: '#374151' }}>
+          {label}
+          {required ? <span aria-hidden="true" style={{ color: '#dc2626' }}> *</span> : null}
+        </div>
+      )}
       <input
         id={inputId}
         ref={ref}

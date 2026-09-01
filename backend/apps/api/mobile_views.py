@@ -65,7 +65,7 @@ from apps.notifications.services.notifications import NotificationService
 from apps.platform_media.models import MediaFolderType, MediaVisibility
 from apps.platform_media.services import MediaService
 from apps.services.models import Service, ServiceCategory, ServiceImage, ServicePricing, ServiceStatus, ServiceVisibility
-from apps.staff.models import EmploymentStatus, Staff, StaffServiceAssignment
+from apps.staff.models import EmploymentStatus, Staff
 from apps.tenancy.models import Tenant
 
 MOBILE_CUSTOMER_PERMISSIONS = [IsAuthenticated, IsEmailVerified]
@@ -122,15 +122,56 @@ UPCOMING_BOOKING_STATUSES = {
 
 
 def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
-    service = Service.objects.require_tenant(tenant).filter(id=booking.service_id).first()
-    service_name = ""
-    if service is not None:
-        service_name = service.display_name or service.name
+    line_items = list(booking.line_items.order_by("sort_order", "start_at"))
+    service_ids = [str(item.service_id) for item in line_items] or [str(booking.service_id)]
+    services = {
+        str(service.id): service
+        for service in Service.objects.require_tenant(tenant).filter(id__in=service_ids)
+    }
+    staff_ids = [str(item.staff_id) for item in line_items if item.staff_id]
+    if booking.staff_id:
+        staff_ids.append(str(booking.staff_id))
+    staff_map = {
+        str(member.id): member
+        for member in Staff.objects.require_tenant(tenant).filter(id__in=staff_ids)
+    }
+
+    service_names: list[str] = []
+    for service_id in service_ids:
+        service = services.get(service_id)
+        if service is not None:
+            service_names.append(service.display_name or service.name)
+
+    primary_service = services.get(str(booking.service_id))
+    service_name = primary_service.display_name or primary_service.name if primary_service else ""
+    if len(service_names) > 1:
+        service_name = f"{service_names[0]} + {len(service_names) - 1} more"
+
     staff_name = ""
     if booking.staff_id:
-        staff = Staff.objects.require_tenant(tenant).filter(id=booking.staff_id).first()
+        staff = staff_map.get(str(booking.staff_id))
         if staff is not None:
             staff_name = staff.display_name
+
+    serialized_items = []
+    for item in line_items:
+        service = services.get(str(item.service_id))
+        item_staff = staff_map.get(str(item.staff_id)) if item.staff_id else None
+        serialized_items.append(
+            {
+                "id": str(item.id),
+                "service_id": str(item.service_id),
+                "service_name": (service.display_name or service.name) if service else "",
+                "staff_id": str(item.staff_id) if item.staff_id else None,
+                "staff_name": item_staff.display_name if item_staff else "",
+                "start_at": item.start_at,
+                "end_at": item.end_at,
+                "duration_minutes": item.duration_minutes,
+                "sort_order": item.sort_order,
+                "price_snapshot": item.price_snapshot,
+            }
+        )
+
     metadata = booking.metadata or {}
     review_payload = None
     try:
@@ -178,8 +219,10 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
         "status": booking.status,
         "service_id": booking.service_id,
         "service_name": service_name,
+        "service_names": service_names,
         "staff_id": booking.staff_id,
         "staff_name": staff_name,
+        "items": serialized_items,
         "branch": branch_payload,
         "appointment_date": booking.appointment_date,
         "start_at": booking.start_at,
@@ -202,10 +245,11 @@ def _serialize_mobile_service(*, tenant: Tenant, business: Business, service: Se
     duration = (
         service.durations.filter(is_default=True).values_list("duration_minutes", flat=True).first() or 30
     )
-    staff_ids = list(
-        StaffServiceAssignment.objects.require_tenant(tenant)
-        .filter(service=service, is_active_assignment=True, staff__employment_status=EmploymentStatus.ACTIVE)
-        .values_list("staff_id", flat=True)
+    availability = AvailabilityService()
+    eligible_staff_ids = availability.staff_eligible_for_all_services(
+        tenant=tenant,
+        business=business,
+        service_ids=[service.id],
     )
     staff_rows = [
         {
@@ -213,7 +257,9 @@ def _serialize_mobile_service(*, tenant: Tenant, business: Business, service: Se
             "display_name": member.display_name,
             "title": member.designation or "",
         }
-        for member in Staff.objects.require_tenant(tenant).filter(id__in=staff_ids, business=business)
+        for member in Staff.objects.require_tenant(tenant)
+        .filter(id__in=eligible_staff_ids, business=business)
+        .order_by("display_name")
     ]
     return {
         "id": str(service.id),
@@ -383,16 +429,39 @@ class MobileAvailabilityView(APIView):
             )
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
-        slots = self.service.available_slots(
-            tenant=tenant,
-            business=business,
-            staff_id=serializer.validated_data.get("staff_id"),
-            service_id=serializer.validated_data.get("service_id"),
-            target_date=serializer.validated_data["date"],
-            duration_minutes=serializer.validated_data["duration_minutes"],
-            interval_minutes=serializer.validated_data["interval_minutes"],
-            buffer_minutes=serializer.validated_data.get("buffer_minutes"),
-        )
+
+        service_ids = serializer.validated_data.get("service_ids") or []
+        service_id = serializer.validated_data.get("service_id")
+        if service_id and not service_ids:
+            service_ids = [service_id]
+
+        if len(service_ids) > 1:
+            items = [{"service_id": sid} for sid in service_ids]
+            slots = self.service.available_slots_for_items(
+                tenant=tenant,
+                business=business,
+                target_date=serializer.validated_data["date"],
+                items=items,
+                interval_minutes=serializer.validated_data["interval_minutes"],
+                staff_id=serializer.validated_data.get("staff_id"),
+            )
+        else:
+            duration_minutes = serializer.validated_data.get("duration_minutes")
+            if duration_minutes is None and service_ids:
+                duration_minutes = self.service.default_service_duration_minutes(
+                    service_id=service_ids[0]
+                )
+            duration_minutes = duration_minutes or 30
+            slots = self.service.available_slots(
+                tenant=tenant,
+                business=business,
+                staff_id=serializer.validated_data.get("staff_id"),
+                service_id=service_ids[0] if service_ids else service_id,
+                target_date=serializer.validated_data["date"],
+                duration_minutes=duration_minutes,
+                interval_minutes=serializer.validated_data["interval_minutes"],
+                buffer_minutes=serializer.validated_data.get("buffer_minutes"),
+            )
         return success_response(
             {
                 "slots": [slot.as_dict() for slot in slots],
@@ -419,12 +488,34 @@ class MobileBookingRequestView(APIView):
             )
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
-        service = Service.objects.require_tenant(tenant).filter(
-            id=serializer.validated_data["service_id"], business=business
-        ).first()
-        if service is None:
-            return Response({"error": {"message": "Service not found."}}, status=status.HTTP_404_NOT_FOUND)
 
+        raw_items = serializer.validated_data.get("items")
+        if raw_items:
+            booking_items = list(raw_items)
+            service_ids = [item["service_id"] for item in booking_items]
+            services = {
+                str(service.id): service
+                for service in Service.objects.require_tenant(tenant).filter(
+                    id__in=service_ids, business=business
+                )
+            }
+            if len(services) != len(set(str(sid) for sid in service_ids)):
+                return Response({"error": {"message": "One or more services were not found."}}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            service = Service.objects.require_tenant(tenant).filter(
+                id=serializer.validated_data["service_id"], business=business
+            ).first()
+            if service is None:
+                return Response({"error": {"message": "Service not found."}}, status=status.HTTP_404_NOT_FOUND)
+            booking_items = [
+                {
+                    "service_id": service.id,
+                    "duration_minutes": serializer.validated_data["duration_minutes"],
+                }
+            ]
+            services = {str(service.id): service}
+
+        availability_service = AvailabilityService()
         staff_id = serializer.validated_data.get("staff_id")
         if staff_id:
             staff = Staff.objects.require_tenant(tenant).filter(
@@ -434,29 +525,33 @@ class MobileBookingRequestView(APIView):
             ).first()
             if staff is None:
                 return Response({"error": {"message": "Stylist not found."}}, status=status.HTTP_404_NOT_FOUND)
-            if not StaffServiceAssignment.objects.require_tenant(tenant).filter(
-                staff=staff,
-                service=service,
-                is_active_assignment=True,
-            ).exists():
-                return Response(
-                    {"error": {"message": "Selected stylist does not offer this service."}},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        elif not StaffServiceAssignment.objects.require_tenant(tenant).filter(
-            service=service,
-            is_active_assignment=True,
-            staff__business=business,
-            staff__employment_status=EmploymentStatus.ACTIVE,
-        ).exists():
-            return Response(
-                {
-                    "error": {
-                        "message": "No timeslot available. No stylist is assigned to this service.",
-                    }
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            for item in booking_items:
+                service = services.get(str(item["service_id"]))
+                if service and not availability_service.staff_can_perform_service(
+                    tenant=tenant,
+                    staff_id=staff_id,
+                    service_id=service.id,
+                ):
+                    return Response(
+                        {"error": {"message": "Selected stylist does not offer all selected services."}},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+        else:
+            for item in booking_items:
+                service = services.get(str(item["service_id"]))
+                if service and not availability_service.staff_eligible_for_all_services(
+                    tenant=tenant,
+                    business=business,
+                    service_ids=[service.id],
+                ):
+                    return Response(
+                        {
+                            "error": {
+                                "message": "No timeslot available. No stylist is assigned to one of the selected services.",
+                            }
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
         user = request.user
         customer_name = serializer.validated_data.get("customer_name", "").strip()
@@ -481,18 +576,16 @@ class MobileBookingRequestView(APIView):
             email=email,
         )
         start_at = serializer.validated_data["start_at"]
-        duration = serializer.validated_data["duration_minutes"]
         try:
             booking = self.booking_service.create_booking(
                 tenant=tenant,
                 business=business,
                 data={
                     "customer_id": customer.id,
-                    "service_id": service.id,
+                    "items": booking_items,
                     "staff_id": staff_id,
                     "branch_id": serializer.validated_data.get("branch_id"),
                     "start_at": start_at,
-                    "duration_minutes": duration,
                     "status": BookingStatus.PENDING,
                     "source": BookingSource.CUSTOMER_APP,
                     "channel": BookingChannel.MOBILE,
@@ -670,6 +763,7 @@ class MobileBookingListView(APIView):
         bookings = (
             Booking.objects.require_tenant(tenant)
             .filter(business=business, customer_id__in=customers.values_list("id", flat=True))
+            .prefetch_related("line_items")
             .order_by("-start_at")
         )
         status_filter = serializer.validated_data.get("status", "").strip()
@@ -799,11 +893,13 @@ class MobileStaffListView(APIView):
         )
         service_id = serializer.validated_data.get("service_id")
         if service_id:
-            assigned_ids = StaffServiceAssignment.objects.require_tenant(tenant).filter(
-                service_id=service_id,
-                is_active_assignment=True,
-            ).values_list("staff_id", flat=True)
-            staff_qs = staff_qs.filter(id__in=assigned_ids)
+            availability = AvailabilityService()
+            eligible_ids = availability.staff_eligible_for_all_services(
+                tenant=tenant,
+                business=business,
+                service_ids=[service_id],
+            )
+            staff_qs = staff_qs.filter(id__in=eligible_ids)
         rows = [
             {
                 "id": str(member.id),

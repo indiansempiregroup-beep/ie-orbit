@@ -13,6 +13,14 @@ function normalizeWebsiteInput(value: string): string {
   return `https://${trimmed}`;
 }
 
+const phoneSchema = z
+  .string()
+  .trim()
+  .min(1, 'Phone number is required')
+  .refine((value) => /^(\+91)?[6-9]\d{9}$/.test(value.replace(/[\s-]/g, '')), {
+    message: 'Enter a valid 10-digit Indian mobile number',
+  });
+
 const optionalWebsiteSchema = z
   .string()
   .transform(normalizeWebsiteInput)
@@ -42,7 +50,7 @@ export const registerWizardSchema = z
     businessCategory: z.string().min(1, 'Select a category'),
     industry: z.string().min(1, 'Select an industry'),
     businessEmail: z.string().email('Enter a valid business email'),
-    businessPhone: z.string().min(6, 'Enter a valid phone number'),
+    businessPhone: phoneSchema,
     website: optionalWebsiteSchema,
     country: z.string().min(1, 'Country is required'),
     state: z.string().min(1, 'State is required'),
@@ -55,7 +63,7 @@ export const registerWizardSchema = z
     lastName: z.string().min(1, 'Last name is required'),
     displayName: z.string().min(1, 'Display name is required'),
     email: z.string().email('Enter a valid email'),
-    mobile: z.string().min(6, 'Enter a valid mobile number'),
+    mobile: phoneSchema,
     password: z.string(),
     confirmPassword: z.string(),
     googleIdToken: z.string(),

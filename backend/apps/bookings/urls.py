@@ -9,6 +9,7 @@ from apps.bookings.api.views import (
     BookingDetailView,
     BookingListCreateView,
     BookingRescheduleView,
+    BookingReassignableStaffView,
     BookingReviewListView,
     BusinessAvailabilityView,
     StaffAvailabilityView,
@@ -36,6 +37,11 @@ urlpatterns = [
         "bookings/<uuid:booking_id>/reschedule",
         BookingRescheduleView.as_view(),
         name="booking-reschedule",
+    ),
+    path(
+        "bookings/<uuid:booking_id>/reassignable-staff",
+        BookingReassignableStaffView.as_view(),
+        name="booking-reassignable-staff",
     ),
     path(
         "bookings/<uuid:booking_id>/check-in", BookingCheckInView.as_view(), name="booking-check-in"

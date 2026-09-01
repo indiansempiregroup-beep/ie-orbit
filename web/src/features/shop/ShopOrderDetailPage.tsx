@@ -204,6 +204,34 @@ export function ShopOrderDetailPage() {
                   : 'standard delivery'
                 : data.fulfillment_mode}
             </div>
+            {data.customer_id ? (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid #e5e7eb',
+                  background: '#f9fafb',
+                  maxWidth: 420,
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
+                  Customer details
+                </div>
+                <Link
+                  to={`/customers/${data.customer_id}`}
+                  style={{ color: '#2563eb', fontWeight: 600, fontSize: 16, textDecoration: 'none' }}
+                >
+                  {data.customer_name?.trim() || 'View customer profile'}
+                </Link>
+                {data.customer_phone ? (
+                  <div style={{ color: '#6b7280', marginTop: 4 }}>{data.customer_phone}</div>
+                ) : null}
+                {data.delivery_address ? (
+                  <div style={{ color: '#374151', marginTop: 4, lineHeight: 1.5 }}>{data.delivery_address}</div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {data.fulfillment_mode === 'delivery' &&

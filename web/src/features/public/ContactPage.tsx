@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Mail, MessageSquare } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Mail, MessageSquare, Phone } from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
@@ -10,7 +11,15 @@ export function ContactPage() {
     description: 'Contact the IE Orbit team for support and sales inquiries.',
   });
 
+  const [searchParams] = useSearchParams();
   const [submitted, setSubmitted] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (searchParams.get('intent') === 'demo') {
+      setMessage("I'd like a demo of IE Orbit for my business.");
+    }
+  }, [searchParams]);
 
   return (
     <>
@@ -46,7 +55,7 @@ export function ContactPage() {
                 <Input label="Email" name="email" type="email" required autoComplete="email" />
                 <label className="public-form-label">
                   <span>Message</span>
-                  <textarea name="message" required rows={5} />
+                  <textarea name="message" required rows={5} value={message} onChange={(e) => setMessage(e.target.value)} />
                 </label>
                 <Button type="submit" variant="primary">
                   Send message
@@ -62,6 +71,15 @@ export function ContactPage() {
               <h3>Email</h3>
               <p style={{ marginBottom: 0 }}>
                 <a href="mailto:support@indiansempire.com">support@indiansempire.com</a>
+              </p>
+            </article>
+            <article className="public-card">
+              <div className="public-card-icon public-card-icon--teal">
+                <Phone size={20} />
+              </div>
+              <h3>Phone</h3>
+              <p style={{ marginBottom: 0 }}>
+                <a href="tel:+918048040848">+91 80 4804 0848</a>
               </p>
             </article>
             <article className="public-card">

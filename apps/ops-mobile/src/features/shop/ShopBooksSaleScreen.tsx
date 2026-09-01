@@ -27,6 +27,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
+import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
 import { getApiErrorMessage } from '../../utils/format';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -631,6 +632,13 @@ function SaleInvoiceDetailModal({
                 </View>
               )}
             </View>
+
+            {localVoucher.customer ? (
+              <CustomerDetailLinkCard
+                customerId={String(localVoucher.customer)}
+                customerName={localVoucher.customer_name?.trim() || voucherPartyLabel(localVoucher)}
+              />
+            ) : null}
 
             <Text style={detailStyles.section}>Line items</Text>
             {lines.length === 0 ? (

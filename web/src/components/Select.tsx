@@ -4,17 +4,23 @@ type Props = React.SelectHTMLAttributes<HTMLSelectElement> & {
   label?: string;
   error?: string;
   compact?: boolean;
+  required?: boolean;
   options: Array<{ value: string; label: string }>;
 };
 
 export const Select = React.forwardRef<HTMLSelectElement, Props>(function Select(
-  { label, error, compact = false, options, style, id, ...rest },
+  { label, error, compact = false, required, options, style, id, ...rest },
   ref,
 ) {
   const selectId = id ?? rest.name;
   return (
     <label style={{ display: 'block', marginBottom: compact ? 0 : 12 }} htmlFor={selectId}>
-      {label ? <div style={{ marginBottom: 6, fontSize: 13, color: '#374151' }}>{label}</div> : null}
+      {label ? (
+        <div style={{ marginBottom: 6, fontSize: 13, color: '#374151' }}>
+          {label}
+          {required ? <span aria-hidden="true" style={{ color: '#dc2626' }}> *</span> : null}
+        </div>
+      ) : null}
       <select
         id={selectId}
         ref={ref}

@@ -616,6 +616,10 @@ class ShopBusinessSettings(TenantModel):
     )
     same_day_delivery_enabled = models.BooleanField(default=False)
     instant_delivery_enabled = models.BooleanField(default=False)
+    cod_enabled = models.BooleanField(
+        default=True,
+        help_text="Allow online customers to pay with cash on delivery or at pickup.",
+    )
     delivery_integration = models.JSONField(
         default=_default_delivery_integration,
         blank=True,

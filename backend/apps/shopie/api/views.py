@@ -566,12 +566,17 @@ class MerchantPaymentSettingsView(APIView):
         data = serializer.validated_data
         business = self._business(request, data["business_id"])
         try:
+            if "cod_enabled" in request.data:
+                self.payments.update_cod_enabled(
+                    business=business,
+                    cod_enabled=bool(data.get("cod_enabled")),
+                )
             cashfree = data.get("cashfree") if isinstance(data.get("cashfree"), dict) else None
             razorpay_touched = any(
                 field in request.data
                 for field in ("key_id", "key_secret", "webhook_secret", "enabled")
             )
-            if razorpay_touched or cashfree is None:
+            if razorpay_touched or "upi_vpa" in request.data:
                 payload = self.payments.update_settings(
                     business=business,
                     key_id=data.get("key_id") or "",

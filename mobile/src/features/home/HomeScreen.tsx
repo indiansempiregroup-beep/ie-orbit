@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MobileDiscoverService, PlatformAnnouncement, ShopDashboardAd, ShopOrder, ShopProduct } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { PromoCarousel, openPromoAd } from '../../components/PromoCarousel';
+import { HomeBookingRow } from '../../components/HomeBookingRow';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
@@ -16,11 +17,16 @@ import { useMobileBookings } from '../../hooks/useMobileBookings';
 import { useMobileNotifications } from '../../hooks/useMobileNotifications';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Avatar } from '../../components/ui/Avatar';
-import { Badge, badgeTone, type BadgeStatus } from '../../components/ui/Badge';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { formatDateTime, formatTime, isUpcomingBooking, mapBookingStatus } from '../../utils/format';
+import { isUpcomingBooking, mapBookingStatus } from '../../utils/format';
+import {
+  bookingServiceLabel,
+  bookingStaffLabel,
+  bookingStartsInLabel,
+  bookingTimeRangeLabel,
+} from '../../utils/bookingDisplay';
 import {
   formatShopMoney,
   formatShopOrderPlaced,
@@ -50,16 +56,6 @@ function bookingDateParts(iso: string) {
     dateLabel: date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' }),
   };
 }
-
-type FeatherName = React.ComponentProps<typeof Feather>['name'];
-
-const HISTORY_ICONS: Record<BadgeStatus, FeatherName> = {
-  confirmed: 'calendar',
-  pending: 'clock',
-  cancelled: 'x-circle',
-  completed: 'check-circle',
-  noshow: 'alert-circle',
-};
 
 function orderTimestamp(order: ShopOrder) {
   if (!order.created_at) return 0;
@@ -188,7 +184,7 @@ export function HomeScreen() {
   const upcomingBookings = useMemo(
     () =>
       bookings
-        .filter((booking) => isUpcomingBooking(booking.status, booking.start_at))
+        .filter((booking) => isUpcomingBooking(booking.status, booking.start_at, booking.end_at))
         .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
         .slice(0, 5),
     [bookings],
@@ -196,11 +192,13 @@ export function HomeScreen() {
   const nextBooking = upcomingBookings[0];
   const moreUpcoming = upcomingBookings.slice(1);
   const nextParts = nextBooking ? bookingDateParts(nextBooking.start_at) : null;
+  const nextTiming = nextBooking ? bookingStartsInLabel(nextBooking.start_at, nextBooking.end_at) : null;
+  const nextStaffLabel = nextBooking ? bookingStaffLabel(nextBooking) : '';
 
   const recentBookings = useMemo(
     () =>
       bookings
-        .filter((booking) => !isUpcomingBooking(booking.status, booking.start_at))
+        .filter((booking) => !isUpcomingBooking(booking.status, booking.start_at, booking.end_at))
         .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
         .slice(0, 3),
     [bookings],
@@ -255,7 +253,19 @@ export function HomeScreen() {
                 style={styles.nextCard}
                 onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
               >
-                <Text style={styles.nextLabel}>Next appointment</Text>
+                <View style={styles.nextHeaderRow}>
+                  <Text style={styles.nextLabel}>Next appointment</Text>
+                  {nextTiming ? (
+                    <View style={styles.nextTimingChip}>
+                      <Feather
+                        name={nextTiming.tone === 'now' ? 'activity' : 'clock'}
+                        size={12}
+                        color="#fff"
+                      />
+                      <Text style={styles.nextTimingText}>{nextTiming.label}</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <View style={styles.nextMain}>
                   <View style={styles.nextDateTile}>
                     <Text style={styles.nextDateMonth}>{nextParts?.month}</Text>
@@ -263,50 +273,58 @@ export function HomeScreen() {
                   </View>
                   <View style={styles.nextCopy}>
                     <Text style={styles.nextTitle} numberOfLines={2}>
-                      {nextBooking.service_name}
+                      {bookingServiceLabel(nextBooking)}
                     </Text>
                     <Text style={styles.nextHint}>
-                      {nextParts?.dateLabel} · {formatTime(nextBooking.start_at)}
+                      {bookingTimeRangeLabel(nextBooking.start_at, nextBooking.end_at)}
+                      {nextBooking.duration_minutes ? ` · ${nextBooking.duration_minutes} min` : ''}
                     </Text>
-                    {nextBooking.staff_name ? (
-                      <Text style={styles.nextHint}>with {nextBooking.staff_name}</Text>
+                    {nextBooking.branch?.display_name ? (
+                      <Text style={styles.nextHint} numberOfLines={1}>
+                        at {nextBooking.branch.display_name}
+                      </Text>
+                    ) : null}
+                    {nextStaffLabel ? (
+                      <Text style={styles.nextHint} numberOfLines={2}>
+                        with {nextStaffLabel}
+                      </Text>
                     ) : null}
                   </View>
-                </View>
-                <View style={styles.manageBtn}>
-                  <Text style={[styles.manageText, { color: primary }]}>View details</Text>
-                  <Feather name="chevron-right" size={14} color={primary} />
+                  <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
                 </View>
               </Pressable>
             ) : (
               <Pressable style={styles.nextCard} onPress={() => navigation.navigate('Book')}>
                 <Text style={styles.nextLabel}>Next appointment</Text>
-                <Text style={styles.nextTitle}>No upcoming bookings</Text>
-                <Text style={styles.nextHint}>Book your next visit in a few taps</Text>
-                <View style={styles.manageBtn}>
-                  <Text style={[styles.manageText, { color: primary }]}>Book now</Text>
-                  <Feather name="chevron-right" size={14} color={primary} />
+                <View style={styles.nextMain}>
+                  <View style={styles.nextCopy}>
+                    <Text style={styles.nextTitle}>No upcoming bookings</Text>
+                    <Text style={styles.nextHint}>Book your next visit in a few taps</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
                 </View>
               </Pressable>
             )
           ) : showShop ? (
             <Pressable style={styles.nextCard} onPress={() => navigation.navigate('Shop')}>
               <Text style={styles.nextLabel}>Shop {appName}</Text>
-              <Text style={styles.nextTitle}>Order in a few taps</Text>
-              <Text style={styles.nextHint}>Browse products and keep your receipts in the app</Text>
-              <View style={styles.manageBtn}>
-                <Text style={[styles.manageText, { color: primary }]}>Shop now</Text>
-                <Feather name="chevron-right" size={14} color={primary} />
+              <View style={styles.nextMain}>
+                <View style={styles.nextCopy}>
+                  <Text style={styles.nextTitle}>Order in a few taps</Text>
+                  <Text style={styles.nextHint}>Browse products and keep your receipts in the app</Text>
+                </View>
+                <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
               </View>
             </Pressable>
           ) : (
             <Pressable style={styles.nextCard} onPress={() => navigation.navigate('HelpSupport')}>
               <Text style={styles.nextLabel}>Welcome</Text>
-              <Text style={styles.nextTitle}>{appName}</Text>
-              <Text style={styles.nextHint}>Reach the team any time from Help & Support</Text>
-              <View style={styles.manageBtn}>
-                <Text style={[styles.manageText, { color: primary }]}>Get help</Text>
-                <Feather name="chevron-right" size={14} color={primary} />
+              <View style={styles.nextMain}>
+                <View style={styles.nextCopy}>
+                  <Text style={styles.nextTitle}>{appName}</Text>
+                  <Text style={styles.nextHint}>Reach the team any time from Help & Support</Text>
+                </View>
+                <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
               </View>
             </Pressable>
           )}
@@ -368,32 +386,15 @@ export function HomeScreen() {
               }
             />
             <View style={styles.upcomingList}>
-              {moreUpcoming.map((booking) => {
-                const parts = bookingDateParts(booking.start_at);
-                return (
-                  <Pressable
-                    key={booking.id}
-                    style={styles.upcomingCard}
-                    onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-                  >
-                    <View style={[styles.upcomingDate, { backgroundColor: `${primary}12` }]}>
-                      <Text style={[styles.upcomingMonth, { color: primary }]}>{parts.month}</Text>
-                      <Text style={[styles.upcomingDay, { color: primary }]}>{parts.day}</Text>
-                    </View>
-                    <View style={styles.sampleBody}>
-                      <Text style={styles.sampleTitle} numberOfLines={1}>
-                        {booking.service_name}
-                      </Text>
-                      <Text style={styles.sampleMeta}>
-                        {parts.weekday} · {formatTime(booking.start_at)}
-                        {booking.staff_name ? ` · ${booking.staff_name}` : ''}
-                      </Text>
-                    </View>
-                    <Badge status={mapBookingStatus(booking.status)} />
-                    <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-                  </Pressable>
-                );
-              })}
+              {moreUpcoming.map((booking) => (
+                <HomeBookingRow
+                  key={booking.id}
+                  booking={booking}
+                  variant="upcoming"
+                  primaryColor={primary}
+                  onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                />
+              ))}
             </View>
           </>
         ) : null}
@@ -403,7 +404,7 @@ export function HomeScreen() {
             <SectionHeader
               title="Popular services"
               action={
-                <Pressable onPress={() => navigation.navigate('Discover')}>
+                <Pressable onPress={() => navigation.navigate('Services')}>
                   <Text style={[styles.link, { color: primary }]}>See all</Text>
                 </Pressable>
               }
@@ -511,32 +512,15 @@ export function HomeScreen() {
             ) : recentBookings.length ? (
               <View style={styles.historyBlock}>
                 <View style={styles.historyList}>
-                  {recentBookings.map((booking) => {
-                    const status = mapBookingStatus(booking.status);
-                    const tone = badgeTone(status);
-                    return (
-                      <Pressable
-                        key={booking.id}
-                        style={({ pressed }) => [styles.historyCard, pressed && styles.cardPressed]}
-                        onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-                      >
-                        <View style={[styles.historyIcon, { backgroundColor: tone.bg }]}>
-                          <Feather name={HISTORY_ICONS[status]} size={16} color={tone.text} />
-                        </View>
-                        <View style={styles.sampleBody}>
-                          <Text style={styles.sampleTitle} numberOfLines={1}>
-                            {booking.service_name}
-                          </Text>
-                          <Text style={styles.sampleMeta} numberOfLines={1}>
-                            {formatDateTime(booking.start_at)}
-                            {booking.staff_name ? ` · ${booking.staff_name}` : ''}
-                          </Text>
-                        </View>
-                        <Badge status={status} />
-                        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-                      </Pressable>
-                    );
-                  })}
+                  {recentBookings.map((booking) => (
+                    <HomeBookingRow
+                      key={booking.id}
+                      booking={booking}
+                      variant="recent"
+                      primaryColor={primary}
+                      onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                    />
+                  ))}
                 </View>
                 {rebookTarget ? (
                   <Pressable
@@ -690,7 +674,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  hero: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+  hero: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   pointsChip: {
     flexDirection: 'row',
@@ -725,10 +709,26 @@ const styles = StyleSheet.create({
   nextCard: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: radius.xl,
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   nextLabel: { ...typography.caption, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.4 },
+  nextHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  nextTimingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  nextTimingText: { ...typography.tiny, color: '#fff', fontWeight: '700' },
   nextMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   nextDateTile: {
     width: 56,
@@ -743,17 +743,6 @@ const styles = StyleSheet.create({
   nextCopy: { flex: 1, gap: 4 },
   nextTitle: { ...typography.title, color: '#fff' },
   nextHint: { ...typography.caption, color: 'rgba(255,255,255,0.75)' },
-  manageBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#fff',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  manageText: { ...typography.caption, fontWeight: '700' },
   upcomingList: { gap: spacing.sm, marginBottom: spacing.xl },
   upcomingCard: {
     flexDirection: 'row',
