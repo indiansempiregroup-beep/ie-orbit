@@ -3899,7 +3899,14 @@ class ApiClient {
       duration_minutes?: number;
       interval_minutes?: number;
       buffer_minutes?: number | null;
-    }) => this.request<AvailabilitySlot[]>(`/availability`, { method: 'GET', query }),
+    }) => {
+      const { items, ...rest } = query;
+      const params: Record<string, QueryParamValue> = { ...rest };
+      if (items?.length && !params.service_ids) {
+        params.service_ids = items.map((item) => item.service_id);
+      }
+      return this.request<AvailabilitySlot[]>(`/availability`, { method: 'GET', query: params });
+    },
     staffWeeklySchedules: {
       list: (query: { staff_id: string; business?: string }) =>
         this.request<StaffWeeklySchedule[]>('/staff-weekly-schedules', { method: 'GET', query }),
