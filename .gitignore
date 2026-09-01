@@ -32,8 +32,12 @@ pnpm-debug.log*
 # Environment
 ############################################################
 
-# Private repo: live .env files are tracked for portability.
-# Templates (.env.example, .env.docker.example, .env.production.example) stay committed too.
+# Live secrets — copy from .env.example (dev) or .env.production.example (VPS).
+# Never commit .env; VPS keeps its own copy at /opt/ie-platform/.env outside git.
+.env
+!.env.example
+!.env.docker.example
+!.env.production.example
 
 ############################################################
 # Python

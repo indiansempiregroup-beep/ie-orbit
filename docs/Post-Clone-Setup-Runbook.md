@@ -151,9 +151,9 @@ Replace flavor key / app name from [`mobile/flavors/manifest.json`](../mobile/fl
 
 ## Adding new secrets later
 
-This private repo **tracks** secrets by default (see [`.gitignore`](../.gitignore)). When you add:
+**`.env` is not in git.** Keep dev values in your local `.env` (copy from [`.env.example`](../.env.example)). On the VPS, edit `/opt/ie-platform/.env` only on the server — `git pull` will not touch it.
 
-- a new `.env` value — edit `.env`, then `git add .env && git commit && git push`
+- a new `.env` value — edit local `.env` or VPS `/opt/ie-platform/.env` directly; do not commit
 - a new Firebase JSON — place under `mobile/credentials/google-services/`, commit and push
 - new IMP notes or keys — update `~/Sanket/IMP`, then refresh the repo backup:
 
@@ -166,10 +166,25 @@ git push
 
 ---
 
+## VPS deploy
+
+Production `.env` lives only on the server. After `git pull`, Compose still reads `/opt/ie-platform/.env` from disk.
+
+```bash
+ssh ie-platform-vps
+cd /opt/ie-platform
+git pull origin main
+docker compose -p ie-platform-prod -f docker-compose.prod.yml up --build -d
+docker compose -p ie-platform-prod -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput
+```
+
+---
+
 ## What is not in git (reinstall on new machine)
 
 | Item | Restore how |
 |------|-------------|
+| `.env` | Copy `.env.example` → `.env` locally; on VPS use `.env.production.example` as a template once |
 | `node_modules/` | `corepack pnpm install` |
 | `backend/.venv/` | Recreate from backend requirements / Docker |
 | Docker images / volumes | `docker compose up --build` |
