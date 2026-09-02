@@ -78,6 +78,14 @@ export function deliveryMethodForOrder(order: ShopOrder): string {
   return typeof metadata.delivery === 'object' && metadata.delivery !== null ? 'instant' : 'standard';
 }
 
+const SHIPMENT_STATUS_LABELS: Record<string, string> = {
+  shipped: 'Shipped',
+  in_transit: 'In transit',
+  out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered',
+  failed: 'Delivery failed',
+};
+
 export function deliverySummaryFromOrder(order: ShopOrder): {
   status?: string;
   etaMinutes?: number | null;
@@ -90,10 +98,21 @@ export function deliverySummaryFromOrder(order: ShopOrder): {
     metadata.delivery && typeof metadata.delivery === 'object'
       ? (metadata.delivery as Record<string, unknown>)
       : {};
+  const shipment =
+    metadata.shipment && typeof metadata.shipment === 'object'
+      ? (metadata.shipment as Record<string, unknown>)
+      : null;
   const rawEta = delivery.eta_minutes ?? metadata.eta_minutes;
   const eta = rawEta == null ? null : Number(rawEta);
+  const isStandard = deliveryMethodForOrder(order) !== 'instant';
+  const shipmentStatus = shipment ? String(shipment.status || '').toLowerCase() : '';
+  const partnerStatus = String(delivery.partner_status || delivery.status || '').toLowerCase();
+  const status =
+    isStandard && shipmentStatus
+      ? SHIPMENT_STATUS_LABELS[shipmentStatus] ?? shipmentStatus.replace(/_/g, ' ')
+      : partnerStatus || undefined;
   return {
-    status: String(delivery.partner_status || delivery.status || '').toLowerCase() || undefined,
+    status: status || undefined,
     etaMinutes: Number.isFinite(eta) ? eta : null,
   };
 }

@@ -84,6 +84,7 @@ import { ReportsRedirectScreen } from '../features/bi/ReportsRedirectScreen';
 import { TeamScreen } from '../features/team/TeamScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
 import { ProfileEditScreen } from '../features/profile/ProfileEditScreen';
+import { NotificationPreferencesScreen } from '../features/profile/NotificationPreferencesScreen';
 import { SecurityScreen } from '../features/profile/SecurityScreen';
 import { SessionsScreen } from '../features/profile/SessionsScreen';
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen';
@@ -296,6 +297,7 @@ export function RootNavigator() {
             {stackScreen('Team', TeamScreen, t('settings.team'))}
             {stackScreen('Profile', ProfileScreen, t('profile.title'))}
             {stackScreen('ProfileEdit', ProfileEditScreen, t('profile.editTitle'))}
+            {stackScreen('NotificationPreferences', NotificationPreferencesScreen, t('profile.notificationPreferences'))}
             {stackScreen('Security', SecurityScreen, t('profile.security'))}
             {stackScreen('Sessions', SessionsScreen, t('profile.sessions'))}
             {stackScreen('VerifyEmail', VerifyEmailScreen, t('profile.verifyEmail'))}

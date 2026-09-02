@@ -169,6 +169,7 @@ class BookingService:
                 body=body,
                 event_type="BookingStaffAssigned",
                 metadata={"booking_id": str(booking.id)},
+                channels=["in_app", "email"],
             )
 
     def _notify_newly_assigned_staff(
@@ -209,6 +210,7 @@ class BookingService:
             body=body,
             event_type="BookingStaffAssigned",
             metadata={"booking_id": str(booking.id)},
+            channels=["in_app", "email"],
         )
 
     def _apply_booking_plan(

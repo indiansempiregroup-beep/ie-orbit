@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { Notification } from '@ie-orbit/sdk';
@@ -8,11 +8,39 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
 import { useNotifications } from '../../contexts/NotificationsContext';
-import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatRelativeTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
+
+const iconMap = {
+  booking: 'calendar',
+  reminder: 'clock',
+  review: 'star',
+  cancel: 'x',
+  payment: 'credit-card',
+  order: 'package',
+  return: 'rotate-ccw',
+  pet: 'gift',
+} as const;
+
+type NotificationType = keyof typeof iconMap;
+
+function iconWrapStyle(type: string) {
+  if (type === 'review') return styles.iconAmber;
+  if (type === 'cancel') return styles.iconRed;
+  if (type === 'order' || type === 'return') return styles.iconGreen;
+  if (type === 'pet') return styles.iconPink;
+  return styles.iconBlue;
+}
+
+function iconColor(type: string) {
+  if (type === 'review') return colors.warning;
+  if (type === 'cancel') return colors.destructive;
+  if (type === 'order' || type === 'return') return colors.success;
+  if (type === 'pet') return '#DB2777';
+  return colors.primary;
+}
 
 function openRelatedItem(
   navigation: NativeStackNavigationProp<RootStackParamList>,
@@ -30,11 +58,8 @@ function openRelatedItem(
 export function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { notifications, loading, reload, markRead, markAllRead, unreadCount } = useNotifications();
-  const { activeBusiness } = useWorkspace();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const hasUnread = unreadCount > 0;
-  const logo = activeBusiness?.logo;
-  const businessName = activeBusiness?.display_name || activeBusiness?.business_name || 'Business';
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -65,45 +90,45 @@ export function NotificationsScreen() {
           empty={!loading && notifications.length === 0}
           emptyMessage="No alerts yet."
         />
-        {notifications.map((notification) => (
-          <Pressable
-            key={notification.id}
-            onPress={() => {
-              if (!notification.is_read) void markRead(notification.id);
-              openRelatedItem(navigation, notification);
-            }}
-          >
-            <View style={[styles.card, !notification.is_read && styles.unread]}>
-              <View style={styles.row}>
-                {logo ? (
-                  <Image source={{ uri: logo }} style={styles.logo} />
-                ) : (
-                  <View style={styles.logoFallback}>
-                    <Text style={styles.logoInitial}>{businessName.slice(0, 1).toUpperCase()}</Text>
+        {notifications.map((notification) => {
+          const type = (notification.notification_type || 'booking') as NotificationType;
+          const icon = iconMap[type] ?? 'bell';
+
+          return (
+            <Pressable
+              key={notification.id}
+              onPress={() => {
+                if (!notification.is_read) void markRead(notification.id);
+                openRelatedItem(navigation, notification);
+              }}
+            >
+              <View style={[styles.card, !notification.is_read && styles.unread]}>
+                <View style={styles.row}>
+                  <View style={[styles.iconWrap, iconWrapStyle(type)]}>
+                    <Feather name={icon} size={18} color={iconColor(type)} />
                   </View>
-                )}
-                <View style={styles.copy}>
-                  <Text style={styles.brand}>{businessName}</Text>
-                  <Text style={styles.subject}>{notification.subject ?? 'Notification'}</Text>
-                  <Text style={styles.body} numberOfLines={3}>
-                    {notification.body ?? ''}
-                  </Text>
-                  <View style={styles.footer}>
-                    <Text style={styles.time}>{formatRelativeTime(notification.created_at)}</Text>
-                    {!notification.is_read ? (
-                      <View style={styles.dotRow}>
-                        <View style={styles.dot} />
-                        <Text style={styles.unreadLabel}>New</Text>
-                      </View>
-                    ) : (
-                      <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
-                    )}
+                  <View style={styles.copy}>
+                    <Text style={styles.subject}>{notification.subject ?? 'Notification'}</Text>
+                    <Text style={styles.body} numberOfLines={3}>
+                      {notification.body ?? ''}
+                    </Text>
+                    <View style={styles.footer}>
+                      <Text style={styles.time}>{formatRelativeTime(notification.created_at)}</Text>
+                      {!notification.is_read ? (
+                        <View style={styles.dotRow}>
+                          <View style={styles.dot} />
+                          <Text style={styles.unreadLabel}>New</Text>
+                        </View>
+                      ) : (
+                        <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
+                      )}
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
-          </Pressable>
-        ))}
+            </Pressable>
+          );
+        })}
       </RefreshableScrollView>
     </DesktopPage>
   );
@@ -123,19 +148,20 @@ const styles = StyleSheet.create({
   },
   unread: { borderColor: colors.primary, backgroundColor: colors.secondary },
   row: { flexDirection: 'row', gap: spacing.md },
-  logo: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.tint },
-  logoFallback: {
+  iconWrap: {
     width: 44,
     height: 44,
     borderRadius: radius.md,
-    backgroundColor: colors.tint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoInitial: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.primary },
+  iconBlue: { backgroundColor: colors.tint },
+  iconAmber: { backgroundColor: colors.warningSoft },
+  iconRed: { backgroundColor: colors.destructiveSoft },
+  iconGreen: { backgroundColor: colors.successSoft },
+  iconPink: { backgroundColor: '#FCE7F3' },
   copy: { flex: 1, minWidth: 0 },
-  brand: { ...typography.tiny, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.6 },
-  subject: { ...typography.title, fontSize: 15, color: colors.foreground, marginTop: 2 },
+  subject: { ...typography.title, fontSize: 15, color: colors.foreground },
   body: { ...typography.body, color: colors.mutedForeground, marginTop: 4, lineHeight: 20 },
   footer: {
     flexDirection: 'row',

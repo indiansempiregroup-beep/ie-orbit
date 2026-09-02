@@ -24,6 +24,7 @@ from apps.notifications.models import (
 from apps.notifications.repositories.notifications import NotificationRepository
 from apps.notifications.services.branding import absolute_public_url
 from apps.notifications.services.providers import EmailProvider, FirebasePushProvider, NotificationProvider
+from apps.notifications.services.preferences import channel_enabled
 from apps.notifications.services.realtime import publish_notification_created
 
 logger = logging.getLogger("ie_orbit.notifications")
@@ -136,7 +137,11 @@ class NotificationService:
         template = self._get_template(event, template_code)
         if not template:
             return None
-        if not self._channel_enabled_for_user(user=user, channel=template.channel):
+
+        deliver_in_app = channel_enabled(user=user, channel=NotificationChannel.IN_APP)
+        deliver_push = channel_enabled(user=user, channel=NotificationChannel.FIREBASE_PUSH)
+        deliver_email = channel_enabled(user=user, channel=NotificationChannel.EMAIL) and bool(user.email)
+        if not any((deliver_in_app, deliver_push, deliver_email)):
             return None
 
         if Notification.objects.filter(
@@ -149,75 +154,71 @@ class NotificationService:
             return None
 
         context = self._render_context(event=event, template=template, user=user, audience=audience)
-        notification = Notification.objects.create(
-            tenant=event.tenant,
-            business=event.booking.business,
-            user=user,
-            booking=event.booking,
-            template=template,
-            channel=template.channel,
-            subject=context.get("subject", template.subject),
-            body=context.get("body", template.body),
-            status=NotificationStatus.PENDING,
-            metadata={"event_type": event.event_type, "audience": audience},
-        )
-        NotificationHistory.objects.create(
-            tenant=event.tenant,
-            notification=notification,
-            event_type=event.event_type,
-            payload=event.payload,
-        )
-        if template.channel == NotificationChannel.IN_APP:
-            notification.status = NotificationStatus.SENT
-            notification.external_id = "in_app"
-            notification.save(update_fields=["status", "external_id", "updated_at"])
-            if audience == "customer":
-                self._send_branded_customer_email(event=event, user=user, context=context)
-        elif user.email:
-            result = self.provider.send(template=template, recipient=user.email, context=context)
-            notification.status = NotificationStatus.SENT
-            notification.external_id = result.get("provider", "unknown")
-            notification.save(update_fields=["status", "external_id", "updated_at"])
-            NotificationLog.objects.create(
+        notification: Notification | None = None
+
+        if deliver_in_app:
+            notification = Notification.objects.create(
+                tenant=event.tenant,
+                business=event.booking.business,
+                user=user,
+                booking=event.booking,
+                template=template,
+                channel=NotificationChannel.IN_APP,
+                subject=context.get("subject", template.subject),
+                body=context.get("body", template.body),
+                status=NotificationStatus.SENT,
+                external_id="in_app",
+                metadata={"event_type": event.event_type, "audience": audience},
+            )
+            NotificationHistory.objects.create(
                 tenant=event.tenant,
                 notification=notification,
-                provider=result.get("provider", "unknown"),
-                response_code="200",
-                response_body=result,
+                event_type=event.event_type,
+                payload=event.payload,
             )
-        else:
-            notification.status = NotificationStatus.SENT
-            notification.external_id = "no_recipient"
-            notification.save(update_fields=["status", "external_id", "updated_at"])
-
-        push_title, push_body = self._push_content(
-            event=event,
-            context=context,
-            audience=audience,
-            template=template,
-        )
-        push_result = self._send_expo_push(
-            notification=notification,
-            user=user,
-            subject=push_title,
-            body=push_body,
-            audience=audience,
-            event_type=event.event_type,
-        )
-        if push_result is not None:
-            NotificationLog.objects.create(
+            NotificationQueue.objects.create(
                 tenant=event.tenant,
                 notification=notification,
-                provider="expo_push",
-                response_code="200" if not push_result.get("error") else "502",
-                response_body=push_result,
+                next_attempt_at=timezone.now(),
+            )
+            publish_notification_created(notification=notification)
+
+        if deliver_email:
+            self._send_branded_booking_email(
+                event=event,
+                user=user,
+                context=context,
+                audience=audience,
             )
 
-        NotificationQueue.objects.create(
-            tenant=event.tenant,
-            notification=notification,
-            next_attempt_at=timezone.now(),
-        )
+        if deliver_push:
+            push_title, push_body = self._push_content(
+                event=event,
+                context=context,
+                audience=audience,
+                template=template,
+            )
+            push_result = self._send_expo_push(
+                event=event,
+                notification=notification,
+                user=user,
+                subject=push_title,
+                body=push_body,
+                audience=audience,
+                event_type=event.event_type,
+            )
+            if push_result is not None and notification is not None:
+                NotificationLog.objects.create(
+                    tenant=event.tenant,
+                    notification=notification,
+                    provider="expo_push",
+                    response_code="200" if not push_result.get("error") else "502",
+                    response_body=push_result,
+                )
+
+        if notification is None:
+            return None
+
         logger.info(
             "Notification processed",
             extra={
@@ -227,13 +228,13 @@ class NotificationService:
                 "user_id": str(user.id),
             },
         )
-        publish_notification_created(notification=notification)
         return notification
 
     def _send_expo_push(
         self,
         *,
-        notification: Notification,
+        event: BookingEvent,
+        notification: Notification | None,
         user: User,
         subject: str,
         body: str,
@@ -244,13 +245,13 @@ class NotificationService:
 
         try:
             result = send_push_to_user(
-                tenant=notification.tenant,
+                tenant=event.tenant,
                 user=user,
                 title=subject,
                 body=body,
                 data={
-                    "notification_id": str(notification.id),
-                    "booking_id": str(notification.booking_id) if notification.booking_id else "",
+                    "notification_id": str(notification.id) if notification is not None else "",
+                    "booking_id": str(event.booking_id),
                     "event_type": event_type,
                     "audience": audience,
                 },
@@ -258,7 +259,10 @@ class NotificationService:
         except Exception:
             logger.exception(
                 "Expo push failed",
-                extra={"notification_id": str(notification.id), "user_id": str(user.id)},
+                extra={
+                    "notification_id": str(notification.id) if notification is not None else "",
+                    "user_id": str(user.id),
+                },
             )
             return {"error": "exception"}
 
@@ -421,30 +425,15 @@ class NotificationService:
             "lead_minutes": replacements["{{lead_minutes}}"],
         }
 
-    def _channel_enabled_for_user(self, *, user: User, channel: str) -> bool:
-        prefs = getattr(user, "notification_preferences", None)
-        if not isinstance(prefs, dict):
-            return True
-        if channel == NotificationChannel.EMAIL:
-            if "email_updates" in prefs:
-                return prefs.get("email_updates") is not False
-            if "email" in prefs:
-                return prefs.get("email") is not False
-            return True
-        if channel == NotificationChannel.SMS:
-            if "sms_reminders" in prefs:
-                return prefs.get("sms_reminders") is not False
-            if "sms" in prefs:
-                return prefs.get("sms") is not False
-            return True
-        if channel == NotificationChannel.FIREBASE_PUSH:
-            return prefs.get("push", True) is not False
-        if channel == NotificationChannel.IN_APP:
-            return prefs.get("in_app", True) is not False
-        return True
-
-    def _send_branded_customer_email(self, *, event: BookingEvent, user: User, context: dict[str, Any]) -> None:
-        if not user.email or not self._channel_enabled_for_user(user=user, channel=NotificationChannel.EMAIL):
+    def _send_branded_booking_email(
+        self,
+        *,
+        event: BookingEvent,
+        user: User,
+        context: dict[str, Any],
+        audience: str,
+    ) -> None:
+        if not user.email:
             return
         notification = Notification.objects.create(
             tenant=event.tenant,
@@ -455,7 +444,7 @@ class NotificationService:
             subject=str(context.get("subject") or ""),
             body=str(context.get("body") or ""),
             status=NotificationStatus.PENDING,
-            metadata={"event_type": event.event_type, "audience": "customer"},
+            metadata={"event_type": event.event_type, "audience": audience},
         )
         try:
             result = EmailProvider().send(
@@ -475,8 +464,12 @@ class NotificationService:
             )
         except Exception:
             logger.exception(
-                "Booking customer email failed",
-                extra={"notification_id": str(notification.id), "user_id": str(user.id)},
+                "Booking email failed",
+                extra={
+                    "notification_id": str(notification.id),
+                    "user_id": str(user.id),
+                    "audience": audience,
+                },
             )
             notification.status = NotificationStatus.FAILED
             notification.external_id = "email_failed"

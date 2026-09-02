@@ -128,6 +128,11 @@ export function ProfileScreen() {
         <View style={styles.menu}>
           <MenuSection title={t('common.account')}>
             <MenuRow icon="edit-3" label={t('profile.editProfile')} onPress={() => navigation.navigate('ProfileEdit')} />
+            <MenuRow
+              icon="bell"
+              label={t('profile.notificationPreferences')}
+              onPress={() => navigation.navigate('NotificationPreferences')}
+            />
             <MenuRow icon="lock" label={t('profile.changePassword')} onPress={() => navigation.navigate('Security')} />
             <MenuRow
               icon="smartphone"

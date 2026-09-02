@@ -52,6 +52,11 @@ Reference this backlog in Agent chat:
 | Fix one item | `@docs/qa/FINDINGS.md fix QA-004` |
 | Batch fix by severity | `Read docs/qa and fix all P0/P1 open items` |
 | Test coverage | `@docs/qa/scenarios/test-scenarios.md list FAIL cases` |
+| Post-deploy automation | `@docs/qa/automation.md` |
+
+## Automated QA (post-deploy)
+
+See [`automation.md`](automation.md) for Playwright + Maestro setup and `./scripts/qa-post-deploy.sh` after VPS deploy.
 
 Opening any file under `docs/qa/` also loads the project’s QA Cursor rule for context.
 

@@ -1,0 +1,12 @@
+# Maestro smoke flows for IE Orbit customer mobile (native APK).
+# Prereqs: Maestro CLI, latest flavor APK installed, credentials exported.
+#
+#   export QA_CUSTOMER_EMAIL=...
+#   export QA_CUSTOMER_PASSWORD=...
+#   maestro test mobile/.maestro/smoke/
+
+appId: com.ieorbit.mobile.dev
+
+env:
+  QA_CUSTOMER_EMAIL: ${QA_CUSTOMER_EMAIL}
+  QA_CUSTOMER_PASSWORD: ${QA_CUSTOMER_PASSWORD}

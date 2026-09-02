@@ -140,14 +140,7 @@ export function nextShopOrderAction(
     };
   }
   if (value === 'ready') {
-    if (instant) return null;
-    if (delivery) {
-      return {
-        status: 'out_for_delivery',
-        label: 'Mark out for delivery',
-        hint: 'The parcel has left with your delivery staff.',
-      };
-    }
+    if (instant || delivery) return null;
     return {
       status: 'completed',
       label: 'Mark picked up',
@@ -184,8 +177,12 @@ export function canCancelShopOrder(status?: string | null): boolean {
   );
 }
 
-export function canDispatchShopOrder(status?: string | null): boolean {
-  return ['ready', 'delivery_failed'].includes(String(status || '').toLowerCase());
+export function canDispatchShopOrder(order: ShopOrder): boolean {
+  const status = String(order.status || '').toLowerCase();
+  if (status === 'delivery_failed') return true;
+  if (status !== 'ready') return false;
+  // Status stays "ready" until pickup; hide once a rider is already booked.
+  return !getShopOrderDeliveryMeta(order).booking_id;
 }
 
 export function formatMoney(value: string | number | undefined | null, fallback = '0.00'): string {

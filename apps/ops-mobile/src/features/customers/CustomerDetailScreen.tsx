@@ -14,9 +14,11 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useCustomer, useReviews } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
 import { useToast } from '../../contexts/ToastContext';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatRelativeTime, getApiErrorMessage } from '../../utils/format';
+import { hasShopie } from '../../utils/products';
 import type { RootStackParamList } from '../../navigation/types';
 
 type PayMethod = 'cash' | 'upi' | 'card';
@@ -26,6 +28,8 @@ export function CustomerDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const toast = useToast();
+  const { activeBusiness } = useWorkspace();
+  const showGstFields = hasShopie(activeBusiness?.product_subscriptions);
   const { customer, loading, reload } = useCustomer(route.params.customerId);
   const { reviews } = useReviews(route.params.customerId);
   const mutations = useCustomerMutations();
@@ -105,6 +109,9 @@ export function CustomerDetailScreen() {
         </View>
         <DetailRow label="Email" value={customer.email ?? '—'} />
         <DetailRow label="Phone" value={customer.phone_number ?? '—'} />
+        {showGstFields ? (
+          <DetailRow label="GSTIN" value={customer.gstin?.trim() || '—'} />
+        ) : null}
         <DetailRow label="Address" value={formatCustomerAddressLabel(customer)} />
       </Card>
 

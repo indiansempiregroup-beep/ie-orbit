@@ -1,6 +1,7 @@
 from django.urls import include, path
 
 from apps.api.views import HealthView, OperationsSearchView
+from apps.common.api.contact_views import ContactFormView
 from apps.common.api.places_views import (
     PlacesAutocompleteView,
     PlacesDetailsView,
@@ -8,6 +9,7 @@ from apps.common.api.places_views import (
 )
 
 urlpatterns = [
+    path("contact", ContactFormView.as_view(), name="contact-form"),
     path("places/autocomplete", PlacesAutocompleteView.as_view(), name="places-autocomplete"),
     path("places/details", PlacesDetailsView.as_view(), name="places-details"),
     path("places/reverse", ReverseGeocodeView.as_view(), name="places-reverse"),

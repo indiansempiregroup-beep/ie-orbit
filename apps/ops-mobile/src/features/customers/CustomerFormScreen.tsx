@@ -14,6 +14,8 @@ import { useCustomerMutations } from '../../hooks/useOpsExtended';
 import { colors, fonts, typography } from '../../theme/tokens';
 import { parseCustomerAddress, type ParsedCustomerAddress } from '../../utils/customerAddress';
 import { getApiErrorMessage } from '../../utils/format';
+import { normalizeGstin, validateGstin } from '../../utils/gstin';
+import { hasShopie } from '../../utils/products';
 import type { RootStackParamList } from '../../navigation/types';
 import { writePosSession } from '../shop/posSession';
 
@@ -74,7 +76,8 @@ function returnToPets(
 export function CustomerFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CustomerForm'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { businessId } = useWorkspace();
+  const { businessId, activeBusiness } = useWorkspace();
+  const showGstFields = hasShopie(activeBusiness?.product_subscriptions);
   const isEdit = Boolean(route.params?.customerId);
   const { customer, loading } = useCustomer(route.params?.customerId ?? '');
   const mutations = useCustomerMutations();
@@ -84,6 +87,7 @@ export function CustomerFormScreen() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [gstin, setGstin] = useState('');
   const [address, setAddress] = useState<ParsedCustomerAddress>({ line1: '', latitude: null, longitude: null });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +99,7 @@ export function CustomerFormScreen() {
     setLastName(customer.last_name ?? '');
     setEmail(customer.email ?? '');
     setPhone(customer.phone_number ?? '');
+    setGstin(normalizeGstin(customer.gstin ?? ''));
     setAddress(parseCustomerAddress(customer));
   }, [customer]);
 
@@ -113,12 +118,22 @@ export function CustomerFormScreen() {
             setError(null);
             try {
               const line1 = address.line1.trim();
+              let resolvedGstin = '';
+              if (showGstFields) {
+                const gstinResult = validateGstin(gstin);
+                if (!gstinResult.ok) {
+                  setError(gstinResult.message);
+                  return;
+                }
+                resolvedGstin = gstinResult.gstin;
+              }
               const payload = {
                 display_name: displayName || `${firstName} ${lastName}`.trim() || email,
                 first_name: firstName,
                 last_name: lastName,
                 email,
                 phone_number: phone,
+                ...(showGstFields ? { gstin: resolvedGstin || undefined } : {}),
                 ...(line1
                   ? {
                       default_address: {
@@ -191,6 +206,20 @@ export function CustomerFormScreen() {
         />
         <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
       </FormSection>
+
+      {showGstFields ? (
+        <FormSection title="GST (Orbit Mart)" subtitle="Optional — used on B2B POS bills and GST books.">
+          <Input
+            label="GSTIN"
+            value={gstin}
+            onChangeText={(value) => setGstin(normalizeGstin(value))}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={15}
+            placeholder="29AABCU9603R1ZJ"
+          />
+        </FormSection>
+      ) : null}
 
       <FormSection title="Address" subtitle="Optional — helps with location-aware booking.">
         <AddressLocationPicker

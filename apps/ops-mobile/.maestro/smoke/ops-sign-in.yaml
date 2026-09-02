@@ -1,0 +1,32 @@
+# Ops app — sign in smoke (requires QA_OWNER_EMAIL / QA_OWNER_PASSWORD).
+appId: com.ieorbit.ops
+
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+- tapOn:
+    text: "Email"
+    optional: true
+- inputText: ${QA_OWNER_EMAIL}
+- tapOn:
+    text: "Password"
+    optional: true
+- inputText: ${QA_OWNER_PASSWORD}
+- hideKeyboard
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible:
+      text: "Good morning"
+    timeout: 30000
+    optional: true
+- extendedWaitUntil:
+    visible:
+      text: "Good afternoon"
+    timeout: 30000
+    optional: true
+- extendedWaitUntil:
+    visible:
+      text: "Good evening"
+    timeout: 30000
+    optional: true

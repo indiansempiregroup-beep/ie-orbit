@@ -18,6 +18,7 @@ from apps.notifications.models import (
     NotificationStatus,
 )
 from apps.notifications.services.providers import EmailProvider
+from apps.notifications.services.preferences import channel_enabled
 from apps.notifications.services.realtime import publish_notification_created
 from apps.tenancy.models import Tenant
 
@@ -60,8 +61,19 @@ class CustomerDirectNotifier:
             **(metadata or {}),
         }
 
-        if "in_app" in wanted and user is not None:
-            notification = Notification.objects.create(
+        in_app_notification: Notification | None = None
+        deliver_in_app = "in_app" in wanted and user is not None and channel_enabled(
+            user, NotificationChannel.IN_APP
+        )
+        deliver_push = user is not None and channel_enabled(user, NotificationChannel.FIREBASE_PUSH) and (
+            "in_app" in wanted or "email" in wanted
+        )
+        deliver_email = "email" in wanted and (
+            user is None or channel_enabled(user, NotificationChannel.EMAIL)
+        )
+
+        if deliver_in_app:
+            in_app_notification = Notification.objects.create(
                 tenant=tenant,
                 business=business,
                 user=user,
@@ -74,15 +86,27 @@ class CustomerDirectNotifier:
             )
             NotificationQueue.objects.create(
                 tenant=tenant,
-                notification=notification,
+                notification=in_app_notification,
                 next_attempt_at=timezone.now(),
             )
-            publish_notification_created(notification=notification)
-            self._send_push(notification=notification, user=user, subject=subject, body=body, event_type=event_type)
+            publish_notification_created(notification=in_app_notification)
             sent_channels.append("in_app")
-            notification_ids.append(str(notification.id))
+            notification_ids.append(str(in_app_notification.id))
 
-        if "email" in wanted:
+        if deliver_push and user is not None:
+            self._send_push(
+                notification=in_app_notification,
+                tenant=tenant,
+                user=user,
+                subject=subject,
+                body=body,
+                event_type=event_type,
+                meta=meta,
+            )
+            if "push" not in sent_channels:
+                sent_channels.append("push")
+
+        if deliver_email:
             recipient = (customer.email or "").strip() or (getattr(user, "email", None) or "")
             if recipient:
                 notification = Notification.objects.create(
@@ -159,11 +183,13 @@ class CustomerDirectNotifier:
     def _send_push(
         self,
         *,
-        notification: Notification,
+        notification: Notification | None,
+        tenant: Tenant,
         user: User,
         subject: str,
         body: str,
         event_type: str,
+        meta: dict[str, Any],
     ) -> None:
         from apps.notifications.services.expo_push import send_push_to_user
 
@@ -172,36 +198,39 @@ class CustomerDirectNotifier:
         push_category = "shipment_updates" if is_shipment else ""
         try:
             result = send_push_to_user(
-                tenant=notification.tenant,
+                tenant=tenant,
                 user=user,
                 title=subject,
                 body=body,
                 channel_id=push_channel,
                 category_id=push_category,
                 data={
-                    "notification_id": str(notification.id),
+                    "notification_id": str(notification.id) if notification is not None else "",
                     "event_type": event_type,
                     "audience": "customer",
-                    "pet_id": str((notification.metadata or {}).get("pet_id") or ""),
-                    "order_id": str((notification.metadata or {}).get("order_id") or ""),
-                    "order_number": str((notification.metadata or {}).get("order_number") or ""),
-                    "return_id": str((notification.metadata or {}).get("return_id") or ""),
-                    "shipment_status": str((notification.metadata or {}).get("shipment_status") or ""),
-                    "carrier_label": str((notification.metadata or {}).get("carrier_label") or ""),
-                    "tracking_number": str((notification.metadata or {}).get("tracking_number") or ""),
-                    "tracking_url": str((notification.metadata or {}).get("tracking_url") or ""),
+                    "pet_id": str(meta.get("pet_id") or ""),
+                    "order_id": str(meta.get("order_id") or ""),
+                    "order_number": str(meta.get("order_number") or ""),
+                    "return_id": str(meta.get("return_id") or ""),
+                    "shipment_status": str(meta.get("shipment_status") or ""),
+                    "carrier_label": str(meta.get("carrier_label") or ""),
+                    "tracking_number": str(meta.get("tracking_number") or ""),
+                    "tracking_url": str(meta.get("tracking_url") or ""),
                     "action": "track" if is_shipment else "",
                 },
             )
         except Exception:
             logger.exception(
                 "Expo push failed for customer notify",
-                extra={"notification_id": str(notification.id), "user_id": str(user.id)},
+                extra={
+                    "notification_id": str(notification.id) if notification is not None else "",
+                    "user_id": str(user.id),
+                },
             )
             return
-        if result and not result.get("skipped"):
+        if result and not result.get("skipped") and notification is not None:
             NotificationLog.objects.create(
-                tenant=notification.tenant,
+                tenant=tenant,
                 notification=notification,
                 provider="expo_push",
                 response_code="200" if not result.get("error") else "502",

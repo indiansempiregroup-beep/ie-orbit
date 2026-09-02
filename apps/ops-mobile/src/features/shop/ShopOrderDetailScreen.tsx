@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } fro
 import {
   ActivityIndicator,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -25,6 +27,8 @@ import { formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { confirmAction } from '../../utils/confirmAction';
 import { DesktopPage } from '../../components/DesktopPage';
 import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
+import { SelectField } from '../../components/SelectField';
+import { Input } from '../../components/ui/Input';
 import {
   formatMoney,
   formatShopOrderFulfillment,
@@ -47,6 +51,17 @@ import {
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
 
 const RETURNABLE_STATUSES = new Set(['confirmed', 'ready', 'completed']);
+
+const SHIP_CARRIERS = [
+  { value: 'delhivery', label: 'Delhivery' },
+  { value: 'bluedart', label: 'Blue Dart' },
+  { value: 'dtdc', label: 'DTDC' },
+  { value: 'india_post', label: 'India Post' },
+  { value: 'shiprocket', label: 'Shiprocket' },
+  { value: 'ekart', label: 'Ekart' },
+  { value: 'xpressbees', label: 'XpressBees' },
+  { value: 'other', label: 'Other' },
+];
 
 function returnedQtyByLine(returns: ShopReturn[]): Record<string, number> {
   const totals: Record<string, number> = {};
@@ -94,27 +109,53 @@ export function ShopOrderDetailScreen() {
   const [reason, setReason] = useState('');
   const [restock, setRestock] = useState(true);
   const [deliveryLive, setDeliveryLive] = useState<ShopDeliveryLive | null>(null);
+  const [shiprocketConfigured, setShiprocketConfigured] = useState(false);
+  const [shipOpen, setShipOpen] = useState(false);
+  const [shipCarrier, setShipCarrier] = useState('delhivery');
+  const [shipAwb, setShipAwb] = useState('');
+  const [shipEta, setShipEta] = useState('');
+  const [shipNotify, setShipNotify] = useState(true);
+
+  const refreshOrderData = useCallback(async () => {
+    if (!client || !orderId || !businessId) return;
+    const [orderRes, returnsRes] = await Promise.all([
+      client.shop.getOrder(orderId),
+      client.shop.listReturns({ business_id: businessId, order_id: orderId }),
+    ]);
+    setOrder(orderRes.data);
+    setReturns(returnsRes.data ?? []);
+    if (String(orderRes.data.fulfillment_mode || '').toLowerCase() === 'delivery') {
+      try {
+        const live = await client.shop.getOrderDeliveryLive(orderId, true);
+        setDeliveryLive(live.data);
+      } catch {
+        setDeliveryLive(null);
+      }
+    } else {
+      setDeliveryLive(null);
+    }
+  }, [businessId, client, orderId]);
+
+  const refreshOrder = useCallback(async () => {
+    if (!client || !orderId || !businessId) return;
+    try {
+      await refreshOrderData();
+    } catch {
+      // Keep the current screen if a post-mutation refresh fails.
+    }
+  }, [businessId, client, orderId, refreshOrderData]);
 
   const load = useCallback(async () => {
     if (!client || !orderId || !businessId) return;
     setLoading(true);
     setError(null);
     try {
-      const [orderRes, returnsRes] = await Promise.all([
-        client.shop.getOrder(orderId),
-        client.shop.listReturns({ business_id: businessId, order_id: orderId }),
-      ]);
-      setOrder(orderRes.data);
-      setReturns(returnsRes.data ?? []);
-      if (String(orderRes.data.fulfillment_mode || '').toLowerCase() === 'delivery') {
-        try {
-          const live = await client.shop.getOrderDeliveryLive(orderId, true);
-          setDeliveryLive(live.data);
-        } catch {
-          setDeliveryLive(null);
-        }
-      } else {
-        setDeliveryLive(null);
+      await refreshOrderData();
+      try {
+        const settings = await client.shop.getDeliverySettings({ business_id: businessId });
+        setShiprocketConfigured(Boolean(settings.data.courier_integration?.configured));
+      } catch {
+        setShiprocketConfigured(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load order');
@@ -122,7 +163,7 @@ export function ShopOrderDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, orderId]);
+  }, [businessId, client, orderId, refreshOrderData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,14 +182,13 @@ export function ShopOrderDetailScreen() {
             response.data.order_status &&
             response.data.order_status !== order?.status
           ) {
-            const refreshed = await client.shop.getOrder(orderId);
-            setOrder(refreshed.data);
+            await refreshOrderData();
           }
         })
         .catch(() => undefined);
     }, 12000);
     return () => clearInterval(timer);
-  }, [client, deliveryLive, order?.status, orderId]);
+  }, [client, deliveryLive, order?.status, orderId, refreshOrderData]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -218,8 +258,8 @@ export function ShopOrderDetailScreen() {
     setBusy(true);
     setError(null);
     try {
-      const response = await client.shop.setOrderStatus(order.id, { status });
-      setOrder(response.data);
+      await client.shop.setOrderStatus(order.id, { status });
+      await refreshOrder();
       const messages: Record<string, string> = {
         confirmed: 'Order confirmed',
         ready: 'Order marked ready',
@@ -273,10 +313,8 @@ export function ShopOrderDetailScreen() {
     setBusy(true);
     setError(null);
     try {
-      const response = await client.shop.dispatchOrder(order.id);
-      setOrder(response.data);
-      const live = await client.shop.getOrderDeliveryLive(order.id, true);
-      setDeliveryLive(live.data);
+      await client.shop.dispatchOrder(order.id);
+      await refreshOrder();
       toast.push('Rider requested. Live tracking is active.', 'success');
     } catch (err) {
       const text = getApiErrorMessage(err, 'Unable to dispatch order');
@@ -294,7 +332,7 @@ export function ShopOrderDetailScreen() {
     try {
       const live = await client.shop.simulateOrderDelivery(order.id);
       setDeliveryLive(live.data);
-      await load();
+      await refreshOrder();
       toast.push(`Mock delivery · ${live.data.headline}`, 'success');
     } catch (err) {
       const text = getApiErrorMessage(err, 'Unable to simulate delivery');
@@ -303,6 +341,75 @@ export function ShopOrderDetailScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitShipOrder() {
+    if (!client || !order) return;
+    const awb = shipAwb.trim();
+    if (!awb) {
+      setError('AWB or tracking number is required.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await client.shop.shipOrder(order.id, {
+        carrier: shipCarrier,
+        tracking_number: awb,
+        estimated_delivery_at: shipEta.trim() || undefined,
+        notify_customer: shipNotify,
+      });
+      await refreshOrder();
+      setShipOpen(false);
+      setShipAwb('');
+      setShipEta('');
+      toast.push('Shipment saved. Customer can track the package now.', 'success');
+    } catch (err) {
+      const text = getApiErrorMessage(err, 'Unable to save shipment.');
+      setError(text);
+      toast.push(text, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bookWithShiprocket() {
+    if (!client || !order) return;
+    const ok = await confirmAction({
+      title: 'Book with Shiprocket?',
+      message: 'This creates a courier shipment and assigns an AWB automatically.',
+      confirmLabel: 'Book shipment',
+      cancelLabel: 'Not yet',
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await client.shop.shipOrderWithShiprocket(order.id, {
+        notify_customer: shipNotify,
+      });
+      await refreshOrder();
+      toast.push(
+        `Booked with Shiprocket. AWB ${response.data.shipment.tracking_number}. Customer notified.`,
+        'success',
+      );
+    } catch (err) {
+      const text = getApiErrorMessage(err, 'Unable to book with Shiprocket.');
+      setError(text);
+      toast.push(text, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markStandardDelivered() {
+    const ok = await confirmAction({
+      title: 'Mark delivered?',
+      message: 'Use this when the customer has received the package.',
+      confirmLabel: 'Mark delivered',
+      cancelLabel: 'Not yet',
+    });
+    if (ok) await setOrderStatus('completed');
   }
 
   async function submitReturn() {
@@ -340,7 +447,7 @@ export function ShopOrderDetailScreen() {
         'success',
       );
       closeReturnMode();
-      await load();
+      await refreshOrder();
     } catch (err) {
       const text = err instanceof Error ? err.message : 'Return failed';
       setError(text);
@@ -425,8 +532,17 @@ export function ShopOrderDetailScreen() {
     !['paid', 'settled', 'awaiting_confirmation'].includes(paymentStatusValue);
   const nextAction = nextShopOrderAction(order.status, order.fulfillment_mode, deliveryMethod);
   const statusStyle = shopOrderBadgeStyle(order);
+  const isDeliveryOrder = String(order.fulfillment_mode || '').toLowerCase() === 'delivery';
+  const isStandardDelivery = isDeliveryOrder && !isInstantDelivery;
+  const canStandardShip = isStandardDelivery && order.status === 'ready';
+  const canStandardMarkDelivered =
+    isStandardDelivery && ['out_for_delivery', 'delivery_failed'].includes(String(order.status || '').toLowerCase());
+  const canInstantDispatch = isDeliveryOrder && isInstantDelivery && canDispatchShopOrder(order);
   const canCancel =
     canCancelShopOrder(order.status) && !(isInstantDelivery && deliveryLive?.available && !deliveryLive.terminal);
+  const showFulfillmentCard =
+    isOnlineOrder &&
+    (nextAction || canCancel || canStandardShip || canStandardMarkDelivered || canInstantDispatch);
   const lineDiscountTotal = Number(pos.line_discount_total ?? 0);
   const billDiscountAmount = Number(pos.bill_discount_amount ?? 0);
   const merchandiseGross = (order.lines ?? []).reduce((sum, line) => {
@@ -513,6 +629,14 @@ export function ShopOrderDetailScreen() {
                   {deliveryLive.headline || formatDeliveryStatus(deliveryLive.partner_status)}
                 </Text>
                 {deliveryLive.subtitle ? <Text style={styles.deliverySubtitle}>{deliveryLive.subtitle}</Text> : null}
+                {deliveryLive.shipment?.tracking_number ? (
+                  <Text style={styles.meta}>
+                    AWB {deliveryLive.shipment.tracking_number}
+                    {deliveryLive.shipment.carrier_label
+                      ? ` · ${deliveryLive.shipment.carrier_label}`
+                      : ''}
+                  </Text>
+                ) : null}
               </View>
               {deliveryLive.eta_minutes != null ? (
                 <View style={styles.etaCard}>
@@ -598,13 +722,17 @@ export function ShopOrderDetailScreen() {
           </View>
         ) : null}
 
-        {isOnlineOrder && (nextAction || canCancel) ? (
+        {showFulfillmentCard ? (
           <View style={styles.headerCard}>
             <Text style={styles.section}>Fulfillment</Text>
             {nextAction ? <Text style={styles.meta}>{nextAction.hint}</Text> : null}
-            {String(order.fulfillment_mode).toLowerCase() === 'delivery' &&
-            canDispatchShopOrder(order.status) &&
-            isInstantDelivery ? (
+            {canStandardShip ? (
+              <Text style={styles.meta}>
+                Pack the order, then add courier tracking or book with Shiprocket. The customer gets a
+                tracking link and push notification.
+              </Text>
+            ) : null}
+            {canInstantDispatch ? (
               <Pressable
                 style={[styles.primaryBtn, busy && styles.btnDisabled]}
                 disabled={busy}
@@ -618,13 +746,53 @@ export function ShopOrderDetailScreen() {
                       : 'Dispatch · request rider'}
                 </Text>
               </Pressable>
-            ) : nextAction ? (
+            ) : null}
+            {canStandardShip ? (
+              <>
+                {shiprocketConfigured ? (
+                  <Pressable
+                    style={[styles.primaryBtn, busy && styles.btnDisabled]}
+                    disabled={busy}
+                    onPress={() => void bookWithShiprocket()}
+                  >
+                    <Text style={styles.primaryBtnText}>
+                      {busy ? 'Booking…' : 'Book with Shiprocket'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  style={[
+                    shiprocketConfigured ? styles.secondaryBtn : styles.primaryBtn,
+                    busy && styles.btnDisabled,
+                  ]}
+                  disabled={busy}
+                  onPress={() => {
+                    setShipOpen(true);
+                    setError(null);
+                  }}
+                >
+                  <Text style={shiprocketConfigured ? styles.secondaryBtnText : styles.primaryBtnText}>
+                    Mark shipped
+                  </Text>
+                </Pressable>
+              </>
+            ) : null}
+            {nextAction && !canStandardShip && !canInstantDispatch ? (
               <Pressable
                 style={[styles.primaryBtn, busy && styles.btnDisabled]}
                 disabled={busy}
                 onPress={() => void confirmAdvance(nextAction)}
               >
                 <Text style={styles.primaryBtnText}>{busy ? 'Updating…' : nextAction.label}</Text>
+              </Pressable>
+            ) : null}
+            {canStandardMarkDelivered ? (
+              <Pressable
+                style={[styles.primaryBtn, busy && styles.btnDisabled]}
+                disabled={busy}
+                onPress={() => void markStandardDelivered()}
+              >
+                <Text style={styles.primaryBtnText}>{busy ? 'Updating…' : 'Mark delivered'}</Text>
               </Pressable>
             ) : null}
             {isInstantDelivery && order.status === 'delivery_failed' && nextAction ? (
@@ -660,7 +828,7 @@ export function ShopOrderDetailScreen() {
                   .confirmOrderPayment(orderId, { action: 'confirm' })
                   .then(() => {
                     toast.push('Cash payment recorded', 'success');
-                    return load();
+                    return refreshOrder();
                   })
                   .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
                   .finally(() => setBusy(false));
@@ -689,7 +857,7 @@ export function ShopOrderDetailScreen() {
                     .confirmOrderPayment(orderId, { action: 'confirm' })
                     .then(() => {
                       toast.push('Payment confirmed', 'success');
-                      return load();
+                      return refreshOrder();
                     })
                     .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
                     .finally(() => setBusy(false));
@@ -707,7 +875,7 @@ export function ShopOrderDetailScreen() {
                     .confirmOrderPayment(orderId, { action: 'reject' })
                     .then(() => {
                       toast.push('Payment rejected', 'success');
-                      return load();
+                      return refreshOrder();
                     })
                     .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
                     .finally(() => setBusy(false));
@@ -946,6 +1114,56 @@ export function ShopOrderDetailScreen() {
           ) : null}
         </View>
       </ScrollView>
+
+      <Modal visible={shipOpen} transparent animationType="slide" onRequestClose={() => setShipOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShipOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.modalTitle}>Ship order</Text>
+            <Text style={styles.meta}>
+              Add courier tracking so customers can follow the shipment like Amazon.
+            </Text>
+            <SelectField
+              label="Carrier"
+              value={shipCarrier}
+              options={SHIP_CARRIERS}
+              onChange={setShipCarrier}
+              searchable={false}
+            />
+            <Input
+              label="AWB / tracking number"
+              value={shipAwb}
+              onChangeText={setShipAwb}
+              placeholder="1234567890123"
+              autoCapitalize="characters"
+            />
+            <Input
+              label="Estimated delivery (optional)"
+              value={shipEta}
+              onChangeText={setShipEta}
+              placeholder="YYYY-MM-DD"
+            />
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchLabel}>Notify customer</Text>
+                <Text style={styles.meta}>Send push and email with tracking link</Text>
+              </View>
+              <Switch value={shipNotify} onValueChange={setShipNotify} />
+            </View>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.secondaryBtn} onPress={() => setShipOpen(false)} disabled={busy}>
+                <Text style={styles.secondaryBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.primaryBtn, (busy || !shipAwb.trim()) && styles.btnDisabled]}
+                disabled={busy || !shipAwb.trim()}
+                onPress={() => void submitShipOrder()}
+              >
+                <Text style={styles.primaryBtnText}>{busy ? 'Saving…' : 'Mark shipped'}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </DesktopPage>
   );
 }
@@ -1236,4 +1454,26 @@ const styles = StyleSheet.create({
   priorReturns: { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 10 },
   priorRow: { gap: 2 },
   error: { color: colors.destructive },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: spacing.lg,
+    gap: spacing.md,
+    maxHeight: '90%',
+  },
+  modalTitle: { fontFamily: fonts.display, fontSize: 22, color: colors.foreground },
+  modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  switchLabel: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
 });

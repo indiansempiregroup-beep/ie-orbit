@@ -3,14 +3,13 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
-import { BookingRow } from '../../components/BookingRow';
-import { UpcomingBookingHero } from '../../components/UpcomingBookingHero';
+import { TodayBookingsPanel } from '../../components/TodayBookingsPanel';
+import { TodayOrdersPanel } from '../../components/TodayOrdersPanel';
+import { HomeOpsTabs } from '../../components/HomeOpsTabs';
 import { OpsHeader, OpsHeaderIconButton } from '../../components/OpsHeader';
 import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { DesktopContent } from '../../components/DesktopContent';
-import { ScreenState } from '../../components/ScreenState';
-import { SectionHeader } from '../../components/ui/SectionHeader';
 import { StatTile } from '../../components/ui/StatTile';
 import { TileGrid } from '../../components/ui/TileGrid';
 import { Button } from '../../components/ui/Button';
@@ -21,16 +20,16 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
+import { useShopOrders } from '../../hooks/useShopOrders';
 import { useBIOverview, useEntityMaps, usePlanFeatures } from '../../hooks/useOpsExtended';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import {
   bookingCustomerLabel,
-  bookingCustomerPhone,
   bookingServiceLabel,
-  bookingStaffLabel,
   filterUpcomingBookings,
 } from '../../utils/bookingDisplay';
 import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/products';
+import { homeOrdersFromList } from '../../utils/shopOrderDisplay';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
 import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
@@ -87,6 +86,7 @@ export function DashboardScreen() {
   const showReturns = shopieEnabled && has(PlanFeature.shopieReturns);
   const showCashTiles = shopieEnabled && has(PlanFeature.shopieBooksCash);
   const showPartyTiles = shopieEnabled && has(PlanFeature.shopieBooksParties);
+  const { orders: shopOrders, loading: ordersLoading, reload: reloadOrders } = useShopOrders(showOrders);
 
   const loadBooks = useCallback(async () => {
     if (!showBooksHub || !businessId || !client) return;
@@ -101,21 +101,23 @@ export function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadBooks();
-    }, [loadBooks]),
+      void reloadOrders();
+    }, [loadBooks, reloadOrders]),
   );
 
   const reload = async () => {
-    await Promise.all([reloadSummary(), reloadBookings(), loadBooks()]);
+    await Promise.all([reloadSummary(), reloadBookings(), loadBooks(), reloadOrders()]);
   };
   const { refreshing, onRefresh } = usePullToRefresh(reload);
-  const isRefreshing = refreshing || loading;
+  const isRefreshing = refreshing || loading || (showOrders && ordersLoading);
 
   const upcoming = useMemo(() => filterUpcomingBookings(bookings).slice(0, 5), [bookings]);
+  const openOrders = useMemo(() => homeOrdersFromList(shopOrders), [shopOrders]);
+  const nextBooking = upcoming[0];
   const completedToday = useMemo(
     () => bookings.filter((b) => String(b.status || '').toLowerCase() === 'completed').length,
     [bookings],
   );
-  const nextBooking = upcoming[0];
   const displayName = user?.first_name || user?.full_name || 'there';
   const appointie = summary?.appointie;
   const shopie = summary?.shopie;
@@ -218,6 +220,37 @@ export function DashboardScreen() {
     else openSale();
   }
 
+  const showHomeTabs = hasAppointie && showOrders;
+  const headerHasCarousel = (hasAppointie && upcoming.length > 0) || (showOrders && openOrders.length > 0);
+
+  const bookingsPanel = (
+    <TodayBookingsPanel
+      bookings={upcoming}
+      loading={loading}
+      serviceMap={serviceMap}
+      customerMap={customerMap}
+      staffMap={staffMap}
+      hideHeader={showHomeTabs}
+      hidePanelMargin={showHomeTabs}
+      onPressBooking={(bookingId) => navigation.navigate('BookingDetail', { bookingId })}
+      onSeeAll={() => navigation.navigate('Main', { screen: 'Bookings' } as never)}
+      onCreateBooking={() => navigation.navigate('CreateBooking', {})}
+    />
+  );
+
+  const ordersPanel = (
+    <TodayOrdersPanel
+      orders={openOrders}
+      loading={ordersLoading}
+      customerMap={customerMap}
+      hideHeader={showHomeTabs}
+      hidePanelMargin={showHomeTabs}
+      onPressOrder={(orderId) => navigation.navigate('ShopOrderDetail', { orderId })}
+      onSeeAll={() => navigation.navigate('ShopOrders')}
+      onOpenOrders={() => navigation.navigate('ShopOrders')}
+    />
+  );
+
   return (
     <View style={styles.screen}>
       <RefreshableScrollView
@@ -228,6 +261,7 @@ export function DashboardScreen() {
         <OpsHeader
           title={displayName}
           subtitle={greeting()}
+          compact={headerHasCarousel}
           right={
             <View style={styles.headerActions}>
               <OpsHeaderIconButton
@@ -244,28 +278,17 @@ export function DashboardScreen() {
             </View>
           }
         >
-          {hasAppointie ? (
-            nextBooking ? (
-              <UpcomingBookingHero
-                booking={nextBooking}
-                serviceMap={serviceMap}
-                customerMap={customerMap}
-                staffMap={staffMap}
-                onOpen={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
-              />
-            ) : (
-              <View style={styles.nextCard}>
-                <Text style={styles.nextLabel}>Next up today</Text>
-                <Text style={styles.nextTitle}>No upcoming bookings</Text>
-                <Text style={styles.nextHint}>Fill today&apos;s schedule with a new appointment.</Text>
-                <Button
-                  label="New booking"
-                  size="sm"
-                  style={styles.nextBtn}
-                  onPress={() => navigation.navigate('CreateBooking', {})}
-                />
-              </View>
-            )
+          {showHomeTabs ? (
+            <HomeOpsTabs
+              bookingsCount={upcoming.length}
+              ordersCount={openOrders.length}
+              bookingsPanel={bookingsPanel}
+              ordersPanel={ordersPanel}
+            />
+          ) : hasAppointie ? (
+            bookingsPanel
+          ) : showOrders ? (
+            ordersPanel
           ) : shopieEnabled ? (
             <View style={styles.nextCard}>
               <Text style={styles.nextLabel}>Orbit Mart today</Text>
@@ -430,46 +453,6 @@ export function DashboardScreen() {
                     </>
                   )}
                 </View>
-
-                {hasAppointie ? (
-                  <View style={isDesktop ? styles.desktopCol : undefined}>
-                    <SectionHeader
-                      title="Upcoming today"
-                      action={
-                        <Pressable onPress={() => navigation.navigate('Main', { screen: 'Bookings' } as never)}>
-                          <Text style={styles.link}>See all</Text>
-                        </Pressable>
-                      }
-                    />
-                    <ScreenState
-                      loading={loading && !bookings.length}
-                      empty={!loading && upcoming.length === 0}
-                      emptyTitle="Clear schedule"
-                      emptyMessage="No upcoming bookings left today."
-                      actionLabel="New booking"
-                      onAction={() => navigation.navigate('CreateBooking', {})}
-                    />
-                    <View style={styles.list}>
-                      {upcoming.map((booking, index) => (
-                        <BookingRow
-                          key={booking.id}
-                          highlight={index === 0}
-                          serviceName={bookingServiceLabel(booking, serviceMap)}
-                          customerName={bookingCustomerLabel(booking, customerMap)}
-                          customerPhone={bookingCustomerPhone(booking)}
-                          staffName={bookingStaffLabel(booking, staffMap)}
-                          startAt={booking.start_at}
-                          endAt={booking.end_at}
-                          durationMinutes={booking.duration_minutes}
-                          serviceCount={booking.line_items?.length || undefined}
-                          bookingNumber={booking.booking_number}
-                          status={booking.status}
-                          onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
               </View>
             </View>
           </DesktopContent>
@@ -657,8 +640,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   quickLabel: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground },
-  link: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
-  list: { gap: spacing.md },
   fab: {
     position: 'absolute',
     right: spacing.xl,

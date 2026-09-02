@@ -8,12 +8,11 @@ import { useProfileDetails } from './profileHooks';
 import { useProfileRoutes } from './profileRoutes';
 
 const notificationPreferenceLabels: Record<string, string> = {
-  email_updates: 'Email reminders',
+  email: 'Email notifications',
   push: 'Push notifications',
-  sms_reminders: 'SMS reminders',
-  in_app: 'In-app notifications',
-  email: 'Email reminders',
   sms: 'SMS reminders',
+  email_updates: 'Email notifications',
+  sms_reminders: 'SMS reminders',
 };
 
 function renderNotificationPreferenceValue(value: unknown) {
@@ -183,7 +182,9 @@ export function ProfilePage() {
               <span style={{ color: '#6b7280', fontSize: 13 }}>Notification preferences</span>
               {user?.notification_preferences && typeof user.notification_preferences === 'object' ? (
                 <div style={{ display: 'grid', gap: 10, padding: 12, borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
-                  {Object.entries(user.notification_preferences).map(([key, value]) => (
+                  {Object.entries(user.notification_preferences)
+                    .filter(([key]) => key !== 'in_app')
+                    .map(([key, value]) => (
                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                       <span style={{ color: '#374151', fontWeight: 600 }}>{notificationPreferenceLabels[key] ?? key}</span>
                       <span style={{ color: '#6b7280' }}>{renderNotificationPreferenceValue(value)}</span>

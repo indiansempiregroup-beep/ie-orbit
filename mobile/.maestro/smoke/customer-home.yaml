@@ -1,0 +1,15 @@
+# Customer app — home tabs visible after login (run after customer-sign-in or standalone).
+appId: ${APP_ID}
+
+---
+- launchApp
+- runFlow:
+    file: customer-sign-in.yaml
+    env:
+      APP_ID: ${APP_ID}
+- assertVisible:
+    text: "Notifications"
+    optional: true
+- assertVisible:
+    text: "Profile"
+    optional: true

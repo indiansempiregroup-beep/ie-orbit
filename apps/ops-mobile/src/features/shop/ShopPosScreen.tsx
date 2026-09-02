@@ -38,6 +38,7 @@ import {
 } from './posSession';
 import { normalizeGstin, validateGstin } from '../../utils/gstin';
 import { getApiErrorMessage } from '../../utils/format';
+import { hasShopie } from '../../utils/products';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../utils/loyalty';
 
 type BasketLine = {
@@ -94,6 +95,7 @@ export function ShopPosScreen() {
   const client = useOpsClient();
   const toast = useToast();
   const { businessId, activeBusiness } = useWorkspace();
+  const showGstFields = hasShopie(activeBusiness?.product_subscriptions);
   const mode = resolvePosMode(route.params?.mode);
   const isPurchase = mode === 'purchase';
   const isQuotation = mode === 'quotation';
@@ -184,11 +186,11 @@ export function ShopPosScreen() {
       setCustomerId(id);
       setPointsToRedeem(0);
       const customer = customers.find((row) => row.id === id);
-      const nextGstin = normalizeGstin(customer?.gstin || '');
+      const nextGstin = showGstFields ? normalizeGstin(customer?.gstin || '') : '';
       setPartyGstin(nextGstin);
       writePosSession({ customerId: id, partyGstin: nextGstin });
     },
-    [customers],
+    [customers, showGstFields],
   );
 
   const updateSupplierId = useCallback(
@@ -210,6 +212,18 @@ export function ShopPosScreen() {
     },
     [skipSaleSession],
   );
+
+  useEffect(() => {
+    if (!showGstFields || !customerId || usesSupplier || !customers.length) return;
+    const customer = customers.find((row) => row.id === customerId);
+    const fromCustomer = normalizeGstin(customer?.gstin || '');
+    if (!fromCustomer) return;
+    setPartyGstin((current) => {
+      if (current) return current;
+      if (!skipSaleSession) writePosSession({ partyGstin: fromCustomer });
+      return fromCustomer;
+    });
+  }, [customerId, customers, showGstFields, skipSaleSession, usesSupplier]);
 
   const syncBasket = useCallback(
     (next: BasketLine[] | ((current: BasketLine[]) => BasketLine[])) => {
@@ -534,7 +548,7 @@ export function ShopPosScreen() {
       toast.push(text, 'error');
       return;
     }
-    const gstinResult = validateGstin(partyGstin);
+    const gstinResult = showGstFields ? validateGstin(partyGstin) : { ok: true as const, gstin: '' };
     if (!gstinResult.ok) {
       setMessage(gstinResult.message);
       toast.push(gstinResult.message, 'error');
@@ -1036,24 +1050,28 @@ export function ShopPosScreen() {
           ) : null}
         </View>
 
-        <Text style={styles.section}>{usesSupplier ? 'Supplier GSTIN' : 'Customer GSTIN'}</Text>
-        <TextInput
-          style={[styles.input, partyGstin.length > 0 && !billGstinCheck.ok && styles.inputError]}
-          value={partyGstin}
-          onChangeText={updatePartyGstin}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={15}
-          placeholder="29AABCU9603R1ZJ (optional for B2C)"
-          placeholderTextColor={colors.mutedForeground}
-        />
-        <Text style={[styles.hint, partyGstin.length > 0 && !billGstinCheck.ok && styles.hintError]}>
-          {partyGstin.length === 0
-            ? 'Leave blank for B2C. Enter a valid 15-character GSTIN for a proper B2B GST invoice.'
-            : !billGstinCheck.ok
-              ? billGstinCheck.message
-              : 'Valid GSTIN — this bill will be posted as B2B for GSTR-1 / e-invoice.'}
-        </Text>
+        {showGstFields ? (
+          <>
+            <Text style={styles.section}>{usesSupplier ? 'Supplier GSTIN' : 'Customer GSTIN'}</Text>
+            <TextInput
+              style={[styles.input, partyGstin.length > 0 && !billGstinCheck.ok && styles.inputError]}
+              value={partyGstin}
+              onChangeText={updatePartyGstin}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={15}
+              placeholder="29AABCU9603R1ZJ (optional for B2C)"
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <Text style={[styles.hint, partyGstin.length > 0 && !billGstinCheck.ok && styles.hintError]}>
+              {partyGstin.length === 0
+                ? 'Leave blank for B2C. Enter a valid 15-character GSTIN for a proper B2B GST invoice.'
+                : !billGstinCheck.ok
+                  ? billGstinCheck.message
+                  : 'Valid GSTIN — this bill will be posted as B2B for GSTR-1 / e-invoice.'}
+            </Text>
+          </>
+        ) : null}
 
         {isDocument ? (
           isQuotation ? (

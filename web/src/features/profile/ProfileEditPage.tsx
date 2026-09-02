@@ -17,11 +17,15 @@ import { uploadProfilePhoto } from './uploadProfilePhoto';
 import { useProfileRoutes } from './profileRoutes';
 
 const preferenceOptions = [
-  { key: 'email_updates', label: 'Email reminders', helper: 'Booking updates sent by email when that channel is used.' },
+  { key: 'email', label: 'Email notifications', helper: 'Booking, order, and operational updates by email.' },
   { key: 'push', label: 'Push notifications', helper: 'Mobile push alerts on devices where you are signed in.' },
-  { key: 'sms_reminders', label: 'SMS reminders', helper: 'Stored for future SMS delivery (SMS provider not enabled yet).' },
-  { key: 'in_app', label: 'In-app notifications', helper: 'Notifications shown in the web and ops notification center.' },
+  { key: 'sms', label: 'SMS reminders', helper: 'Stored for future SMS delivery (SMS provider not enabled yet).' },
 ];
+
+const LEGACY_PREFERENCE_KEYS: Record<string, string[]> = {
+  email: ['email_updates'],
+  sms: ['sms_reminders'],
+};
 
 type NotificationPreferenceState = Record<string, boolean>;
 
@@ -30,8 +34,13 @@ function normalizeNotificationPreferences(raw?: Record<string, unknown> | null):
     if (raw && option.key in raw) {
       acc[option.key] = Boolean(raw[option.key]);
     } else {
-      // Default on so existing users keep receiving notifications until they opt out.
-      acc[option.key] = true;
+      const legacyKeys = LEGACY_PREFERENCE_KEYS[option.key] ?? [];
+      const legacyMatch = legacyKeys.find((key) => raw && key in raw);
+      if (legacyMatch) {
+        acc[option.key] = Boolean(raw?.[legacyMatch]);
+      } else {
+        acc[option.key] = true;
+      }
     }
     return acc;
   }, {} as NotificationPreferenceState);
@@ -41,8 +50,14 @@ function preserveExtraPreferences(raw?: Record<string, unknown> | null): Record<
   const extra: Record<string, unknown> = {};
   if (!raw || typeof raw !== 'object') return extra;
 
+  const knownKeys = new Set([
+    ...preferenceOptions.map((option) => option.key),
+    'email_updates',
+    'sms_reminders',
+    'in_app',
+  ]);
   Object.entries(raw).forEach(([key, value]) => {
-    if (!preferenceOptions.some((option) => option.key === key)) {
+    if (!knownKeys.has(key)) {
       extra[key] = value;
     }
   });

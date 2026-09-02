@@ -18,6 +18,7 @@ type Props = {
   bookingNumber?: string | null;
   status?: string | null;
   highlight?: boolean;
+  compact?: boolean;
   onPress?: () => void;
 };
 
@@ -40,6 +41,7 @@ export function BookingRow({
   bookingNumber,
   status,
   highlight = false,
+  compact = false,
   onPress,
 }: Props) {
   const timing = bookingStartsInLabel(startAt, endAt);
@@ -51,15 +53,15 @@ export function BookingRow({
     serviceCount && serviceCount > 1 ? `${serviceCount} services` : durationMinutes ? `${durationMinutes} min` : '';
 
   const content = (
-    <View style={[styles.card, highlight && styles.cardHighlight]}>
-      <View style={[styles.timeBlock, { backgroundColor: timingColors.bg }]}>
+    <View style={[styles.card, compact && styles.cardCompact, highlight && styles.cardHighlight]}>
+      <View style={[styles.timeBlock, compact && styles.timeBlockCompact, { backgroundColor: timingColors.bg }]}>
         <Text style={[styles.time, { color: timingColors.text }]}>{startLabel}</Text>
         <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={1}>
           {timing.label}
         </Text>
       </View>
 
-      <View style={styles.body}>
+      <View style={[styles.body, compact && styles.bodyCompact]}>
         <View style={styles.titleRow}>
           <Text style={styles.title} numberOfLines={1}>
             {serviceName}
@@ -101,7 +103,7 @@ export function BookingRow({
         {bookingNumber ? (
           <Text style={styles.ref} numberOfLines={1}>
             #{bookingNumber}
-            {dateLabel ? ` · ${dateLabel}` : ''}
+            {!compact && dateLabel ? ` · ${dateLabel}` : ''}
           </Text>
         ) : null}
       </View>
@@ -110,7 +112,7 @@ export function BookingRow({
 
   if (onPress) {
     return (
-      <Pressable style={({ pressed }) => [pressed && styles.pressed]} onPress={onPress}>
+      <Pressable style={({ pressed }) => [styles.pressable, pressed && styles.pressed]} onPress={onPress}>
         {content}
       </Pressable>
     );
@@ -129,10 +131,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
   },
+  cardCompact: {
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
   cardHighlight: {
     borderColor: colors.primary,
     backgroundColor: colors.tint,
   },
+  pressable: { width: '100%', maxWidth: '100%' },
   pressed: { opacity: 0.92 },
   timeBlock: {
     minWidth: 72,
@@ -141,6 +148,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     gap: 2,
+  },
+  timeBlockCompact: {
+    minWidth: 64,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   time: {
     fontFamily: fonts.bodyBold,
@@ -152,6 +164,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   body: { flex: 1, gap: 6, minWidth: 0 },
+  bodyCompact: { gap: 3 },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

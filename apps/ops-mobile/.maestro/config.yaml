@@ -1,0 +1,12 @@
+# Maestro smoke flows for IE Orbit ops mobile (native APK).
+# Prereqs: Maestro CLI, ops production-preview APK installed.
+#
+#   export QA_OWNER_EMAIL=...
+#   export QA_OWNER_PASSWORD=...
+#   maestro test apps/ops-mobile/.maestro/smoke/
+
+appId: com.ieorbit.ops
+
+env:
+  QA_OWNER_EMAIL: ${QA_OWNER_EMAIL}
+  QA_OWNER_PASSWORD: ${QA_OWNER_PASSWORD}

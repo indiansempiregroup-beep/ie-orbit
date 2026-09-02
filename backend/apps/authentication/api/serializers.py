@@ -234,6 +234,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def validate_profile_photo(self, value: str) -> str:
         return normalize_stored_asset_url(value)
 
+    def validate_notification_preferences(self, value: dict | None) -> dict[str, bool]:
+        from apps.notifications.services.preferences import merge_notification_preferences
+
+        existing = None
+        if self.instance is not None:
+            existing = getattr(self.instance, "notification_preferences", None)
+        return merge_notification_preferences(existing, value)
+
     def get_roles(self, user: User) -> list[str]:
         return list(user.user_roles.values_list("role__code", flat=True))
 

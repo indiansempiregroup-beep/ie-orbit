@@ -12,6 +12,9 @@ import { Dialog } from '../../components/Dialog';
 import { formatTimestamp } from '../../lib/datetime';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { normalizeGstin, validateGstin } from '../../lib/gstin';
+import { hasSubscribedProduct } from '../../config/products';
 import { Customer360Tabs } from './Customer360Tabs';
 import { CustomerBorrowPanel } from './CustomerBorrowPanel';
 
@@ -27,6 +30,8 @@ type AddressFormState = {
 
 export function CustomerDetailPage() {
   const snackbar = useSnackbar();
+  const { activeBusiness } = useWorkspace();
+  const showGstFields = hasSubscribedProduct(activeBusiness?.product_subscriptions, 'shopie');
   const { customerId } = useParams();
   const navigate = useNavigate();
   const customerQuery = useCustomerDetail(customerId);
@@ -38,6 +43,7 @@ export function CustomerDetailPage() {
     email: '',
     phone_number: '',
     status: 'active',
+    gstin: '',
   });
   const [addressForm, setAddressForm] = useState<AddressFormState>({
     full_address: '',
@@ -56,6 +62,7 @@ export function CustomerDetailPage() {
       email: customer.email ?? '',
       phone_number: customer.phone_number ?? '',
       status: customer.status ?? 'active',
+      gstin: normalizeGstin(customer.gstin ?? ''),
     });
     setAddressForm({
       full_address: customer.full_address ?? customer.address?.full_address ?? customer.address?.line1 ?? '',
@@ -135,6 +142,13 @@ export function CustomerDetailPage() {
                 </div>
               </div>
 
+              {showGstFields ? (
+                <div>
+                  <p style={{ margin: 0, color: '#6b7280' }}>GSTIN</p>
+                  <p style={{ margin: '8px 0 0' }}>{customerQuery.data.gstin?.trim() || '—'}</p>
+                </div>
+              ) : null}
+
               <CustomerBorrowPanel
                 customerId={customerQuery.data.id}
                 balanceDue={Number(customerQuery.data.borrow_balance_due ?? 0)}
@@ -179,11 +193,21 @@ export function CustomerDetailPage() {
             event.preventDefault();
             setEditError(null);
             if (!customerId) return;
+            let resolvedGstin = '';
+            if (showGstFields) {
+              const gstinResult = validateGstin(formState.gstin ?? '');
+              if (!gstinResult.ok) {
+                setEditError(gstinResult.message);
+                return;
+              }
+              resolvedGstin = gstinResult.gstin;
+            }
             updateCustomer.mutate(
               {
                 customerId,
                 customer: {
                   ...formState,
+                  ...(showGstFields ? { gstin: resolvedGstin || undefined } : {}),
                   default_address: {
                     full_address: addressForm.full_address,
                     city: addressForm.city,
@@ -228,6 +252,17 @@ export function CustomerDetailPage() {
             placeholder="Phone number"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
+          {showGstFields ? (
+            <input
+              value={formState.gstin ?? ''}
+              onChange={(event) =>
+                setFormState({ ...formState, gstin: normalizeGstin(event.target.value) })
+              }
+              placeholder="GSTIN (optional, for Orbit Mart B2B bills)"
+              maxLength={15}
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+          ) : null}
           <select
             value={formState.status ?? 'active'}
             onChange={(event) => setFormState({ ...formState, status: event.target.value })}

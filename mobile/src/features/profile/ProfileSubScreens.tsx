@@ -67,9 +67,11 @@ export function NotificationPreferencesScreen() {
   const { branding } = useBootstrap();
   const primary = branding?.primaryColor ?? colors.primary;
   const prefs = (user?.notification_preferences ?? {}) as Record<string, boolean>;
-  const [email, setEmail] = useState(prefs.email !== false);
+  const [email, setEmail] = useState(
+    prefs.email !== false && prefs.email_updates !== false,
+  );
   const [push, setPush] = useState(prefs.push !== false);
-  const [sms, setSms] = useState(Boolean(prefs.sms));
+  const [sms, setSms] = useState(Boolean(prefs.sms ?? prefs.sms_reminders));
   const [loading, setLoading] = useState(false);
 
   async function onSave() {

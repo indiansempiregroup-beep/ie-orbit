@@ -1,0 +1,17 @@
+# Ops app — shop POS entry from dashboard (shopie tenants only).
+appId: com.ieorbit.ops
+
+---
+- runFlow: ops-sign-in.yaml
+- tapOn:
+    text: "Shop"
+    optional: true
+- tapOn:
+    text: "POS"
+    optional: true
+- assertVisible:
+    text: "Cart"
+    optional: true
+- assertVisible:
+    text: "Checkout"
+    optional: true

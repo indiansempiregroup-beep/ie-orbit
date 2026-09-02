@@ -61,10 +61,10 @@ def send_expo_push_messages(messages: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def push_enabled_for_user(user: Any) -> bool:
-    prefs = getattr(user, "notification_preferences", None)
-    if not isinstance(prefs, dict):
-        return True
-    return prefs.get("push", True) is not False
+    from apps.notifications.services.preferences import channel_enabled
+    from apps.notifications.models import NotificationChannel
+
+    return channel_enabled(user, NotificationChannel.FIREBASE_PUSH)
 
 
 def send_push_to_user(

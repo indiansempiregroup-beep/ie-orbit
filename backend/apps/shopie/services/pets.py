@@ -187,7 +187,7 @@ class PetsService:
                 "customer_id": str(pet.customer_id),
                 "deep_link": f"shop/pets/{pet.id}",
             },
-            channels=["in_app"],
+            channels=["in_app", "email"],
         )
 
     def send_birthday_reminders(self, *, lead_days: int = BIRTHDAY_REMINDER_LEAD_DAYS) -> dict[str, int]:

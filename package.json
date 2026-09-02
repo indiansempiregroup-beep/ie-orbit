@@ -5,9 +5,18 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "typecheck": "corepack pnpm -r typecheck",
-    "lint": "corepack pnpm -r lint"
+    "lint": "corepack pnpm -r lint",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "test:e2e:web": "playwright test --config e2e/playwright.config.ts --project web",
+    "test:e2e:ops": "playwright test --config e2e/playwright.config.ts --project ops",
+    "test:e2e:report": "playwright show-report",
+    "test:maestro:ops": "maestro test apps/ops-mobile/.maestro/smoke/",
+    "test:maestro:customer": "maestro test mobile/.maestro/smoke/",
+    "qa:post-deploy": "bash scripts/qa-post-deploy.sh"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "dotenv": "^16.6.1",
     "typescript": "^5.8.3"
   },
   "pnpm": {

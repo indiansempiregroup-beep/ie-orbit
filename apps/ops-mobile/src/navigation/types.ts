@@ -129,6 +129,7 @@ export type RootStackParamList = {
   Team: undefined;
   Profile: undefined;
   ProfileEdit: undefined;
+  NotificationPreferences: undefined;
   Security: undefined;
   Sessions: undefined;
 };

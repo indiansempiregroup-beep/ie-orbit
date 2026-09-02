@@ -67,6 +67,13 @@ export type ForgotPasswordRequest = {
   email: string;
 };
 
+export type ContactFormRequest = {
+  name: string;
+  email: string;
+  message: string;
+  website?: string;
+};
+
 export type ResetPasswordRequest = {
   token: string;
   new_password: string;
@@ -4986,6 +4993,11 @@ class ApiClient {
         latitude?: number | null;
         longitude?: number | null;
       }>('/places/reverse', { method: 'GET', query }),
+  };
+
+  public = {
+    submitContactForm: (body: ContactFormRequest) =>
+      this.request<{ submitted: boolean }>('/contact', { method: 'POST', body }),
   };
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<ApiEnvelope<T>> {

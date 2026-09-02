@@ -949,6 +949,12 @@ button.public-back-link {
   border: 1px solid #a7f3d0;
 }
 
+.public-status--error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
 @media (max-width: 960px) {
   .public-hero-inner,
   .public-contact-grid,

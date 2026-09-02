@@ -1,0 +1,14 @@
+# Ops app — dashboard panels after login.
+appId: com.ieorbit.ops
+
+---
+- runFlow: ops-sign-in.yaml
+- assertVisible:
+    text: "Today"
+    optional: true
+- assertVisible:
+    text: "Bookings"
+    optional: true
+- assertVisible:
+    text: "Orders"
+    optional: true

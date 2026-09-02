@@ -1,0 +1,57 @@
+name: E2E Post-Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Marketing site base URL
+        required: false
+        default: https://ie-orbit.com
+      ops_url:
+        description: Ops web base URL
+        required: false
+        default: https://ops.ie-orbit.com
+      api_url:
+        description: API base URL
+        required: false
+        default: https://api.ie-orbit.com/api/v1
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run Playwright smoke tests
+        env:
+          QA_BASE_URL: ${{ inputs.base_url }}
+          QA_OPS_URL: ${{ inputs.ops_url }}
+          QA_API_URL: ${{ inputs.api_url }}
+          QA_OWNER_EMAIL: ${{ secrets.QA_OWNER_EMAIL }}
+          QA_OWNER_PASSWORD: ${{ secrets.QA_OWNER_PASSWORD }}
+          QA_CUSTOMER_EMAIL: ${{ secrets.QA_CUSTOMER_EMAIL }}
+          QA_CUSTOMER_PASSWORD: ${{ secrets.QA_CUSTOMER_PASSWORD }}
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

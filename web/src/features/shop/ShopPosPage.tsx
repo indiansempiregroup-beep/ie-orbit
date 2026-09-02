@@ -9,6 +9,8 @@ import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
+import { normalizeGstin, validateGstin } from '../../lib/gstin';
+import { hasSubscribedProduct } from '../../config/products';
 import type { Customer, MerchantCashfreeCheckout, MerchantRazorpayCheckout, ShopProduct } from '@ie-orbit/sdk';
 
 type BasketLine = {
@@ -65,11 +67,13 @@ export function ShopPosPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isChallan = searchParams.get('mode') === 'delivery_challan';
+  const showGstFields = hasSubscribedProduct(workspace.activeBusiness?.product_subscriptions, 'shopie');
   const products = useShopProducts('', 'active');
   const { lookup, lookupBulk, createOrder } = useShopProductMutations();
   const { create: createDocument } = useShopBooksDocumentMutations();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
+  const [partyGstin, setPartyGstin] = useState('');
   const [scan, setScan] = useState('');
   const [bulkCodes, setBulkCodes] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -218,6 +222,17 @@ export function ShopPosPage() {
     () => customers.find((row) => row.id === customerId) ?? null,
     [customers, customerId],
   );
+
+  useEffect(() => {
+    if (!showGstFields) {
+      setPartyGstin('');
+      return;
+    }
+    const nextGstin = normalizeGstin(selectedCustomer?.gstin || '');
+    setPartyGstin(nextGstin);
+  }, [customerId, selectedCustomer?.gstin, showGstFields]);
+
+  const billGstinCheck = useMemo(() => validateGstin(partyGstin), [partyGstin]);
   const loyaltyMaxPoints = useMemo(
     () => maxRedeemablePoints(totals.subtotal, loyaltyPrefs, Number(selectedCustomer?.loyalty_points ?? 0)),
     [totals.subtotal, loyaltyPrefs, selectedCustomer?.loyalty_points],
@@ -306,13 +321,25 @@ export function ShopPosPage() {
       snackbar.push(text, 'error');
       return;
     }
+    const gstinResult = showGstFields ? validateGstin(partyGstin) : { ok: true as const, gstin: '' };
+    if (!gstinResult.ok) {
+      setMessage(gstinResult.message);
+      snackbar.push(gstinResult.message, 'error');
+      return;
+    }
+    const resolvedGstin = gstinResult.gstin;
     setMessage(null);
     try {
       if (isChallan) {
         const challan = await createDocument.mutateAsync({
           doc_type: 'delivery_challan',
           customer_id: customerId || null,
-          notes: 'Delivery challan from Sale counter',
+          notes: [
+            'Delivery challan from Sale counter',
+            resolvedGstin ? `Customer GSTIN ${resolvedGstin}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · '),
           lines: basket.map((line) => ({
             product_id: line.product.id,
             quantity: line.quantity,
@@ -333,6 +360,7 @@ export function ShopPosPage() {
         fulfillment_mode: 'pos',
         confirm: true,
         customer_id: customerId || null,
+        customer_gstin: resolvedGstin || undefined,
         payment_method: paymentMethod,
         bill_discount_type: billDiscountType,
         bill_discount_value: Number(billDiscountValue) || 0,
@@ -501,6 +529,29 @@ export function ShopPosPage() {
               ))}
             </select>
           </label>
+          {showGstFields ? (
+            <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Customer GSTIN</span>
+              <input
+                value={partyGstin}
+                onChange={(event) => setPartyGstin(normalizeGstin(event.target.value))}
+                maxLength={15}
+                placeholder="29AABCU9603R1ZJ (optional for B2C)"
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  border: `1px solid ${partyGstin && !billGstinCheck.ok ? '#dc2626' : '#e5e7eb'}`,
+                }}
+              />
+              <span style={{ fontSize: 12, color: partyGstin && !billGstinCheck.ok ? '#dc2626' : '#6b7280' }}>
+                {partyGstin.length === 0
+                  ? 'Leave blank for B2C. Enter a valid GSTIN for B2B GST invoices.'
+                  : !billGstinCheck.ok
+                    ? billGstinCheck.message
+                    : 'Valid GSTIN — bill will be posted as B2B for GSTR-1 / e-invoice.'}
+              </span>
+            </label>
+          ) : null}
           {customerId && !isChallan && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
             <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>Reward points</span>

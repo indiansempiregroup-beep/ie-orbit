@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Mail, MessageSquare, Phone } from 'lucide-react';
+import { createApiClient } from '@ie-orbit/sdk';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
+import { getApiErrorMessage } from '../../lib/apiClient';
+
+const contactClient = createApiClient({ baseUrl: '/api/v1' });
 
 export function ContactPage() {
   usePageMeta({
@@ -12,14 +16,43 @@ export function ContactPage() {
   });
 
   const [searchParams] = useSearchParams();
-  const [submitted, setSubmitted] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('intent') === 'demo') {
       setMessage("I'd like a demo of IE Orbit for my business.");
     }
   }, [searchParams]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    const formData = new FormData(event.currentTarget);
+    try {
+      await contactClient.public.submitContactForm({
+        name,
+        email,
+        message,
+        website: String(formData.get('website') ?? ''),
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError(
+        getApiErrorMessage(
+          err,
+          'We could not send your message right now. Please email support@indiansempire.com instead.',
+        ),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <>
@@ -44,20 +77,50 @@ export function ContactPage() {
                 Thank you. We will respond within two business days.
               </p>
             ) : (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setSubmitted(true);
-                }}
-              >
+              <form onSubmit={handleSubmit}>
                 <h2 style={{ marginTop: 0 }}>Send a message</h2>
-                <Input label="Name" name="name" required autoComplete="name" />
-                <Input label="Email" name="email" type="email" required autoComplete="email" />
+                {error ? (
+                  <p className="public-status public-status--error" role="alert">
+                    {error}
+                  </p>
+                ) : null}
+                <Input
+                  label="Name"
+                  name="name"
+                  required
+                  autoComplete="name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  disabled={loading}
+                />
+                <Input
+                  label="Email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={loading}
+                />
                 <label className="public-form-label">
                   <span>Message</span>
-                  <textarea name="message" required rows={5} value={message} onChange={(e) => setMessage(e.target.value)} />
+                  <textarea
+                    name="message"
+                    required
+                    rows={5}
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    disabled={loading}
+                  />
                 </label>
-                <Button type="submit" variant="primary">
+                <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>
+                  <label>
+                    Website
+                    <input name="website" type="text" tabIndex={-1} autoComplete="off" />
+                  </label>
+                </div>
+                <Button type="submit" variant="primary" loading={loading} loadingLabel="Sending…">
                   Send message
                 </Button>
               </form>
@@ -79,7 +142,7 @@ export function ContactPage() {
               </div>
               <h3>Phone</h3>
               <p style={{ marginBottom: 0 }}>
-                <a href="tel:+918048040848">+91 80 4804 0848</a>
+                <a href="tel:+919766855617">+91 9766855617</a>
               </p>
             </article>
             <article className="public-card">

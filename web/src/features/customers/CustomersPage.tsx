@@ -18,10 +18,15 @@ import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { normalizeGstin, validateGstin } from '../../lib/gstin';
+import { hasSubscribedProduct } from '../../config/products';
 
 export function CustomersPage() {
   const snackbar = useSnackbar();
   const navigate = useNavigate();
+  const { activeBusiness } = useWorkspace();
+  const showGstFields = hasSubscribedProduct(activeBusiness?.product_subscriptions, 'shopie');
   const [searchTerm, setSearchTerm] = useState('');
   const createCustomer = useCustomerCreate();
   const updateCustomer = useCustomerUpdate();
@@ -44,6 +49,7 @@ export function CustomersPage() {
     postal_code: '',
     latitude: null as number | null,
     longitude: null as number | null,
+    gstin: '',
   });
   const [creationError, setCreationError] = useState<string | null>(null);
   const { data: customers, isLoading, error, refetch } = useCustomerList();
@@ -83,6 +89,7 @@ export function CustomersPage() {
       postal_code: '',
       latitude: null,
       longitude: null,
+      gstin: '',
     });
   }
 
@@ -280,6 +287,15 @@ export function CustomersPage() {
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
+            let resolvedGstin = '';
+            if (showGstFields) {
+              const gstinResult = validateGstin(formState.gstin);
+              if (!gstinResult.ok) {
+                setCreationError(gstinResult.message);
+                return;
+              }
+              resolvedGstin = gstinResult.gstin;
+            }
             createCustomer.mutate(
               {
                 business: formState.business,
@@ -291,6 +307,7 @@ export function CustomersPage() {
                 phone_number: formState.phone_number,
                 status: formState.status,
                 send_registration_invite: formState.send_registration_invite,
+                ...(showGstFields && resolvedGstin ? { gstin: resolvedGstin } : {}),
                 default_address: formState.full_address.trim()
                   ? {
                       full_address: formState.full_address,
@@ -349,6 +366,17 @@ export function CustomersPage() {
             placeholder="Phone number"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
+          {showGstFields ? (
+            <input
+              value={formState.gstin}
+              onChange={(event) =>
+                setFormState({ ...formState, gstin: normalizeGstin(event.target.value) })
+              }
+              placeholder="GSTIN (optional, for Orbit Mart B2B bills)"
+              maxLength={15}
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            />
+          ) : null}
           <label style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <input
               type="checkbox"

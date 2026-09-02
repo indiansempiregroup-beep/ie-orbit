@@ -6,6 +6,8 @@ export const layout = {
   pageMaxWidth: 1120,
   formMaxWidth: 640,
   authCardMaxWidth: 440,
+  /** Home carousel cards — keep width phone-like on wide screens. */
+  homeCarouselCardMaxWidth: 400,
   desktopGutter: 32,
 } as const;
 

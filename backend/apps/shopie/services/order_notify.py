@@ -303,7 +303,7 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
                 "status": status_value,
                 "fulfillment_mode": order.fulfillment_mode,
             },
-            channels=["in_app"],
+            channels=["in_app", "email"],
         )
     except Exception:
         logger.exception(

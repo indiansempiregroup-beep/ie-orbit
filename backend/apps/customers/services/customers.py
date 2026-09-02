@@ -45,6 +45,11 @@ class CustomerService:
     def __init__(self, repository: CustomerRepository | None = None) -> None:
         self.repository = repository or CustomerRepository()
 
+    @staticmethod
+    def _normalize_gstin(data: dict[str, Any]) -> None:
+        if "gstin" in data and data["gstin"] is not None:
+            data["gstin"] = str(data["gstin"]).strip().upper()
+
     @transaction.atomic
     def create_customer(
         self,
@@ -57,6 +62,7 @@ class CustomerService:
         profile_data = data.pop("profile", None)
         preferences_data = data.pop("preferences", None)
         address_data = data.pop("default_address", None)
+        self._normalize_gstin(data)
         customer = Customer(tenant=tenant, **data)
         if getattr(actor, "is_authenticated", False):
             customer.mark_created(actor_id=actor.id)
@@ -95,6 +101,7 @@ class CustomerService:
         profile_data = data.pop("profile", None)
         preferences_data = data.pop("preferences", None)
         address_data = data.pop("default_address", None)
+        self._normalize_gstin(data)
         for field, value in data.items():
             setattr(customer, field, value)
         if getattr(actor, "is_authenticated", False):

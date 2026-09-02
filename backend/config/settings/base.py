@@ -152,6 +152,10 @@ BACKUP_S3_PREFIX = os.getenv("BACKUP_S3_PREFIX", "backups/postgres").strip()
 BACKUP_LOCAL_RETENTION_DAYS = os.getenv("BACKUP_LOCAL_RETENTION_DAYS", "").strip()
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DEFAULT_FROM_EMAIL = ENV.default_from_email
+CONTACT_FORM_RECIPIENT_EMAIL = os.getenv(
+    "CONTACT_FORM_RECIPIENT_EMAIL",
+    "support@indiansempire.com",
+)
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.smtp.EmailBackend",
@@ -181,6 +185,7 @@ REST_FRAMEWORK = {
         "user": "1000/hour",
         "auth_login": "10/minute",
         "password_reset": "5/minute",
+        "contact_form": "5/minute",
         "places": "60/minute",
     },
     "PAGE_SIZE": 50,
