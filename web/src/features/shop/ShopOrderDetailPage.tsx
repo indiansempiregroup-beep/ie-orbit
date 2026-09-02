@@ -592,10 +592,8 @@ export function ShopOrderDetailPage() {
           }}
           onClick={() => setShipOpen(false)}
         >
-          <Card
-            style={{ width: '100%', maxWidth: 480 }}
-            onClick={(event) => event.stopPropagation()}
-          >
+          <div onClick={(event: React.MouseEvent) => event.stopPropagation()}>
+            <Card style={{ width: '100%', maxWidth: 480 }}>
             <h2 style={{ marginTop: 0 }}>Ship order</h2>
             <p style={{ color: '#64748b' }}>
               Add courier tracking so customers can follow the shipment like Amazon.
@@ -655,6 +653,7 @@ export function ShopOrderDetailPage() {
               </div>
             </form>
           </Card>
+          </div>
         </div>
       ) : null}
     </div>

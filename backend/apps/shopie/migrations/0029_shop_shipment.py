@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="ShopShipment",
             fields=[
-                ("id", models.UUIDField(default=apps.core.db.uuid.uuid7, editable=False, primary_key=True, serialize=False)),
+                ("id", models.UUIDField(default=apps.core.db.uuid.generate_uuid, editable=False, primary_key=True, serialize=False)),
                 ("created_at", models.DateTimeField(auto_now_add=True, db_index=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("version", models.PositiveIntegerField(default=1)),

@@ -19,8 +19,8 @@ Add new important files to this folder and list them in this table.
 
 ## Connect
 
-Host alias in `~/.ssh/config`: `ie-platform-vps`
+Host alias in `~/.ssh/config`: `ie-orbit-vps`
 
 ```bash
-ssh ie-platform-vps
+ssh ie-orbit-vps
 ```

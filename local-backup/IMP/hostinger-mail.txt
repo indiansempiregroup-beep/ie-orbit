@@ -8,7 +8,7 @@ SMTP port: 465 (SSL)  — fallback 587 (STARTTLS)
 IMAP: imap.hostinger.com:993
 Webmail: https://mail.hostinger.com
 
-VPS env ( /opt/ie-platform/.env ):
+VPS env ( /opt/ie-orbit/.env ):
   EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
   EMAIL_HOST=smtp.hostinger.com
   EMAIL_PORT=465

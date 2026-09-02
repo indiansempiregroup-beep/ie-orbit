@@ -49,7 +49,7 @@ chmod 644 ~/.ssh/ie_platform_interserver.pub
 Add the VPS host alias to `~/.ssh/config` if it is not already there:
 
 ```sshconfig
-Host ie-platform-vps
+Host ie-orbit-vps
     HostName <your-vps-ip>
     User root
     IdentityFile ~/.ssh/ie_platform_interserver
@@ -59,7 +59,7 @@ Host ie-platform-vps
 Test:
 
 ```bash
-ssh ie-platform-vps
+ssh ie-orbit-vps
 ```
 
 See [`local-backup/IMP/README.md`](../local-backup/IMP/README.md) for what each IMP file is for.
@@ -141,7 +141,7 @@ Replace flavor key / app name from [`mobile/flavors/manifest.json`](../mobile/fl
 ## Step 6 — Verify checklist
 
 - [ ] `git pull` works with your GitHub account
-- [ ] `~/Sanket/IMP` restored; `ssh ie-platform-vps` connects
+- [ ] `~/Sanket/IMP` restored; `ssh ie-orbit-vps` connects
 - [ ] `corepack pnpm install` completed without errors
 - [ ] `docker compose up -d` — backend health check returns OK
 - [ ] `eas login` works (if building mobile)
@@ -151,9 +151,9 @@ Replace flavor key / app name from [`mobile/flavors/manifest.json`](../mobile/fl
 
 ## Adding new secrets later
 
-**`.env` is not in git.** Keep dev values in your local `.env` (copy from [`.env.example`](../.env.example)). On the VPS, edit `/opt/ie-platform/.env` only on the server — `git pull` will not touch it.
+**`.env` is not in git.** Keep dev values in your local `.env` (copy from [`.env.example`](../.env.example)). On the VPS, edit `/opt/ie-orbit/.env` only on the server — `git pull` will not touch it.
 
-- a new `.env` value — edit local `.env` or VPS `/opt/ie-platform/.env` directly; do not commit
+- a new `.env` value — edit local `.env` or VPS `/opt/ie-orbit/.env` directly; do not commit
 - a new Firebase JSON — place under `mobile/credentials/google-services/`, commit and push
 - new IMP notes or keys — update `~/Sanket/IMP`, then refresh the repo backup:
 
@@ -168,14 +168,14 @@ git push
 
 ## VPS deploy
 
-Production `.env` lives only on the server. After `git pull`, Compose still reads `/opt/ie-platform/.env` from disk.
+Production `.env` lives only on the server. After `git pull`, Compose still reads `/opt/ie-orbit/.env` from disk.
 
 ```bash
-ssh ie-platform-vps
-cd /opt/ie-platform
+ssh ie-orbit-vps
+cd /opt/ie-orbit
 git pull origin main
-docker compose -p ie-platform-prod -f docker-compose.prod.yml up --build -d
-docker compose -p ie-platform-prod -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput
+docker compose -f docker-compose.prod.yml up --build -d --force-recreate
+docker compose -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput
 ```
 
 ---

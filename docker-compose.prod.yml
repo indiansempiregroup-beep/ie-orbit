@@ -275,10 +275,20 @@ services:
 
 volumes:
   postgres-data:
+    external: true
+    name: ie-orbit-prod_postgres-data
   redis-data:
+    external: true
+    name: ie-orbit-prod_redis-data
   backend-static:
+    external: true
+    name: ie-orbit-prod_backend-static
   backend-logs:
+    external: true
+    name: ie-orbit-prod_backend-logs
   celerybeat-data:
+    external: true
+    name: ie-orbit-prod_celerybeat-data
 
 networks:
   edge:

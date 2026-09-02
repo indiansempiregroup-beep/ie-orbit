@@ -33,7 +33,7 @@ pnpm-debug.log*
 ############################################################
 
 # Live secrets — copy from .env.example (dev) or .env.production.example (VPS).
-# Never commit .env; VPS keeps its own copy at /opt/ie-platform/.env outside git.
+# Never commit .env; VPS keeps its own copy at /opt/ie-orbit/.env outside git.
 .env
 !.env.example
 !.env.docker.example
