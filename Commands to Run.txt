@@ -265,3 +265,10 @@ corepack pnpm eas:build:sanket:production-preview
 cd ../apps/ops-mobile
 corepack pnpm exec eas init --id b897b310-e21b-49ab-b58f-56b8da1867f3 --force --non-interactive
 corepack pnpm eas:build:production-preview
+
+
+ssh ie-orbit-vps   # or ie-orbit-vps once alias is set
+cd /opt/ie-orbit
+git pull origin main
+docker compose -f docker-compose.prod.yml up --build -d --force-recreate
+docker compose -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput
