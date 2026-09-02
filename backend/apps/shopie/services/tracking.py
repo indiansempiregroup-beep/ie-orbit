@@ -28,6 +28,8 @@ CANONICAL_LABELS = {
     "confirmed": "Order confirmed",
     "packing": "Packing your order",
     "packed": "Packed and ready",
+    "shipped": "Shipped",
+    "in_transit": "In transit",
     "finding_rider": "Finding a rider",
     "rider_assigned": "Rider assigned",
     "at_pickup": "Rider at the shop",
@@ -195,6 +197,7 @@ class TrackingHistoryService:
         source_key: str = "",
         webhook_event=None,
         metadata: dict[str, Any] | None = None,
+        label: str = "",
     ) -> ShopOrderTrackingEvent:
         canonical = PARTNER_TO_CANONICAL.get(status, status)
         defaults = {
@@ -204,7 +207,7 @@ class TrackingHistoryService:
             "webhook_event": webhook_event,
             "kind": TrackingEventKind.STATUS,
             "status": canonical,
-            "label": CANONICAL_LABELS.get(canonical, canonical.replace("_", " ").title()),
+            "label": label or CANONICAL_LABELS.get(canonical, canonical.replace("_", " ").title()),
             "source": source,
             "occurred_at": occurred_at or timezone.now(),
             "eta_minutes": int(eta_minutes) if eta_minutes not in (None, "") else None,

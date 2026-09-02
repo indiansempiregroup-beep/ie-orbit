@@ -27,6 +27,8 @@ import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateTime } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { DeliveryTrackerMap } from './DeliveryTrackerMap';
+import { DeliveryProgressStepper } from './DeliveryProgressStepper';
+import * as Clipboard from 'expo-clipboard';
 import {
   formatShopDateLabel,
   formatShopMoney,
@@ -81,6 +83,8 @@ function ProductThumb({ uri, size = 72 }: { uri?: string | null; size?: number }
 }
 
 function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: string }) {
+  const isCourier =
+    live.delivery_method === 'standard' && Boolean(live.shipment?.tracking_number || live.tracking_url);
   const events = [...(live.events ?? [])].sort((a, b) => {
     const left = a.occurred_at ? new Date(a.occurred_at).getTime() : 0;
     const right = b.occurred_at ? new Date(b.occurred_at).getTime() : 0;
@@ -100,8 +104,11 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
     (live.attempts ?? []).at(-1);
   const rider = live.rider ?? activeAttempt?.rider;
   const trackingUrl = live.tracking_url || activeAttempt?.tracking_url;
+  const shipment = live.shipment;
   const failureReason = live.subtitle || activeAttempt?.reason;
   const headline = String(live.headline || 'Delivery update').replace(/\s*·\s*\d+\s*min(?:utes?)?$/i, '');
+  const promiseLabel = live.delivery_promise?.label;
+  const showMap = live.show_map !== false && !isCourier && Boolean(live.dispatched);
 
   const renderEvents = (rows: typeof events) => (
     <View style={styles.deliveryEvents}>
@@ -134,8 +141,13 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
       <View style={styles.trackingHeader}>
         <View style={[styles.liveDot, { backgroundColor: live.terminal ? colors.success : primary }]} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.trackingEyebrow}>{live.terminal ? 'DELIVERY STATUS' : 'LIVE DELIVERY'}</Text>
-          <Text style={styles.trackingTitle}>{headline}</Text>
+          <Text style={styles.trackingEyebrow}>
+            {live.terminal ? 'DELIVERY STATUS' : isCourier ? 'SHIPMENT STATUS' : 'LIVE DELIVERY'}
+          </Text>
+          <Text style={styles.trackingTitle}>{isCourier && promiseLabel ? promiseLabel : headline}</Text>
+          {isCourier && shipment?.carrier_label ? (
+            <Text style={styles.trackingSubtitle}>Shipped with {shipment.carrier_label}</Text>
+          ) : null}
           {failureReason ? <Text style={styles.trackingSubtitle}>{failureReason}</Text> : null}
           <Text style={[styles.updatedText, live.stale && styles.staleText]}>
             {live.stale
@@ -146,7 +158,21 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
           </Text>
         </View>
       </View>
-      {!live.terminal ? (
+      {isCourier && shipment?.tracking_number ? (
+        <View style={styles.awbRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.awbLabel}>Tracking ID</Text>
+            <Text style={styles.awbValue}>{shipment.tracking_number}</Text>
+          </View>
+          <Pressable
+            onPress={() => void Clipboard.setStringAsync(shipment.tracking_number || '')}
+            style={styles.copyButton}
+          >
+            <Text style={{ color: primary, fontWeight: '700' }}>Copy</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {!live.terminal && !isCourier ? (
         <View style={[styles.etaBox, { backgroundColor: `${primary}12` }]}>
           <Feather name="clock" size={20} color={primary} />
           <View>
@@ -157,7 +183,7 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
           </View>
         </View>
       ) : null}
-      <DeliveryTrackerMap live={live} primary={primary} />
+      {showMap ? <DeliveryTrackerMap live={live} primary={primary} /> : null}
       {rider?.name || rider?.phone || rider?.vehicle ? (
         <View style={styles.riderRow}>
           {resolveMediaUrl(rider.photo_url) ? (
@@ -186,7 +212,9 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
       {trackingUrl ? (
         <Pressable style={styles.trackingLink} onPress={() => Linking.openURL(trackingUrl)}>
           <Feather name="external-link" size={16} color={primary} />
-          <Text style={[styles.trackingLinkText, { color: primary }]}>Open carrier tracking</Text>
+          <Text style={[styles.trackingLinkText, { color: primary }]}>
+            {isCourier ? `Track on ${shipment?.carrier_label || 'carrier'}` : 'Open carrier tracking'}
+          </Text>
         </Pressable>
       ) : null}
       {orderEvents.length || attemptNumbers.length ? (
@@ -320,7 +348,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
         .catch((err) =>
           setDeliveryError(err instanceof Error ? err.message : 'Unable to refresh live delivery updates.'),
         );
-    }, 12000);
+    }, 60000);
     return () => clearInterval(timer);
   }, [
     businessCode,
@@ -536,6 +564,30 @@ export function ShopOrderDetailScreen({ route }: Props) {
         onRefresh={() => load('refresh')}
         primaryColor={primary}
       >
+        {route.params.placed && order ? (
+          <View style={[styles.confirmBanner, { borderColor: `${primary}44`, backgroundColor: `${primary}10` }]}>
+            <Feather name="check-circle" size={20} color={primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.confirmTitle}>Order placed</Text>
+              <Text style={styles.confirmText}>
+                #{order.order_number} · We will update you when it ships.
+              </Text>
+              {order.metadata &&
+              typeof order.metadata === 'object' &&
+              (order.metadata as Record<string, unknown>).delivery_promise &&
+              typeof (order.metadata as Record<string, unknown>).delivery_promise === 'object'
+                ? (
+                    <Text style={styles.confirmText}>
+                      {String(
+                        ((order.metadata as Record<string, unknown>).delivery_promise as Record<string, unknown>)
+                          .label || '',
+                      )}
+                    </Text>
+                  )
+                : null}
+            </View>
+          </View>
+        ) : null}
         <View style={[styles.hero, { backgroundColor: tone.bg }]}>
           <View style={[styles.heroIcon, { backgroundColor: `${tone.dot}22` }]}>
             <Feather
@@ -562,6 +614,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
         </View>
 
         {deliveryLive?.available ? <DeliveryTracker live={deliveryLive} primary={primary} /> : null}
+        {order && String(order.fulfillment_mode).toLowerCase() === 'delivery' ? (
+          <DeliveryProgressStepper order={order} primary={primary} />
+        ) : null}
 
         {String(order.fulfillment_mode).toLowerCase() === 'delivery' && deliveryError ? (
           <View style={styles.deliveryError}>
@@ -1029,6 +1084,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  awbRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  awbLabel: { ...typography.caption, color: colors.mutedForeground },
+  awbValue: { ...typography.label, color: colors.foreground, fontWeight: '800', marginTop: 2 },
+  copyButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  confirmBanner: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    alignItems: 'flex-start',
+  },
+  confirmTitle: { ...typography.label, fontWeight: '800', color: colors.foreground },
+  confirmText: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   trackingLinkText: { ...typography.label, fontWeight: '700' },
   historySection: { padding: spacing.lg, gap: spacing.lg },
   historyTitle: { ...typography.title, fontSize: 16, color: colors.foreground },

@@ -1,10 +1,16 @@
 import { Platform } from 'react-native';
-import { ResponseType } from 'expo-auth-session';
-import * as AuthSession from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import { ApiClientError } from '@ie-orbit/sdk';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { googleSignInConfigured } = require('./googleAuthRequest.cjs') as {
+  googleSignInConfigured: (input?: {
+    platform?: string;
+    androidClientId?: string;
+    webClientId?: string;
+  }) => boolean;
+};
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -14,14 +20,13 @@ export type GoogleIdTokenClaims = {
   family_name?: string;
 };
 
-const DISABLED_CLIENT_ID = '000000000000-disabled.apps.googleusercontent.com';
-
 type GoogleIdApi = {
   initialize: (config: {
     client_id: string;
     callback: (response: { credential?: string }) => void;
     auto_select?: boolean;
     cancel_on_tap_outside?: boolean;
+    itp_support?: boolean;
     ux_mode?: 'popup' | 'redirect';
     use_fedcm_for_prompt?: boolean;
   }) => void;
@@ -73,6 +78,25 @@ function loadGoogleIdentityServices(): Promise<GoogleIdApi> {
   });
 }
 
+function currentGoogleOrigin(): string {
+  if (typeof window === 'undefined') return '';
+  return window.location.origin;
+}
+
+function googleOriginAllowlistHint(origin = currentGoogleOrigin()): string {
+  const host = origin.replace(/^https?:\/\//, '');
+  const withPort = origin;
+  const withoutPort = origin.replace(/:\d+$/, '');
+  const lines = [withPort];
+  if (withoutPort !== withPort) lines.push(withoutPort);
+  if (host.startsWith('localhost')) {
+    lines.push(origin.replace('localhost', '127.0.0.1'));
+  } else if (host.startsWith('127.0.0.1')) {
+    lines.push(origin.replace('127.0.0.1', 'localhost'));
+  }
+  return `Add these exact values (no trailing slash) as Authorized JavaScript origins AND Authorized redirect URIs on the existing Web client: ${[...new Set(lines)].join(', ')}.`;
+}
+
 async function promptGoogleIdTokenOnWeb(clientId: string): Promise<string | null> {
   const googleId = await loadGoogleIdentityServices();
   return new Promise((resolve, reject) => {
@@ -89,6 +113,9 @@ async function promptGoogleIdTokenOnWeb(clientId: string): Promise<string | null
       else resolve(token ?? null);
     };
 
+    // Do not set ux_mode: 'popup' or use_fedcm_for_prompt. Those open a full
+    // OAuth window whose redirect_uri is this page origin. If that origin is
+    // missing on the Web client, Google shows "Access blocked".
     googleId.initialize({
       client_id: clientId,
       callback: (response) => {
@@ -97,14 +124,17 @@ async function promptGoogleIdTokenOnWeb(clientId: string): Promise<string | null
       },
       auto_select: false,
       cancel_on_tap_outside: true,
-      ux_mode: 'popup',
-      use_fedcm_for_prompt: true,
+      itp_support: true,
     });
 
     googleId.prompt((notification) => {
       if (settled) return;
       if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-        finish(new Error('GIS_UNAVAILABLE'));
+        finish(
+          new Error(
+            `Google sign-in was blocked for ${currentGoogleOrigin()}. ${googleOriginAllowlistHint()}`,
+          ),
+        );
       }
     });
   });
@@ -148,7 +178,11 @@ export function getGoogleOAuthAndroidClientId(): string {
 }
 
 export function isGoogleSignInConfigured(): boolean {
-  return Boolean(getGoogleOAuthClientId());
+  return googleSignInConfigured({
+    platform: Platform.OS,
+    androidClientId: getGoogleOAuthAndroidClientId(),
+    webClientId: getGoogleOAuthClientId(),
+  });
 }
 
 export function isExpoGoRuntime(): boolean {
@@ -182,34 +216,49 @@ export function decodeGoogleIdToken(idToken: string): GoogleIdTokenClaims {
   }
 }
 
-function googleRedirectUri(): string {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  const scheme = String(Constants.expoConfig?.scheme || '')
-    .split(',')[0]
-    .trim();
-  return AuthSession.makeRedirectUri({
-    native: scheme ? `${scheme}:/oauthredirect` : undefined,
+async function promptNativeGoogleIdToken(webClientId: string): Promise<string | null> {
+  // Lazy so Expo Go can boot without the native module.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const {
+    GoogleSignin,
+    isErrorWithCode,
+    isSuccessResponse,
+    statusCodes,
+  } = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin');
+  GoogleSignin.configure({
+    webClientId,
+    offlineAccess: false,
+    scopes: ['openid', 'profile', 'email'],
   });
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  try {
+    const response = await GoogleSignin.signIn();
+    if (!isSuccessResponse(response)) {
+      return null;
+    }
+    const idToken = response.data.idToken || '';
+    if (!idToken) {
+      throw new Error('Google did not return a sign-in token. Please try again.');
+    }
+    return idToken;
+  } catch (error) {
+    if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
+      return null;
+    }
+    const code = isErrorWithCode(error) ? String(error.code) : '';
+    if (code === '10' || /DEVELOPER_ERROR/i.test(error instanceof Error ? error.message : '')) {
+      throw new Error(
+        'Google sign-in is misconfigured for this Android build. Add package com.ieorbit.ops and the EAS keystore SHA-1 to the ops Android OAuth client (373269001775-uaeuvfkv...).',
+      );
+    }
+    throw error;
+  }
 }
 
 export function useGoogleIdTokenAuth() {
   const clientId = getGoogleOAuthClientId();
-  const iosClientId = getGoogleOAuthIosClientId();
-  const androidClientId = getGoogleOAuthAndroidClientId();
-  const configured = Boolean(clientId);
+  const configured = isGoogleSignInConfigured();
   const expoGo = isExpoGoRuntime();
-  const redirectUri = googleRedirectUri();
-  const [, , promptAsync] = Google.useAuthRequest({
-    clientId: clientId || DISABLED_CLIENT_ID,
-    iosClientId: iosClientId || undefined,
-    androidClientId: androidClientId || undefined,
-    webClientId: clientId || undefined,
-    responseType: ResponseType.IdToken,
-    redirectUri,
-    scopes: ['openid', 'profile', 'email'],
-  });
 
   async function promptForIdToken(): Promise<string | null> {
     if (!configured) {
@@ -221,26 +270,9 @@ export function useGoogleIdTokenAuth() {
       );
     }
     if (Platform.OS === 'web') {
-      try {
-        return await promptGoogleIdTokenOnWeb(clientId);
-      } catch (error) {
-        if (!(error instanceof Error) || error.message !== 'GIS_UNAVAILABLE') {
-          throw error;
-        }
-      }
+      return await promptGoogleIdTokenOnWeb(clientId);
     }
-    const result = await promptAsync();
-    if (result.type === 'cancel' || result.type === 'dismiss') {
-      return null;
-    }
-    if (result.type !== 'success') {
-      throw new Error('Google sign-in was interrupted. Please try again.');
-    }
-    const idToken = result.params.id_token || result.authentication?.idToken || '';
-    if (!idToken) {
-      throw new Error('Google did not return a sign-in token. Please try again.');
-    }
-    return idToken;
+    return await promptNativeGoogleIdToken(clientId);
   }
 
   return { configured, promptForIdToken };

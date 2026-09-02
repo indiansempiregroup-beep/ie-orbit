@@ -21,10 +21,15 @@ from apps.shopie.api.serializers import (
     ShopDeliveryQuoteSerializer,
     ShopDeliverySettingsPatchSerializer,
     ShopOrderSerializer,
+    ShopOrderShipSerializer,
+    ShopOrderShipmentPatchSerializer,
 )
-from apps.shopie.models import ShopOrder, ShopProduct
+from apps.shopie.models import OrderStatus, ShopOrder, ShopProduct
 from apps.shopie.services.delivery import DeliveryService
 from apps.shopie.services.fulfillment import FulfillmentService
+from apps.shopie.services.orders import OrderService
+from apps.shopie.services.shipment import ShipmentService
+from apps.shopie.services.shiprocket_standard import ShiprocketStandardService
 
 
 def _api_validation(exc: DjangoValidationError) -> ValidationError:
@@ -103,6 +108,12 @@ class ShopDeliverySettingsView(APIView):
                 enabled=data.get("instant_delivery_enabled"),
                 incoming=dict(data.get("delivery_integration") or {}),
             )
+            if data.get("courier_integration") is not None:
+                settings = self.delivery.update_courier_settings(
+                    tenant=request.current_tenant,
+                    business=business,
+                    incoming=dict(data["courier_integration"]),
+                )
         except DjangoValidationError as exc:
             raise _api_validation(exc) from exc
         return success_response(self.delivery.public_settings(settings))
@@ -190,7 +201,7 @@ class ShopOrderDeliveryLiveView(APIView):
 
     def get(self, request: Request, order_id) -> Response:
         order = get_object_or_404(
-            ShopOrder.objects.select_related("business", "tenant"),
+            ShopOrder.objects.select_related("business", "tenant").prefetch_related("shipment"),
             tenant=request.current_tenant,
             id=order_id,
         )
@@ -200,6 +211,139 @@ class ShopOrderDeliveryLiveView(APIView):
             return success_response(self.delivery.live_payload(order=order, refresh=refresh))
         except DjangoValidationError as exc:
             raise _api_validation(exc) from exc
+
+
+class ShopOrderShipView(APIView):
+    permission_classes = [ShopAccessPermission]
+    shipments = ShipmentService()
+
+    def post(self, request: Request, order_id) -> Response:
+        order = get_object_or_404(
+            ShopOrder.objects.select_related("business", "customer", "tenant"),
+            tenant=request.current_tenant,
+            id=order_id,
+        )
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
+        serializer = ShopOrderShipSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            shipment = self.shipments.ship_order(
+                tenant=request.current_tenant,
+                business=order.business,
+                order=order,
+                carrier=data["carrier"],
+                tracking_number=data["tracking_number"],
+                carrier_label_override=data.get("carrier_label") or "",
+                tracking_url_override=data.get("tracking_url") or "",
+                estimated_delivery_at=self.shipments.parse_estimated_delivery(
+                    data.get("estimated_delivery_at")
+                ),
+                notify_customer=bool(data.get("notify_customer", True)),
+            )
+        except DjangoValidationError as exc:
+            raise _api_validation(exc) from exc
+        order = ShopOrder.objects.select_related("business", "customer").prefetch_related(
+            "shipment"
+        ).get(id=order.id)
+        return success_response(
+            {
+                "order": ShopOrderSerializer(order).data,
+                "shipment": self.shipments.serialize(shipment),
+            }
+        )
+
+
+class ShopOrderShiprocketView(APIView):
+    permission_classes = [ShopAccessPermission]
+    shiprocket = ShiprocketStandardService()
+
+    def post(self, request: Request, order_id) -> Response:
+        order = get_object_or_404(
+            ShopOrder.objects.select_related("business", "customer", "tenant"),
+            tenant=request.current_tenant,
+            id=order_id,
+        )
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
+        notify_customer = bool(request.data.get("notify_customer", True))
+        try:
+            shipment = self.shiprocket.book_order(order=order, notify_customer=notify_customer)
+        except DjangoValidationError as exc:
+            raise _api_validation(exc) from exc
+        shipments = ShipmentService()
+        order = ShopOrder.objects.select_related("business", "customer").prefetch_related(
+            "shipment"
+        ).get(id=order.id)
+        return success_response(
+            {
+                "order": ShopOrderSerializer(order).data,
+                "shipment": shipments.serialize(shipment),
+            }
+        )
+
+
+class ShopCourierWebhookView(APIView):
+    """Shiprocket standard shipment status updates (no HMAC required)."""
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+    shiprocket = ShiprocketStandardService()
+
+    def post(self, request: Request, business_id) -> Response:
+        business = get_object_or_404(
+            Business.all_objects.select_related("tenant"),
+            id=business_id,
+        )
+        result = self.shiprocket.process_webhook(business=business, body=request.body)
+        return Response(result, status=200)
+
+
+class ShopOrderShipmentView(APIView):
+    permission_classes = [ShopAccessPermission]
+    shipments = ShipmentService()
+    orders = OrderService()
+
+    def patch(self, request: Request, order_id) -> Response:
+        order = get_object_or_404(
+            ShopOrder.objects.select_related("business", "tenant").prefetch_related("shipment"),
+            tenant=request.current_tenant,
+            id=order_id,
+        )
+        require_any_shopie_feature(order.business, (FEATURE_SHOPIE_ORDERS,))
+        serializer = ShopOrderShipmentPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        shipment = None
+        try:
+            if data.get("status"):
+                shipment = self.shipments.update_milestone(
+                    order=order,
+                    status=data["status"],
+                    notify_customer=bool(data.get("notify_customer", True)),
+                )
+                if data["status"] == "delivered":
+                    self.orders.transition(
+                        tenant=request.current_tenant,
+                        business=order.business,
+                        order=order,
+                        status=OrderStatus.COMPLETED,
+                        notify=False,
+                    )
+            else:
+                shipment = self.shipments.get_shipment(order=order)
+                if shipment is None:
+                    raise DjangoValidationError({"shipment": "No shipment found."})
+        except DjangoValidationError as exc:
+            raise _api_validation(exc) from exc
+        order = ShopOrder.objects.select_related("business").prefetch_related("shipment").get(
+            id=order.id
+        )
+        return success_response(
+            {
+                "order": ShopOrderSerializer(order).data,
+                "shipment": self.shipments.serialize(shipment),
+            }
+        )
 
 
 class MobileShopDeliveryQuoteView(APIView):
@@ -256,7 +400,7 @@ class MobileShopOrderDeliveryLiveView(APIView):
             raise ValidationError({"detail": str(exc)}) from exc
         customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
         order = get_object_or_404(
-            ShopOrder.objects.select_related("business", "tenant"),
+            ShopOrder.objects.select_related("business", "tenant").prefetch_related("shipment"),
             tenant=tenant,
             business=business,
             customer=customer,

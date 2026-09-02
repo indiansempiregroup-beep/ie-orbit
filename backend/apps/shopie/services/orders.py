@@ -181,6 +181,51 @@ class OrderService:
                 metadata["delivery_zone_name"] = zone.name
                 metadata["delivery_fee"] = str(zone.fee)
                 metadata["same_day"] = zone.same_day
+                min_order = Decimal(str(zone.min_order_total or "0"))
+                if min_order > 0 and lines:
+                    preview_subtotal = Decimal("0.00")
+                    product_ids = [raw["product_id"] for raw in lines if raw.get("product_id")]
+                    products = {
+                        str(product.id): product
+                        for product in ShopProduct.objects.filter(
+                            tenant=tenant,
+                            business=business,
+                            id__in=product_ids,
+                        )
+                    }
+                    for raw in lines:
+                        product = products.get(str(raw.get("product_id")))
+                        if product is None:
+                            continue
+                        qty = Decimal(str(raw.get("quantity") or "1"))
+                        unit_price = Decimal(
+                            str(
+                                raw.get("unit_price")
+                                if raw.get("unit_price") is not None
+                                else product.price
+                            )
+                        )
+                        preview_subtotal += (unit_price * qty).quantize(Decimal("0.01"))
+                    if preview_subtotal < min_order:
+                        raise ValidationError(
+                            {
+                                "delivery": (
+                                    f"Minimum order for this delivery zone is {min_order}. "
+                                    f"Your cart subtotal is {preview_subtotal}."
+                                )
+                            }
+                        )
+                from apps.shopie.services.delivery_promise import compute_delivery_promise
+                from apps.shopie.models import ShopBusinessSettings
+
+                shop_settings = ShopBusinessSettings.objects.filter(
+                    tenant=tenant,
+                    business=business,
+                ).first()
+                metadata["delivery_promise"] = compute_delivery_promise(
+                    zone=zone,
+                    settings=shop_settings,
+                )
 
         payment = str(payment_method or "").strip().lower()
         if payment in {"cod", "qr"}:
@@ -604,6 +649,7 @@ class OrderService:
         business: Business,
         order: ShopOrder,
         status: str,
+        notify: bool = True,
     ) -> ShopOrder:
         allowed = {
             OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
@@ -697,7 +743,8 @@ class OrderService:
             )
         if status in {OrderStatus.CONFIRMED, OrderStatus.COMPLETED}:
             self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
-        self._notify_online(refreshed, status)
+        if notify:
+            self._notify_online(refreshed, status)
         return refreshed
 
     @transaction.atomic

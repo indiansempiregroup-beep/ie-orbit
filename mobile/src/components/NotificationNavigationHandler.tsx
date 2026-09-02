@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Linking } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { createNavigationContainerRef, CommonActions } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,8 +20,19 @@ function notificationKey(data: Record<string, unknown>) {
     .join(':');
 }
 
-function navigateFromNotificationData(data: Record<string, unknown>) {
+function openTrackingUrl(data: Record<string, unknown>) {
+  const url = String(data.tracking_url || '').trim();
+  if (!url) return false;
+  void Linking.openURL(url);
+  return true;
+}
+
+function navigateFromNotificationData(data: Record<string, unknown>, actionId?: string) {
   if (!navigationRef.isReady()) return false;
+
+  if (actionId === 'track') {
+    if (openTrackingUrl(data)) return true;
+  }
 
   const returnId = String(data.return_id || '').trim();
   if (returnId) {
@@ -76,7 +88,7 @@ export function NotificationNavigationHandler() {
         pendingRef.current = data;
         return;
       }
-      if (navigateFromNotificationData(data)) {
+      if (navigateFromNotificationData(data, response.actionIdentifier)) {
         handledRef.current.add(key);
       }
     };

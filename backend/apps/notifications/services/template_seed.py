@@ -34,8 +34,8 @@ CUSTOMER_TEMPLATES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "booking_reminder",
-        "Starting soon · {{service_name}}",
-        "Reminder: your booking {{booking_number}} for {{service_name}} starts at {{start_at}} (about 15 minutes).\n\n{{service_details}}\n\n— {{business_name}}",
+        "⏰ Your appointment starts in 15 minutes!",
+        "Hi {{customer_name}},\n\nYour upcoming appointment at {{business_name}} is almost here!\n\n✨ {{service_name}}\n🕐 {{start_at}}\n👤 With {{staff_names}}\n\n{{service_details}}\n\nWe can't wait to see you!\n\n— {{business_name}}",
     ),
 )
 
@@ -67,8 +67,13 @@ ADMIN_TEMPLATES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "booking_reminder_admin",
-        "Upcoming · {{customer_name}}",
-        "Reminder: {{customer_name}} has {{service_name}} at {{start_at}} ({{booking_number}}).\n\n{{service_details}}",
+        "📋 Upcoming appointment in 15 min",
+        "Heads up! {{customer_name}} has an appointment starting at {{start_at}}.\n\n✨ {{service_name}}\n👤 Staff: {{staff_names}}\n📌 {{booking_number}}\n\n{{service_details}}",
+    ),
+    (
+        "booking_reminder_staff",
+        "✨ You're up in 15 minutes!",
+        "Hi there — your upcoming appointment is almost here!\n\n👤 {{customer_name}}\n✨ {{assigned_service_name}}\n🕐 {{start_at}}\n\n{{assigned_service_details}}\n\nYou've got this!",
     ),
     (
         "booking_reviewed_admin",

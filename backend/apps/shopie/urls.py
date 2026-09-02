@@ -29,6 +29,10 @@ from apps.shopie.api.delivery_views import (
     ShopOrderDeliveryLiveView,
     ShopOrderDeliverySimulateView,
     ShopOrderDispatchView,
+    ShopOrderShipView,
+    ShopOrderShiprocketView,
+    ShopOrderShipmentView,
+    ShopCourierWebhookView,
 )
 from apps.shopie.api.extended_books_views import (
     ShopBooksDocumentConvertView,
@@ -148,6 +152,21 @@ urlpatterns = [
         name="shop-order-delivery-live",
     ),
     path(
+        "shop/orders/<uuid:order_id>/ship",
+        ShopOrderShipView.as_view(),
+        name="shop-order-ship",
+    ),
+    path(
+        "shop/orders/<uuid:order_id>/ship/shiprocket",
+        ShopOrderShiprocketView.as_view(),
+        name="shop-order-ship-shiprocket",
+    ),
+    path(
+        "shop/orders/<uuid:order_id>/shipment",
+        ShopOrderShipmentView.as_view(),
+        name="shop-order-shipment",
+    ),
+    path(
         "shop/orders/<uuid:order_id>/delivery-simulate",
         ShopOrderDeliverySimulateView.as_view(),
         name="shop-order-delivery-simulate",
@@ -206,6 +225,11 @@ urlpatterns = [
         "shop/delivery/webhooks/<str:provider>/<uuid:business_id>",
         ShopDeliveryWebhookView.as_view(),
         name="shop-delivery-webhook",
+    ),
+    path(
+        "shop/courier/webhooks/shiprocket/<uuid:business_id>",
+        ShopCourierWebhookView.as_view(),
+        name="shop-courier-webhook-shiprocket",
     ),
     path("shop/coupons", ShopCouponListCreateView.as_view(), name="shop-coupon-list-create"),
     path(

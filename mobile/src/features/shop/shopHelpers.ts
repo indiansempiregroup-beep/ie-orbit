@@ -282,6 +282,64 @@ const PARTNER_HEADLINES: Record<
   },
 };
 
+const SHIPMENT_HEADLINES: Record<
+  string,
+  { title: string; subtitle: string; tone: ShopOrderStatusTone }
+> = {
+  shipped: {
+    title: 'Shipped',
+    subtitle: 'Your order has been handed to the courier.',
+    tone: 'info',
+  },
+  in_transit: {
+    title: 'In transit',
+    subtitle: 'Your package is on the way.',
+    tone: 'info',
+  },
+  out_for_delivery: {
+    title: 'Arriving today',
+    subtitle: 'Your package is out for delivery.',
+    tone: 'info',
+  },
+};
+
+function orderDeliveryMethod(order: Pick<ShopOrder, 'metadata'>): string {
+  const metadata = order.metadata && typeof order.metadata === 'object'
+    ? (order.metadata as Record<string, unknown>)
+    : {};
+  return String(metadata.delivery_method || 'standard').toLowerCase();
+}
+
+function orderShipmentMeta(order: Pick<ShopOrder, 'metadata'>): Record<string, unknown> | null {
+  const metadata = order.metadata && typeof order.metadata === 'object'
+    ? (order.metadata as Record<string, unknown>)
+    : {};
+  const shipment = metadata.shipment;
+  return shipment && typeof shipment === 'object' ? (shipment as Record<string, unknown>) : null;
+}
+
+export const DELIVERY_PROGRESS_STEPS = [
+  { key: 'ordered', label: 'Ordered' },
+  { key: 'packed', label: 'Packed' },
+  { key: 'shipped', label: 'Shipped' },
+  { key: 'on_the_way', label: 'On the way' },
+  { key: 'delivered', label: 'Delivered' },
+] as const;
+
+export function shopOrderProgressIndex(
+  order: Pick<ShopOrder, 'status' | 'fulfillment_mode' | 'metadata'>,
+): number {
+  const status = String(order.status || '').toLowerCase();
+  const shipment = orderShipmentMeta(order);
+  const shipmentStatus = String(shipment?.status || '').toLowerCase();
+  if (status === 'completed' || status === 'delivered' || shipmentStatus === 'delivered') return 4;
+  if (shipmentStatus === 'out_for_delivery' || status === 'out_for_delivery') return 3;
+  if (shipmentStatus === 'in_transit' || shipmentStatus === 'shipped' || shipment) return 2;
+  if (status === 'ready' || status === 'packed') return 1;
+  if (['confirmed', 'pending'].includes(status)) return 0;
+  return 0;
+}
+
 export function shopOrderHeadline(
   order: Pick<ShopOrder, 'status' | 'fulfillment_mode' | 'metadata'>,
 ): {
@@ -291,7 +349,20 @@ export function shopOrderHeadline(
 } {
   const status = String(order.status || '').toLowerCase();
   const delivery = String(order.fulfillment_mode || '').toLowerCase() === 'delivery';
+  const standardCourier = delivery && orderDeliveryMethod(order) !== 'instant';
+  const shipment = orderShipmentMeta(order);
   const tone = shopOrderStatusTone(status);
+  if (shipment && standardCourier) {
+    const shipmentStatus = String(shipment.status || 'shipped').toLowerCase();
+    const carrier = String(shipment.carrier_label || 'Courier');
+    const headline = SHIPMENT_HEADLINES[shipmentStatus];
+    if (headline) {
+      return {
+        ...headline,
+        subtitle: `${carrier}${shipment.tracking_number ? ` · ${String(shipment.tracking_number)}` : ''}`,
+      };
+    }
+  }
   if (status === 'cancelled' || status === 'delivery_cancelled') {
     return { title: 'Cancelled', subtitle: 'This order was cancelled.', tone };
   }
@@ -325,15 +396,19 @@ export function shopOrderHeadline(
     return {
       title: delivery ? 'Packed and ready' : 'Ready for pickup',
       subtitle: delivery
-        ? 'The shop will request your rider when the parcel is ready to hand over.'
+        ? standardCourier
+          ? 'The shop will ship your order soon.'
+          : 'The shop will request your rider when the parcel is ready to hand over.'
         : 'You can collect this order from the shop.',
       tone,
     };
   }
   if (status === 'out_for_delivery') {
     return {
-      title: 'Out for delivery',
-      subtitle: 'Your order is with the rider and on the way.',
+      title: standardCourier ? 'Shipped' : 'Out for delivery',
+      subtitle: standardCourier
+        ? 'Track your shipment for live courier updates.'
+        : 'Your order is with the rider and on the way.',
       tone,
     };
   }
@@ -362,12 +437,24 @@ export function shopOrderDeliverySummary(
   const delivery = metadata.delivery && typeof metadata.delivery === 'object'
     ? (metadata.delivery as Record<string, unknown>)
     : {};
+  const shipment = orderShipmentMeta(order);
+  const promise = metadata.delivery_promise && typeof metadata.delivery_promise === 'object'
+    ? (metadata.delivery_promise as Record<string, unknown>)
+    : null;
   const eta = Number(delivery.eta_minutes ?? metadata.eta_minutes);
   const terminal = ['completed', 'delivered', 'cancelled'].includes(status);
+  let etaLabel: string | null = null;
+  if (!terminal && Number.isFinite(eta) && eta > 0 && orderDeliveryMethod(order) === 'instant') {
+    etaLabel = `${Math.round(eta)} min`;
+  } else if (!terminal && shipment?.estimated_delivery_at) {
+    etaLabel = String(promise?.label || 'Track shipment');
+  } else if (!terminal && promise?.label) {
+    etaLabel = String(promise.label);
+  }
   return {
     active: !terminal,
     statusLabel: shopOrderHeadline(order).title,
-    etaLabel: !terminal && Number.isFinite(eta) && eta > 0 ? `${Math.round(eta)} min` : null,
+    etaLabel,
     actionLabel: terminal ? 'View' : 'Track',
   };
 }

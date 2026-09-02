@@ -13,6 +13,16 @@ process.env.EXPO_NO_METRO_WORKSPACE_ROOT = '1';
 
 require('../../scripts/load-root-env.cjs').loadRootEnv();
 
+// Ops-only: bake Google OAuth IDs into EXPO_PUBLIC_* for native builds.
+const opsGoogleWebClient = (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim();
+if (opsGoogleWebClient && !(process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || '').trim()) {
+  process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID = opsGoogleWebClient;
+}
+const opsGoogleAndroidClient = (process.env.GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID || '').trim();
+if (opsGoogleAndroidClient && !(process.env.EXPO_PUBLIC_GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID || '').trim()) {
+  process.env.EXPO_PUBLIC_GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID = opsGoogleAndroidClient;
+}
+
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');

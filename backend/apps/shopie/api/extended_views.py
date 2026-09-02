@@ -177,7 +177,17 @@ class ShopDeliveryMatchView(APIView):
         )
         if zone is None:
             return success_response({"matched": False, "zone": None})
-        return success_response({"matched": True, "zone": ShopDeliveryZoneSerializer(zone).data})
+        from apps.shopie.models import ShopBusinessSettings
+        from apps.shopie.services.delivery_promise import compute_delivery_promise
+
+        settings = ShopBusinessSettings.objects.filter(
+            tenant=request.current_tenant,
+            business=business,
+        ).first()
+        zone_data = ShopDeliveryZoneSerializer(zone).data
+        zone_data["delivery_promise"] = compute_delivery_promise(zone=zone, settings=settings)
+        zone_data["is_catch_all"] = not (zone.cities or zone.postal_prefixes)
+        return success_response({"matched": True, "zone": zone_data})
 
 
 class ShopSettingsView(APIView):

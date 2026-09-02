@@ -21,6 +21,11 @@ export function ShopOrderDetailPage() {
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [shipOpen, setShipOpen] = useState(false);
+  const [shipCarrier, setShipCarrier] = useState('delhivery');
+  const [shipAwb, setShipAwb] = useState('');
+  const [shipEta, setShipEta] = useState('');
+  const [shipNotify, setShipNotify] = useState(true);
   const createInvoice = useMutation({
     mutationFn: async () => {
       const response = await client.shop.createInvoiceFromOrder(orderId);
@@ -79,6 +84,55 @@ export function ShopOrderDetailPage() {
     onSuccess: () => {
       void order.refetch();
       void deliveryLive.refetch();
+    },
+  });
+  const shipOrder = useMutation({
+    mutationFn: async () => {
+      const response = await client.shop.shipOrder(orderId, {
+        carrier: shipCarrier,
+        tracking_number: shipAwb.trim(),
+        estimated_delivery_at: shipEta.trim() || undefined,
+        notify_customer: shipNotify,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      setShipOpen(false);
+      setShipAwb('');
+      setMessage('Shipment saved. Customer can track the package now.');
+      void order.refetch();
+      void deliveryLive.refetch();
+    },
+    onError: (error) => {
+      setMessage(getApiErrorMessage(error, 'Unable to save shipment.'));
+    },
+  });
+  const deliverySettings = useQuery({
+    queryKey: ['shop-delivery-settings', order.data?.business],
+    enabled: Boolean(order.data?.business),
+    queryFn: async () => {
+      const response = await client.shop.getDeliverySettings({
+        business_id: String(order.data?.business),
+      });
+      return response.data;
+    },
+  });
+  const shiprocketBook = useMutation({
+    mutationFn: async () => {
+      const response = await client.shop.shipOrderWithShiprocket(orderId, {
+        notify_customer: shipNotify,
+      });
+      return response.data;
+    },
+    onSuccess: (result) => {
+      setMessage(
+        `Booked with Shiprocket. AWB ${result.shipment.tracking_number}. Customer notified.`,
+      );
+      void order.refetch();
+      void deliveryLive.refetch();
+    },
+    onError: (error) => {
+      setMessage(getApiErrorMessage(error, 'Unable to book with Shiprocket.'));
     },
   });
 
@@ -144,6 +198,7 @@ export function ShopOrderDetailPage() {
   const shortfall = fulfillment?.shortfall ?? [];
   const deliveryMethod = shopOrderDeliveryMethod(data);
   const isInstantDelivery = deliveryMethod === 'instant';
+  const shiprocketConfigured = Boolean(deliverySettings.data?.courier_integration?.configured);
   const activeDeliveryAttempt = deliveryLive.data?.attempts?.find(
     (attempt) => attempt.attempt_number === deliveryLive.data?.active_attempt_number,
   );
@@ -260,14 +315,23 @@ export function ShopOrderDetailPage() {
             {data.fulfillment_mode === 'delivery' &&
             !isInstantDelivery &&
             data.status === 'ready' ? (
-              <Button
-                type="button"
-                variant="primary"
-                disabled={updateStatus.isPending}
-                onClick={() => updateStatus.mutate('out_for_delivery')}
-              >
-                Mark out for delivery
-              </Button>
+              <>
+                {shiprocketConfigured ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={shiprocketBook.isPending}
+                    onClick={() => {
+                      void shiprocketBook.mutateAsync();
+                    }}
+                  >
+                    {shiprocketBook.isPending ? 'Booking…' : 'Book with Shiprocket'}
+                  </Button>
+                ) : null}
+                <Button type="button" variant={shiprocketConfigured ? 'neutral' : 'primary'} onClick={() => setShipOpen(true)}>
+                  Mark shipped
+                </Button>
+              </>
             ) : null}
             {data.fulfillment_mode === 'delivery' &&
             !isInstantDelivery &&
@@ -512,6 +576,87 @@ export function ShopOrderDetailPage() {
         ))}
         {!returns.data?.length ? <p>No returns yet.</p> : null}
       </Card>
+
+      {shipOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 50,
+            padding: 16,
+          }}
+          onClick={() => setShipOpen(false)}
+        >
+          <Card
+            style={{ width: '100%', maxWidth: 480 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>Ship order</h2>
+            <p style={{ color: '#64748b' }}>
+              Add courier tracking so customers can follow the shipment like Amazon.
+            </p>
+            <form
+              style={{ display: 'grid', gap: 12 }}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void shipOrder.mutateAsync();
+              }}
+            >
+              <label style={{ display: 'grid', gap: 6 }}>
+                Carrier
+                <select value={shipCarrier} onChange={(event) => setShipCarrier(event.target.value)}>
+                  <option value="delhivery">Delhivery</option>
+                  <option value="bluedart">Blue Dart</option>
+                  <option value="dtdc">DTDC</option>
+                  <option value="india_post">India Post</option>
+                  <option value="shiprocket">Shiprocket</option>
+                  <option value="ekart">Ekart</option>
+                  <option value="xpressbees">XpressBees</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                AWB / tracking number
+                <input
+                  value={shipAwb}
+                  onChange={(event) => setShipAwb(event.target.value)}
+                  required
+                  placeholder="1234567890123"
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                Estimated delivery (optional)
+                <input
+                  type="date"
+                  value={shipEta}
+                  onChange={(event) => setShipEta(event.target.value)}
+                />
+              </label>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={shipNotify}
+                  onChange={(event) => setShipNotify(event.target.checked)}
+                />
+                Notify customer
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button type="submit" variant="primary" disabled={shipOrder.isPending || !shipAwb.trim()}>
+                  {shipOrder.isPending ? 'Saving…' : 'Mark shipped'}
+                </Button>
+                <Button type="button" variant="neutral" onClick={() => setShipOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      ) : null}
     </div>
   );
 }

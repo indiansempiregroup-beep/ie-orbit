@@ -196,6 +196,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-notifications',
       {
         defaultChannel: 'default',
+        iosDisplayInForeground: true,
       },
     ],
     ...(adMobPlugin ? [adMobPlugin] : []),

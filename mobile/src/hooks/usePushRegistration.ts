@@ -38,7 +38,21 @@ async function getExpoPushToken(): Promise<string | null> {
       name: 'default',
       importance: Notifications.AndroidImportance.DEFAULT,
     });
+    await Notifications.setNotificationChannelAsync('shipment_updates', {
+      name: 'Shipment updates',
+      importance: Notifications.AndroidImportance.HIGH,
+    });
   }
+
+  await Notifications.setNotificationCategoryAsync('shipment_updates', [
+    {
+      identifier: 'track',
+      buttonTitle: 'Track',
+      options: {
+        opensAppToForeground: false,
+      },
+    },
+  ]);
 
   const projectId = resolveEasProjectId();
   const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);

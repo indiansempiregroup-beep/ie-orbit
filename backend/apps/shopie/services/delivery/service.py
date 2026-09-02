@@ -128,9 +128,15 @@ class DeliveryService:
         }
         if config.get("webhook_secret"):
             config["webhook_secret"] = mask_secret(str(config["webhook_secret"]))
+        from apps.shopie.services.shiprocket_standard import ShiprocketStandardService
+
         return {
             "instant_delivery_enabled": settings.instant_delivery_enabled,
             "delivery_integration": {**config, "credentials": masked},
+            "delivery_sla": dict((settings.metadata or {}).get("delivery_sla") or {}),
+            "courier_integration": ShiprocketStandardService().public_settings(
+                business=settings.business
+            ),
         }
 
     def update_settings(
@@ -188,6 +194,22 @@ class DeliveryService:
                 "version",
             ]
         )
+        return settings
+
+    def update_courier_settings(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        incoming: dict[str, Any],
+    ) -> ShopBusinessSettings:
+        settings = self.ensure_settings(tenant=tenant, business=business)
+        metadata = dict(settings.metadata or {})
+        current = dict(metadata.get("courier_integration") or {})
+        merged = {**current, **incoming}
+        metadata["courier_integration"] = merged
+        settings.metadata = metadata
+        settings.save(update_fields=["metadata", "updated_at", "version"])
         return settings
 
     @staticmethod
@@ -759,6 +781,19 @@ class DeliveryService:
         )
 
     def refresh_tracking(self, *, order: ShopOrder) -> ShopOrder:
+        from apps.shopie.services.shipment import ShipmentService
+
+        shipment = ShipmentService().get_shipment(order=order)
+        if shipment is not None and (shipment.metadata or {}).get("provider") == "shiprocket_standard":
+            from apps.shopie.services.shiprocket_standard import ShiprocketStandardService
+
+            try:
+                ShiprocketStandardService().refresh_shipment(shipment=shipment)
+            except Exception:
+                pass
+            order.refresh_from_db()
+            return order
+
         delivery = (order.metadata or {}).get("delivery") or {}
         booking_id = str(delivery.get("booking_id") or "")
         if not booking_id or delivery.get("partner_status") in TERMINAL_PARTNER_STATUSES:
@@ -774,39 +809,64 @@ class DeliveryService:
     def live_payload(self, *, order: ShopOrder, refresh: bool = False) -> dict[str, Any]:
         if refresh:
             order = self.refresh_tracking(order=order)
+        from apps.shopie.services.delivery_promise import promise_from_shipment
+        from apps.shopie.services.shipment import ShipmentService
+
+        delivery_method = str((order.metadata or {}).get("delivery_method") or "standard")
+        shipment = ShipmentService().get_shipment(order=order)
+        shipment_data = ShipmentService().serialize(shipment)
         delivery = dict((order.metadata or {}).get("delivery") or {})
-        status = str(
-            delivery.get("partner_status")
-            or canonical_order_status(order, order.status)
-            or "order_placed"
-        )
-        rider = dict(delivery.get("rider") or {})
-        eta = delivery.get("eta_minutes")
-        rider_name = str(rider.get("name") or "").strip()
-        headlines = {
-            "order_placed": "Order placed",
-            "confirmed": "Order confirmed",
-            "packing": "The shop is packing your order",
-            "packed": "Packed and ready",
-            "finding_rider": "Finding a delivery rider",
-            "rider_assigned": f"{rider_name or 'Your rider'} is heading to the shop",
-            "at_pickup": "Your rider is at the shop",
-            "picked_up": f"{rider_name or 'Your rider'} is on the way",
-            "out_for_delivery": "Your order is out for delivery",
-            "nearby": "Your delivery is nearby",
-            "delivered": "Delivered",
-            "delivery_failed": "Delivery needs attention",
-            "delivery_cancelled": "Delivery was cancelled",
-            "retrying": "The shop is requesting another rider",
-            "failed": "Delivery needs attention",
-            "cancelled": "Delivery was cancelled",
-        }
-        headline = headlines.get(status, "Delivery update")
-        if eta and status not in TERMINAL_PARTNER_STATUSES:
-            headline = f"{headline} · {eta} min"
+        if shipment is not None and delivery_method == "standard":
+            status = str(shipment.status or "shipped")
+            carrier = shipment.carrier_label or "Courier"
+            promise = promise_from_shipment(
+                estimated_delivery_at=shipment.estimated_delivery_at,
+                status=status,
+            )
+            headlines = {
+                "shipped": f"Shipped with {carrier}",
+                "in_transit": "Your package is on the way",
+                "out_for_delivery": promise.get("label") or "Arriving today",
+                "delivered": "Delivered",
+                "failed": "Delivery needs attention",
+            }
+            headline = headlines.get(status, "Shipment update")
+        else:
+            status = str(
+                delivery.get("partner_status")
+                or canonical_order_status(order, order.status)
+                or "order_placed"
+            )
+            rider = dict(delivery.get("rider") or {})
+            eta = delivery.get("eta_minutes")
+            rider_name = str(rider.get("name") or "").strip()
+            headlines = {
+                "order_placed": "Order placed",
+                "confirmed": "Order confirmed",
+                "packing": "The shop is packing your order",
+                "packed": "Packed and ready",
+                "finding_rider": "Finding a delivery rider",
+                "rider_assigned": f"{rider_name or 'Your rider'} is heading to the shop",
+                "at_pickup": "Your rider is at the shop",
+                "picked_up": f"{rider_name or 'Your rider'} is on the way",
+                "out_for_delivery": "Your order is out for delivery",
+                "nearby": "Your delivery is nearby",
+                "delivered": "Delivered",
+                "delivery_failed": "Delivery needs attention",
+                "delivery_cancelled": "Delivery was cancelled",
+                "retrying": "The shop is requesting another rider",
+                "failed": "Delivery needs attention",
+                "cancelled": "Delivery was cancelled",
+            }
+            headline = headlines.get(status, "Delivery update")
+            if eta and status not in TERMINAL_PARTNER_STATUSES:
+                headline = f"{headline} · {eta} min"
+            promise = {}
         history = TrackingHistoryService().payload(order=order)
         events = history["events"] or delivery.get("events") or []
         last_updated = delivery.get("last_updated")
+        if shipment is not None and shipment.shipped_at:
+            last_updated = shipment.shipped_at.isoformat()
         parsed_last_updated = parse_datetime(str(last_updated or ""))
         terminal = order.status in {OrderStatus.COMPLETED, OrderStatus.CANCELLED}
         stale = bool(
@@ -814,13 +874,18 @@ class DeliveryService:
             and parsed_last_updated
             and (timezone.now() - parsed_last_updated).total_seconds() > 45
         )
+        rider = dict(delivery.get("rider") or {})
+        eta = delivery.get("eta_minutes")
+        tracking_url = delivery.get("tracking_url") or ""
+        if shipment is not None:
+            tracking_url = shipment.tracking_url or tracking_url
         return {
             "available": order.fulfillment_mode == "delivery",
             "order_id": str(order.id),
             "order_status": order.status,
-            "delivery_method": str((order.metadata or {}).get("delivery_method") or "standard"),
+            "delivery_method": delivery_method,
             "provider": delivery.get("provider"),
-            "dispatched": bool(delivery.get("booking_id")),
+            "dispatched": bool(delivery.get("booking_id")) or shipment is not None,
             "partner_status": status,
             "headline": headline,
             "subtitle": delivery.get("reason") or "",
@@ -836,11 +901,14 @@ class DeliveryService:
             "attempts": history["attempts"],
             "active_attempt_number": history["active_attempt_number"],
             "location_trail": history["location_trail"],
-            "tracking_url": delivery.get("tracking_url") or "",
+            "tracking_url": tracking_url,
+            "shipment": shipment_data,
+            "delivery_promise": promise if shipment is not None else (order.metadata or {}).get("delivery_promise") or {},
             "can_call_rider": bool(rider.get("phone")),
             "last_updated": last_updated or (events[-1].get("occurred_at") if events else None),
             "terminal": terminal,
             "stale": stale,
+            "show_map": delivery_method == "instant" and bool(delivery.get("booking_id")),
         }
 
     def verify_webhook(

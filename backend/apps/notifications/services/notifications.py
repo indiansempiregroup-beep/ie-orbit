@@ -127,7 +127,12 @@ class NotificationService:
         user: User,
         audience: str,
     ) -> Notification | None:
-        template_code = self._template_code_for_event(event.event_type, audience=audience)
+        template_code = self._template_code_for_event(
+            event.event_type,
+            audience=audience,
+            event=event,
+            user=user,
+        )
         template = self._get_template(event, template_code)
         if not template:
             return None
@@ -185,11 +190,17 @@ class NotificationService:
             notification.external_id = "no_recipient"
             notification.save(update_fields=["status", "external_id", "updated_at"])
 
+        push_title, push_body = self._push_content(
+            event=event,
+            context=context,
+            audience=audience,
+            template=template,
+        )
         push_result = self._send_expo_push(
             notification=notification,
             user=user,
-            subject=str(context.get("subject", template.subject)),
-            body=str(context.get("body", template.body)),
+            subject=push_title,
+            body=push_body,
             audience=audience,
             event_type=event.event_type,
         )
@@ -362,8 +373,10 @@ class NotificationService:
         payload = event.payload or {}
         rating = payload.get("rating")
         comment = payload.get("comment") or ""
+        lead_minutes = payload.get("lead_minutes")
         replacements["{{rating}}"] = str(rating) if rating is not None else ""
         replacements["{{comment}}"] = str(comment)
+        replacements["{{lead_minutes}}"] = str(lead_minutes) if lead_minutes is not None else "15"
 
         if audience == "admin" and staff_id:
             replacements["{{service_name}}"] = replacements["{{assigned_service_name}}"]
@@ -400,6 +413,12 @@ class NotificationService:
             "business_logo": absolute_public_url(business.logo or ""),
             "accent_color": "#1A56DB",
             "extra_html": extra_html,
+            "customer_name": replacements["{{customer_name}}"],
+            "service_name": replacements["{{service_name}}"],
+            "assigned_service_name": replacements["{{assigned_service_name}}"],
+            "start_at": replacements["{{start_at}}"],
+            "staff_names": replacements["{{staff_names}}"],
+            "lead_minutes": replacements["{{lead_minutes}}"],
         }
 
     def _channel_enabled_for_user(self, *, user: User, channel: str) -> bool:
@@ -463,7 +482,23 @@ class NotificationService:
             notification.external_id = "email_failed"
             notification.save(update_fields=["status", "external_id", "updated_at"])
 
-    def _template_code_for_event(self, event_type: str, *, audience: str) -> str:
+    def _template_code_for_event(
+        self,
+        event_type: str,
+        *,
+        audience: str,
+        event: BookingEvent | None = None,
+        user: User | None = None,
+    ) -> str:
+        if (
+            event_type == "BookingReminder"
+            and audience == "admin"
+            and event is not None
+            and user is not None
+            and self._staff_id_for_user(booking=event.booking, user=user)
+        ):
+            return "booking_reminder_staff"
+
         base_mapping = {
             "BookingCreated": "booking_created",
             "BookingPending": "booking_pending",
@@ -479,6 +514,51 @@ class NotificationService:
         if audience == "admin":
             return f"{base}{ADMIN_TEMPLATE_SUFFIX}"
         return base
+
+    def _push_content(
+        self,
+        *,
+        event: BookingEvent,
+        context: dict[str, Any],
+        audience: str,
+        template: NotificationTemplate,
+    ) -> tuple[str, str]:
+        subject = str(context.get("subject", template.subject))
+        body = str(context.get("body", template.body))
+        if event.event_type != "BookingReminder":
+            return subject, self._compact_push_body(body)
+
+        if audience == "customer":
+            service_name = str(context.get("service_name") or context.get("booking_number") or "your appointment")
+            start_at = str(context.get("start_at") or "")
+            return (
+                subject,
+                f"{service_name} at {start_at} — see you soon!",
+            )
+
+        if template.code == "booking_reminder_staff":
+            customer_name = str(context.get("customer_name") or "")
+            service_name = str(context.get("assigned_service_name") or "")
+            start_at = str(context.get("start_at") or "")
+            return (
+                subject,
+                f"{service_name} with {customer_name} at {start_at}",
+            )
+
+        customer_name = str(context.get("customer_name") or "")
+        service_name = str(context.get("service_name") or "")
+        start_at = str(context.get("start_at") or "")
+        return (
+            subject,
+            f"{customer_name} · {service_name} at {start_at}",
+        )
+
+    @staticmethod
+    def _compact_push_body(body: str, *, max_length: int = 160) -> str:
+        compact = " ".join(line.strip() for line in body.splitlines() if line.strip())
+        if len(compact) <= max_length:
+            return compact
+        return f"{compact[: max_length - 1].rstrip()}…"
 
     def _build_provider(self) -> NotificationProvider:
         provider_setting = getattr(settings, "NOTIFICATION_PROVIDER", "email")

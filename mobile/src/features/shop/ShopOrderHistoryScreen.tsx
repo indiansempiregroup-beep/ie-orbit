@@ -42,6 +42,7 @@ import {
   type ShopOrderPeriodFilter,
   type ShopOrderStatusFilter,
 } from './shopHelpers';
+import { DeliveryProgressStepper } from './DeliveryProgressStepper';
 import type { ShopOrder, ShopOrderLine } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -172,6 +173,10 @@ export function ShopOrderHistoryScreen() {
           ) : null}
           {shopOrderNeedsAppPayment(item) ? <Text style={styles.unpaidHint}> · Pay now</Text> : null}
         </View>
+
+        {deliverySummary?.active ? (
+          <DeliveryProgressStepper order={item} primary={primary} compact />
+        ) : null}
 
         {preview.map((line: ShopOrderLine) => (
           <View key={line.id} style={styles.lineRow}>

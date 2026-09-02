@@ -74,6 +74,8 @@ def send_push_to_user(
     title: str,
     body: str,
     data: dict[str, Any] | None = None,
+    channel_id: str = "default",
+    category_id: str = "",
 ) -> dict[str, Any]:
     """Send Expo push to all active devices for a user; deactivate bad tokens."""
     from apps.notifications.models import MobileDevice
@@ -92,18 +94,21 @@ def send_push_to_user(
     if not devices:
         return {"skipped": "no_devices", "data": []}
 
-    messages = [
-        {
+    messages = []
+    for device in devices:
+        if not device.expo_push_token:
+            continue
+        message: dict[str, Any] = {
             "to": device.expo_push_token,
             "sound": "default",
             "title": title,
             "body": body,
             "data": data or {},
-            "channelId": "default",
+            "channelId": channel_id,
         }
-        for device in devices
-        if device.expo_push_token
-    ]
+        if category_id:
+            message["categoryId"] = category_id
+        messages.append(message)
     result = send_expo_push_messages(messages)
     _deactivate_invalid_tokens(devices=devices, tickets=result.get("data") or [])
     return result

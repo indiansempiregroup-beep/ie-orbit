@@ -661,10 +661,20 @@ class TrackingEventKind(models.TextChoices):
 class TrackingEventSource(models.TextChoices):
     ORDER = "order", "Order"
     DISPATCH = "dispatch", "Dispatch"
+    SHIPMENT = "shipment", "Shipment"
     WEBHOOK = "webhook", "Webhook"
     POLL = "poll", "Poll"
     SIMULATION = "simulation", "Simulation"
     MIGRATION = "migration", "Migration"
+
+
+class ShipmentStatus(models.TextChoices):
+    LABEL_CREATED = "label_created", "Label created"
+    SHIPPED = "shipped", "Shipped"
+    IN_TRANSIT = "in_transit", "In transit"
+    OUT_FOR_DELIVERY = "out_for_delivery", "Out for delivery"
+    DELIVERED = "delivered", "Delivered"
+    FAILED = "failed", "Failed"
 
 
 class ShopDeliveryAttempt(TenantModel):
@@ -709,6 +719,45 @@ class ShopDeliveryAttempt(TenantModel):
             *TenantModel.Meta.indexes,
             models.Index(fields=["business", "status", "started_at"]),
             models.Index(fields=["provider", "booking_id"]),
+        ]
+
+
+class ShopShipment(TenantModel):
+    """Courier shipment for standard (non-rider) delivery orders."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_shipments",
+    )
+    order = models.OneToOneField(
+        ShopOrder,
+        on_delete=models.CASCADE,
+        related_name="shipment",
+    )
+    carrier = models.CharField(max_length=32, blank=True, db_index=True)
+    carrier_label = models.CharField(max_length=120, blank=True)
+    tracking_number = models.CharField(max_length=120, blank=True, db_index=True)
+    tracking_url = models.URLField(max_length=1000, blank=True)
+    status = models.CharField(
+        max_length=32,
+        choices=ShipmentStatus.choices,
+        default=ShipmentStatus.SHIPPED,
+        db_index=True,
+    )
+    shipped_at = models.DateTimeField(null=True, blank=True)
+    estimated_delivery_at = models.DateField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_shipments"
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["business", "status", "shipped_at"]),
+            models.Index(fields=["carrier", "tracking_number"]),
         ]
 
 

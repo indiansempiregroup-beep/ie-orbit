@@ -167,19 +167,30 @@ class CustomerDirectNotifier:
     ) -> None:
         from apps.notifications.services.expo_push import send_push_to_user
 
+        is_shipment = str(event_type or "").startswith("ShopShipment")
+        push_channel = "shipment_updates" if is_shipment else "default"
+        push_category = "shipment_updates" if is_shipment else ""
         try:
             result = send_push_to_user(
                 tenant=notification.tenant,
                 user=user,
                 title=subject,
                 body=body,
+                channel_id=push_channel,
+                category_id=push_category,
                 data={
                     "notification_id": str(notification.id),
                     "event_type": event_type,
                     "audience": "customer",
                     "pet_id": str((notification.metadata or {}).get("pet_id") or ""),
                     "order_id": str((notification.metadata or {}).get("order_id") or ""),
+                    "order_number": str((notification.metadata or {}).get("order_number") or ""),
                     "return_id": str((notification.metadata or {}).get("return_id") or ""),
+                    "shipment_status": str((notification.metadata or {}).get("shipment_status") or ""),
+                    "carrier_label": str((notification.metadata or {}).get("carrier_label") or ""),
+                    "tracking_number": str((notification.metadata or {}).get("tracking_number") or ""),
+                    "tracking_url": str((notification.metadata or {}).get("tracking_url") or ""),
+                    "action": "track" if is_shipment else "",
                 },
             )
         except Exception:

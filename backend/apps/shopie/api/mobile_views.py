@@ -543,6 +543,49 @@ class MobileShopOrderPaymentProofView(APIView):
         )
 
 
+class MobileShopDeliveryHintView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+    zones = DeliveryZoneService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def get(self, request: Request) -> Response:
+        try:
+            tenant, business = _scope_from_request(request)
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        enabled = list(self.zones.list_zones(tenant=tenant, business=business).filter(enabled=True))
+        if not enabled:
+            return success_response({"available": False, "zone": None})
+        catch_all = next(
+            (zone for zone in enabled if not (zone.cities or zone.postal_prefixes)),
+            None,
+        )
+        zone = catch_all or enabled[0]
+        from apps.shopie.models import ShopBusinessSettings
+        from apps.shopie.services.delivery_promise import compute_delivery_promise
+
+        settings = ShopBusinessSettings.objects.filter(tenant=tenant, business=business).first()
+        promise = compute_delivery_promise(zone=zone, settings=settings)
+        is_catch_all = not (zone.cities or zone.postal_prefixes)
+        return success_response(
+            {
+                "available": True,
+                "zone": {
+                    "id": str(zone.id),
+                    "name": zone.name,
+                    "fee": str(zone.fee),
+                    "min_order_total": str(zone.min_order_total),
+                    "same_day": zone.same_day,
+                    "is_catch_all": is_catch_all,
+                    "delivery_promise": promise,
+                },
+                "headline": "Delivers across India" if is_catch_all else f"Delivers to {zone.name}",
+                "detail": promise.get("detail") or promise.get("label") or "",
+            }
+        )
+
+
 class MobileShopDeliveryZoneMatchView(APIView):
     permission_classes = [AllowAny]
     authentication_classes: list = []
@@ -562,6 +605,11 @@ class MobileShopDeliveryZoneMatchView(APIView):
         )
         if zone is None:
             return success_response({"matched": False, "zone": None})
+        from apps.shopie.models import ShopBusinessSettings
+        from apps.shopie.services.delivery_promise import compute_delivery_promise
+
+        settings = ShopBusinessSettings.objects.filter(tenant=tenant, business=business).first()
+        promise = compute_delivery_promise(zone=zone, settings=settings)
         return success_response(
             {
                 "matched": True,
@@ -572,6 +620,11 @@ class MobileShopDeliveryZoneMatchView(APIView):
                     "min_order_total": str(zone.min_order_total),
                     "same_day": zone.same_day,
                     "instant_delivery_enabled": zone.instant_delivery_enabled,
+                    "is_catch_all": not (zone.cities or zone.postal_prefixes),
+                    "delivery_promise": promise,
+                    "shop_instant_delivery_enabled": bool(
+                        settings and settings.instant_delivery_enabled
+                    ),
                 },
             }
         )

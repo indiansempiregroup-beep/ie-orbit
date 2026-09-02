@@ -34,12 +34,32 @@ const adMobPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
       ]
     : null;
 
+const androidGoogleClientId =
+  process.env.EXPO_PUBLIC_GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID ||
+  process.env.GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID ||
+  '';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { googleAuthSchemes, googleReversedClientScheme } = require('./src/utils/googleAuthRequest.cjs') as {
+  googleAuthSchemes: (input: {
+    appSlug?: string;
+    applicationId?: string;
+    androidClientId?: string;
+  }) => string[];
+  googleReversedClientScheme: (clientId?: string) => string;
+};
+const urlSchemes = googleAuthSchemes({
+  appSlug: 'ie-orbit-ops',
+  applicationId: 'com.ieorbit.ops',
+  androidClientId: androidGoogleClientId,
+});
+const googleSignInIosScheme = googleReversedClientScheme(androidGoogleClientId);
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'IE Orbit',
   slug: 'ie-orbit-ops',
   owner: 'indians-empire',
-  scheme: 'ieorbitops',
+  scheme: urlSchemes.length > 1 ? urlSchemes : urlSchemes[0] ?? 'ieorbitops',
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
@@ -81,6 +101,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     ...(adMobPlugin ? [adMobPlugin] : []),
+    ...(googleSignInIosScheme
+      ? [
+          [
+            '@react-native-google-signin/google-signin',
+            { iosUrlScheme: googleSignInIosScheme },
+          ],
+        ]
+      : []),
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../../scripts/withPinnedPlayServicesAds.cjs'),
   ],

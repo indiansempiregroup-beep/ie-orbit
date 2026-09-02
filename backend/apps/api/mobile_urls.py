@@ -37,6 +37,7 @@ from apps.shopie.api.mobile_views import (
     MobileShopCouponAvailableView,
     MobileShopCouponValidateView,
     MobileShopDeliveryZoneMatchView,
+    MobileShopDeliveryHintView,
     MobileShopOrderCancelView,
     MobileShopOrderClaimPaymentView,
     MobileShopOrderDetailView,
@@ -163,6 +164,11 @@ urlpatterns = [
         "mobile/shop/orders/<uuid:order_id>/payment-proof",
         MobileShopOrderPaymentProofView.as_view(),
         name="mobile-shop-order-payment-proof",
+    ),
+    path(
+        "mobile/shop/delivery-hint",
+        MobileShopDeliveryHintView.as_view(),
+        name="mobile-shop-delivery-hint",
     ),
     path(
         "mobile/shop/delivery-zones/match",

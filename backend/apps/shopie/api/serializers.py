@@ -714,6 +714,7 @@ class ShopDeliverySettingsPatchSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     instant_delivery_enabled = serializers.BooleanField(required=False)
     delivery_integration = serializers.DictField(required=False)
+    courier_integration = serializers.DictField(required=False)
 
 
 class ShopPetSerializer(serializers.ModelSerializer):
@@ -813,6 +814,23 @@ class ShopSettingsPatchSerializer(serializers.Serializer):
 
 class ShopOrderStatusSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=OrderStatus.choices)
+
+
+class ShopOrderShipSerializer(serializers.Serializer):
+    carrier = serializers.CharField(max_length=32)
+    tracking_number = serializers.CharField(max_length=120)
+    carrier_label = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    tracking_url = serializers.URLField(required=False, allow_blank=True, max_length=1000)
+    estimated_delivery_at = serializers.DateField(required=False, allow_null=True)
+    notify_customer = serializers.BooleanField(required=False, default=True)
+
+
+class ShopOrderShipmentPatchSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=["in_transit", "out_for_delivery", "delivered"],
+        required=False,
+    )
+    notify_customer = serializers.BooleanField(required=False, default=True)
 
 
 class ShopOrderSettlePaymentSerializer(serializers.Serializer):

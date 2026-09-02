@@ -40,6 +40,11 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [starFilter, setStarFilter] = useState<number | null>(null);
   const [reviewSort, setReviewSort] = useState<ReviewSort>('recent');
+  const [deliveryHint, setDeliveryHint] = useState<{
+    headline: string;
+    detail: string;
+    minOrderTotal?: string;
+  } | null>(null);
   const primary = branding?.primaryColor ?? colors.primary;
 
   const load = useCallback(async () => {
@@ -63,6 +68,22 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void mobileClient.mobile
+      .getShopDeliveryHint({ tenant_slug: tenantSlug, business_code: businessCode })
+      .then((response) => {
+        if (!response.data.available || !response.data.headline) return;
+        setDeliveryHint({
+          headline: response.data.headline,
+          detail: response.data.detail || response.data.zone?.delivery_promise?.label || '',
+          minOrderTotal: response.data.zone?.min_order_total,
+        });
+      })
+      .catch(() => {
+        setDeliveryHint(null);
+      });
+  }, [businessCode, tenantSlug]);
 
   const cartBtn = (
     <Pressable onPress={() => navigation.navigate('Cart')} hitSlop={8} accessibilityLabel="Cart">
@@ -174,6 +195,20 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
           {inCart > 0 ? <Text style={styles.inCartHint}>{inCart} already in cart</Text> : null}
+          {deliveryHint ? (
+            <View style={styles.deliveryHint}>
+              <Feather name="truck" size={14} color={primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.deliveryHintTitle, { color: primary }]}>{deliveryHint.headline}</Text>
+                {deliveryHint.detail ? <Text style={styles.deliveryHintDetail}>{deliveryHint.detail}</Text> : null}
+                {deliveryHint.minOrderTotal && Number(deliveryHint.minOrderTotal) > 0 ? (
+                  <Text style={styles.deliveryHintDetail}>
+                    Min. order {formatShopMoney(deliveryHint.minOrderTotal, product.currency)}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
         </View>
 
         {facts.length ? (
@@ -375,6 +410,17 @@ const styles = StyleSheet.create({
   stockOut: { color: colors.destructive },
   meta: { marginTop: spacing.sm, ...typography.caption, color: colors.mutedForeground },
   inCartHint: { marginTop: spacing.sm, ...typography.caption, color: colors.mutedForeground },
+  deliveryHint: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.muted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  deliveryHintTitle: { ...typography.caption, fontWeight: '700' },
+  deliveryHintDetail: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   section: {
     marginTop: spacing.md,
     backgroundColor: colors.card,

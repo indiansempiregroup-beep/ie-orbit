@@ -92,6 +92,23 @@ export function ShopDeliveryZonesPage() {
     dialog.show();
   }
 
+  async function createEverywhereZone() {
+    setEditingId(null);
+    setForm({
+      name: 'Deliver everywhere',
+      cities: '',
+      prefixes: '',
+      fee: '49',
+      minOrder: '0',
+      notes: 'Catch-all zone for nationwide courier delivery.',
+      sameDay: false,
+      instantDelivery: false,
+      enabled: true,
+    });
+    setMessage(null);
+    dialog.show();
+  }
+
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     if (!form.name.trim()) return;
@@ -195,6 +212,9 @@ export function ShopDeliveryZonesPage() {
                   <strong>{zone.name}</strong>
                   <div style={{ opacity: 0.8 }}>
                     {zone.enabled ? 'Enabled' : 'Disabled'}
+                    {!((zone.cities ?? []).length || (zone.postal_prefixes ?? []).length) ? (
+                      <span style={{ color: '#047857', fontWeight: 700 }}> · Covers all addresses</span>
+                    ) : null}
                     {zone.same_day ? ' · Same day' : ''}
                     {zone.instant_delivery_enabled ? ' · Deliver now' : ''}
                     {` · ${(zone.cities ?? []).join(', ') || 'Any city'}`}
@@ -225,6 +245,11 @@ export function ShopDeliveryZonesPage() {
                   : 'No zones yet. Add one for delivery checkout.'}
               </p>
               {!zones.data?.length ? (
+                <Button type="button" variant="neutral" onClick={createEverywhereZone}>
+                  Deliver everywhere (preset)
+                </Button>
+              ) : null}
+              {!zones.data?.length ? (
                 <Button type="button" variant="primary" onClick={openAddDialog}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Plus size={16} aria-hidden="true" />
@@ -246,8 +271,8 @@ export function ShopDeliveryZonesPage() {
       >
         <form onSubmit={handleSave} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-            Match checkout addresses by city name and/or postal prefix. Fee is added when the zone
-            matches. Deliver now appears only in zones where it is explicitly allowed.
+            Match checkout addresses by city name and/or postal prefix. Leave cities and postal
+            prefixes empty to deliver everywhere. Fee is added when the zone matches.
           </p>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>

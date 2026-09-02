@@ -22,7 +22,7 @@ export type RootStackParamList = {
   ServiceDetail: { serviceId: string };
   ShopProductDetail: { productId: string };
   Cart: { selectedAddressId?: string } | undefined;
-  ShopOrderDetail: { orderId: string };
+  ShopOrderDetail: { orderId: string; placed?: boolean };
   ShopOrderHistory: undefined;
   AddressBook: { mode?: 'select'; selectedAddressId?: string } | undefined;
   AddressForm: { addressId?: string; selectOnSave?: boolean } | undefined;

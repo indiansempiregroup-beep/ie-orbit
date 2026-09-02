@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from apps.shopie.models import FulfillmentMode, OrderStatus, ShopOrder, ShopReturn
+from apps.shopie.models import FulfillmentMode, OrderStatus, ShopOrder, ShopReturn, ShopShipment
 
 logger = logging.getLogger("ie_orbit.shopie.notify")
 
 ONLINE_FULFILLMENT = {FulfillmentMode.PICKUP, FulfillmentMode.DELIVERY}
+DELIVERY_METHOD_STANDARD = "standard"
+DELIVERY_METHOD_INSTANT = "instant"
 
 
 def _escape(value: object) -> str:
@@ -42,6 +44,18 @@ def _customer_name(order: ShopOrder) -> str:
     return str(getattr(customer, "display_name", "") or getattr(customer, "first_name", "") or "there")
 
 
+def _delivery_method(order: ShopOrder) -> str:
+    metadata = order.metadata if isinstance(order.metadata, dict) else {}
+    return str(metadata.get("delivery_method") or DELIVERY_METHOD_STANDARD).lower()
+
+
+def _is_standard_delivery(order: ShopOrder) -> bool:
+    return (
+        str(order.fulfillment_mode or "").lower() == FulfillmentMode.DELIVERY
+        and _delivery_method(order) != DELIVERY_METHOD_INSTANT
+    )
+
+
 def _item_rows_html(order: ShopOrder) -> str:
     rows = []
     for line in list(order.lines.all())[:6]:
@@ -60,7 +74,7 @@ def _item_rows_html(order: ShopOrder) -> str:
     return "".join(rows)
 
 
-def _order_extra_html(order: ShopOrder, *, kicker: str) -> str:
+def _order_extra_html(order: ShopOrder, *, kicker: str, shipment: ShopShipment | None = None) -> str:
     mode = "Delivery" if str(order.fulfillment_mode).lower() == "delivery" else "Pickup"
     address = str(order.delivery_address or "").strip()
     address_html = (
@@ -69,6 +83,19 @@ def _order_extra_html(order: ShopOrder, *, kicker: str) -> str:
         if mode == "Delivery" or address
         else f"<p style='margin:10px 0 0;font-size:13px;color:#64748b;'><strong style='color:#0f172a;'>{mode}</strong></p>"
     )
+    shipment_html = ""
+    if shipment is not None:
+        track = str(shipment.tracking_url or "").strip()
+        track_link = (
+            f" · <a href='{_escape(track)}'>Track shipment</a>" if track else ""
+        )
+        shipment_html = (
+            "<p style='margin:12px 0 0;font-size:14px;color:#0f172a;'>"
+            f"<strong>{_escape(shipment.carrier_label or 'Courier')}</strong>"
+            f" · AWB {_escape(shipment.tracking_number)}"
+            f"{track_link}"
+            "</p>"
+        )
     return (
         "<div style='margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;'>"
         f"<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;font-weight:700;'>{_escape(kicker)}</div>"
@@ -80,6 +107,7 @@ def _order_extra_html(order: ShopOrder, *, kicker: str) -> str:
         f"<td style='padding-top:12px;font-size:16px;font-weight:800;text-align:right;color:#0f172a;'>{_escape(_money(order.total, order.currency or 'INR'))}</td>"
         "</tr></table>"
         f"{address_html}"
+        f"{shipment_html}"
         "</div>"
     )
 
@@ -89,6 +117,7 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
     shop = str(getattr(order.business, "display_name", "") or "the shop")
     number = order.order_number
     delivery = str(order.fulfillment_mode).lower() == "delivery"
+    standard = _is_standard_delivery(order)
     if status == OrderStatus.PENDING:
         return (
             f"We've received your order · #{number}",
@@ -102,6 +131,12 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
             "Confirmed",
         )
     if status == OrderStatus.READY:
+        if delivery and standard:
+            return (
+                f"Packed and ready · #{number}",
+                f"Hi {name},\n\nOrder #{number} is packed. {shop} will ship it soon and share tracking details here.",
+                "Packed",
+            )
         if delivery:
             return (
                 f"Packed and ready · #{number}",
@@ -126,6 +161,15 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
             label,
         )
     if status in {OrderStatus.OUT_FOR_DELIVERY, "picked_up", "nearby"}:
+        if standard:
+            shipment = getattr(order, "shipment", None)
+            carrier = getattr(shipment, "carrier_label", None) or "your courier"
+            awb = getattr(shipment, "tracking_number", None) or ""
+            body = (
+                f"Hi {name},\n\nOrder #{number} has been shipped via {carrier}."
+                f"{f' AWB {awb}.' if awb else ''} Open the order to track your shipment."
+            )
+            return (f"Shipped · #{number}", body, "Shipped")
         label = "Your delivery is nearby" if status == "nearby" else "Your order is on the way"
         return (
             f"{label} · #{number}",
@@ -138,7 +182,7 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
             f"Hi {name},\n\nThe delivery for order #{number} needs attention. {shop} will contact you with the next step.",
             "Delivery issue",
         )
-    if status == OrderStatus.COMPLETED:
+    if status in {OrderStatus.COMPLETED, "delivered"}:
         if delivery:
             return (
                 f"Delivered · #{number}",
@@ -160,6 +204,50 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
         f"Order update · #{number}",
         f"Hi {name},\n\nThere's an update on order #{number} from {shop}.",
         "Update",
+    )
+
+
+def _copy_for_shipment(
+    order: ShopOrder,
+    *,
+    shipment: ShopShipment,
+    status: str,
+) -> tuple[str, str, str]:
+    name = _customer_name(order)
+    number = order.order_number
+    carrier = shipment.carrier_label or "Courier"
+    awb = shipment.tracking_number or ""
+    awb_text = f" AWB {awb}." if awb else ""
+    normalized = str(status or "").strip().lower()
+    if normalized == "shipped":
+        return (
+            f"Shipped · #{number}",
+            f"Hi {name},\n\nYour order has been shipped via {carrier}.{awb_text} Tap to track your shipment.",
+            "Shipped",
+        )
+    if normalized == "in_transit":
+        return (
+            f"On the way · #{number}",
+            f"Hi {name},\n\nYour package is in transit via {carrier}.{awb_text}",
+            "In transit",
+        )
+    if normalized == "out_for_delivery":
+        return (
+            f"Arriving today · #{number}",
+            f"Hi {name},\n\nYour package is out for delivery via {carrier}.{awb_text}",
+            "Out for delivery",
+        )
+    if normalized == "delivered":
+        shop = str(getattr(order.business, "display_name", "") or "the shop")
+        return (
+            f"Delivered · #{number}",
+            f"Hi {name},\n\nOrder #{number} has been delivered. Thanks for shopping with {shop}.",
+            "Delivered",
+        )
+    return (
+        f"Shipment update · #{number}",
+        f"Hi {name},\n\nThere's a shipment update on order #{number}.{awb_text}",
+        "Shipment update",
     )
 
 
@@ -221,6 +309,45 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
         logger.exception(
             "Online order staff notify failed",
             extra={"order_id": str(order.id), "status": status_value},
+        )
+
+
+def notify_shipment_milestone(*, order: ShopOrder, shipment: ShopShipment, status: str) -> None:
+    if not _is_online(order) or not order.customer_id:
+        return
+    customer = getattr(order, "customer", None)
+    if customer is None:
+        return
+    status_value = str(status or "").strip().lower()
+    subject, body, kicker = _copy_for_shipment(order, shipment=shipment, status=status_value)
+    try:
+        from apps.notifications.services.customer_direct import CustomerDirectNotifier
+
+        CustomerDirectNotifier().notify_customer(
+            tenant=order.tenant,
+            business=order.business,
+            customer=customer,
+            subject=subject,
+            body=body,
+            channels=["in_app", "email"],
+            event_type=f"ShopShipment{status_value.title()}",
+            metadata={
+                "order_id": str(order.id),
+                "order_number": order.order_number,
+                "shipment_status": status_value,
+                "carrier_label": shipment.carrier_label,
+                "tracking_number": shipment.tracking_number,
+                "tracking_url": shipment.tracking_url,
+                "fulfillment_mode": order.fulfillment_mode,
+            },
+            extra_html=_order_extra_html(order, kicker=kicker, shipment=shipment),
+            cta_label="Track shipment" if shipment.tracking_url else "",
+            cta_url=shipment.tracking_url or "",
+        )
+    except Exception:
+        logger.exception(
+            "Shipment notify failed",
+            extra={"order_id": str(order.id), "shipment_status": status_value},
         )
 
 

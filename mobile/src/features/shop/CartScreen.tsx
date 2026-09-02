@@ -68,6 +68,10 @@ type StandardDeliveryOption = {
   zoneName: string;
   sameDay: boolean;
   instantEnabled: boolean;
+  shopInstantEnabled: boolean;
+  isCatchAll: boolean;
+  deliveryPromise?: { label?: string; detail?: string; arrives_by?: string | null };
+  minOrderTotal: number;
 };
 
 export function CartScreen() {
@@ -91,7 +95,7 @@ export function CartScreen() {
   const [couponOffers, setCouponOffers] = useState<ShopCouponOffer[]>([]);
   const [couponSheetOpen, setCouponSheetOpen] = useState(false);
   const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup');
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('instant');
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('standard');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi'>('cash');
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -345,18 +349,26 @@ export function CartScreen() {
       if (cancelled) return;
       const zone =
         zoneResponse?.data.matched && zoneResponse.data.zone ? zoneResponse.data.zone : null;
+      const shopInstantEnabled = Boolean(
+        (zone as { shop_instant_delivery_enabled?: boolean } | null)?.shop_instant_delivery_enabled,
+      );
       const standard = zone
         ? {
             fee: Number(zone.fee || 0),
             zoneName: zone.name,
             sameDay: Boolean(zone.same_day),
-            instantEnabled: Boolean(zone.instant_delivery_enabled),
+            instantEnabled: Boolean(zone.instant_delivery_enabled) && shopInstantEnabled,
+            shopInstantEnabled,
+            isCatchAll: Boolean((zone as { is_catch_all?: boolean }).is_catch_all),
+            deliveryPromise: (zone as { delivery_promise?: StandardDeliveryOption['deliveryPromise'] })
+              .delivery_promise,
+            minOrderTotal: Number(zone.min_order_total || 0),
           }
         : null;
 
       let instant: InstantDeliveryOption | null = null;
       if (
-        zone?.instant_delivery_enabled &&
+        standard?.instantEnabled &&
         selectedAddress.latitude != null &&
         selectedAddress.longitude != null
       ) {
@@ -556,7 +568,7 @@ export function CartScreen() {
         })),
       });
       clear();
-      navigation.replace('ShopOrderDetail', { orderId: response.data.id });
+      navigation.replace('ShopOrderDetail', { orderId: response.data.id, placed: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Checkout failed');
     } finally {
@@ -767,6 +779,7 @@ export function CartScreen() {
                       {deliveryOptionsLoading ? <ActivityIndicator size="small" color={primary} /> : null}
                     </View>
 
+                    {standardDelivery?.shopInstantEnabled ? (
                     <Pressable
                       disabled={!instantDelivery || deliveryOptionsLoading}
                       onPress={() => setDeliveryMethod('instant')}
@@ -826,6 +839,7 @@ export function CartScreen() {
                         }
                       />
                     </Pressable>
+                    ) : null}
 
                     <Pressable
                       disabled={!standardDelivery || deliveryOptionsLoading}
@@ -845,7 +859,11 @@ export function CartScreen() {
                         <Text style={styles.deliveryOptionTitle}>Standard delivery</Text>
                         <Text style={styles.meta}>
                           {standardDelivery
-                            ? `${standardDelivery.zoneName} · ${
+                            ? `${
+                                standardDelivery.isCatchAll
+                                  ? 'We deliver to your area'
+                                  : standardDelivery.zoneName
+                              } · ${
                                 standardDelivery.fee > 0
                                   ? formatShopMoney(standardDelivery.fee, currency)
                                   : 'Free delivery'
@@ -854,9 +872,13 @@ export function CartScreen() {
                         </Text>
                         {standardDelivery ? (
                           <Text style={styles.deliveryHint}>
-                            {standardDelivery.sameDay
-                              ? 'Same-day delivery is available.'
-                              : 'The shop will confirm the delivery schedule.'}
+                            {standardDelivery.deliveryPromise?.label ||
+                              (standardDelivery.sameDay
+                                ? 'Same-day delivery is available.'
+                                : 'The shop will confirm the delivery schedule.')}
+                            {standardDelivery.minOrderTotal > merchandiseAfterCoupon
+                              ? ` · Min order ${formatShopMoney(standardDelivery.minOrderTotal, currency)}`
+                              : ''}
                           </Text>
                         ) : null}
                       </View>

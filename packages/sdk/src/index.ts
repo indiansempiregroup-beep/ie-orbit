@@ -1981,6 +1981,25 @@ export type ShopDeliveryPlace = {
   contact?: { name?: string; phone?: string };
 };
 
+export type ShopDeliveryPromise = {
+  label: string;
+  detail?: string;
+  arrives_by?: string | null;
+  same_day?: boolean;
+  same_day_cutoff?: string;
+};
+
+export type ShopShipment = {
+  id: string;
+  carrier?: string;
+  carrier_label?: string;
+  tracking_number?: string;
+  tracking_url?: string;
+  status?: string;
+  shipped_at?: string | null;
+  estimated_delivery_at?: string | null;
+};
+
 export type ShopDeliveryLive = {
   available: boolean;
   order_id: string;
@@ -1999,6 +2018,9 @@ export type ShopDeliveryLive = {
     | 'delivered'
     | 'failed'
     | 'cancelled'
+    | 'shipped'
+    | 'in_transit'
+    | 'out_for_delivery'
     | string;
   headline: string;
   subtitle?: string;
@@ -2012,6 +2034,9 @@ export type ShopDeliveryLive = {
   active_attempt_number?: number | null;
   location_trail?: ShopDeliveryLocation[];
   tracking_url?: string;
+  shipment?: ShopShipment | null;
+  delivery_promise?: ShopDeliveryPromise;
+  show_map?: boolean;
   can_call_rider?: boolean;
   last_updated?: string | null;
   terminal?: boolean;
@@ -2020,6 +2045,11 @@ export type ShopDeliveryLive = {
 
 export type ShopDeliverySettings = {
   instant_delivery_enabled: boolean;
+  delivery_sla?: {
+    default_delivery_days_min?: number | string;
+    default_delivery_days_max?: number | string;
+    same_day_cutoff_time?: string;
+  };
   delivery_integration: {
     provider?: 'mock' | 'porter' | 'shiprocket_quick' | string;
     credentials?: Record<string, string>;
@@ -2028,6 +2058,13 @@ export type ShopDeliverySettings = {
     charge_bearer?: 'customer' | 'merchant' | 'split' | string;
     free_delivery_min_order?: string | number;
     merchant_absorb_cap?: string | number;
+    pickup_location?: string;
+    default_parcel_weight_kg?: string | number;
+  };
+  courier_integration?: {
+    enabled?: boolean;
+    provider?: string;
+    configured?: boolean;
     pickup_location?: string;
     default_parcel_weight_kg?: string | number;
   };
@@ -3630,6 +3667,37 @@ class ApiClient {
       this.request<ShopOrder>(`/shop/orders/${orderId}/status`, { method: 'POST', body }),
     dispatchOrder: (orderId: string) =>
       this.request<ShopOrder>(`/shop/orders/${orderId}/dispatch`, { method: 'POST', body: {} }),
+    shipOrder: (
+      orderId: string,
+      body: {
+        carrier: string;
+        tracking_number: string;
+        carrier_label?: string;
+        tracking_url?: string;
+        estimated_delivery_at?: string;
+        notify_customer?: boolean;
+      },
+    ) =>
+      this.request<{ order: ShopOrder; shipment: ShopShipment }>(`/shop/orders/${orderId}/ship`, {
+        method: 'POST',
+        body,
+      }),
+    shipOrderWithShiprocket: (orderId: string, body?: { notify_customer?: boolean }) =>
+      this.request<{ order: ShopOrder; shipment: ShopShipment }>(
+        `/shop/orders/${orderId}/ship/shiprocket`,
+        {
+          method: 'POST',
+          body: body ?? {},
+        },
+      ),
+    patchOrderShipment: (
+      orderId: string,
+      body: { status?: 'in_transit' | 'out_for_delivery' | 'delivered'; notify_customer?: boolean },
+    ) =>
+      this.request<{ order: ShopOrder; shipment: ShopShipment }>(`/shop/orders/${orderId}/shipment`, {
+        method: 'PATCH',
+        body,
+      }),
     getOrderDeliveryLive: (orderId: string, refresh = true) =>
       this.request<ShopDeliveryLive>(`/shop/orders/${orderId}/delivery-live`, {
         method: 'GET',
@@ -3687,6 +3755,7 @@ class ApiClient {
       business_id: string;
       instant_delivery_enabled?: boolean;
       delivery_integration?: ShopDeliverySettings['delivery_integration'];
+      courier_integration?: ShopDeliverySettings['courier_integration'];
     }) => this.request<ShopDeliverySettings>('/shop/delivery-settings', { method: 'PATCH', body }),
     getSettings: (query: { business_id: string }) =>
       this.request<ShopSettings>('/shop/settings', { method: 'GET', query }),
@@ -4759,6 +4828,21 @@ class ApiClient {
           instant_delivery_enabled: boolean;
         };
       }>('/mobile/shop/delivery-zones/match', { method: 'GET', query, auth: false }),
+    getShopDeliveryHint: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<{
+        available: boolean;
+        headline?: string;
+        detail?: string;
+        zone: null | {
+          id: string;
+          name: string;
+          fee: string;
+          min_order_total: string;
+          same_day: boolean;
+          is_catch_all: boolean;
+          delivery_promise?: ShopDeliveryPromise;
+        };
+      }>('/mobile/shop/delivery-hint', { method: 'GET', query, auth: false }),
     quoteShopDelivery: (body: {
       tenant_slug: string;
       business_code: string;

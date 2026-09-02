@@ -35,6 +35,7 @@ import {
   shopOrderHeadline,
   shopOrderStatusColors,
 } from '../shop/shopHelpers';
+import { DeliveryProgressStepper } from '../shop/DeliveryProgressStepper';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -109,6 +110,10 @@ export function HomeScreen() {
   const [services, setServices] = useState<MobileDiscoverService[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [orders, setOrders] = useState<ShopOrder[]>([]);
+  const activeDeliveryOrder = useMemo(
+    () => orders.find((order) => shopOrderDeliverySummary(order)?.active),
+    [orders],
+  );
   const [announcements, setAnnouncements] = useState<PlatformAnnouncement[]>([]);
   const [ads, setAds] = useState<ShopDashboardAd[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -564,6 +569,29 @@ export function HomeScreen() {
 
         {showShop ? (
           <>
+            {activeDeliveryOrder ? (
+              <Pressable
+                style={[styles.activeShipmentCard, styles.sectionGap]}
+                onPress={() =>
+                  navigation.navigate('ShopOrderDetail', { orderId: activeDeliveryOrder.id })
+                }
+              >
+                <View style={styles.activeShipmentHead}>
+                  <Text style={[styles.activeShipmentEyebrow, { color: primary }]}>ACTIVE DELIVERY</Text>
+                  <Text style={[styles.trackAction, { color: primary }]}>Track</Text>
+                </View>
+                <Text style={styles.activeShipmentTitle}>
+                  Order #{activeDeliveryOrder.order_number}
+                </Text>
+                <Text style={styles.sampleMeta}>
+                  {shopOrderDeliverySummary(activeDeliveryOrder)?.statusLabel}
+                  {shopOrderDeliverySummary(activeDeliveryOrder)?.etaLabel
+                    ? ` · ${shopOrderDeliverySummary(activeDeliveryOrder)?.etaLabel}`
+                    : ''}
+                </Text>
+                <DeliveryProgressStepper order={activeDeliveryOrder} primary={primary} compact />
+              </Pressable>
+            ) : null}
             <SectionHeader
               title="Recent orders"
               action={
@@ -902,6 +930,16 @@ const styles = StyleSheet.create({
   statusText: { ...typography.tiny, fontWeight: '800' },
   unpaidHint: { ...typography.tiny, color: colors.warning, fontWeight: '800' },
   trackAction: { ...typography.caption, fontWeight: '800' },
+  activeShipmentCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.card,
+  },
+  activeShipmentHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  activeShipmentEyebrow: { ...typography.tiny, fontWeight: '800', letterSpacing: 0.6 },
+  activeShipmentTitle: { ...typography.label, fontWeight: '800', marginTop: spacing.xs },
   skeletonIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.muted },
   skeletonLine: { height: 10, borderRadius: radius.sm, backgroundColor: colors.muted },
   skeletonLineShort: { width: '55%', marginTop: spacing.sm },
