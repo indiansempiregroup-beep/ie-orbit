@@ -91,6 +91,14 @@ media/
 staticfiles/
 
 ############################################################
+# Celery Beat (local scheduler state)
+############################################################
+
+backend/celerybeat-schedule
+backend/celerybeat-schedule-shm
+backend/celerybeat-schedule-wal
+
+############################################################
 # SQLite
 ############################################################
 
