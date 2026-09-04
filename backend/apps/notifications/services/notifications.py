@@ -395,18 +395,30 @@ class NotificationService:
         business = booking.business
         service_name = replacements["{{service_name}}"]
         start_label = replacements["{{start_at}}"]
-        extra_html = (
-            "<div style='margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;'>"
-            "<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;font-weight:700;'>Appointment</div>"
-            f"<div style='margin-top:4px;font-size:16px;font-weight:800;color:#0f172a;'>{_escape_html(service_name or 'Booking')}</div>"
-            f"<p style='margin:8px 0 0;font-size:14px;color:#334155;'>{_escape_html(start_label)}</p>"
-            f"<p style='margin:4px 0 0;font-size:13px;color:#64748b;'>{_escape_html(replacements['{{service_details}}'])}</p>"
-            f"<p style='margin:4px 0 0;font-size:13px;color:#64748b;'>#{_escape_html(booking.booking_number)} · {_escape_html(booking.status)}</p>"
-            "</div>"
+        staff_label = replacements["{{staff_names}}"]
+        from apps.notifications.services.providers.email import email_info_card
+
+        detail_lines = [line for line in [
+            start_label,
+            f"With {staff_label}" if staff_label else "",
+            f"#{booking.booking_number} · {str(booking.status).replace('_', ' ').title()}",
+        ] if line]
+        service_details = replacements["{{service_details}}"].strip()
+        if service_details:
+            detail_lines.append(service_details)
+        extra_html = email_info_card(
+            title=service_name or "Appointment",
+            lines=detail_lines,
         )
+        headline = str(subject).split("·", 1)[0].strip() if "·" in str(subject) else str(subject)
+        # Drop emoji-only noise from reminder subjects for the body headline.
+        for prefix in ("⏰ ", "📋 ", "✨ "):
+            if headline.startswith(prefix):
+                headline = headline[len(prefix):].strip()
         return {
             "subject": subject,
             "body": body,
+            "headline": headline,
             "booking_id": str(booking.id),
             "booking_number": booking.booking_number,
             "status": booking.status,

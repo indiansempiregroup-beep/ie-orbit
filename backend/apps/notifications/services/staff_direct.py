@@ -43,6 +43,10 @@ class StaffDirectNotifier:
         event_type: str = "StaffDirectMessage",
         metadata: dict[str, Any] | None = None,
         channels: list[str] | None = None,
+        headline: str = "",
+        extra_html: str = "",
+        cta_label: str = "",
+        cta_url: str = "",
     ) -> dict[str, Any]:
         wanted = {str(c).strip().lower() for c in (channels or ["in_app"]) if str(c).strip()}
         users = resolve_business_manager_users(tenant=tenant, business=business)
@@ -64,6 +68,10 @@ class StaffDirectNotifier:
                 body=body,
                 wanted=wanted,
                 meta=meta,
+                headline=headline,
+                extra_html=extra_html,
+                cta_label=cta_label,
+                cta_url=cta_url,
             )
             if result["sent_channels"]:
                 sent_user_ids.append(str(user.id))
@@ -151,6 +159,10 @@ class StaffDirectNotifier:
         wanted: set[str],
         meta: dict[str, Any],
         booking_id: Any | None = None,
+        headline: str = "",
+        extra_html: str = "",
+        cta_label: str = "",
+        cta_url: str = "",
     ) -> dict[str, Any]:
         from apps.notifications.services.branding import business_email_brand
 
@@ -219,6 +231,10 @@ class StaffDirectNotifier:
                     context={
                         "subject": subject,
                         "body": body,
+                        "headline": headline,
+                        "extra_html": extra_html,
+                        "cta_label": cta_label,
+                        "cta_url": cta_url,
                         **brand,
                     },
                 )

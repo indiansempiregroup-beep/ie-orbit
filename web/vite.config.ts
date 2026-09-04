@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { seoHtmlPlugin } from './vite-plugin-seo';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -24,10 +25,11 @@ export default defineConfig(({ mode }) => {
   const opsWebUrl = (env.VITE_OPS_MOBILE_WEB_URL || process.env.VITE_OPS_MOBILE_WEB_URL || '').trim();
   const publicSiteUrl = (env.VITE_PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || '').trim();
   const adminAppUrl = (env.VITE_ADMIN_APP_URL || process.env.VITE_ADMIN_APP_URL || '').trim();
+  const gaMeasurementId = (env.VITE_GA_MEASUREMENT_ID || process.env.VITE_GA_MEASUREMENT_ID || '').trim();
   const apiProxyTarget = resolveApiProxyTarget(env);
 
   return {
-    plugins: [react()],
+    plugins: [react(), seoHtmlPlugin(publicSiteUrl)],
     // Single monorepo `.env` at repo root (shared with backend / Expo apps).
     envDir: repoRoot,
     resolve: {
@@ -73,6 +75,9 @@ export default defineConfig(({ mode }) => {
         : {}),
       ...(adminAppUrl
         ? { 'import.meta.env.VITE_ADMIN_APP_URL': JSON.stringify(adminAppUrl) }
+        : {}),
+      ...(gaMeasurementId
+        ? { 'import.meta.env.VITE_GA_MEASUREMENT_ID': JSON.stringify(gaMeasurementId) }
         : {}),
     },
   };

@@ -29,7 +29,22 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     setLoading(true);
     try {
       const response = await client.notifications.list();
-      setNotifications(response.data ?? []);
+      const seen = new Set<string>();
+      setNotifications(
+        (response.data ?? []).filter((item) => {
+          if (item.channel && item.channel !== 'in_app') return false;
+          const key = [
+            item.notification_type || '',
+            item.booking_id || '',
+            item.pet_id || '',
+            item.subject || '',
+            item.id,
+          ].join(':');
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }),
+      );
     } finally {
       setLoading(false);
     }

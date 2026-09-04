@@ -269,6 +269,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [deliveryLive, setDeliveryLive] = useState<ShopDeliveryLive | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [showPlacedBanner, setShowPlacedBanner] = useState(() => Boolean(route.params.placed));
   const primary = branding?.primaryColor ?? colors.primary;
   const business = bootstrap?.business;
 
@@ -561,10 +562,16 @@ export function ShopOrderDetailScreen({ route }: Props) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 48, gap: spacing.md }}
         refreshing={refreshing}
-        onRefresh={() => load('refresh')}
+        onRefresh={() => {
+          if (showPlacedBanner) {
+            setShowPlacedBanner(false);
+            navigation.setParams({ placed: undefined });
+          }
+          void load('refresh');
+        }}
         primaryColor={primary}
       >
-        {route.params.placed && order ? (
+        {showPlacedBanner && order ? (
           <View style={[styles.confirmBanner, { borderColor: `${primary}44`, backgroundColor: `${primary}10` }]}>
             <Feather name="check-circle" size={20} color={primary} />
             <View style={{ flex: 1 }}>

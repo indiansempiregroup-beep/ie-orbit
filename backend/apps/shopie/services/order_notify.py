@@ -3,6 +3,13 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
+from apps.notifications.services.providers.email import (
+    email_info_card,
+    email_item_rows,
+    email_progress_steps,
+    email_totals_block,
+    escape_email,
+)
 from apps.shopie.models import FulfillmentMode, OrderStatus, ShopOrder, ShopReturn, ShopShipment
 
 logger = logging.getLogger("ie_orbit.shopie.notify")
@@ -11,15 +18,12 @@ ONLINE_FULFILLMENT = {FulfillmentMode.PICKUP, FulfillmentMode.DELIVERY}
 DELIVERY_METHOD_STANDARD = "standard"
 DELIVERY_METHOD_INSTANT = "instant"
 
+_DELIVERY_STEPS = ("Ordered", "Packed", "Out for delivery", "Delivered")
+_PICKUP_STEPS = ("Ordered", "Confirmed", "Ready for pickup", "Picked up")
+
 
 def _escape(value: object) -> str:
-    return (
-        str(value or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return escape_email(value)
 
 
 def _money(amount: object, currency: str) -> str:
@@ -56,59 +60,58 @@ def _is_standard_delivery(order: ShopOrder) -> bool:
     )
 
 
-def _item_rows_html(order: ShopOrder) -> str:
-    rows = []
-    for line in list(order.lines.all())[:6]:
-        rows.append(
-            "<tr>"
-            f"<td style='padding:8px 0;border-bottom:1px solid #eef2f7;color:#0f172a;font-size:14px;'>{_escape(line.product_name)}</td>"
-            f"<td style='padding:8px 0;border-bottom:1px solid #eef2f7;color:#64748b;font-size:13px;text-align:right;'>× {_escape(line.quantity)}</td>"
-            f"<td style='padding:8px 0 8px 12px;border-bottom:1px solid #eef2f7;color:#0f172a;font-size:14px;font-weight:700;text-align:right;'>{_escape(_money(line.line_total, order.currency or 'INR'))}</td>"
-            "</tr>"
-        )
-    extra = max(0, order.lines.count() - 6)
-    if extra:
-        rows.append(
-            f"<tr><td colspan='3' style='padding:8px 0;color:#64748b;font-size:13px;'>+{extra} more item{'s' if extra != 1 else ''}</td></tr>"
-        )
-    return "".join(rows)
+def _progress_index_for_status(order: ShopOrder, *, status: str, kicker: str) -> int:
+    delivery = str(order.fulfillment_mode).lower() == "delivery"
+    normalized = str(status or "").lower()
+    kicker_l = str(kicker or "").lower()
+    if normalized in {OrderStatus.COMPLETED, "delivered"} or "delivered" in kicker_l or "picked up" in kicker_l:
+        return 3
+    if normalized in {OrderStatus.OUT_FOR_DELIVERY, "picked_up", "nearby", "in_transit", "shipped"} or "on the way" in kicker_l or "shipped" in kicker_l or "out for delivery" in kicker_l:
+        return 2
+    if normalized in {OrderStatus.READY, "finding_rider", "rider_assigned", "at_pickup"} or "packed" in kicker_l or "ready" in kicker_l:
+        return 2 if not delivery else 1
+    if normalized == OrderStatus.CONFIRMED or "confirmed" in kicker_l:
+        return 1
+    return 0
 
 
-def _order_extra_html(order: ShopOrder, *, kicker: str, shipment: ShopShipment | None = None) -> str:
+def _order_extra_html(order: ShopOrder, *, kicker: str, shipment: ShopShipment | None = None, status: str = "") -> str:
     mode = "Delivery" if str(order.fulfillment_mode).lower() == "delivery" else "Pickup"
     address = str(order.delivery_address or "").strip()
-    address_html = (
-        f"<p style='margin:10px 0 0;font-size:13px;color:#64748b;'><strong style='color:#0f172a;'>{mode}</strong>"
-        f"{' · ' + _escape(address) if address else ''}</p>"
-        if mode == "Delivery" or address
-        else f"<p style='margin:10px 0 0;font-size:13px;color:#64748b;'><strong style='color:#0f172a;'>{mode}</strong></p>"
-    )
-    shipment_html = ""
+    currency = order.currency or "INR"
+    callout_lines = [f"Order #{order.order_number}", f"{mode}" + (f" · {address}" if address else "")]
     if shipment is not None:
-        track = str(shipment.tracking_url or "").strip()
-        track_link = (
-            f" · <a href='{_escape(track)}'>Track shipment</a>" if track else ""
-        )
-        shipment_html = (
-            "<p style='margin:12px 0 0;font-size:14px;color:#0f172a;'>"
-            f"<strong>{_escape(shipment.carrier_label or 'Courier')}</strong>"
-            f" · AWB {_escape(shipment.tracking_number)}"
-            f"{track_link}"
-            "</p>"
-        )
+        carrier = shipment.carrier_label or "Courier"
+        awb = shipment.tracking_number or ""
+        callout_lines.append(f"{carrier}" + (f" · AWB {awb}" if awb else ""))
+
+    progress = email_progress_steps(
+        _DELIVERY_STEPS if mode == "Delivery" else _PICKUP_STEPS,
+        current_index=_progress_index_for_status(order, status=status or kicker, kicker=kicker),
+    )
+
+    item_rows = [
+        {
+            "name": line.product_name,
+            "qty": line.quantity,
+            "amount": _money(line.line_total, currency),
+        }
+        for line in list(order.lines.all())[:6]
+    ]
+    extra_count = max(0, order.lines.count() - 6)
+    if extra_count:
+        item_rows.append({"name": f"+{extra_count} more item{'s' if extra_count != 1 else ''}", "qty": "", "amount": ""})
+
+    payment = str(getattr(order, "payment_status", "") or "").strip()
+    totals = [("Order total", _money(order.total, currency))]
+    if payment:
+        totals.insert(0, ("Payment", payment.replace("_", " ").title()))
+
     return (
-        "<div style='margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;'>"
-        f"<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;font-weight:700;'>{_escape(kicker)}</div>"
-        f"<div style='margin-top:4px;font-size:16px;font-weight:800;color:#0f172a;'>#{_escape(order.order_number)}</div>"
-        "<table role='presentation' width='100%' cellspacing='0' cellpadding='0' style='margin-top:10px;'>"
-        f"{_item_rows_html(order)}"
-        "<tr>"
-        "<td colspan='2' style='padding-top:12px;font-size:14px;color:#64748b;'>Order total</td>"
-        f"<td style='padding-top:12px;font-size:16px;font-weight:800;text-align:right;color:#0f172a;'>{_escape(_money(order.total, order.currency or 'INR'))}</td>"
-        "</tr></table>"
-        f"{address_html}"
-        f"{shipment_html}"
-        "</div>"
+        email_info_card(title=kicker or "Order update", lines=callout_lines)
+        + progress
+        + email_item_rows(item_rows)
+        + email_totals_block(totals)
     )
 
 
@@ -276,7 +279,8 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
                 "status": status_value,
                 "fulfillment_mode": order.fulfillment_mode,
             },
-            extra_html=_order_extra_html(order, kicker=kicker),
+            extra_html=_order_extra_html(order, kicker=kicker, status=status_value),
+            headline=kicker,
         )
     except Exception:
         logger.exception("Online order notify failed", extra={"order_id": str(order.id), "status": status_value})
@@ -304,6 +308,8 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
                 "fulfillment_mode": order.fulfillment_mode,
             },
             channels=["in_app", "email"],
+            headline="New online order",
+            extra_html=_order_extra_html(order, kicker="New order", status=status_value),
         )
     except Exception:
         logger.exception(
@@ -340,9 +346,12 @@ def notify_shipment_milestone(*, order: ShopOrder, shipment: ShopShipment, statu
                 "tracking_url": shipment.tracking_url,
                 "fulfillment_mode": order.fulfillment_mode,
             },
-            extra_html=_order_extra_html(order, kicker=kicker, shipment=shipment),
+            extra_html=_order_extra_html(
+                order, kicker=kicker, shipment=shipment, status=status_value
+            ),
             cta_label="Track shipment" if shipment.tracking_url else "",
             cta_url=shipment.tracking_url or "",
+            headline=kicker,
         )
     except Exception:
         logger.exception(
@@ -377,19 +386,28 @@ def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
         )
         event = "ShopReturnRequested"
         kicker = "Return requested"
-    items = "".join(
-        f"<tr><td style='padding:8px 0;border-bottom:1px solid #eef2f7;font-size:14px;'>{_escape(raw.get('name'))}</td>"
-        f"<td style='padding:8px 0;border-bottom:1px solid #eef2f7;font-size:13px;color:#64748b;text-align:right;'>× {_escape(raw.get('quantity'))}</td></tr>"
+    item_rows = [
+        {"name": raw.get("name"), "qty": raw.get("quantity"), "amount": ""}
         for raw in (shop_return.line_items or [])
         if isinstance(raw, dict)
-    )
+    ]
+    refund_title = "Refund issued" if completed else "Refund requested"
     extra = (
-        "<div style='margin-top:18px;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;'>"
-        f"<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;font-weight:700;'>{kicker}</div>"
-        f"<div style='margin-top:4px;font-size:16px;font-weight:800;'>#{_escape(order.order_number)} · {_escape(shop_return.return_number)}</div>"
-        f"<table role='presentation' width='100%' style='margin-top:10px;'>{items}</table>"
-        f"<p style='margin:12px 0 0;font-size:15px;font-weight:800;'>Refund {_escape(refund)}</p>"
-        "</div>"
+        email_info_card(
+            title=kicker,
+            lines=[
+                f"Order #{order.order_number}",
+                f"Return {shop_return.return_number}",
+            ],
+        )
+        + email_item_rows(item_rows)
+        + email_info_card(
+            title=refund_title,
+            lines=[
+                f"{refund}" + (" refunded" if completed else " pending review"),
+                "Usually shows in 1–3 business days" if completed else "We’ll update you when it’s processed.",
+            ],
+        )
     )
     try:
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
@@ -408,6 +426,7 @@ def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
                 "return_number": shop_return.return_number,
             },
             extra_html=extra,
+            headline=kicker,
         )
     except Exception:
         logger.exception("Online return notify failed", extra={"return_id": str(shop_return.id)})

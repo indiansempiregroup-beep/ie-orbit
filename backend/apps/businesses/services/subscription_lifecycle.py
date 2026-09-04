@@ -6,7 +6,6 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -289,11 +288,18 @@ class SubscriptionLifecycleService:
             email = (getattr(user, "email", "") or "").strip()
             if email:
                 try:
-                    send_mail(
+                    from apps.notifications.services.branding import business_email_brand
+                    from apps.notifications.services.providers.email import send_branded_email
+
+                    brand = business_email_brand(subscription.business)
+                    send_branded_email(
                         subject=subject,
-                        message=body,
-                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-                        recipient_list=[email],
+                        body=body,
+                        recipient=email,
+                        business_name=brand.get("business_name") or "IE Orbit",
+                        logo_url=brand.get("business_logo") or "",
+                        accent_color=brand.get("accent_color") or "#1A56DB",
+                        headline=str(subject).split("·", 1)[0].strip() if "·" in str(subject) else str(subject),
                         fail_silently=True,
                     )
                 except Exception:

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from django.conf import settings
 
 from apps.customers.models import Customer
+from apps.notifications.services.providers.email import build_branded_email_html, email_info_card
 
 
 @dataclass(frozen=True)
@@ -30,14 +31,27 @@ def build_customer_registration_invite(*, customer: Customer, business_name: str
         f"— {product_name}"
     )
 
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-  <body style="font-family:Inter,Arial,sans-serif;color:#111827;line-height:1.6;">
-    <p>Hi {greeting},</p>
-    <p><strong>{product_name}</strong> added you as a customer. Create your account to book appointments and manage your visits.</p>
-    <p><a href="{register_url}" style="display:inline-block;padding:12px 18px;background:#1a56db;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;">Create your account</a></p>
-    <p style="color:#6b7280;font-size:13px;">Or copy this link: {register_url}</p>
-  </body>
-</html>"""
+    body = (
+        f"Hi {greeting},\n\n"
+        f"{product_name} added you as a customer. Create your account to book appointments, "
+        "view your visit history, and manage notifications."
+    )
+    html = build_branded_email_html(
+        subject=subject,
+        body=body,
+        business_name=product_name,
+        headline="You're invited",
+        extra_html=email_info_card(
+            title="What you can do",
+            lines=[
+                "Book appointments online",
+                "Track orders and visits",
+                "Manage notifications in one place",
+            ],
+        ),
+        cta_label="Create your account",
+        cta_url=register_url,
+        footer_note="If you were not expecting this email, you can ignore it.",
+    )
 
     return CustomerRegistrationInviteContent(subject=subject, plain_text=plain_text, html=html)

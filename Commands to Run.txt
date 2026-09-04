@@ -276,3 +276,14 @@ exit
 
 # Post-deploy QA (after VPS is up — see docs/qa/automation.md):
 # cd /path/to/ie-orbit && cp e2e/.env.example e2e/.env && ./scripts/qa-post-deploy.sh
+
+# Create new apk (Build new apk)
+# For OPS
+cd apps/ops-mobile
+corepack pnpm exec eas login
+corepack pnpm eas:build:production-preview
+
+# For Sanket Pet Shop
+cd mobile
+corepack pnpm exec eas login
+corepack pnpm eas:build:sanket:production-preview

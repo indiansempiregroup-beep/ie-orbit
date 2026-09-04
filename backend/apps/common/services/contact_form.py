@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
-from django.core.mail import send_mail
+
+from apps.notifications.services.providers.email import email_info_card, send_branded_email
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +30,16 @@ class ContactFormService:
         if ip_address or user_agent:
             body_lines.extend(["", "---", f"IP: {ip_address or 'unknown'}", f"User-Agent: {user_agent or 'unknown'}"])
         try:
-            send_mail(
+            send_branded_email(
                 subject=subject,
-                message="\n".join(body_lines),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[recipient],
+                body=f"{name} sent a message via the IE Orbit contact form.",
+                recipient=recipient,
+                business_name="IE Orbit",
+                headline="New contact form message",
+                extra_html=email_info_card(
+                    title="Message",
+                    lines=body_lines,
+                ),
                 reply_to=[email],
                 fail_silently=False,
             )

@@ -4,10 +4,12 @@ import { Menu, X } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
+import { trackEvent } from '../../seo/analytics';
 
 const navLinks = [
   { to: '/', label: 'Home' },
   { to: '/features', label: 'Features' },
+  { to: '/industries', label: 'Industries' },
   { to: '/pricing', label: 'Pricing' },
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },
@@ -19,6 +21,8 @@ const footerColumns = [
     title: 'Product',
     links: [
       { to: '/features', label: 'Features' },
+      { to: '/industries', label: 'Industries' },
+      { to: '/integrations', label: 'Integrations' },
       { to: '/pricing', label: 'Pricing' },
       { to: '/faq', label: 'FAQ' },
       { to: '/help', label: 'Help Center' },
@@ -29,6 +33,7 @@ const footerColumns = [
     links: [
       { to: '/about', label: 'About' },
       { to: '/contact', label: 'Contact' },
+      { to: '/download', label: 'Apps' },
     ],
   },
   {
@@ -36,6 +41,7 @@ const footerColumns = [
     links: [
       { to: '/privacy', label: 'Privacy' },
       { to: '/terms', label: 'Terms' },
+      { to: '/cookies', label: 'Cookies' },
     ],
   },
 ];
@@ -98,7 +104,7 @@ export function PublicLayout() {
             <Link to="/auth">
               <Button variant="ghost">Sign in</Button>
             </Link>
-            <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+            <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE} onClick={() => trackEvent('generate_lead', { method: 'header_create_account' })}>
               <Button variant="primary">Create account</Button>
             </Link>
           </div>

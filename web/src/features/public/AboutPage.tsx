@@ -1,13 +1,9 @@
-import { CalendarDays, Store, Users } from 'lucide-react';
-import { usePageMeta } from '../../hooks/usePageMeta';
+import { Link } from 'react-router-dom';
+import { CalendarDays, Mail, Phone, Store, Users } from 'lucide-react';
 import { PublicCtaBand } from './PublicCtaBand';
+import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, CONTACT_PHONE_TEL } from '../../seo/config';
 
 export function AboutPage() {
-  usePageMeta({
-    title: 'About — IE Orbit',
-    description: 'About Indians Empire Technologies and IE Orbit — Orbit Appoint and Orbit Mart.',
-  });
-
   return (
     <>
       <section className="public-hero-band">
@@ -18,8 +14,9 @@ export function AboutPage() {
               Built for <span className="public-gradient-text">Indian businesses</span>
             </h1>
             <p className="public-lead">
-              IE Orbit helps service and retail teams run daily operations from a single workspace — without stitching
-              together separate tools for bookings, the counter, and books.
+              IE Orbit is the appointments-and-retail workspace from Indians Empire Technologies. Orbit Appoint runs
+              bookings and staff. Orbit Mart runs the counter, catalog, and GST books — with UPI subscription billing and
+              a 15-day full-Pro trial.
             </p>
           </div>
         </div>
@@ -58,6 +55,35 @@ export function AboutPage() {
             </p>
           </article>
         </div>
+        <section className="public-section">
+          <div className="public-section__head">
+            <h2>Company and contact</h2>
+            <p className="public-lead">
+              IE Orbit is operated by Indians Empire Technologies. For support, sales, or demos, use the channels below
+              or the <Link to="/contact">Contact</Link> page.
+            </p>
+          </div>
+          <div className="public-grid">
+            <article className="public-card">
+              <div className="public-card-icon">
+                <Mail size={20} />
+              </div>
+              <h3>Email</h3>
+              <p style={{ marginBottom: 0 }}>
+                <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+              </p>
+            </article>
+            <article className="public-card">
+              <div className="public-card-icon public-card-icon--teal">
+                <Phone size={20} />
+              </div>
+              <h3>Phone</h3>
+              <p style={{ marginBottom: 0 }}>
+                <a href={`tel:${CONTACT_PHONE_TEL}`}>{CONTACT_PHONE_DISPLAY}</a>
+              </p>
+            </article>
+          </div>
+        </section>
       </div>
       <PublicCtaBand />
     </>

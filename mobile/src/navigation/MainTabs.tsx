@@ -6,7 +6,6 @@ import { Feather } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useBootstrap } from '../contexts/BootstrapContext';
 import { useMobileNotifications } from '../hooks/useMobileNotifications';
-import { useNotificationStream } from '../hooks/useNotificationStream';
 import { GlassTabBarBackground } from '../components/GlassTabBarBackground';
 import {
   GOOGLE_AD_BANNER_HEIGHT,
@@ -52,8 +51,7 @@ function CustomerTabBar({
 export function MainTabs() {
   const { t } = useTranslation();
   const { branding, bootstrap } = useBootstrap();
-  const { unreadCount, reload } = useMobileNotifications();
-  useNotificationStream({ onNotification: reload });
+  const { unreadCount } = useMobileNotifications();
   const primary = branding?.primaryColor ?? colors.primary;
   const { showShop, showBooking } = customerAppFeatures(bootstrap?.features);
   const { pillHeight, sideInset, bottomOffset } = useTabBarLayout();

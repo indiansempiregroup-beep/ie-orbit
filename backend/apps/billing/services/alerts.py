@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable
 
 from django.conf import settings
-from django.core.mail import send_mail
 
 from apps.billing.models import BillingWebhookEvent
+from apps.notifications.services.providers.email import email_info_card, send_branded_email
 
 logger = logging.getLogger("ie_orbit.billing.alerts")
 
@@ -14,14 +13,6 @@ logger = logging.getLogger("ie_orbit.billing.alerts")
 class BillingAlertService:
     def notify_webhook_failure(self, *, webhook_event: BillingWebhookEvent) -> None:
         recipients = self._recipients()
-        message = (
-            "Billing webhook processing failed.\n\n"
-            f"Event ID: {webhook_event.external_event_id}\n"
-            f"Type: {webhook_event.event_type}\n"
-            f"Status: {webhook_event.status}\n"
-            f"Retry count: {webhook_event.retry_count}\n"
-            f"Error: {webhook_event.error_message}\n"
-        )
         logger.error(
             "billing.webhook.alert",
             extra={
@@ -32,11 +23,22 @@ class BillingAlertService:
             },
         )
         if recipients:
-            send_mail(
+            send_branded_email(
                 subject=f"[IE Orbit] Billing webhook failed: {webhook_event.event_type}",
-                message=message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=list(recipients),
+                body="A billing webhook failed during processing. Review the details below.",
+                recipient=recipients,
+                business_name="IE Orbit",
+                headline="Billing webhook failed",
+                extra_html=email_info_card(
+                    title="Event details",
+                    lines=[
+                        f"Event ID: {webhook_event.external_event_id}",
+                        f"Type: {webhook_event.event_type}",
+                        f"Status: {webhook_event.status}",
+                        f"Retry count: {webhook_event.retry_count}",
+                        f"Error: {webhook_event.error_message}",
+                    ],
+                ),
                 fail_silently=True,
             )
 

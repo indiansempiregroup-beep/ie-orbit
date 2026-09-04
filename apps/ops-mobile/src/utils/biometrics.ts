@@ -137,14 +137,14 @@ export async function disableBiometricLogin() {
 }
 
 /**
- * Face ID / Touch ID only — no device-passcode fallback.
- * Requires NSFaceIDUsageDescription in the host app (Expo Go or a dev/production build).
+ * Face ID / Touch ID with device PIN/pattern fallback when biometrics fail.
+ * Matches customer-mobile so Expo Go / fingerprint devices behave the same.
  */
 async function authenticateWithBiometrics(promptMessage: string) {
   return LocalAuthentication.authenticateAsync({
     promptMessage,
     cancelLabel: 'Cancel',
-    disableDeviceFallback: true,
+    disableDeviceFallback: false,
   });
 }
 
@@ -178,8 +178,8 @@ function biometricFailureMessage(
   if (error === 'user_cancel' || error === 'system_cancel' || error === 'app_cancel') {
     return `${label} was cancelled. Close other popups, then try again.`;
   }
-  if (error === 'user_fallback' || error === 'passcode_not_set') {
-    return `${label} is required — use your face / fingerprint, not the phone passcode.`;
+  if (error === 'passcode_not_set') {
+    return `Set a device passcode in Settings, then try ${label} again.`;
   }
   if (error === 'lockout' || error === 'lockout_permanent') {
     return `${label} is temporarily locked. Unlock your phone with your passcode, then try again.`;

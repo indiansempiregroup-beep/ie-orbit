@@ -8,10 +8,10 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
-import { usePageMeta } from '../../hooks/usePageMeta';
 import { PublicCtaBand } from './PublicCtaBand';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
+import { trackEvent } from '../../seo/analytics';
 
 const products = [
   {
@@ -63,12 +63,6 @@ const steps = [
 ];
 
 export function HomePage() {
-  usePageMeta({
-    title: 'IE Orbit — Orbit Appoint and Orbit Mart for Indian businesses',
-    description:
-      'One workspace for appointments and retail. Orbit Appoint for bookings, Orbit Mart for POS, GST books, and Grow. Start a 15-day free trial.',
-  });
-
   return (
     <>
       <section className="public-hero-band">
@@ -83,7 +77,11 @@ export function HomePage() {
               15-day full-Pro trial, then pick the product — or both — that your business needs.
             </p>
             <div className="public-hero-actions">
-              <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+              <Link
+                to={registerStartPath()}
+                state={REGISTER_FRESH_START_STATE}
+                onClick={() => trackEvent('generate_lead', { method: 'home_create_account' })}
+              >
                 <Button variant="primary">Create account</Button>
               </Link>
               <Link to="/features">
@@ -165,7 +163,9 @@ export function HomePage() {
           <div className="public-section__head">
             <p className="public-kicker">Products</p>
             <h2>Pick one product, or run both together</h2>
-            <p className="public-lead">Same business, staff, customers, and billing — whether you book services or sell from the counter.</p>
+            <p className="public-lead">
+              Same business, staff, customers, and billing — whether you book services or sell from the counter.
+            </p>
           </div>
           <div className="public-product-grid">
             {products.map((product) => {
@@ -177,7 +177,7 @@ export function HomePage() {
                       <Icon size={22} />
                     </div>
                     <p className="public-kicker">{product.kicker}</p>
-                    <h2>{product.title}</h2>
+                    <h3>{product.title}</h3>
                     <p>{product.body}</p>
                     <ul className="public-list">
                       {product.points.map((point) => (
@@ -188,6 +188,24 @@ export function HomePage() {
                 </Link>
               );
             })}
+          </div>
+        </section>
+
+        <section className="public-section" aria-label="Industries">
+          <div className="public-section__head">
+            <p className="public-kicker">Industries</p>
+            <h2>Built for service and retail teams</h2>
+            <p className="public-lead">
+              See how Orbit Appoint and Orbit Mart fit salons, clinics, fitness, retail, and more.
+            </p>
+          </div>
+          <div className="public-hero-actions">
+            <Link to="/industries">
+              <Button variant="neutral">Browse industries</Button>
+            </Link>
+            <Link to="/integrations">
+              <Button variant="ghost">View integrations</Button>
+            </Link>
           </div>
         </section>
 

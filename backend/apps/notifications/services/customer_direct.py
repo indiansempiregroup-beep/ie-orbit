@@ -46,6 +46,7 @@ class CustomerDirectNotifier:
         extra_html: str = "",
         cta_label: str = "",
         cta_url: str = "",
+        headline: str = "",
     ) -> dict[str, Any]:
         from apps.notifications.services.branding import business_email_brand
 
@@ -129,6 +130,7 @@ class CustomerDirectNotifier:
                             "extra_html": extra_html,
                             "cta_label": cta_label,
                             "cta_url": cta_url,
+                            "headline": headline,
                             **brand,
                         },
                     )

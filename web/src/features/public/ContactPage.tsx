@@ -2,19 +2,15 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Mail, MessageSquare, Phone } from 'lucide-react';
 import { createApiClient } from '@ie-orbit/sdk';
-import { usePageMeta } from '../../hooks/usePageMeta';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { getApiErrorMessage } from '../../lib/apiClient';
+import { trackEvent } from '../../seo/analytics';
+import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, CONTACT_PHONE_TEL } from '../../seo/config';
 
 const contactClient = createApiClient({ baseUrl: '/api/v1' });
 
 export function ContactPage() {
-  usePageMeta({
-    title: 'Contact — IE Orbit',
-    description: 'Contact the IE Orbit team for support and sales inquiries.',
-  });
-
   const [searchParams] = useSearchParams();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -22,12 +18,14 @@ export function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const isDemo = searchParams.get('intent') === 'demo';
 
   useEffect(() => {
-    if (searchParams.get('intent') === 'demo') {
+    if (isDemo) {
       setMessage("I'd like a demo of IE Orbit for my business.");
+      trackEvent('generate_lead', { method: 'demo_intent' });
     }
-  }, [searchParams]);
+  }, [isDemo]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,11 +40,12 @@ export function ContactPage() {
         website: String(formData.get('website') ?? ''),
       });
       setSubmitted(true);
+      trackEvent('generate_lead', { method: isDemo ? 'contact_demo' : 'contact_form' });
     } catch (err) {
       setError(
         getApiErrorMessage(
           err,
-          'We could not send your message right now. Please email support@indiansempire.com instead.',
+          `We could not send your message right now. Please email ${CONTACT_EMAIL} instead.`,
         ),
       );
     } finally {
@@ -133,7 +132,7 @@ export function ContactPage() {
               </div>
               <h3>Email</h3>
               <p style={{ marginBottom: 0 }}>
-                <a href="mailto:support@indiansempire.com">support@indiansempire.com</a>
+                <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
               </p>
             </article>
             <article className="public-card">
@@ -142,7 +141,7 @@ export function ContactPage() {
               </div>
               <h3>Phone</h3>
               <p style={{ marginBottom: 0 }}>
-                <a href="tel:+919766855617">+91 9766855617</a>
+                <a href={`tel:${CONTACT_PHONE_TEL}`}>{CONTACT_PHONE_DISPLAY}</a>
               </p>
             </article>
             <article className="public-card">

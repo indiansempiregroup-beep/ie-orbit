@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import type { LoginResponse, UserProfile, WorkspaceProvisionResponse } from '@ie-orbit/sdk';
 import { opsClient } from '../api/client';
@@ -122,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
   const accessIssuedAtRef = useRef<number>(0);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
     opsClient.setToken(token);
@@ -202,8 +204,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const ensureFreshAccess = useCallback(async (): Promise<string | null> => {
+    // Only refresh an active session — never silently restore from the biometric vault.
+    if (!token) return null;
+
     const remaining = remainingAccessSeconds(token);
-    if (token && remaining > ACCESS_REFRESH_SKEW_SECONDS) return token;
+    if (remaining > ACCESS_REFRESH_SKEW_SECONDS) return token;
 
     const refreshed = await performRefresh();
     if (refreshed) {
@@ -315,6 +320,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Intentionally run once on mount; restore reads latest secure-store tokens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // After lock/unlock or long background, timers may be paused — refresh on foreground.
+  useEffect(() => {
+    const onChange = (next: AppStateStatus) => {
+      const wasBackground = appStateRef.current === 'inactive' || appStateRef.current === 'background';
+      appStateRef.current = next;
+      if (wasBackground && next === 'active') {
+        void ensureFreshAccess();
+      }
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [ensureFreshAccess]);
 
   const applySession = useCallback(async (payload: LoginResponse) => {
     if (!payload.access) {

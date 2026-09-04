@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
+import { trackEvent } from '../../seo/analytics';
 
 export function PublicCtaBand({
   title = 'Run appointments and retail from one workspace',
@@ -19,7 +20,11 @@ export function PublicCtaBand({
           <p>{body}</p>
         </div>
         <div className="public-hero-actions">
-          <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+          <Link
+            to={registerStartPath()}
+            state={REGISTER_FRESH_START_STATE}
+            onClick={() => trackEvent('generate_lead', { method: 'cta_band' })}
+          >
             <Button variant="primary">Create account</Button>
           </Link>
           <Link to="/pricing">

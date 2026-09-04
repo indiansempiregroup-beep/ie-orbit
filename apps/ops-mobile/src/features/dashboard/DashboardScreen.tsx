@@ -48,7 +48,7 @@ function greeting() {
 export function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
-  const { unreadCount } = useNotifications();
+  const { unreadCount, reload: reloadNotifications } = useNotifications();
   const { activeBusiness, businessId } = useWorkspace();
   const client = useOpsClient();
   const { isDesktop } = useBreakpoint();
@@ -102,11 +102,18 @@ export function DashboardScreen() {
     useCallback(() => {
       void loadBooks();
       void reloadOrders();
-    }, [loadBooks, reloadOrders]),
+      void reloadNotifications();
+    }, [loadBooks, reloadOrders, reloadNotifications]),
   );
 
   const reload = async () => {
-    await Promise.all([reloadSummary(), reloadBookings(), loadBooks(), reloadOrders()]);
+    await Promise.all([
+      reloadSummary(),
+      reloadBookings(),
+      loadBooks(),
+      reloadOrders(),
+      reloadNotifications(),
+    ]);
   };
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const isRefreshing = refreshing || loading || (showOrders && ordersLoading);

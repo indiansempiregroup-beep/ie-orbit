@@ -1,20 +1,13 @@
-import { usePageMeta } from '../../hooks/usePageMeta';
-
 export function TermsPage() {
-  usePageMeta({
-    title: 'Terms & Conditions — IE Orbit',
-    description: 'IE Orbit terms and conditions.',
-  });
-
   return (
     <div className="public-page public-page-narrow public-legal">
       <p className="public-kicker">Legal</p>
       <h1>Terms &amp; Conditions</h1>
-      <p>Last updated: August 2026</p>
+      <p>Last updated: September 2026</p>
       <h2>Service</h2>
       <p>
-        IE Orbit, including Orbit Appoint and Orbit Mart, is provided on an as-available basis during the trial and on paid
-        subscription plans after you upgrade.
+        IE Orbit, including Orbit Appoint and Orbit Mart, is provided on an as-available basis during the trial and on
+        paid subscription plans after you upgrade.
       </p>
       <h2>Accounts</h2>
       <p>You are responsible for safeguarding credentials and activity under your workspace.</p>

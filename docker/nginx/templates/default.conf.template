@@ -118,6 +118,23 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    location = /robots.txt {
+        try_files $uri =404;
+        add_header Content-Type text/plain;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
+    location = /sitemap.xml {
+        try_files $uri =404;
+        add_header Content-Type application/xml;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
+    location ~ ^/(auth|onboarding|dashboard|admin|settings|shop|customers|calendar|bookings|bi|profile|notifications|staff|services|reports|business)(/|$) {
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        try_files $uri $uri/ /index.html;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }

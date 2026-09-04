@@ -7,7 +7,6 @@ import {
   Sparkles,
   Store,
 } from 'lucide-react';
-import { usePageMeta } from '../../hooks/usePageMeta';
 import { Button } from '../../components/Button';
 import { PublicCtaBand } from './PublicCtaBand';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
@@ -91,12 +90,6 @@ const featureGroups = [
 ];
 
 export function FeaturesPage() {
-  usePageMeta({
-    title: 'Features — IE Orbit',
-    description:
-      'Orbit Appoint bookings and Orbit Mart commerce, GST books, Grow tools, and Pets pack — one workspace for service and retail businesses.',
-  });
-
   return (
     <>
       <section className="public-hero-band">

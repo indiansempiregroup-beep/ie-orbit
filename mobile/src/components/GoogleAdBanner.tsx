@@ -37,38 +37,59 @@ function productionBannerUnitId() {
   return process.env.EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID;
 }
 
+function useTestAdUnits() {
+  return (
+    __DEV__ ||
+    process.env.EXPO_PUBLIC_ADMOB_USE_TEST_ADS === 'true' ||
+    process.env.EXPO_PUBLIC_ADMOB_USE_TEST_ADS === '1'
+  );
+}
+
+async function initializeAdsSdk(ads: AdsModule) {
+  // UMP can hang when no form is configured or the native UI never settles.
+  // Never block Mobile Ads init on consent — otherwise the slot stays empty forever.
+  await Promise.race([
+    ads.AdsConsent.gatherConsent().catch(() => null),
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), 2500);
+    }),
+  ]);
+  return ads.MobileAds().initialize();
+}
+
 export function isGoogleAdMobAvailable(): boolean {
   return loadAds() !== null;
 }
 
 export function GoogleAdBanner({ onClose }: { onClose: () => void }) {
   const ads = useMemo(loadAds, []);
+  const preferTest = useTestAdUnits();
   const [ready, setReady] = useState(false);
+  const [unitId, setUnitId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ads) return;
     if (!initialization) {
-      initialization = ads.AdsConsent.gatherConsent()
-        .catch(() => null)
-        .then(() => ads.MobileAds().initialize());
+      initialization = initializeAdsSdk(ads);
     }
     let active = true;
     void initialization
       .then(() => {
-        if (active) setReady(true);
+        if (!active) return;
+        const nextUnit = preferTest ? ads.TestIds.BANNER : productionBannerUnitId() || null;
+        setUnitId(nextUnit);
+        setReady(true);
       })
-      .catch(() => {
+      .catch((error) => {
+        console.warn('[GoogleAdBanner] Mobile Ads init failed', error);
         if (active) setReady(false);
       });
     return () => {
       active = false;
     };
-  }, [ads]);
+  }, [ads, preferTest]);
 
-  if (!ads || !ready) return null;
-
-  const unitId = __DEV__ ? ads.TestIds.BANNER : productionBannerUnitId();
-  if (!unitId) return null;
+  if (!ads || !ready || !unitId) return null;
 
   const BannerAd = ads.BannerAd;
   return (
@@ -88,8 +109,12 @@ export function GoogleAdBanner({ onClose }: { onClose: () => void }) {
       <View style={styles.ad}>
         <BannerAd
           unitId={unitId}
-          size={ads.BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          // Fixed 320x50 fits the shell; adaptive banners often clip behind overflow:hidden.
+          size={ads.BannerAdSize.BANNER}
           requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          onAdFailedToLoad={(error) => {
+            console.warn('[GoogleAdBanner] failed to load', unitId, error);
+          }}
         />
       </View>
     </View>

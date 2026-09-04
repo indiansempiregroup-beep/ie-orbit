@@ -1024,13 +1024,17 @@ def test_send_billing_ops_digest_task(monkeypatch: pytest.MonkeyPatch, settings)
     settings.BILLING_OPS_DIGEST_RECIPIENTS = "ops@example.com"
     captured: dict[str, object] = {}
 
-    def _fake_send_mail(*, subject: str, message: str, from_email: str, recipient_list: list[str], fail_silently: bool):
-        captured["subject"] = subject
-        captured["message"] = message
-        captured["recipients"] = recipient_list
-        return 1
+    def _fake_send_branded_email(**kwargs):
+        captured["subject"] = kwargs.get("subject")
+        captured["message"] = kwargs.get("body")
+        recipients = kwargs.get("recipient")
+        captured["recipients"] = [recipients] if isinstance(recipients, str) else list(recipients or [])
+        return None
 
-    monkeypatch.setattr("apps.billing.tasks.send_mail", _fake_send_mail)
+    monkeypatch.setattr(
+        "apps.notifications.services.providers.email.send_branded_email",
+        _fake_send_branded_email,
+    )
     from apps.billing.tasks import send_billing_ops_digest_task
 
     result = send_billing_ops_digest_task(window_hours=24)

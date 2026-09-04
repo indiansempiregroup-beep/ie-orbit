@@ -5,7 +5,6 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -205,18 +204,31 @@ class StaffInvitationService:
         )
 
     def _send_invitation_email(self, *, invitation: StaffInvitation) -> None:
+        from apps.notifications.services.providers.email import email_info_card, send_branded_email
+
         frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000")
         accept_url = f"{frontend_base.rstrip('/')}/auth/accept-invitation?token={invitation.token}"
         business_name = invitation.business.display_name
-        send_mail(
+        body = (
+            f"You have been invited to join {business_name} as {invitation.platform_role_code}.\n\n"
+            f"Accept the invitation to get started. This link expires on {invitation.expires_at:%Y-%m-%d}."
+        )
+        send_branded_email(
             subject=f"You are invited to join {business_name} on IE Orbit",
-            message=(
-                f"You have been invited to join {business_name} as {invitation.platform_role_code}.\n\n"
-                f"Accept your invitation: {accept_url}\n\n"
-                f"This link expires on {invitation.expires_at:%Y-%m-%d}."
+            body=body,
+            recipient=invitation.email,
+            business_name=business_name or "IE Orbit",
+            headline="You're invited to join the team",
+            cta_label="Accept invitation",
+            cta_url=accept_url,
+            extra_html=email_info_card(
+                title="Invitation details",
+                lines=[
+                    f"Business: {business_name}",
+                    f"Role: {invitation.platform_role_code}",
+                    f"Expires: {invitation.expires_at:%Y-%m-%d}",
+                ],
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[invitation.email],
             fail_silently=False,
         )
         logger.info(

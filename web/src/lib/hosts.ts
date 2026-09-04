@@ -1,3 +1,5 @@
+import { isPublicMarketingPathname } from '../seo/pages';
+
 function trimOrigin(value: string): string {
   return value.trim().replace(/\/$/, '');
 }
@@ -64,19 +66,6 @@ export function isPublicSiteHost(): boolean {
   return Boolean(current) && current === getPublicSiteOrigin();
 }
 
-const PUBLIC_SITE_PATHS = new Set([
-  '/',
-  '/features',
-  '/pricing',
-  '/about',
-  '/contact',
-  '/privacy',
-  '/terms',
-  '/faq',
-  '/help',
-]);
-
 export function isPublicMarketingPath(pathname: string): boolean {
-  if (PUBLIC_SITE_PATHS.has(pathname)) return true;
-  return pathname.startsWith('/auth/register') || pathname.startsWith('/onboarding');
+  return isPublicMarketingPathname(pathname);
 }

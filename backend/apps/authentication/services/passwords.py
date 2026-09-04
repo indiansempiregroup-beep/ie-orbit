@@ -5,7 +5,6 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
-from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import exceptions
 
@@ -13,6 +12,7 @@ from apps.authentication.models import PasswordHistory, PasswordResetToken, User
 from apps.authentication.repositories.users import UserRepository
 from apps.authentication.security.tokens import generate_plain_token, hash_token
 from apps.authentication.services.audit import SecurityAuditService
+from apps.notifications.services.providers.email import email_info_card, send_branded_email
 
 
 @dataclass(frozen=True)
@@ -60,15 +60,27 @@ class PasswordService:
         frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
         reset_url = f"{frontend_base}/auth/reset-password?token={token}"
         minutes = settings.IAM_SETTINGS["PASSWORD_RESET_TOKEN_MINUTES"]
-        send_mail(
+        body = (
+            "We received a request to reset your IE Orbit password.\n\n"
+            f"This link expires in {minutes} minutes. If you did not ask for a reset, you can ignore this email."
+        )
+        send_branded_email(
             subject="Reset your IE Orbit password",
-            message=(
-                f"Use this link to reset your password:\n{reset_url}\n\n"
-                f"This link expires in {minutes} minutes.\n\n"
-                f"If the link does not work, use this token: {token}"
+            body=body,
+            recipient=user.email,
+            business_name="IE Orbit",
+            headline="Reset your password",
+            cta_label="Reset password",
+            cta_url=reset_url,
+            extra_html=email_info_card(
+                title="Can’t open the button?",
+                lines=[
+                    "Copy and paste this link into your browser:",
+                    reset_url,
+                    f"Or use this token: {token}",
+                ],
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
+            footer_note="For your security, never share this link with anyone.",
             fail_silently=True,
         )
         self.audit_service.record(

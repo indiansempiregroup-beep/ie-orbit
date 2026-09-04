@@ -149,6 +149,8 @@ class PetsService:
         body: str,
         channels: list[str] | None = None,
         event_type: str = "PetOwnerMessage",
+        headline: str = "",
+        extra_html: str = "",
     ) -> dict[str, Any]:
         self.require_pets_pack(tenant=pet.tenant, business=pet.business)
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
@@ -162,6 +164,8 @@ class PetsService:
             channels=channels or ["in_app", "email"],
             event_type=event_type,
             metadata={"pet_id": str(pet.id), "pet_name": pet.name},
+            headline=headline,
+            extra_html=extra_html,
         )
 
     def notify_managers(
@@ -171,6 +175,8 @@ class PetsService:
         subject: str,
         body: str,
         event_type: str = "PetStaffAlert",
+        headline: str = "",
+        extra_html: str = "",
     ) -> dict[str, Any]:
         self.require_pets_pack(tenant=pet.tenant, business=pet.business)
         from apps.notifications.services.staff_direct import StaffDirectNotifier
@@ -188,6 +194,8 @@ class PetsService:
                 "deep_link": f"shop/pets/{pet.id}",
             },
             channels=["in_app", "email"],
+            headline=headline,
+            extra_html=extra_html,
         )
 
     def send_birthday_reminders(self, *, lead_days: int = BIRTHDAY_REMINDER_LEAD_DAYS) -> dict[str, int]:
@@ -235,6 +243,8 @@ class PetsService:
                 or "your business"
             )
             birthday_label = birthday.strftime("%d %b")
+            from apps.notifications.services.providers.email import email_info_card
+
             owner_subject = f"{pet.name}'s birthday is coming up"
             owner_body = (
                 f"Hi {owner_name},\n\n"
@@ -242,11 +252,19 @@ class PetsService:
                 f"(in {lead_days} days). "
                 f"We thought you'd like a gentle reminder from {business_name}."
             )
+            owner_extra = email_info_card(
+                title=f"{pet.name}'s birthday",
+                lines=[birthday_label, f"In {lead_days} days"],
+            )
             staff_subject = f"Pet birthday in {lead_days} days: {pet.name}"
             staff_body = (
                 f"{pet.name}'s birthday is on {birthday_label} (in {lead_days} days). "
                 f"Owner: {owner_name}. "
                 f"Open the pet profile to send an extra reminder or offer if you want."
+            )
+            staff_extra = email_info_card(
+                title=pet.name,
+                lines=[f"Birthday: {birthday_label}", f"Owner: {owner_name}", f"In {lead_days} days"],
             )
 
             with transaction.atomic():
@@ -270,12 +288,16 @@ class PetsService:
                     body=owner_body,
                     channels=["in_app", "email"],
                     event_type="PetBirthdayReminder",
+                    headline="Birthday coming up",
+                    extra_html=owner_extra,
                 )
                 staff_result = self.notify_managers(
                     pet=locked,
                     subject=staff_subject,
                     body=staff_body,
                     event_type="PetBirthdayReminder",
+                    headline="Pet birthday reminder",
+                    extra_html=staff_extra,
                 )
                 if not owner_result.get("sent_channels") and not staff_result.get("sent_channels"):
                     skipped += 1

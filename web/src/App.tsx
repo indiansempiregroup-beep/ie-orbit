@@ -9,8 +9,9 @@ import { TenantOpsGuard } from './guards/TenantOpsGuard';
 import { PublicLayout } from './features/public/PublicLayout';
 import { AuthLayout } from './features/auth/AuthLayout';
 import { HostGate } from './components/HostGate';
+import { HomePage } from './features/public/HomePage';
+import { SeoRuntime } from './seo/SeoRuntime';
 
-const HomePage = lazy(() => import('./features/public/HomePage').then((m) => ({ default: m.HomePage })));
 const FeaturesPage = lazy(() => import('./features/public/FeaturesPage').then((m) => ({ default: m.FeaturesPage })));
 const PricingPage = lazy(() => import('./features/public/PricingPage').then((m) => ({ default: m.PricingPage })));
 const AboutPage = lazy(() => import('./features/public/AboutPage').then((m) => ({ default: m.AboutPage })));
@@ -18,6 +19,17 @@ const ContactPage = lazy(() => import('./features/public/ContactPage').then((m) 
 const PrivacyPage = lazy(() => import('./features/public/PrivacyPage').then((m) => ({ default: m.PrivacyPage })));
 const TermsPage = lazy(() => import('./features/public/TermsPage').then((m) => ({ default: m.TermsPage })));
 const FaqPage = lazy(() => import('./features/public/FaqPage').then((m) => ({ default: m.FaqPage })));
+const IndustriesHubPage = lazy(() =>
+  import('./features/public/industries/IndustriesHubPage').then((m) => ({ default: m.IndustriesHubPage })),
+);
+const IndustryDetailPage = lazy(() =>
+  import('./features/public/industries/IndustryDetailPage').then((m) => ({ default: m.IndustryDetailPage })),
+);
+const IntegrationsPage = lazy(() =>
+  import('./features/public/IntegrationsPage').then((m) => ({ default: m.IntegrationsPage })),
+);
+const CookiesPage = lazy(() => import('./features/public/CookiesPage').then((m) => ({ default: m.CookiesPage })));
+const DownloadPage = lazy(() => import('./features/public/DownloadPage').then((m) => ({ default: m.DownloadPage })));
 const AuthPage = lazy(() => import('./features/auth/AuthPage').then((m) => ({ default: m.AuthPage })));
 const ForgotPasswordPage = lazy(() => import('./features/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
@@ -165,19 +177,26 @@ function PageFallback() {
 function App() {
   return (
     <BrowserRouter>
+      <SeoRuntime />
       <HostGate>
         <Suspense fallback={<PageFallback />}>
           <Routes>
           <Route element={<PublicLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/features" element={<FeaturesPage />} />
+            <Route path="/industries" element={<IndustriesHubPage />} />
+            <Route path="/industries/:slug" element={<IndustryDetailPage />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
+            <Route path="/cookies" element={<CookiesPage />} />
+            <Route path="/download" element={<DownloadPage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/help" element={<HelpCenterPage />} />
+            <Route path="/help/:slug" element={<HelpCenterPage />} />
           </Route>
 
           <Route element={<AuthLayout />}>

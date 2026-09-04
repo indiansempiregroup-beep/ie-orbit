@@ -7,6 +7,7 @@ import { DateTimeZoneSync } from './src/components/DateTimeZoneSync';
 import { LanguageSync } from './src/components/LanguageSync';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { BootstrapProvider } from './src/contexts/BootstrapContext';
+import { NotificationsProvider } from './src/contexts/NotificationsContext';
 import { CartProvider } from './src/features/shop/CartContext';
 import { SplashGate } from './src/components/SplashGate';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -20,16 +21,18 @@ export default function App() {
       <SafeAreaProvider>
         <BootstrapProvider>
           <AuthProvider>
-            <CartProvider>
-              <LanguageSync>
-                <DateTimeZoneSync>
-                  <StatusBar style="dark" />
-                  <SplashGate>
-                    <RootNavigator />
-                  </SplashGate>
-                </DateTimeZoneSync>
-              </LanguageSync>
-            </CartProvider>
+            <NotificationsProvider>
+              <CartProvider>
+                <LanguageSync>
+                  <DateTimeZoneSync>
+                    <StatusBar style="dark" />
+                    <SplashGate>
+                      <RootNavigator />
+                    </SplashGate>
+                  </DateTimeZoneSync>
+                </LanguageSync>
+              </CartProvider>
+            </NotificationsProvider>
           </AuthProvider>
         </BootstrapProvider>
       </SafeAreaProvider>

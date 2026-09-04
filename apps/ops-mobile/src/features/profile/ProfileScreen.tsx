@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Platform, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,6 @@ import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatUserRole } from '../../utils/roles';
-import { isExpoGo } from '../../utils/biometrics';
 import { confirmAction } from '../../utils/confirmAction';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
@@ -35,7 +34,6 @@ export function ProfileScreen() {
   const { activeBusiness } = useWorkspace();
   const displayName = user?.full_name || user?.email || t('profile.title');
   const [busy, setBusy] = useState(false);
-  const faceIdBlockedInExpoGo = isExpoGo() && Platform.OS === 'ios';
 
   useEffect(() => {
     void refreshBiometricState().catch(() => undefined);
@@ -55,14 +53,6 @@ export function ProfileScreen() {
   }
 
   function onToggleBiometric(next: boolean) {
-    if (faceIdBlockedInExpoGo) {
-      Alert.alert(
-        `${biometricLabel} needs a development build`,
-        `${biometricLabel} cannot run inside Expo Go. Use a development or production build of IE Orbit later to enable it.`,
-      );
-      return;
-    }
-
     if (!biometricAvailable) {
       Alert.alert(
         `${biometricLabel} unavailable`,
@@ -150,21 +140,19 @@ export function ProfileScreen() {
               <View style={styles.biometricCopy}>
                 <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
                 <Text style={styles.biometricHint}>
-                  {faceIdBlockedInExpoGo
-                    ? `Unavailable in Expo Go · needs a development build`
-                    : busy
-                      ? 'Updating…'
-                      : biometricAvailable
-                        ? biometricEnabled
-                          ? `On · use after signing out`
-                          : `Off · tap to enable with ${biometricLabel} only`
-                        : `Not available on this device`}
+                  {busy
+                    ? 'Updating…'
+                    : biometricAvailable
+                      ? biometricEnabled
+                        ? `On · use after signing out`
+                        : `Off · tap to enable with ${biometricLabel}`
+                      : `Not available on this device`}
                 </Text>
               </View>
               <Switch
-                value={biometricEnabled && !faceIdBlockedInExpoGo}
+                value={biometricEnabled}
                 onValueChange={onToggleBiometric}
-                disabled={busy || faceIdBlockedInExpoGo || (!biometricAvailable && !biometricEnabled)}
+                disabled={busy || (!biometricAvailable && !biometricEnabled)}
                 trackColor={{ true: colors.primary }}
               />
             </View>

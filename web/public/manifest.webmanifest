@@ -1,0 +1,21 @@
+{
+  "name": "IE Orbit",
+  "short_name": "IE Orbit",
+  "description": "Orbit Appoint and Orbit Mart — appointments and retail in one workspace.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f7f8fa",
+  "theme_color": "#1a56db",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml"
+    }
+  ]
+}
