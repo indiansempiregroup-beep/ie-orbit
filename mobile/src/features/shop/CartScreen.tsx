@@ -34,8 +34,11 @@ import { addressSingleLine, addressTypeMeta, deliveryAddressLine } from './addre
 import { QtyStepper } from './QtyStepper';
 import { formatShopMoney, formatShopDateIso, formatShopDateLabel, formatShopTimeLabel, isPickupTimeAfterNow, nextAvailablePickupTime, shopLinePayable } from './shopHelpers';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import type { CustomerAddress, ShopCouponOffer } from '@ie-orbit/sdk';
+import { ApiClientError, type CustomerAddress, type ShopCouponOffer } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
+
+const PLACE_ORDER_TIMEOUT_MS = 45000;
+const PLACE_ORDER_BUSY_MESSAGE = 'Server is busy. Please try again in a moment.';
 
 function tomorrowIso() {
   const value = new Date();
@@ -543,7 +546,7 @@ export function CartScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      const response = await mobileClient.mobile.createShopOrder({
+      const orderRequest = mobileClient.mobile.createShopOrder({
         tenant_slug: tenantSlug,
         business_code: businessCode,
         fulfillment_mode: fulfillment,
@@ -567,10 +570,20 @@ export function CartScreen() {
           quantity: line.quantity,
         })),
       });
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(PLACE_ORDER_BUSY_MESSAGE)), PLACE_ORDER_TIMEOUT_MS);
+      });
+      const response = await Promise.race([orderRequest, timeout]);
       clear();
       navigation.replace('ShopOrderDetail', { orderId: response.data.id, placed: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Checkout failed');
+      if (err instanceof ApiClientError && (err.status === 504 || err.status === 502 || err.status === 503)) {
+        setError(PLACE_ORDER_BUSY_MESSAGE);
+      } else if (err instanceof Error && /timeout|gateway|504/i.test(err.message)) {
+        setError(PLACE_ORDER_BUSY_MESSAGE);
+      } else {
+        setError(err instanceof Error ? err.message : 'Checkout failed');
+      }
     } finally {
       setSubmitting(false);
     }

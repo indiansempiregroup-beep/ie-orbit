@@ -24,6 +24,9 @@ logger = logging.getLogger("ie_orbit.notifications.realtime")
 
 KEEPALIVE_SECONDS = 25
 POLL_TIMEOUT_SECONDS = 1.0
+# Sync Gunicorn holds a worker thread for the life of each SSE connection.
+# Cap lifetime so threads recycle; SDK clients reconnect automatically.
+STREAM_MAX_SECONDS = 45.0
 
 
 class EventStreamRenderer(BaseRenderer):
@@ -59,8 +62,14 @@ def _keepalive_only_stream() -> Iterator[str]:
     silent stream as a signal to keep polling.
     """
     yield "event: connected\ndata: {}\n\n"
-    while True:
-        time.sleep(KEEPALIVE_SECONDS)
+    deadline = time.monotonic() + STREAM_MAX_SECONDS
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(KEEPALIVE_SECONDS, remaining))
+        if time.monotonic() >= deadline:
+            break
         yield ": keepalive\n\n"
 
 
@@ -79,10 +88,11 @@ def _notification_event_stream(*, user_id: str, business_id: str | None = None) 
         yield from _keepalive_only_stream()
         return
     last_ping = time.monotonic()
+    deadline = time.monotonic() + STREAM_MAX_SECONDS
 
     try:
         yield "event: connected\ndata: {}\n\n"
-        while True:
+        while time.monotonic() < deadline:
             message = pubsub.get_message(timeout=POLL_TIMEOUT_SECONDS)
             if message and message.get("type") == "message":
                 raw = message.get("data")

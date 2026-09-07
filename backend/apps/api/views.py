@@ -26,6 +26,7 @@ class HealthSerializer(serializers.Serializer):
 class HealthView(APIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = []
     serializer_class = HealthSerializer
 
     def get(self, request: Request) -> Response:
