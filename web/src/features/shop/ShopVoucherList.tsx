@@ -270,6 +270,7 @@ export function ShopVoucherList({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [selected, setSelected] = useState<ShopBooksVoucher | null>(null);
   const detailDialog = useDialog();
   const isSale = voucherType === 'sale';
   const pageTitle = heading ?? (isSale ? 'Sale invoices' : 'Purchases');
