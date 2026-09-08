@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -17,12 +16,17 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
+import { SearchBar } from '../../components/SearchBar';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { ShopGodown, ShopProduct, ShopProductOfficeStock } from '@ie-orbit/sdk';
-import { formatMoney } from './shopBooksHelpers';
+import { formatMoney, formatVoucherDateTime } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';
 import { PlanFeature } from '../../utils/planFeatures';
@@ -91,7 +95,6 @@ export function ShopStockAdjustScreen() {
       const [productsRes, godownsRes] = await Promise.all([
         client.shop.listProducts({
           business_id: businessId,
-          search: search.trim() || undefined,
         }),
         showGodowns
           ? client.shop.listGodowns({ business_id: businessId }).catch(() => ({ data: [] as ShopGodown[] }))
@@ -106,7 +109,7 @@ export function ShopStockAdjustScreen() {
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, search, showGodowns]);
+  }, [businessId, client, showGodowns]);
 
   useFocusEffect(
     useCallback(() => {
@@ -171,12 +174,11 @@ export function ShopStockAdjustScreen() {
           </View>
         }
       >
-        <Text style={styles.formTitle}>Adjust stock</Text>
-        <Text style={styles.productName}>{selected.name}</Text>
-        <Text style={styles.meta}>
-          On hand: {selected.stock_on_hand}
-          {selected.sku ? ` · SKU ${selected.sku}` : ''}
-        </Text>
+        <FormHero
+          icon="archive"
+          title="Adjust stock"
+          subtitle={`${selected.name} · On hand: ${selected.stock_on_hand}${selected.sku ? ` · SKU ${selected.sku}` : ''}`}
+        />
 
         {officeStock.length > 1 ? (
           <View style={styles.officeBreakdown}>
@@ -200,6 +202,7 @@ export function ShopStockAdjustScreen() {
         {officeStock.length > 1 ? (
           <SelectField
             label="Office to adjust"
+            required
             value={godownId}
             options={officeStock.map((office) => ({
               value: office.godown_id,
@@ -211,6 +214,7 @@ export function ShopStockAdjustScreen() {
         ) : showGodowns && godowns.length ? (
           <SelectField
             label="Godown"
+            required
             value={godownId}
             options={godowns.map((godown) => ({
               value: godown.id,
@@ -221,36 +225,31 @@ export function ShopStockAdjustScreen() {
           />
         ) : null}
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Quantity change (+/-)</Text>
-          <TextInput
-            style={styles.input}
-            value={quantityDelta}
-            onChangeText={(value) => setQuantityDelta(value.replace(/[^0-9.\-]/g, ''))}
-            placeholder="e.g. 5 or -2"
-            keyboardType="numbers-and-punctuation"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <Input
+          label="Quantity change (+/-)"
+          required
+          value={quantityDelta}
+          onChangeText={(value) => setQuantityDelta(value.replace(/[^0-9.\-]/g, ''))}
+          placeholder="e.g. 5 or -2"
+          keyboardType="numbers-and-punctuation"
+        />
 
         <SelectField
           label="Movement type"
+          required
           value={movementType}
           options={MOVEMENT_OPTIONS}
           onChange={setMovementType}
         />
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Reason</Text>
-          <TextInput
-            style={[styles.input, styles.notes]}
-            value={reason}
-            onChangeText={setReason}
-            placeholder="Optional note"
-            multiline
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <Input
+          label="Reason"
+          optional
+          value={reason}
+          onChangeText={setReason}
+          placeholder="Optional note"
+          multiline
+        />
       </FormScreen>
     );
   }
@@ -258,37 +257,30 @@ export function ShopStockAdjustScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <TextInput
+        <SearchBar
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={() => void load()}
           placeholder="Search products"
-          style={styles.search}
-          placeholderTextColor={colors.mutedForeground}
-          returnKeyType="search"
+          style={styles.searchBar}
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => void selectProduct(item)}>
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.stock}>{item.stock_on_hand}</Text>
-              </View>
-              <Text style={styles.meta}>
-                {formatMoney(item.price)}
-                {item.sku ? ` · ${item.sku}` : ''}
-              </Text>
-              <View style={styles.rowHint}>
-                <Feather name="edit-3" size={13} color={colors.primary} />
-                <Text style={styles.hintText}>Tap to adjust</Text>
-              </View>
-            </Pressable>
+            <BooksDocumentRow
+              title={item.name}
+              amount={String(item.stock_on_hand)}
+              meta={`${formatMoney(item.price)}${item.sku ? ` · ${item.sku}` : ''}${item.updated_at || item.created_at ? ` · ${formatVoucherDateTime(item.updated_at || item.created_at, item.updated_at || item.created_at)}` : ''}`}
+              badge="Tap to adjust"
+              icon="package"
+              iconTone={Number(item.stock_on_hand) <= 0 ? 'rose' : 'navy'}
+              onPress={() => void selectProduct(item)}
+            />
           )}
           ListEmptyComponent={
             !loading ? (
@@ -307,16 +299,7 @@ export function ShopStockAdjustScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  search: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.foreground,
-    backgroundColor: colors.card,
-    marginBottom: spacing.sm,
-  },
+  searchBar: { marginBottom: spacing.sm },
   formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
   productName: { fontFamily: fonts.bodySemi, fontSize: 16, color: colors.foreground },
   formFooter: { gap: spacing.sm },
@@ -354,11 +337,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -16,9 +17,11 @@ import { SelectField } from '../../components/SelectField';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import { brand, colors, radius, spacing, typography } from '../../theme/tokens';
+import { brand, colors, radius, shadows, spacing, typography } from '../../theme/tokens';
 import { layout } from '../../theme/layout';
 import { getApiErrorMessage } from '../../utils/format';
+import { emailFieldError } from '../../utils/emailValidation';
+import { indianMobileError, passwordFieldError, requiredMessage } from '../../utils/formValidation';
 import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../utils/googleAuth';
 import { PRODUCT_CATALOG, formatInrFromPaise, formatPlanDisplayName, getProductName, getRecommendedPlanCode, isRecommendedPlanCode } from '../../utils/products';
 import { opsClient } from '../../api/client';
@@ -165,6 +168,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [catalogPlans, setCatalogPlans] = useState<BillingPlanCatalogItem[]>([]);
 
   function plansForProduct(productId: string) {
@@ -206,6 +210,11 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
 
   function patch(partial: Partial<RegisterWizardValues>) {
     setValues((current) => ({ ...current, ...partial }));
+    setFieldErrors((current) => {
+      const next = { ...current };
+      for (const key of Object.keys(partial)) delete next[key];
+      return next;
+    });
   }
 
   function updateHours(day: keyof WeeklyHours, patchHours: Partial<WeeklyHours[keyof WeeklyHours]>) {
@@ -218,30 +227,48 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
     }));
   }
 
-  function validateStep(): string | null {
+  function validateStep(): Record<string, string> {
+    const next: Record<string, string> = {};
     if (step === 0) {
-      if (!values.firstName.trim() || !values.email.trim()) return 'Fill in account details.';
+      if (!values.firstName.trim()) next.firstName = requiredMessage('First name');
+      if (!values.lastName.trim()) next.lastName = requiredMessage('Last name');
+      const emailError = emailFieldError(values.email);
+      if (emailError) next.email = emailError;
+      const mobileError = indianMobileError(values.mobile, true);
+      if (mobileError) next.mobile = mobileError;
       if (!values.googleIdToken) {
-        if (!values.password) return 'Fill in account details.';
-        if (values.password.length < 8) return 'Password must be at least 8 characters.';
-        if (values.password !== confirmPassword) return 'Passwords do not match.';
+        const passwordError = passwordFieldError(values.password, { confirm: confirmPassword });
+        if (passwordError) next.password = passwordError;
+        if (!confirmPassword) next.confirmPassword = requiredMessage('Confirm password');
       }
     }
     if (step === 1) {
-      if (!values.businessName.trim() || !values.businessEmail.trim()) return 'Business name and email are required.';
-    }
-    if (step === 2) {
-      if (!values.selectedProducts.length) return 'Select at least one product.';
-      const missingPlan = values.selectedProducts.find((productId) => !values.planCodes[productId]);
-      if (missingPlan) return `Select a ${getProductName(missingPlan)} package.`;
-      if (!values.skipHours) {
-        const openDays = HOUR_DAYS.filter((day) => values.businessHours[day.value].open);
-        if (!openDays.length) return 'Open at least one day, or skip hours for now.';
-        const invalid = openDays.some((day) => values.businessHours[day.value].start >= values.businessHours[day.value].end);
-        if (invalid) return 'Closing time must be after opening time.';
+      if (!values.businessName.trim()) next.businessName = requiredMessage('Business name');
+      if (!values.displayName.trim()) next.displayName = requiredMessage('Display name');
+      const businessEmailError = emailFieldError(values.businessEmail);
+      if (businessEmailError) next.businessEmail = businessEmailError;
+      const phoneError = indianMobileError(values.businessPhone, true);
+      if (phoneError) next.businessPhone = phoneError;
+      if (!values.address.trim()) next.address = requiredMessage('Address');
+      if (!values.city.trim()) next.city = requiredMessage('City');
+      if (!values.country.trim()) next.country = requiredMessage('Country');
+      if (!values.postalCode.trim()) next.postalCode = requiredMessage('Postal code');
+      if (values.latitude == null || values.longitude == null) {
+        next.address = next.address || 'Select a map location for this address.';
       }
     }
-    return null;
+    if (step === 2) {
+      if (!values.selectedProducts.length) next.products = 'Select at least one product.';
+      const missingPlan = values.selectedProducts.find((productId) => !values.planCodes[productId]);
+      if (missingPlan) next.products = `Select a ${getProductName(missingPlan)} package.`;
+      if (!values.skipHours) {
+        const openDays = HOUR_DAYS.filter((day) => values.businessHours[day.value].open);
+        if (!openDays.length) next.hours = 'Open at least one day, or skip hours for now.';
+        const invalid = openDays.some((day) => values.businessHours[day.value].start >= values.businessHours[day.value].end);
+        if (invalid) next.hours = 'Closing time must be after opening time.';
+      }
+    }
+    return next;
   }
 
   function clearCurrentStep() {
@@ -288,6 +315,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
       });
     }
     setError(null);
+    setFieldErrors({});
   }
 
   async function finish() {
@@ -337,40 +365,64 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
               <Text style={styles.googleLinkedCopy}>{values.email}</Text>
             </View>
           )}
-          <Input label="First name" value={values.firstName} onChangeText={(v) => patch({ firstName: v })} />
-          <Input label="Last name" value={values.lastName} onChangeText={(v) => patch({ lastName: v })} />
+          <Input
+            label="First name"
+            required
+            value={values.firstName}
+            onChangeText={(v) => patch({ firstName: v })}
+            error={fieldErrors.firstName}
+          />
+          <Input
+            label="Last name"
+            required
+            value={values.lastName}
+            onChangeText={(v) => patch({ lastName: v })}
+            error={fieldErrors.lastName}
+          />
           <Input
             label="Email"
+            required
             autoCapitalize="none"
             keyboardType="email-address"
             value={values.email}
             editable={!values.googleIdToken}
             onChangeText={(v) => patch({ email: v })}
+            error={fieldErrors.email}
           />
           <Input
             label="Mobile"
+            required
             keyboardType="phone-pad"
             value={values.mobile}
             onChangeText={(v) => patch({ mobile: v })}
+            error={fieldErrors.mobile}
           />
           {!values.googleIdToken ? (
             <>
               <Input
                 label="Password"
+                required
                 secureTextEntry
                 value={values.password}
                 onChangeText={(v) => patch({ password: v })}
+                error={fieldErrors.password}
               />
               <Input
                 label="Confirm password"
+                required
                 secureTextEntry
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(value) => {
+                  setConfirmPassword(value);
+                  setFieldErrors((current) => ({ ...current, confirmPassword: '', password: current.password || '' }));
+                }}
+                error={fieldErrors.confirmPassword}
               />
             </>
           ) : null}
           <Input
-            label="Affiliate code (optional)"
+            label="Affiliate code"
+            optional
             autoCapitalize="characters"
             value={values.affiliateCode || ''}
             onChangeText={(v) => patch({ affiliateCode: v.toUpperCase() })}
@@ -383,24 +435,38 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
         <>
           <Input
             label="Business name"
+            required
             value={values.businessName}
             onChangeText={(v) => patch({ businessName: v, displayName: values.displayName || v })}
+            error={fieldErrors.businessName}
           />
-          <Input label="Display name" value={values.displayName} onChangeText={(v) => patch({ displayName: v })} />
+          <Input
+            label="Display name"
+            required
+            value={values.displayName}
+            onChangeText={(v) => patch({ displayName: v })}
+            error={fieldErrors.displayName}
+          />
           <Input
             label="Business email"
+            required
             autoCapitalize="none"
             keyboardType="email-address"
             value={values.businessEmail}
             onChangeText={(v) => patch({ businessEmail: v })}
+            error={fieldErrors.businessEmail}
           />
           <Input
             label="Phone"
+            required
             keyboardType="phone-pad"
             value={values.businessPhone}
             onChangeText={(v) => patch({ businessPhone: v })}
+            error={fieldErrors.businessPhone}
           />
           <AddressLocationPicker
+            required
+            fieldError={fieldErrors.address}
             value={values.address}
             latitude={values.latitude}
             longitude={values.longitude}
@@ -417,16 +483,32 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
               })
             }
           />
-        <Input label="City" value={values.city} onChangeText={(v) => patch({ city: v })} editable={!(values.latitude != null && values.longitude != null)} />
+        <Input
+          label="City"
+          required
+          value={values.city}
+          onChangeText={(v) => patch({ city: v })}
+          editable={!(values.latitude != null && values.longitude != null)}
+          error={fieldErrors.city}
+        />
         <Input label="State" value={values.state} onChangeText={(v) => patch({ state: v })} editable={!(values.latitude != null && values.longitude != null)} />
         <Input
           label="Country code"
+          required
           value={values.country}
           onChangeText={(v) => patch({ country: v })}
           autoCapitalize="characters"
           editable={!(values.latitude != null && values.longitude != null)}
+          error={fieldErrors.country}
         />
-        <Input label="Postal code" value={values.postalCode} onChangeText={(v) => patch({ postalCode: v })} editable={!(values.latitude != null && values.longitude != null)} />
+        <Input
+          label="Postal code"
+          required
+          value={values.postalCode}
+          onChangeText={(v) => patch({ postalCode: v })}
+          editable={!(values.latitude != null && values.longitude != null)}
+          error={fieldErrors.postalCode}
+        />
         </>
       ) : null}
 
@@ -434,23 +516,27 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
         <>
           <SelectField
             label="Timezone"
+            required
             value={values.timezone}
             options={TIMEZONES}
             onChange={(v) => patch({ timezone: v })}
           />
           <SelectField
             label="Currency"
+            required
             value={values.currency}
             options={CURRENCIES}
             onChange={(v) => patch({ currency: v })}
           />
           <SelectField
             label="Language"
+            required
             value={values.language}
             options={LANGUAGES}
             onChange={(v) => patch({ language: v })}
           />
           <Text style={styles.sectionLabel}>Products</Text>
+          {fieldErrors.products ? <Text style={styles.error}>{fieldErrors.products}</Text> : null}
           <Text style={styles.hint}>Select one or both. Packages stay inside the product card.</Text>
           {PRODUCT_CATALOG.map((product) => {
             const selected = values.selectedProducts.includes(product.id);
@@ -517,7 +603,9 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
           {values.skipHours ? (
             <Text style={styles.hint}>You can set hours later in Settings.</Text>
           ) : (
-            HOUR_DAYS.map((day) => {
+            <>
+              {fieldErrors.hours ? <Text style={styles.error}>{fieldErrors.hours}</Text> : null}
+              {HOUR_DAYS.map((day) => {
               const row = values.businessHours[day.value];
               return (
                 <View key={day.value} style={styles.hoursCard}>
@@ -545,7 +633,8 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
                   ) : null}
                 </View>
               );
-            })
+            })}
+            </>
           )}
         </>
       ) : null}
@@ -566,6 +655,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
           />
           <ImagePickerButton
             label="Logo"
+            optional
             variant="card"
             valueUri={values.logoAsset?.uri || null}
             onPicked={(asset: ImagePickerAsset) => patch({ logoAsset: asset })}
@@ -584,11 +674,13 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
             label="Continue"
             fullWidth
             onPress={() => {
-              const message = validateStep();
-              if (message) {
-                setError(message);
+              const nextErrors = validateStep();
+              if (Object.keys(nextErrors).length) {
+                setFieldErrors(nextErrors);
+                setError(Object.values(nextErrors)[0]);
                 return;
               }
+              setFieldErrors({});
               setError(null);
               setStep((s) => s + 1);
             }}
@@ -618,13 +710,18 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
         </View>
       ) : (
         <>
-          <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          <LinearGradient
+            colors={[brand.gradientStart, brand.gradientEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.header, { paddingTop: insets.top + spacing.lg }]}
+          >
             <Text style={styles.kicker}>New workspace</Text>
             <Text style={styles.title}>Register your business</Text>
             <Text style={styles.stepLabel}>
               Step {step + 1} of {STEPS.length}: {STEPS[step]}
             </Text>
-          </View>
+          </LinearGradient>
           <RefreshableScrollView contentContainerStyle={styles.content}>{stepFields}</RefreshableScrollView>
         </>
       )}
@@ -645,6 +742,7 @@ const styles = StyleSheet.create({
   stepLabel: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginTop: spacing.sm },
   content: { padding: spacing.xxl, gap: spacing.md, paddingBottom: spacing.xxxl },
   hint: { ...typography.caption, color: colors.mutedForeground },
+  error: { ...typography.caption, color: colors.destructive },
   googleLinked: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -663,11 +761,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
     backgroundColor: colors.card,
+    ...shadows.soft,
   },
-  productCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.muted,
-  },
+  productCardSelected: { borderColor: colors.primary, backgroundColor: colors.secondary },
   packageLabel: {
     ...typography.caption,
     color: colors.mutedForeground,
@@ -683,11 +779,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: 4,
     backgroundColor: colors.card,
+    ...shadows.soft,
   },
-  packageCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.muted,
-  },
+  packageCardSelected: { borderColor: colors.primary, backgroundColor: colors.secondary },
   packageTitle: { ...typography.body, color: colors.foreground, fontWeight: '700' },
   packageMeta: { ...typography.caption, color: colors.mutedForeground },
   hoursHeader: { gap: spacing.sm, marginTop: spacing.sm },
@@ -699,6 +793,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.card,
     gap: spacing.sm,
+    ...shadows.soft,
   },
   hoursRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dayLabel: { ...typography.body, color: colors.foreground, fontWeight: '600' },
@@ -720,6 +815,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.xxxl,
     gap: spacing.md,
+    ...shadows.soft,
   },
   desktopKicker: {
     ...typography.caption,

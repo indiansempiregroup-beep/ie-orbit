@@ -22,7 +22,10 @@ import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { Input } from '../../components/ui/Input';
+import { FieldLabel } from '../../components/ui/FieldLabel';
 import { DesktopPage } from '../../components/DesktopPage';
+import { SearchBar } from '../../components/SearchBar';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type {
@@ -35,11 +38,14 @@ import type {
 import {
   customerLabel,
   formatMoney,
+  formatVoucherDateTime,
   supplierLabel,
   todayIso,
-  voucherStatusStyle,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 
 type DocLine = {
   key: string;
@@ -121,6 +127,7 @@ export function ShopBooksDocumentsScreen() {
   const [documentDate, setDocumentDate] = useState(todayIso());
   const [lines, setLines] = useState<DocLine[]>([emptyLine()]);
   const [notes, setNotes] = useState('');
+  const [search, setSearch] = useState('');
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -200,6 +207,29 @@ export function ShopBooksDocumentsScreen() {
   );
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
+
+  const filteredDocs = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return documents;
+    return documents.filter((item) =>
+      [item.document_number, item.customer_name ?? '', item.supplier_name ?? '', item.status, String(item.total)]
+        .join(' ')
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [documents, search]);
+
+  const docSummary = useMemo(() => {
+    let total = 0;
+    let open = 0;
+    let converted = 0;
+    for (const item of filteredDocs) {
+      total += Number(item.total ?? 0);
+      if (canConvert(item)) open += 1;
+      else converted += 1;
+    }
+    return { total, open, converted, count: filteredDocs.length };
+  }, [filteredDocs]);
 
   const partyOptions = useMemo(() => {
     if (meta.usesSupplier) {
@@ -326,19 +356,21 @@ export function ShopBooksDocumentsScreen() {
 
         <SelectField
           label={meta.usesSupplier ? 'Supplier' : 'Customer'}
+          required
           value={partyId}
           options={partyOptions}
           onChange={setPartyId}
           searchable
         />
 
-        <DateField label="Date" value={documentDate} onChange={setDocumentDate} allowClear={false} />
+        <DateField label="Date" required value={documentDate} onChange={setDocumentDate} allowClear={false} />
 
         <Text style={styles.section}>Items</Text>
         {lines.map((line) => (
           <View key={line.key} style={styles.lineCard}>
             <SelectField
               label="Product"
+              required
               value={line.productId}
               options={productOptions}
               onChange={(value) => selectProductForLine(line.key, value)}
@@ -347,7 +379,7 @@ export function ShopBooksDocumentsScreen() {
             />
             <View style={styles.lineRow}>
               <View style={styles.lineField}>
-                <Text style={styles.smallLabel}>Qty</Text>
+                <FieldLabel label="Qty" required />
                 <TextInput
                   style={styles.input}
                   value={line.qty}
@@ -357,7 +389,7 @@ export function ShopBooksDocumentsScreen() {
                 />
               </View>
               <View style={styles.lineField}>
-                <Text style={styles.smallLabel}>Rate</Text>
+                <FieldLabel label="Rate" required />
                 <TextInput
                   style={styles.input}
                   value={line.rate}
@@ -367,7 +399,7 @@ export function ShopBooksDocumentsScreen() {
                 />
               </View>
               <View style={styles.lineField}>
-                <Text style={styles.smallLabel}>GST %</Text>
+                <FieldLabel label="GST %" optional />
                 <TextInput
                   style={styles.input}
                   value={line.gst}
@@ -402,13 +434,12 @@ export function ShopBooksDocumentsScreen() {
           </View>
         </View>
 
-        <TextInput
-          style={[styles.input, styles.notes]}
+        <Input
+          label="Notes"
+          optional
           value={notes}
           onChangeText={setNotes}
-          placeholder="Notes (optional)"
           multiline
-          placeholderTextColor={colors.mutedForeground}
         />
       </FormScreen>
     );
@@ -417,45 +448,42 @@ export function ShopBooksDocumentsScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <VoucherSummaryCards
+          metrics={[
+            { label: 'Total', value: formatMoney(docSummary.total), hint: String(docSummary.count) },
+            { label: 'Open', value: String(docSummary.open), tone: 'due' },
+            { label: 'Done', value: String(docSummary.converted), tone: 'paid' },
+          ]}
+        />
+        <SearchBar value={search} onChangeText={setSearch} placeholder={`Search ${meta.title.toLowerCase()}`} style={styles.search} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
-          data={documents}
+          {...groupedListProps(filteredDocs.length)}
+          data={filteredDocs}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
-            const badge = voucherStatusStyle(item.status);
             const party =
               item.customer_name ||
               item.supplier_name ||
               (item.customer || item.supplier ? 'Party' : 'No party');
             const converting = convertingId === item.id;
+            const open = canConvert(item);
+            const converted = Boolean(item.converted_voucher || (item.status || '').toLowerCase() === 'converted');
             return (
-              <View style={styles.row}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.document_number}</Text>
-                  <Text style={styles.total}>{formatMoney(item.total)}</Text>
-                </View>
-                <Text style={styles.metaText}>
-                  {party}
-                  {item.document_date ? ` · ${item.document_date}` : ''}
-                </Text>
-                <View style={styles.rowBottom}>
-                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                  </View>
-                  {canConvert(item) ? (
-                    <Pressable onPress={() => void onConvert(item)} hitSlop={8} disabled={converting}>
-                      <Text style={[styles.convertText, converting && styles.convertDisabled]}>
-                        {converting ? 'Working…' : meta.convertLabel}
-                      </Text>
-                    </Pressable>
-                  ) : item.converted_voucher || (item.status || '').toLowerCase() === 'converted' ? (
-                    <Text style={styles.convertedMeta}>Converted</Text>
-                  ) : null}
-                </View>
-              </View>
+              <BooksDocumentRow
+                title={party}
+                amount={formatMoney(item.total)}
+                meta={`${item.document_number}${item.document_date || item.created_at ? ` · ${formatVoucherDateTime(item.document_date, item.created_at)}` : ''}`}
+                badge={item.status}
+                badgeKind={converted ? 'paid' : open ? 'due' : 'neutral'}
+                icon="file-text"
+                iconTone={converted ? 'green' : 'navy'}
+                actionLabel={open ? (converting ? 'Working…' : meta.convertLabel) : undefined}
+                onAction={open && !converting ? () => void onConvert(item) : undefined}
+              />
             );
           }}
           ListEmptyComponent={
@@ -477,6 +505,7 @@ export function ShopBooksDocumentsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  search: { marginBottom: spacing.sm },
   headerBtn: {
     width: 40,
     height: 40,
@@ -516,11 +545,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
   lineCard: {

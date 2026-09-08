@@ -11,8 +11,11 @@ type SingleProps = {
   onChangeValues?: never;
   allowPast?: boolean;
   allowFuture?: boolean;
+  minYear?: number;
+  maxYear?: number;
   /** Month to show when browsing without changing the selected value. */
   viewDate?: string;
+  onYearChange?: (year: number) => void;
 };
 
 type MultiProps = {
@@ -23,7 +26,10 @@ type MultiProps = {
   onChange?: never;
   allowPast?: boolean;
   allowFuture?: boolean;
+  minYear?: number;
+  maxYear?: number;
   viewDate?: string;
+  onYearChange?: (year: number) => void;
 };
 
 type Props = SingleProps | MultiProps;
@@ -45,6 +51,15 @@ function parseIso(value: string) {
 export function CalendarPicker(props: Props) {
   const allowPast = props.allowPast ?? true;
   const allowFuture = props.allowFuture ?? true;
+  const nowYear = new Date().getFullYear();
+  const minYear = props.minYear ?? (allowPast ? nowYear - 80 : nowYear);
+  const maxYear = props.maxYear ?? (allowFuture ? nowYear + 10 : nowYear);
+
+  function clampMonth(next: Date) {
+    const year = Math.min(maxYear, Math.max(minYear, next.getFullYear()));
+    return new Date(year, next.getMonth(), 1);
+  }
+
   const isMulti = props.mode === 'multiple';
   const selectedKey = isMulti ? props.values.join(',') : props.value || '';
   const selectedSet = useMemo(
@@ -58,12 +73,28 @@ export function CalendarPicker(props: Props) {
       : props.value || toIso(new Date()));
   const selectedDate = parseIso(anchor);
   const [month, setMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+  const [pickingYear, setPickingYear] = useState(false);
+  const years = useMemo(() => {
+    const list: number[] = [];
+    for (let year = maxYear; year >= minYear; year -= 1) list.push(year);
+    return list;
+  }, [minYear, maxYear]);
 
   useEffect(() => {
     if (!anchor) return;
     const next = parseIso(anchor);
     setMonth(new Date(next.getFullYear(), next.getMonth(), 1));
   }, [anchor]);
+
+  const canPrevMonth =
+    month.getFullYear() > minYear || (month.getFullYear() === minYear && month.getMonth() > 0);
+  const canNextMonth =
+    month.getFullYear() < maxYear || (month.getFullYear() === maxYear && month.getMonth() < 11);
+  function selectYear(year: number) {
+    setMonth(clampMonth(new Date(year, month.getMonth(), 1)));
+    setPickingYear(false);
+    props.onYearChange?.(year);
+  }
 
   const weeks = useMemo(() => {
     const year = month.getFullYear();
@@ -100,21 +131,55 @@ export function CalendarPicker(props: Props) {
     <View style={styles.card}>
       <View style={styles.header}>
         <Pressable
-          style={styles.navBtn}
-          onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+          style={[styles.navBtn, (pickingYear || !canPrevMonth) && styles.navBtnDisabled]}
+          disabled={pickingYear || !canPrevMonth}
+          onPress={() => setMonth(clampMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)))}
+          accessibilityLabel="Previous month"
         >
           <Feather name="chevron-left" size={16} color={colors.foreground} />
         </Pressable>
-        <Text style={styles.monthLabel}>
-          {month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-        </Text>
         <Pressable
-          style={styles.navBtn}
-          onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+          style={styles.monthBtn}
+          onPress={() => setPickingYear((current) => !current)}
+          accessibilityLabel="Select year"
+        >
+          <Text style={styles.monthLabel}>
+            {pickingYear
+              ? 'Select year'
+              : month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+          </Text>
+          <Feather
+            name={pickingYear ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={colors.primary}
+          />
+        </Pressable>
+        <Pressable
+          style={[styles.navBtn, (pickingYear || !canNextMonth) && styles.navBtnDisabled]}
+          disabled={pickingYear || !canNextMonth}
+          onPress={() => setMonth(clampMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1)))}
+          accessibilityLabel="Next month"
         >
           <Feather name="chevron-right" size={16} color={colors.foreground} />
         </Pressable>
       </View>
+      {pickingYear ? (
+        <View style={styles.yearGrid}>
+          {years.map((year) => {
+            const selected = year === month.getFullYear();
+            return (
+              <Pressable
+                key={year}
+                style={[styles.yearChip, selected && styles.yearChipSelected]}
+                onPress={() => selectYear(year)}
+              >
+                <Text style={[styles.yearChipText, selected && styles.yearChipTextSelected]}>{year}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : (
+        <>
       <View style={styles.weekdays}>
         {WEEKDAYS.map((d) => (
           <Text key={d} style={styles.weekday}>
@@ -159,6 +224,8 @@ export function CalendarPicker(props: Props) {
           })}
         </View>
       ))}
+        </>
+      )}
     </View>
   );
 }
@@ -166,15 +233,11 @@ export function CalendarPicker(props: Props) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    shadowColor: '#142033',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
   },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md, gap: spacing.sm },
+  navPair: { flexDirection: 'row', gap: 4 },
   navBtn: {
     width: 34,
     height: 34,
@@ -183,7 +246,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  monthLabel: { ...typography.label, color: colors.foreground, fontFamily: typography.label.fontFamily },
+  monthBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 34,
+    paddingHorizontal: spacing.sm,
+  },
+  monthLabel: {
+    ...typography.label,
+    color: colors.foreground,
+    textAlign: 'center',
+  },
+  navBtnDisabled: { opacity: 0.35 },
+  yearGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  yearChip: {
+    width: '31%',
+    flexGrow: 1,
+    minHeight: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.inputBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yearChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  yearChipText: { ...typography.body, color: colors.foreground, fontWeight: '700' },
+  yearChipTextSelected: { color: colors.primaryForeground },
   weekdays: { flexDirection: 'row', marginBottom: spacing.sm },
   weekday: { flex: 1, textAlign: 'center', ...typography.caption, color: colors.mutedForeground, fontWeight: '600' },
   weekRow: { flexDirection: 'row' },

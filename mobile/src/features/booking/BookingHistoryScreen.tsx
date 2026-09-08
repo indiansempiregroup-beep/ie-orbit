@@ -13,8 +13,9 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { BookingCard } from '../../components/BookingCard';
+import { HomeBookingRow } from '../../components/HomeBookingRow';
 import { Chip } from '../../components/ui/Chip';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { useMobileBookings } from '../../hooks/useMobileBookings';
@@ -90,13 +91,16 @@ export function BookingHistoryScreen() {
       <FlatList
         data={visible}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, flexGrow: 1 }}
+        {...groupedListProps(visible.length, styles.listGroup)}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40, flexGrow: 1 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primary} colors={[primary]} />
         }
         renderItem={({ item }) => (
-          <BookingCard
+          <HomeBookingRow
             booking={item}
+            variant="recent"
+            attached
             primaryColor={primary}
             onPress={() => navigation.navigate('BookingDetail', { bookingId: item.id })}
           />
@@ -145,4 +149,5 @@ const styles = StyleSheet.create({
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   count: { ...typography.caption, color: colors.mutedForeground },
   loader: { marginTop: spacing.md },
+  listGroup: { marginHorizontal: spacing.lg, marginTop: spacing.lg },
 });

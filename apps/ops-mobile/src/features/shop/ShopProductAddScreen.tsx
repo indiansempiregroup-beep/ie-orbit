@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -24,13 +23,20 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadProductImage } from '../../api/media';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { HtmlEditorField } from '../../components/HtmlEditorField';
 import { RemoteImage } from '../../components/RemoteImage';
 import { Button } from '../../components/ui/Button';
+import { Chip } from '../../components/ui/Chip';
+import { FieldLabel } from '../../components/ui/FieldLabel';
+import { FieldRow } from '../../components/ui/FieldRow';
+import { FormAlert } from '../../components/ui/FormAlert';
+import { FormSection } from '../../components/ui/FormSection';
+import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
 import { CURRENCIES } from '../../constants/options';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
-import { colors, fonts, spacing } from '../../theme/tokens';
+import { colors, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import {
   MAX_PRODUCT_IMAGES,
@@ -496,7 +502,11 @@ export function ShopProductAddScreen() {
   }
 
   async function save() {
-    if (!client || !businessId || !form.name.trim()) return;
+    if (!client || !businessId) return;
+    if (!form.name.trim()) {
+      setMessage('Product name is required.');
+      return;
+    }
     setBusy(true);
     setMessage(null);
     const gallery = normalizeProductGallery(form.images.map(toStoredProductImageUrl));
@@ -564,6 +574,13 @@ export function ShopProductAddScreen() {
 
   const imageSlots = ensureProductImageSlots(form.images);
 
+  function openScanner() {
+    navigation.navigate('BarcodeScanner', {
+      target: 'addProduct',
+      ...(productId ? { productId } : {}),
+    });
+  }
+
   return (
     <FormScreen
       footer={
@@ -577,317 +594,349 @@ export function ShopProductAddScreen() {
         />
       }
     >
-      <Text style={styles.helper}>
-        Upload up to {MAX_PRODUCT_IMAGES} photos. The first photo is the primary image on product
-        cards. Photo 1/2 can also drive packaging analysis. Scan the barcode for the best match —
-        always review suggested fields before saving.
-      </Text>
+      <FormHero
+        title={isEditing ? 'Edit product' : 'New product'}
+        subtitle={
+          isEditing
+            ? 'Update photos, price, stock, and barcode for this item.'
+            : 'Add photos, fill in the basics, then save to the catalog.'
+        }
+      />
 
-      <View style={styles.photoGrid}>
-        {imageSlots.map((url, index) => {
-          const preview = previews[index] || url;
-          return (
-            <View key={index} style={styles.photoCard}>
-              <Pressable onPress={() => void captureAt(index)} disabled={busy}>
-                {preview ? (
-                  <RemoteImage uri={resolveMediaUrl(preview) || preview} style={styles.photo} />
-                ) : (
-                  <View style={styles.photoPlaceholder}>
-                    <Feather name="camera" size={20} color={colors.mutedForeground} />
-                    <Text style={styles.photoLabel}>{productImageSlotLabel(index)}</Text>
-                  </View>
-                )}
-              </Pressable>
-              <Text style={styles.photoCaption}>{productImageSlotLabel(index)}</Text>
-              {url || previews[index] ? (
-                <Pressable onPress={() => removeAt(index)} style={styles.removeBtn}>
-                  <Text style={styles.removeText}>Remove</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
-
-      <View style={styles.actions}>
-        <Pressable
-          style={[styles.actionBtn, styles.actionSecondary]}
-          onPress={() =>
-            navigation.navigate('BarcodeScanner', {
-              target: 'addProduct',
-              ...(productId ? { productId } : {}),
-            })
+      {message ? (
+        <FormAlert
+          message={message}
+          tone={
+            /unable|failed|error|expired|permission/i.test(message) ? 'error' : 'success'
           }
-        >
-          <Feather name="maximize" size={18} color={colors.primary} />
-          <Text style={styles.actionSecondaryText}>Scan barcode</Text>
-        </Pressable>
-        <Pressable
-          style={styles.actionBtn}
-          onPress={() => void analyzePackaging()}
-          disabled={busy || analyzing || (!form.images[0] && !form.images[1])}
-        >
-          <Feather name="zap" size={18} color="#fff" />
-          <Text style={styles.actionText}>{analyzing ? 'Analysing…' : 'Analyse packaging'}</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Search by product name</Text>
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
-            value={nameLookup}
-            onChangeText={setNameLookup}
-            placeholder="e.g. Pedigree Adult 3kg"
-            placeholderTextColor={colors.mutedForeground}
-            onSubmitEditing={() => void lookupByName()}
-            returnKeyType="search"
-          />
-          <Pressable style={styles.lookupBtn} onPress={() => void lookupByName()} disabled={busy}>
-            <Feather name="search" size={18} color="#fff" />
-          </Pressable>
-        </View>
-      </View>
-
-      {busy || analyzing ? (
-        <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.sm }} />
-      ) : null}
-      {message ? <Text style={styles.meta}>{message}</Text> : null}
-
-      {(
-        [
-          ['name', 'Product name'],
-          ['brand', 'Brand'],
-          ['sku', 'SKU'],
-          ['price', 'Price'],
-          ['tax_rate', 'GST %'],
-          ['stock_on_hand', 'Stock on hand'],
-          ['low_stock_threshold', 'Low stock alert'],
-          ['pack_size', 'Pack size / quantity'],
-        ] as const
-      ).map(([key, label]) => (
-        <View key={key} style={styles.field}>
-          <Text style={styles.fieldLabel}>{label}</Text>
-          <TextInput
-            style={styles.input}
-            value={form[key]}
-            onChangeText={(value) => setField(key, value)}
-            placeholderTextColor={colors.mutedForeground}
-            keyboardType={
-              key === 'price' || key === 'tax_rate' || key === 'stock_on_hand' || key === 'low_stock_threshold'
-                ? 'decimal-pad'
-                : 'default'
-            }
-          />
-        </View>
-      ))}
-
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Barcode / RFID EPC</Text>
-        <View style={styles.row}>
-          <TextInput
-            style={styles.input}
-            value={form.barcode}
-            onChangeText={(value) => setField('barcode', value)}
-            placeholder="Scan or type barcode"
-            placeholderTextColor={colors.mutedForeground}
-          />
-          <Pressable
-            style={styles.lookupBtn}
-            onPress={() =>
-              navigation.navigate('BarcodeScanner', {
-                target: 'addProduct',
-                ...(productId ? { productId } : {}),
-              })
-            }
-            accessibilityLabel="Scan barcode with camera"
-          >
-            <Feather name="camera" size={18} color="#fff" />
-          </Pressable>
-        </View>
-      </View>
-
-      {showGodowns && godowns.length ? (
-        <SelectField
-          label={isEditing ? 'Godown for stock changes' : 'Stock godown'}
-          value={godownId}
-          options={godowns.map((godown) => ({
-            value: godown.id,
-            label: godown.is_default ? `${godown.name} (default)` : godown.name,
-          }))}
-          onChange={setGodownId}
-          placeholder="Select godown"
         />
       ) : null}
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>GST on price</Text>
-        <View style={styles.chips}>
+      <FormSection
+        title="Photos"
+        subtitle={`Primary photo first · up to ${MAX_PRODUCT_IMAGES} images`}
+      >
+        <View style={styles.photoGrid}>
+          {imageSlots.map((url, index) => {
+            const preview = previews[index] || url;
+            const isPrimary = index === 0;
+            return (
+              <View key={index} style={[styles.photoCard, isPrimary && styles.photoCardPrimary]}>
+                <Pressable onPress={() => void captureAt(index)} disabled={busy} style={styles.photoHit}>
+                  {preview ? (
+                    <RemoteImage
+                      uri={resolveMediaUrl(preview) || preview}
+                      style={[styles.photo, isPrimary && styles.photoPrimary]}
+                    />
+                  ) : (
+                    <View style={[styles.photoPlaceholder, isPrimary && styles.photoPrimary]}>
+                      <Feather name={isPrimary ? 'camera' : 'plus'} size={20} color={colors.mutedForeground} />
+                      <Text style={styles.photoLabel}>
+                        {isPrimary ? 'Add primary photo' : `Photo ${index + 1}`}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+                {url || previews[index] ? (
+                  <Pressable
+                    onPress={() => removeAt(index)}
+                    style={styles.photoRemove}
+                    accessibilityLabel={`Remove ${productImageSlotLabel(index)}`}
+                  >
+                    <Feather name="x" size={14} color="#fff" />
+                  </Pressable>
+                ) : null}
+                {isPrimary && (url || previews[index]) ? (
+                  <View style={styles.primaryBadge}>
+                    <Text style={styles.primaryBadgeText}>Primary</Text>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+        <Button
+          label={analyzing ? 'Analysing packaging…' : 'Fill details from photos'}
+          variant="soft"
+          icon="zap"
+          disabled={busy || analyzing || (!form.images[0] && !form.images[1])}
+          onPress={() => void analyzePackaging()}
+        />
+      </FormSection>
+
+      <FormSection title="Lookup" subtitle="Scan a barcode or search the catalog to prefill fields">
+        <View style={styles.lookupRow}>
+          <View style={styles.lookupField}>
+            <Input
+              label="Search by name"
+              value={nameLookup}
+              onChangeText={setNameLookup}
+              placeholder="e.g. Pedigree Adult 3kg"
+              returnKeyType="search"
+              onSubmitEditing={() => void lookupByName()}
+            />
+          </View>
           <Pressable
-            style={[styles.chip, form.tax_inclusive === 'excluded' && styles.chipActive]}
-            onPress={() => setField('tax_inclusive', 'excluded')}
+            style={styles.iconAction}
+            onPress={() => void lookupByName()}
+            disabled={busy}
+            accessibilityLabel="Search catalog"
           >
-            <Text style={styles.chipText}>GST excluded</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.chip, form.tax_inclusive === 'included' && styles.chipActive]}
-            onPress={() => setField('tax_inclusive', 'included')}
-          >
-            <Text style={styles.chipText}>GST included</Text>
+            <Feather name="search" size={18} color={colors.primaryForeground} />
           </Pressable>
         </View>
-        <Text style={styles.meta}>
-          {form.tax_inclusive === 'included'
-            ? 'Selling price already includes GST. POS will split tax from the price.'
-            : 'GST is added on top of the selling price at checkout.'}
-        </Text>
-      </View>
+        <Button label="Scan barcode" variant="outline" icon="maximize" onPress={openScanner} />
+      </FormSection>
 
-      <SelectField
-        label="Currency"
-        value={form.currency}
-        options={
-          form.currency && !CURRENCIES.some((option) => option.value === form.currency)
-            ? [...CURRENCIES, { value: form.currency, label: form.currency }]
-            : CURRENCIES
-        }
-        onChange={(value) => setField('currency', value)}
-      />
+      {busy || analyzing ? <ActivityIndicator color={colors.primary} /> : null}
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Category</Text>
-        <View style={styles.chips}>
-          {SHOP_PRODUCT_CATEGORIES.map((item) => (
-            <Pressable
-              key={item.value}
-              style={[styles.chip, form.category === item.value && styles.chipActive]}
-              onPress={() => setField('category', item.value)}
-            >
-              <Text style={styles.chipText}>{item.label}</Text>
-            </Pressable>
-          ))}
+      <FormSection title="Product" subtitle="Name and how it appears in the catalog">
+        <Input
+          label="Product name"
+          required
+          value={form.name}
+          onChangeText={(value) => setField('name', value)}
+          placeholder="Product name"
+          error={!form.name.trim() && message === 'Product name is required.' ? message : undefined}
+        />
+        <FieldRow>
+          <Input label="Brand" optional value={form.brand} onChangeText={(value) => setField('brand', value)} />
+          <Input label="SKU" optional value={form.sku} onChangeText={(value) => setField('sku', value)} />
+        </FieldRow>
+        <Input
+          label="Pack size / quantity"
+          optional
+          value={form.pack_size}
+          onChangeText={(value) => setField('pack_size', value)}
+          placeholder="e.g. 1 kg, 12 pcs"
+        />
+        <SelectField
+          label="Status"
+          required
+          value={form.status}
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'draft', label: 'Draft' },
+            { value: 'inactive', label: 'Inactive' },
+            { value: 'archived', label: 'Archived' },
+          ]}
+          onChange={(value) => setField('status', value)}
+          searchable={false}
+        />
+        <View style={styles.chipBlock}>
+          <FieldLabel label="Category" optional />
+          <View style={styles.chips}>
+            {SHOP_PRODUCT_CATEGORIES.map((item) => (
+              <Chip
+                key={item.value}
+                label={item.label}
+                active={form.category === item.value}
+                onPress={() => setField('category', form.category === item.value ? '' : item.value)}
+              />
+            ))}
+          </View>
         </View>
-      </View>
+      </FormSection>
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Description / ingredients</Text>
-        <TextInput
-          style={[styles.input, styles.textarea]}
+      <FormSection title="Price & tax">
+        <FieldRow>
+          <Input
+            label="Price"
+            required
+            value={form.price}
+            onChangeText={(value) => setField('price', value)}
+            keyboardType="decimal-pad"
+          />
+          <Input
+            label="GST %"
+            optional
+            value={form.tax_rate}
+            onChangeText={(value) => setField('tax_rate', value)}
+            keyboardType="decimal-pad"
+          />
+        </FieldRow>
+        <SelectField
+          label="Currency"
+          required
+          value={form.currency}
+          options={
+            form.currency && !CURRENCIES.some((option) => option.value === form.currency)
+              ? [...CURRENCIES, { value: form.currency, label: form.currency }]
+              : CURRENCIES
+          }
+          onChange={(value) => setField('currency', value)}
+        />
+        <View style={styles.chipBlock}>
+          <FieldLabel label="GST on price" />
+          <View style={styles.chips}>
+            <Chip
+              label="GST excluded"
+              active={form.tax_inclusive === 'excluded'}
+              onPress={() => setField('tax_inclusive', 'excluded')}
+            />
+            <Chip
+              label="GST included"
+              active={form.tax_inclusive === 'included'}
+              onPress={() => setField('tax_inclusive', 'included')}
+            />
+          </View>
+          <Text style={styles.hint}>
+            {form.tax_inclusive === 'included'
+              ? 'Selling price already includes GST. POS splits tax from the price.'
+              : 'GST is added on top of the selling price at checkout.'}
+          </Text>
+        </View>
+      </FormSection>
+
+      <FormSection title="Stock">
+        <FieldRow>
+          <Input
+            label="Stock on hand"
+            optional
+            value={form.stock_on_hand}
+            onChangeText={(value) => setField('stock_on_hand', value)}
+            keyboardType="decimal-pad"
+          />
+          <Input
+            label="Low stock alert"
+            optional
+            value={form.low_stock_threshold}
+            onChangeText={(value) => setField('low_stock_threshold', value)}
+            keyboardType="decimal-pad"
+          />
+        </FieldRow>
+        {showGodowns && godowns.length ? (
+          <SelectField
+            label={isEditing ? 'Godown for stock changes' : 'Stock godown'}
+            optional
+            value={godownId}
+            options={godowns.map((godown) => ({
+              value: godown.id,
+              label: godown.is_default ? `${godown.name} (default)` : godown.name,
+            }))}
+            onChange={setGodownId}
+            placeholder="Select godown"
+          />
+        ) : null}
+      </FormSection>
+
+      <FormSection title="Barcode" subtitle="Optional · used at the Sale counter">
+        <View style={styles.lookupRow}>
+          <View style={styles.lookupField}>
+            <Input
+              label="Barcode / RFID EPC"
+              optional
+              value={form.barcode}
+              onChangeText={(value) => setField('barcode', value)}
+              placeholder="Scan or type"
+              autoCapitalize="none"
+            />
+          </View>
+          <Pressable style={styles.iconAction} onPress={openScanner} accessibilityLabel="Scan barcode with camera">
+            <Feather name="camera" size={18} color={colors.primaryForeground} />
+          </Pressable>
+        </View>
+        <View style={styles.chipBlock}>
+          <FieldLabel label="Code type" />
+          <View style={styles.chips}>
+            {([
+              { value: 'manufacturer', label: 'Manufacturer' },
+              { value: 'internal', label: 'Internal' },
+              { value: 'rfid_epc', label: 'RFID EPC' },
+            ] as const).map((item) => (
+              <Chip
+                key={item.value}
+                label={item.label}
+                active={form.barcode_type === item.value}
+                onPress={() => setField('barcode_type', item.value)}
+              />
+            ))}
+          </View>
+        </View>
+      </FormSection>
+
+      <FormSection title="Description">
+        <Input
+          label="Description / ingredients"
+          optional
           value={form.description}
           onChangeText={(value) => setField('description', value)}
-          placeholderTextColor={colors.mutedForeground}
           multiline
         />
-      </View>
-
-      <HtmlEditorField
-        label="Product details"
-        value={form.details_html}
-        onChange={(value) => setField('details_html', value)}
-      />
-
-      <Text style={styles.fieldLabel}>Barcode type</Text>
-      <View style={styles.chips}>
-        {(['manufacturer', 'internal', 'rfid_epc'] as const).map((type) => (
-          <Pressable
-            key={type}
-            style={[styles.chip, form.barcode_type === type && styles.chipActive]}
-            onPress={() => setField('barcode_type', type)}
-          >
-            <Text style={styles.chipText}>{type}</Text>
-          </Pressable>
-        ))}
-      </View>
+        <HtmlEditorField
+          label="Product details"
+          optional
+          value={form.details_html}
+          onChange={(value) => setField('details_html', value)}
+        />
+      </FormSection>
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  helper: { color: colors.mutedForeground, lineHeight: 20 },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.sm,
   },
-  photoCard: { width: '47%' },
-  photo: { width: '100%', height: 140, borderRadius: 12, backgroundColor: colors.muted },
+  photoCard: {
+    width: '47%',
+    flexGrow: 1,
+    position: 'relative',
+  },
+  photoCardPrimary: {
+    width: '100%',
+  },
+  photoHit: { borderRadius: radius.md, overflow: 'hidden' },
+  photo: { width: '100%', height: 108, backgroundColor: colors.muted },
+  photoPrimary: { height: 188 },
   photoPlaceholder: {
-    height: 140,
-    borderRadius: 12,
+    height: 108,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.card,
+    gap: 6,
+    backgroundColor: colors.inputBackground,
     paddingHorizontal: 8,
   },
   photoLabel: { color: colors.mutedForeground, fontWeight: '600', textAlign: 'center', fontSize: 12 },
-  photoCaption: {
-    marginTop: 6,
-    textAlign: 'center',
-    color: colors.foreground,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 12,
-  },
-  removeBtn: { alignItems: 'center', marginTop: 4 },
-  removeText: { color: colors.destructive, fontSize: 12, fontWeight: '600' },
-  actions: { flexDirection: 'row', gap: 8 },
-  actionBtn: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
+  photoRemove: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,23,42,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
   },
-  actionSecondary: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.primary,
+  primaryBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  actionText: { color: '#fff', fontWeight: '600' },
-  actionSecondaryText: { color: colors.primary, fontWeight: '600' },
-  row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  lookupBtn: {
+  primaryBadgeText: { color: colors.primaryForeground, fontSize: 11, fontWeight: '700' },
+  lookupRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  lookupField: { flex: 1, minWidth: 0 },
+  iconAction: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.md,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 1,
   },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.foreground,
-    backgroundColor: colors.card,
-  },
-  field: {},
-  fieldLabel: {
-    marginBottom: 6,
-    color: colors.foreground,
-    fontSize: 13,
-    fontFamily: fonts.bodyMedium,
-  },
-  textarea: { minHeight: 90, textAlignVertical: 'top' },
+  chipBlock: { gap: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.muted },
-  chipText: { color: colors.foreground, fontSize: 13 },
-  meta: { color: colors.mutedForeground },
+  hint: { color: colors.mutedForeground, fontSize: 13, lineHeight: 18 },
 });

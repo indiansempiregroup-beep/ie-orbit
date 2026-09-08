@@ -34,6 +34,7 @@ import {
   PrivacySecurityScreen,
   ReviewsScreen,
 } from '../features/profile/ProfileSubScreens';
+import { SupportTicketDetailScreen } from '../features/profile/SupportTicketDetailScreen';
 import { ReferralScreen } from '../features/profile/ReferralScreen';
 import { usePushRegistration } from '../hooks/usePushRegistration';
 import { ReferralLinkHandler } from '../components/ReferralLinkHandler';
@@ -114,6 +115,7 @@ export function RootNavigator() {
             <Stack.Screen name="Reviews" component={ReviewsScreen} />
             <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
             <Stack.Screen name="HelpArticle" component={HelpArticleScreen} />
+            <Stack.Screen name="SupportTicketDetail" component={SupportTicketDetailScreen} />
             <Stack.Screen name="Referral" component={ReferralScreen} />
           </Stack.Navigator>
         ) : needsVerification ? (

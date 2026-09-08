@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { IconBadge } from './IconBadge';
+import { colors, spacing, typography, type IconTone } from '../../theme/tokens';
 
 type Props = {
   icon: keyof typeof Feather.glyphMap;
@@ -10,17 +11,53 @@ type Props = {
   destructive?: boolean;
   subtitle?: string;
   last?: boolean;
+  tone?: IconTone;
 };
 
-export function MenuRow({ icon, label, onPress, destructive, subtitle, last }: Props) {
+const iconTone: Partial<Record<keyof typeof Feather.glyphMap, IconTone>> = {
+  calendar: 'blue',
+  'book-open': 'violet',
+  layers: 'violet',
+  'shopping-cart': 'green',
+  'shopping-bag': 'green',
+  package: 'amber',
+  home: 'amber',
+  truck: 'coral',
+  users: 'cyan',
+  user: 'cyan',
+  'user-check': 'green',
+  heart: 'rose',
+  star: 'amber',
+  bell: 'coral',
+  'bar-chart-2': 'violet',
+  'map-pin': 'coral',
+  'message-circle': 'green',
+  globe: 'blue',
+  'share-2': 'cyan',
+  tool: 'amber',
+  image: 'rose',
+  tag: 'coral',
+  'credit-card': 'violet',
+  'dollar-sign': 'green',
+  file: 'blue',
+  'file-text': 'blue',
+  clipboard: 'violet',
+  award: 'amber',
+  percent: 'green',
+  'rotate-ccw': 'coral',
+  list: 'blue',
+  settings: 'navy',
+  shield: 'navy',
+  gift: 'rose',
+};
+
+export function MenuRow({ icon, label, onPress, destructive, subtitle, last, tone }: Props) {
   return (
     <Pressable
       style={({ pressed }) => [styles.row, last && styles.rowLast, pressed && styles.pressed]}
       onPress={onPress}
     >
-      <View style={[styles.icon, destructive && styles.iconDestructive]}>
-        <Feather name={icon} size={16} color={destructive ? colors.destructive : colors.primary} />
-      </View>
+      <IconBadge icon={icon} tone={destructive ? 'rose' : tone ?? iconTone[icon] ?? 'blue'} />
       <View style={styles.copy}>
         <Text style={[styles.label, destructive && styles.destructive]} numberOfLines={1}>
           {label}
@@ -49,15 +86,6 @@ const styles = StyleSheet.create({
   },
   rowLast: { borderBottomWidth: 0 },
   pressed: { backgroundColor: colors.tint },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconDestructive: { backgroundColor: colors.destructiveSoft },
   copy: { flex: 1, minWidth: 0 },
   label: { ...typography.body, color: colors.foreground, fontFamily: typography.label.fontFamily, fontWeight: '600' },
   subtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },

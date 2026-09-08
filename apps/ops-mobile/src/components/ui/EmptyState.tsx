@@ -2,7 +2,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Button } from './Button';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { IconBadge } from './IconBadge';
+import { colors, iconTones, radius, spacing, typography, type IconTone } from '../../theme/tokens';
 
 type Props = {
   title: string;
@@ -12,6 +13,8 @@ type Props = {
   onAction?: () => void;
   secondaryLabel?: string;
   onSecondary?: () => void;
+  tone?: IconTone;
+  illustration?: React.ReactNode;
 };
 
 export function EmptyState({
@@ -22,12 +25,18 @@ export function EmptyState({
   onAction,
   secondaryLabel,
   onSecondary,
+  tone = 'blue',
+  illustration,
 }: Props) {
   return (
     <View style={styles.wrap}>
-      <View style={styles.iconWell}>
-        <Feather name={icon} size={28} color={colors.primary} />
-      </View>
+      {illustration ?? (
+        <View style={styles.artwork} importantForAccessibility="no-hide-descendants">
+          <View style={[styles.orbitLarge, { backgroundColor: iconTones[tone].background }]} />
+          <View style={[styles.orbitSmall, { backgroundColor: iconTones.amber.background }]} />
+          <IconBadge icon={icon} tone={tone} size="lg" style={styles.artworkIcon} />
+        </View>
+      )}
       <Text style={styles.title}>{title}</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {actionLabel && onAction ? (
@@ -50,14 +59,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     gap: spacing.sm,
   },
-  iconWell: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.full,
-    backgroundColor: colors.tint,
+  artwork: {
+    width: 92,
+    height: 76,
+    marginBottom: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.sm,
+  },
+  orbitLarge: {
+    position: 'absolute',
+    width: 76,
+    height: 76,
+    borderRadius: radius.full,
+    opacity: 0.72,
+  },
+  orbitSmall: {
+    position: 'absolute',
+    width: 26,
+    height: 26,
+    borderRadius: radius.full,
+    right: 2,
+    top: 2,
+  },
+  artworkIcon: {
+    borderWidth: 3,
+    borderColor: colors.card,
   },
   title: { ...typography.title, color: colors.foreground, textAlign: 'center' },
   message: {

@@ -417,6 +417,7 @@ export function BookingDetailScreen() {
                     label={
                       item.service_name || entityLabel(serviceMap, item.service_id, 'Service')
                     }
+                    optional
                     value={lineStaffDraft[item.id] ?? ''}
                     options={lineStaffOptionsMap[item.id] ?? [{ value: '', label: 'Auto-assign' }]}
                     onChange={(next) =>
@@ -428,6 +429,7 @@ export function BookingDetailScreen() {
               ) : (
                 <SelectField
                   label="Staff member"
+                  optional
                   value={staffDraft}
                   options={staffOptions}
                   onChange={setStaffDraft}

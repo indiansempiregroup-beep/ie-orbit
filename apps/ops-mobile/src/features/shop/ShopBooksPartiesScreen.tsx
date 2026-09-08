@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -20,12 +19,16 @@ import { SearchBar } from '../../components/SearchBar';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopPartyStatement, ShopSupplier } from '@ie-orbit/sdk';
-import { formatMoney, supplierLabel } from './shopBooksHelpers';
+import { formatMoney, formatVoucherDateTime, supplierLabel } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 
 type SupplierForm = {
   name: string;
@@ -94,14 +97,14 @@ export function ShopBooksPartiesScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listSuppliers({ business_id: businessId, search: search || undefined });
+      const response = await client.shop.listSuppliers({ business_id: businessId });
       setSuppliers(response.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load suppliers');
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, search]);
+  }, [businessId, client]);
 
   useFocusEffect(
     useCallback(() => {
@@ -182,68 +185,60 @@ export function ShopBooksPartiesScreen() {
         }
       >
         <Text style={styles.formTitle}>Add supplier</Text>
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Supplier name"
+          required
           value={form.name}
           onChangeText={(value) => setField('name', value)}
-          placeholder="Supplier name"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Phone"
+          optional
           value={form.phone}
           onChangeText={(value) => setField('phone', value)}
-          placeholder="Phone"
           keyboardType="phone-pad"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Email"
+          optional
           value={form.email}
           onChangeText={(value) => setField('email', value)}
-          placeholder="Email"
           keyboardType="email-address"
           autoCapitalize="none"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="GSTIN"
+          optional
           value={form.gstin}
           onChangeText={(value) => setField('gstin', value.toUpperCase())}
-          placeholder="GSTIN"
           autoCapitalize="characters"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Billing state"
+          optional
           value={form.billingState}
           onChangeText={(value) => setField('billingState', value)}
-          placeholder="Billing state"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={[styles.input, styles.notes]}
+        <Input
+          label="Billing address"
+          optional
           value={form.billingAddress}
           onChangeText={(value) => setField('billingAddress', value)}
-          placeholder="Billing address"
           multiline
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Credit limit"
+          optional
           value={form.creditLimit}
           onChangeText={(value) => setField('creditLimit', value.replace(/[^0-9.]/g, ''))}
-          placeholder="Credit limit (optional)"
           keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Opening balance"
+          optional
           value={form.openingBalance}
           onChangeText={(value) => setField('openingBalance', value.replace(/[^0-9.-]/g, ''))}
-          placeholder="Opening balance"
           keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
         />
       </FormScreen>
     );
@@ -252,26 +247,34 @@ export function ShopBooksPartiesScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search suppliers…" />
+        <VoucherSummaryCards
+          metrics={[
+            { label: 'Suppliers', value: String(filtered.length) },
+            { label: 'All', value: String(suppliers.length) },
+          ]}
+        />
+        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search suppliers" />
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
             const expanded = expandedId === item.id;
             return (
-              <Pressable style={styles.row} onPress={() => void toggleStatement(item)}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{supplierLabel(item)}</Text>
-                  <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
-                </View>
-                <Text style={styles.meta}>
-                  {item.phone || 'No phone'} {item.email ? `· ${item.email}` : ''}
-                </Text>
-                {item.gstin ? <Text style={styles.meta}>GSTIN {item.gstin}</Text> : null}
+              <BooksDocumentRow
+                title={supplierLabel(item)}
+                meta={[item.phone || 'No phone', item.email, item.gstin ? `GSTIN ${item.gstin}` : '']
+                  .filter(Boolean)
+                  .join(' · ')}
+                badge={expanded ? 'Statement' : 'View statement'}
+                icon="truck"
+                iconTone="navy"
+                onPress={() => void toggleStatement(item)}
+              >
                 {expanded ? (
                   <View style={styles.statement}>
                     {statementLoading ? (
@@ -287,13 +290,19 @@ export function ShopBooksPartiesScreen() {
                           <Text style={styles.statementValue}>{formatMoney(statement.closing_balance)}</Text>
                         </View>
                         <Text style={styles.hint}>{statement.entries.length} ledger entries</Text>
+                        {statement.entries.slice(0, 4).map((entry, index) => (
+                          <Text key={`${entry.created_at}-${index}`} style={styles.hint}>
+                            {formatVoucherDateTime(entry.created_at, entry.created_at) || entry.created_at}
+                            {entry.entry_type ? ` · ${entry.entry_type}` : ''}
+                          </Text>
+                        ))}
                       </>
                     ) : (
                       <Text style={styles.meta}>No statement available.</Text>
                     )}
                   </View>
                 ) : null}
-              </Pressable>
+              </BooksDocumentRow>
             );
           }}
           ListEmptyComponent={
@@ -328,24 +337,14 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
-  row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.card,
-    gap: 4,
-  },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
-  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground, flex: 1 },
   meta: { color: colors.mutedForeground, fontSize: 13 },
   error: { color: colors.destructive, marginBottom: spacing.sm },
   statement: {

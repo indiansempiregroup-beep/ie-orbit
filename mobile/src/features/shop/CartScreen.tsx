@@ -26,6 +26,7 @@ import { CalendarPicker } from '../../components/CalendarPicker';
 import { TimePicker } from '../../components/TimePicker';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { buildUpiPayUrl } from '../../utils/upi';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
@@ -626,6 +627,7 @@ export function CartScreen() {
               <Text style={{ color: primary }}>{formatShopMoney(total, currency)}</Text>
             </Text>
 
+            <GroupedList style={styles.itemGroup}>
             {lines.map((line) => {
               const imageUri = resolveMediaUrl(line.product.image_url);
               const lineTotal = shopLinePayable(line.product, line.quantity);
@@ -662,6 +664,7 @@ export function CartScreen() {
                 </View>
               );
             })}
+            </GroupedList>
 
             <Pressable style={styles.couponEntry} onPress={() => setCouponSheetOpen(true)}>
               <View style={[styles.couponEntryIcon, { backgroundColor: `${primary}14` }]}>
@@ -1258,15 +1261,12 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   emptyWrap: { flex: 1, justifyContent: 'center', padding: spacing.xl },
   subtotalTop: { ...typography.title, color: colors.foreground, marginBottom: spacing.lg },
+  itemGroup: { marginBottom: spacing.md },
   itemCard: {
     flexDirection: 'row',
     gap: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
-    marginBottom: spacing.md,
   },
   thumb: { width: 84, height: 84, borderRadius: radius.md, backgroundColor: colors.muted },
   thumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },

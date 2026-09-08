@@ -4,6 +4,7 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,10 +16,11 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
 import { Chip } from '../../components/ui/Chip';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { formatShopMoney, formatShopOrderPlaced } from './shopHelpers';
+import { formatShopMoney, formatShopOrderPlaced, formatShopQty } from './shopHelpers';
 import type { ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -29,24 +31,35 @@ const STATUS_FILTERS = [
   { id: 'rejected', label: 'Rejected' },
 ] as const;
 
+type ReturnLine = { name?: string; quantity?: string | number };
+
 function returnTone(status?: string) {
   const value = String(status || '').toLowerCase();
-  if (value === 'completed' || value === 'approved') return { bg: '#ECFDF5', text: '#047857', label: 'Completed' };
-  if (value === 'rejected') return { bg: '#FEF2F2', text: '#B91C1C', label: 'Rejected' };
-  return { bg: '#FFFBEB', text: '#B45309', label: 'Pending' };
+  if (value === 'completed' || value === 'approved') {
+    return { bg: '#ECFDF5', text: '#047857', dot: '#047857', label: 'Completed' };
+  }
+  if (value === 'rejected') {
+    return { bg: '#FEF2F2', text: '#B91C1C', dot: '#B91C1C', label: 'Rejected' };
+  }
+  return { bg: '#FFFBEB', text: '#B45309', dot: '#B45309', label: 'Pending' };
+}
+
+function returnLines(item: ShopReturn): ReturnLine[] {
+  return (Array.isArray(item.line_items) ? item.line_items : []).flatMap((raw) =>
+    raw && typeof raw === 'object' ? [raw as ReturnLine] : [],
+  );
+}
+
+function itemCount(item: ShopReturn) {
+  return returnLines(item).reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
 }
 
 function itemPreview(item: ShopReturn): string {
-  const lines = Array.isArray(item.line_items) ? item.line_items : [];
-  return lines
-    .map((raw) => {
-      if (!raw || typeof raw !== 'object') return '';
-      const row = raw as { name?: string; quantity?: string | number };
-      return row.name ? `${row.name} × ${row.quantity ?? 1}` : '';
-    })
+  return returnLines(item)
+    .map((row) => (row.name ? `${row.name} × ${formatShopQty(row.quantity ?? 1)}` : ''))
     .filter(Boolean)
     .slice(0, 2)
-    .join(', ');
+    .join(' · ');
 }
 
 export function MyReturnsScreen() {
@@ -61,20 +74,23 @@ export function MyReturnsScreen() {
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]['id']>('all');
   const primary = branding?.primaryColor ?? colors.primary;
 
-  const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
-    if (mode === 'refresh') setRefreshing(true);
-    else setLoading(true);
-    try {
-      const res = await mobileClient.mobile.listMyReturns({
-        tenant_slug: tenantSlug,
-        business_code: businessCode,
-      });
-      setItems(res.data);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [businessCode, tenantSlug]);
+  const load = useCallback(
+    async (mode: 'initial' | 'refresh' = 'initial') => {
+      if (mode === 'refresh') setRefreshing(true);
+      else setLoading(true);
+      try {
+        const res = await mobileClient.mobile.listMyReturns({
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+        });
+        setItems(res.data);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [businessCode, tenantSlug],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -106,9 +122,16 @@ export function MyReturnsScreen() {
             placeholderTextColor={colors.mutedForeground}
             value={search}
             onChangeText={setSearch}
+            returnKeyType="search"
+            autoCorrect={false}
           />
+          {search ? (
+            <Pressable onPress={() => setSearch('')} hitSlop={8}>
+              <Feather name="x" size={16} color={colors.mutedForeground} />
+            </Pressable>
+          ) : null}
         </View>
-        <View style={styles.filters}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
           {STATUS_FILTERS.map((item) => (
             <Chip
               key={item.id}
@@ -118,7 +141,7 @@ export function MyReturnsScreen() {
               onPress={() => setStatus(item.id)}
             />
           ))}
-        </View>
+        </ScrollView>
         {!loading ? (
           <Text style={styles.count}>
             {visible.length} {visible.length === 1 ? 'return' : 'returns'}
@@ -129,7 +152,12 @@ export function MyReturnsScreen() {
       <FlatList
         data={visible}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        {...groupedListProps(visible.length, styles.listGroup)}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 40,
+          flexGrow: 1,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -141,17 +169,41 @@ export function MyReturnsScreen() {
         renderItem={({ item }) => {
           const tone = returnTone(item.status);
           const preview = itemPreview(item);
+          const count = itemCount(item);
           return (
-            <Pressable style={styles.card} onPress={() => navigation.navigate('ReturnDetail', { returnId: item.id })}>
-              <View style={styles.topRow}>
-                <Text style={styles.name}>{item.return_number}</Text>
-                <Text style={styles.total}>{formatShopMoney(item.refund_total, item.currency)}</Text>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              onPress={() => navigation.navigate('ReturnDetail', { returnId: item.id })}
+            >
+              <View style={[styles.iconWrap, { backgroundColor: tone.bg }]}>
+                <Feather
+                  name={tone.label === 'Completed' ? 'check-circle' : tone.label === 'Rejected' ? 'x-circle' : 'rotate-ccw'}
+                  size={18}
+                  color={tone.text}
+                />
               </View>
-              <View style={[styles.pill, { backgroundColor: tone.bg }]}>
-                <Text style={[styles.pillText, { color: tone.text }]}>{tone.label}</Text>
+              <View style={styles.body}>
+                <View style={styles.topRow}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    #{item.return_number}
+                  </Text>
+                  <Text style={styles.total}>{formatShopMoney(item.refund_total, item.currency)}</Text>
+                </View>
+                <Text style={styles.meta} numberOfLines={1}>
+                  {formatShopOrderPlaced(item.created_at)}
+                  {count ? ` · ${count} item${count === 1 ? '' : 's'}` : ''}
+                </Text>
+                {preview ? (
+                  <Text style={styles.preview} numberOfLines={2}>
+                    {preview}
+                  </Text>
+                ) : null}
+                <View style={[styles.pill, { backgroundColor: tone.bg }]}>
+                  <View style={[styles.dot, { backgroundColor: tone.dot }]} />
+                  <Text style={[styles.pillText, { color: tone.text }]}>{tone.label}</Text>
+                </View>
               </View>
-              {preview ? <Text style={styles.preview}>{preview}</Text> : null}
-              <Text style={styles.meta}>{formatShopOrderPlaced(item.created_at)}</Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
           );
         }}
@@ -163,7 +215,7 @@ export function MyReturnsScreen() {
               description={
                 items.length
                   ? 'Try another search or status.'
-                  : 'Open an order and tap Return items if you need to send something back.'
+                  : 'Open a completed order and tap Return items if you need to send something back.'
               }
             />
           ) : null
@@ -196,21 +248,40 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   search: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  filters: { gap: spacing.sm, paddingVertical: 2 },
   count: { ...typography.caption, color: colors.mutedForeground },
-  card: {
+  listGroup: { marginHorizontal: spacing.lg, marginTop: spacing.lg },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
     padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  name: { fontWeight: '800', color: colors.foreground, flex: 1 },
-  total: { fontWeight: '800', color: colors.foreground },
-  pill: { alignSelf: 'flex-start', marginTop: spacing.sm, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  pressed: { opacity: 0.92 },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  body: { flex: 1, minWidth: 0, gap: 4 },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  name: { ...typography.label, fontWeight: '800', color: colors.foreground, flex: 1 },
+  total: { ...typography.label, fontWeight: '800', color: colors.foreground },
+  meta: { ...typography.caption, color: colors.mutedForeground },
+  preview: { ...typography.caption, color: colors.foreground, lineHeight: 18 },
+  pill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
   pillText: { ...typography.caption, fontWeight: '800' },
-  preview: { marginTop: spacing.sm, color: colors.foreground, fontSize: 13 },
-  meta: { marginTop: 4, color: colors.mutedForeground, fontSize: 12 },
 });

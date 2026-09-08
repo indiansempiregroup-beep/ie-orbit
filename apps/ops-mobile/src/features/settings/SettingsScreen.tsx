@@ -49,8 +49,14 @@ export function SettingsScreen() {
             icon="map-pin"
             label={t('settings.offices')}
             subtitle="Branches & locations"
-            last={!showTeam}
             onPress={() => navigation.navigate('Branches')}
+          />
+          <MenuRow
+            icon="life-buoy"
+            label="Support tickets"
+            subtitle="Customer requests and your replies"
+            last={!showTeam}
+            onPress={() => navigation.navigate('SupportTickets')}
           />
           {showTeam ? (
             <MenuRow

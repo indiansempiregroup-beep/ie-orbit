@@ -97,6 +97,20 @@ export function filterFutureSlots<T extends { start_at: string }>(
   });
 }
 
+export function formatDate(isoDate?: string | null) {
+  if (!isoDate) return '—';
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(
+    getActiveIntlLocale(),
+    withZone({
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
+  );
+}
+
 export function formatDateTime(isoDate?: string | null) {
   if (!isoDate) return '—';
   return new Date(isoDate).toLocaleString(

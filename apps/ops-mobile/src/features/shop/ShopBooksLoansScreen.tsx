@@ -20,13 +20,18 @@ import { SelectField } from '../../components/SelectField';
 import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopLoan } from '@ie-orbit/sdk';
-import { customerLabel, formatMoney, todayIso, voucherStatusStyle } from './shopBooksHelpers';
+import { customerLabel, formatMoney, formatVoucherDate, formatVoucherDateTime, todayIso } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
+import { SearchBar } from '../../components/SearchBar';
 
 export function ShopBooksLoansScreen() {
   const insets = useSafeAreaInsets();
@@ -52,6 +57,7 @@ export function ShopBooksLoansScreen() {
   const [interestRate, setInterestRate] = useState('');
   const [startDate, setStartDate] = useState(todayIso());
   const [notes, setNotes] = useState('');
+  const [search, setSearch] = useState('');
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -104,6 +110,28 @@ export function ShopBooksLoansScreen() {
   );
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
+
+  const filteredLoans = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return loans;
+    return loans.filter((loan) =>
+      [loan.title, loan.customer_name ?? '', loan.status, String(loan.balance)]
+        .join(' ')
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [loans, search]);
+
+  const loanSummary = useMemo(() => {
+    let outstanding = 0;
+    let open = 0;
+    for (const item of filteredLoans) {
+      const balance = Number(item.balance ?? 0);
+      outstanding += balance;
+      if (balance > 0.009) open += 1;
+    }
+    return { outstanding, open, count: filteredLoans.length };
+  }, [filteredLoans]);
 
   const customerOptions = useMemo(
     () => [
@@ -181,50 +209,42 @@ export function ShopBooksLoansScreen() {
         <Text style={styles.formTitle}>New loan</Text>
         <SelectField
           label="Customer"
+          required
           value={customerId}
           options={customerOptions}
           onChange={setCustomerId}
           searchable
         />
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Title</Text>
-          <TextInput
-            style={styles.input}
-            value={title}
-            onChangeText={setTitle}
-            placeholder="e.g. Working capital"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Principal</Text>
-          <TextInput
-            style={styles.input}
-            value={principal}
-            onChangeText={(value) => setPrincipal(value.replace(/[^0-9.]/g, ''))}
-            keyboardType="decimal-pad"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Interest rate %</Text>
-          <TextInput
-            style={styles.input}
-            value={interestRate}
-            onChangeText={(value) => setInterestRate(value.replace(/[^0-9.]/g, ''))}
-            keyboardType="decimal-pad"
-            placeholder="Optional"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-        <DateField label="Start date" value={startDate} onChange={setStartDate} allowClear={false} />
-        <TextInput
-          style={[styles.input, styles.notes]}
+        <Input
+          label="Title"
+          required
+          value={title}
+          onChangeText={setTitle}
+          placeholder="e.g. Working capital"
+        />
+        <Input
+          label="Principal"
+          required
+          value={principal}
+          onChangeText={(value) => setPrincipal(value.replace(/[^0-9.]/g, ''))}
+          keyboardType="decimal-pad"
+        />
+        <Input
+          label="Interest rate %"
+          optional
+          value={interestRate}
+          onChangeText={(value) => setInterestRate(value.replace(/[^0-9.]/g, ''))}
+          keyboardType="decimal-pad"
+          placeholder="Optional"
+        />
+        <DateField label="Start date" required value={startDate} onChange={setStartDate} allowClear={false} />
+        <Input
+          label="Notes"
+          optional
           value={notes}
           onChangeText={setNotes}
-          placeholder="Notes (optional)"
+          placeholder="Notes"
           multiline
-          placeholderTextColor={colors.mutedForeground}
         />
       </FormScreen>
     );
@@ -233,44 +253,47 @@ export function ShopBooksLoansScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <VoucherSummaryCards
+          metrics={[
+            { label: 'Outstanding', value: formatMoney(loanSummary.outstanding), tone: 'due' },
+            { label: 'Open', value: String(loanSummary.open) },
+            { label: 'Loans', value: String(loanSummary.count) },
+          ]}
+        />
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search loans" style={styles.search} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
-          data={loans}
+          {...groupedListProps(filteredLoans.length)}
+          data={filteredLoans}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
-            const badge = voucherStatusStyle(item.status);
             const expanded = expandedId === item.id;
             const party = item.customer_name || 'Customer loan';
             const balance = Number(item.balance ?? 0);
             return (
-              <Pressable
-                style={styles.row}
-                onPress={() => {
-                  setExpandedId(expanded ? null : item.id);
-                  setRepayAmount('');
-                  setRepayNotes('');
-                }}
+              <BooksDocumentRow
+                title={item.title}
+                amount={formatMoney(item.balance)}
+                amountTone={balance > 0.009 ? 'due' : 'paid'}
+                meta={`${party} · Principal ${formatMoney(item.principal)}${item.start_date ? ` · ${formatVoucherDate(item.start_date)}` : item.created_at ? ` · ${formatVoucherDateTime(item.created_at, item.created_at)}` : ''}`}
+                badge={item.status}
+                badgeKind={balance > 0.009 ? 'due' : 'paid'}
+                icon="percent"
+                iconTone={balance > 0.009 ? 'amber' : 'green'}
+                actionLabel={balance > 0.009 ? (expanded ? 'Hide' : 'Repay') : undefined}
+                onAction={
+                  balance > 0.009
+                    ? () => {
+                        setExpandedId(expanded ? null : item.id);
+                        setRepayAmount('');
+                        setRepayNotes('');
+                      }
+                    : undefined
+                }
               >
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.title}</Text>
-                  <Text style={styles.total}>{formatMoney(item.balance)}</Text>
-                </View>
-                <Text style={styles.meta}>
-                  {party} · Principal {formatMoney(item.principal)}
-                </Text>
-                <View style={styles.rowBottom}>
-                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                  </View>
-                  {balance > 0.009 ? (
-                    <Text style={styles.repayHint}>{expanded ? 'Hide repay' : 'Repay'}</Text>
-                  ) : (
-                    <Text style={styles.meta}>Settled</Text>
-                  )}
-                </View>
                 {expanded && balance > 0.009 ? (
                   <View style={styles.repayBox}>
                     <TextInput
@@ -296,7 +319,7 @@ export function ShopBooksLoansScreen() {
                     />
                   </View>
                 ) : null}
-              </Pressable>
+              </BooksDocumentRow>
             );
           }}
           ListEmptyComponent={
@@ -318,6 +341,7 @@ export function ShopBooksLoansScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  search: { marginBottom: spacing.sm },
   headerBtn: {
     width: 40,
     height: 40,
@@ -351,11 +375,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
 });

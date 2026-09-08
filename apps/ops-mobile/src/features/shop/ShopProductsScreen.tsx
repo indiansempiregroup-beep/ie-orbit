@@ -2,9 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } fro
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,7 +24,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { RemoteImage } from '../../components/RemoteImage';
-import { colors, fonts, radius, spacing } from '../../theme/tokens';
+import { colors, fonts, iconTones, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-orbit/sdk';
 import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
@@ -41,6 +39,11 @@ import {
 } from './productImages';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { SearchBar } from '../../components/SearchBar';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
+import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -72,6 +75,7 @@ export function ShopProductsScreen() {
   const { user } = useAuth();
   const { businessId } = useWorkspace();
   const { isDesktop } = useBreakpoint();
+  const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.82);
   const canWrite = canWriteShopCatalog(user);
   const [items, setItems] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,6 +83,8 @@ export function ShopProductsScreen() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [category, setCategory] = useState('');
+  const [sortBy, setSortBy] = useState('name_asc');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkCategory, setBulkCategory] = useState('');
@@ -165,14 +171,24 @@ export function ShopProductsScreen() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((item) =>
-      [item.name, item.brand ?? '', item.sku ?? '', ...(item.barcodes ?? []).map((b) => b.code)]
-        .join(' ')
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [items, search]);
+    const list = !term
+      ? [...items]
+      : items.filter((item) =>
+          [item.name, item.brand ?? '', item.sku ?? '', ...(item.barcodes ?? []).map((b) => b.code)]
+            .join(' ')
+            .toLowerCase()
+            .includes(term),
+        );
+    list.sort((a, b) => {
+      if (sortBy === 'name_desc') return String(a.name).localeCompare(String(b.name)) * -1;
+      if (sortBy === 'price_desc') return Number(b.price ?? 0) - Number(a.price ?? 0);
+      if (sortBy === 'price_asc') return Number(a.price ?? 0) - Number(b.price ?? 0);
+      if (sortBy === 'stock_desc') return Number(b.stock_on_hand ?? 0) - Number(a.stock_on_hand ?? 0);
+      if (sortBy === 'stock_asc') return Number(a.stock_on_hand ?? 0) - Number(b.stock_on_hand ?? 0);
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return list;
+  }, [items, search, sortBy]);
 
   const filteredIds = useMemo(() => filtered.map((item) => item.id), [filtered]);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
@@ -238,14 +254,18 @@ export function ShopProductsScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          onSubmitEditing={() => void load()}
-          placeholder="Search products"
-          style={styles.input}
-          placeholderTextColor={colors.mutedForeground}
-        />
+        <View style={styles.topBar}>
+          <SearchBar
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search products"
+            style={styles.searchFlex}
+          />
+          <FilterButton
+            count={Number(Boolean(status)) + Number(Boolean(category)) + Number(sortBy !== 'name_asc')}
+            onPress={() => setFiltersOpen(true)}
+          />
+        </View>
         {canWrite && !isDesktop ? (
           <Pressable
             onPress={() => navigation.navigate('ShopProductsAddMany')}
@@ -274,20 +294,6 @@ export function ShopProductsScreen() {
             </Pressable>
           </View>
         ) : null}
-        <View style={styles.filters}>
-          <View style={styles.filterHalf}>
-            <SelectField label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
-          </View>
-          <View style={styles.filterHalf}>
-            <SelectField
-              label="Category"
-              value={category}
-              options={CATEGORY_OPTIONS}
-              onChange={setCategory}
-              searchable
-            />
-          </View>
-        </View>
         {status || category ? (
           <Pressable
             onPress={() => {
@@ -299,6 +305,32 @@ export function ShopProductsScreen() {
             <Text style={styles.clearFiltersText}>Clear filters</Text>
           </Pressable>
         ) : null}
+
+        <FilterSheet
+          visible={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          onReset={() => {
+            setStatus('');
+            setCategory('');
+            setSortBy('name_asc');
+          }}
+        >
+          <FilterChoiceGroup label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
+          <FilterChoiceGroup label="Category" value={category} options={CATEGORY_OPTIONS} onChange={setCategory} searchable />
+          <FilterChoiceGroup
+            label="Sort"
+            value={sortBy}
+            options={[
+              { value: 'name_asc', label: 'Name A–Z' },
+              { value: 'name_desc', label: 'Name Z–A' },
+              { value: 'price_desc', label: 'Price high–low' },
+              { value: 'price_asc', label: 'Price low–high' },
+              { value: 'stock_desc', label: 'Stock high–low' },
+              { value: 'stock_asc', label: 'Stock low–high' },
+            ]}
+            onChange={setSortBy}
+          />
+        </FilterSheet>
 
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -328,72 +360,53 @@ export function ShopProductsScreen() {
           </View>
         ) : null}
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
           renderItem={({ item }) => {
-            const uri = resolveMediaUrl(primaryProductImageUrl(item));
-            const photoCount = normalizeProductGallery(galleryFromProduct(item)).length;
             const selected = selectedIds.includes(item.id);
+            const categoryLabel =
+              SHOP_PRODUCT_CATEGORIES.find((c) => c.value === item.category)?.label || item.category;
             return (
-              <Pressable
-                style={styles.row}
-                onPress={() => navigation.navigate('ShopProductAdd', { productId: item.id })}
-              >
-                <View style={styles.rowInner}>
-                  {canWrite ? (
-                    <Pressable
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        toggleSelected(item.id);
-                      }}
-                      hitSlop={8}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: selected }}
-                      accessibilityLabel={`Select ${item.name}`}
-                    >
-                      <Feather
-                        name={selected ? 'check-square' : 'square'}
-                        size={20}
-                        color={selected ? colors.primary : colors.mutedForeground}
-                      />
-                    </Pressable>
-                  ) : null}
-                  {uri ? (
-                    <RemoteImage uri={uri} style={styles.thumb} />
-                  ) : (
-                    <View style={[styles.thumb, styles.thumbEmpty]}>
-                      <Feather name="package" size={18} color={colors.mutedForeground} />
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.meta}>
-                      {item.status}
-                      {item.category
-                        ? ` · ${
-                            SHOP_PRODUCT_CATEGORIES.find((c) => c.value === item.category)?.label ||
-                            item.category
-                          }`
-                        : ''}{' '}
-                      · {item.currency} {item.price} · stock {item.stock_on_hand}
-                    </Text>
-                    <Text style={styles.meta}>
-                      SKU {item.sku || '—'} ·{' '}
-                      {(item.barcodes ?? []).map((b) => b.code).join(' · ') || 'No barcodes'}
-                      {photoCount ? ` · ${photoCount}/${MAX_PRODUCT_IMAGES} photos` : ''}
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              <View style={styles.productRow}>
+                {canWrite ? (
+                  <Pressable
+                    onPress={() => toggleSelected(item.id)}
+                    hitSlop={8}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={`Select ${item.name}`}
+                    style={styles.productCheck}
+                  >
+                    <Feather
+                      name={selected ? 'check-square' : 'square'}
+                      size={20}
+                      color={selected ? colors.primary : colors.mutedForeground}
+                    />
+                  </Pressable>
+                ) : null}
+                <View style={styles.productCard}>
+                  <BooksDocumentRow
+                    title={item.name}
+                    amount={`${item.currency} ${item.price}`}
+                    meta={`SKU ${item.sku || '—'} · stock ${item.stock_on_hand}${categoryLabel ? ` · ${categoryLabel}` : ''}`}
+                    badge={item.status}
+                    badgeKind={item.status === 'active' ? 'paid' : item.status === 'inactive' ? 'void' : 'neutral'}
+                    icon="package"
+                    iconTone="amber"
+                    onPress={() => navigation.navigate('ShopProductAdd', { productId: item.id })}
+                  />
                 </View>
-              </Pressable>
+              </View>
             );
           }}
           ListEmptyComponent={
             !loading ? (
               <EmptyState
                 icon="package"
+                tone="amber"
                 title="No products yet"
                 message="Add items with price and stock to sell from Sale or invoices."
                 actionLabel={canWrite ? 'Add product' : undefined}
@@ -411,8 +424,10 @@ export function ShopProductsScreen() {
           onRequestClose={() => setBulkOpen(false)}
         >
           <Pressable style={styles.backdrop} onPress={() => setBulkOpen(false)}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.popupWrap}>
-              <Pressable style={styles.popup} onPress={(event) => event.stopPropagation()}>
+            <Pressable
+              style={[styles.popup, { marginBottom: lift, maxHeight, paddingBottom: bottomPad }]}
+              onPress={(event) => event.stopPropagation()}
+            >
                 <View style={styles.popupHeader}>
                   <Text style={styles.bulkTitle}>
                     Edit {selectedIds.length} product{selectedIds.length === 1 ? '' : 's'}
@@ -479,7 +494,6 @@ export function ShopProductsScreen() {
                   </View>
                 </ScrollView>
               </Pressable>
-            </KeyboardAvoidingView>
           </Pressable>
         </Modal>
       </View>
@@ -552,17 +566,23 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: colors.overlay,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    justifyContent: 'flex-end',
   },
-  popupWrap: { width: '100%', maxWidth: 480, alignSelf: 'center' },
+  popupWrap: { width: '100%' },
   popup: {
     backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    maxHeight: '85%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    width: '100%',
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
   },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.sm },
+  searchFlex: { flex: 1, marginBottom: 0 },
+  productRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  productCheck: { paddingTop: 18 },
+  productCard: { flex: 1, minWidth: 0 },
   popupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -588,12 +608,13 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   filters: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },
   filterHalf: { flex: 1 },
@@ -610,7 +631,7 @@ const styles = StyleSheet.create({
   rowInner: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   thumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.muted },
   thumbEmpty: {
-    backgroundColor: colors.tint,
+    backgroundColor: iconTones.amber.background,
     alignItems: 'center',
     justifyContent: 'center',
   },

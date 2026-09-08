@@ -41,6 +41,46 @@ def _headline_from_subject(subject: str) -> str:
     return text
 
 
+def email_stat_grid(cells: Sequence[dict[str, Any]]) -> str:
+    """2-up KPI tiles for digest / summary emails. Each cell: {label, value, hint?}."""
+    usable = [cell for cell in cells if cell.get("value") not in (None, "")]
+    if not usable:
+        return ""
+    rows: list[str] = []
+    for idx in range(0, len(usable), 2):
+        pair = usable[idx : idx + 2]
+        tds: list[str] = []
+        for cell in pair:
+            label = escape_email(cell.get("label") or "")
+            value = escape_email(cell.get("value") or "")
+            hint = escape_email(cell.get("hint") or "")
+            color = escape_email(cell.get("color") or _TEXT)
+            hint_html = (
+                f'<div style="font-size:11px;line-height:1.4;color:{_MUTED};'
+                f'margin-top:4px;">{hint}</div>'
+                if hint
+                else ""
+            )
+            tds.append(
+                f'<td width="50%" valign="top" style="padding:6px;">'
+                f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+                f'style="border:1px solid {_BORDER};border-radius:10px;background:{_SOFT};">'
+                f'<tr><td style="padding:14px 14px 12px;">'
+                f'<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;'
+                f'text-transform:uppercase;color:{_MUTED};margin:0 0 6px;">{label}</div>'
+                f'<div style="font-size:22px;line-height:1.2;font-weight:800;'
+                f'color:{color};">{value}</div>'
+                f"{hint_html}</td></tr></table></td>"
+            )
+        if len(pair) == 1:
+            tds.append('<td width="50%" style="padding:6px;"></td>')
+        rows.append(f"<tr>{''.join(tds)}</tr>")
+    return (
+        f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+        f'style="margin:16px 0 4px;border-collapse:separate;">{"".join(rows)}</table>'
+    )
+
+
 def email_info_card(*, title: str = "", lines: Sequence[str] | None = None, html: str = "") -> str:
     """Soft callout used for ETA, address, appointment summary, refund box."""
     title_html = (

@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -15,11 +14,12 @@ import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useCustomers } from '../../hooks/useOpsData';
-import { colors, spacing } from '../../theme/tokens';
+import { colors, radius, spacing } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopPet } from '@ie-orbit/sdk';
 import { DesktopPage } from '../../components/DesktopPage';
+import { Input } from '../../components/ui/Input';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopPetDetail'>;
 
@@ -169,22 +169,20 @@ export function ShopPetDetailScreen() {
 
         {showNotify ? (
           <View style={styles.notifyCard}>
-            <Text style={styles.label}>Subject</Text>
-            <TextInput
-              style={styles.input}
+            <Input
+              label="Subject"
+              required
               value={subject}
               onChangeText={setSubject}
               placeholder="Subject"
-              placeholderTextColor={colors.mutedForeground}
             />
-            <Text style={styles.label}>Message</Text>
-            <TextInput
-              style={[styles.input, styles.notes]}
+            <Input
+              label="Message"
+              required
               value={body}
               onChangeText={setBody}
               placeholder="Write a custom message for the pet owner…"
               multiline
-              placeholderTextColor={colors.mutedForeground}
             />
             <Text style={styles.hint}>Sends in-app (if they have an account) and email.</Text>
             <Pressable
@@ -254,13 +252,14 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginTop: 6,
     marginBottom: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.background,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 100, textAlignVertical: 'top' },
 });

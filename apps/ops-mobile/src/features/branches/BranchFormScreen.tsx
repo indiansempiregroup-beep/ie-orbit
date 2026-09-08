@@ -6,11 +6,15 @@ import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-n
 import type { Branch } from '@ie-orbit/sdk';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
+import { FieldRow } from '../../components/ui/FieldRow';
+import { FormAlert } from '../../components/ui/FormAlert';
+import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
 import { useToast } from '../../contexts/ToastContext';
 import { useBranches, useBranchMutations } from '../../hooks/useOpsExtended';
-import { colors, fonts, radius, spacing } from '../../theme/tokens';
+import { colors, radius, spacing } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -67,6 +71,7 @@ export function BranchFormScreen() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
 
   useLayoutEffect(() => {
@@ -89,18 +94,20 @@ export function BranchFormScreen() {
   }
 
   async function save() {
-    if (!form.name.trim()) {
-      setError('Office name is required.');
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!form.name.trim()) nextErrors.name = 'Office name is required.';
     if (!form.addressLine1.trim() || !form.city.trim() || !form.country.trim()) {
-      setError('Select a full office address from Google Places.');
-      return;
+      nextErrors.address = 'Select a full office address from Google Places.';
     }
     if (latitude == null || longitude == null) {
-      setError('Google Map location is required.');
+      nextErrors.address = nextErrors.address || 'Google Map location is required.';
+    }
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setError(Object.values(nextErrors)[0]);
       return;
     }
+    setFieldErrors({});
 
     const payload = {
       branch_name: form.name.trim(),
@@ -179,7 +186,7 @@ export function BranchFormScreen() {
         {loading ? (
           <ActivityIndicator color={colors.primary} />
         ) : (
-          <Text style={styles.error}>This office is no longer available.</Text>
+          <FormAlert message="This office is no longer available." />
         )}
       </FormScreen>
     );
@@ -198,92 +205,103 @@ export function BranchFormScreen() {
         />
       }
     >
-      <Text style={styles.helper}>
-        Each office needs a full address and a Google Map pin. The pin drives customer directions,
-        per-office stock, and instant delivery pickup.
-      </Text>
-
-      <Input
-        label="Office name"
-        value={form.name}
-        onChangeText={(value) => setField('name', value)}
-        placeholder="Downtown clinic"
+      <FormHero
+        icon="map-pin"
+        title={isEditing ? 'Edit office' : 'Add office'}
+        subtitle="Each office needs a full address and a Google Map pin for directions, stock, and delivery pickup."
       />
 
-      <AddressLocationPicker
-        value={form.address}
-        latitude={latitude}
-        longitude={longitude}
-        onChangeText={(value) => setField('address', value)}
-        onPlaceSelected={(place) => {
-          setForm((current) => ({
-            ...current,
-            address: place.formattedAddress,
-            addressLine1: place.line1 || place.formattedAddress,
-            city: place.city || '',
-            state: place.state || '',
-            country: place.country || '',
-            postalCode: place.postalCode || '',
-          }));
-          setLatitude(place.latitude ?? null);
-          setLongitude(place.longitude ?? null);
-        }}
-      />
+      <FormSection title="Office" subtitle="Name customers and staff will recognize.">
+        <Input
+          label="Office name"
+          value={form.name}
+          onChangeText={(value) => {
+            setField('name', value);
+            setFieldErrors((current) => ({ ...current, name: '' }));
+          }}
+          placeholder="Downtown clinic"
+          required
+          error={fieldErrors.name}
+        />
+      </FormSection>
 
-      <View style={styles.row}>
-        <View style={styles.rowHalf}>
-          <Input label="City" value={form.city} onChangeText={(value) => setField('city', value)} editable={!(latitude != null && longitude != null)} />
-        </View>
-        <View style={styles.rowHalf}>
-          <Input label="State" value={form.state} onChangeText={(value) => setField('state', value)} editable={!(latitude != null && longitude != null)} />
-        </View>
-      </View>
-      <View style={styles.row}>
-        <View style={styles.rowHalf}>
+      <FormSection title="Address" subtitle="Search Places, then confirm the pin on the map.">
+        <AddressLocationPicker
+          required
+          fieldError={fieldErrors.address}
+          value={form.address}
+          latitude={latitude}
+          longitude={longitude}
+          onChangeText={(value) => {
+            setField('address', value);
+            setFieldErrors((current) => ({ ...current, address: '' }));
+          }}
+          onPlaceSelected={(place) => {
+            setForm((current) => ({
+              ...current,
+              address: place.formattedAddress,
+              addressLine1: place.line1 || place.formattedAddress,
+              city: place.city || '',
+              state: place.state || '',
+              country: place.country || '',
+              postalCode: place.postalCode || '',
+            }));
+            setLatitude(place.latitude ?? null);
+            setLongitude(place.longitude ?? null);
+            setFieldErrors((current) => ({ ...current, address: '' }));
+          }}
+        />
+
+        <FieldRow>
+          <Input label="City" required value={form.city} onChangeText={(value) => setField('city', value)} editable={!(latitude != null && longitude != null)} />
+          <Input label="State" optional value={form.state} onChangeText={(value) => setField('state', value)} editable={!(latitude != null && longitude != null)} />
+        </FieldRow>
+        <FieldRow>
           <Input
             label="Country"
+            required
             value={form.country}
             onChangeText={(value) => setField('country', value)}
             editable={!(latitude != null && longitude != null)}
           />
-        </View>
-        <View style={styles.rowHalf}>
           <Input
             label="Postal code"
+            optional
             value={form.postalCode}
             onChangeText={(value) => setField('postalCode', value)}
             keyboardType="number-pad"
             editable={!(latitude != null && longitude != null)}
           />
+        </FieldRow>
+
+        <View style={[styles.pinCard, latitude == null ? styles.pinCardWarning : null]}>
+          <Feather
+            name={latitude != null ? 'map-pin' : 'alert-circle'}
+            size={16}
+            color={latitude != null ? colors.primary : colors.warning}
+          />
+          <Text style={latitude != null ? styles.pinText : styles.pinWarningText}>
+            {latitude != null && longitude != null
+              ? `Map pin saved: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+              : 'Select an address from Google Places so a map pin is saved.'}
+          </Text>
         </View>
-      </View>
+      </FormSection>
 
-      <Input
-        label="Phone (rider contact)"
-        value={form.phoneNumber}
-        onChangeText={(value) => setField('phoneNumber', value)}
-        keyboardType="phone-pad"
-        placeholder="Optional"
-      />
-
-      <View style={[styles.pinCard, latitude == null ? styles.pinCardWarning : null]}>
-        <Feather
-          name={latitude != null ? 'map-pin' : 'alert-circle'}
-          size={16}
-          color={latitude != null ? colors.primary : colors.warning}
+      <FormSection title="Contact" subtitle="Used as the rider pickup contact for this office.">
+        <Input
+          label="Phone (rider contact)"
+          optional
+          value={form.phoneNumber}
+          onChangeText={(value) => setField('phoneNumber', value)}
+          keyboardType="phone-pad"
         />
-        <Text style={latitude != null ? styles.pinText : styles.pinWarningText}>
-          {latitude != null && longitude != null
-            ? `Map pin saved: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-            : 'Select an address from Google Places so a map pin is saved.'}
-        </Text>
-      </View>
+      </FormSection>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <FormAlert message={error} /> : null}
 
       {isEditing && branch ? (
-        <View style={styles.manageSection}>
-          <Text style={styles.sectionTitle}>Manage</Text>
+        <FormSection title="Manage">
           {branch.is_primary ? (
             <Text style={styles.meta}>
               This is the primary office. It is used as the default pickup point and cannot be
@@ -313,16 +331,13 @@ export function BranchFormScreen() {
               </Pressable>
             </>
           )}
-        </View>
+        </FormSection>
       ) : null}
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  helper: { color: colors.mutedForeground, lineHeight: 20 },
-  row: { flexDirection: 'row', gap: spacing.md },
-  rowHalf: { flex: 1 },
   pinCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -333,24 +348,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.tint,
   },
-  pinCardWarning: { backgroundColor: colors.card, borderColor: colors.warning },
+  pinCardWarning: { backgroundColor: colors.warningSoft, borderColor: colors.warning },
   pinText: { flex: 1, color: colors.foreground, fontSize: 13 },
   pinWarningText: { flex: 1, color: colors.warning, fontSize: 13 },
-  manageSection: {
-    gap: spacing.sm,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  sectionTitle: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.foreground },
   manageRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
   },
   manageLabel: { color: colors.primary, fontSize: 14, fontWeight: '600' },
   manageDanger: { color: colors.destructive, fontSize: 14, fontWeight: '600' },
-  meta: { color: colors.mutedForeground, fontSize: 13 },
-  error: { color: colors.destructive, fontSize: 13 },
+  meta: { color: colors.mutedForeground, fontSize: 13, lineHeight: 18 },
 });

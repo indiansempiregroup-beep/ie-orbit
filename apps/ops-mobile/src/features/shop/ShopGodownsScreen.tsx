@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -21,15 +20,18 @@ import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { StatTile } from '../../components/ui/StatTile';
-import { TileGrid } from '../../components/ui/TileGrid';
 import { DesktopPage } from '../../components/DesktopPage';
+import { SearchBar } from '../../components/SearchBar';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { GroupedList, GroupedListSeparator } from '../../components/ui/GroupedList';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopGodown, ShopGodownStock, ShopProduct, ShopStockTransfer } from '@ie-orbit/sdk';
-import { formatMoney, todayIso } from './shopBooksHelpers';
+import { formatMoney, formatVoucherDateTime, todayIso } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 
 type Mode = 'list' | 'godown' | 'transfer';
@@ -403,17 +405,15 @@ export function ShopGodownsScreen() {
         }
       >
         <Text style={styles.formTitle}>{editingId ? 'Edit godown' : 'New godown'}</Text>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Main warehouse"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <Input
+          label="Name"
+          required
+          value={name}
+          onChangeText={setName}
+          placeholder="Main warehouse"
+        />
         <AddressLocationPicker
+          required
           value={addressLine1}
           latitude={latitude}
           longitude={longitude}
@@ -428,34 +428,28 @@ export function ShopGodownsScreen() {
             setLongitude(place.longitude ?? null);
           }}
         />
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Pickup phone</Text>
-          <TextInput
-            style={styles.input}
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            placeholder="Optional"
-            placeholderTextColor={colors.mutedForeground}
-            keyboardType="phone-pad"
-          />
-        </View>
+        <Input
+          label="Pickup phone"
+          optional
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          placeholder="Optional"
+          keyboardType="phone-pad"
+        />
         <View style={styles.fieldBlock}>
           <Text style={styles.label}>City / State / Country / Postal code</Text>
           <Text style={styles.hint}>
             {[city, state, country, postalCode].filter(Boolean).join(', ') || 'Select an address above'}
           </Text>
         </View>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Code</Text>
-          <TextInput
-            style={styles.input}
-            value={code}
-            onChangeText={setCode}
-            placeholder="Optional code"
-            placeholderTextColor={colors.mutedForeground}
-            autoCapitalize="characters"
-          />
-        </View>
+        <Input
+          label="Code"
+          optional
+          value={code}
+          onChangeText={setCode}
+          placeholder="Optional code"
+          autoCapitalize="characters"
+        />
         <View style={styles.switchRow}>
           <Text style={styles.label}>Default godown</Text>
           <Switch
@@ -491,6 +485,7 @@ export function ShopGodownsScreen() {
         <Text style={styles.formTitle}>Stock transfer</Text>
         <SelectField
           label="From godown"
+          required
           value={fromGodownId}
           options={godownOptions}
           onChange={setFromGodownId}
@@ -498,6 +493,7 @@ export function ShopGodownsScreen() {
         />
         <SelectField
           label="To godown"
+          required
           value={toGodownId}
           options={godownOptions}
           onChange={setToGodownId}
@@ -505,22 +501,20 @@ export function ShopGodownsScreen() {
         />
         <SelectField
           label="Product"
+          required
           value={productId}
           options={productOptions}
           onChange={setProductId}
           searchable
           placeholder="Choose product"
         />
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Quantity</Text>
-          <TextInput
-            style={styles.input}
-            value={qty}
-            onChangeText={(value) => setQty(value.replace(/[^0-9.]/g, ''))}
-            keyboardType="decimal-pad"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
+        <Input
+          label="Quantity"
+          required
+          value={qty}
+          onChangeText={(value) => setQty(value.replace(/[^0-9.]/g, ''))}
+          keyboardType="decimal-pad"
+        />
       </FormScreen>
     );
   }
@@ -529,29 +523,13 @@ export function ShopGodownsScreen() {
     <View style={styles.headerBlock}>
       {godowns.length ? (
         <>
-          <TileGrid>
-            <StatTile
-              label="Locations"
-              value={String(godowns.length)}
-              hint={insights.defaultLocation ? `${insights.defaultLocation.godown.name} default` : 'Warehouses'}
-            />
-            <StatTile
-              label="SKUs in stock"
-              value={String(insights.uniqueSkuCount)}
-              hint="With location qty"
-            />
-            <StatTile
-              label="Units"
-              value={formatQty(insights.totalUnits)}
-              hint="Across godowns"
-            />
-            <StatTile
-              label="Stock value"
-              value={formatMoney(insights.totalValue)}
-              hint="At selling price"
-              tone={insights.totalValue > 0 ? 'positive' : 'default'}
-            />
-          </TileGrid>
+          <VoucherSummaryCards
+            metrics={[
+              { label: 'Locations', value: String(godowns.length), hint: insights.defaultLocation ? insights.defaultLocation.godown.name : undefined },
+              { label: 'Units', value: formatQty(insights.totalUnits), hint: `${insights.uniqueSkuCount} SKUs` },
+              { label: 'Value', value: formatMoney(insights.totalValue), tone: insights.totalValue > 0 ? 'paid' : undefined },
+            ]}
+          />
 
           <View style={styles.note}>
             <Feather name="info" size={14} color={colors.primary} />
@@ -632,33 +610,35 @@ export function ShopGodownsScreen() {
           {transfers.length ? (
             <View style={styles.sectionBlock}>
               <Text style={styles.sectionTitle}>Recent transfers</Text>
-              {transfers.map((transfer) => (
-                <View key={transfer.id} style={styles.transferRow}>
-                  <View style={styles.transferIcon}>
-                    <Feather name="shuffle" size={14} color={colors.primary} />
+              <GroupedList>
+                {transfers.map((transfer) => (
+                  <View key={transfer.id} style={styles.transferRow}>
+                    <View style={styles.transferIcon}>
+                      <Feather name="shuffle" size={14} color={colors.primary} />
+                    </View>
+                    <View style={styles.transferCopy}>
+                      <Text style={styles.name} numberOfLines={1}>
+                        {transfer.from_godown_name || 'From'} → {transfer.to_godown_name || 'To'}
+                      </Text>
+                      <Text style={styles.meta} numberOfLines={1}>
+                        {transferSummary(transfer)}
+                        {transfer.transfer_date || transfer.created_at
+                          ? ` · ${formatVoucherDateTime(transfer.transfer_date, transfer.created_at)}`
+                          : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.transferNo}>{transfer.transfer_number.replace(/^TR-/, '')}</Text>
                   </View>
-                  <View style={styles.transferCopy}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {transfer.from_godown_name || 'From'} → {transfer.to_godown_name || 'To'}
-                    </Text>
-                    <Text style={styles.meta} numberOfLines={1}>
-                      {transferSummary(transfer)}
-                      {transfer.transfer_date ? ` · ${transfer.transfer_date}` : ''}
-                    </Text>
-                  </View>
-                  <Text style={styles.transferNo}>{transfer.transfer_number.replace(/^TR-/, '')}</Text>
-                </View>
-              ))}
+                ))}
+              </GroupedList>
             </View>
           ) : null}
 
-          <TextInput
+          <SearchBar
             value={query}
             onChangeText={setQuery}
             placeholder="Search location or product"
-            placeholderTextColor={colors.mutedForeground}
-            style={styles.search}
-            returnKeyType="search"
+            style={styles.searchBar}
           />
           <View style={styles.chips}>
             <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
@@ -684,54 +664,28 @@ export function ShopGodownsScreen() {
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           ListHeaderComponent={header}
+          ItemSeparatorComponent={filteredLocations.length ? GroupedListSeparator : undefined}
           renderItem={({ item }) => {
             const expanded = expandedId === item.godown.id;
             const preview = item.lines.slice(0, expanded ? 12 : 3);
             return (
-              <View style={styles.row}>
-                <Pressable
-                  onPress={() => setExpandedId(expanded ? null : item.godown.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.godown.name} stock`}
-                >
-                  <View style={styles.rowTop}>
-                    <View style={styles.rowTitle}>
-                      <Text style={styles.name}>{item.godown.name}</Text>
-                      {item.godown.is_default ? (
-                        <View style={styles.badge}>
-                          <Text style={styles.badgeText}>Default · POS</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Feather
-                      name={expanded ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color={colors.mutedForeground}
-                    />
-                  </View>
-                  <Text style={styles.meta}>
-                    {item.godown.code ? `Code ${item.godown.code} · ` : ''}
-                    {item.skuCount} SKU{item.skuCount === 1 ? '' : 's'} · {formatQty(item.units)} units
-                    {item.value > 0 ? ` · ${formatMoney(item.value)}` : ''}
-                  </Text>
-                  <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        {
-                          width: `${item.share > 0 ? Math.max(item.share * 100, 4) : 0}%`,
-                          backgroundColor: item.godown.is_default ? colors.primary : colors.tintStrong,
-                        },
-                      ]}
-                    />
-                  </View>
-                  {item.lowStock > 0 ? (
-                    <Text style={styles.lowHint}>
-                      {item.lowStock} low-stock SKU{item.lowStock === 1 ? '' : 's'}
-                    </Text>
-                  ) : null}
-                </Pressable>
-
+              <BooksDocumentRow
+                title={item.godown.name}
+                amount={item.value > 0 ? formatMoney(item.value) : undefined}
+                meta={`${item.godown.code ? `Code ${item.godown.code} · ` : ''}${item.skuCount} SKU${item.skuCount === 1 ? '' : 's'} · ${formatQty(item.units)} units`}
+                badge={item.godown.is_default ? 'Default · POS' : item.lowStock > 0 ? `${item.lowStock} low` : undefined}
+                badgeKind={item.lowStock > 0 ? 'due' : item.godown.is_default ? 'paid' : 'neutral'}
+                icon="home"
+                iconTone={item.lowStock > 0 ? 'amber' : item.godown.is_default ? 'navy' : 'green'}
+                onPress={() => setExpandedId(expanded ? null : item.godown.id)}
+                extraActions={[
+                  { label: 'Send', onPress: () => openTransfer(item.godown.id) },
+                  { label: 'Receive', onPress: () => openTransfer(undefined, item.godown.id) },
+                  ...(item.godown.branch
+                    ? []
+                    : [{ label: 'Edit', onPress: () => openEdit(item.godown) }]),
+                ]}
+              >
                 {preview.length ? (
                   <View style={styles.stockList}>
                     {preview.map((line) => (
@@ -761,31 +715,7 @@ export function ShopGodownsScreen() {
                 ) : (
                   <Text style={styles.emptyLocation}>No stock at this location yet.</Text>
                 )}
-
-                <View style={styles.cardActions}>
-                  <Pressable style={styles.cardAction} onPress={() => openTransfer(item.godown.id)}>
-                    <Feather name="arrow-up-right" size={14} color={colors.primary} />
-                    <Text style={styles.cardActionText}>Send</Text>
-                  </Pressable>
-                  <Pressable style={styles.cardAction} onPress={() => openTransfer(undefined, item.godown.id)}>
-                    <Feather name="arrow-down-left" size={14} color={colors.primary} />
-                    <Text style={styles.cardActionText}>Receive</Text>
-                  </Pressable>
-                  {item.godown.branch ? (
-                    <Text style={styles.meta}>Office location · edit under Offices</Text>
-                  ) : (
-                    <Pressable
-                      style={styles.cardAction}
-                      onPress={() => openEdit(item.godown)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit ${item.godown.name}`}
-                    >
-                      <Feather name="edit-2" size={14} color={colors.primary} />
-                      <Text style={styles.cardActionText}>Edit</Text>
-                    </Pressable>
-                  )}
-                </View>
-              </View>
+              </BooksDocumentRow>
             );
           }}
           ListEmptyComponent={
@@ -884,14 +814,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.foreground,
   },
+  searchBar: { marginBottom: spacing.sm },
   search: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   row: {
@@ -907,11 +839,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
     padding: spacing.md,
-    backgroundColor: colors.tint,
+    backgroundColor: colors.card,
   },
   transferIcon: {
     width: 28,
@@ -959,10 +888,11 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
 });

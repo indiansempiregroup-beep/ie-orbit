@@ -44,6 +44,7 @@ export function AddressFormScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lineError, setLineError] = useState<string | null>(null);
+  const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
   const [line1, setLine1] = useState('');
   const [line2, setLine2] = useState('');
   const [city, setCity] = useState('');
@@ -96,6 +97,14 @@ export function AddressFormScreen() {
       setLineError('Search for your address or drop a pin on the map.');
       return;
     }
+    const nextErrors: Record<string, string> = {};
+    if (!city.trim()) nextErrors.city = 'City is required';
+    if (!country.trim()) nextErrors.country = 'Country is required';
+    if (Object.keys(nextErrors).length) {
+      setDetailErrors(nextErrors);
+      return;
+    }
+    setDetailErrors({});
     setLineError(null);
     setError(null);
     setSaving(true);
@@ -166,6 +175,8 @@ export function AddressFormScreen() {
             primaryColor={primary}
           />
           <AddressLocationPicker
+            required
+            fieldError={lineError || undefined}
             value={line1}
             latitude={latitude}
             longitude={longitude}
@@ -183,15 +194,16 @@ export function AddressFormScreen() {
               setLatitude(place.latitude ?? null);
               setLongitude(place.longitude ?? null);
               setLineError(null);
+              setDetailErrors({});
             }}
           />
-          {lineError ? <Text style={styles.fieldError}>{lineError}</Text> : null}
         </Card>
 
         <Card style={styles.section}>
           <SectionHead icon="home" title="Address details" primaryColor={primary} />
           <Input
             label="Flat, floor or landmark"
+            optional
             hint="Optional, but it helps the delivery partner reach your door."
             placeholder="Flat 302, B wing, near City Mall"
             value={line2}
@@ -199,7 +211,18 @@ export function AddressFormScreen() {
           />
           <View style={styles.row}>
             <View style={styles.rowItem}>
-              <Input label="City" placeholder="City" value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
+              <Input
+                label="City"
+                required
+                placeholder="City"
+                value={city}
+                onChangeText={(value) => {
+                  setCity(value);
+                  setDetailErrors((current) => ({ ...current, city: '' }));
+                }}
+                error={detailErrors.city}
+                editable={!(latitude != null && longitude != null)}
+              />
             </View>
             <View style={styles.rowItem}>
               <Input label="State" placeholder="State" value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
@@ -217,7 +240,18 @@ export function AddressFormScreen() {
               />
             </View>
             <View style={styles.rowItem}>
-              <Input label="Country" placeholder="Country" value={country} onChangeText={setCountry} editable={!(latitude != null && longitude != null)} />
+              <Input
+                label="Country"
+                required
+                placeholder="Country"
+                value={country}
+                onChangeText={(value) => {
+                  setCountry(value);
+                  setDetailErrors((current) => ({ ...current, country: '' }));
+                }}
+                error={detailErrors.country}
+                editable={!(latitude != null && longitude != null)}
+              />
             </View>
           </View>
         </Card>

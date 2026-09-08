@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { FormSection } from '../../components/ui/FormSection';
+import { FieldRow } from '../../components/ui/FieldRow';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
@@ -15,8 +17,8 @@ import { DURATION_OPTIONS } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useService, useServiceMutations } from '../../hooks/useOpsExtended';
-import { colors, fonts, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { requiredMessage } from '../../utils/formValidation';
 import {
   serviceCurrency,
   serviceDurationMinutes,
@@ -43,6 +45,7 @@ export function ServiceFormScreen() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!service) return;
@@ -76,6 +79,11 @@ export function ServiceFormScreen() {
             setSubmitting(true);
             setError(null);
             try {
+              if (!name.trim()) {
+                setFieldErrors({ name: requiredMessage('Name') });
+                return;
+              }
+              setFieldErrors({});
               let primaryImage: { media_id: string } | undefined;
               if (imageAsset) {
                 const uploaded = await uploadServiceImage({
@@ -128,14 +136,16 @@ export function ServiceFormScreen() {
         />
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>{isEdit ? 'Edit service' : 'Add service'}</Text>
-        <Text style={styles.subtitle}>What customers book and what staff can be assigned to.</Text>
-      </View>
+      <FormHero
+        icon="package"
+        title={isEdit ? 'Edit service' : 'Add service'}
+        subtitle="What customers book and what staff can be assigned to."
+      />
 
       <FormSection title="Basics">
         <ImagePickerButton
           label="Service image"
+          optional
           variant="card"
           valueUri={imagePreview || serviceImageUrl(service)}
           onPicked={(asset) => {
@@ -144,20 +154,33 @@ export function ServiceFormScreen() {
           }}
           helperText="Shown on service lists and booking screens."
         />
-        <Input label="Name" value={name} onChangeText={setName} />
-        <Input label="Description" value={description} onChangeText={setDescription} multiline />
+        <Input
+          label="Name"
+          required
+          value={name}
+          onChangeText={(value) => {
+            setName(value);
+            setFieldErrors((current) => ({ ...current, name: '' }));
+          }}
+          error={fieldErrors.name}
+        />
+        <Input label="Description" optional value={description} onChangeText={setDescription} multiline />
       </FormSection>
 
       <FormSection title="Duration & price">
-        <SelectField label="Duration" value={duration} options={DURATION_OPTIONS} onChange={setDuration} />
-        <Input
-          label={`Price (${currency})`}
-          value={price}
-          onChangeText={setPrice}
-          keyboardType="decimal-pad"
-        />
+        <FieldRow>
+          <SelectField label="Duration" required value={duration} options={DURATION_OPTIONS} onChange={setDuration} />
+          <Input
+            label={`Price (${currency})`}
+            optional
+            value={price}
+            onChangeText={setPrice}
+            keyboardType="decimal-pad"
+          />
+        </FieldRow>
         <Input
           label="Points earned on complete"
+          optional
           value={loyaltyPointsEarn}
           onChangeText={setLoyaltyPointsEarn}
           keyboardType="number-pad"
@@ -165,14 +188,7 @@ export function ServiceFormScreen() {
         />
       </FormSection>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <FormAlert message={error} /> : null}
     </FormScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  intro: { gap: 4, marginBottom: 4 },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
-  error: { ...typography.caption, color: colors.destructive },
-});

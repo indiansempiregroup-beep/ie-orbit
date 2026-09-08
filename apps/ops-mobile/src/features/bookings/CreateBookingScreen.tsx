@@ -1,14 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
 import type { StaffServiceAssignment } from '@ie-orbit/sdk';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { SelectField } from '../../components/SelectField';
 import { TimeSlotGrid } from '../../components/TimeSlotGrid';
 import { Button } from '../../components/ui/Button';
+import { Chip } from '../../components/ui/Chip';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { FormSection } from '../../components/ui/FormSection';
+import { IconBadge } from '../../components/ui/IconBadge';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -17,8 +22,8 @@ import { useAvailability, useBookingMutations, useBranches, useEntityMaps } from
 import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
+import { requiredMessage } from '../../utils/formValidation';
 import {
-  formatServiceMeta,
   servicesSummaryLabel,
   servicesTotalDurationMinutes,
   servicesTotalPriceLabel,
@@ -32,6 +37,42 @@ function dateFromIso(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return formatDateKey(new Date());
   return formatDateKey(date);
+}
+
+function addDays(from: Date, days: number) {
+  const next = new Date(from.getFullYear(), from.getMonth(), from.getDate() + days);
+  return next;
+}
+
+function friendlyDate(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function RecapRow({
+  icon,
+  label,
+  value,
+  pending,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  value: string;
+  pending?: boolean;
+}) {
+  return (
+    <View style={styles.recapRow}>
+      <Feather name={icon} size={14} color={pending ? colors.mutedForeground : colors.primary} />
+      <Text style={styles.recapLabel}>{label}</Text>
+      <Text style={[styles.recapValue, pending && styles.recapPending]} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
 }
 
 export function CreateBookingScreen() {
@@ -56,7 +97,23 @@ export function CreateBookingScreen() {
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assignments, setAssignments] = useState<StaffServiceAssignment[]>([]);
+
+  const quickDates = useMemo(() => {
+    const today = new Date();
+    return [0, 1, 2, 3, 4].map((offset) => {
+      const day = addDays(today, offset);
+      const key = formatDateKey(day);
+      const label =
+        offset === 0
+          ? 'Today'
+          : offset === 1
+            ? 'Tomorrow'
+            : day.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+      return { key, label };
+    });
+  }, []);
 
   useEffect(() => {
     if (!branches.length) return;
@@ -101,6 +158,8 @@ export function CreateBookingScreen() {
   const serviceSummaryLabel = servicesSummaryLabel(selectedServices, (service) =>
     serviceMap.get(service.id) ?? service.name ?? service.id,
   );
+  const customerName = customerId ? customerMap.get(customerId) ?? 'Customer' : '';
+  const staffName = staffId ? staffMap.get(staffId) ?? 'Staff' : 'Any available';
 
   const eligibleStaff = useMemo(() => {
     const activeStaff = staff.filter(
@@ -164,6 +223,12 @@ export function CreateBookingScreen() {
     setSelectedSlot('');
   }
 
+  function pickDate(next: string) {
+    setDate(next);
+    setSelectedSlot('');
+    setFieldErrors((current) => ({ ...current, slot: '' }));
+  }
+
   const customerOptions = useMemo(
     () => customers.map((c) => ({ value: c.id, label: customerMap.get(c.id) ?? c.id })),
     [customers, customerMap],
@@ -193,66 +258,108 @@ export function CreateBookingScreen() {
     [branches],
   );
   const needsOfficePicker = branches.length > 1;
+  const recapWhen = selectedSlot ? formatDateTime(selectedSlot) : friendlyDate(date);
+  const recapFooter = [customerName || null, serviceSummaryLabel || null, selectedSlot ? formatDateTime(selectedSlot) : null]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <FormScreen
       footer={
-        <Button
-          label={
-            selectedSlot
-              ? `Book · ${formatDateTime(selectedSlot)}${servicePriceLabel ? ` · ${servicePriceLabel}` : ''}`
-              : 'Create booking'
-          }
-          loading={loading}
-          fullWidth
-          size="lg"
-          onPress={async () => {
-            if (!customerId || !selectedServiceIds.length) {
-              setError('Customer and at least one service are required.');
-              return;
-            }
-            if (needsOfficePicker && !branchId) {
-              setError('Select an office for this booking.');
-              return;
-            }
-            if (!selectedSlot) {
-              setError('Select an available time slot.');
-              return;
-            }
-            setLoading(true);
-            setError(null);
-            try {
-              const booking = await mutations.create({
-                business: businessId ?? undefined,
-                customer_id: customerId,
-                items: selectedServices.map((service, index) => ({
-                  service_id: service.id,
-                  duration_minutes: serviceDurationMinutes(service),
-                  sort_order: index,
-                })),
-                staff_id: requiresMultipleSpecialists ? null : staffId || null,
-                branch_id: branchId || null,
-                start_at: selectedSlot,
-                notes: notes || undefined,
-                source: 'operations_dashboard',
-                channel: 'mobile',
-              });
-              navigation.replace('BookingDetail', {
-                bookingId: booking.id,
-                initialBooking: booking,
-              });
-            } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to create booking.'));
-            } finally {
-              setLoading(false);
-            }
-          }}
-        />
+        <View style={styles.footerBlock}>
+          <Text style={styles.footerRecap} numberOfLines={2}>
+            {recapFooter || 'Choose a customer, services, and a time'}
+          </Text>
+          <Button
+            label={selectedSlot ? 'Confirm booking' : 'Create booking'}
+            icon={selectedSlot ? 'check' : 'calendar'}
+            loading={loading}
+            fullWidth
+            size="lg"
+            onPress={async () => {
+              if (!customerId || !selectedServiceIds.length) {
+                setFieldErrors({
+                  ...(!customerId ? { customer: requiredMessage('Customer') } : {}),
+                  ...(!selectedServiceIds.length ? { services: 'Select at least one service.' } : {}),
+                });
+                setError('Customer and at least one service are required.');
+                return;
+              }
+              if (needsOfficePicker && !branchId) {
+                setFieldErrors({ office: 'Select an office for this booking.' });
+                setError('Select an office for this booking.');
+                return;
+              }
+              if (!selectedSlot) {
+                setFieldErrors({ slot: 'Select an available time slot.' });
+                setError('Select an available time slot.');
+                return;
+              }
+              setFieldErrors({});
+              setLoading(true);
+              setError(null);
+              try {
+                const booking = await mutations.create({
+                  business: businessId ?? undefined,
+                  customer_id: customerId,
+                  items: selectedServices.map((service, index) => ({
+                    service_id: service.id,
+                    duration_minutes: serviceDurationMinutes(service),
+                    sort_order: index,
+                  })),
+                  staff_id: requiresMultipleSpecialists ? null : staffId || null,
+                  branch_id: branchId || null,
+                  start_at: selectedSlot,
+                  notes: notes || undefined,
+                  source: 'operations_dashboard',
+                  channel: 'mobile',
+                });
+                navigation.replace('BookingDetail', {
+                  bookingId: booking.id,
+                  initialBooking: booking,
+                });
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to create booking.'));
+              } finally {
+                setLoading(false);
+              }
+            }}
+          />
+        </View>
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>New booking</Text>
-        <Text style={styles.subtitle}>Who, what, then when — three quick steps.</Text>
+      <FormHero subtitle="Customer and services first, then pick a time. Notes are optional." />
+
+      <View style={styles.recapCard}>
+        <RecapRow
+          icon="user"
+          label="Customer"
+          value={customerName || 'Not selected'}
+          pending={!customerId}
+        />
+        <RecapRow
+          icon="layers"
+          label="Visit"
+          value={
+            selectedServices.length
+              ? `${serviceSummaryLabel}${servicePriceLabel ? ` · ${servicePriceLabel}` : ''} · ${durationMinutes} min`
+              : 'No services yet'
+          }
+          pending={!selectedServices.length}
+        />
+        <RecapRow
+          icon="clock"
+          label="When"
+          value={selectedSlot ? recapWhen : `${friendlyDate(date)} · pick a time`}
+          pending={!selectedSlot}
+        />
+        {showStaffPicker ? (
+          <RecapRow
+            icon="users"
+            label="Staff"
+            value={requiresMultipleSpecialists ? 'Multiple specialists' : staffName}
+          />
+        ) : null}
       </View>
 
       <FormSection
@@ -264,54 +371,88 @@ export function CreateBookingScreen() {
             : 'Customer, services, and office'
         }
       >
-        <SelectField label="Customer" value={customerId} options={customerOptions} onChange={setCustomerId} />
+        <SelectField
+          label="Customer"
+          required
+          value={customerId}
+          options={customerOptions}
+          placeholder="Search customers"
+          onChange={(value) => {
+            setCustomerId(value);
+            setFieldErrors((current) => ({ ...current, customer: '' }));
+            setError(null);
+          }}
+          error={fieldErrors.customer}
+        />
 
         <ServiceMultiPicker
+          required
+          error={fieldErrors.services}
           services={services}
           selectedIds={selectedServiceIds}
-          onChange={updateSelectedServices}
+          onChange={(ids) => {
+            updateSelectedServices(ids);
+            setFieldErrors((current) => ({ ...current, services: '' }));
+            setError(null);
+          }}
           nameFor={(service) => serviceMap.get(service.id) ?? service.name ?? service.id}
         />
 
         {needsOfficePicker ? (
-          <SelectField label="Office" value={branchId} options={branchOptions} onChange={setBranchId} />
+          <SelectField
+            label="Office"
+            required
+            value={branchId}
+            options={branchOptions}
+            onChange={(value) => {
+              setBranchId(value);
+              setFieldErrors((current) => ({ ...current, office: '' }));
+              setError(null);
+            }}
+            error={fieldErrors.office}
+          />
         ) : null}
 
         {showStaffPicker ? (
           requiresMultipleSpecialists ? (
-            <View style={styles.infoCard}>
-              <Text style={styles.infoTitle}>Multiple specialists will be assigned</Text>
-              <Text style={styles.hint}>
-                No single staff member covers all selected services. The system will assign the best
-                available team for each service.
-              </Text>
+            <View style={styles.callout}>
+              <IconBadge icon="users" tone="cyan" size="sm" />
+              <View style={styles.calloutCopy}>
+                <Text style={styles.calloutTitle}>Multiple specialists will be assigned</Text>
+                <Text style={styles.hint}>
+                  No single staff member covers all selected services. The system will assign the best
+                  available team for each service.
+                </Text>
+              </View>
             </View>
           ) : (
             <SelectField
               label="Staff"
+              optional
               value={staffId}
               options={staffOptions}
               onChange={(value) => {
                 setStaffId(value);
                 setSelectedSlot('');
+                setFieldErrors((current) => ({ ...current, slot: '' }));
               }}
               placeholder={selectedServiceIds.length ? 'Choose eligible staff' : 'Select services first'}
+              hint={
+                selectedServiceIds.length && !staffId && eligibleStaff.length > 0
+                  ? 'Any available assigns only among staff who can perform all selected services.'
+                  : undefined
+              }
             />
           )
         ) : null}
 
-        {selectedServices.length === 1 ? (
-          <Text style={styles.hint}>{formatServiceMeta(selectedServices[0])}</Text>
-        ) : null}
         {showStaffPicker && selectedServiceIds.length > 0 && eligibleStaff.length === 0 && !requiresMultipleSpecialists ? (
-          <Text style={styles.error}>
-            No staff is assigned to the selected services. Assign services on the staff profile.
-          </Text>
-        ) : null}
-        {showStaffPicker && selectedServiceIds.length > 0 && !staffId && !requiresMultipleSpecialists ? (
-          <Text style={styles.hint}>
-            Any available assigns only among staff who can perform all selected services.
-          </Text>
+          <View style={styles.calloutWarn}>
+            <IconBadge icon="alert-circle" tone="amber" size="sm" />
+            <Text style={styles.calloutWarnText}>
+              No staff is assigned to the selected services. Assign services on the staff profile.
+            </Text>
+          </View>
         ) : null}
       </FormSection>
 
@@ -320,22 +461,38 @@ export function CreateBookingScreen() {
         title="Date & time"
         subtitle={
           selectedServices.length > 1
-            ? `Showing slots for ${serviceSummaryLabel} (${durationMinutes} min total)`
-            : 'Only open slots for the selected service are shown'
+            ? `Slots for ${serviceSummaryLabel} (${durationMinutes} min total)`
+            : selectedServices.length === 1
+              ? `Open slots for ${serviceSummaryLabel}`
+              : 'Select services first to load times'
         }
       >
+        <View style={styles.quickDates}>
+          {quickDates.map((item) => (
+            <Chip
+              key={item.key}
+              label={item.label}
+              active={date === item.key}
+              onPress={() => pickDate(item.key)}
+            />
+          ))}
+        </View>
+
         <CalendarPicker
           value={date}
-          onChange={(next) => {
-            setDate(next);
-            setSelectedSlot('');
-          }}
+          allowPast={false}
+          onChange={(next) => pickDate(next)}
         />
         <TimeSlotGrid
           slots={slots}
           selected={selectedSlot}
-          onSelect={setSelectedSlot}
+          onSelect={(startAt) => {
+            setSelectedSlot(startAt);
+            setFieldErrors((current) => ({ ...current, slot: '' }));
+            setError(null);
+          }}
           loading={slotsLoading}
+          error={fieldErrors.slot}
           emptyMessage={
             !selectedServiceIds.length
               ? 'Select at least one service to load available times.'
@@ -346,37 +503,99 @@ export function CreateBookingScreen() {
                   : 'No timeslot available. No staff is free for the selected services on this date.'
           }
         />
-        {selectedSlot ? <Text style={styles.selected}>Selected · {formatDateTime(selectedSlot)}</Text> : null}
+        {selectedSlot ? (
+          <Pressable
+            onPress={() => setSelectedSlot('')}
+            style={styles.selectedChip}
+            accessibilityRole="button"
+            accessibilityLabel="Clear selected time"
+          >
+            <Feather name="check-circle" size={16} color={colors.primary} />
+            <Text style={styles.selected}>Selected · {formatDateTime(selectedSlot)}</Text>
+            <Text style={styles.clearSlot}>Change</Text>
+          </Pressable>
+        ) : null}
       </FormSection>
 
       <FormSection step={3} title="Notes" subtitle="Optional details for the team">
         <Input
           label="Notes"
+          optional
           value={notes}
           onChangeText={setNotes}
           multiline
-          placeholder="Add booking notes"
+          placeholder="Allergies, preferences, or anything the team should know"
         />
       </FormSection>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <FormAlert message={error} /> : null}
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  intro: { gap: 4, marginBottom: spacing.sm },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
-  infoCard: {
+  recapCard: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.md,
+  },
+  recapRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  recapLabel: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    width: 72,
+  },
+  recapValue: {
+    ...typography.label,
+    color: colors.foreground,
+    flex: 1,
+    textAlign: 'right',
+  },
+  recapPending: {
+    color: colors.mutedForeground,
+    fontFamily: fonts.body,
+    fontWeight: '400',
+  },
+  quickDates: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  callout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
     padding: spacing.md,
     borderRadius: radius.md,
     backgroundColor: colors.secondary,
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
   },
-  infoTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
-  hint: { ...typography.caption, color: colors.mutedForeground },
-  selected: { ...typography.label, color: colors.primary },
-  error: { ...typography.caption, color: colors.destructive },
+  calloutCopy: { flex: 1, gap: spacing.xs },
+  calloutTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  calloutWarn: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.warningSoft,
+  },
+  calloutWarnText: { ...typography.caption, color: colors.foreground, flex: 1, lineHeight: 18 },
+  hint: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
+  selectedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  selected: { ...typography.label, color: colors.primary, flex: 1 },
+  clearSlot: { ...typography.caption, color: colors.mutedForeground, fontFamily: fonts.bodySemi },
+  footerBlock: { gap: spacing.sm },
+  footerRecap: { ...typography.caption, color: colors.mutedForeground, textAlign: 'center', lineHeight: 18 },
 });

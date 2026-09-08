@@ -14,7 +14,7 @@ export function Chip({ label, active, onPress }: Props) {
       onPress={onPress}
       style={[
         styles.chip,
-        active ? { backgroundColor: colors.tint, borderColor: colors.primary } : null,
+        active ? { backgroundColor: colors.primary, borderColor: colors.primary } : null,
       ]}
     >
       <Text style={[styles.label, active ? styles.labelActive : null]}>{label}</Text>
@@ -28,8 +28,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderColor: 'transparent',
+    backgroundColor: colors.inputBackground,
   },
   label: {
     ...typography.caption,
@@ -37,5 +37,5 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontWeight: '500',
   },
-  labelActive: { color: colors.primary, fontFamily: fonts.bodySemi },
+  labelActive: { color: colors.primaryForeground, fontFamily: fonts.bodySemi },
 });

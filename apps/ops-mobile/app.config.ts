@@ -66,8 +66,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/icon.png',
   splash: {
     image: './assets/splash.png',
-    resizeMode: 'cover',
-    backgroundColor: '#0B1F3A',
+    resizeMode: 'contain',
+    backgroundColor: '#F4F7F8',
   },
   plugins: [
     ...(Array.isArray(config.plugins) ? config.plugins : []),
@@ -95,9 +95,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#0B1F3A',
+        backgroundColor: '#F4F7F8',
         image: './assets/splash.png',
-        resizeMode: 'cover',
+        resizeMode: 'contain',
       },
     ],
     ...(adMobPlugin ? [adMobPlugin] : []),
@@ -142,8 +142,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     },
     adaptiveIcon: {
-      foregroundImage: './assets/icon.png',
-      backgroundColor: '#0B1F3A',
+      foregroundImage: './assets/adaptive-icon.png',
+      backgroundColor: '#F4F7F8',
     },
     // Allow http:// LAN API calls from Android builds / Expo Go.
     ...({ usesCleartextTraffic: true } as object),
@@ -152,7 +152,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...config.web,
     bundler: 'metro',
     output: 'single',
-    favicon: './assets/icon.png',
+    favicon: './assets/favicon.png',
   },
   extra: {
     ...config.extra,

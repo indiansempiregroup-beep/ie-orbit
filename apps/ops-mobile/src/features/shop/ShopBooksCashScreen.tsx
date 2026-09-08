@@ -1,8 +1,9 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -11,27 +12,31 @@ import { SelectField } from '../../components/SelectField';
 import { DateField } from '../../components/DateField';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { Chip } from '../../components/ui/Chip';
-import { StatTile } from '../../components/ui/StatTile';
-import { TileGrid } from '../../components/ui/TileGrid';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
+import { SearchBar } from '../../components/SearchBar';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopBooksVoucher, ShopCashAccount, ShopSupplier } from '@ie-orbit/sdk';
 import {
   customerLabel,
   formatMoney,
+  formatVoucherDateTime,
   isVoidedVoucher,
   supplierLabel,
   todayIso,
   voucherAmount,
-  voucherStatusStyle,
 } from './shopBooksHelpers';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { GroupedList } from '../../components/ui/GroupedList';
 
 type PaymentType = 'payment_in' | 'payment_out';
 
 export function ShopBooksCashScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const toast = useToast();
@@ -56,6 +61,8 @@ export function ShopBooksCashScreen() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(todayIso());
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [search, setSearch] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentType>('all');
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -147,6 +154,23 @@ export function ShopBooksCashScreen() {
         .reduce((sum, p) => sum + voucherAmount(p.total), 0),
     [payments],
   );
+  const visiblePayments = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return payments.filter((item) => {
+      if (paymentFilter !== 'all' && item.voucher_type !== paymentFilter) return false;
+      if (!term) return true;
+      return [
+        item.voucher_number,
+        item.customer_name ?? '',
+        item.supplier_name ?? '',
+        item.cash_account_name ?? '',
+        String(item.total),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [payments, paymentFilter, search]);
 
   async function saveAccount() {
     if (!client || !businessId || !accountName.trim()) {
@@ -229,40 +253,46 @@ export function ShopBooksCashScreen() {
   return (
     <DesktopPage>
       <RefreshableScrollView
-        refreshing={refreshing || loading}
+        refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]}
       >
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <TileGrid>
-          <StatTile label="Cash in hand" value={formatMoney(cashTotal)} />
-          <StatTile label="Bank balance" value={formatMoney(bankTotal)} />
-          <StatTile label="Payment in" value={formatMoney(paymentInTotal)} tone="positive" hint="Collected" />
-          <StatTile label="Payment out" value={formatMoney(paymentOutTotal)} tone="negative" hint="Paid out" />
-        </TileGrid>
+        <VoucherSummaryCards
+          metrics={[
+            { label: 'Cash', value: formatMoney(cashTotal) },
+            { label: 'Bank', value: formatMoney(bankTotal) },
+            {
+              label: 'In',
+              value: formatMoney(paymentInTotal),
+              tone: 'paid',
+              hint: `Out ${formatMoney(paymentOutTotal)}`,
+            },
+          ]}
+        />
 
         {showAccountForm ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Add account</Text>
-            <TextInput
-              style={styles.input}
+            <Input
+              label="Account name"
+              required
               value={accountName}
               onChangeText={setAccountName}
               placeholder="Account name"
-              placeholderTextColor={colors.mutedForeground}
             />
             <View style={styles.chipRow}>
               <Chip label="Cash" active={accountType === 'cash'} onPress={() => setAccountType('cash')} />
               <Chip label="Bank" active={accountType === 'bank'} onPress={() => setAccountType('bank')} />
             </View>
-            <TextInput
-              style={styles.input}
+            <Input
+              label="Opening balance"
+              optional
               value={accountOpening}
               onChangeText={(value) => setAccountOpening(value.replace(/[^0-9.]/g, ''))}
               placeholder="Opening balance"
               keyboardType="decimal-pad"
-              placeholderTextColor={colors.mutedForeground}
             />
             <Button label={busy ? 'Saving…' : 'Save account'} loading={busy} fullWidth onPress={() => void saveAccount()} />
           </View>
@@ -270,18 +300,19 @@ export function ShopBooksCashScreen() {
 
         <Text style={styles.sectionTitle}>Accounts</Text>
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
-        {accounts.map((account) => (
-          <View key={account.id} style={styles.accountRow}>
-            <View style={styles.accountIcon}>
-              <Feather name={account.account_type === 'bank' ? 'credit-card' : 'dollar-sign'} size={16} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{account.name}</Text>
-              <Text style={styles.meta}>{account.account_type}</Text>
-            </View>
-            <Text style={styles.balance}>{formatMoney(account.current_balance)}</Text>
-          </View>
-        ))}
+        <GroupedList>
+          {accounts.map((account) => (
+            <BooksDocumentRow
+              key={account.id}
+              title={account.name}
+              amount={formatMoney(account.current_balance)}
+              meta={account.account_type}
+              badge={account.is_active === false ? 'Inactive' : undefined}
+              icon={account.account_type === 'bank' ? 'credit-card' : 'dollar-sign'}
+              iconTone={account.account_type === 'bank' ? 'navy' : 'green'}
+            />
+          ))}
+        </GroupedList>
         {!loading && !accounts.length ? (
           <EmptyState
             icon="credit-card"
@@ -315,28 +346,29 @@ export function ShopBooksCashScreen() {
 
           <SelectField
             label={paymentType === 'payment_in' ? 'From customer' : 'To supplier'}
+            required
             value={paymentPartyId}
             options={partyOptions}
             onChange={setPaymentPartyId}
             searchable
           />
-          <SelectField label="Account" value={paymentAccountId} options={accountOptions} onChange={setPaymentAccountId} />
-          <TextInput
-            style={styles.input}
+          <SelectField label="Account" required value={paymentAccountId} options={accountOptions} onChange={setPaymentAccountId} />
+          <Input
+            label="Amount"
+            required
             value={paymentAmount}
             onChangeText={(value) => setPaymentAmount(value.replace(/[^0-9.]/g, ''))}
             placeholder="Amount"
             keyboardType="decimal-pad"
-            placeholderTextColor={colors.mutedForeground}
           />
-          <DateField label="Date" value={paymentDate} onChange={setPaymentDate} allowClear={false} />
-          <TextInput
-            style={[styles.input, styles.notes]}
+          <DateField label="Date" required value={paymentDate} onChange={setPaymentDate} allowClear={false} />
+          <Input
+            label="Notes"
+            optional
             value={paymentNotes}
             onChangeText={setPaymentNotes}
-            placeholder="Notes (optional)"
+            placeholder="Notes"
             multiline
-            placeholderTextColor={colors.mutedForeground}
           />
           <Button
             label={busy ? 'Saving…' : `Record ${paymentType === 'payment_in' ? 'payment in' : 'payment out'}`}
@@ -347,35 +379,34 @@ export function ShopBooksCashScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>Recent payments</Text>
-        {payments.slice(0, 25).map((item) => {
-          const badge = voucherStatusStyle(item.status);
-          const isIn = item.voucher_type === 'payment_in';
-          const canVoid = !isVoidedVoucher(item.status);
-          return (
-            <View key={item.id} style={styles.row}>
-              <View style={styles.rowTop}>
-                <Text style={styles.name}>
-                  {isIn ? '↓ In' : '↑ Out'} · {item.voucher_number}
-                </Text>
-                <Text style={[styles.total, isIn ? styles.inAmount : styles.outAmount]}>{formatMoney(item.total)}</Text>
-              </View>
-              <Text style={styles.meta}>
-                {item.customer_name || item.supplier_name || item.cash_account_name || '—'}
-                {item.voucher_date ? ` · ${item.voucher_date}` : ''}
-              </Text>
-              <View style={styles.rowBottom}>
-                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                  <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                </View>
-                {canVoid ? (
-                  <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
-                    <Text style={styles.voidText}>Void</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            </View>
-          );
-        })}
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search payments" style={styles.search} />
+        <View style={styles.chipRow}>
+          <Chip label="All" active={paymentFilter === 'all'} onPress={() => setPaymentFilter('all')} />
+          <Chip label="In" active={paymentFilter === 'payment_in'} onPress={() => setPaymentFilter('payment_in')} />
+          <Chip label="Out" active={paymentFilter === 'payment_out'} onPress={() => setPaymentFilter('payment_out')} />
+        </View>
+        <GroupedList>
+          {visiblePayments.slice(0, 25).map((item) => {
+            const isIn = item.voucher_type === 'payment_in';
+            const voided = isVoidedVoucher(item.status);
+            return (
+              <BooksDocumentRow
+                key={item.id}
+                title={item.customer_name || item.supplier_name || item.cash_account_name || (isIn ? 'Payment in' : 'Payment out')}
+                amount={formatMoney(item.total)}
+                amountTone={voided ? undefined : isIn ? 'paid' : 'due'}
+                meta={`${item.voucher_number}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}`}
+                badge={item.status}
+                badgeKind={voided ? 'void' : isIn ? 'paid' : 'due'}
+                icon={isIn ? 'arrow-down' : 'arrow-up'}
+                iconTone={voided ? 'rose' : isIn ? 'green' : 'coral'}
+                dimmed={voided}
+                actionLabel={!voided ? 'Void' : undefined}
+                onAction={!voided ? () => void onVoid(item) : undefined}
+              />
+            );
+          })}
+        </GroupedList>
         {!loading && !payments.length ? <Text style={styles.meta}>No payments recorded yet.</Text> : null}
       </RefreshableScrollView>
     </DesktopPage>
@@ -384,6 +415,7 @@ export function ShopBooksCashScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.sm, paddingBottom: spacing.xxxl },
+  search: { marginBottom: 0 },
   error: { color: colors.destructive, marginBottom: spacing.sm },
   sectionTitle: { ...typography.title, fontSize: 16, color: colors.foreground, marginTop: spacing.md },
   headerBtn: {
@@ -406,49 +438,15 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.background,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 64, textAlignVertical: 'top' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  accountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  accountIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
   meta: { color: colors.mutedForeground, fontSize: 13 },
-  balance: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
-  row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    backgroundColor: colors.card,
-    gap: 4,
-  },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  total: { fontFamily: fonts.bodyBold, fontSize: 15 },
-  inAmount: { color: colors.success },
-  outAmount: { color: colors.destructive },
-  badge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
-  voidText: { color: colors.destructive, fontSize: 13, fontWeight: '700' },
 });

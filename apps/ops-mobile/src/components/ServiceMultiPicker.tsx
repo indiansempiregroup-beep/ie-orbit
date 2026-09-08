@@ -5,6 +5,7 @@ import type { Service } from '@ie-orbit/sdk';
 import { SearchBar } from './SearchBar';
 import { Avatar } from './ui/Avatar';
 import { Card } from './ui/Card';
+import { FieldLabel } from './ui/FieldLabel';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 import {
   formatServiceMeta,
@@ -20,6 +21,8 @@ type Props = {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   nameFor: (service: Service) => string;
+  required?: boolean;
+  error?: string;
 };
 
 function compactSummaryLabel(services: Service[], nameFor: (service: Service) => string): string {
@@ -29,7 +32,7 @@ function compactSummaryLabel(services: Service[], nameFor: (service: Service) =>
   return `${nameFor(services[0])}, ${nameFor(services[1])} + ${services.length - 2} more`;
 }
 
-export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }: Props) {
+export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor, required, error }: Props) {
   const [search, setSearch] = useState('');
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
@@ -77,6 +80,8 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
 
   return (
     <View style={styles.root}>
+      <FieldLabel label="Services" required={required} />
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       {selectedServices.length > 0 ? (
         <Card style={styles.summaryCard} soft>
           <View style={styles.summaryHeader}>
@@ -234,6 +239,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
 
 const styles = StyleSheet.create({
   root: { gap: spacing.md },
+  error: { ...typography.caption, color: colors.destructive },
   summaryCard: { gap: spacing.sm },
   summaryHeader: {
     flexDirection: 'row',

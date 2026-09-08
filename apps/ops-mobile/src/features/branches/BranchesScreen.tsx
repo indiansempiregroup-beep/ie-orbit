@@ -5,9 +5,12 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Branch } from '@ie-orbit/sdk';
+import { SearchBar } from '../../components/SearchBar';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { DesktopPage } from '../../components/DesktopPage';
-import { SelectField } from '../../components/SelectField';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { BooksDocumentRow } from '../shop/BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBranches } from '../../hooks/useOpsExtended';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
@@ -30,6 +33,7 @@ export function BranchesScreen() {
   const { branches, loading, reload } = useBranches();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('active');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -79,19 +83,26 @@ export function BranchesScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search offices"
-          style={styles.input}
-          placeholderTextColor={colors.mutedForeground}
-        />
-        <View style={styles.filters}>
-          <SelectField label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
+        <View style={styles.topBar}>
+          <SearchBar
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search offices"
+            style={styles.searchFlex}
+          />
+          <FilterButton count={Number(status !== 'active')} onPress={() => setFiltersOpen(true)} />
         </View>
+        <FilterSheet
+          visible={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          onReset={() => setStatus('active')}
+        >
+          <FilterChoiceGroup label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
+        </FilterSheet>
 
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
@@ -100,41 +111,24 @@ export function BranchesScreen() {
             const active = isActive(item);
             const hasPin = item.latitude != null && item.longitude != null;
             return (
-              <Pressable
-                style={styles.row}
+              <BooksDocumentRow
+                title={item.display_name ?? item.branch_name}
+                meta={[
+                  [item.address_line1, item.city, item.state, item.country].filter(Boolean).join(', ') || 'No address set',
+                  hasPin
+                    ? `Pin ${Number(item.latitude).toFixed(4)}, ${Number(item.longitude).toFixed(4)}`
+                    : 'No map pin',
+                  item.phone_number,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                badge={item.is_primary ? 'Primary' : active ? 'Active' : 'Inactive'}
+                badgeKind={active ? 'paid' : 'void'}
+                icon="map-pin"
+                iconTone={active ? 'coral' : 'rose'}
+                dimmed={!active}
                 onPress={() => navigation.navigate('BranchForm', { branchId: item.id })}
-              >
-                <View style={styles.rowInner}>
-                  <View style={[styles.icon, !active && styles.iconMuted]}>
-                    <Feather
-                      name="map-pin"
-                      size={18}
-                      color={active ? colors.primary : colors.mutedForeground}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.name}>{item.display_name ?? item.branch_name}</Text>
-                      {item.is_primary ? (
-                        <Text style={styles.primaryBadge}>Primary</Text>
-                      ) : null}
-                      {!active ? <Text style={styles.inactiveBadge}>Inactive</Text> : null}
-                    </View>
-                    <Text style={styles.meta}>
-                      {[item.address_line1, item.city, item.state, item.country]
-                        .filter(Boolean)
-                        .join(', ') || 'No address set'}
-                    </Text>
-                    <Text style={hasPin ? styles.meta : styles.metaWarning}>
-                      {hasPin
-                        ? `Map pin ${Number(item.latitude).toFixed(4)}, ${Number(item.longitude).toFixed(4)}`
-                        : 'No map pin — delivery pickup will fail'}
-                      {item.phone_number ? ` · ${item.phone_number}` : ''}
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-                </View>
-              </Pressable>
+              />
             );
           }}
           ListEmptyComponent={
@@ -160,6 +154,8 @@ export function BranchesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
+  searchFlex: { flex: 1 },
   headerBtn: {
     width: 40,
     height: 40,
@@ -171,12 +167,13 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   filters: { marginBottom: spacing.sm },
   row: {

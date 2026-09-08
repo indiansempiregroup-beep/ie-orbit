@@ -15,13 +15,14 @@ import {
   orderTitle,
   orderTotalLabel,
 } from '../utils/shopOrderDisplay';
-import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
 
 type Props = {
   order: ShopOrder;
   customerMap?: Map<string, string>;
   highlight?: boolean;
   compact?: boolean;
+  attached?: boolean;
   onPress?: () => void;
 };
 
@@ -49,6 +50,7 @@ export function OrderRow({
   customerMap,
   highlight = false,
   compact = false,
+  attached = false,
   onPress,
 }: Props) {
   const timingColors = TIMING_COLORS[timingTone(order.created_at)];
@@ -60,7 +62,14 @@ export function OrderRow({
   const createdDate = orderCreatedDateLabel(order.created_at);
 
   const content = (
-    <View style={[styles.card, compact && styles.cardCompact, highlight && styles.cardHighlight]}>
+    <View
+      style={[
+        styles.card,
+        compact && styles.cardCompact,
+        attached && styles.cardAttached,
+        highlight && styles.cardHighlight,
+      ]}
+    >
       <View style={[styles.timeBlock, compact && styles.timeBlockCompact, { backgroundColor: timingColors.bg }]}>
         <Text style={[styles.amount, { color: timingColors.text }]} numberOfLines={1}>
           {orderTotalLabel(order)}
@@ -153,10 +162,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+    ...shadows.soft,
   },
   cardCompact: {
     padding: spacing.sm,
     gap: spacing.sm,
+  },
+  cardAttached: {
+    borderWidth: 0,
+    borderRadius: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   cardHighlight: {
     borderColor: colors.primary,

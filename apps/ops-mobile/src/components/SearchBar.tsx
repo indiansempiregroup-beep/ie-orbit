@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { inputReset } from './ui/fieldStyles';
 
 type Props = {
   value: string;
@@ -29,9 +30,10 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search…', styl
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.mutedForeground}
-        style={styles.input}
+        style={[inputReset, styles.input]}
         autoCapitalize="none"
         autoCorrect={false}
+        underlineColorAndroid="transparent"
         clearButtonMode="while-editing"
       />
       {showClear ? (

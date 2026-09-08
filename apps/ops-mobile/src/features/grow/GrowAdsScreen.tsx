@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -22,6 +21,7 @@ import { FormScreen } from '../../components/FormScreen';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { RemoteImage } from '../../components/RemoteImage';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
@@ -215,7 +215,6 @@ export function GrowAdsScreen() {
       }
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.formTitle}>Customer ads</Text>
       <Text style={styles.help}>
         Create up to {MAX_ADS} banners for the customer app home. {activeCount} of {MAX_ADS} active.
       </Text>
@@ -223,28 +222,28 @@ export function GrowAdsScreen() {
       {showForm ? (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{editingId ? 'Edit ad' : 'New ad'}</Text>
-          <TextInput
-            style={styles.input}
+          <Input
+            label="Title"
+            required
             value={title}
             onChangeText={setTitle}
             placeholder="Title"
-            placeholderTextColor={colors.mutedForeground}
           />
-          <TextInput
-            style={[styles.input, styles.notes]}
+          <Input
+            label="Short message"
+            optional
             value={body}
             onChangeText={setBody}
-            placeholder="Short message (optional)"
+            placeholder="Short message"
             multiline
-            placeholderTextColor={colors.mutedForeground}
           />
-          <TextInput
-            style={styles.input}
+          <Input
+            label="Link"
+            optional
             value={linkUrl}
             onChangeText={setLinkUrl}
-            placeholder="https://… (optional link)"
+            placeholder="https://…"
             autoCapitalize="none"
-            placeholderTextColor={colors.mutedForeground}
           />
           <View style={styles.chipRow}>
             <Chip label="Active" active={isActive} onPress={() => setIsActive(true)} />
@@ -252,6 +251,7 @@ export function GrowAdsScreen() {
           </View>
           <ImagePickerButton
             label="Ad image"
+            optional
             valueUri={imageUrl}
             onPicked={onPickedImage}
             helperText="JPG or PNG. Shown as a full-width banner in the customer app."
@@ -324,11 +324,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.background,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

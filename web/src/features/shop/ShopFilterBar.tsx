@@ -19,6 +19,18 @@ type Props = {
   }>;
   onClear: () => void;
   action?: React.ReactNode;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateFromChange?: (value: string) => void;
+  onDateToChange?: (value: string) => void;
+  hideSearch?: boolean;
+};
+
+const controlStyle: React.CSSProperties = {
+  borderRadius: 12,
+  border: '1px solid var(--border, #e5e7eb)',
+  padding: '10px 12px',
+  background: 'var(--card, #fff)',
 };
 
 export function ShopFilterBar({
@@ -28,7 +40,14 @@ export function ShopFilterBar({
   filters = [],
   onClear,
   action,
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+  hideSearch,
 }: Props) {
+  const showDates = Boolean(onDateFromChange && onDateToChange);
+
   return (
     <div
       style={{
@@ -36,9 +55,10 @@ export function ShopFilterBar({
         gap: 10,
         flexWrap: 'wrap',
         alignItems: 'flex-end',
-        marginBottom: 12,
+        marginBottom: 16,
       }}
     >
+      {hideSearch ? null : (
       <input
         type="search"
         value={search}
@@ -48,26 +68,20 @@ export function ShopFilterBar({
         style={{
           flex: '1 1 220px',
           minWidth: 200,
-          borderRadius: 12,
-          border: '1px solid var(--border, #e5e7eb)',
+          ...controlStyle,
           padding: '10px 14px',
-          background: 'var(--card, #fff)',
           alignSelf: 'stretch',
         }}
       />
+      )}
       {filters.map((filter) => (
         <label key={filter.id} style={{ display: 'grid', gap: 4, minWidth: 140 }}>
-          <span style={{ fontSize: 12, opacity: 0.7 }}>{filter.label}</span>
+          <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{filter.label}</span>
           <select
             value={filter.value}
             onChange={(event) => filter.onChange(event.target.value)}
             aria-label={filter.label}
-            style={{
-              borderRadius: 12,
-              border: '1px solid var(--border, #e5e7eb)',
-              padding: '10px 12px',
-              background: 'var(--card, #fff)',
-            }}
+            style={controlStyle}
           >
             {filter.options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -77,6 +91,18 @@ export function ShopFilterBar({
           </select>
         </label>
       ))}
+      {showDates ? (
+        <>
+          <label style={{ display: 'grid', gap: 4, minWidth: 140 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>From</span>
+            <input type="date" value={dateFrom} onChange={(event) => onDateFromChange?.(event.target.value)} style={controlStyle} />
+          </label>
+          <label style={{ display: 'grid', gap: 4, minWidth: 140 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>To</span>
+            <input type="date" value={dateTo} onChange={(event) => onDateToChange?.(event.target.value)} style={controlStyle} />
+          </label>
+        </>
+      ) : null}
       <Button type="button" variant="ghost" onClick={onClear}>
         Clear
       </Button>

@@ -1,28 +1,68 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useRoute } from '@react-navigation/native';
+import { CompositeNavigationProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MobileBranch, MobileDiscoverService } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { CalendarPicker } from '../../components/CalendarPicker';
+import { DateStrip } from '../../components/DateStrip';
 import { ServiceMultiPicker } from '../../components/ServiceMultiPicker';
+import { TimeSlotGrid } from '../../components/TimeSlotGrid';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
-import { useMobileStaff } from '../../hooks/useMobileStaff';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
+import { withAlpha } from '../../theme/colorUtils';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { filterFutureSlots, formatDateKey, formatMoney, formatTime } from '../../utils/format';
-import type { MainTabParamList } from '../../navigation/types';
+import { filterFutureSlots, formatDate, formatDateKey, formatMoney, formatTime } from '../../utils/format';
+import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
+
+type BookNavigation = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Book'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+function friendlyDate(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return dateKey;
+  const today = formatDateKey(new Date());
+  const tomorrow = formatDateKey(new Date(Date.now() + 86400000));
+  if (dateKey === today) return 'Today';
+  if (dateKey === tomorrow) return 'Tomorrow';
+  return parsed.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function RecapChip({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.recapChip} hitSlop={4}>
+      <Feather name={icon} size={12} color={colors.mutedForeground} />
+      <Text style={styles.recapChipText} numberOfLines={1}>
+        {label}
+      </Text>
+      <Feather name="edit-2" size={11} color={colors.mutedForeground} />
+    </Pressable>
+  );
+}
 
 export function BookingScreen() {
   const route = useRoute<RouteProp<MainTabParamList, 'Book'>>();
+  const navigation = useNavigation<BookNavigation>();
   const { user } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
@@ -37,8 +77,8 @@ export function BookingScreen() {
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
     route.params?.serviceId ? [route.params.serviceId] : [],
   );
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [date, setDate] = useState(() => formatDateKey(new Date()));
+  const [showFullCalendar, setShowFullCalendar] = useState(false);
   const [slots, setSlots] = useState<Array<{ start_at: string; end_at: string }>>([]);
   const [availabilityMessage, setAvailabilityMessage] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
@@ -46,6 +86,7 @@ export function BookingScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [bookingRef, setBookingRef] = useState('');
+  const [bookingId, setBookingId] = useState('');
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [pointsPerCurrency, setPointsPerCurrency] = useState(bootstrap?.loyalty?.points_per_currency_unit ?? 10);
@@ -54,29 +95,23 @@ export function BookingScreen() {
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
   const needsLocation = offices.length > 1;
-  const steps = needsLocation
-    ? ['Location', 'Service', 'Staff', 'Date & Time', 'Review', 'Confirmed']
-    : ['Service', 'Staff', 'Date & Time', 'Review', 'Confirmed'];
-  const serviceStep = needsLocation ? 1 : 0;
-  const stylistStep = needsLocation ? 2 : 1;
-  const scheduleStep = needsLocation ? 3 : 2;
-  const reviewStep = needsLocation ? 4 : 3;
-  const confirmedStep = needsLocation ? 5 : 4;
 
   const selectedServices = useMemo(
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [services, selectedServiceIds],
   );
-  const primaryServiceId = selectedServiceIds[0] ?? null;
-  const { staff } = useMobileStaff(primaryServiceId);
-  const commonStaff = useMemo(() => {
-    if (!selectedServices.length) return [];
-    const staffSets = selectedServices.map(
-      (service) => new Set((service.staff ?? []).map((member) => member.id)),
-    );
-    return staff.filter((member) => staffSets.every((set) => set.has(member.id)));
-  }, [selectedServices, staff]);
-  const requiresMultipleSpecialists = selectedServices.length > 1 && commonStaff.length === 0;
+  const steps = [
+    ...(needsLocation ? ['Location'] : []),
+    'Service',
+    'When',
+    'Review',
+    'Done',
+  ];
+  const serviceStep = needsLocation ? 1 : 0;
+  const scheduleStep = serviceStep + 1;
+  const reviewStep = scheduleStep + 1;
+  const confirmedStep = reviewStep + 1;
+  const progressCount = reviewStep + 1;
   const totalDurationMinutes = useMemo(
     () => selectedServices.reduce((sum, service) => sum + (service.duration_minutes || 0), 0),
     [selectedServices],
@@ -95,14 +130,6 @@ export function BookingScreen() {
     () => offices.find((office) => office.id === selectedBranchId) ?? null,
     [offices, selectedBranchId],
   );
-  const selectedStaff = selectedStaffId
-    ? (commonStaff.find((member) => member.id === selectedStaffId) ??
-        staff.find((member) => member.id === selectedStaffId) ??
-        null)
-    : null;
-  const stylistLabel = requiresMultipleSpecialists
-    ? 'Assigned specialists'
-    : selectedStaff?.display_name ?? (selectedStaffId === '' ? 'Any available' : '');
 
   const customerName = user?.full_name || [user?.first_name, user?.last_name].filter(Boolean).join(' ') || '';
   const customerEmail = user?.email ?? '';
@@ -128,15 +155,52 @@ export function BookingScreen() {
     if (rows.length === 1) {
       setSelectedBranchId(rows[0].id);
     } else if (rows.length > 1) {
-      const primary = rows.find((row) => row.is_primary) ?? rows[0];
-      setSelectedBranchId((current) => current ?? primary.id);
+      const primaryOffice = rows.find((row) => row.is_primary) ?? rows[0];
+      setSelectedBranchId((current) => current ?? primaryOffice.id);
     }
   }, [tenantSlug, businessCode]);
 
+  async function loadSlots(
+    slotDate: string,
+    selected: MobileDiscoverService[],
+  ) {
+    if (!selected.length) return;
+    setLoading(true);
+    setSlots([]);
+    setSelectedSlot('');
+    setError('');
+    setAvailabilityMessage('');
+    try {
+      const response = await mobileClient.mobile.availability({
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+        date: slotDate,
+        duration_minutes: selected.length === 1 ? selected[0].duration_minutes : undefined,
+        service_id: selected.length === 1 ? selected[0].id : undefined,
+        service_ids: selected.length > 1 ? selected.map((service) => service.id) : undefined,
+      });
+      const openSlots = filterFutureSlots(response.data.slots);
+      setSlots(openSlots);
+      setAvailabilityMessage(
+        response.data.message ||
+          (openSlots.length
+            ? ''
+            : 'No timeslot available for this date. Try another day.'),
+      );
+      setSelectedSlot('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load availability.');
+      setSlots([]);
+      setAvailabilityMessage('');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await Promise.all([loadServices(), loadOffices()]);
-    if (step === scheduleStep && selectedServices.length && selectedStaffId !== null) {
-      await loadSlots(selectedStaffId, date, selectedServices);
+    if (step === scheduleStep && selectedServices.length) {
+      await loadSlots(date, selectedServices);
     }
   });
 
@@ -153,52 +217,14 @@ export function BookingScreen() {
 
   function updateSelectedServices(next: string[]) {
     setSelectedServiceIds(next);
-    setSelectedStaffId(null);
     setSelectedSlot('');
     setSlots([]);
-  }
-
-  async function loadSlots(
-    staffId: string,
-    slotDate: string,
-    selected: MobileDiscoverService[],
-  ) {
-    if (!selected.length) return;
-    setLoading(true);
-    setError('');
-    setAvailabilityMessage('');
-    try {
-      const response = await mobileClient.mobile.availability({
-        tenant_slug: tenantSlug,
-        business_code: businessCode,
-        date: slotDate,
-        duration_minutes: selected.length === 1 ? selected[0].duration_minutes : undefined,
-        staff_id: staffId || undefined,
-        service_id: selected.length === 1 ? selected[0].id : undefined,
-        service_ids: selected.length > 1 ? selected.map((service) => service.id) : undefined,
-      });
-      const openSlots = filterFutureSlots(response.data.slots);
-      setSlots(openSlots);
-      setAvailabilityMessage(
-        response.data.message ||
-          (openSlots.length
-            ? ''
-            : 'No timeslot available for this date. Try another day or staff member.'),
-      );
-      setSelectedSlot('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load availability.');
-      setSlots([]);
-      setAvailabilityMessage('');
-    } finally {
-      setLoading(false);
-    }
   }
 
   const maxRedeemablePoints = useMemo(() => {
     if (!selectedServices.length || !loyaltyEnabled || loyaltyBalance <= 0) return 0;
     const rate = Math.max(1, pointsPerCurrency);
-    const maxByPercent = Math.floor((totalPrice * maxRedeemPercent) / 100 * rate);
+    const maxByPercent = Math.floor(((totalPrice * maxRedeemPercent) / 100) * rate);
     return Math.max(0, Math.min(loyaltyBalance, maxByPercent));
   }, [selectedServices.length, loyaltyEnabled, loyaltyBalance, pointsPerCurrency, maxRedeemPercent, totalPrice]);
 
@@ -206,6 +232,7 @@ export function BookingScreen() {
     if (pointsToRedeem <= 0) return 0;
     return pointsToRedeem / Math.max(1, pointsPerCurrency);
   }, [pointsToRedeem, pointsPerCurrency]);
+  const payableTotal = Math.max(0, totalPrice - redeemDiscount);
   const bookingEarnPoints = loyaltyEnabled
     ? selectedServices.reduce((sum, service) => sum + Math.max(0, Number(service.loyalty_points_earn) || 0), 0)
     : 0;
@@ -231,8 +258,22 @@ export function BookingScreen() {
     }
   }
 
+  function resetFlow() {
+    setStep(0);
+    setSelectedServiceIds(route.params?.serviceId ? [route.params.serviceId] : []);
+    setDate(formatDateKey(new Date()));
+    setShowFullCalendar(false);
+    setSlots([]);
+    setSelectedSlot('');
+    setNotes('');
+    setError('');
+    setBookingRef('');
+    setBookingId('');
+    setPointsToRedeem(0);
+  }
+
   async function confirmBooking() {
-    if (!selectedServices.length || !selectedSlot || selectedStaffId === null) return;
+    if (!selectedServices.length || !selectedSlot) return;
     if (needsLocation && !selectedBranchId) {
       setError('Select an office to continue.');
       return;
@@ -257,7 +298,7 @@ export function BookingScreen() {
           sort_order: index,
         })),
         branch_id: selectedBranchId,
-        staff_id: requiresMultipleSpecialists ? null : selectedStaffId || null,
+        staff_id: null,
         customer_name: customerName.trim(),
         phone_number: customerPhone.trim(),
         email: customerEmail.trim() || undefined,
@@ -271,6 +312,7 @@ export function BookingScreen() {
       });
       const response = await Promise.race([bookingRequest, timeout]);
       setBookingRef(response.data.booking_number || response.data.booking_id);
+      setBookingId(response.data.booking_id);
       setStep(confirmedStep);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to request booking.');
@@ -279,35 +321,38 @@ export function BookingScreen() {
     }
   }
 
+  const canContinue = useMemo(() => {
+    if (needsLocation && step === 0) return Boolean(selectedBranchId);
+    if (step === serviceStep) return selectedServices.length > 0;
+    if (step === scheduleStep) return Boolean(selectedSlot);
+    if (step === reviewStep) return Boolean(customerName.trim() && customerPhone.trim());
+    return true;
+  }, [
+    needsLocation,
+    step,
+    selectedBranchId,
+    serviceStep,
+    selectedServices.length,
+    scheduleStep,
+    selectedSlot,
+    reviewStep,
+    customerName,
+    customerPhone,
+  ]);
+
   function nextStep() {
-    if (needsLocation && step === 0 && !selectedBranchId) {
-      setError('Select an office to continue.');
-      return;
-    }
-    if (step === serviceStep && !selectedServices.length) {
-      setError('Select at least one service to continue.');
-      return;
-    }
-    if (step === stylistStep && selectedStaffId === null && !requiresMultipleSpecialists) {
-      setError('Select a staff member or Any available to continue.');
-      return;
-    }
-    if (step === stylistStep) {
-      const effectiveStaffId = requiresMultipleSpecialists ? '' : selectedStaffId;
-      if (selectedServices.length && effectiveStaffId !== null) {
-        void loadSlots(effectiveStaffId, date, selectedServices);
-      }
-      if (requiresMultipleSpecialists) {
-        setSelectedStaffId('');
-      }
-      setStep(scheduleStep);
-      return;
-    }
-    if (step === scheduleStep && !selectedSlot) {
-      setError('Select a time slot to continue.');
+    if (!canContinue) {
+      if (needsLocation && step === 0 && !selectedBranchId) setError('Select a location to continue.');
+      else if (step === serviceStep && !selectedServices.length) setError('Select at least one service.');
+      else if (step === scheduleStep && !selectedSlot) setError('Select a time to continue.');
+      else if (step === reviewStep) setError('Add your phone number in Profile before booking.');
       return;
     }
     setError('');
+    if (step === serviceStep) {
+      setStep(scheduleStep);
+      return;
+    }
     if (step === scheduleStep) {
       void loadLoyalty();
       setStep(reviewStep);
@@ -321,93 +366,158 @@ export function BookingScreen() {
   }
 
   useEffect(() => {
-    if (step === stylistStep && requiresMultipleSpecialists) {
-      setSelectedStaffId('');
-    }
-  }, [step, stylistStep, requiresMultipleSpecialists]);
+    if (step !== scheduleStep || !selectedServices.length) return;
+    void loadSlots(date, selectedServices);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, step, selectedServiceIds, scheduleStep]);
 
   useEffect(() => {
-    if (step !== scheduleStep || !selectedServices.length || selectedStaffId === null) return;
-    void loadSlots(selectedStaffId, date, selectedServices);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, step, selectedServiceIds, selectedStaffId, scheduleStep]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [year, month, day] = date.split('-').map(Number);
+    const selected = new Date(year, month - 1, day);
+    const diffDays = Math.round((selected.getTime() - today.getTime()) / 86400000);
+    if (diffDays > 13) setShowFullCalendar(true);
+  }, [date]);
+
+  const headerCopy =
+    needsLocation && step === 0
+      ? { title: 'Where would you like to visit?', subtitle: 'Choose a location for this appointment.' }
+      : step === serviceStep
+        ? { title: 'What can we help with?', subtitle: 'Tap to add one or more services.' }
+        : step === scheduleStep
+          ? { title: 'When works for you?', subtitle: `${totalDurationMinutes || 0} min visit · pick a day, then a time.` }
+          : { title: 'Does this look right?', subtitle: 'Pay at the venue after your visit.' };
+
+  const ctaLabel =
+    step === reviewStep
+      ? `Confirm · ${formatMoney(payableTotal, bookingCurrency)}`
+      : step === scheduleStep
+        ? 'Review booking'
+        : 'Continue';
 
   if (step === confirmedStep) {
     return (
-      <View style={styles.confirmRoot}>
+      <View style={[styles.confirmRoot, { paddingBottom: contentInset }]}>
         <View style={styles.confirmIcon}>
           <Feather name="check" size={36} color={colors.success} />
         </View>
-        <Text style={styles.confirmTitle}>Booking Confirmed!</Text>
-        <Text style={styles.confirmSubtitle}>Confirmation sent to {customerEmail || 'your email'}.</Text>
+        <Text style={styles.confirmTitle}>You're booked</Text>
+        <Text style={styles.confirmSubtitle}>
+          {selectedSlot
+            ? `${friendlyDate(formatDateKey(new Date(selectedSlot)))} at ${formatTime(selectedSlot)}`
+            : 'Your appointment is confirmed.'}
+        </Text>
         <Card style={styles.summaryCard}>
           <View style={styles.confirmServiceHeader}>
-            <View style={[styles.confirmThumb, { backgroundColor: `${primary}12` }]}>
+            <View style={[styles.confirmThumb, { backgroundColor: withAlpha(primary, 0.12) }]}>
               <Feather name="calendar" size={20} color={primary} />
             </View>
             <View style={styles.confirmServiceCopy}>
               <Text style={styles.confirmServiceName}>{serviceSummaryLabel || 'Services'}</Text>
-              {stylistLabel ? <Text style={styles.confirmServiceMeta}>{stylistLabel}</Text> : null}
             </View>
           </View>
           {selectedOffice ? (
-            <SummaryRow
-              label="Location"
-              value={selectedOffice.formatted_address || selectedOffice.display_name}
-            />
+            <SummaryRow label="Location" value={selectedOffice.formatted_address || selectedOffice.display_name} />
           ) : null}
-          <SummaryRow label="Date" value={new Date(selectedSlot).toLocaleDateString()} />
+          <SummaryRow label="Date" value={formatDate(selectedSlot)} />
           <SummaryRow label="Time" value={formatTime(selectedSlot)} />
           <SummaryRow label="Reference" value={bookingRef} />
           <SummaryRow label="Payment" value="Pay at venue" />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={[styles.totalValue, { color: primary }]}>
-              {formatMoney(Math.max(0, totalPrice - redeemDiscount), bookingCurrency)}
+              {formatMoney(payableTotal, bookingCurrency)}
             </Text>
           </View>
           {bookingEarnPoints > 0 ? (
-            <Text style={styles.earnHint}>
-              You'll earn {bookingEarnPoints} pts after this visit is completed.
-            </Text>
+            <Text style={styles.earnHint}>You'll earn {bookingEarnPoints} pts after this visit.</Text>
           ) : null}
         </Card>
-        <Button label="Done" primaryColor={primary} onPress={() => setStep(0)} />
+        {bookingId ? (
+          <Button
+            label="View appointment"
+            fullWidth
+            primaryColor={primary}
+            onPress={() => navigation.navigate('BookingDetail', { bookingId })}
+          />
+        ) : null}
+        <Button label="Book another" variant="outline" fullWidth onPress={resetFlow} />
       </View>
     );
   }
 
-  const progressCount = reviewStep + 1;
-
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
         <View style={styles.stepHeader}>
           {step > 0 ? (
-            <Pressable style={styles.backBtn} onPress={() => setStep((s) => Math.max(0, s - 1))}>
-              <Feather name="arrow-left" size={16} color={colors.foreground} />
+            <Pressable
+              style={styles.backBtn}
+              onPress={() => setStep((current) => Math.max(0, current - 1))}
+              accessibilityLabel="Back"
+            >
+              <Feather name="arrow-left" size={18} color={colors.foreground} />
             </Pressable>
           ) : (
             <View style={styles.backBtnPlaceholder} />
           )}
           <View style={styles.progressWrap}>
-            <View style={styles.progressRow}>
-              {steps.slice(0, progressCount).map((_, i) => (
-                <View key={i} style={[styles.progressBar, { backgroundColor: i <= step ? primary : colors.muted }]} />
-              ))}
+            <View style={[styles.progressRow, { maxWidth: Math.min(56 + progressCount * 72, 280) }]}>
+              {steps.slice(0, progressCount).map((name, index) => {
+                const done = index < step;
+                const active = index === step;
+                return (
+                  <React.Fragment key={name}>
+                    <View
+                      style={[
+                        styles.progressDot,
+                        (done || active) && { backgroundColor: primary },
+                        active && styles.progressDotActive,
+                      ]}
+                    />
+                    {index < progressCount - 1 ? (
+                      <View style={[styles.progressLine, done && { backgroundColor: primary }]} />
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
             </View>
             <Text style={styles.stepMeta}>
-              Step {step + 1} of {progressCount} — {steps[step]}
+              {steps[step]} · {step + 1} of {progressCount}
             </Text>
           </View>
         </View>
-        <Text style={styles.title}>
-          {needsLocation && step === 0 && 'Choose a location'}
-          {step === serviceStep && 'Select services'}
-          {step === stylistStep && 'Choose staff'}
-          {step === scheduleStep && 'Pick a date & time'}
-          {step === reviewStep && 'Review & confirm'}
-        </Text>
+        <Text style={styles.title}>{headerCopy.title}</Text>
+        <Text style={styles.subtitle}>{headerCopy.subtitle}</Text>
+        {step > 0 ? (
+          <View style={styles.recapRow}>
+            {needsLocation && selectedOffice && step > 0 ? (
+              <RecapChip
+                icon="map-pin"
+                label={selectedOffice.display_name}
+                onPress={() => setStep(0)}
+              />
+            ) : null}
+            {step > serviceStep && serviceSummaryLabel ? (
+              <RecapChip
+                icon="layers"
+                label={serviceSummaryLabel}
+                onPress={() => setStep(serviceStep)}
+              />
+            ) : null}
+            {step > scheduleStep && selectedSlot ? (
+              <RecapChip
+                icon="clock"
+                label={`${friendlyDate(date)} · ${formatTime(selectedSlot)}`}
+                onPress={() => setStep(scheduleStep)}
+              />
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <RefreshableScrollView
@@ -415,6 +525,7 @@ export function BookingScreen() {
         refreshing={refreshing}
         onRefresh={onRefresh}
         primaryColor={primary}
+        keyboardShouldPersistTaps="handled"
       >
         {needsLocation && step === 0
           ? offices.map((office) => {
@@ -422,14 +533,22 @@ export function BookingScreen() {
               return (
                 <Pressable
                   key={office.id}
-                  style={[styles.option, selected && { borderColor: primary, backgroundColor: `${primary}08` }]}
+                  style={[
+                    styles.option,
+                    selected && { borderColor: primary, backgroundColor: withAlpha(primary, 0.06) },
+                  ]}
                   onPress={() => setSelectedBranchId(office.id)}
                 >
-                  <View style={[styles.thumb, { backgroundColor: `${primary}12` }]}>
+                  <View style={[styles.thumb, { backgroundColor: withAlpha(primary, 0.12) }]}>
                     <Feather name="map-pin" size={18} color={primary} />
                   </View>
                   <View style={styles.optionBody}>
-                    <Text style={styles.optionTitle}>{office.display_name}</Text>
+                    <View style={styles.optionTitleRow}>
+                      <Text style={styles.optionTitle}>{office.display_name}</Text>
+                      {office.is_primary ? (
+                        <Text style={[styles.primaryBadge, { color: primary }]}>Primary</Text>
+                      ) : null}
+                    </View>
                     <Text style={styles.optionMeta}>
                       {office.formatted_address ||
                         [office.address_line1, office.city, office.state].filter(Boolean).join(', ') ||
@@ -453,93 +572,42 @@ export function BookingScreen() {
           />
         ) : null}
 
-        {step === stylistStep && (
+        {step === scheduleStep ? (
           <>
-            {requiresMultipleSpecialists ? (
-              <Card>
-                <Text style={styles.optionTitle}>We'll assign the right specialists</Text>
-                <Text style={styles.optionMeta}>
-                  Your selected services may involve multiple team members. We'll assign the best
-                  available staff for each service.
+            <View style={styles.scheduleHead}>
+              <Text style={styles.sectionLabel}>Date</Text>
+              <Pressable onPress={() => setShowFullCalendar((value) => !value)} hitSlop={8}>
+                <Text style={[styles.calendarToggle, { color: primary }]}>
+                  {showFullCalendar ? 'Hide calendar' : 'More dates'}
                 </Text>
-              </Card>
-            ) : (
-              <>
-            <Pressable
-              style={[
-                styles.staffOption,
-                selectedStaffId === '' && { borderColor: primary, backgroundColor: `${primary}08` },
-              ]}
-              onPress={() => setSelectedStaffId('')}
-            >
-              <Avatar name="Any" size="md" />
-              <View style={styles.optionBody}>
-                <Text style={styles.optionTitle}>Any available</Text>
-                <Text style={styles.optionMeta}>We’ll assign the next available staff member</Text>
-              </View>
-              <View style={[styles.radio, selectedStaffId === '' && { borderColor: primary, backgroundColor: primary }]}>
-                {selectedStaffId === '' ? <Feather name="check" size={12} color="#fff" /> : null}
-              </View>
-            </Pressable>
-            {commonStaff.map((member) => {
-              const selected = selectedStaffId === member.id;
-              return (
-                <Pressable
-                  key={member.id}
-                  style={[styles.staffOption, selected && { borderColor: primary, backgroundColor: `${primary}08` }]}
-                  onPress={() => setSelectedStaffId(member.id)}
-                >
-                  <Avatar name={member.display_name} size="md" />
-                  <View style={styles.optionBody}>
-                    <Text style={styles.optionTitle}>{member.display_name}</Text>
-                    <Text style={styles.optionMeta}>{member.designation}</Text>
-                  </View>
-                  <View style={[styles.radio, selected && { borderColor: primary, backgroundColor: primary }]}>
-                    {selected ? <Feather name="check" size={12} color="#fff" /> : null}
-                  </View>
-                </Pressable>
-              );
-            })}
-              </>
-            )}
-          </>
-        )}
-
-        {step === scheduleStep && (
-          <>
-            <CalendarPicker value={date} onChange={setDate} primaryColor={primary} />
-            <Text style={styles.sectionLabel}>
-              Available times {stylistLabel ? `with ${stylistLabel}` : ''}
-            </Text>
-            <View style={styles.slotGrid}>
-              {slots.map((slot) => {
-                const selected = selectedSlot === slot.start_at;
-                return (
-                  <Pressable
-                    key={slot.start_at}
-                    style={[styles.slot, selected && { backgroundColor: primary, borderColor: primary }]}
-                    onPress={() => setSelectedSlot(slot.start_at)}
-                  >
-                    <Text style={[styles.slotText, selected && styles.slotTextSelected]}>
-                      {formatTime(slot.start_at)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              {!loading && !slots.length ? (
-                <Text style={styles.optionMeta}>
-                  {availabilityMessage || 'No timeslot available for this date. Try another day or staff member.'}
-                </Text>
-              ) : null}
-              {loading ? <Text style={styles.optionMeta}>Loading available times...</Text> : null}
+              </Pressable>
             </View>
+            <DateStrip value={date} onChange={setDate} primaryColor={primary} />
+            {showFullCalendar ? (
+              <CalendarPicker value={date} onChange={setDate} primaryColor={primary} />
+            ) : null}
+            <TimeSlotGrid
+              slots={slots}
+              selected={selectedSlot}
+              onSelect={setSelectedSlot}
+              loading={loading}
+              emptyMessage={
+                availabilityMessage || 'No timeslot available for this date. Try another day.'
+              }
+              label="Available times"
+              primaryColor={primary}
+            />
           </>
-        )}
+        ) : null}
 
         {step === reviewStep && selectedServices.length ? (
           <>
             <Card>
-              <Text style={styles.sectionLabel}>Visit timeline</Text>
+              <Text style={styles.ticketKicker}>Appointment</Text>
+              <Text style={styles.ticketTitle}>{serviceSummaryLabel}</Text>
+              <Text style={styles.ticketWhen}>
+                {friendlyDate(date)} · {formatTime(selectedSlot)} · {totalDurationMinutes} min
+              </Text>
               {selectedServices.map((service, index) => {
                 const offsetMinutes = selectedServices
                   .slice(0, index)
@@ -552,52 +620,75 @@ export function BookingScreen() {
                   : null;
                 return (
                   <View key={service.id} style={styles.timelineRow}>
-                    <Text style={styles.timelineTime}>
-                      {itemStart && itemEnd
-                        ? `${formatTime(itemStart.toISOString())} – ${formatTime(itemEnd.toISOString())}`
-                        : `${service.duration_minutes} min`}
-                    </Text>
+                    <View style={[styles.timelineDot, { backgroundColor: primary }]} />
                     <View style={styles.timelineBody}>
                       <Text style={styles.optionTitle}>{service.name}</Text>
                       <Text style={styles.optionMeta}>
-                        {requiresMultipleSpecialists ? 'Specialist assigned at booking' : stylistLabel}
+                        {itemStart && itemEnd
+                          ? `${formatTime(itemStart.toISOString())} – ${formatTime(itemEnd.toISOString())}`
+                          : `${service.duration_minutes} min`}
                       </Text>
                     </View>
+                    <Text style={styles.timelinePrice}>
+                      {formatMoney(Number(service.price) || 0, service.currency)}
+                    </Text>
                   </View>
                 );
               })}
-            </Card>
-            <Card>
-              <Text style={styles.sectionLabel}>Booking Summary</Text>
-              <SummaryRow label="Services" value={serviceSummaryLabel} />
-              <SummaryRow label="Staff" value={stylistLabel} />
-              <SummaryRow label="Date" value={new Date(selectedSlot).toLocaleDateString()} />
-              <SummaryRow label="Time" value={formatTime(selectedSlot)} />
-              <SummaryRow label="Duration" value={`${totalDurationMinutes} minutes`} />
+              <View style={styles.divider} />
+              <SummaryRow
+                label="Location"
+                value={
+                  selectedOffice?.display_name ??
+                  bootstrap?.business.display_name ??
+                  branding?.appName ??
+                  '—'
+                }
+              />
+              <SummaryRow label="Payment" value="Pay at venue" />
               {pointsToRedeem > 0 ? (
                 <SummaryRow
                   label="Points discount"
-                  value={`-${formatMoney(redeemDiscount, bookingCurrency)} (${pointsToRedeem} pts)`}
+                  value={`-${formatMoney(redeemDiscount, bookingCurrency)}`}
                 />
               ) : null}
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalLabel}>Due at venue</Text>
                 <Text style={[styles.totalValue, { color: primary }]}>
-                  {formatMoney(Math.max(0, totalPrice - redeemDiscount), bookingCurrency)}
+                  {formatMoney(payableTotal, bookingCurrency)}
                 </Text>
               </View>
               {bookingEarnPoints > 0 ? (
-                <Text style={styles.earnHint}>
-                  You'll earn {bookingEarnPoints} pts after this visit is completed.
-                </Text>
+                <Text style={styles.earnHint}>You'll earn {bookingEarnPoints} pts after this visit.</Text>
               ) : null}
             </Card>
+
             {loyaltyEnabled ? (
               <Card>
-                <Text style={styles.sectionLabel}>Use reward points</Text>
-                <Text style={styles.optionMeta}>
-                  Balance {loyaltyBalance} pts · {pointsPerCurrency} pts = {formatMoney(1, bookingCurrency)}
-                </Text>
+                <View style={styles.loyaltyHead}>
+                  <View>
+                    <Text style={styles.sectionLabel}>Reward points</Text>
+                    <Text style={styles.optionMeta}>
+                      Balance {loyaltyBalance} pts · {pointsPerCurrency} pts ={' '}
+                      {formatMoney(1, bookingCurrency)}
+                    </Text>
+                  </View>
+                  {maxRedeemablePoints >= minRedeemPoints ? (
+                    <Pressable
+                      onPress={() =>
+                        setPointsToRedeem((current) => (current > 0 ? 0 : maxRedeemablePoints))
+                      }
+                      style={[
+                        styles.useMax,
+                        pointsToRedeem > 0 && { backgroundColor: withAlpha(primary, 0.12) },
+                      ]}
+                    >
+                      <Text style={[styles.useMaxText, { color: primary }]}>
+                        {pointsToRedeem > 0 ? 'Remove' : 'Use max'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
                 {maxRedeemablePoints >= minRedeemPoints ? (
                   <>
                     <View style={styles.redeemRow}>
@@ -628,9 +719,7 @@ export function BookingScreen() {
                       </Pressable>
                     </View>
                     {pointsToRedeem > 0 ? (
-                      <Text style={styles.optionMeta}>
-                        Saves {formatMoney(redeemDiscount, bookingCurrency)}
-                      </Text>
+                      <Text style={styles.optionMeta}>Saves {formatMoney(redeemDiscount, bookingCurrency)}</Text>
                     ) : null}
                   </>
                 ) : (
@@ -640,28 +729,20 @@ export function BookingScreen() {
                 )}
               </Card>
             ) : null}
-            <Card>
-              <Text style={styles.sectionLabel}>Location</Text>
-              <Text style={styles.locationName}>
-                {selectedOffice?.display_name ?? bootstrap?.business.display_name ?? branding?.appName}
-              </Text>
-              {(selectedOffice?.formatted_address || bootstrap?.business.formatted_address) ? (
-                <Text style={styles.optionMeta}>
-                  {selectedOffice?.formatted_address || bootstrap?.business.formatted_address}
-                </Text>
-              ) : null}
-            </Card>
+
             {bootstrap?.business.cancellation_policy ? (
               <Card>
-                <Text style={styles.sectionLabel}>Cancellation Policy</Text>
+                <Text style={styles.sectionLabel}>Cancellation</Text>
                 <Text style={styles.policyText}>{bootstrap.business.cancellation_policy}</Text>
               </Card>
             ) : null}
+
             <Input
-              label="Notes (optional)"
+              label="Notes"
+              optional
               value={notes}
               onChangeText={setNotes}
-              placeholder="Any preferences for your visit"
+              placeholder="Allergies, preferences, parking notes…"
               multiline
               style={{ minHeight: 72, textAlignVertical: 'top' }}
             />
@@ -672,13 +753,16 @@ export function BookingScreen() {
       </RefreshableScrollView>
 
       <View style={[styles.footer, { paddingBottom: contentInset }]}>
-        {step === serviceStep && selectedServices.length > 0 ? (
+        {selectedServices.length > 0 && step !== reviewStep ? (
           <View style={styles.cartBar}>
-            <View>
-              <Text style={styles.cartTitle}>
-                {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected
+            <View style={styles.cartCopy}>
+              <Text style={styles.cartTitle} numberOfLines={1}>
+                {serviceSummaryLabel}
               </Text>
-              <Text style={styles.cartSubtitle}>{totalDurationMinutes} min visit</Text>
+              <Text style={styles.cartSubtitle}>
+                {totalDurationMinutes} min
+                {selectedSlot && step > scheduleStep ? ` · ${formatTime(selectedSlot)}` : ''}
+              </Text>
             </View>
             <Text style={[styles.cartPrice, { color: primary }]}>
               {formatMoney(totalPrice, bookingCurrency)}
@@ -686,15 +770,16 @@ export function BookingScreen() {
           </View>
         ) : null}
         <Button
-          label={step === reviewStep ? 'Confirm Booking' : 'Continue'}
+          label={ctaLabel}
           size="lg"
           fullWidth
-          loading={loading}
+          loading={loading && step === reviewStep}
+          disabled={!canContinue || (loading && step === scheduleStep)}
           primaryColor={primary}
           onPress={nextStep}
         />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -715,31 +800,54 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    gap: spacing.sm,
   },
-  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   backBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backBtnPlaceholder: { width: 32 },
+  backBtnPlaceholder: { width: 36 },
   progressWrap: { flex: 1 },
-  progressRow: { flexDirection: 'row', gap: 4 },
-  progressBar: { flex: 1, height: 4, borderRadius: 2 },
-  stepMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
-  title: { ...typography.heading, fontSize: 20, color: colors.foreground },
-  body: { padding: spacing.xl, gap: spacing.md },
-  categoryBlock: { gap: spacing.sm, marginBottom: spacing.md },
-  categoryLabel: {
-    ...typography.caption,
-    color: colors.mutedForeground,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+  progressRow: { flexDirection: 'row', alignItems: 'center' },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.muted,
   },
+  progressDotActive: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  progressLine: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.muted,
+    marginHorizontal: 6,
+  },
+  stepMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 6 },
+  title: { ...typography.heading, fontSize: 22, color: colors.foreground },
+  subtitle: { ...typography.body, color: colors.mutedForeground, lineHeight: 20 },
+  recapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
+  recapChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.inputBackground,
+  },
+  recapChipText: { ...typography.caption, color: colors.foreground, fontWeight: '600', maxWidth: 180 },
+  body: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -751,65 +859,60 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   thumb: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  staffOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  staffIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionBody: { flex: 1 },
-  optionTitle: { ...typography.label, color: colors.foreground, fontWeight: '600' },
-  optionMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
-  optionRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  optionPrice: { ...typography.label, fontWeight: '700', color: colors.foreground },
+  optionBody: { flex: 1, minWidth: 0 },
+  optionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  optionTitle: { ...typography.label, color: colors.foreground, fontWeight: '600', flexShrink: 1 },
+  primaryBadge: { ...typography.tiny, fontWeight: '700', textTransform: 'uppercase' },
+  optionMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2, lineHeight: 18 },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  refreshSlots: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
-  refreshText: { ...typography.caption, fontWeight: '600' },
+  scheduleHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calendarToggle: { ...typography.caption, fontWeight: '700' },
   sectionLabel: {
     ...typography.caption,
     color: colors.mutedForeground,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginBottom: spacing.sm,
   },
-  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  slot: {
-    width: '30%',
-    minWidth: 96,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    alignItems: 'center',
+  ticketKicker: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 4,
   },
-  slotText: { ...typography.label, color: colors.foreground },
-  slotTextSelected: { color: '#fff' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
+  ticketTitle: { ...typography.title, color: colors.foreground },
+  ticketWhen: { ...typography.body, color: colors.mutedForeground, marginTop: 4, marginBottom: spacing.md },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  timelineDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
+  timelineBody: { flex: 1 },
+  timelinePrice: { ...typography.caption, fontWeight: '700', color: colors.foreground },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, marginBottom: spacing.sm },
   summaryLabel: { ...typography.body, color: colors.mutedForeground },
-  summaryValue: { ...typography.body, color: colors.foreground, fontWeight: '600' },
+  summaryValue: { ...typography.body, color: colors.foreground, fontWeight: '600', flex: 1, textAlign: 'right' },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -826,6 +929,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: spacing.sm,
   },
+  loyaltyHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  useMax: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.inputBackground,
+  },
+  useMaxText: { ...typography.caption, fontWeight: '700' },
   redeemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -843,9 +960,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.muted,
   },
-  redeemValue: { ...typography.label, fontWeight: '700', color: colors.foreground, minWidth: 80, textAlign: 'center' },
-  locationName: { ...typography.body, color: colors.foreground, fontWeight: '600' },
-  policyText: { ...typography.caption, color: colors.mutedForeground, lineHeight: 20 },
+  redeemValue: {
+    ...typography.label,
+    fontWeight: '700',
+    color: colors.foreground,
+    minWidth: 80,
+    textAlign: 'center',
+  },
+  policyText: { ...typography.caption, color: colors.mutedForeground, lineHeight: 20, marginTop: spacing.sm },
   error: { ...typography.caption, color: colors.destructive },
   footer: {
     padding: spacing.xl,
@@ -857,21 +979,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.md,
     marginBottom: spacing.md,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  cartCopy: { flex: 1, minWidth: 0 },
   cartTitle: { ...typography.label, color: colors.foreground, fontWeight: '600' },
   cartSubtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   cartPrice: { ...typography.label, fontWeight: '800' },
-  timelineRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  timelineTime: { ...typography.caption, color: colors.mutedForeground, width: 108 },
-  timelineBody: { flex: 1 },
   confirmRoot: {
     flex: 1,
     backgroundColor: colors.background,
@@ -909,5 +1026,4 @@ const styles = StyleSheet.create({
   },
   confirmServiceCopy: { flex: 1 },
   confirmServiceName: { ...typography.label, fontWeight: '700', color: colors.foreground, fontSize: 16 },
-  confirmServiceMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
 });

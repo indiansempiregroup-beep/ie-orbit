@@ -13,7 +13,7 @@ export function Card({
   children,
   style,
   padded = true,
-  elevated = false,
+  elevated = true,
   bordered = true,
   soft = false,
   ...rest
@@ -38,7 +38,7 @@ export function Card({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
   soft: {
     backgroundColor: colors.tint,
@@ -47,5 +47,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  padded: { padding: spacing.lg },
+  padded: { padding: spacing.xl },
 });

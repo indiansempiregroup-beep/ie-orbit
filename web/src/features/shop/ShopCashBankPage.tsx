@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeftRight, Landmark, Plus, Wallet } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ArrowLeftRight, Plus } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -7,6 +7,7 @@ import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
+import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import {
   useShopCashAccountMutations,
@@ -168,61 +169,87 @@ export function ShopCashBankPage() {
     }
   }
 
+  const cashTotal = useMemo(
+    () =>
+      (accounts.data ?? [])
+        .filter((account) => account.account_type === 'cash')
+        .reduce((sum, account) => sum + Number(account.current_balance ?? 0), 0),
+    [accounts.data],
+  );
+  const bankTotal = useMemo(
+    () =>
+      (accounts.data ?? [])
+        .filter((account) => account.account_type === 'bank')
+        .reduce((sum, account) => sum + Number(account.current_balance ?? 0), 0),
+    [accounts.data],
+  );
+
   return (
     <div className="page-stack">
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Cash &amp; bank</h2>
-            <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
-              Accounts, payments received/paid, and transfers between accounts.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Button type="button" variant="neutral" onClick={openInDialog}>
-              Payment in
-            </Button>
-            <Button type="button" variant="neutral" onClick={openOutDialog}>
-              Payment out
-            </Button>
-            <Button type="button" variant="neutral" onClick={openTransferDialog}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <ArrowLeftRight size={14} aria-hidden="true" />
-                Transfer
-              </span>
-            </Button>
-            <Button type="button" variant="primary" onClick={openAccountDialog}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Plus size={16} aria-hidden="true" />
-                Add account
-              </span>
-            </Button>
-          </div>
+      <div className="invoice-page-header">
+        <h1 className="invoice-page-title">Cash &amp; bank</h1>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button type="button" variant="neutral" onClick={openInDialog}>
+            Payment in
+          </Button>
+          <Button type="button" variant="neutral" onClick={openOutDialog}>
+            Payment out
+          </Button>
+          <Button type="button" variant="neutral" onClick={openTransferDialog}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <ArrowLeftRight size={14} aria-hidden="true" />
+              Transfer
+            </span>
+          </Button>
+          <Button type="button" variant="primary" onClick={openAccountDialog}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={16} aria-hidden="true" />
+              Add account
+            </span>
+          </Button>
         </div>
-      </Card>
+      </div>
+
+      <div className="invoice-strip">
+        <div className="invoice-strip__cell">
+          <span>Cash</span>
+          <strong>{formatMoney(cashTotal, currency)}</strong>
+        </div>
+        <div className="invoice-strip__cell">
+          <span>Bank</span>
+          <strong>{formatMoney(bankTotal, currency)}</strong>
+        </div>
+        <div className="invoice-strip__cell">
+          <span>Accounts</span>
+          <strong>{accounts.data?.length ?? 0}</strong>
+        </div>
+      </div>
 
       <Card>
-        <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>Accounts</h3>
-        {accounts.isLoading ? <p>Loading…</p> : null}
-        <div style={{ display: 'grid', gap: 8 }}>
+        {accounts.isLoading ? <p className="invoice-muted">Loading…</p> : null}
+        <div className="invoice-list">
           {(accounts.data ?? []).map((account) => (
-            <div key={account.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--border, #eee)', paddingBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center', background: 'var(--muted, #f3f4f6)' }}>
-                  {account.account_type === 'bank' ? <Landmark size={16} /> : <Wallet size={16} />}
+            <div key={account.id} className="invoice-row">
+              <div className="invoice-row__main">
+                <strong>{account.name}</strong>
+                <span>
+                  {account.account_type}
+                  {account.is_active ? '' : ' · inactive'}
+                  {account.created_at ? ` · ${formatVoucherWhen(account.created_at, account.created_at)}` : ''}
                 </span>
-                <div>
-                  <strong>{account.name}</strong>
-                  <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
-                    {account.account_type} {account.is_active ? '' : '· inactive'}
-                  </div>
-                </div>
               </div>
-              <strong>{formatMoney(Number(account.current_balance ?? 0), currency)}</strong>
+              <div className="invoice-row__side">
+                <strong>{formatMoney(Number(account.current_balance ?? 0), currency)}</strong>
+              </div>
             </div>
           ))}
           {!accounts.isLoading && !accounts.data?.length ? (
-            <p>No accounts yet. Add a cash or bank account to start recording payments.</p>
+            <div className="invoice-empty">
+              <p>No accounts yet. Add a cash or bank account to start recording payments.</p>
+              <Button type="button" variant="primary" onClick={openAccountDialog}>
+                Add account
+              </Button>
+            </div>
           ) : null}
         </div>
       </Card>

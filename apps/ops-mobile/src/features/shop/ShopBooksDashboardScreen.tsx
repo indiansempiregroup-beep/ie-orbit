@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import { OpsHeader } from '../../components/OpsHeader';
 import { MenuRow } from '../../components/ui/MenuRow';
 import { MenuSection } from '../../components/ui/MenuSection';
 import { TileGrid } from '../../components/ui/TileGrid';
+import { IconBadge } from '../../components/ui/IconBadge';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
@@ -25,6 +26,8 @@ import { usePlanFeatures } from '../../hooks/useOpsExtended';
 export function ShopBooksDashboardScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute();
+  const isTab = route.name === 'Books';
   const client = useOpsClient();
   const { businessId } = useWorkspace();
   const { isDesktop } = useBreakpoint();
@@ -80,10 +83,10 @@ export function ShopBooksDashboardScreen() {
 
   return (
     <View style={styles.screen}>
+      {isTab ? <OpsHeader compact title={t('nav.shopBooks')} /> : null}
       <RefreshableScrollView
         ref={scrollRef}
-        // Never flip RefreshControl on while scrolled — it forces scrollY to 0.
-        refreshing={refreshing || (loading && !dashboard)}
+        refreshing={refreshing}
         onRefresh={onRefresh}
         onScroll={(event) => {
           scrollYRef.current = event.nativeEvent.contentOffset.y;
@@ -91,11 +94,10 @@ export function ShopBooksDashboardScreen() {
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: contentInset }}
       >
-        <OpsHeader title={t('nav.shopBooks')} subtitle="Cash, documents & reports" compact />
-
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
           <DesktopContent style={styles.stack}>
             {error ? <Text style={styles.error}>{error}</Text> : null}
+            {loading && !dashboard ? <Text style={styles.emptyAccounts}>Loading balances…</Text> : null}
 
             <View style={styles.counterCard}>
               <Text style={styles.counterTitle}>Cash &amp; payables</Text>
@@ -153,13 +155,10 @@ export function ShopBooksDashboardScreen() {
                     style={[styles.accountRow, index === dashboard.accounts!.length - 1 && styles.accountRowLast]}
                     onPress={() => navigation.navigate('ShopBooksCash')}
                   >
-                    <View style={styles.accountIcon}>
-                      <Feather
-                        name={String(account.account_type).toLowerCase().includes('bank') ? 'credit-card' : 'dollar-sign'}
-                        size={16}
-                        color={colors.primary}
-                      />
-                    </View>
+                    <IconBadge
+                      icon={String(account.account_type).toLowerCase().includes('bank') ? 'credit-card' : 'dollar-sign'}
+                      tone={String(account.account_type).toLowerCase().includes('bank') ? 'violet' : 'amber'}
+                    />
                     <View style={styles.accountCopy}>
                       <Text style={styles.accountName} numberOfLines={1}>
                         {account.name}
@@ -398,9 +397,11 @@ function CounterTile({
   return (
     <Pressable style={({ pressed }) => [styles.counterTile, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.counterTileTop}>
-        <View style={styles.counterIcon}>
-          <Feather name={icon} size={14} color={colors.primary} />
-        </View>
+        <IconBadge
+          icon={icon}
+          size="sm"
+          tone={tone === 'positive' ? 'green' : tone === 'negative' ? 'rose' : icon === 'credit-card' ? 'violet' : 'amber'}
+        />
         {hint ? (
           <Text style={styles.counterHint} numberOfLines={1}>
             {hint}
@@ -440,6 +441,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.md,
+    shadowColor: '#0B1F3A',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
   counterTitle: { ...typography.title, fontSize: 16, color: colors.foreground },
   counterTile: {
@@ -457,14 +463,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-  },
-  counterIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.sm,
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   counterHint: { ...typography.tiny, color: colors.mutedForeground, flexShrink: 1 },
   counterLabel: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
@@ -501,14 +499,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   accountRowLast: { borderBottomWidth: 0, paddingBottom: 0 },
-  accountIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   accountCopy: { flex: 1, minWidth: 0 },
   accountName: { ...typography.body, color: colors.foreground, fontFamily: fonts.bodyMedium },
   accountMeta: {

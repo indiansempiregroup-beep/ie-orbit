@@ -95,7 +95,7 @@ export function DiscoverScreen() {
         {filtered.map((service) => (
           <Pressable
             key={service.id}
-            style={styles.card}
+            style={styles.row}
             onPress={() => navigation.navigate('ServiceDetail', { serviceId: service.id })}
           >
             {service.image_url ? (
@@ -140,16 +140,16 @@ const styles = StyleSheet.create({
   },
   title: { ...typography.heading, color: colors.foreground, fontSize: 20 },
   chips: { gap: spacing.sm, paddingBottom: 2 },
-  list: { padding: spacing.xl, gap: spacing.lg },
-  card: {
+  list: { padding: spacing.xl, gap: 6 },
+  row: {
     flexDirection: 'row',
     backgroundColor: colors.card,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
   },
-  thumb: { width: 88, alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 88, height: 88, alignItems: 'center', justifyContent: 'center' },
   thumbImage: { width: 88, height: 88 },
   cardBody: { flex: 1, padding: spacing.md },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },

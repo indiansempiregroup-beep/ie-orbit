@@ -19,7 +19,7 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
-import { colors, fonts, spacing } from '../../theme/tokens';
+import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
@@ -1124,6 +1124,7 @@ export function ShopOrderDetailScreen() {
             </Text>
             <SelectField
               label="Carrier"
+              required
               value={shipCarrier}
               options={SHIP_CARRIERS}
               onChange={setShipCarrier}
@@ -1131,6 +1132,7 @@ export function ShopOrderDetailScreen() {
             />
             <Input
               label="AWB / tracking number"
+              required
               value={shipAwb}
               onChangeText={setShipAwb}
               placeholder="1234567890123"
@@ -1414,10 +1416,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
+    backgroundColor: colors.inputBackground,
   },
   previewCard: {
     borderWidth: 1,

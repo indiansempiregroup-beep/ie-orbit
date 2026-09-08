@@ -1,4 +1,5 @@
 import type { Customer, ShopBooksVoucher, ShopSupplier } from '@ie-orbit/sdk';
+import { formatTime } from '../../utils/format';
 
 export { formatMoney } from './posPayment';
 
@@ -229,4 +230,31 @@ export function voucherPartyLabel(voucher: ShopBooksVoucher): string {
 
 export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+export function formatVoucherDate(iso?: string | null) {
+  const day = String(iso || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(year, month - 1, date).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/** Document date plus clock time from `created_at` (or a datetime `date` value). */
+export function formatVoucherDateTime(date?: string | null, timestamp?: string | null) {
+  const dateLabel = formatVoucherDate(date || timestamp);
+  if (!dateLabel) return '';
+  const timeSource =
+    timestamp && String(timestamp).length > 10
+      ? timestamp
+      : date && String(date).length > 10
+        ? date
+        : null;
+  if (!timeSource) return dateLabel;
+  const timeLabel = formatTime(timeSource);
+  if (!timeLabel || timeLabel === '—') return dateLabel;
+  return `${dateLabel}, ${timeLabel}`;
 }

@@ -1,6 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { layout } from '../theme/layout';
@@ -13,37 +16,47 @@ type Props = {
   right?: React.ReactNode;
   children?: React.ReactNode;
   compact?: boolean;
+  showWorkspace?: boolean;
 };
 
-/** Flat white header (Vyapar-style) with Deep Navy accents. */
-export function OpsHeader({ title, subtitle, right, children, compact }: Props) {
+/** Branded customer-style gradient header shared by primary ops destinations. */
+export function OpsHeader({ title, subtitle, right, children, compact, showWorkspace = true }: Props) {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const { activeBusiness } = useWorkspace();
   const { isDesktop } = useBreakpoint();
 
   return (
-    <View
-      style={[
-        styles.wrap,
-        {
-          paddingTop: isDesktop ? spacing.lg : insets.top + spacing.md,
-          paddingHorizontal: isDesktop ? layout.desktopGutter : spacing.xl,
-          paddingBottom: isDesktop || compact ? spacing.lg : spacing.xxl,
-        },
-      ]}
-    >
-      <View style={isDesktop ? styles.desktopInner : undefined}>
-        <View style={styles.row}>
-          <View style={styles.copy}>
-            <Text style={styles.kicker}>{activeBusiness?.display_name ?? brand.appName}</Text>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-            <Text style={[styles.title, isDesktop && styles.titleDesktop]}>{title}</Text>
+    <>
+      {isFocused ? <StatusBar style="light" /> : null}
+      <LinearGradient
+        colors={[brand.gradientStart, brand.gradientEnd]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.wrap,
+          {
+            paddingTop: isDesktop ? spacing.lg : Math.max(insets.top, spacing.sm),
+            paddingHorizontal: isDesktop ? layout.desktopGutter : spacing.xl,
+            paddingBottom: isDesktop || compact ? spacing.md : spacing.xl,
+          },
+        ]}
+      >
+        <View style={isDesktop ? styles.desktopInner : undefined}>
+          <View style={styles.row}>
+            <View style={styles.copy}>
+              {showWorkspace ? (
+                <Text style={styles.kicker}>{activeBusiness?.display_name ?? brand.appName}</Text>
+              ) : null}
+              <Text style={[styles.title, compact && styles.titleCompact, isDesktop && styles.titleDesktop]}>{title}</Text>
+              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            </View>
+            {right}
           </View>
-          {right}
+          {children}
         </View>
-        {children}
-      </View>
-    </View>
+      </LinearGradient>
+    </>
   );
 }
 
@@ -67,7 +80,7 @@ export function OpsHeaderIconButton({
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
     >
-      <Feather name={icon} size={18} color={colors.primary} />
+      <Feather name={icon} size={18} color="#FFFFFF" />
       {showBadge ? (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{badge > 99 ? '99+' : String(badge)}</Text>
@@ -79,9 +92,7 @@ export function OpsHeaderIconButton({
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: colors.headerBg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.headerBorder,
+    backgroundColor: brand.primary,
   },
   desktopInner: {
     width: '100%',
@@ -98,29 +109,30 @@ const styles = StyleSheet.create({
   kicker: {
     ...typography.caption,
     fontFamily: fonts.bodyMedium,
-    color: colors.mutedForeground,
+    color: 'rgba(255,255,255,0.72)',
   },
   subtitle: {
     ...typography.body,
-    color: colors.mutedForeground,
+    color: 'rgba(255,255,255,0.82)',
   },
   title: {
     fontFamily: fonts.bodyBold,
-    fontSize: 24,
-    color: colors.foreground,
+    fontSize: 22,
+    color: '#FFFFFF',
     marginTop: 2,
     letterSpacing: -0.3,
   },
-  titleDesktop: { fontSize: 22 },
+  titleCompact: { fontSize: 20 },
+  titleDesktop: { fontSize: 20 },
   iconBtn: {
     width: 40,
     height: 40,
     borderRadius: radius.full,
-    backgroundColor: colors.tint,
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconBtnPressed: { opacity: 0.85 },
+  iconBtnPressed: { backgroundColor: 'rgba(255,255,255,0.26)' },
   badge: {
     position: 'absolute',
     top: -2,

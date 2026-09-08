@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { DesktopContent } from '../../components/DesktopContent';
 import { Avatar } from '../../components/ui/Avatar';
 import { MenuRow } from '../../components/ui/MenuRow';
 import { MenuSection } from '../../components/ui/MenuSection';
+import { IconBadge } from '../../components/ui/IconBadge';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
@@ -23,11 +25,11 @@ import { hasShopie } from '../../utils/products';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';
 import { confirmAction } from '../../utils/confirmAction';
-import { colors, fonts, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
 /**
- * More menu — Vyapar-inspired groups.
+ * Colorful customer-style module and account groups.
  * Sale/Compliance only under Books; Offices/Team only under Settings.
  * Reports absorbed into BI.
  */
@@ -64,19 +66,37 @@ export function MoreScreen() {
       style={styles.screen}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + spacing.xl, paddingBottom: contentInset },
+        { paddingTop: Math.max(insets.top, spacing.xl), paddingBottom: contentInset },
         isDesktop && styles.contentDesktop,
       ]}
     >
-      <DesktopContent>
-        <View style={styles.hero}>
+      <DesktopContent style={styles.stack}>
+        <Pressable style={({ pressed }) => [styles.profileCard, pressed && styles.pressed]} onPress={() => navigation.navigate('Profile')}>
           <Avatar name={displayName} size="xl" src={user?.profile_photo} />
-          <Text style={styles.name}>{displayName}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
-          <Text style={styles.meta}>
-            {workspaceLabel}
-            {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
-          </Text>
+          <View style={styles.profileCopy}>
+            <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.email} numberOfLines={1}>{user?.email}</Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {workspaceLabel}
+              {user?.roles?.length ? ` · ${formatUserRole(user.roles)}` : ''}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+        </Pressable>
+
+        <View style={styles.quickGrid}>
+          {has(PlanFeature.shopiePos) ? (
+            <MoreShortcut icon="shopping-cart" tone="green" label={t('nav.pos')} onPress={() => navigation.navigate('ShopPos')} />
+          ) : null}
+          {showBooks ? (
+            <MoreShortcut icon="book-open" tone="violet" label={t('nav.shopBooks')} onPress={() => navigation.navigate('ShopBooks')} />
+          ) : null}
+          {has(PlanFeature.appointieCustomers) || showShop ? (
+            <MoreShortcut icon="users" tone="cyan" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
+          ) : null}
+          {showSettings ? (
+            <MoreShortcut icon="settings" tone="navy" label={t('settings.title')} onPress={() => navigation.navigate('Settings')} />
+          ) : null}
         </View>
 
         <View style={styles.menu}>
@@ -266,24 +286,69 @@ export function MoreScreen() {
   );
 }
 
+function MoreShortcut({
+  icon,
+  tone,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  tone: IconTone;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={({ pressed }) => [styles.shortcut, pressed && styles.pressed]} onPress={onPress}>
+      <IconBadge icon={icon} tone={tone} />
+      <Text style={styles.shortcutLabel} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingHorizontal: spacing.xl },
+  content: { paddingHorizontal: spacing.xl, gap: spacing.xl },
   contentDesktop: { paddingHorizontal: 0 },
-  hero: { alignItems: 'center', paddingBottom: spacing.xxl },
+  stack: { gap: spacing.xl },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadows.soft,
+  },
+  profileCopy: { flex: 1, minWidth: 0 },
   name: {
     fontFamily: fonts.bodyBold,
-    fontSize: 26,
+    fontSize: 18,
     color: colors.foreground,
-    marginTop: spacing.md,
-    letterSpacing: -0.4,
+    letterSpacing: -0.2,
   },
-  email: { ...typography.body, color: colors.mutedForeground, marginTop: 4 },
+  email: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   meta: {
     ...typography.caption,
     color: colors.mutedForeground,
-    marginTop: spacing.sm,
-    textAlign: 'center',
+    marginTop: 3,
   },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  shortcut: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 130,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  shortcutLabel: { ...typography.label, color: colors.foreground, flex: 1 },
+  pressed: { opacity: 0.82 },
   menu: { gap: spacing.xl },
 });

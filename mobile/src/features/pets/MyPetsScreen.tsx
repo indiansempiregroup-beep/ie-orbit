@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
@@ -98,10 +99,31 @@ export function MyPetsScreen() {
         ) : null}
       </View>
       {loading && !pets.length ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
+      {upcoming.length ? (
+        <Pressable
+          style={[styles.birthdayBanner, { borderColor: `${primary}44` }]}
+          onPress={() => navigation.navigate('PetDetail', { petId: upcoming[0].id })}
+        >
+          <View style={[styles.giftIcon, { backgroundColor: `${primary}14` }]}>
+            <Feather name="gift" size={18} color={primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerTitle}>
+              {upcoming[0].name}
+              {upcoming.length > 1 ? ` and ${upcoming.length - 1} more` : ''}
+            </Text>
+            <Text style={styles.bannerMeta}>
+              {birthdayLabel(upcoming[0].birthday)}. Reminders also show in Notifications.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+        </Pressable>
+      ) : null}
       <FlatList
         data={visible}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, flexGrow: 1 }}
+        {...groupedListProps(visible.length, styles.listGroup)}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40, flexGrow: 1 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -110,34 +132,12 @@ export function MyPetsScreen() {
             colors={[primary]}
           />
         }
-        ListHeaderComponent={
-          upcoming.length ? (
-            <Pressable
-              style={[styles.birthdayBanner, { borderColor: `${primary}44` }]}
-              onPress={() => navigation.navigate('PetDetail', { petId: upcoming[0].id })}
-            >
-              <View style={[styles.giftIcon, { backgroundColor: `${primary}14` }]}>
-                <Feather name="gift" size={18} color={primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bannerTitle}>
-                  {upcoming[0].name}
-                  {upcoming.length > 1 ? ` and ${upcoming.length - 1} more` : ''}
-                </Text>
-                <Text style={styles.bannerMeta}>
-                  {birthdayLabel(upcoming[0].birthday)}. Reminders also show in Notifications.
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ) : null
-        }
         renderItem={({ item }) => {
           const photo = resolveMediaUrl(item.photo_url);
           const details = [item.species, item.breed, item.sex].filter(Boolean).join(' · ');
           const birthday = birthdayLabel(item.birthday);
           return (
-            <Pressable style={styles.card} onPress={() => navigation.navigate('PetDetail', { petId: item.id })}>
+            <Pressable style={styles.row} onPress={() => navigation.navigate('PetDetail', { petId: item.id })}>
               {photo ? (
                 <Image source={{ uri: photo }} style={styles.photo} />
               ) : (
@@ -172,18 +172,16 @@ export function MyPetsScreen() {
             />
           ) : null
         }
-        ListFooterComponent={
-          !loading ? (
-            <Pressable
-              style={[styles.addBtn, { borderColor: primary }]}
-              onPress={() => navigation.navigate('PetForm', {})}
-            >
-              <Feather name="plus" size={16} color={primary} />
-              <Text style={[styles.addText, { color: primary }]}>Add a pet</Text>
-            </Pressable>
-          ) : null
-        }
       />
+      {!loading ? (
+        <Pressable
+          style={[styles.addBtn, { borderColor: primary }]}
+          onPress={() => navigation.navigate('PetForm', {})}
+        >
+          <Feather name="plus" size={16} color={primary} />
+          <Text style={[styles.addText, { color: primary }]}>Add a pet</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -212,6 +210,7 @@ const styles = StyleSheet.create({
   },
   search: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
   count: { ...typography.caption, color: colors.mutedForeground },
+  listGroup: { marginHorizontal: spacing.lg, marginTop: spacing.lg, flex: 1 },
   birthdayBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -219,6 +218,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
     borderWidth: 1,
   },
@@ -231,16 +232,12 @@ const styles = StyleSheet.create({
   },
   bannerTitle: { ...typography.label, fontWeight: '800', color: colors.foreground },
   bannerMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2, lineHeight: 18 },
-  card: {
+  row: {
     flexDirection: 'row',
     gap: spacing.md,
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
     padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   photo: { width: 72, height: 72, borderRadius: radius.lg, backgroundColor: colors.muted },
   photoEmpty: { alignItems: 'center', justifyContent: 'center' },
@@ -259,6 +256,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
     backgroundColor: colors.card,
   },
   addText: { fontWeight: '700' },

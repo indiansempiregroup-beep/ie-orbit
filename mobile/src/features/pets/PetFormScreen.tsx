@@ -48,6 +48,7 @@ export function PetFormScreen({ navigation, route }: Props) {
   const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState('');
 
   useEffect(() => {
     if (!isEdit || !petId) return;
@@ -75,9 +76,10 @@ export function PetFormScreen({ navigation, route }: Props) {
 
   async function onSave() {
     if (!name.trim()) {
-      Alert.alert('Name required', 'Give your pet a name.');
+      setNameError('Give your pet a name.');
       return;
     }
+    setNameError('');
     setSaving(true);
     try {
       let nextPhoto = photoUrl;
@@ -140,7 +142,17 @@ export function PetFormScreen({ navigation, route }: Props) {
               variant="avatar"
               helperText="A clear photo helps the shop recognise them."
             />
-            <Input label="Name" value={name} onChangeText={setName} placeholder="Milo" />
+            <Input
+              label="Name"
+              required
+              value={name}
+              onChangeText={(value) => {
+                setName(value);
+                setNameError('');
+              }}
+              error={nameError}
+              placeholder="Milo"
+            />
             <View>
               <Text style={styles.label}>Species</Text>
               <View style={styles.chips}>
@@ -155,7 +167,7 @@ export function PetFormScreen({ navigation, route }: Props) {
                 ))}
               </View>
             </View>
-            <Input label="Breed (optional)" value={breed} onChangeText={setBreed} placeholder="Indie, Labrador…" />
+            <Input label="Breed" optional value={breed} onChangeText={setBreed} placeholder="Indie, Labrador…" />
             <View>
               <Text style={styles.label}>Sex</Text>
               <View style={styles.chips}>
@@ -179,7 +191,8 @@ export function PetFormScreen({ navigation, route }: Props) {
               helperText="We'll send you an in-app and email reminder 5 days before, and it will also appear in Notifications."
             />
             <Input
-              label="Notes (optional)"
+              label="Notes"
+              optional
               value={medicalNotes}
               onChangeText={setMedicalNotes}
               placeholder="Allergies, diet, temperament…"

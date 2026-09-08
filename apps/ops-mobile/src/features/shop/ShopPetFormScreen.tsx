@@ -4,7 +4,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -17,11 +16,15 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useCustomers } from '../../hooks/useOpsData';
 import { uploadPetImage } from '../../api/media';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { DateField } from '../../components/DateField';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
+import { FormSection } from '../../components/ui/FormSection';
+import { Input } from '../../components/ui/Input';
 import { ScreenState } from '../../components/ScreenState';
+import { FieldLabel } from '../../components/ui/FieldLabel';
 import { colors } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopPet } from '@ie-orbit/sdk';
@@ -82,6 +85,7 @@ export function ShopPetFormScreen() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(!isEdit);
 
   useEffect(() => {
@@ -144,13 +148,16 @@ export function ShopPetFormScreen() {
   async function save() {
     if (!client || !businessId) return;
     if (!form.customerId) {
+      setFieldErrors({ customerId: 'Select a customer (owner).' });
       setMessage('Select a customer (owner).');
       return;
     }
     if (!form.name.trim()) {
+      setFieldErrors({ name: 'Pet name is required.' });
       setMessage('Pet name is required.');
       return;
     }
+    setFieldErrors({});
     if (form.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(form.birthday.trim())) {
       setMessage('Birthday must be YYYY-MM-DD.');
       return;
@@ -242,93 +249,107 @@ export function ShopPetFormScreen() {
         </>
       }
     >
-      <Text style={styles.sectionTitle}>Owner</Text>
-      <View style={styles.customerRow}>
-        <View style={styles.customerField}>
-          <SelectField
-            label="Customer"
-            value={form.customerId}
-            options={customerOptions}
-            onChange={(value) => setField('customerId', value)}
-            searchable
-            placeholder="Select customer"
-          />
+      <FormHero
+        icon="heart"
+        title={isEdit ? 'Edit pet' : 'Add pet'}
+        subtitle="Owner details, photo, birthday, and care notes in one profile."
+      />
+
+      <FormSection title="Owner">
+        <View style={styles.customerRow}>
+          <View style={styles.customerField}>
+            <SelectField
+              label="Customer"
+              required
+              value={form.customerId}
+              options={customerOptions}
+              onChange={(value) => {
+                setField('customerId', value);
+                setFieldErrors((current) => ({ ...current, customerId: '' }));
+              }}
+              searchable
+              placeholder="Select customer"
+              error={fieldErrors.customerId}
+            />
+          </View>
+          <Pressable
+            style={styles.sideAddBtn}
+            onPress={() => navigation.navigate('CustomerForm', { returnTo: 'pets' })}
+            accessibilityLabel="Add customer"
+          >
+            <Feather name="user-plus" size={20} color="#fff" />
+          </Pressable>
         </View>
-        <Pressable
-          style={styles.sideAddBtn}
-          onPress={() => navigation.navigate('CustomerForm', { returnTo: 'pets' })}
-          accessibilityLabel="Add customer"
-        >
-          <Feather name="user-plus" size={20} color="#fff" />
-        </Pressable>
-      </View>
+      </FormSection>
 
-      <ImagePickerButton
-        label="Pet photo"
-        variant="card"
-        valueUri={photoPreview || form.photoUrl || null}
-        onPicked={(asset) => {
-          setPhotoAsset(asset);
-          setPhotoPreview(asset.uri);
-        }}
-        helperText="Shown on the pet profile. Use camera or gallery."
-      />
+      <FormSection title="Pet photo">
+        <ImagePickerButton
+          label="Pet photo"
+          optional
+          variant="card"
+          valueUri={photoPreview || form.photoUrl || null}
+          onPicked={(asset) => {
+            setPhotoAsset(asset);
+            setPhotoPreview(asset.uri);
+          }}
+          helperText="Shown on the pet profile. Use camera or gallery."
+        />
+      </FormSection>
 
-      <Text style={styles.sectionTitle}>Pet details</Text>
-      <TextInput
-        style={styles.input}
-        value={form.name}
-        onChangeText={(value) => setField('name', value)}
-        placeholder="Pet name"
-        placeholderTextColor={colors.mutedForeground}
-      />
-      <Text style={styles.label}>Species</Text>
-      <View style={styles.chipWrap}>
-        {SPECIES.map((value) => (
-          <Pressable
-            key={value}
-            style={[styles.chip, form.species === value && styles.chipActive]}
-            onPress={() => setField('species', value)}
-          >
-            <Text style={[styles.chipText, form.species === value && styles.chipTextActive]}>{value}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <TextInput
-        style={styles.input}
-        value={form.breed}
-        onChangeText={(value) => setField('breed', value)}
-        placeholder="Breed"
-        placeholderTextColor={colors.mutedForeground}
-      />
-      <Text style={styles.label}>Sex</Text>
-      <View style={styles.chipWrap}>
-        {SEX_OPTIONS.map((value) => (
-          <Pressable
-            key={value}
-            style={[styles.chip, form.sex === value && styles.chipActive]}
-            onPress={() => setField('sex', value)}
-          >
-            <Text style={[styles.chipText, form.sex === value && styles.chipTextActive]}>{value}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <DateField
-        label="Birthday"
-        value={form.birthday}
-        onChange={(value) => setField('birthday', value)}
-        allowPast
-        allowFuture={false}
-        helperText="Owners get an in-app + email reminder 5 days before the birthday. Business owners and managers also get an alert so they can open the pet and send an extra message."
-      />
-      <TextInput
-        style={[styles.input, styles.notes]}
-        value={form.medicalNotes}
-        onChangeText={(value) => setField('medicalNotes', value)}
-        placeholder="Medical notes / allergies / diet"
-        multiline
-        placeholderTextColor={colors.mutedForeground}
-      />
+      <FormSection title="Pet details">
+        <Input
+          label="Pet name"
+          required
+          value={form.name}
+          onChangeText={(value) => {
+            setField('name', value);
+            setFieldErrors((current) => ({ ...current, name: '' }));
+          }}
+          error={fieldErrors.name}
+        />
+        <FieldLabel label="Species" required />
+        <View style={styles.chipWrap}>
+          {SPECIES.map((value) => (
+            <Pressable
+              key={value}
+              style={[styles.chip, form.species === value && styles.chipActive]}
+              onPress={() => setField('species', value)}
+            >
+              <Text style={[styles.chipText, form.species === value && styles.chipTextActive]}>{value}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Input label="Breed" optional value={form.breed} onChangeText={(value) => setField('breed', value)} />
+        <FieldLabel label="Sex" optional />
+        <View style={styles.chipWrap}>
+          {SEX_OPTIONS.map((value) => (
+            <Pressable
+              key={value}
+              style={[styles.chip, form.sex === value && styles.chipActive]}
+              onPress={() => setField('sex', value)}
+            >
+              <Text style={[styles.chipText, form.sex === value && styles.chipTextActive]}>{value}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <DateField
+          label="Birthday"
+          optional
+          value={form.birthday}
+          onChange={(value) => setField('birthday', value)}
+          allowPast
+          allowFuture={false}
+          helperText="Owners get an in-app + email reminder 5 days before the birthday. Business owners and managers also get an alert so they can open the pet and send an extra message."
+        />
+        <Input
+          label="Care notes"
+          optional
+          value={form.medicalNotes}
+          onChangeText={(value) => setField('medicalNotes', value)}
+          placeholder="Medical notes, allergies, or diet"
+          multiline
+        />
+      </FormSection>
 
       {message ? <Text style={styles.meta}>{message}</Text> : null}
     </FormScreen>
@@ -336,10 +357,6 @@ export function ShopPetFormScreen() {
 }
 
 const styles = StyleSheet.create({
-  sectionTitle: {
-    fontWeight: '700',
-    color: colors.foreground,
-  },
   customerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -356,16 +373,6 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   label: { color: colors.foreground, fontWeight: '600', marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.foreground,
-    backgroundColor: colors.card,
-  },
-  notes: { minHeight: 90, textAlignVertical: 'top' },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: 1,

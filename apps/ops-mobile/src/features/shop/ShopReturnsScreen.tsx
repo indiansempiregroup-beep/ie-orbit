@@ -11,7 +11,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SearchBar } from '../../components/SearchBar';
-import { SelectField } from '../../components/SelectField';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -22,6 +22,9 @@ import type { ShopOrder, ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime } from '../../utils/format';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { formatMoney } from './posPayment';
 
@@ -61,6 +64,8 @@ export function ShopReturnsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [restock, setRestock] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const orderMap = useMemo(() => {
     const map = new Map<string, ShopOrder>();
@@ -96,7 +101,7 @@ export function ShopReturnsScreen() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return returns.filter((item) => {
+    const list = returns.filter((item) => {
       if (restock === 'yes' && !item.restock) return false;
       if (restock === 'no' && item.restock) return false;
 
@@ -119,7 +124,12 @@ export function ShopReturnsScreen() {
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [returns, search, restock, orderMap, customerMap]);
+    return [...list].sort((a, b) => {
+      if (sortBy === 'oldest') return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+      if (sortBy === 'amount_desc') return Number(b.refund_total ?? 0) - Number(a.refund_total ?? 0);
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+  }, [returns, search, restock, sortBy, orderMap, customerMap]);
 
   function clearFilters() {
     setSearch('');
@@ -129,24 +139,38 @@ export function ShopReturnsScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <SearchBar
-          style={styles.search}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search return #, order, product…"
-        />
-
-        <View style={styles.filterRow}>
-          <View style={styles.filterField}>
-            <SelectField
-              label="Inventory"
-              value={restock}
-              options={RESTOCK_OPTIONS}
-              onChange={setRestock}
-              searchable={false}
-            />
-          </View>
+        <View style={styles.topBar}>
+          <SearchBar
+            style={styles.searchFlex}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search return #, order, product…"
+          />
+          <FilterButton
+            count={Number(Boolean(restock)) + Number(sortBy !== 'newest')}
+            onPress={() => setFiltersOpen(true)}
+          />
         </View>
+        <FilterSheet
+          visible={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          onReset={() => {
+            setRestock('');
+            setSortBy('newest');
+          }}
+        >
+          <FilterChoiceGroup label="Inventory" value={restock} options={RESTOCK_OPTIONS} onChange={setRestock} />
+          <FilterChoiceGroup
+            label="Sort"
+            value={sortBy}
+            options={[
+              { value: 'newest', label: 'Newest' },
+              { value: 'oldest', label: 'Oldest' },
+              { value: 'amount_desc', label: 'Refund high–low' },
+            ]}
+            onChange={setSortBy}
+          />
+        </FilterSheet>
 
         <View style={styles.toolbar}>
           <Text style={styles.count}>
@@ -165,6 +189,7 @@ export function ShopReturnsScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
@@ -177,42 +202,42 @@ export function ShopReturnsScreen() {
               : 'Walk-in';
             const products = returnLineSummary(item);
             return (
-              <Pressable
-                style={styles.row}
-                onPress={() => {
-                  if (order?.id) {
-                    navigation.navigate('ShopOrderDetail', { orderId: order.id });
-                  }
-                }}
-                disabled={!order?.id}
-              >
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.return_number}</Text>
-                  <Text style={styles.total}>
-                    {item.currency || 'INR'} {formatMoney(item.refund_total)}
-                  </Text>
-                </View>
-                <Text style={styles.meta}>
-                  {order?.order_number ? `${order.order_number} · ` : ''}
-                  {customer}
-                </Text>
-                {item.created_at ? (
-                  <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
-                ) : null}
-                <Text style={styles.meta}>
-                  {item.restock ? 'Restocked to inventory' : 'No restock'}
-                  {item.reason ? ` · ${item.reason}` : ''}
-                </Text>
-                {products ? <Text style={styles.preview}>{products}</Text> : null}
-                {order?.id ? <Text style={styles.openHint}>Tap to open bill</Text> : null}
-              </Pressable>
+              <BooksDocumentRow
+                title={item.return_number}
+                amount={`${item.currency || 'INR'} ${formatMoney(item.refund_total)}`}
+                meta={[
+                  order?.order_number,
+                  customer,
+                  item.created_at ? formatDateTime(item.created_at) : '',
+                  item.restock ? 'Restocked' : 'No restock',
+                  item.reason,
+                  products,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                badge={item.status || 'Return'}
+                badgeKind="neutral"
+                icon="rotate-ccw"
+                iconTone="coral"
+                onPress={
+                  order?.id
+                    ? () => navigation.navigate('ShopOrderDetail', { orderId: order.id })
+                    : undefined
+                }
+              />
             );
           }}
           ListEmptyComponent={
             !loading ? (
-              <Text style={styles.meta}>
-                {returns.length ? 'No returns match these filters.' : 'No returns yet.'}
-              </Text>
+              <EmptyState
+                icon="rotate-ccw"
+                title={returns.length ? 'No matching returns' : 'No returns yet'}
+                message={
+                  returns.length
+                    ? 'Try a different search or filter.'
+                    : 'Process returns from an order’s bill detail.'
+                }
+              />
             ) : null
           }
         />
@@ -223,6 +248,8 @@ export function ShopReturnsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.sm },
+  searchFlex: { flex: 1 },
   search: { marginBottom: spacing.sm },
   filterRow: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },
   filterField: { flex: 1 },

@@ -10,8 +10,10 @@ import { DateField } from '../../components/DateField';
 import { SearchBar } from '../../components/SearchBar';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { DesktopPage } from '../../components/DesktopPage';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { formatVoucherDateTime } from './shopBooksHelpers';
 import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
 
 type ReportOption = {
@@ -79,6 +81,7 @@ type ReportRecord = {
   key: string;
   number: string;
   date: string;
+  createdAt?: string;
   type: string;
   typeLabel: string;
   party: string;
@@ -108,6 +111,7 @@ function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRec
     key: String(row.id ?? `${row.voucher_number ?? 'row'}-${index}`),
     number: String(row.voucher_number ?? '—'),
     date: String(row.voucher_date ?? ''),
+    createdAt: String(row.created_at ?? ''),
     type,
     typeLabel: VOUCHER_TYPE_LABELS[type] ?? labelFor(type || 'entry'),
     party: String(row.party ?? row.cash_account ?? 'Cash / walk-in'),
@@ -135,6 +139,7 @@ function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecor
     key: `${String(row.voucher_number ?? 'invoice')}-${index}`,
     number: String(row.voucher_number ?? '—'),
     date: String(row.voucher_date ?? ''),
+    createdAt: String(row.created_at ?? ''),
     type,
     typeLabel: type,
     party: String(row.customer_name ?? 'Walk-in / B2C'),
@@ -224,15 +229,8 @@ function toIsoDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function formatDate(value: unknown) {
-  const iso = String(value ?? '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || '—';
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+function formatDate(value: unknown, timestamp?: unknown) {
+  return formatVoucherDateTime(String(value ?? ''), timestamp ? String(timestamp) : null) || '—';
 }
 
 function labelFor(key: string) {
@@ -759,11 +757,11 @@ export function ShopBooksReportsScreen() {
           <Text style={styles.recordsNote}>Void entries are listed here but excluded from report totals.</Text>
         ) : null}
 
-        <View style={styles.list}>
+        <GroupedList>
           {visible.map((record) => (
             <RecordCard key={record.key} record={record} money={money} />
           ))}
-        </View>
+        </GroupedList>
 
         {filteredRecords.length > visible.length ? (
           <Pressable style={styles.moreBtn} onPress={() => setVisibleCount((count) => count + 20)}>
@@ -796,7 +794,6 @@ export function ShopBooksReportsScreen() {
       >
         <View style={styles.heading}>
           <View>
-            <Text style={styles.title}>Books reports</Text>
             <Text style={styles.subtitle}>Business performance and GST insights</Text>
           </View>
           {loading && data != null ? <ActivityIndicator color={colors.primary} /> : null}
@@ -957,7 +954,7 @@ function RecordCard({ record, money }: { record: ReportRecord; money: (value: un
               </Text>
             </View>
           </View>
-          <Text style={styles.entryDate}>{formatDate(record.date)}</Text>
+          <Text style={styles.entryDate}>{formatDate(record.date, record.createdAt)}</Text>
         </View>
         <View style={styles.entryAmountCol}>
           <Text style={[styles.entryAmount, isVoid && styles.strikeText]}>{money(record.total)}</Text>
@@ -1025,7 +1022,6 @@ function EmptyReport({ message }: { message: string }) {
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   heading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { ...typography.heading, color: colors.foreground },
   subtitle: { ...typography.body, color: colors.mutedForeground },
   /** Horizontal strips inside a vertical scroll view stretch unless growth is pinned. */
   hScroll: { flexGrow: 0, flexShrink: 0 },
@@ -1206,12 +1202,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   moreText: { ...typography.label, color: colors.primary },
-  list: { gap: spacing.sm },
   entryCard: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.sm,
   },

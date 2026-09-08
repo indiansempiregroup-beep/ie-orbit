@@ -2,12 +2,15 @@ import React, { createElement, useCallback, useLayoutEffect, useRef, useState } 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { FieldLabel } from './ui/FieldLabel';
 
 type Props = {
   label?: string;
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
+  required?: boolean;
+  optional?: boolean;
 };
 
 const DEFAULT_PLACEHOLDER = 'Ingredients, how to use, size guide…';
@@ -24,7 +27,7 @@ const EDITOR_CSS = `
 .ie-html-editor p { margin: 0 0 8px; }
 .ie-html-editor h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
 .ie-html-editor ul, .ie-html-editor ol { margin: 0 0 8px; padding-left: 1.25rem; }
-.ie-html-editor a { color: #123A6B; }
+.ie-html-editor a { color: #19576b; }
 `;
 
 function isEditorEmpty(el: HTMLElement) {
@@ -48,6 +51,8 @@ export function HtmlEditorField({
   value,
   onChange,
   placeholder = DEFAULT_PLACEHOLDER,
+  required,
+  optional,
 }: Props) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const skipSyncRef = useRef(false);
@@ -155,7 +160,7 @@ export function HtmlEditorField({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <FieldLabel label={label} required={required} optional={optional} />
       <Text style={styles.hint}>Add rich details customers will see on the product page. Use the toolbar to format text.</Text>
       <View style={styles.shell}>
         <View style={styles.toolbar} accessibilityRole="toolbar">
@@ -202,7 +207,7 @@ function Tool({
       {text ? (
         <Text style={[styles.toolText, active && styles.toolTextActive]}>{text}</Text>
       ) : (
-        <Feather name={icon!} size={15} color={active ? colors.primary : colors.foreground} />
+        <Feather name={icon!} size={15} color={active ? colors.primaryForeground : colors.foreground} />
       )}
     </Pressable>
   );
@@ -215,9 +220,9 @@ const styles = StyleSheet.create({
   shell: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     overflow: 'hidden',
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   toolbar: {
     flexDirection: 'row',
@@ -228,7 +233,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: colors.background,
+    backgroundColor: colors.secondary,
   },
   divider: { width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: 4 },
   tool: {
@@ -238,9 +243,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  toolActive: { backgroundColor: colors.tint },
+  toolActive: { backgroundColor: colors.primary },
   toolText: { ...typography.label, color: colors.foreground, fontWeight: '700' },
-  toolTextActive: { color: colors.primary },
+  toolTextActive: { color: colors.primaryForeground },
   editorWrap: { position: 'relative' },
   placeholder: {
     ...typography.body,

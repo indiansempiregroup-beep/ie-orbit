@@ -18,7 +18,6 @@ import { colors, spacing } from '../theme/tokens';
 
 type Props = {
   children: React.ReactNode;
-  /** Action buttons pinned above the keyboard when an input is focused. */
   footer?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
@@ -48,7 +47,9 @@ export function FormScreen({
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
-        bottomOffset={footer ? spacing.lg : spacing.xxxl}
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
+        bottomOffset={footer ? spacing.xl : spacing.xxxl}
         showsVerticalScrollIndicator={false}
         refreshControl={
           onRefresh ? (
@@ -71,7 +72,7 @@ export function FormScreen({
             style={[
               styles.footer,
               isDesktop && styles.footerDesktop,
-              { paddingBottom: Math.max(insets.bottom, spacing.lg) },
+              { paddingBottom: Math.max(insets.bottom, spacing.md) },
             ]}
           >
             {isDesktop ? <View style={styles.formColumn}>{footer}</View> : footer}
@@ -89,9 +90,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: {
     flexGrow: 1,
-    padding: spacing.xl,
-    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
     paddingBottom: spacing.xxxl,
+    gap: spacing.lg,
   },
   contentDesktop: {
     alignItems: 'center',
@@ -104,7 +106,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     backgroundColor: colors.card,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,

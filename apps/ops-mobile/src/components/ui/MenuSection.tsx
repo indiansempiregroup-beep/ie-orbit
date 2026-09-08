@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { colors, radius, shadows, spacing, typography } from '../../theme/tokens';
 
 type Props = {
   title: string;
@@ -20,7 +20,7 @@ const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
   title: {
     ...typography.caption,
-    fontFamily: fonts.bodySemi,
+    fontWeight: '700',
     color: colors.mutedForeground,
     textTransform: 'uppercase',
     letterSpacing: 0.7,
@@ -32,5 +32,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+    ...shadows.soft,
   },
 });

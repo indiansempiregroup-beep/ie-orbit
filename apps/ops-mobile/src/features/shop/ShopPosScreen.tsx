@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } fro
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -15,20 +15,33 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Customer, ShopCashAccount, ShopProduct, ShopSupplier } from '@ie-orbit/sdk';
+import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
 import { DesktopPage } from '../../components/DesktopPage';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { DateField } from '../../components/DateField';
+import { PickerSheet } from '../../components/PickerSheet';
 import { SelectField } from '../../components/SelectField';
+import { FormHero } from '../../components/FormHero';
+import { Button } from '../../components/ui/Button';
+import { Chip } from '../../components/ui/Chip';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
+import { FormAlert } from '../../components/ui/FormAlert';
+import { FormSection } from '../../components/ui/FormSection';
+import { IconBadge } from '../../components/ui/IconBadge';
+import { Input } from '../../components/ui/Input';
+import { StickyFooterBar } from '../../components/ui/StickyFooterBar';
+import { fieldStyles, inputReset } from '../../components/ui/fieldStyles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import { shopListRefreshControl } from './shopRefreshControl';
-import { computePosTotals, isProductTaxInclusive, type DiscountType } from './posPricing';
+import { applyDiscount, computePosTotals, isProductTaxInclusive, type DiscountType } from './posPricing';
 import {
   clearPosBillKeepCustomer,
   readPosSession,
@@ -40,6 +53,10 @@ import { normalizeGstin, validateGstin } from '../../utils/gstin';
 import { getApiErrorMessage } from '../../utils/format';
 import { hasShopie } from '../../utils/products';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../utils/loyalty';
+import { RemoteImage } from '../../components/RemoteImage';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { primaryProductImageUrl } from './productImages';
+import { formatMoney } from './shopBooksHelpers';
 
 type BasketLine = {
   product: ShopProduct;
@@ -87,9 +104,75 @@ function modeTitle(mode: PosMode) {
   return 'Sale';
 }
 
+const LINE_PERCENT_PRESETS = [5, 10, 15, 20, 25, 50];
+const SCAN_SUGGESTION_LIMIT = 12;
+
+function productScanCodes(product: ShopProduct): string[] {
+  const codes: string[] = [];
+  for (const row of product.barcodes ?? []) {
+    const code = String(row.code || '').trim();
+    if (code) codes.push(code);
+  }
+  const sku = String(product.sku || '').trim();
+  if (sku && !codes.some((code) => cEquals(code, sku))) codes.push(sku);
+  return codes;
+}
+
+function cEquals(a: string, b: string) {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function matchedScanCode(product: ShopProduct, term: string): string | undefined {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return undefined;
+  const codes = productScanCodes(product);
+  return (
+    codes.find((code) => code.toLowerCase() === needle) ||
+    codes.find((code) => code.toLowerCase().startsWith(needle)) ||
+    codes.find((code) => code.toLowerCase().includes(needle))
+  );
+}
+
+function scanMatchRank(product: ShopProduct, term: string): number | null {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return null;
+  const codes = productScanCodes(product).map((code) => code.toLowerCase());
+  if (codes.some((code) => code === needle)) return 0;
+  if (codes.some((code) => code.startsWith(needle))) return 1;
+  if (codes.some((code) => code.includes(needle))) return 2;
+  return null;
+}
+
+function ProductThumb({ product, size = 36 }: { product: ShopProduct; size?: number }) {
+  const uri = resolveMediaUrl(primaryProductImageUrl(product));
+  if (uri) {
+    return (
+      <RemoteImage
+        uri={uri}
+        style={{ width: size, height: size, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 8,
+        backgroundColor: colors.muted,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      <Feather name="package" size={size > 36 ? 18 : 14} color={colors.mutedForeground} />
+    </View>
+  );
+}
+
 export function ShopPosScreen() {
-  const insets = useSafeAreaInsets();
   const { isDesktop } = useBreakpoint();
+  const { lift, maxHeight, bottomPad, keyboardOpen } = useSheetKeyboardLayout(0.72);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
   const client = useOpsClient();
@@ -127,6 +210,10 @@ export function ShopPosScreen() {
   const [scan, setScan] = useState('');
   const [productQuery, setProductQuery] = useState('');
   const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const [productCategory, setProductCategory] = useState('');
+  const [productStock, setProductStock] = useState('');
+  const [productSort, setProductSort] = useState('name_asc');
+  const [productFiltersOpen, setProductFiltersOpen] = useState(false);
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>(
     () => (skipSaleSession ? '' : initialSession.billDiscountType),
   );
@@ -144,6 +231,9 @@ export function ShopPosScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [discountLineId, setDiscountLineId] = useState<string | null>(null);
+  const [draftDiscType, setDraftDiscType] = useState<DiscountType>('percent');
+  const [draftDiscValue, setDraftDiscValue] = useState('');
 
   const catalogLoadedRef = React.useRef(false);
 
@@ -240,9 +330,40 @@ export function ShopPosScreen() {
 
   const resolveCode = useCallback(
     async (code: string) => {
-      if (!client || !businessId) return;
       const trimmed = code.trim();
       if (!trimmed) return;
+      const exact = products.filter((product) => scanMatchRank(product, trimmed) === 0);
+      if (exact.length === 1) {
+        const product = exact[0];
+        syncBasket((current) => {
+          const existing = current.find((line) => line.product.id === product.id);
+          if (existing) {
+            return current.map((line) =>
+              line.product.id === product.id
+                ? {
+                    ...line,
+                    quantity: line.quantity + 1,
+                    barcode_scanned: trimmed || line.barcode_scanned,
+                  }
+                : line,
+            );
+          }
+          return [
+            ...current,
+            {
+              product,
+              quantity: 1,
+              barcode_scanned: trimmed,
+              discountType: '',
+              discountValue: 0,
+            },
+          ];
+        });
+        setScan('');
+        setMessage(`Added ${product.name}`);
+        return;
+      }
+      if (!client || !businessId) return;
       setBusy(true);
       setMessage(null);
       try {
@@ -277,12 +398,17 @@ export function ShopPosScreen() {
         setScan('');
         setMessage(`Added ${response.data.name}`);
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'Barcode not found');
+        const localMatches = products.filter((product) => scanMatchRank(product, trimmed) != null);
+        if (localMatches.length) {
+          setMessage('Select a matching product below.');
+        } else {
+          setMessage(err instanceof Error ? err.message : 'Barcode not found');
+        }
       } finally {
         setBusy(false);
       }
     },
-    [businessId, client, syncBasket],
+    [businessId, client, products, syncBasket],
   );
 
   useFocusEffect(
@@ -410,18 +536,49 @@ export function ShopPosScreen() {
     [cashAccounts],
   );
 
+  const productCategoryOptions = useMemo(() => {
+    const present = Array.from(
+      new Set(products.map((product) => String(product.category || '').trim()).filter(Boolean)),
+    );
+    const labels = new Map(SHOP_PRODUCT_CATEGORIES.map((item) => [item.value, item.label]));
+    return [
+      { value: '', label: 'All' },
+      ...present.map((value) => ({ value, label: labels.get(value) || value })),
+    ];
+  }, [products]);
+
+  const scanSuggestions = useMemo(() => {
+    const term = scan.trim();
+    if (!term) return [];
+    return products
+      .map((product) => ({ product, rank: scanMatchRank(product, term) }))
+      .filter((row): row is { product: ShopProduct; rank: number } => row.rank != null)
+      .sort((a, b) => a.rank - b.rank || String(a.product.name).localeCompare(String(b.product.name)))
+      .slice(0, SCAN_SUGGESTION_LIMIT)
+      .map((row) => row.product);
+  }, [products, scan]);
+
   const filteredProducts = useMemo(() => {
     const term = productQuery.trim().toLowerCase();
-    if (!term) return products.slice(0, 60);
-    return products
-      .filter((product) =>
-        [product.name, product.brand ?? '', product.sku ?? '', ...(product.barcodes ?? []).map((b) => b.code)]
-          .join(' ')
-          .toLowerCase()
-          .includes(term),
-      )
-      .slice(0, 60);
-  }, [productQuery, products]);
+    let list = products.filter((product) => {
+      if (productCategory && String(product.category || '') !== productCategory) return false;
+      if (productStock === 'in_stock' && Number(product.stock_on_hand) <= 0) return false;
+      if (productStock === 'low' && Number(product.stock_on_hand) > Number(product.low_stock_threshold ?? 5)) {
+        return false;
+      }
+      if (!term) return true;
+      return [product.name, product.brand ?? '', product.sku ?? '', ...(product.barcodes ?? []).map((b) => b.code)]
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+    list = [...list].sort((a, b) => {
+      if (productSort === 'price_desc') return Number(b.price ?? 0) - Number(a.price ?? 0);
+      if (productSort === 'stock_desc') return Number(b.stock_on_hand ?? 0) - Number(a.stock_on_hand ?? 0);
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return list.slice(0, 80);
+  }, [productQuery, products, productCategory, productStock, productSort]);
 
   const billGstinCheck = useMemo(() => validateGstin(partyGstin), [partyGstin]);
 
@@ -443,6 +600,29 @@ export function ShopPosScreen() {
       ),
     [basket, billDiscountType, billDiscountValue],
   );
+
+  const discountLine = basket.find((line) => line.product.id === discountLineId) ?? null;
+  const discountPriced = discountLine
+    ? totals.lines.find((row) => row.id === discountLine.product.id)
+    : undefined;
+  const draftDiscAmount = applyDiscount(
+    discountPriced?.gross ?? 0,
+    draftDiscType,
+    Number(draftDiscValue) || 0,
+  );
+
+  useEffect(() => {
+    if (!discountLineId) return;
+    const line = basket.find((row) => row.product.id === discountLineId);
+    if (!line) {
+      setDiscountLineId(null);
+      return;
+    }
+    setDraftDiscType(line.discountType || 'percent');
+    setDraftDiscValue(line.discountValue ? String(line.discountValue) : '');
+    // Sync only when the sheet opens for a line.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discountLineId]);
 
   const loyaltyPrefs = useMemo(
     () => readLoyaltyPrefs((activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined),
@@ -495,6 +675,7 @@ export function ShopPosScreen() {
         },
       ];
     });
+    setProductFiltersOpen(false);
     setProductPickerOpen(false);
     setProductQuery('');
   }
@@ -508,6 +689,7 @@ export function ShopPosScreen() {
   }
 
   function openAddProduct() {
+    setProductFiltersOpen(false);
     setProductPickerOpen(false);
     navigation.navigate('ShopProductAdd', { returnTo: 'pos' });
   }
@@ -757,57 +939,110 @@ export function ShopPosScreen() {
     }
   }
 
+  const payableShown = mode === 'sale' ? payableAfterLoyalty : totals.payable;
+  const checkoutLabel = busy
+    ? isSaleOrder
+      ? 'Saving sale order…'
+      : isPurchaseOrder
+        ? 'Saving purchase order…'
+        : isChallan
+          ? 'Saving challan…'
+          : isQuotation
+            ? 'Saving quotation…'
+            : isNote
+              ? 'Saving note…'
+              : isPurchase
+                ? 'Recording purchase…'
+                : 'Creating bill…'
+    : isSaleOrder
+      ? `Save sale order · ${formatMoney(totals.payable)}`
+      : isPurchaseOrder
+        ? `Save purchase order · ${formatMoney(totals.payable)}`
+        : isChallan
+          ? `Save challan · ${formatMoney(totals.payable)}`
+          : isQuotation
+            ? `Save quotation · ${formatMoney(totals.payable)}`
+            : isCreditNote
+              ? `Save credit note · ${formatMoney(totals.payable)}`
+              : isDebitNote
+                ? `Save debit note · ${formatMoney(totals.payable)}`
+                : isPurchase
+                  ? paymentMethod === 'borrow'
+                    ? `Record purchase · Due ${formatMoney(totals.payable)}`
+                    : `Record purchase · ${formatMoney(totals.payable)}`
+                  : paymentMethod === 'borrow'
+                    ? `Save bill · Due ${formatMoney(payableShown)}`
+                    : `Charge ${formatMoney(payableShown)}`;
+
   return (
     <DesktopPage maxWidth={960}>
     <View style={[styles.screen, { paddingTop: spacing.md }]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: spacing.xl }}
+        contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.lg }}
         keyboardShouldPersistTaps="handled"
         refreshControl={shopListRefreshControl(refreshing, onRefresh)}
       >
-        <View style={styles.customerRow}>
-          {usesSupplier ? (
-            <View style={styles.customerField}>
-              <SelectField
-                label="Supplier"
-                value={supplierId}
-                options={supplierOptions}
-                onChange={updateSupplierId}
-                searchable
-                placeholder={isPurchase ? 'No supplier' : 'Select supplier'}
-              />
-            </View>
-          ) : (
-            <>
+        <FormHero
+          title={modeTitle(mode)}
+          subtitle={
+            isDocument
+              ? 'Add products, then save the document.'
+              : isPurchase
+                ? 'Scan supplier items and record the bill.'
+                : 'Scan or search products, then take payment.'
+          }
+        />
+
+        <FormSection
+          title={usesSupplier ? 'Supplier' : 'Customer'}
+          subtitle={usesSupplier ? 'Who are you buying from?' : 'Walk-in or a saved customer'}
+        >
+          <View style={styles.customerRow}>
+            {usesSupplier ? (
               <View style={styles.customerField}>
                 <SelectField
-                  label={isCreditNote ? 'Customer' : 'Customer'}
-                  value={customerId}
-                  options={customerOptions}
-                  onChange={updateCustomerId}
+                  label="Supplier"
+                  required
+                  value={supplierId}
+                  options={supplierOptions}
+                  onChange={updateSupplierId}
                   searchable
-                  placeholder={
-                    isCreditNote
-                      ? 'Select customer'
-                      : isSaleOrder || isChallan
-                        ? 'Customer (optional)'
-                        : 'Walk-in customer'
-                  }
+                  placeholder={isPurchase ? 'No supplier' : 'Select supplier'}
                 />
               </View>
-              {!isDocument || isQuotation || isCreditNote || isSaleOrder || isChallan ? (
-                <Pressable
-                  style={styles.sideAddBtn}
-                  onPress={openAddCustomer}
-                  accessibilityLabel="Add customer"
-                >
-                  <Feather name="user-plus" size={20} color="#fff" />
-                </Pressable>
-              ) : null}
-            </>
-          )}
-        </View>
+            ) : (
+              <>
+                <View style={styles.customerField}>
+                  <SelectField
+                    label="Customer"
+                    required
+                    value={customerId}
+                    options={customerOptions}
+                    onChange={updateCustomerId}
+                    searchable
+                    placeholder={
+                      isCreditNote
+                        ? 'Select customer'
+                        : isSaleOrder || isChallan
+                          ? 'Customer (optional)'
+                          : 'Walk-in customer'
+                    }
+                  />
+                </View>
+                {!isDocument || isQuotation || isCreditNote || isSaleOrder || isChallan ? (
+                  <Pressable
+                    style={styles.sideAddBtn}
+                    onPress={openAddCustomer}
+                    accessibilityLabel="Add customer"
+                  >
+                    <Feather name="user-plus" size={20} color="#fff" />
+                  </Pressable>
+                ) : null}
+              </>
+            )}
+          </View>
+        </FormSection>
 
         {mode === 'sale' && customerId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
           <View style={styles.loyaltyBox}>
@@ -848,18 +1083,29 @@ export function ShopPosScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.section}>Add products</Text>
+        <FormSection
+          title="Bill"
+          subtitle={`${basket.length} item${basket.length === 1 ? '' : 's'} · scan, search, or add`}
+        >
+        <View>
         <View style={styles.scanRow}>
-          <TextInput
-            style={styles.input}
-            value={scan}
-            onChangeText={setScan}
-            onSubmitEditing={() => void resolveCode(scan)}
-            placeholder="Scan / type barcode"
-            placeholderTextColor={colors.mutedForeground}
-            autoCapitalize="none"
-            returnKeyType="done"
-          />
+          <View style={[fieldStyles.control, styles.scanField]}>
+            <Feather name="maximize" size={16} color={colors.primary} />
+            <TextInput
+              style={[inputReset, fieldStyles.value]}
+              value={scan}
+              onChangeText={(value) => {
+                setScan(value);
+                if (value.trim()) setMessage(null);
+              }}
+              onSubmitEditing={() => void resolveCode(scan)}
+              placeholder="Scan / type barcode"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+            />
+          </View>
           <Pressable
             style={styles.iconBtn}
             onPress={() => void resolveCode(scan)}
@@ -890,27 +1136,59 @@ export function ShopPosScreen() {
             <Feather name="plus" size={20} color="#fff" />
           </Pressable>
         </View>
+        {scan.trim() ? (
+          <ScrollView
+            style={styles.scanSuggestions}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
+            {scanSuggestions.length ? (
+              scanSuggestions.map((product) => {
+                const matched = matchedScanCode(product, scan);
+                return (
+                  <Pressable
+                    key={product.id}
+                    style={styles.scanSuggestionRow}
+                    onPress={() => {
+                      addProduct(product, matched || scan.trim());
+                      setScan('');
+                      setMessage(`Added ${product.name}`);
+                    }}
+                    accessibilityLabel={`Add ${product.name}`}
+                  >
+                    <ProductThumb product={product} size={36} />
+                    <View style={styles.productCopy}>
+                      <Text style={styles.name} numberOfLines={1}>
+                        {product.name}
+                      </Text>
+                      <Text style={styles.meta} numberOfLines={1}>
+                        {matched ? `${matched} · ` : ''}
+                        {formatMoney(product.price)} · stock {product.stock_on_hand}
+                      </Text>
+                    </View>
+                    <Feather name="plus" size={16} color={colors.primary} />
+                  </Pressable>
+                );
+              })
+            ) : (
+              <Text style={styles.scanEmpty}>No products match this barcode. Search the catalog or add a product.</Text>
+            )}
+          </ScrollView>
+        ) : null}
+        </View>
 
-        {message ? <Text style={styles.message}>{message}</Text> : null}
+        {message ? (
+          <FormAlert
+            message={message}
+            tone={message.toLowerCase().includes('posted') || message.toLowerCase().includes('saved') ? 'success' : 'error'}
+          />
+        ) : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
 
-        <Text style={styles.section}>
-          {isSaleOrder
-            ? `Sale order (${basket.length} items)`
-            : isPurchaseOrder
-              ? `Purchase order (${basket.length} items)`
-              : isQuotation
-                ? `Estimate (${basket.length} items)`
-                : isPurchase
-                  ? `Purchase (${basket.length} items)`
-                  : isCreditNote
-                    ? `Credit note (${basket.length} items)`
-                    : isDebitNote
-                      ? `Debit note (${basket.length} items)`
-                      : `Bill (${basket.length} items)`}
-        </Text>
         {!basket.length ? (
           <View style={styles.emptyBill}>
+            <IconBadge icon="shopping-bag" tone="navy" />
+            <Text style={styles.name}>Basket is empty</Text>
             <Text style={styles.meta}>
               {isSaleOrder
                 ? 'Scan or search products to build the sale order. Stock and payment wait until you convert it.'
@@ -922,96 +1200,170 @@ export function ShopPosScreen() {
                       ? 'Scan or search products from the supplier bill.'
                       : isNote
                         ? 'Scan or search products for this adjustment note.'
-                        : 'Scan or search products to start billing.'}
+                        : 'Scan a barcode or search the catalog to start billing.'}
             </Text>
+            <Button label="Search products" variant="soft" onPress={() => setProductPickerOpen(true)} />
           </View>
         ) : (
-          basket.map((line) => {
+          <View style={styles.lineList}>
+          {basket.map((line) => {
             const priced = totals.lines.find((row) => row.id === line.product.id);
+            const hasDiscount = Boolean(line.discountType && line.discountValue > 0);
+            const discountLabel =
+              line.discountType === 'percent'
+                ? `−${line.discountValue}%`
+                : line.discountType === 'amount'
+                  ? `−₹${formatMoney(line.discountValue)}`
+                  : '';
             return (
               <View key={line.product.id} style={styles.lineCard}>
-                <View style={styles.lineHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>{line.product.name}</Text>
-                    <Text style={styles.meta}>
-                      {Number(line.product.price).toFixed(2)} · GST{' '}
-                      {Number(line.product.gst_rate ?? line.product.tax_rate ?? 0)}%
-                      {isProductTaxInclusive(line.product) ? ' incl.' : ' excl.'}
-                      {priced && priced.discountAmount > 0
-                        ? ` · disc. -${priced.discountAmount.toFixed(2)}`
-                        : ''}
+                <Pressable
+                  style={styles.lineHit}
+                  onPress={() => setDiscountLineId(line.product.id)}
+                  accessibilityLabel={`Discount for ${line.product.name}`}
+                >
+                  <ProductThumb product={line.product} size={36} />
+                  <View style={styles.lineCopy}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {line.product.name}
+                    </Text>
+                    <Text style={hasDiscount ? styles.discBadge : styles.lineHint} numberOfLines={1}>
+                      {hasDiscount ? discountLabel : 'Tap to add discount'}
                     </Text>
                   </View>
-                  <Pressable onPress={() => updateLine(line.product.id, { quantity: 0 })}>
-                    <Feather name="trash-2" size={18} color={colors.destructive} />
-                  </Pressable>
-                </View>
-                <View style={styles.qtyRow}>
-                  <Pressable
-                    style={styles.qtyBtn}
-                    onPress={() => updateLine(line.product.id, { quantity: line.quantity - 1 })}
-                  >
-                    <Text style={styles.qtyBtnText}>−</Text>
-                  </Pressable>
-                  <Text style={styles.qty}>{line.quantity}</Text>
-                  <Pressable
-                    style={styles.qtyBtn}
-                    onPress={() => updateLine(line.product.id, { quantity: line.quantity + 1 })}
-                  >
-                    <Text style={styles.qtyBtnText}>+</Text>
-                  </Pressable>
-                  <Text style={styles.lineTotal}>{priced?.total.toFixed(2) ?? '0.00'}</Text>
-                </View>
-                <View style={styles.discountRow}>
-                  <Pressable
-                    style={[styles.chip, line.discountType === '' && styles.chipActive]}
-                    onPress={() => updateLine(line.product.id, { discountType: '', discountValue: 0 })}
-                  >
-                    <Text style={styles.chipText}>No disc.</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.chip, line.discountType === 'percent' && styles.chipActive]}
-                    onPress={() =>
-                      updateLine(line.product.id, {
-                        discountType: 'percent',
-                        discountValue: line.discountValue || 5,
-                      })
-                    }
-                  >
-                    <Text style={styles.chipText}>%</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.chip, line.discountType === 'amount' && styles.chipActive]}
-                    onPress={() =>
-                      updateLine(line.product.id, {
-                        discountType: 'amount',
-                        discountValue: line.discountValue || 10,
-                      })
-                    }
-                  >
-                    <Text style={styles.chipText}>₹</Text>
-                  </Pressable>
-                  {line.discountType ? (
-                    <TextInput
-                      style={[styles.input, styles.discountInput]}
-                      value={String(line.discountValue || '')}
-                      onChangeText={(value) =>
-                        updateLine(line.product.id, {
-                          discountValue: Number(value.replace(/[^0-9.]/g, '')) || 0,
-                        })
-                      }
-                      keyboardType="decimal-pad"
-                      placeholder="0"
-                      placeholderTextColor={colors.mutedForeground}
-                    />
+                </Pressable>
+                <Pressable
+                  style={styles.qtyBtn}
+                  onPress={() => updateLine(line.product.id, { quantity: line.quantity - 1 })}
+                  accessibilityLabel="Decrease quantity"
+                >
+                  <Text style={styles.qtyBtnText}>−</Text>
+                </Pressable>
+                <Text style={styles.qty}>{line.quantity}</Text>
+                <Pressable
+                  style={styles.qtyBtn}
+                  onPress={() => updateLine(line.product.id, { quantity: line.quantity + 1 })}
+                  accessibilityLabel="Increase quantity"
+                >
+                  <Text style={styles.qtyBtnText}>+</Text>
+                </Pressable>
+                <View style={styles.lineAmount}>
+                  {hasDiscount ? (
+                    <Text style={styles.lineStrike}>{formatMoney(priced?.gross ?? 0)}</Text>
                   ) : null}
+                  <Text style={styles.lineTotal}>{formatMoney(priced?.total ?? 0)}</Text>
                 </View>
+                <Pressable
+                  onPress={() => updateLine(line.product.id, { quantity: 0 })}
+                  hitSlop={8}
+                  accessibilityLabel="Remove line"
+                >
+                  <Feather name="x" size={16} color={colors.mutedForeground} />
+                </Pressable>
               </View>
             );
-          })
+          })}
+          </View>
         )}
+        </FormSection>
 
-        <Text style={styles.section}>Bill discount</Text>
+        <PickerSheet
+          visible={Boolean(discountLine)}
+          title="Item discount"
+          preview={
+            discountLine
+              ? draftDiscAmount > 0
+                ? `Saves ${formatMoney(draftDiscAmount)}`
+                : discountLine.product.name
+              : ''
+          }
+          icon="percent"
+          onClose={() => setDiscountLineId(null)}
+          actionLabel="Apply discount"
+          onAction={() => {
+            if (!discountLine) return;
+            const value = Number(draftDiscValue) || 0;
+            updateLine(discountLine.product.id, {
+              discountType: value > 0 ? draftDiscType : '',
+              discountValue: value > 0 ? value : 0,
+            });
+            setDiscountLineId(null);
+          }}
+        >
+          {discountLine ? (
+            <View style={styles.discSheet}>
+              <Text style={styles.discProduct} numberOfLines={2}>
+                {discountLine.product.name}
+              </Text>
+              <View style={styles.discTypeRow}>
+                <Pressable
+                  style={[styles.discTypeCard, draftDiscType === 'percent' && styles.discTypeCardOn]}
+                  onPress={() => setDraftDiscType('percent')}
+                >
+                  <Text style={[styles.discTypeTitle, draftDiscType === 'percent' && styles.discTypeTitleOn]}>
+                    Percent
+                  </Text>
+                  <Text style={[styles.discTypeMeta, draftDiscType === 'percent' && styles.discTypeMetaOn]}>
+                    e.g. 10% off
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.discTypeCard, draftDiscType === 'amount' && styles.discTypeCardOn]}
+                  onPress={() => setDraftDiscType('amount')}
+                >
+                  <Text style={[styles.discTypeTitle, draftDiscType === 'amount' && styles.discTypeTitleOn]}>
+                    Amount
+                  </Text>
+                  <Text style={[styles.discTypeMeta, draftDiscType === 'amount' && styles.discTypeMetaOn]}>
+                    e.g. ₹20 off
+                  </Text>
+                </Pressable>
+              </View>
+              {draftDiscType === 'percent' ? (
+                <View style={styles.discPresetRow}>
+                  {LINE_PERCENT_PRESETS.map((preset) => (
+                    <Pressable
+                      key={preset}
+                      style={[
+                        styles.discPreset,
+                        draftDiscValue === String(preset) && styles.discPresetOn,
+                      ]}
+                      onPress={() => setDraftDiscValue(String(preset))}
+                    >
+                      <Text
+                        style={[
+                          styles.discPresetText,
+                          draftDiscValue === String(preset) && styles.discPresetTextOn,
+                        ]}
+                      >
+                        {preset}%
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              <Input
+                label={draftDiscType === 'amount' ? 'Rupees off' : 'Percent off'}
+                optional
+                value={draftDiscValue}
+                onChangeText={(value) => setDraftDiscValue(value.replace(/[^0-9.]/g, ''))}
+                keyboardType="decimal-pad"
+                placeholder="0"
+              />
+              <Button
+                label="Remove discount"
+                variant="ghost"
+                fullWidth
+                onPress={() => {
+                  updateLine(discountLine.product.id, { discountType: '', discountValue: 0 });
+                  setDiscountLineId(null);
+                }}
+              />
+            </View>
+          ) : null}
+        </PickerSheet>
+
+        <FormSection title="Bill discount" subtitle="Optional off the whole bill">
         <View style={styles.discountRow}>
           {(
             [
@@ -1020,9 +1372,10 @@ export function ShopPosScreen() {
               { value: 'amount', label: '₹' },
             ] as const
           ).map((option) => (
-            <Pressable
+            <Chip
               key={option.value || 'none'}
-              style={[styles.chip, billDiscountType === option.value && styles.chipActive]}
+              label={option.label}
+              active={billDiscountType === option.value}
               onPress={() => {
                 setBillDiscountType(option.value);
                 if (!option.value) setBillDiscountValue('0');
@@ -1031,9 +1384,7 @@ export function ShopPosScreen() {
                   billDiscountValue: option.value ? billDiscountValue : '0',
                 });
               }}
-            >
-              <Text style={styles.chipText}>{option.label}</Text>
-            </Pressable>
+            />
           ))}
           {billDiscountType ? (
             <TextInput
@@ -1049,34 +1400,36 @@ export function ShopPosScreen() {
             />
           ) : null}
         </View>
+        </FormSection>
 
         {showGstFields ? (
-          <>
-            <Text style={styles.section}>{usesSupplier ? 'Supplier GSTIN' : 'Customer GSTIN'}</Text>
-            <TextInput
-              style={[styles.input, partyGstin.length > 0 && !billGstinCheck.ok && styles.inputError]}
+          <FormSection title="GST" subtitle={usesSupplier ? 'Supplier GSTIN' : 'Customer GSTIN'}>
+            <Input
+              label="GSTIN"
+              optional
               value={partyGstin}
               onChangeText={updatePartyGstin}
               autoCapitalize="characters"
               autoCorrect={false}
               maxLength={15}
               placeholder="29AABCU9603R1ZJ (optional for B2C)"
-              placeholderTextColor={colors.mutedForeground}
+              error={partyGstin.length > 0 && !billGstinCheck.ok ? billGstinCheck.message : undefined}
+              hint={
+                partyGstin.length === 0
+                  ? 'Leave blank for B2C. Enter a valid 15-character GSTIN for a B2B invoice.'
+                  : billGstinCheck.ok
+                    ? 'Valid GSTIN — this bill will be posted as B2B.'
+                    : undefined
+              }
             />
-            <Text style={[styles.hint, partyGstin.length > 0 && !billGstinCheck.ok && styles.hintError]}>
-              {partyGstin.length === 0
-                ? 'Leave blank for B2C. Enter a valid 15-character GSTIN for a proper B2B GST invoice.'
-                : !billGstinCheck.ok
-                  ? billGstinCheck.message
-                  : 'Valid GSTIN — this bill will be posted as B2B for GSTR-1 / e-invoice.'}
-            </Text>
-          </>
+          </FormSection>
         ) : null}
 
         {isDocument ? (
           isQuotation ? (
             <DateField
               label="Valid until"
+              optional
               value={validUntil}
               onChange={setValidUntil}
               helperText="Optional expiry date for this quotation."
@@ -1097,8 +1450,7 @@ export function ShopPosScreen() {
             </Text>
           )
         ) : (
-          <>
-            <Text style={styles.section}>Payment</Text>
+          <FormSection title="Payment" subtitle="How this bill is settled">
             <View style={styles.discountRow}>
               {(
                 [
@@ -1108,23 +1460,23 @@ export function ShopPosScreen() {
                   { value: 'borrow', label: isPurchase ? 'Unpaid' : 'Borrow' },
                 ] as const
               ).map((method) => (
-                <Pressable
+                <Chip
                   key={method.value}
-                  style={[styles.chip, paymentMethod === method.value && styles.chipActive]}
+                  label={method.label}
+                  active={paymentMethod === method.value}
                   onPress={() => {
                     setPaymentMethod(method.value);
                     if (!isPurchase) {
                       writePosSession({ paymentMethod: method.value });
                     }
                   }}
-                >
-                  <Text style={styles.chipText}>{method.label}</Text>
-                </Pressable>
+                />
               ))}
             </View>
             {isPurchase && paymentMethod !== 'borrow' ? (
               <SelectField
                 label="Paid from"
+                required
                 value={cashAccountId}
                 options={cashAccountOptions}
                 onChange={setCashAccountId}
@@ -1138,7 +1490,7 @@ export function ShopPosScreen() {
                   : 'Borrow / credit: customer takes goods now and pays later. A customer is required (not Walk-in).'}
               </Text>
             ) : null}
-          </>
+          </FormSection>
         )}
 
         <View style={styles.totalsCard}>
@@ -1161,27 +1513,27 @@ export function ShopPosScreen() {
           </Text>
           <View style={styles.totalRow}>
             <Text style={styles.meta}>Items</Text>
-            <Text style={styles.meta}>{totals.merchandiseGross.toFixed(2)}</Text>
+            <Text style={styles.meta}>{formatMoney(totals.merchandiseGross)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.meta}>Product discounts</Text>
-            <Text style={styles.meta}>-{totals.lineDiscountTotal.toFixed(2)}</Text>
+            <Text style={styles.meta}>-{formatMoney(totals.lineDiscountTotal)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.meta}>Bill discount</Text>
-            <Text style={styles.meta}>-{totals.billDiscountAmount.toFixed(2)}</Text>
+            <Text style={styles.meta}>-{formatMoney(totals.billDiscountAmount)}</Text>
           </View>
           {loyaltyDiscount > 0 ? (
             <View style={styles.totalRow}>
               <Text style={styles.meta}>Reward points</Text>
-              <Text style={styles.meta}>-{loyaltyDiscount.toFixed(2)}</Text>
+              <Text style={styles.meta}>-{formatMoney(loyaltyDiscount)}</Text>
             </View>
           ) : null}
           <View style={styles.totalRow}>
             <Text style={styles.meta}>
               GST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
             </Text>
-            <Text style={styles.meta}>{totals.taxTotal.toFixed(2)}</Text>
+            <Text style={styles.meta}>{formatMoney(totals.taxTotal)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.payableLabel}>
@@ -1193,124 +1545,131 @@ export function ShopPosScreen() {
                     ? 'Amount to pay'
                     : 'Payable'}
             </Text>
-            <Text style={styles.payableValue}>
-              {(mode === 'sale' ? payableAfterLoyalty : totals.payable).toFixed(2)}
-            </Text>
+            <Text style={styles.payableValue}>{formatMoney(payableShown)}</Text>
           </View>
         </View>
       </ScrollView>
 
-      <View style={[styles.chargeBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        <Pressable
-          style={[styles.checkout, (!basket.length || busy) && styles.checkoutDisabled]}
+      <StickyFooterBar>
+        <View style={styles.chargeMeta}>
+          <Text style={styles.chargeHint}>{basket.length} item{basket.length === 1 ? '' : 's'}</Text>
+          <Text style={styles.chargeAmount}>{formatMoney(payableShown)}</Text>
+        </View>
+        <Button
+          label={checkoutLabel}
+          size="lg"
+          fullWidth
+          loading={busy}
           disabled={!basket.length || busy}
           onPress={() => void checkout()}
-        >
-          <Text style={styles.checkoutText}>
-            {busy
-              ? isSaleOrder
-                ? 'Saving sale order…'
-                : isPurchaseOrder
-                  ? 'Saving purchase order…'
-                  : isChallan
-                    ? 'Saving challan…'
-                    : isQuotation
-                    ? 'Saving quotation…'
-                    : isNote
-                      ? 'Saving note…'
-                      : isPurchase
-                        ? 'Recording purchase…'
-                        : 'Creating bill…'
-              : isSaleOrder
-                ? `Save sale order · ${totals.payable.toFixed(2)}`
-                : isPurchaseOrder
-                  ? `Save purchase order · ${totals.payable.toFixed(2)}`
-                  : isChallan
-                    ? `Save challan · ${totals.payable.toFixed(2)}`
-                    : isQuotation
-                    ? `Save quotation · ${totals.payable.toFixed(2)}`
-                    : isCreditNote
-                      ? `Save credit note · ${totals.payable.toFixed(2)}`
-                      : isDebitNote
-                        ? `Save debit note · ${totals.payable.toFixed(2)}`
-                        : isPurchase
-                          ? paymentMethod === 'borrow'
-                            ? `Record purchase · Due ${totals.payable.toFixed(2)}`
-                            : `Record purchase · ${totals.payable.toFixed(2)}`
-                          : paymentMethod === 'borrow'
-                            ? `Save bill · Due ${payableAfterLoyalty.toFixed(2)}`
-                            : `Save & print · ${payableAfterLoyalty.toFixed(2)}`}
-          </Text>
-        </Pressable>
-      </View>
+        />
+      </StickyFooterBar>
 
       <Modal
         visible={productPickerOpen}
         animationType="slide"
         transparent
-        onRequestClose={() => setProductPickerOpen(false)}
+        onRequestClose={() => {
+          setProductFiltersOpen(false);
+          setProductPickerOpen(false);
+        }}
       >
         <View style={[styles.overlay, isDesktop && styles.overlayDesktop]}>
           <Pressable
             style={styles.backdrop}
-            onPress={() => setProductPickerOpen(false)}
+            onPress={() => {
+              setProductFiltersOpen(false);
+              setProductPickerOpen(false);
+            }}
             accessibilityLabel="Close"
           />
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          <View
             style={[
               styles.sheet,
               isDesktop && styles.sheetDesktop,
-              { paddingBottom: Math.max(insets.bottom, spacing.lg) },
+              !isDesktop && {
+                marginBottom: lift,
+                maxHeight,
+                height: maxHeight,
+                paddingBottom: bottomPad,
+              },
+              isDesktop && { paddingBottom: spacing.lg },
             ]}
           >
-            <View style={styles.handle} />
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>Find product</Text>
-                <Text style={styles.sheetSubtitle}>
-                  {filteredProducts.length} match{filteredProducts.length === 1 ? '' : 'es'}
-                </Text>
+            <View style={[styles.pickerHero, keyboardOpen && styles.pickerHeroCompact]}>
+              {!isDesktop ? <View style={styles.handle} /> : null}
+              <View style={styles.pickerHeroTop}>
+                <Text style={styles.pickerKicker}>Catalog</Text>
+                <Pressable
+                  style={styles.pickerClose}
+                  onPress={() => {
+                    setProductFiltersOpen(false);
+                    setProductPickerOpen(false);
+                  }}
+                  hitSlop={8}
+                >
+                  <Feather name="x" size={18} color={colors.primaryForeground} />
+                </Pressable>
               </View>
-              <Pressable style={styles.closeBtn} onPress={() => setProductPickerOpen(false)} hitSlop={8}>
-                <Feather name="x" size={18} color={colors.foreground} />
-              </Pressable>
+              <Text style={[styles.pickerTitle, keyboardOpen && styles.pickerTitleCompact]}>Find product</Text>
+              <Text style={styles.pickerSubtitle}>
+                {filteredProducts.length} match{filteredProducts.length === 1 ? '' : 'es'}
+              </Text>
             </View>
 
-            <View style={styles.searchWrap}>
-              <Feather name="search" size={16} color={colors.mutedForeground} />
-              <TextInput
-                value={productQuery}
-                onChangeText={setProductQuery}
-                placeholder="Search name, brand, SKU, barcode"
-                placeholderTextColor={colors.mutedForeground}
-                autoFocus
-                autoCorrect={false}
-                autoCapitalize="none"
-                clearButtonMode="while-editing"
-                style={styles.searchInput}
+            <View style={styles.pickerSearchRow}>
+              <View style={styles.searchWrap}>
+                <Feather name="search" size={16} color={colors.mutedForeground} />
+                <TextInput
+                  value={productQuery}
+                  onChangeText={setProductQuery}
+                  placeholder="Search name, brand, SKU, barcode"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoFocus
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  clearButtonMode="while-editing"
+                  style={styles.searchInput}
+                />
+                {productQuery.length > 0 && Platform.OS !== 'ios' ? (
+                  <Pressable onPress={() => setProductQuery('')} hitSlop={8}>
+                    <Feather name="x-circle" size={16} color={colors.mutedForeground} />
+                  </Pressable>
+                ) : null}
+              </View>
+              <FilterButton
+                count={
+                  Number(Boolean(productCategory)) +
+                  Number(Boolean(productStock)) +
+                  Number(productSort !== 'name_asc')
+                }
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setProductFiltersOpen(true);
+                }}
               />
-              {productQuery.length > 0 && Platform.OS !== 'ios' ? (
-                <Pressable onPress={() => setProductQuery('')} hitSlop={8}>
-                  <Feather name="x-circle" size={16} color={colors.mutedForeground} />
-                </Pressable>
-              ) : null}
             </View>
 
             <FlatList
+              {...groupedListProps(filteredProducts.length, styles.list)}
               data={filteredProducts}
               keyExtractor={(item) => item.id}
               keyboardShouldPersistTaps="handled"
-              style={styles.list}
+              keyboardDismissMode="interactive"
               contentContainerStyle={
                 filteredProducts.length === 0 ? styles.listEmptyContent : styles.listContent
               }
               renderItem={({ item }) => (
                 <Pressable style={styles.productRow} onPress={() => addProduct(item)}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.meta}>
-                    {item.price} · stock {item.stock_on_hand}
-                  </Text>
+                  <ProductThumb product={item} size={44} />
+                  <View style={styles.productCopy}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.meta}>
+                      {formatMoney(item.price)} · stock {item.stock_on_hand}
+                    </Text>
+                  </View>
                 </Pressable>
               )}
               ListEmptyComponent={
@@ -1324,7 +1683,46 @@ export function ShopPosScreen() {
               <Feather name="plus" size={18} color="#fff" />
               <Text style={styles.createProductText}>Add new product</Text>
             </Pressable>
-          </KeyboardAvoidingView>
+
+            <FilterSheet
+              embedded
+              visible={productFiltersOpen}
+              title="Product filters"
+              onClose={() => setProductFiltersOpen(false)}
+              onReset={() => {
+                setProductCategory('');
+                setProductStock('');
+                setProductSort('name_asc');
+              }}
+            >
+              <FilterChoiceGroup
+                label="Category"
+                value={productCategory}
+                options={productCategoryOptions}
+                onChange={setProductCategory}
+              />
+              <FilterChoiceGroup
+                label="Stock"
+                value={productStock}
+                options={[
+                  { value: '', label: 'Any' },
+                  { value: 'in_stock', label: 'In stock' },
+                  { value: 'low', label: 'Low stock' },
+                ]}
+                onChange={setProductStock}
+              />
+              <FilterChoiceGroup
+                label="Sort"
+                value={productSort}
+                options={[
+                  { value: 'name_asc', label: 'Name' },
+                  { value: 'price_desc', label: 'Price' },
+                  { value: 'stock_desc', label: 'Stock' },
+                ]}
+                onChange={setProductSort}
+              />
+            </FilterSheet>
+          </View>
         </View>
       </Modal>
     </View>
@@ -1360,7 +1758,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 1,
   },
   section: {
     fontFamily: fonts.bodyMedium,
@@ -1369,16 +1766,42 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
-  scanRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: spacing.sm },
+  scanRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  scanField: { flex: 1, gap: spacing.sm },
+  scanSuggestions: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+    maxHeight: 260,
+  },
+  scanSuggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  scanEmpty: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    padding: spacing.md,
+    lineHeight: 18,
+  },
   input: {
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   inputError: {
     borderColor: colors.destructive,
@@ -1410,36 +1833,79 @@ const styles = StyleSheet.create({
   emptyBill: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     padding: spacing.lg,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
+    alignItems: 'center',
+    gap: spacing.sm,
   },
+  lineList: { gap: 8 },
   lineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.md,
-    backgroundColor: colors.card,
-    marginBottom: spacing.sm,
-    gap: 8,
+    borderRadius: radius.md,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.inputBackground,
+    minHeight: 44,
   },
-  lineHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  name: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.foreground },
-  meta: { marginTop: 2, color: colors.mutedForeground, fontSize: 13 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lineHit: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lineCopy: { flex: 1, minWidth: 0, gap: 1 },
+  name: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.foreground },
+  lineHint: { fontSize: 11, color: colors.mutedForeground },
+  discBadge: { fontSize: 11, fontWeight: '700', color: '#B45309' },
+  meta: { color: colors.mutedForeground, fontSize: 13 },
   qtyBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
   },
-  qtyBtnText: { fontSize: 20, color: colors.primary, fontWeight: '600' },
-  qty: { minWidth: 28, textAlign: 'center', color: colors.foreground, fontWeight: '600' },
-  lineTotal: { marginLeft: 'auto', fontWeight: '700', color: colors.foreground },
+  qtyBtnText: { fontSize: 16, color: colors.primary, fontWeight: '700', lineHeight: 18 },
+  qty: { minWidth: 18, textAlign: 'center', color: colors.foreground, fontWeight: '700', fontSize: 14 },
+  lineAmount: { alignItems: 'flex-end', minWidth: 56 },
+  lineStrike: {
+    fontSize: 11,
+    color: colors.mutedForeground,
+    textDecorationLine: 'line-through',
+  },
+  lineTotal: { fontWeight: '700', color: colors.foreground, fontSize: 14 },
+  discSheet: { gap: spacing.md },
+  discProduct: { ...typography.body, color: colors.foreground, fontWeight: '600' },
+  discTypeRow: { flexDirection: 'row', gap: spacing.sm },
+  discTypeCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    backgroundColor: colors.inputBackground,
+    gap: 4,
+  },
+  discTypeCardOn: { borderColor: colors.primary, backgroundColor: colors.tint },
+  discTypeTitle: { fontWeight: '700', color: colors.foreground, fontSize: 15 },
+  discTypeTitleOn: { color: colors.primary },
+  discTypeMeta: { fontSize: 12, color: colors.mutedForeground },
+  discTypeMetaOn: { color: colors.primary },
+  discPresetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  discPreset: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  discPresetOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  discPresetText: { fontWeight: '700', fontSize: 13, color: colors.foreground },
+  discPresetTextOn: { color: colors.primaryForeground },
   discountRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   chip: {
     borderWidth: 1,
@@ -1483,13 +1949,13 @@ const styles = StyleSheet.create({
   overlayDesktop: { justifyContent: 'center', alignItems: 'center', padding: spacing.xxl },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
   sheet: {
-    backgroundColor: colors.sheet,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '82%',
-    height: '72%',
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '90%',
+    overflow: 'hidden',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingTop: 0,
     shadowColor: '#142033',
     shadowOpacity: 0.18,
     shadowRadius: 24,
@@ -1505,13 +1971,48 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
   },
+  chargeMeta: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  chargeHint: { ...typography.caption, color: colors.mutedForeground },
+  chargeAmount: { fontFamily: fonts.bodyBold, fontSize: 22, color: colors.foreground, letterSpacing: -0.3 },
+  pickerHero: {
+    backgroundColor: colors.primary,
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  pickerHeroTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  pickerHeroCompact: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  pickerKicker: { ...typography.label, color: 'rgba(255,255,255,0.82)', flex: 1 },
+  pickerTitle: { fontSize: 24, fontWeight: '700', color: colors.primaryForeground, letterSpacing: -0.3 },
+  pickerTitleCompact: { fontSize: 18 },
+  pickerSubtitle: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
+  pickerClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   handle: {
     alignSelf: 'center',
     width: 40,
     height: 4,
     borderRadius: radius.full,
-    backgroundColor: colors.muted,
-    marginBottom: spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -1537,6 +2038,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   searchWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -1546,6 +2048,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: spacing.md,
+  },
+  pickerSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginBottom: spacing.md,
   },
   searchInput: {
@@ -1559,13 +2066,14 @@ const styles = StyleSheet.create({
   listEmptyContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
   emptySearch: { alignItems: 'center', paddingVertical: spacing.lg },
   productRow: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.sm,
+    paddingRight: spacing.md,
     backgroundColor: colors.card,
   },
+  productCopy: { flex: 1, minWidth: 0 },
   createProductBtn: {
     marginTop: spacing.sm,
     backgroundColor: colors.primary,

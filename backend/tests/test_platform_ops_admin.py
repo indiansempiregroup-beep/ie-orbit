@@ -81,6 +81,79 @@ def test_ticket_thread_assign_and_resolve(
 
 
 @pytest.mark.django_db
+def test_customer_ticket_is_visible_to_owner_and_hidden_from_other_users(
+    api_client: APIClient,
+    tenant_owner: User,
+) -> None:
+    tenant = Tenant.objects.create(slug="shop-tickets", display_name="Shop Tickets", owner=tenant_owner)
+    customer = User.objects.create_user(
+        email="ticket-customer@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    stranger = User.objects.create_user(
+        email="ticket-stranger@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    ticket = SupportTicket.objects.create(tenant=tenant, subject="Order never arrived", requester=customer)
+    SupportTicketNote.objects.create(ticket=ticket, author=customer, body="Waiting since Monday", is_internal=False)
+    SupportTicketNote.objects.create(ticket=ticket, author=tenant_owner, body="Internal ops note", is_internal=True)
+
+    api_client.force_authenticate(user=customer)
+    mine = api_client.get(reverse("support-tickets"))
+    assert mine.status_code == 200
+    assert [row["subject"] for row in mine.json()["data"]["tickets"]] == ["Order never arrived"]
+    detail = api_client.get(reverse("support-ticket-detail", kwargs={"ticket_id": ticket.id}))
+    assert detail.status_code == 200
+    assert [note["body"] for note in detail.json()["data"]["notes"]] == ["Waiting since Monday"]
+
+    api_client.force_authenticate(user=tenant_owner)
+    owner_list = api_client.get(reverse("support-tickets"), HTTP_X_TENANT_ID=str(tenant.id))
+    assert owner_list.status_code == 200
+    assert owner_list.json()["data"]["tickets"][0]["requester_email"] == customer.email
+
+    api_client.force_authenticate(user=stranger)
+    hidden = api_client.get(reverse("support-ticket-detail", kwargs={"ticket_id": ticket.id}))
+    assert hidden.status_code == 404
+
+
+@pytest.mark.django_db
+def test_create_ticket_emails_platform_admins(
+    api_client: APIClient,
+    platform_admin_user: User,
+    tenant_owner: User,
+    django_capture_on_commit_callbacks,
+    monkeypatch,
+) -> None:
+    tenant = Tenant.objects.create(slug="notify-tickets", display_name="Notify Co", owner=tenant_owner)
+    customer = User.objects.create_user(
+        email="notify-customer@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    sent: list[str] = []
+
+    def fake_send_branded_email(**kwargs):
+        sent.append(str(kwargs.get("recipient") or ""))
+
+    monkeypatch.setattr(
+        "apps.notifications.services.providers.email.send_branded_email",
+        fake_send_branded_email,
+    )
+
+    api_client.force_authenticate(user=customer)
+    with django_capture_on_commit_callbacks(execute=True):
+        created = api_client.post(
+            reverse("support-tickets"),
+            {"subject": "App crash", "body": "Cannot open cart", "tenant_id": str(tenant.id)},
+            format="json",
+        )
+    assert created.status_code == 201
+    assert platform_admin_user.email in sent
+
+
+@pytest.mark.django_db
 def test_help_article_edit_and_unpublish(api_client: APIClient, platform_admin_user: User) -> None:
     api_client.force_authenticate(user=platform_admin_user)
     created = api_client.post(

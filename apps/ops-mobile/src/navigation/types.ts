@@ -61,6 +61,8 @@ export type RootStackParamList = {
   StaffSchedule: { staffId: string };
   StaffAvailability: { staffId: string };
   Settings: undefined;
+  SupportTickets: { mode?: 'workspace' | 'platform' } | undefined;
+  SupportTicketDetail: { ticketId: string; mode?: 'workspace' | 'platform' };
   BusinessProfile: undefined;
   BusinessEdit: undefined;
   PaymentSettings: undefined;

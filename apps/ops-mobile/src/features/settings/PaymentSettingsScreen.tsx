@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { MerchantPaymentSettings } from '@ie-orbit/sdk';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
@@ -217,13 +218,11 @@ export function PaymentSettingsScreen() {
         </View>
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>Payments</Text>
-        <Text style={styles.subtitle}>
-          Connect your own Razorpay and Cashfree accounts so customer payments settle directly to
-          your bank. We never hold your money.
-        </Text>
-      </View>
+      <FormHero
+        icon="credit-card"
+        title="Payments"
+        subtitle="Connect your own Razorpay and Cashfree accounts so customer payments settle directly to your bank. We never hold your money."
+      />
 
       <FormSection
         title="Razorpay"
@@ -240,6 +239,7 @@ export function PaymentSettingsScreen() {
         </View>
         <Input
           label="Key ID"
+          required
           value={keyId}
           onChangeText={setKeyId}
           autoCapitalize="none"
@@ -249,6 +249,7 @@ export function PaymentSettingsScreen() {
         />
         <Input
           label={configured ? 'Key Secret (blank keeps saved secret)' : 'Key Secret'}
+          required={!configured}
           value={keySecret}
           onChangeText={setKeySecret}
           autoCapitalize="none"
@@ -258,6 +259,7 @@ export function PaymentSettingsScreen() {
         />
         <Input
           label={webhookConfigured ? 'Webhook Secret (blank keeps saved secret)' : 'Webhook Secret'}
+          optional
           value={webhookSecret}
           onChangeText={setWebhookSecret}
           autoCapitalize="none"
@@ -309,6 +311,7 @@ export function PaymentSettingsScreen() {
         </View>
         <Input
           label="App ID"
+          required
           value={cashfreeAppId}
           onChangeText={setCashfreeAppId}
           autoCapitalize="none"
@@ -318,6 +321,7 @@ export function PaymentSettingsScreen() {
         />
         <Input
           label={cashfreeConfigured ? 'Secret Key (blank keeps saved secret)' : 'Secret Key'}
+          required={!cashfreeConfigured}
           value={cashfreeSecret}
           onChangeText={setCashfreeSecret}
           autoCapitalize="none"
@@ -370,6 +374,7 @@ export function PaymentSettingsScreen() {
       <FormSection title="UPI & QR" subtitle="Fallback for offline collection.">
         <Input
           label="UPI ID"
+          optional
           value={upiVpa}
           onChangeText={setUpiVpa}
           autoCapitalize="none"
@@ -377,7 +382,8 @@ export function PaymentSettingsScreen() {
           hint="Used to generate amount-specific QR codes for online orders."
         />
         <ImagePickerButton
-          label="Static payment QR (optional)"
+          label="Static payment QR"
+          optional
           variant="card"
           valueUri={paymentQrPreview || undefined}
           onPicked={(asset) => {
@@ -395,9 +401,6 @@ export function PaymentSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  intro: { gap: 4, marginBottom: 4 },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   footerButton: { flex: 1 },
   statusRow: {

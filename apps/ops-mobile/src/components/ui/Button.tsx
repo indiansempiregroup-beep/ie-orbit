@@ -12,7 +12,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { colors, fonts, radius, typography } from '../../theme/tokens';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'destructive' | 'soft';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'destructive' | 'soft' | 'cta';
 type Size = 'sm' | 'md' | 'lg';
 
 type Props = PressableProps & {
@@ -95,6 +95,13 @@ function getVariantStyle(variant: Variant) {
         spinner: colors.foreground,
         icon: colors.foreground,
       };
+    case 'cta':
+      return {
+        container: { backgroundColor: colors.primary },
+        label: { color: colors.primaryForeground },
+        spinner: colors.primaryForeground,
+        icon: colors.primaryForeground,
+      };
     case 'destructive':
       return {
         container: { backgroundColor: colors.destructive },
@@ -121,12 +128,12 @@ const sizes: Record<Size, ViewStyle> = {
 const sizeStyles: Record<Size, TextStyle> = {
   sm: { fontSize: 12 },
   md: { fontSize: 14 },
-  lg: { fontSize: 15 },
+  lg: { fontSize: 16 },
 };
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -134,6 +141,6 @@ const styles = StyleSheet.create({
   content: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   fullWidth: { width: '100%' },
   label: { ...typography.label, fontFamily: fonts.bodySemi },
-  pressed: { opacity: 0.88 },
+  pressed: { opacity: 0.92 },
   disabled: { opacity: 0.45 },
 });

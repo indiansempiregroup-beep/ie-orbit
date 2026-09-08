@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';
@@ -17,6 +18,8 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { colors, fonts, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { emailFieldError } from '../../utils/emailValidation';
+import { indianMobileError, requiredMessage, websiteFieldError } from '../../utils/formValidation';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function BusinessEditScreen() {
@@ -44,6 +47,7 @@ export function BusinessEditScreen() {
   const [razorpayStatusLabel, setRazorpayStatusLabel] = useState('Not connected');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,6 +114,19 @@ export function BusinessEditScreen() {
             setLoading(true);
             setError(null);
             try {
+              const nextErrors: Record<string, string> = {};
+              if (!businessName.trim() && !displayName.trim()) nextErrors.businessName = requiredMessage('Business name');
+              const emailError = emailFieldError(email, false);
+              if (emailError) nextErrors.email = emailError;
+              const phoneError = indianMobileError(primaryContact, false);
+              if (phoneError) nextErrors.primaryContact = phoneError;
+              const websiteError = websiteFieldError(website);
+              if (websiteError) nextErrors.website = websiteError;
+              if (Object.keys(nextErrors).length) {
+                setFieldErrors(nextErrors);
+                return;
+              }
+              setFieldErrors({});
               let logo = activeBusiness?.logo;
               if (logoAsset) {
                 const uploaded = await uploadBrandingLogo({
@@ -150,14 +167,16 @@ export function BusinessEditScreen() {
         />
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>Edit business</Text>
-        <Text style={styles.subtitle}>Branding, contact, location, and regional defaults.</Text>
-      </View>
+      <FormHero
+        icon="briefcase"
+        title="Edit business"
+        subtitle="Branding, contact, location, and regional defaults."
+      />
 
       <FormSection title="Branding">
         <ImagePickerButton
           label="Business logo"
+          optional
           variant="card"
           valueUri={logoPreview || activeBusiness?.logo}
           onPicked={(asset) => {
@@ -166,24 +185,58 @@ export function BusinessEditScreen() {
           }}
           helperText="Shown in OPS-Mobile and customer-facing branding."
         />
-        <Input label="Legal / business name" value={businessName} onChangeText={setBusinessName} />
-        <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
+        <Input
+          label="Legal / business name"
+          required
+          value={businessName}
+          onChangeText={(value) => {
+            setBusinessName(value);
+            setFieldErrors((current) => ({ ...current, businessName: '' }));
+          }}
+          error={fieldErrors.businessName}
+        />
+        <Input label="Display name" required value={displayName} onChangeText={setDisplayName} />
       </FormSection>
 
       <FormSection title="Contact">
         <Input
           label="Business email"
+          optional
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            setFieldErrors((current) => ({ ...current, email: '' }));
+          }}
+          error={fieldErrors.email}
           autoCapitalize="none"
           keyboardType="email-address"
         />
-        <Input label="Primary contact" value={primaryContact} onChangeText={setPrimaryContact} />
-        <Input label="Website" value={website} onChangeText={setWebsite} autoCapitalize="none" />
+        <Input
+          label="Primary contact"
+          optional
+          value={primaryContact}
+          onChangeText={(value) => {
+            setPrimaryContact(value);
+            setFieldErrors((current) => ({ ...current, primaryContact: '' }));
+          }}
+          error={fieldErrors.primaryContact}
+        />
+        <Input
+          label="Website"
+          optional
+          value={website}
+          onChangeText={(value) => {
+            setWebsite(value);
+            setFieldErrors((current) => ({ ...current, website: '' }));
+          }}
+          error={fieldErrors.website}
+          autoCapitalize="none"
+        />
       </FormSection>
 
       <FormSection title="Location">
         <AddressLocationPicker
+          optional
           value={addressLine1}
           latitude={latitude}
           longitude={longitude}
@@ -198,15 +251,16 @@ export function BusinessEditScreen() {
             setLongitude(place.longitude ?? null);
           }}
         />
-        <Input label="City" value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
-        <Input label="State" value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
-        <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} editable={!(latitude != null && longitude != null)} />
-        <Input label="Country" value={country} onChangeText={setCountry} editable={!(latitude != null && longitude != null)} />
+        <Input label="City" optional value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
+        <Input label="State" optional value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
+        <Input label="Postal code" optional value={postalCode} onChangeText={setPostalCode} editable={!(latitude != null && longitude != null)} />
+        <Input label="Country" optional value={country} onChangeText={setCountry} editable={!(latitude != null && longitude != null)} />
       </FormSection>
 
       <FormSection title="Tax & GST">
         <Input
           label="GSTIN"
+          optional
           value={gstTaxNumber}
           onChangeText={setGstTaxNumber}
           autoCapitalize="characters"
@@ -231,8 +285,8 @@ export function BusinessEditScreen() {
       </FormSection>
 
       <FormSection title="Regional">
-        <SelectField label="Timezone" value={timezone} options={timezoneOptions} onChange={setTimezone} />
-        <SelectField label="Currency" value={currency} options={currencyOptions} onChange={setCurrency} />
+        <SelectField label="Timezone" required value={timezone} options={timezoneOptions} onChange={setTimezone} />
+        <SelectField label="Currency" required value={currency} options={currencyOptions} onChange={setCurrency} />
       </FormSection>
 
       {message ? <Text style={styles.success}>{message}</Text> : null}
@@ -242,9 +296,6 @@ export function BusinessEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  intro: { gap: 4, marginBottom: 4 },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },
   paymentStatus: { gap: 4, padding: 14, borderRadius: 14, backgroundColor: colors.muted },

@@ -1357,6 +1357,7 @@ export type SupportTicketSummary = {
   assignee_email?: string | null;
   created_at: string;
   updated_at?: string | null;
+  preview?: string | null;
 };
 
 export type SupportTicketDetail = SupportTicketSummary & {
@@ -4495,8 +4496,11 @@ class ApiClient {
 
   support = {
     tickets: () => this.request<{ tickets: SupportTicketSummary[] }>('/support/tickets', { method: 'GET' }),
+    ticket: (ticketId: string) => this.request<SupportTicketDetail>(`/support/tickets/${ticketId}`, { method: 'GET' }),
     createTicket: (body: { subject: string; body?: string; tenant_id?: string }) =>
       this.request<{ id: string; status: string }>('/support/tickets', { method: 'POST', body }),
+    addTicketNote: (ticketId: string, body: { body: string }) =>
+      this.request<SupportTicketDetail>(`/support/tickets/${ticketId}/notes`, { method: 'POST', body }),
   };
 
   billing = {

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { IconBadge } from './IconBadge';
+import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 
 type Tone = 'default' | 'positive' | 'negative' | 'warning';
 
@@ -12,13 +13,27 @@ type Props = {
   tone?: Tone;
   onPress?: () => void;
   style?: ViewStyle;
+  icon?: keyof typeof Feather.glyphMap;
+  iconTone?: IconTone;
 };
 
 /** Visual KPI card. Parent (e.g. TileGrid) owns width — do not use % minWidth here. */
-export function StatTile({ label, value, hint, tone = 'default', onPress, style }: Props) {
+export function StatTile({
+  label,
+  value,
+  hint,
+  tone = 'default',
+  onPress,
+  style,
+  icon,
+  iconTone = 'blue',
+}: Props) {
   const content = (
     <View style={[styles.tile, style]}>
-      <Text style={styles.label}>{label}</Text>
+      <View style={styles.topRow}>
+        <Text style={styles.label}>{label}</Text>
+        {icon ? <IconBadge icon={icon} tone={iconTone} size="sm" /> : null}
+      </View>
       <Text
         style={[
           styles.value,
@@ -66,7 +81,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     gap: 4,
+    ...shadows.soft,
   },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   label: { ...typography.caption, color: colors.mutedForeground },
   value: {
     fontFamily: fonts.bodyBold,

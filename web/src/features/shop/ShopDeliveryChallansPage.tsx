@@ -1,21 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, PackageCheck, Plus, Search, Truck } from 'lucide-react';
+import { Plus, Search, Truck } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Select } from '../../components/Select';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
+import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useShopBooksDocumentMutations, useShopBooksDocuments } from './shopHooks';
-
-function statusTone(status: string) {
-  const normalized = status.toLowerCase();
-  if (normalized === 'dispatched' || normalized === 'converted') return { bg: '#dcfce7', color: '#166534' };
-  if (normalized === 'cancelled' || normalized === 'void') return { bg: '#fee2e2', color: '#991b1b' };
-  return { bg: '#fef3c7', color: '#92400e' };
-}
 
 export function ShopDeliveryChallansPage() {
   const workspace = useWorkspace();
@@ -54,38 +48,28 @@ export function ShopDeliveryChallansPage() {
 
   return (
     <div className="page-stack">
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Delivery challans</h2>
-            <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
-              Create challans from the Sale counter, then dispatch when goods leave.
-            </p>
-          </div>
-          <Link to="/shop/pos?mode=delivery_challan" style={{ textDecoration: 'none' }}>
-            <Button type="button" variant="primary">
-              <Plus size={16} aria-hidden="true" /> New challan
-            </Button>
-          </Link>
-        </div>
-      </Card>
+      <div className="invoice-page-header">
+        <h1 className="invoice-page-title">Delivery challans</h1>
+        <Link to="/shop/pos?mode=delivery_challan" style={{ textDecoration: 'none' }}>
+          <Button type="button" variant="primary">
+            <Plus size={16} aria-hidden="true" /> New challan
+          </Button>
+        </Link>
+      </div>
 
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
-        {[
-          { label: 'All challans', value: rows.length, icon: Truck, color: '#2563eb' },
-          { label: 'Ready to dispatch', value: draftCount, icon: PackageCheck, color: '#d97706' },
-          { label: 'Dispatched', value: dispatchedCount, icon: CheckCircle2, color: '#16a34a' },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <Card key={label}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{label}</div>
-                <strong style={{ fontSize: 24 }}>{value}</strong>
-              </div>
-              <Icon size={22} color={color} aria-hidden="true" />
-            </div>
-          </Card>
-        ))}
+      <div className="invoice-strip">
+        <div className="invoice-strip__cell">
+          <span>All</span>
+          <strong>{rows.length}</strong>
+        </div>
+        <div className="invoice-strip__cell">
+          <span>Open</span>
+          <strong>{draftCount}</strong>
+        </div>
+        <div className="invoice-strip__cell">
+          <span>Dispatched</span>
+          <strong>{dispatchedCount}</strong>
+        </div>
       </div>
 
       <Card>
@@ -137,47 +121,39 @@ export function ShopDeliveryChallansPage() {
             ) : null}
           </div>
         ) : null}
-        <div style={{ display: 'grid', gap: 10 }}>
+        <div className="invoice-list">
           {filteredRows.map((row) => {
-            const tone = statusTone(row.status);
             const canDispatch =
               !row.converted_voucher && !['dispatched', 'converted', 'cancelled', 'void'].includes(row.status.toLowerCase());
+            const isVoid = ['cancelled', 'void'].includes(row.status.toLowerCase());
+            const dispatched = ['dispatched', 'converted'].includes(row.status.toLowerCase());
             return (
-              <div key={row.id} style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 12, padding: 14, display: 'grid', gap: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                  <div>
-                    <strong>{row.document_number}</strong>
-                    <div style={{ color: 'var(--muted-foreground)', fontSize: 13 }}>
-                      {row.customer_name || 'Walk-in / no customer'} · {row.document_date || 'No date'}
-                    </div>
-                  </div>
-                  <strong>{formatMoney(Number(row.total ?? 0), currency)}</strong>
+              <div key={row.id} className={`invoice-row${isVoid ? ' invoice-row--void' : ''}`}>
+                <div className="invoice-row__main">
+                  <strong>{row.customer_name || 'Walk-in / no customer'}</strong>
+                  <span>
+                    {row.document_number}
+                    {row.document_date || row.created_at
+                      ? ` · ${formatVoucherWhen(row.document_date, row.created_at)}`
+                      : ''}
+                  </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                  <span
-                    style={{
-                      borderRadius: 999,
-                      padding: '3px 9px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      textTransform: 'capitalize',
-                      background: tone.bg,
-                      color: tone.color,
-                    }}
-                  >
+                <div className="invoice-row__side">
+                  <strong>{formatMoney(Number(row.total ?? 0), currency)}</strong>
+                  <span className={`invoice-pill ${isVoid ? 'is-void' : dispatched ? 'is-paid' : 'is-due'}`}>
                     {row.status}
                   </span>
-                  {canDispatch ? (
-                    <Button
-                      type="button"
-                      variant="neutral"
-                      disabled={convert.isPending}
-                      onClick={() => void dispatch(row.id, row.document_number)}
-                    >
-                      <Truck size={15} aria-hidden="true" /> Dispatch
-                    </Button>
-                  ) : null}
                 </div>
+                {canDispatch ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={convert.isPending}
+                    onClick={() => void dispatch(row.id, row.document_number)}
+                  >
+                    Dispatch
+                  </Button>
+                ) : null}
               </div>
             );
           })}

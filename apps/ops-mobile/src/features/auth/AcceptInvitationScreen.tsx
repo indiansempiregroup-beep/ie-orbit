@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { passwordFieldError, requiredMessage } from '../../utils/formValidation';
 import type { AuthStackParamList } from '../../navigation/types';
 
 export function AcceptInvitationScreen() {
@@ -17,6 +18,7 @@ export function AcceptInvitationScreen() {
   const [lastName, setLastName] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   if (!token) {
     return (
@@ -40,6 +42,16 @@ export function AcceptInvitationScreen() {
             setStatus('submitting');
             setMessage(null);
             try {
+              const nextErrors: Record<string, string> = {};
+              if (!firstName.trim()) nextErrors.firstName = requiredMessage('First name');
+              const passwordError = passwordFieldError(password);
+              if (passwordError) nextErrors.password = passwordError;
+              if (Object.keys(nextErrors).length) {
+                setFieldErrors(nextErrors);
+                setStatus('idle');
+                return;
+              }
+              setFieldErrors({});
               await opsClient.invitations.accept({
                 token,
                 password: password || undefined,
@@ -57,9 +69,28 @@ export function AcceptInvitationScreen() {
       }
     >
       <Text style={styles.copy}>Set your password to join the workspace, then sign in on the login screen.</Text>
-      <Input label="First name" value={firstName} onChangeText={setFirstName} />
-      <Input label="Last name" value={lastName} onChangeText={setLastName} />
-      <Input label="Password" secureTextEntry value={password} onChangeText={setPassword} />
+      <Input
+        label="First name"
+        required
+        value={firstName}
+        onChangeText={(value) => {
+          setFirstName(value);
+          setFieldErrors((current) => ({ ...current, firstName: '' }));
+        }}
+        error={fieldErrors.firstName}
+      />
+      <Input label="Last name" optional value={lastName} onChangeText={setLastName} />
+      <Input
+        label="Password"
+        required
+        secureTextEntry
+        value={password}
+        onChangeText={(value) => {
+          setPassword(value);
+          setFieldErrors((current) => ({ ...current, password: '' }));
+        }}
+        error={fieldErrors.password}
+      />
       {message ? <Text style={status === 'error' ? styles.error : styles.success}>{message}</Text> : null}
     </FormScreen>
   );

@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CalendarPicker } from './CalendarPicker';
-import { SelectField } from './SelectField';
-import { colors, radius, spacing, typography } from '../theme/tokens';
+import { PickerSheet } from './PickerSheet';
+import { colors, spacing } from '../theme/tokens';
+import { FieldLabel } from './ui/FieldLabel';
+import { fieldStyles } from './ui/fieldStyles';
 
 type Props = {
   label: string;
@@ -13,29 +15,15 @@ type Props = {
   allowClear?: boolean;
   allowPast?: boolean;
   allowFuture?: boolean;
-  /** How far back year options go when allowPast is true. */
   pastYears?: number;
+  required?: boolean;
+  optional?: boolean;
+  error?: string;
 };
 
-function formatDisplay(iso: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function buildYearOptions(allowPast: boolean, allowFuture: boolean, pastYears: number) {
-  const current = new Date().getFullYear();
-  const start = allowPast ? current - pastYears : current;
-  const end = allowFuture ? current + 5 : current;
-  const options: Array<{ value: string; label: string }> = [];
-  for (let year = end; year >= start; year -= 1) {
-    options.push({ value: String(year), label: String(year) });
-  }
-  return options;
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 function shiftIsoYear(iso: string, nextYear: string) {
@@ -44,6 +32,17 @@ function shiftIsoYear(iso: string, nextYear: string) {
   const maxDay = new Date(Number(nextYear), Number(month), 0).getDate();
   const nextDay = String(Math.min(Number(day), maxDay)).padStart(2, '0');
   return `${nextYear}-${month}-${nextDay}`;
+}
+
+function formatDisplay(iso: string, long = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    weekday: long ? 'long' : undefined,
+    day: 'numeric',
+    month: long ? 'long' : 'short',
+    year: 'numeric',
+  });
 }
 
 export function DateField({
@@ -55,39 +54,57 @@ export function DateField({
   allowPast = true,
   allowFuture = true,
   pastYears = 40,
+  required,
+  optional,
+  error,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [browseIso, setBrowseIso] = useState(value || '');
+  const today = todayIso();
+  const nowYear = new Date().getFullYear();
+  const minYear = allowPast ? nowYear - pastYears : nowYear;
+  const maxYear = allowFuture ? nowYear + 5 : nowYear;
 
   useEffect(() => {
     if (value) setBrowseIso(value);
   }, [value]);
 
-  const yearOptions = useMemo(
-    () => buildYearOptions(allowPast, allowFuture, pastYears),
-    [allowPast, allowFuture, pastYears],
-  );
-  const selectedYear =
-    (browseIso || value || '').slice(0, 4) || String(new Date().getFullYear());
+  const preview = useMemo(() => {
+    const iso = value || browseIso;
+    return iso ? formatDisplay(iso, true) : 'Pick a day';
+  }, [value, browseIso]);
+
+  function pick(next: string) {
+    onChange(next);
+    setBrowseIso(next);
+    setOpen(false);
+  }
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={fieldStyles.wrap}>
+      <FieldLabel label={label} required={required} optional={optional} />
       <View style={styles.row}>
-        <Pressable style={styles.trigger} onPress={() => setOpen((current) => !current)}>
+        <Pressable
+          style={({ pressed }) => [
+            fieldStyles.control,
+            styles.trigger,
+            pressed && fieldStyles.controlPressed,
+            error ? fieldStyles.controlError : null,
+          ]}
+          onPress={() => setOpen(true)}
+        >
           <Feather name="calendar" size={16} color={colors.primary} />
-          <Text style={[styles.triggerText, !value && styles.placeholder]}>
+          <Text style={[fieldStyles.value, !value && fieldStyles.placeholder]}>
             {value ? formatDisplay(value) : 'Select date'}
           </Text>
-          <Feather name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.mutedForeground} />
+          <Feather name="chevron-down" size={16} color={colors.mutedForeground} />
         </Pressable>
         {allowClear && value ? (
           <Pressable
-            style={styles.clearBtn}
+            style={fieldStyles.clearBtn}
             onPress={() => {
               onChange('');
               setBrowseIso('');
-              setOpen(false);
             }}
             accessibilityLabel="Clear date"
           >
@@ -96,71 +113,53 @@ export function DateField({
         ) : null}
       </View>
 
-      {open ? (
-        <View style={styles.picker}>
-          <SelectField
-            label="Year"
-            value={selectedYear}
-            options={
-              yearOptions.some((option) => option.value === selectedYear)
-                ? yearOptions
-                : [{ value: selectedYear, label: selectedYear }, ...yearOptions]
-            }
-            onChange={(nextYear) => {
-              if (value) {
-                onChange(shiftIsoYear(value, nextYear));
-              } else {
-                setBrowseIso(`${nextYear}-01-01`);
-              }
-            }}
-          />
-          <CalendarPicker
-            value={value}
-            viewDate={browseIso || value || `${selectedYear}-01-01`}
-            onChange={(next) => {
-              onChange(next);
-              setBrowseIso(next);
-              setOpen(false);
-            }}
-            allowPast={allowPast}
-            allowFuture={allowFuture}
-          />
-        </View>
-      ) : null}
+      <PickerSheet
+        visible={open}
+        title={label}
+        preview={preview}
+        icon="calendar"
+        onClose={() => setOpen(false)}
+      >
+        <CalendarPicker
+          value={value}
+          viewDate={browseIso || value || today}
+          onChange={pick}
+          allowPast={allowPast}
+          allowFuture={allowFuture}
+          minYear={minYear}
+          maxYear={maxYear}
+          onYearChange={(year) => {
+            const next = shiftIsoYear(value || browseIso || today, String(year));
+            setBrowseIso(next);
+            if (value) onChange(next);
+          }}
+        />
+        <Pressable style={styles.todayBtn} onPress={() => pick(today)}>
+          <Feather name="sun" size={16} color={colors.primary} />
+          <Text style={styles.todayLabel}>Jump to today</Text>
+        </Pressable>
+      </PickerSheet>
 
-      {helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
+      {error ? <Text style={fieldStyles.error}>{error}</Text> : helperText ? <Text style={fieldStyles.hint}>{helperText}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  trigger: {
-    flex: 1,
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    paddingHorizontal: spacing.md,
+  trigger: { flex: 1, gap: spacing.sm },
+  todayBtn: {
+    marginTop: spacing.md,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: colors.tint,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.sm,
   },
-  triggerText: { ...typography.body, color: colors.foreground, flex: 1 },
-  placeholder: { color: colors.mutedForeground },
-  clearBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
+  todayLabel: {
+    color: colors.primary,
+    fontWeight: '700',
   },
-  picker: { gap: spacing.sm },
-  helper: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
 });

@@ -55,6 +55,12 @@ export function PlatformAdminHomeScreen() {
               onPress={() => navigation.navigate('PlatformAdminAffiliates')}
             />
             <MenuRow
+              icon="life-buoy"
+              label="Tickets"
+              subtitle="Customer and workspace support"
+              onPress={() => navigation.navigate('SupportTickets', { mode: 'platform' })}
+            />
+            <MenuRow
               icon="shield"
               label="Audit"
               subtitle="Platform audit events"

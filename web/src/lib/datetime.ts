@@ -95,6 +95,27 @@ const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   day: 'numeric',
 };
 
+/** Books voucher date (local calendar day) plus time from created_at when present. */
+export function formatVoucherWhen(date?: string | null, timestamp?: string | null) {
+  const day = String(date || timestamp || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+  const [year, month, dateNum] = day.split('-').map(Number);
+  const dateLabel = new Date(year, month - 1, dateNum).toLocaleDateString(
+    localeTag(),
+    withZone({ day: 'numeric', month: 'short', year: 'numeric' }),
+  );
+  const timeSource =
+    timestamp && String(timestamp).length > 10
+      ? timestamp
+      : date && String(date).length > 10
+        ? date
+        : null;
+  if (!timeSource) return dateLabel;
+  const timeLabel = formatTime(timeSource);
+  if (!timeLabel || timeLabel === '—') return dateLabel;
+  return `${dateLabel}, ${timeLabel}`;
+}
+
 /** Date-only labels for plan trial/renewal fields. */
 export function formatDate(value?: string | Date | null) {
   if (!value) return '—';

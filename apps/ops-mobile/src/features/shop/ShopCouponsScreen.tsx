@@ -25,6 +25,8 @@ import { DateField } from '../../components/DateField';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
@@ -195,7 +197,7 @@ export function ShopCouponsScreen() {
   async function save() {
     if (!client || !businessId) return;
     if (!form.code.trim() || !form.name.trim()) {
-      toast.push('Code and name are required', 'error');
+      setError(!form.code.trim() ? 'Code is required' : 'Name is required');
       return;
     }
     setBusy(true);
@@ -282,19 +284,24 @@ export function ShopCouponsScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Input
           label="Code"
+          required
           value={form.code}
           onChangeText={(code) => setForm((current) => ({ ...current, code: code.toUpperCase() }))}
           placeholder="SAVE10"
           autoCapitalize="characters"
+          error={!form.code.trim() && error === 'Code is required' ? error : undefined}
         />
         <Input
           label="Name"
+          required
           value={form.name}
           onChangeText={(name) => setForm((current) => ({ ...current, name }))}
           placeholder="10% off first order"
+          error={!form.name.trim() && error === 'Name is required' ? error : undefined}
         />
         <Input
           label="Description"
+          optional
           value={form.description}
           onChangeText={(description) => setForm((current) => ({ ...current, description }))}
           placeholder="Optional"
@@ -313,12 +320,14 @@ export function ShopCouponsScreen() {
         </View>
         <Input
           label={form.discountType === 'percent' ? 'Percent' : 'Amount'}
+          required
           value={form.discountValue}
           onChangeText={(discountValue) => setForm((current) => ({ ...current, discountValue }))}
           keyboardType="decimal-pad"
         />
         <Input
           label="Min. order"
+          optional
           value={form.minOrder}
           onChangeText={(minOrder) => setForm((current) => ({ ...current, minOrder }))}
           placeholder="Optional"
@@ -326,6 +335,7 @@ export function ShopCouponsScreen() {
         />
         <Input
           label="Max discount"
+          optional
           value={form.maxDiscount}
           onChangeText={(maxDiscount) => setForm((current) => ({ ...current, maxDiscount }))}
           placeholder="Optional cap"
@@ -333,6 +343,7 @@ export function ShopCouponsScreen() {
         />
         <DateField
           label="Starts"
+          optional
           value={form.startsAt}
           onChange={(startsAt) => setForm((current) => ({ ...current, startsAt }))}
           allowPast
@@ -341,6 +352,7 @@ export function ShopCouponsScreen() {
         />
         <DateField
           label="Ends"
+          optional
           value={form.endsAt}
           onChange={(endsAt) => setForm((current) => ({ ...current, endsAt }))}
           allowPast
@@ -349,6 +361,7 @@ export function ShopCouponsScreen() {
         />
         <Input
           label="Total uses"
+          optional
           value={form.maxRedemptions}
           onChangeText={(maxRedemptions) => setForm((current) => ({ ...current, maxRedemptions }))}
           placeholder="Unlimited"
@@ -356,6 +369,7 @@ export function ShopCouponsScreen() {
         />
         <Input
           label="Uses per customer"
+          optional
           value={form.perCustomer}
           onChangeText={(perCustomer) => setForm((current) => ({ ...current, perCustomer }))}
           placeholder="Unlimited"
@@ -403,32 +417,23 @@ export function ShopCouponsScreen() {
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, marginTop: spacing.sm }}
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => openEdit(item)}>
-              <View style={styles.rowInner}>
-                <View style={[styles.thumb, styles.thumbEmpty]}>
-                  <Feather name="tag" size={18} color={colors.mutedForeground} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.code}</Text>
-                  <Text style={styles.meta}>
-                    {item.is_active === false ? 'Inactive' : 'Active'} · {item.name} · {discountLabel(item)}
-                  </Text>
-                  <Text style={styles.meta}>
-                    Used {item.redemption_count ?? 0}
-                    {item.max_redemptions != null ? `/${item.max_redemptions}` : ''}
-                    {item.min_order_total && Number(item.min_order_total) > 0
-                      ? ` · min ₹${item.min_order_total}`
-                      : ''}
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-              </View>
-            </Pressable>
+            <BooksDocumentRow
+              title={item.code}
+              amount={discountLabel(item)}
+              meta={`${item.name} · Used ${item.redemption_count ?? 0}${item.max_redemptions != null ? `/${item.max_redemptions}` : ''}${item.min_order_total && Number(item.min_order_total) > 0 ? ` · min ₹${item.min_order_total}` : ''}`}
+              badge={item.is_active === false ? 'Inactive' : 'Active'}
+              badgeKind={item.is_active === false ? 'void' : 'paid'}
+              icon="tag"
+              iconTone="coral"
+              dimmed={item.is_active === false}
+              onPress={() => openEdit(item)}
+            />
           )}
           ListEmptyComponent={
             !loading ? (

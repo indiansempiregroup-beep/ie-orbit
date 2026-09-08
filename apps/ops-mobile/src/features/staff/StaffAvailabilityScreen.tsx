@@ -185,7 +185,6 @@ export function StaffAvailabilityScreen() {
   return (
     <FormScreen>
       <Card elevated>
-        <Text style={styles.pageTitle}>Availability</Text>
         <Text style={styles.help}>
           Bookings only succeed when the staff is on schedule, not on leave, and assigned to the service.
         </Text>
@@ -298,7 +297,8 @@ export function StaffAvailabilityScreen() {
                   : 'Blocks the full scheduled shift for each selected day.'}
               </Text>
               <Input
-                label="Reason (optional)"
+                label="Reason"
+                optional
                 value={leaveReason}
                 onChangeText={setLeaveReason}
                 placeholder="e.g. Family event"
@@ -394,8 +394,8 @@ export function StaffAvailabilityScreen() {
           </Card>
           {showSpecialForm ? (
             <FormSection title="Add extra hours" subtitle="Choose a one-off window outside the weekly schedule.">
-              <DateTimeField label="Starts" value={specialStart} onChange={setSpecialStart} />
-              <DateTimeField label="Ends" value={specialEnd} onChange={setSpecialEnd} />
+              <DateTimeField label="Starts" required value={specialStart} onChange={setSpecialStart} />
+              <DateTimeField label="Ends" required value={specialEnd} onChange={setSpecialEnd} />
               <Button
                 label="Save window"
                 fullWidth
@@ -485,10 +485,10 @@ export function StaffAvailabilityScreen() {
           </Card>
           {showBlockForm ? (
             <FormSection title="Block a slot" subtitle="Customers cannot book this exact window.">
-              <DateField label="Date" value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
-              <TimeField label="Start" value={slotStart} onChange={setSlotStart} />
-              <TimeField label="End" value={slotEnd} onChange={setSlotEnd} />
-              <Input label="Reason (optional)" value={slotReason} onChangeText={setSlotReason} />
+              <DateField label="Date" required value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
+              <TimeField label="Start" required value={slotStart} onChange={setSlotStart} />
+              <TimeField label="End" required value={slotEnd} onChange={setSlotEnd} />
+              <Input label="Reason" optional value={slotReason} onChangeText={setSlotReason} />
               <Button
                 label="Save block"
                 fullWidth
@@ -575,10 +575,10 @@ export function StaffAvailabilityScreen() {
           </Card>
           {showEmergencyForm ? (
             <FormSection title="Add emergency open" subtitle="Adds bookable time without replacing the weekly day.">
-              <DateField label="Date" value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
-              <TimeField label="Start" value={slotStart} onChange={setSlotStart} />
-              <TimeField label="End" value={slotEnd} onChange={setSlotEnd} />
-              <Input label="Reason (optional)" value={slotReason} onChangeText={setSlotReason} />
+              <DateField label="Date" required value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
+              <TimeField label="Start" required value={slotStart} onChange={setSlotStart} />
+              <TimeField label="End" required value={slotEnd} onChange={setSlotEnd} />
+              <Input label="Reason" optional value={slotReason} onChangeText={setSlotReason} />
               <Button
                 label="Save emergency slot"
                 fullWidth
@@ -653,6 +653,7 @@ export function StaffAvailabilityScreen() {
               <View style={styles.spacer} />
               <SelectField
                 label="Add service"
+                required
                 value={serviceId}
                 options={serviceOptions}
                 onChange={setServiceId}
@@ -698,7 +699,6 @@ export function StaffAvailabilityScreen() {
 }
 
 const styles = StyleSheet.create({
-  pageTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.foreground, marginBottom: spacing.xs },
   section: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.foreground, marginBottom: spacing.xs },
   help: { ...typography.caption, color: colors.mutedForeground, marginBottom: spacing.sm },
   tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },

@@ -79,7 +79,6 @@ function TabButton({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: spacing.lg,
     gap: spacing.sm,
   },
   tabRow: {
@@ -96,8 +95,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   tabActive: {
-    backgroundColor: colors.tint,
-    borderWidth: 1,
+    backgroundColor: colors.primary,
+    borderWidth: 0,
     borderColor: colors.primary,
   },
   tabLabel: {
@@ -107,7 +106,7 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     fontFamily: fonts.bodySemi,
-    color: colors.primary,
+    color: colors.primaryForeground,
   },
   tabBadge: {
     minWidth: 18,
@@ -119,7 +118,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabBadgeActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   tabBadgeText: {
     ...typography.tiny,

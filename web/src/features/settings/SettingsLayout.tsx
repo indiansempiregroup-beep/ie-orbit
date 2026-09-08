@@ -7,6 +7,7 @@ const settingsNav = [
   { to: '/settings', labelKey: 'settings.overview', end: true },
   { to: '/settings/business', labelKey: 'settings.businessProfile' },
   { to: '/settings/payments', labelKey: 'settings.payments', label: 'Payments' },
+  { to: '/settings/support', labelKey: 'settings.support', label: 'Support tickets' },
   { to: '/settings/products', labelKey: 'settings.productsBilling' },
   { to: '/settings/team', labelKey: 'settings.team', permission: 'iam:role:assign' },
 ];

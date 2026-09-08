@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
@@ -112,6 +113,7 @@ export function AddressBookScreen() {
       <AddressCard
         key={address.id}
         address={address}
+        attached
         primaryColor={primary}
         selectMode={selectMode}
         selected={selectMode && (activeId ? address.id === activeId : Boolean(address.is_default))}
@@ -175,7 +177,7 @@ export function AddressBookScreen() {
             {defaultAddress ? (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Default address</Text>
-                {renderCard(defaultAddress)}
+                <GroupedList>{renderCard(defaultAddress)}</GroupedList>
               </View>
             ) : null}
             {otherAddresses.length ? (
@@ -183,7 +185,7 @@ export function AddressBookScreen() {
                 <Text style={styles.sectionLabel}>
                   {defaultAddress ? 'Other addresses' : 'Saved addresses'}
                 </Text>
-                {otherAddresses.map(renderCard)}
+                <GroupedList>{otherAddresses.map(renderCard)}</GroupedList>
               </View>
             ) : null}
           </>
@@ -196,6 +198,7 @@ export function AddressBookScreen() {
 type CardProps = {
   address: CustomerAddress;
   primaryColor: string;
+  attached?: boolean;
   selectMode: boolean;
   selected: boolean;
   busy: boolean;
@@ -208,6 +211,7 @@ type CardProps = {
 function AddressCard({
   address,
   primaryColor,
+  attached = false,
   selectMode,
   selected,
   busy,
@@ -224,6 +228,7 @@ function AddressCard({
     <Pressable
       style={({ pressed }) => [
         styles.card,
+        attached && styles.cardAttached,
         selected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}0D` } : null,
         pressed && styles.pressed,
       ]}
@@ -339,6 +344,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  cardAttached: {
+    borderWidth: 0,
+    borderRadius: 0,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   typeIcon: { width: 28, height: 28, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },

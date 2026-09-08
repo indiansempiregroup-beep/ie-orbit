@@ -2,12 +2,15 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { FieldLabel } from './ui/FieldLabel';
 
 type Props = {
   label?: string;
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
+  required?: boolean;
+  optional?: boolean;
 };
 
 const DEFAULT_PLACEHOLDER = 'Ingredients, how to use, size guide…';
@@ -19,16 +22,16 @@ function buildEditorHtml(placeholder: string) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <style>
-    html, body { margin: 0; padding: 0; background: #fff; font-family: system-ui, -apple-system, sans-serif; }
+    html, body { margin: 0; padding: 0; background: #F0F2F7; font-family: system-ui, -apple-system, sans-serif; }
     .toolbar {
       display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-      padding: 6px 8px; border-bottom: 1px solid #DDE2E7; background: #F3F4F8;
+      padding: 8px; border-bottom: 1px solid rgba(15,22,35,0.08); background: #EEF2FF;
     }
     .toolbar button {
-      width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent;
+      width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent;
       font: 700 13px/1 system-ui, sans-serif; color: #0F1623;
     }
-    .toolbar button.active { background: #E8EEF6; color: #123A6B; }
+    .toolbar button.active { background: #19576b; color: #fff; }
     .editor {
       min-height: 160px; padding: 12px; outline: none; font-size: 15px; line-height: 1.5; color: #0F1623;
     }
@@ -36,16 +39,16 @@ function buildEditorHtml(placeholder: string) {
     .editor p { margin: 0 0 8px; }
     .editor h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
     .editor ul, .editor ol { margin: 0 0 8px; padding-left: 1.25rem; }
-    .editor a { color: #123A6B; }
+    .editor a { color: #19576b; }
     .link-box {
-      display: none; padding: 8px; border-bottom: 1px solid #DDE2E7; background: #fff; gap: 8px; align-items: center;
+      display: none; padding: 8px; border-bottom: 1px solid rgba(15,22,35,0.08); background: #F0F2F7; gap: 8px; align-items: center;
     }
     .link-box.open { display: flex; }
     .link-box input {
-      flex: 1; min-width: 0; height: 32px; border: 1px solid #DDE2E7; border-radius: 8px; padding: 0 8px; font-size: 14px;
+      flex: 1; min-width: 0; height: 36px; border: 1px solid transparent; border-radius: 12px; padding: 0 10px; font-size: 14px; background: #fff;
     }
-    .link-box button { height: 32px; border: 0; border-radius: 8px; padding: 0 10px; font-weight: 700; background: #123A6B; color: #fff; }
-    .link-box button.secondary { background: #E8EEF6; color: #123A6B; }
+    .link-box button { height: 32px; border: 0; border-radius: 8px; padding: 0 10px; font-weight: 700; background: #19576b; color: #fff; }
+    .link-box button.secondary { background: #E4EEF1; color: #19576b; }
   </style>
 </head>
 <body>
@@ -152,6 +155,8 @@ export function HtmlEditorField({
   value,
   onChange,
   placeholder = DEFAULT_PLACEHOLDER,
+  required,
+  optional,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const lastHtmlRef = useRef(value);
@@ -179,7 +184,7 @@ export function HtmlEditorField({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <FieldLabel label={label} required={required} optional={optional} />
       <Text style={styles.hint}>Add rich details customers will see on the product page. Use the toolbar to format text.</Text>
       <View style={styles.shell}>
         <WebView
@@ -209,9 +214,9 @@ const styles = StyleSheet.create({
   shell: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     overflow: 'hidden',
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
     minHeight: 240,
   },
   webview: {

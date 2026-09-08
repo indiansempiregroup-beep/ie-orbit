@@ -21,6 +21,8 @@ import { SearchBar } from '../../components/SearchBar';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
@@ -180,6 +182,7 @@ export function ShopDeliveryZonesScreen() {
 
   async function save() {
     if (!client || !businessId || !form.name.trim()) {
+      setError('Zone name is required');
       toast.push('Zone name is required', 'error');
       return;
     }
@@ -237,12 +240,15 @@ export function ShopDeliveryZonesScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Input
           label="Zone name"
+          required
           value={form.name}
           onChangeText={(value) => setField('name', value)}
           placeholder="e.g. Nashik city"
+          error={!form.name.trim() && error === 'Zone name is required' ? error : undefined}
         />
         <Input
           label="Cities"
+          optional
           value={form.cities}
           onChangeText={(value) => setField('cities', value)}
           placeholder="Nashik, Nasik"
@@ -250,6 +256,7 @@ export function ShopDeliveryZonesScreen() {
         />
         <Input
           label="Postal prefixes"
+          optional
           value={form.prefixes}
           onChangeText={(value) => setField('prefixes', value)}
           placeholder="422"
@@ -257,18 +264,21 @@ export function ShopDeliveryZonesScreen() {
         />
         <Input
           label="Delivery fee"
+          required
           value={form.fee}
           onChangeText={(value) => setField('fee', value)}
           keyboardType="decimal-pad"
         />
         <Input
           label="Minimum order"
+          optional
           value={form.minOrder}
           onChangeText={(value) => setField('minOrder', value)}
           keyboardType="decimal-pad"
         />
         <Input
           label="Notes"
+          optional
           value={form.notes}
           onChangeText={(value) => setField('notes', value)}
           placeholder="Optional"
@@ -317,35 +327,23 @@ export function ShopDeliveryZonesScreen() {
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, marginTop: spacing.sm }}
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => openEdit(item)}>
-              <View style={styles.rowInner}>
-                <View style={[styles.thumb, styles.thumbEmpty]}>
-                  <Feather name="map-pin" size={18} color={colors.mutedForeground} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.meta}>
-                    {item.enabled ? 'Enabled' : 'Disabled'}
-                    {item.same_day ? ' · Same day' : ''}
-                    {item.instant_delivery_enabled ? ' · Deliver now' : ''}
-                    {` · ${(item.cities ?? []).join(', ') || 'Any city'}`}
-                    {` · fee ${item.fee ?? 0}`}
-                  </Text>
-                  <Text style={styles.meta}>
-                    Prefixes {(item.postal_prefixes ?? []).join(', ') || 'any'}
-                    {item.min_order_total && Number(item.min_order_total)
-                      ? ` · min ${item.min_order_total}`
-                      : ''}
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-              </View>
-            </Pressable>
+            <BooksDocumentRow
+              title={item.name}
+              amount={`fee ${item.fee ?? 0}`}
+              meta={`${(item.cities ?? []).join(', ') || 'Any city'} · Prefixes ${(item.postal_prefixes ?? []).join(', ') || 'any'}${item.min_order_total && Number(item.min_order_total) ? ` · min ${item.min_order_total}` : ''}`}
+              badge={item.enabled ? 'Enabled' : 'Disabled'}
+              badgeKind={item.enabled ? 'paid' : 'void'}
+              icon="map-pin"
+              iconTone="coral"
+              dimmed={!item.enabled}
+              onPress={() => openEdit(item)}
+            />
           )}
           ListEmptyComponent={
             !loading ? (

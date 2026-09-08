@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -336,6 +336,13 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
     }
     if (showSettings) {
       businessItems.push({
+        key: 'tickets',
+        label: 'Support tickets',
+        icon: 'life-buoy',
+        match: ['SupportTickets', 'SupportTicketDetail'],
+        onPress: () => go('SupportTickets'),
+      });
+      businessItems.push({
         key: 'settings',
         label: t('settings.title'),
         icon: 'settings',
@@ -395,12 +402,15 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
 
   return (
     <View
+      {...(Platform.OS === 'web' ? { className: 'ie-orbit-desktop-sidebar' } : null)}
       style={[
         styles.rail,
         {
           width: layout.sidebarWidth,
+          backgroundColor: Platform.OS === 'web' ? brand.sidebarWeb : brand.primary,
           paddingTop: Math.max(insets.top, spacing.lg),
           paddingBottom: Math.max(insets.bottom, spacing.md),
+          ...(Platform.OS === 'web' ? { height: '100%', alignSelf: 'stretch' as const } : null),
         },
       ]}
     >
@@ -472,7 +482,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
 
 const styles = StyleSheet.create({
   rail: {
-    backgroundColor: colors.sidebar,
+    backgroundColor: brand.primary,
     paddingHorizontal: spacing.sm,
     justifyContent: 'flex-start',
   },

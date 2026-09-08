@@ -7,6 +7,7 @@ import { FormScreen } from '../../components/FormScreen';
 import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { DetailRow } from '../../components/ui/DetailRow';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { ScreenState } from '../../components/ScreenState';
@@ -15,7 +16,7 @@ import { useCustomer, useReviews } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatRelativeTime, getApiErrorMessage } from '../../utils/format';
 import { hasShopie } from '../../utils/products';
@@ -163,20 +164,22 @@ export function CustomerDetailScreen() {
         {ledger.length ? (
           <View style={styles.ledger}>
             <Text style={styles.ledgerTitle}>Recent activity</Text>
-            {ledger.slice(0, 8).map((entry) => (
-              <View key={entry.id} style={styles.ledgerRow}>
-                <Text style={styles.ledgerMain}>
-                  {entry.entry_type === 'payment' ? 'Payment' : entry.entry_type === 'charge' ? 'Borrow' : entry.entry_type}
-                  {' · '}
-                  {Number(entry.amount).toFixed(2)}
-                  {entry.order_number ? ` · ${entry.order_number}` : ''}
-                </Text>
-                <Text style={styles.ledgerMeta}>
-                  Balance {Number(entry.balance_after).toFixed(2)}
-                  {entry.created_at ? ` · ${formatRelativeTime(entry.created_at)}` : ''}
-                </Text>
-              </View>
-            ))}
+            <GroupedList>
+              {ledger.slice(0, 8).map((entry) => (
+                <View key={entry.id} style={styles.ledgerRow}>
+                  <Text style={styles.ledgerMain}>
+                    {entry.entry_type === 'payment' ? 'Payment' : entry.entry_type === 'charge' ? 'Borrow' : entry.entry_type}
+                    {' · '}
+                    {Number(entry.amount).toFixed(2)}
+                    {entry.order_number ? ` · ${entry.order_number}` : ''}
+                  </Text>
+                  <Text style={styles.ledgerMeta}>
+                    Balance {Number(entry.balance_after).toFixed(2)}
+                    {entry.created_at ? ` · ${formatRelativeTime(entry.created_at)}` : ''}
+                  </Text>
+                </View>
+              ))}
+            </GroupedList>
           </View>
         ) : null}
       </Card>
@@ -242,11 +245,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   methodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
@@ -269,7 +273,7 @@ const styles = StyleSheet.create({
   quickBtnText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
   ledger: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md },
   ledgerTitle: { ...typography.label, color: colors.foreground, marginBottom: spacing.sm },
-  ledgerRow: { marginBottom: spacing.sm },
+  ledgerRow: { padding: spacing.md },
   ledgerMain: { ...typography.body, color: colors.foreground },
   ledgerMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   reviewRow: {

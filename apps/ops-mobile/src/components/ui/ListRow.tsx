@@ -2,7 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Avatar } from './Avatar';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { IconBadge } from './IconBadge';
+import { colors, spacing, typography, type IconTone } from '../../theme/tokens';
 
 type Props = {
   title: string;
@@ -11,19 +12,28 @@ type Props = {
   avatarName?: string;
   avatarSrc?: string | null;
   icon?: keyof typeof Feather.glyphMap;
+  iconTone?: IconTone;
   right?: React.ReactNode;
   onPress?: () => void;
 };
 
-export function ListRow({ title, subtitle, meta, avatarName, avatarSrc, icon, right, onPress }: Props) {
+export function ListRow({
+  title,
+  subtitle,
+  meta,
+  avatarName,
+  avatarSrc,
+  icon,
+  iconTone = 'blue',
+  right,
+  onPress,
+}: Props) {
   const content = (
     <View style={styles.row}>
       {avatarName ? (
         <Avatar name={avatarName} size="md" src={avatarSrc} />
       ) : icon ? (
-        <View style={styles.icon}>
-          <Feather name={icon} size={16} color={colors.primary} />
-        </View>
+        <IconBadge icon={icon} tone={iconTone} />
       ) : null}
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>
@@ -60,20 +70,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
   },
   pressed: { opacity: 0.92 },
-  icon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   body: { flex: 1 },
   title: { ...typography.label, color: colors.foreground },
   subtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },

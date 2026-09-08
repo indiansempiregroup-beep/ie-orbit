@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Linking, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -7,7 +7,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { Input } from '../../components/ui/Input';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { readGrowMetadata, withGrowMetadata } from './growSettings';
 
 export function GoogleProfileScreen() {
@@ -109,30 +110,23 @@ export function GoogleProfileScreen() {
       }
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.formTitle}>Google Business Profile</Text>
       <Text style={styles.help}>Store your public listing URL or place ID and open it quickly.</Text>
-      <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Profile URL</Text>
-        <TextInput
-          style={styles.input}
-          value={url}
-          onChangeText={setUrl}
-          autoCapitalize="none"
-          placeholder="https://g.page/…"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
-      <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Place ID</Text>
-        <TextInput
-          style={styles.input}
-          value={placeId}
-          onChangeText={setPlaceId}
-          autoCapitalize="none"
-          placeholder="Optional Google place_id"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
+      <Input
+        label="Profile URL"
+        optional
+        value={url}
+        onChangeText={setUrl}
+        autoCapitalize="none"
+        placeholder="https://g.page/…"
+      />
+      <Input
+        label="Place ID"
+        optional
+        value={placeId}
+        onChangeText={setPlaceId}
+        autoCapitalize="none"
+        placeholder="Google place_id"
+      />
     </FormScreen>
   );
 }
@@ -151,11 +145,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   footer: { gap: spacing.sm },
   error: { color: colors.destructive },

@@ -2,22 +2,48 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { FieldLabel } from './FieldLabel';
 
 type Props = TextInputProps & {
   label?: string;
   error?: string;
   hint?: string;
   leftIcon?: keyof typeof Feather.glyphMap;
+  required?: boolean;
+  optional?: boolean;
 };
 
-export function Input({ label, error, hint, leftIcon, secureTextEntry, style, multiline, ...rest }: Props) {
+export function Input({
+  label,
+  error,
+  hint,
+  leftIcon,
+  required,
+  optional,
+  secureTextEntry,
+  style,
+  onFocus,
+  onBlur,
+  multiline,
+  editable,
+  ...rest
+}: Props) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
+  const [focused, setFocused] = useState(false);
   const isPassword = Boolean(secureTextEntry);
 
   return (
     <View style={styles.wrap}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={[styles.field, error ? styles.fieldError : null, multiline ? styles.fieldMultiline : null]}>
+      <FieldLabel label={label} required={required} optional={optional} />
+      <View
+        style={[
+          styles.field,
+          focused && styles.fieldFocused,
+          error ? styles.fieldError : null,
+          multiline ? styles.fieldMultiline : null,
+          editable === false && styles.fieldDisabled,
+        ]}
+      >
         {leftIcon ? (
           <Feather name={leftIcon} size={16} color={colors.mutedForeground} style={styles.leftIcon} />
         ) : null}
@@ -25,11 +51,30 @@ export function Input({ label, error, hint, leftIcon, secureTextEntry, style, mu
           placeholderTextColor={colors.mutedForeground}
           secureTextEntry={isPassword ? hidden : false}
           multiline={multiline}
-          style={[styles.input, leftIcon ? styles.inputWithIcon : null, multiline ? styles.inputMultiline : null, style]}
+          editable={editable}
+          onFocus={(e) => {
+            setFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            onBlur?.(e);
+          }}
+          style={[
+            styles.input,
+            leftIcon ? styles.inputWithIcon : null,
+            multiline ? styles.inputMultiline : null,
+            style,
+          ]}
           {...rest}
         />
         {isPassword ? (
-          <Pressable onPress={() => setHidden((v) => !v)} hitSlop={8} style={styles.eye}>
+          <Pressable
+            onPress={() => setHidden((v) => !v)}
+            hitSlop={8}
+            style={styles.eye}
+            accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+          >
             <Feather name={hidden ? 'eye' : 'eye-off'} size={16} color={colors.mutedForeground} />
           </Pressable>
         ) : null}
@@ -42,7 +87,6 @@ export function Input({ label, error, hint, leftIcon, secureTextEntry, style, mu
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -53,7 +97,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inputBackground,
     paddingHorizontal: spacing.md,
   },
+  fieldFocused: { borderColor: colors.primary, backgroundColor: colors.card },
   fieldError: { borderColor: colors.destructive },
+  fieldDisabled: { opacity: 0.7 },
   fieldMultiline: { alignItems: 'flex-start', minHeight: 88, paddingVertical: spacing.sm },
   leftIcon: { marginRight: spacing.sm },
   input: {

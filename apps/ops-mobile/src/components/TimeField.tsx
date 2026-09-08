@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { PickerSheet } from './PickerSheet';
+import { colors, radius, spacing, typography } from '../theme/tokens';
+import { FieldLabel } from './ui/FieldLabel';
+import { fieldStyles } from './ui/fieldStyles';
 
 type Props = {
   label: string;
@@ -12,6 +14,9 @@ type Props = {
   allowClear?: boolean;
   minuteStep?: number;
   placeholder?: string;
+  required?: boolean;
+  optional?: boolean;
+  error?: string;
 };
 
 function pad(n: number) {
@@ -49,181 +54,122 @@ export function TimeField({
   allowClear = false,
   minuteStep = 15,
   placeholder = 'Select time',
+  required,
+  optional,
+  error,
 }: Props) {
-  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
-  const parsed = parseHhmm(value);
-  const display = parsed ? formatTimeLabel(value) : '';
+  const [hour12, setHour12] = useState(9);
+  const [minutes, setMinutes] = useState(0);
+  const [period, setPeriod] = useState<'AM' | 'PM'>('AM');
+  const display = formatTimeLabel(value);
 
   const hourChoices = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
   const minuteChoices = useMemo(() => {
     const mins = new Set<number>();
     for (let minute = 0; minute < 60; minute += minuteStep) mins.add(minute);
-    if (parsed) mins.add(parsed.minutes);
+    mins.add(minutes);
     return [...mins].sort((a, b) => a - b);
-  }, [minuteStep, parsed]);
+  }, [minuteStep, minutes]);
 
-  const draftHour12 = parsed?.hour12 ?? 9;
-  const draftMinute = parsed?.minutes ?? 0;
-  const draftPeriod = parsed?.period ?? 'AM';
+  useEffect(() => {
+    if (!open) return;
+    const parsed = parseHhmm(value);
+    setHour12(parsed?.hour12 ?? 9);
+    setMinutes(parsed?.minutes ?? 0);
+    setPeriod(parsed?.period ?? 'AM');
+  }, [open, value]);
 
-  function apply(hour12: number, minutes: number, period: 'AM' | 'PM') {
-    onChange(toHhmm(hour12, minutes, period));
-  }
+  const draftValue = toHhmm(hour12, minutes, period);
+  const preview = formatTimeLabel(draftValue);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={fieldStyles.wrap}>
+      <FieldLabel label={label} required={required} optional={optional} />
       <View style={styles.row}>
-        <Pressable style={styles.trigger} onPress={() => setOpen(true)}>
+        <Pressable
+          style={({ pressed }) => [
+            fieldStyles.control,
+            styles.trigger,
+            pressed && fieldStyles.controlPressed,
+            error ? fieldStyles.controlError : null,
+          ]}
+          onPress={() => setOpen(true)}
+        >
           <Feather name="clock" size={16} color={colors.primary} />
-          <Text style={[styles.triggerText, !display && styles.placeholder]}>
+          <Text style={[fieldStyles.value, !display && fieldStyles.placeholder]}>
             {display || placeholder}
           </Text>
           <Feather name="chevron-down" size={16} color={colors.mutedForeground} />
         </Pressable>
         {allowClear && value ? (
-          <Pressable
-            style={styles.clearBtn}
-            onPress={() => onChange('')}
-            accessibilityLabel="Clear time"
-          >
+          <Pressable style={fieldStyles.clearBtn} onPress={() => onChange('')} accessibilityLabel="Clear time">
             <Feather name="x" size={16} color={colors.mutedForeground} />
           </Pressable>
         ) : null}
       </View>
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Close" />
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-            <View style={styles.handle} />
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>{label}</Text>
-                <Text style={styles.sheetSubtitle}>{display || 'Choose hour, minutes, and AM/PM'}</Text>
-              </View>
-              <Pressable style={styles.closeBtn} onPress={() => setOpen(false)} hitSlop={8}>
-                <Feather name="x" size={18} color={colors.foreground} />
-              </Pressable>
-            </View>
-
-            <View style={styles.periodRow}>
-              {(['AM', 'PM'] as const).map((period) => (
-                <Pressable
-                  key={period}
-                  style={[styles.periodChip, draftPeriod === period && styles.choiceActive]}
-                  onPress={() => apply(draftHour12, draftMinute, period)}
-                >
-                  <Text style={[styles.choiceText, draftPeriod === period && styles.choiceTextActive]}>{period}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <Text style={styles.groupLabel}>Hour</Text>
-            <View style={styles.grid}>
-              {hourChoices.map((hour) => (
-                <Pressable
-                  key={hour}
-                  style={[styles.choice, draftHour12 === hour && styles.choiceActive]}
-                  onPress={() => apply(hour, draftMinute, draftPeriod)}
-                >
-                  <Text style={[styles.choiceText, draftHour12 === hour && styles.choiceTextActive]}>{hour}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <Text style={styles.groupLabel}>Minutes</Text>
-            <View style={styles.grid}>
-              {minuteChoices.map((minute) => (
-                <Pressable
-                  key={minute}
-                  style={[styles.choice, draftMinute === minute && styles.choiceActive]}
-                  onPress={() => apply(draftHour12, minute, draftPeriod)}
-                >
-                  <Text style={[styles.choiceText, draftMinute === minute && styles.choiceTextActive]}>
-                    {pad(minute)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+      <PickerSheet
+        visible={open}
+        title={label}
+        preview={preview}
+        icon="clock"
+        onClose={() => setOpen(false)}
+        actionLabel="Set time"
+        onAction={() => {
+          onChange(draftValue);
+          setOpen(false);
+        }}
+      >
+        <View style={styles.periodRow}>
+          {(['AM', 'PM'] as const).map((next) => (
+            <Pressable
+              key={next}
+              style={[styles.periodChip, period === next && styles.choiceActive]}
+              onPress={() => setPeriod(next)}
+            >
+              <Text style={[styles.choiceText, period === next && styles.choiceTextActive]}>{next}</Text>
+            </Pressable>
+          ))}
         </View>
-      </Modal>
 
-      {helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
+        <Text style={styles.groupLabel}>Hour</Text>
+        <View style={styles.grid}>
+          {hourChoices.map((hour) => (
+            <Pressable
+              key={hour}
+              style={[styles.choice, hour12 === hour && styles.choiceActive]}
+              onPress={() => setHour12(hour)}
+            >
+              <Text style={[styles.choiceText, hour12 === hour && styles.choiceTextActive]}>{hour}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={styles.groupLabel}>Minutes</Text>
+        <View style={styles.grid}>
+          {minuteChoices.map((minute) => (
+            <Pressable
+              key={minute}
+              style={[styles.choice, minutes === minute && styles.choiceActive]}
+              onPress={() => setMinutes(minute)}
+            >
+              <Text style={[styles.choiceText, minutes === minute && styles.choiceTextActive]}>
+                {pad(minute)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </PickerSheet>
+
+      {error ? <Text style={fieldStyles.error}>{error}</Text> : helperText ? <Text style={fieldStyles.hint}>{helperText}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  trigger: {
-    flex: 1,
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    paddingHorizontal: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  triggerText: { ...typography.body, color: colors.foreground, flex: 1 },
-  placeholder: { color: colors.mutedForeground },
-  clearBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-  },
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
-  sheet: {
-    backgroundColor: colors.sheet,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    shadowColor: '#142033',
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: -8 },
-    elevation: 16,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.muted,
-    marginBottom: spacing.md,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  sheetHeaderCopy: { flex: 1, gap: 2 },
-  sheetTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.foreground, letterSpacing: -0.2 },
-  sheetSubtitle: { ...typography.caption, color: colors.mutedForeground },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  trigger: { flex: 1, gap: spacing.sm },
   periodRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   periodChip: {
     flex: 1,
@@ -233,10 +179,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   groupLabel: { ...typography.caption, color: colors.mutedForeground, fontWeight: '700', marginBottom: spacing.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   choice: {
     width: 52,
     height: 44,
@@ -245,10 +191,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
-  choiceActive: { backgroundColor: colors.secondary, borderColor: colors.primary },
+  choiceActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   choiceText: { ...typography.body, color: colors.foreground, fontWeight: '600' },
-  choiceTextActive: { color: colors.primary },
-  helper: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
+  choiceTextActive: { color: colors.primaryForeground },
 });

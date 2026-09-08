@@ -17,6 +17,7 @@ import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
 import type { ShopGodown } from '@ie-orbit/sdk';
 import { Button } from '../../components/ui/Button';
 import { SelectField } from '../../components/SelectField';
+import { Input } from '../../components/ui/Input';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -415,12 +416,12 @@ export function ShopProductsAddManyScreen() {
             <Feather name="trash-2" size={16} color={colors.mutedForeground} />
           </Pressable>
         </View>
-        <TextInput
+        <Input
+          label="Product name"
+          required
           value={row.name}
           onChangeText={(value) => updateRow(row.id, { name: value })}
-          placeholder="Product name *"
-          style={styles.input}
-          placeholderTextColor={colors.mutedForeground}
+          placeholder="Product name"
         />
         <View style={styles.row2}>
           <TextInput
@@ -508,6 +509,7 @@ export function ShopProductsAddManyScreen() {
         </View>
         <SelectField
           label="Category"
+          optional
           value={row.category}
           options={CATEGORY_OPTIONS}
           onChange={(value) => updateRow(row.id, { category: value })}
@@ -515,6 +517,7 @@ export function ShopProductsAddManyScreen() {
         />
         <SelectField
           label="Status"
+          required
           value={row.status}
           options={STATUS_OPTIONS}
           onChange={(value) => updateRow(row.id, { status: value })}
@@ -605,6 +608,7 @@ export function ShopProductsAddManyScreen() {
           </View>
           <SelectField
             label="Default category"
+            optional
             value={defaults.category}
             options={CATEGORY_OPTIONS}
             onChange={(value) => setDefaults((current) => ({ ...current, category: value }))}
@@ -612,6 +616,7 @@ export function ShopProductsAddManyScreen() {
           />
           <SelectField
             label="Default status"
+            required
             value={defaults.status}
             options={STATUS_OPTIONS}
             onChange={(value) => setDefaults((current) => ({ ...current, status: value }))}
@@ -619,6 +624,7 @@ export function ShopProductsAddManyScreen() {
           {godowns.length ? (
             <SelectField
               label="Stock godown"
+              optional
               value={defaults.godown_id}
               options={[{ value: '', label: 'Default' }, ...godowns.map((item) => ({ value: item.id, label: item.name }))]}
               onChange={(value) => setDefaults((current) => ({ ...current, godown_id: value }))}
@@ -754,11 +760,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   paste: { minHeight: 80, textAlignVertical: 'top' },
   row2: { flexDirection: 'row', gap: 8, alignItems: 'center' },
@@ -784,11 +791,11 @@ const styles = StyleSheet.create({
     width: 110,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingHorizontal: 8,
     paddingVertical: 8,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   gridBarcode: { width: 228, flexDirection: 'row', alignItems: 'center', gap: 6 },
   iconBtn: {

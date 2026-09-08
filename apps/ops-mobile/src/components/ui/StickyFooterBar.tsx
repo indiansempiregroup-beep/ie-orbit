@@ -7,7 +7,7 @@ type Props = ViewProps & {
   children: React.ReactNode;
 };
 
-/** Bottom action bar for POS / forms (Vyapar sticky footer pattern). */
+/** Polished bottom action surface for POS and forms. */
 export function StickyFooterBar({ children, style, ...rest }: Props) {
   const insets = useSafeAreaInsets();
   return (

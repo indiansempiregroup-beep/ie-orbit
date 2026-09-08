@@ -4,8 +4,11 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { FormSection } from '../../components/ui/FormSection';
+import { FieldRow } from '../../components/ui/FieldRow';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { ScreenState } from '../../components/ScreenState';
@@ -14,8 +17,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useIamMutations, useStaffMember, useStaffMutations, useTeamMembers } from '../../hooks/useOpsExtended';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { emailFieldError } from '../../utils/emailValidation';
+import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 import type { RootStackParamList } from '../../navigation/types';
 
 const ROLE_OPTIONS = [
@@ -50,6 +55,7 @@ export function StaffFormScreen() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const linkedMember = useMemo(() => {
     if (!member) return null;
@@ -119,6 +125,19 @@ export function StaffFormScreen() {
             setSubmitting(true);
             setError(null);
             try {
+              const nextErrors: Record<string, string> = {};
+              if (!firstName.trim() && !displayName.trim()) {
+                nextErrors.firstName = requiredMessage('First name');
+              }
+              const emailError = emailFieldError(email, sendInvite);
+              if (emailError) nextErrors.email = emailError;
+              const phoneError = indianMobileError(phone, false);
+              if (phoneError) nextErrors.phone = phoneError;
+              if (Object.keys(nextErrors).length) {
+                setFieldErrors(nextErrors);
+                return;
+              }
+              setFieldErrors({});
               let photo: string | undefined;
               if (photoAsset && token && tenantId) {
                 const uploaded = await uploadStaffPhoto({
@@ -193,14 +212,16 @@ export function StaffFormScreen() {
         />
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>{isEdit ? 'Edit staff' : 'Add staff'}</Text>
-        <Text style={styles.subtitle}>Profile, contact, and OPS-Mobile access.</Text>
-      </View>
+      <FormHero
+        icon="user-check"
+        title={isEdit ? 'Edit staff' : 'Add staff'}
+        subtitle="Profile, contact, and OPS-Mobile access."
+      />
 
       <FormSection title="Profile">
         <ImagePickerButton
           label="Profile photo"
+          optional
           variant="avatar"
           valueUri={photoPreview || member?.photo_url}
           onPicked={(asset) => {
@@ -208,20 +229,47 @@ export function StaffFormScreen() {
             setPhotoPreview(asset.uri);
           }}
         />
-        <Input label="First name" value={firstName} onChangeText={setFirstName} />
-        <Input label="Last name" value={lastName} onChangeText={setLastName} />
-        <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
+        <FieldRow>
+          <Input
+            label="First name"
+            required
+            value={firstName}
+            onChangeText={(value) => {
+              setFirstName(value);
+              setFieldErrors((current) => ({ ...current, firstName: '' }));
+            }}
+            error={fieldErrors.firstName}
+          />
+          <Input label="Last name" optional value={lastName} onChangeText={setLastName} />
+        </FieldRow>
+        <Input label="Display name" optional value={displayName} onChangeText={setDisplayName} />
       </FormSection>
 
       <FormSection title="Contact">
         <Input
           label="Email"
+          required={sendInvite}
+          optional={!sendInvite}
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            setFieldErrors((current) => ({ ...current, email: '' }));
+          }}
+          error={fieldErrors.email}
           autoCapitalize="none"
           keyboardType="email-address"
         />
-        <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+        <Input
+          label="Phone"
+          optional
+          value={phone}
+          onChangeText={(value) => {
+            setPhone(value);
+            setFieldErrors((current) => ({ ...current, phone: '' }));
+          }}
+          error={fieldErrors.phone}
+          keyboardType="phone-pad"
+        />
       </FormSection>
 
       <FormSection
@@ -277,23 +325,20 @@ export function StaffFormScreen() {
         )}
       </FormSection>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <FormAlert message={error} /> : null}
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  intro: { gap: 4, marginBottom: 4 },
-  title: { ...typography.heading, color: colors.foreground },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
   helper: { ...typography.caption, color: colors.mutedForeground },
   roleRow: { gap: spacing.sm },
   roleCard: {
-    borderRadius: radius.md,
-    padding: spacing.md,
-    backgroundColor: colors.inputBackground,
+    borderRadius: 14,
+    padding: spacing.lg,
+    backgroundColor: colors.field,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.fieldBorder,
     gap: 4,
   },
   roleCardActive: { backgroundColor: colors.secondary, borderColor: colors.primary },
@@ -315,5 +360,4 @@ const styles = StyleSheet.create({
   checkMark: { color: '#fff', fontSize: 12, fontFamily: fonts.bodyBold },
   inviteCopy: { flex: 1, gap: 2 },
   inviteTitle: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodySemi },
-  error: { ...typography.caption, color: colors.destructive },
 });

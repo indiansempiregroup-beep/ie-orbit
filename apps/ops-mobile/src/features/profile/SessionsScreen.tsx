@@ -11,7 +11,6 @@ export function SessionsScreen() {
 
   return (
     <FormScreen>
-      <Text style={styles.title}>Sessions</Text>
       <Card>
         <Text style={styles.cardTitle}>This device</Text>
         <Text style={styles.meta}>{user?.email}</Text>
@@ -24,7 +23,6 @@ export function SessionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.foreground },
   cardTitle: { ...typography.title, fontSize: 16, color: colors.foreground },
   meta: { ...typography.body, color: colors.mutedForeground, marginTop: 4 },
   hint: { ...typography.caption, color: colors.mutedForeground },

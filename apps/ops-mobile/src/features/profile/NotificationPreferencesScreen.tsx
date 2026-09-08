@@ -7,7 +7,7 @@ import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { colors, fonts, typography } from '../../theme/tokens';
+import { colors, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -66,7 +66,6 @@ export function NotificationPreferencesScreen() {
         />
       }
     >
-      <Text style={styles.title}>{t('profile.notificationPreferences')}</Text>
       <Text style={styles.subtitle}>
         Choose how you receive booking, order, and operational alerts.
       </Text>
@@ -94,8 +93,7 @@ function PrefRow({ label, value, onChange }: { label: string; value: boolean; on
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground },
-  subtitle: { ...typography.body, color: colors.mutedForeground, marginTop: -4, marginBottom: 8 },
+  subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: 8 },
   prefRow: {
     flexDirection: 'row',
     alignItems: 'center',

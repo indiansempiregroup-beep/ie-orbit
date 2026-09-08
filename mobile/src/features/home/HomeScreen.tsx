@@ -10,13 +10,13 @@ import type { MobileDiscoverService, PlatformAnnouncement, ShopDashboardAd, Shop
 import { mobileClient } from '../../api/client';
 import { PromoCarousel, openPromoAd } from '../../components/PromoCarousel';
 import { HomeBookingRow } from '../../components/HomeBookingRow';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useMobileBookings } from '../../hooks/useMobileBookings';
 import { useMobileNotifications } from '../../hooks/useMobileNotifications';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { Avatar } from '../../components/ui/Avatar';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
@@ -75,23 +75,6 @@ function announcementTone(severity?: string) {
   if (severity === 'warning') return { border: '#F59E0B', bg: '#FFFBEB' };
   if (severity === 'critical' || severity === 'error') return { border: '#DC2626', bg: '#FEF2F2' };
   return { border: '#2563EB', bg: '#EFF6FF' };
-}
-
-/** Placeholder rows so the section never flashes "nothing here" while the first load runs. */
-function HistorySkeleton({ rows = 2 }: { rows?: number }) {
-  return (
-    <View style={[styles.historyList, styles.sectionGap]}>
-      {Array.from({ length: rows }).map((_, index) => (
-        <View key={index} style={styles.historyCard}>
-          <View style={styles.skeletonIcon} />
-          <View style={styles.sampleBody}>
-            <View style={styles.skeletonLine} />
-            <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
-          </View>
-        </View>
-      ))}
-    </View>
-  );
 }
 
 export function HomeScreen() {
@@ -216,12 +199,6 @@ export function HomeScreen() {
 
   const featuredServices = useMemo(() => services.slice(0, 3), [services]);
   const featuredProducts = useMemo(() => products.slice(0, 3), [products]);
-
-  const aboutSubtitle = showBooking && showShop
-    ? 'Bookings, shopping, and support in one place'
-    : showShop
-      ? 'Your neighborhood shop, in your pocket'
-      : 'Your trusted booking partner';
 
   return (
     <View style={styles.root}>
@@ -391,15 +368,18 @@ export function HomeScreen() {
               }
             />
             <View style={styles.upcomingList}>
-              {moreUpcoming.map((booking) => (
-                <HomeBookingRow
-                  key={booking.id}
-                  booking={booking}
-                  variant="upcoming"
-                  primaryColor={primary}
-                  onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-                />
-              ))}
+              <GroupedList>
+                {moreUpcoming.map((booking) => (
+                  <HomeBookingRow
+                    key={booking.id}
+                    booking={booking}
+                    variant="upcoming"
+                    attached
+                    primaryColor={primary}
+                    onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                  />
+                ))}
+              </GroupedList>
             </View>
           </>
         ) : null}
@@ -513,20 +493,31 @@ export function HomeScreen() {
               }
             />
             {bookingsLoading && !bookings.length ? (
-              <HistorySkeleton />
+              <GroupedList style={styles.sectionGap}>
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <View key={index} style={styles.bookingSkeletonCard}>
+                    <View style={styles.bookingSkeletonTime} />
+                    <View style={styles.sampleBody}>
+                      <View style={styles.skeletonLine} />
+                      <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
+                    </View>
+                  </View>
+                ))}
+              </GroupedList>
             ) : recentBookings.length ? (
               <View style={styles.historyBlock}>
-                <View style={styles.historyList}>
+                <GroupedList>
                   {recentBookings.map((booking) => (
                     <HomeBookingRow
                       key={booking.id}
                       booking={booking}
                       variant="recent"
+                      attached
                       primaryColor={primary}
                       onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
                     />
                   ))}
-                </View>
+                </GroupedList>
                 {rebookTarget ? (
                   <Pressable
                     style={({ pressed }) => [
@@ -603,9 +594,19 @@ export function HomeScreen() {
               }
             />
             {catalogLoading && !orders.length ? (
-              <HistorySkeleton />
+              <GroupedList style={styles.sectionGap}>
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <View key={index} style={styles.historyCard}>
+                    <View style={styles.skeletonIcon} />
+                    <View style={styles.sampleBody}>
+                      <View style={styles.skeletonLine} />
+                      <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
+                    </View>
+                  </View>
+                ))}
+              </GroupedList>
             ) : orders.length ? (
-              <View style={[styles.historyList, styles.sectionGap]}>
+              <GroupedList style={styles.sectionGap}>
                 {orders.map((order) => {
                   const headline = shopOrderHeadline(order);
                   const tone = shopOrderStatusColors(headline.tone);
@@ -656,7 +657,7 @@ export function HomeScreen() {
                     </Pressable>
                   );
                 })}
-              </View>
+              </GroupedList>
             ) : (
               <View style={styles.emptyCard}>
                 <View style={[styles.emptyIcon, { backgroundColor: `${primary}12` }]}>
@@ -676,15 +677,6 @@ export function HomeScreen() {
             )}
           </>
         ) : null}
-
-        <SectionHeader title="About" />
-        <View style={styles.aboutCard}>
-          <Avatar name={appName} size="md" src={branding?.logo} />
-          <View style={styles.aboutText}>
-            <Text style={styles.aboutTitle}>{appName}</Text>
-            <Text style={styles.aboutSubtitle}>{aboutSubtitle}</Text>
-          </View>
-        </View>
       </View>
       </RefreshableScrollView>
     </View>
@@ -771,7 +763,7 @@ const styles = StyleSheet.create({
   nextCopy: { flex: 1, gap: 4 },
   nextTitle: { ...typography.title, color: '#fff' },
   nextHint: { ...typography.caption, color: 'rgba(255,255,255,0.75)' },
-  upcomingList: { gap: spacing.sm, marginBottom: spacing.xl },
+  upcomingList: { marginBottom: spacing.xl },
   upcomingCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -837,20 +829,6 @@ const styles = StyleSheet.create({
   inviteBody: { flex: 1 },
   inviteTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   inviteSubtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
-  aboutCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  aboutText: { flex: 1 },
-  aboutTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
-  aboutSubtitle: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   emptyCard: {
     alignItems: 'center',
     gap: spacing.sm,
@@ -887,9 +865,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   cardPressed: { opacity: 0.6 },
   historyIcon: {
@@ -941,6 +916,18 @@ const styles = StyleSheet.create({
   activeShipmentEyebrow: { ...typography.tiny, fontWeight: '800', letterSpacing: 0.6 },
   activeShipmentTitle: { ...typography.label, fontWeight: '800', marginTop: spacing.xs },
   skeletonIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.muted },
+  bookingSkeletonCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  bookingSkeletonTime: {
+    width: 72,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.muted,
+  },
   skeletonLine: { height: 10, borderRadius: radius.sm, backgroundColor: colors.muted },
   skeletonLineShort: { width: '55%', marginTop: spacing.sm },
   sampleBody: { flex: 1 },

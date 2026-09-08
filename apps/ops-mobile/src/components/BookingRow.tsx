@@ -2,7 +2,7 @@ import React from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Badge } from './ui/Badge';
-import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
 import { bookingStartsInLabel, bookingTimeRangeLabel } from '../utils/bookingDisplay';
 import { formatDate, formatTime, mapBookingStatus } from '../utils/format';
 
@@ -19,6 +19,7 @@ type Props = {
   status?: string | null;
   highlight?: boolean;
   compact?: boolean;
+  attached?: boolean;
   onPress?: () => void;
 };
 
@@ -42,6 +43,7 @@ export function BookingRow({
   status,
   highlight = false,
   compact = false,
+  attached = false,
   onPress,
 }: Props) {
   const timing = bookingStartsInLabel(startAt, endAt);
@@ -53,7 +55,14 @@ export function BookingRow({
     serviceCount && serviceCount > 1 ? `${serviceCount} services` : durationMinutes ? `${durationMinutes} min` : '';
 
   const content = (
-    <View style={[styles.card, compact && styles.cardCompact, highlight && styles.cardHighlight]}>
+    <View
+      style={[
+        styles.card,
+        compact && styles.cardCompact,
+        attached && styles.cardAttached,
+        highlight && styles.cardHighlight,
+      ]}
+    >
       <View style={[styles.timeBlock, compact && styles.timeBlockCompact, { backgroundColor: timingColors.bg }]}>
         <Text style={[styles.time, { color: timingColors.text }]}>{startLabel}</Text>
         <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={1}>
@@ -130,10 +139,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+    ...shadows.soft,
   },
   cardCompact: {
     padding: spacing.sm,
     gap: spacing.sm,
+  },
+  cardAttached: {
+    borderWidth: 0,
+    borderRadius: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   cardHighlight: {
     borderColor: colors.primary,

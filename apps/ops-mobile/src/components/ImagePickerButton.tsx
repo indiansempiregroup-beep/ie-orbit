@@ -5,7 +5,8 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 import { RemoteImage } from './RemoteImage';
-import { colors, radius, spacing, typography } from '../theme/tokens';
+import { colors, form, iconTones, radius, spacing, typography } from '../theme/tokens';
+import { FieldLabel } from './ui/FieldLabel';
 
 type Variant = 'avatar' | 'card';
 
@@ -16,6 +17,8 @@ type Props = {
   /** avatar = circular profile photo; card = logo / service image */
   variant?: Variant;
   helperText?: string;
+  required?: boolean;
+  optional?: boolean;
 };
 
 export function ImagePickerButton({
@@ -24,6 +27,8 @@ export function ImagePickerButton({
   onPicked,
   variant = 'card',
   helperText,
+  required,
+  optional,
 }: Props) {
   const [localPreview, setLocalPreview] = useState<string | null>(null);
 
@@ -102,14 +107,14 @@ export function ImagePickerButton({
   if (variant === 'avatar') {
     return (
       <View style={styles.wrap}>
-        <Text style={styles.label}>{label}</Text>
+        <FieldLabel label={label} required={required} optional={optional} />
         <View style={styles.avatarRow}>
           <Pressable style={styles.avatarHit} onPress={openPicker}>
             {preview ? (
               <RemoteImage uri={preview} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatarFallback}>
-                <Feather name="user" size={28} color={colors.primary} />
+              <Feather name="user" size={28} color={iconTones.cyan.foreground} />
               </View>
             )}
             <View style={styles.cameraBadge}>
@@ -131,8 +136,8 @@ export function ImagePickerButton({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
-      <Pressable style={styles.card} onPress={openPicker}>
+      <FieldLabel label={label} required={required} optional={optional} />
+      <Pressable style={[styles.card, preview ? styles.cardFilled : null]} onPress={openPicker}>
         {preview ? (
           <>
             <RemoteImage uri={preview} style={styles.cardPreview} />
@@ -146,7 +151,7 @@ export function ImagePickerButton({
         ) : (
           <View style={styles.cardEmpty}>
             <View style={styles.cardIcon}>
-              <Feather name="image" size={22} color={colors.primary} />
+              <Feather name="image" size={22} color={iconTones.rose.foreground} />
             </View>
             <Text style={styles.cardTitle}>Tap to add image</Text>
             <Text style={styles.helper}>
@@ -177,7 +182,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: colors.secondary,
+    backgroundColor: iconTones.cyan.background,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -199,12 +204,15 @@ const styles = StyleSheet.create({
   avatarCopy: { flex: 1, gap: 4 },
   changeLink: { ...typography.label, color: colors.primary, fontWeight: '700' },
   card: {
-    height: 160,
-    borderRadius: radius.lg,
+    height: 148,
+    borderRadius: form.fieldRadius,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
+    borderColor: form.fieldBorder,
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+  },
+  cardFilled: {
+    borderColor: form.boxBorder,
   },
   cardPreview: { ...StyleSheet.absoluteFillObject },
   cardOverlay: {
@@ -234,7 +242,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: radius.md,
-    backgroundColor: colors.secondary,
+    backgroundColor: iconTones.rose.background,
     alignItems: 'center',
     justifyContent: 'center',
   },

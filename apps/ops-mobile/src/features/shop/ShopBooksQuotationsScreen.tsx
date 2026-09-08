@@ -21,14 +21,20 @@ import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
+import { SearchBar } from '../../components/SearchBar';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopProduct, ShopQuotation } from '@ie-orbit/sdk';
 import {
   customerLabel,
   formatMoney,
+  formatVoucherDate,
+  formatVoucherDateTime,
   todayIso,
-  voucherStatusStyle,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 
@@ -73,6 +79,9 @@ export function ShopBooksQuotationsScreen() {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [customerId, setCustomerId] = useState('');
   const [validUntil, setValidUntil] = useState('');
@@ -131,6 +140,32 @@ export function ShopBooksQuotationsScreen() {
   );
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return quotations.filter((item) => {
+      const status = (item.status || '').toLowerCase();
+      if (statusFilter === 'open' && !canConvert(item)) return false;
+      if (statusFilter === 'converted' && status !== 'converted' && !item.converted_order) return false;
+      if (!term) return true;
+      return [item.quotation_number, item.status, String(item.total), item.valid_until ?? '']
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [quotations, search, statusFilter]);
+
+  const quoteSummary = useMemo(() => {
+    let total = 0;
+    let open = 0;
+    let converted = 0;
+    for (const item of filtered) {
+      total += Number(item.total ?? 0);
+      if (canConvert(item)) open += 1;
+      else if (item.converted_order || (item.status || '').toLowerCase() === 'converted') converted += 1;
+    }
+    return { total, open, converted, count: filtered.length };
+  }, [filtered]);
 
   const customerById = useMemo(() => {
     const map = new Map<string, Customer>();
@@ -241,55 +276,81 @@ export function ShopBooksQuotationsScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <Text style={styles.pageHint}>New quotations use the same Sale counter UI (scan/search products).</Text>
+        <VoucherSummaryCards
+          summary={{
+            count: quoteSummary.count,
+            totalAmount: quoteSummary.total,
+            paidAmount: 0,
+            unpaidAmount: 0,
+            paidCount: 0,
+            unpaidCount: 0,
+          }}
+          metrics={[
+            { label: 'Total', value: formatMoney(quoteSummary.total), hint: String(quoteSummary.count) },
+            { label: 'Open', value: String(quoteSummary.open), tone: 'due' },
+            { label: 'Converted', value: String(quoteSummary.converted), tone: 'paid' },
+          ]}
+        />
+        <View style={styles.topBar}>
+          <SearchBar style={styles.searchFlex} value={search} onChangeText={setSearch} placeholder="Search quotations" />
+          <FilterButton
+            count={Number(Boolean(statusFilter))}
+            onPress={() => setFiltersOpen(true)}
+          />
+        </View>
+        <FilterSheet
+          visible={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          onReset={() => setStatusFilter('')}
+        >
+          <FilterChoiceGroup
+            label="Status"
+            value={statusFilter}
+            options={[
+              { value: '', label: 'All' },
+              { value: 'open', label: 'Open' },
+              { value: 'converted', label: 'Converted' },
+            ]}
+            onChange={setStatusFilter}
+          />
+        </FilterSheet>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
-          data={quotations}
+          {...groupedListProps(filtered.length)}
+          data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
-            const badge = voucherStatusStyle(item.status);
+            const converting = convertingId === item.id;
             const customer =
               item.customer && customerById.get(item.customer)
                 ? customerLabel(customerById.get(item.customer)!)
                 : item.customer
                   ? 'Customer'
                   : 'No customer';
-            const converting = convertingId === item.id;
+            const open = canConvert(item);
+            const converted = Boolean(item.converted_order || (item.status || '').toLowerCase() === 'converted');
             return (
-              <View style={styles.row}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.quotation_number}</Text>
-                  <Text style={styles.total}>{formatMoney(item.total)}</Text>
-                </View>
-                <Text style={styles.meta}>
-                  {customer}
-                  {item.valid_until ? ` · Valid till ${item.valid_until}` : ''}
-                </Text>
-                <View style={styles.rowBottom}>
-                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                  </View>
-                  {canConvert(item) ? (
-                    <Pressable onPress={() => void onConvert(item)} hitSlop={8} disabled={converting}>
-                      <Text style={[styles.convertText, converting && styles.convertDisabled]}>
-                        {converting ? 'Converting…' : 'Convert to sale'}
-                      </Text>
-                    </Pressable>
-                  ) : item.converted_order || (item.status || '').toLowerCase() === 'converted' ? (
-                    <Text style={styles.convertedMeta}>Converted</Text>
-                  ) : null}
-                </View>
-              </View>
+              <BooksDocumentRow
+                title={customer}
+                amount={formatMoney(item.total)}
+                meta={`${item.quotation_number}${item.created_at ? ` · ${formatVoucherDateTime(item.created_at, item.created_at)}` : ''}${item.valid_until ? ` · Valid till ${formatVoucherDate(item.valid_until)}` : ''}`}
+                badge={converted ? 'Converted' : item.status}
+                badgeKind={converted ? 'paid' : open ? 'due' : 'neutral'}
+                icon="file-text"
+                iconTone={converted ? 'green' : 'navy'}
+                actionLabel={open ? (converting ? 'Converting…' : 'Convert to sale') : undefined}
+                onAction={open && !converting ? () => void onConvert(item) : undefined}
+              />
             );
           }}
           ListEmptyComponent={
             !loading ? (
               <EmptyState
                 icon="file-text"
-                title="No quotations yet"
+                title={search || statusFilter ? 'No matching quotations' : 'No quotations yet'}
                 message="Create a quotation and convert it to a sale when the customer confirms."
                 actionLabel="New quotation"
                 onAction={() => navigation.navigate('ShopPos', { mode: 'quotation' })}
@@ -304,7 +365,8 @@ export function ShopBooksQuotationsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  pageHint: { color: colors.mutedForeground, fontSize: 12, marginBottom: spacing.sm, lineHeight: 16 },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
+  searchFlex: { flex: 1 },
   headerBtn: {
     width: 40,
     height: 40,
@@ -346,11 +408,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
   lineCard: {

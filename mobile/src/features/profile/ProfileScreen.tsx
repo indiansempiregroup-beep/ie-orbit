@@ -12,6 +12,7 @@ import { useMobileBookings } from '../../hooks/useMobileBookings';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Avatar } from '../../components/ui/Avatar';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { customerAppFeatures } from '../../utils/customerFeatures';
@@ -196,19 +197,21 @@ export function ProfileScreen() {
       ) : null}
 
       <View style={styles.menu}>
-        {visibleMenuItems.map((item) => (
-          <Pressable
-            key={item.labelKey}
-            style={styles.menuRow}
-            onPress={() => navigation.navigate(item.route)}
-          >
-            <View style={styles.menuIcon}>
-              <Feather name={item.icon} size={16} color={colors.mutedForeground} />
-            </View>
-            <Text style={styles.menuLabel}>{t(item.labelKey)}</Text>
-            <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-          </Pressable>
-        ))}
+        <GroupedList>
+          {visibleMenuItems.map((item) => (
+            <Pressable
+              key={item.labelKey}
+              style={styles.menuRow}
+              onPress={() => navigation.navigate(item.route)}
+            >
+              <View style={styles.menuIcon}>
+                <Feather name={item.icon} size={16} color={colors.mutedForeground} />
+              </View>
+              <Text style={styles.menuLabel}>{t(item.labelKey)}</Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
+          ))}
+        </GroupedList>
 
         <Pressable style={[styles.menuRow, styles.signOut]} onPress={onSignOut}>
           <View style={[styles.menuIcon, styles.signOutIcon]}>
@@ -272,15 +275,12 @@ const styles = StyleSheet.create({
   pointsLabel: { ...typography.caption, color: colors.mutedForeground, fontWeight: '600' },
   pointsValue: { ...typography.heading, fontSize: 20, color: colors.foreground, marginTop: 2 },
   pointsHint: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
-  menu: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  menu: { paddingHorizontal: spacing.xl, gap: spacing.md },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.lg,
   },
@@ -293,7 +293,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   menuLabel: { ...typography.body, color: colors.foreground, flex: 1, fontWeight: '500' },
-  signOut: { marginTop: spacing.md },
+  signOut: {
+    marginTop: 0,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   signOutIcon: { backgroundColor: '#FEE2E2' },
   signOutLabel: { ...typography.body, color: colors.destructive, fontWeight: '600', flex: 1 },
 });

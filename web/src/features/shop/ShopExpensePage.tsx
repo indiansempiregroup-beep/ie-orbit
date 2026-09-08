@@ -8,6 +8,7 @@ import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
+import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
 import { useShopCashAccounts, useShopSuppliers, useShopVoucherMutations, useShopVouchers } from './shopHooks';
@@ -115,60 +116,92 @@ export function ShopExpensePage() {
 
   const fieldStyle: React.CSSProperties = { padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' };
 
+  const expenseSummary = useMemo(() => {
+    let total = 0;
+    for (const voucher of filtered) {
+      if (voucher.status === 'void') continue;
+      total += Number(voucher.total ?? 0);
+    }
+    return { total, count: filtered.length };
+  }, [filtered]);
+
   return (
     <div className="page-stack">
+      <div className="invoice-page-header">
+        <h1 className="invoice-page-title">Expenses</h1>
+        <Button type="button" variant="primary" onClick={openAddDialog}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={16} aria-hidden="true" />
+            Add expense
+          </span>
+        </Button>
+      </div>
+
+      <div className="invoice-strip">
+        <div className="invoice-strip__cell">
+          <span>Total</span>
+          <strong>{formatMoney(expenseSummary.total, currency)}</strong>
+        </div>
+        <div className="invoice-strip__cell">
+          <span>Entries</span>
+          <strong>{expenseSummary.count}</strong>
+        </div>
+      </div>
+
       <Card>
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search expense, category, notes…"
+          searchPlaceholder="Search expenses"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
           onClear={() => {
             setSearch('');
             setDateFrom('');
             setDateTo('');
           }}
-          action={
-            <Button type="button" variant="primary" onClick={openAddDialog}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Plus size={16} aria-hidden="true" />
-                Add expense
-              </span>
-            </Button>
-          }
         />
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-          <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-            From
-            <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }} />
-          </label>
-          <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-            To
-            <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }} />
-          </label>
-        </div>
 
-        {expenses.isLoading ? <p>Loading…</p> : null}
-        <div style={{ display: 'grid', gap: 8 }}>
-          {filtered.map((voucher) => (
-            <div key={voucher.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderBottom: '1px solid var(--border, #eee)', paddingBottom: 8, flexWrap: 'wrap' }}>
-              <div>
-                <strong>{voucher.voucher_number}</strong>{' '}
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: voucher.status === 'void' ? '#fee2e2' : '#f3f4f6', color: voucher.status === 'void' ? '#b42318' : '#374151' }}>
-                  {voucher.status}
-                </span>
-                <div style={{ opacity: 0.8, fontSize: 13 }}>
-                  {voucher.voucher_date} · {voucher.supplier_name || 'General'} · {formatMoney(Number(voucher.total ?? 0), currency)}
-                  {voucher.notes ? ` · ${voucher.notes}` : ''}
+        {expenses.isLoading ? <p className="invoice-muted">Loading…</p> : null}
+        <div className="invoice-list">
+          {filtered.map((voucher) => {
+            const isVoid = voucher.status === 'void';
+            return (
+              <div key={voucher.id} className={`invoice-row${isVoid ? ' invoice-row--void' : ''}`}>
+                <div className="invoice-row__main">
+                  <strong>{voucher.notes?.trim() || voucher.voucher_number}</strong>
+                  <span>
+                    {voucher.voucher_number}
+                    {voucher.voucher_date || voucher.created_at
+                      ? ` · ${formatVoucherWhen(voucher.voucher_date, voucher.created_at)}`
+                      : ''}
+                    {voucher.supplier_name ? ` · ${voucher.supplier_name}` : ''}
+                  </span>
                 </div>
+                <div className="invoice-row__side">
+                  <strong>{formatMoney(Number(voucher.total ?? 0), currency)}</strong>
+                  <span className={`invoice-pill ${isVoid ? 'is-void' : 'is-paid'}`}>
+                    {isVoid ? 'Void' : 'Expense'}
+                  </span>
+                </div>
+                {voucher.status !== 'void' ? (
+                  <Button type="button" variant="ghost" onClick={() => void handleVoid(voucher.id, voucher.voucher_number)}>
+                    Void
+                  </Button>
+                ) : null}
               </div>
-              {voucher.status !== 'void' ? (
-                <Button type="button" variant="ghost" onClick={() => void handleVoid(voucher.id, voucher.voucher_number)}>
-                  Void
-                </Button>
-              ) : null}
+            );
+          })}
+          {!expenses.isLoading && !filtered.length ? (
+            <div className="invoice-empty">
+              <p>No expenses recorded yet.</p>
+              <Button type="button" variant="primary" onClick={openAddDialog}>
+                Add expense
+              </Button>
             </div>
-          ))}
-          {!expenses.isLoading && !filtered.length ? <p>No expenses recorded yet.</p> : null}
+          ) : null}
         </div>
       </Card>
 

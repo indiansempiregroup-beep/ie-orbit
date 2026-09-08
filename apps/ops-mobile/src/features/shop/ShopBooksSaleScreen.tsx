@@ -3,9 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,15 +19,20 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
 import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { FormAlert } from '../../components/ui/FormAlert';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { DesktopPage } from '../../components/DesktopPage';
 import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
 import { getApiErrorMessage } from '../../utils/format';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import { ApiClientError } from '@ie-orbit/sdk';
 import type {
@@ -45,21 +48,23 @@ import type {
 import {
   filterSaleVouchers,
   formatMoney,
+  formatVoucherDateTime,
   isVoidedVoucher,
   isVoucherFullyPaid,
+  summarizeVouchers,
   todayIso,
   voucherAmount,
   voucherBalanceDue,
   voucherDisplayPaid,
   voucherDisplayTotal,
   voucherPartyLabel,
-  voucherStatusStyle,
   type VoucherInvoiceTypeFilter,
   type VoucherPayFilter,
   type VoucherPeriodFilter,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { SearchBar } from '../../components/SearchBar';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
 
 const EWAY_TRANSPORT_MODES = [
   { value: '1', label: 'Road' },
@@ -113,7 +118,7 @@ function ComplianceModal({
 }) {
   const client = useOpsClient();
   const toast = useToast();
-  const insets = useSafeAreaInsets();
+  const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.82);
 
   const [loading, setLoading] = useState(true);
   const [einvoice, setEinvoice] = useState<ShopEInvoice | null>(null);
@@ -238,10 +243,7 @@ function ComplianceModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
-        >
+        <View style={[styles.sheet, { paddingBottom: bottomPad, marginBottom: lift, maxHeight }]}>
           <View style={styles.handle} />
           <View style={styles.sheetHeader}>
             <View style={{ flex: 1 }}>
@@ -290,6 +292,7 @@ function ComplianceModal({
                     <View style={{ gap: spacing.sm }}>
                       <Input
                         label="Cancellation reason"
+                        required
                         value={einvoiceCancelReason}
                         onChangeText={setEinvoiceCancelReason}
                         placeholder="e.g. Data entry error"
@@ -332,10 +335,10 @@ function ComplianceModal({
 
                   {!ewayActive && showEwayForm ? (
                     <View style={{ gap: spacing.sm }}>
-                      <Input label="Vehicle number" value={vehicleNo} onChangeText={setVehicleNo} placeholder="MH12AB1234" autoCapitalize="characters" />
-                      <SelectField label="Transport mode" value={transportMode} options={EWAY_TRANSPORT_MODES} onChange={setTransportMode} />
-                      <Input label="Distance (km)" value={distanceKm} onChangeText={(value) => setDistanceKm(value.replace(/[^0-9]/g, ''))} keyboardType="number-pad" />
-                      <Input label="Transporter name" value={transporterName} onChangeText={setTransporterName} />
+                      <Input label="Vehicle number" required value={vehicleNo} onChangeText={setVehicleNo} placeholder="MH12AB1234" autoCapitalize="characters" />
+                      <SelectField label="Transport mode" required value={transportMode} options={EWAY_TRANSPORT_MODES} onChange={setTransportMode} />
+                      <Input label="Distance (km)" optional value={distanceKm} onChangeText={(value) => setDistanceKm(value.replace(/[^0-9]/g, ''))} keyboardType="number-pad" />
+                      <Input label="Transporter name" optional value={transporterName} onChangeText={setTransporterName} />
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                         <Button label={busy ? 'Generating…' : 'Generate'} size="sm" loading={busy} onPress={() => void handleGenerateEway()} />
                         <Button label="Cancel" variant="ghost" size="sm" onPress={() => setShowEwayForm(false)} />
@@ -352,6 +355,7 @@ function ComplianceModal({
                     <View style={{ gap: spacing.sm }}>
                       <Input
                         label="Cancellation reason"
+                        required
                         value={ewayCancelReason}
                         onChangeText={setEwayCancelReason}
                         placeholder="e.g. Vehicle breakdown"
@@ -375,7 +379,7 @@ function ComplianceModal({
               </>
             )}
           </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </Modal>
   );
@@ -387,14 +391,17 @@ function SaleInvoiceDetailModal({
   onClose,
   onOpenCompliance,
   onReturned,
+  onVoid,
 }: {
   voucher: ShopBooksVoucher | null;
   visible: boolean;
   onClose: () => void;
   onOpenCompliance: () => void;
   onReturned?: () => Promise<void> | void;
+  onVoid?: (voucher: ShopBooksVoucher) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { lift, maxHeight } = useSheetKeyboardLayout(0.88);
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
@@ -591,19 +598,28 @@ function SaleInvoiceDetailModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={detailStyles.backdrop}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityRole="button" />
-        <View style={[detailStyles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <View style={detailStyles.handle} />
-          <View style={detailStyles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={detailStyles.title}>{localVoucher.voucher_number}</Text>
-              <Text style={detailStyles.meta}>
-                {voucherPartyLabel(localVoucher)}
-                {localVoucher.voucher_date ? ` · ${localVoucher.voucher_date}` : ''}
-              </Text>
+        <View
+          style={[
+            detailStyles.sheet,
+            { paddingBottom: Math.max(insets.bottom, spacing.lg), marginBottom: lift, maxHeight },
+          ]}
+        >
+          <View style={detailStyles.hero}>
+            <View style={detailStyles.handle} />
+            <View style={detailStyles.heroTop}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={detailStyles.heroKicker}>
+                  {[formatVoucherDateTime(localVoucher.voucher_date, localVoucher.created_at), voucherPartyLabel(localVoucher)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+                <Text style={detailStyles.heroAmount}>{formatMoney(displayTotal)}</Text>
+                <Text style={detailStyles.heroNumber}>{localVoucher.voucher_number}</Text>
+              </View>
+              <Pressable style={detailStyles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+                <Feather name="x" size={18} color={colors.primaryForeground} />
+              </Pressable>
             </View>
-            <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
-              <Feather name="x" size={22} color={colors.mutedForeground} />
-            </Pressable>
           </View>
 
           <ScrollView
@@ -637,6 +653,7 @@ function SaleInvoiceDetailModal({
               <CustomerDetailLinkCard
                 customerId={String(localVoucher.customer)}
                 customerName={localVoucher.customer_name?.trim() || voucherPartyLabel(localVoucher)}
+                onBeforeNavigate={onClose}
               />
             ) : null}
 
@@ -767,9 +784,7 @@ function SaleInvoiceDetailModal({
                   </View>
                   <Text style={detailStyles.meta}>
                     {shopReturn.status}
-                    {shopReturn.created_at
-                      ? ` · ${String(shopReturn.created_at).slice(0, 10)}`
-                      : ''}
+                    {shopReturn.created_at ? ` · ${formatVoucherDateTime(shopReturn.created_at, shopReturn.created_at)}` : ''}
                     {cnNumber ? ` · CN ${cnNumber}` : ''}
                   </Text>
                   {shopReturn.reason ? (
@@ -783,7 +798,8 @@ function SaleInvoiceDetailModal({
                   const row = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
                   const returnNumber = String(row.return_number || `Return ${index + 1}`);
                   const cnNumber = String(row.credit_note_number || '');
-                  const at = typeof row.at === 'string' ? row.at.slice(0, 10) : '';
+                  const at =
+                    typeof row.at === 'string' ? formatVoucherDateTime(row.at, row.at) : '';
                   return (
                     <View key={`${returnNumber}-${index}`} style={detailStyles.historyCard}>
                       <View style={detailStyles.totalRow}>
@@ -898,7 +914,10 @@ function SaleInvoiceDetailModal({
                   <Button label="Return items" fullWidth onPress={() => setReturnMode(true)} />
                 ) : null}
                 <Button label="GST compliance" variant="outline" fullWidth onPress={onOpenCompliance} />
-                <Button label="Close" variant="outline" fullWidth onPress={onClose} />
+                {onVoid && !isVoidedVoucher(localVoucher.status) ? (
+                  <Button label="Void sale" variant="destructive" fullWidth onPress={() => onVoid(localVoucher)} />
+                ) : null}
+                <Button label="Close" variant="ghost" fullWidth onPress={onClose} />
               </>
             )}
           </View>
@@ -928,11 +947,8 @@ export function ShopBooksSaleScreen() {
   const [invoiceTypeFilter, setInvoiceTypeFilter] = useState<VoucherInvoiceTypeFilter>('all');
   const [customerFilter, setCustomerFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [filterOpen, setFilterOpen] = useState(false);
-  const [draftPay, setDraftPay] = useState<VoucherPayFilter>('all');
-  const [draftPeriod, setDraftPeriod] = useState<VoucherPeriodFilter>('all');
-  const [draftInvoiceType, setDraftInvoiceType] = useState<VoucherInvoiceTypeFilter>('all');
-  const [draftCustomer, setDraftCustomer] = useState('');
   const [complianceVoucher, setComplianceVoucher] = useState<ShopBooksVoucher | null>(null);
   const [detailVoucher, setDetailVoucher] = useState<ShopBooksVoucher | null>(null);
 
@@ -1017,17 +1033,24 @@ export function ShopBooksSaleScreen() {
     [customers],
   );
 
-  const filteredVouchers = useMemo(
-    () =>
-      filterSaleVouchers(vouchers, {
-        pay: payFilter,
-        period: periodFilter,
-        customerId: customerFilter,
-        invoiceType: invoiceTypeFilter,
-        search,
-      }),
-    [vouchers, payFilter, periodFilter, customerFilter, invoiceTypeFilter, search],
-  );
+  const filteredVouchers = useMemo(() => {
+    const list = filterSaleVouchers(vouchers, {
+      pay: payFilter,
+      period: periodFilter,
+      customerId: customerFilter,
+      invoiceType: invoiceTypeFilter,
+      search,
+    });
+    return [...list].sort((a, b) => {
+      if (sortBy === 'oldest') return String(a.voucher_date || '').localeCompare(String(b.voucher_date || ''));
+      if (sortBy === 'amount_desc') return Number(b.total ?? 0) - Number(a.total ?? 0);
+      if (sortBy === 'amount_asc') return Number(a.total ?? 0) - Number(b.total ?? 0);
+      if (sortBy === 'party') return voucherPartyLabel(a).localeCompare(voucherPartyLabel(b));
+      return String(b.voucher_date || '').localeCompare(String(a.voucher_date || ''));
+    });
+  }, [vouchers, payFilter, periodFilter, customerFilter, invoiceTypeFilter, search, sortBy]);
+
+  const summary = useMemo(() => summarizeVouchers(filteredVouchers), [filteredVouchers]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -1035,35 +1058,16 @@ export function ShopBooksSaleScreen() {
     if (periodFilter !== 'all') count += 1;
     if (invoiceTypeFilter !== 'all') count += 1;
     if (customerFilter) count += 1;
+    if (sortBy !== 'newest') count += 1;
     return count;
-  }, [payFilter, periodFilter, invoiceTypeFilter, customerFilter]);
-
-  function openFilters() {
-    setDraftPay(payFilter);
-    setDraftPeriod(periodFilter);
-    setDraftInvoiceType(invoiceTypeFilter);
-    setDraftCustomer(customerFilter);
-    setFilterOpen(true);
-  }
-
-  function applyFilters() {
-    setPayFilter(draftPay);
-    setPeriodFilter(draftPeriod);
-    setInvoiceTypeFilter(draftInvoiceType);
-    setCustomerFilter(draftCustomer);
-    setFilterOpen(false);
-  }
+  }, [payFilter, periodFilter, invoiceTypeFilter, customerFilter, sortBy]);
 
   function clearFilters() {
     setPayFilter('all');
     setPeriodFilter('all');
     setInvoiceTypeFilter('all');
     setCustomerFilter('');
-    setDraftPay('all');
-    setDraftPeriod('all');
-    setDraftInvoiceType('all');
-    setDraftCustomer('');
-    setFilterOpen(false);
+    setSortBy('newest');
   }
 
   const customerOptions = useMemo(
@@ -1185,6 +1189,7 @@ export function ShopBooksSaleScreen() {
           try {
             await client.shop.voidVoucher(voucher.id);
             toast.push('Sale voided', 'success');
+            setDetailVoucher((current) => (current?.id === voucher.id ? null : current));
             await load();
           } catch (err) {
             toast.push(err instanceof Error ? err.message : 'Unable to void sale', 'error');
@@ -1197,123 +1202,68 @@ export function ShopBooksSaleScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <Text style={styles.pageHint}>
-          New sales open the Sale counter (POS). Tap a row to view invoice details.
-        </Text>
+        <VoucherSummaryCards
+          summary={summary}
+          mode="sale"
+          onPressTotal={() => setPayFilter('all')}
+          onPressPaid={() => setPayFilter((current) => (current === 'paid' ? 'all' : 'paid'))}
+          onPressUnpaid={() => setPayFilter((current) => (current === 'unpaid' ? 'all' : 'unpaid'))}
+        />
 
         <View style={styles.topBar}>
           <SearchBar
             style={styles.searchFlex}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search invoice #, customer, GSTIN…"
+            placeholder="Search invoices"
           />
+          <FilterButton count={activeFilterCount} onPress={() => setFilterOpen(true)} />
+        </View>
+        {activeFilterCount || search.trim() ? (
           <Pressable
-            style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
-            onPress={openFilters}
-            accessibilityRole="button"
-            accessibilityLabel="Open filters"
+            onPress={() => {
+              clearFilters();
+              setSearch('');
+            }}
+            hitSlop={8}
+            style={styles.resetRow}
           >
-            <Feather name="sliders" size={18} color={activeFilterCount > 0 ? colors.primary : colors.foreground} />
-            {activeFilterCount > 0 ? (
-              <View style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
-              </View>
-            ) : null}
+            <Text style={styles.clear}>Clear search & filters</Text>
           </Pressable>
-        </View>
+        ) : null}
 
-        <View style={styles.toolbar}>
-          <Text style={styles.count}>
-            {filteredVouchers.length} invoice{filteredVouchers.length === 1 ? '' : 's'}
-            {activeFilterCount
-              ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}`
-              : ''}
-          </Text>
-          {activeFilterCount > 0 ? (
-            <Pressable onPress={clearFilters} hitSlop={8}>
-              <Text style={styles.clear}>Clear</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <FormAlert message={error} /> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
-          style={styles.list}
+          {...groupedListProps(filteredVouchers.length, styles.list)}
           data={filteredVouchers}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
-            const badge = voucherStatusStyle(item.status);
-            const canVoid = !isVoidedVoucher(item.status);
+            const voided = isVoidedVoucher(item.status);
             const paid = isVoucherFullyPaid(item);
             const balance = voucherBalanceDue(item);
             const listTotal = voucherDisplayTotal(item);
-            const listPaid = voucherDisplayPaid(item);
             const returnedHint = voucherAmount(
               item.metadata && typeof item.metadata === 'object'
                 ? (item.metadata as { returned_total?: string | number }).returned_total
                 : 0,
             );
+            const party = voucherPartyLabel(item);
+            const walkIn = !item.customer;
             return (
-              <Pressable
-                style={styles.row}
+              <BooksDocumentRow
+                title={party === '—' ? 'Walk-in sale' : party}
+                amount={formatMoney(listTotal)}
+                meta={`${item.voucher_number}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}${returnedHint > 0 ? ` · returned ${formatMoney(returnedHint)}` : ''}`}
+                badge={voided ? item.status : paid ? 'Paid' : `Due ${formatMoney(balance)}`}
+                badgeKind={voided ? 'void' : paid ? 'paid' : 'due'}
+                icon={voided ? 'slash' : walkIn ? 'shopping-bag' : 'user'}
+                iconTone={voided ? 'rose' : paid ? 'green' : 'amber'}
+                dimmed={voided}
                 onPress={() => setDetailVoucher(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`Sale ${item.voucher_number} details`}
-              >
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.voucher_number}</Text>
-                  <Text style={styles.total}>{formatMoney(listTotal)}</Text>
-                </View>
-                <Text style={styles.meta}>
-                  {voucherPartyLabel(item)}
-                  {item.voucher_date ? ` · ${item.voucher_date}` : ''}
-                  {returnedHint > 0 ? ` · returned ${formatMoney(returnedHint)}` : ''}
-                </Text>
-                {!paid && balance > 0 ? (
-                  <Text style={styles.dueMeta}>Due {formatMoney(balance)}</Text>
-                ) : paid && !isVoidedVoucher(item.status) ? (
-                  <Text style={styles.paidMeta}>Paid {formatMoney(listPaid)}</Text>
-                ) : null}
-                <View style={styles.rowBottom}>
-                  <View style={styles.badgeRow}>
-                    <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                      <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                    </View>
-                    {!isVoidedVoucher(item.status) ? (
-                      <View
-                        style={[
-                          styles.badge,
-                          { backgroundColor: paid ? colors.successSoft : colors.destructiveSoft },
-                        ]}
-                      >
-                        <Text style={[styles.badgeText, { color: paid ? '#047857' : '#B91C1C' }]}>
-                          {paid ? 'Paid' : 'Unpaid'}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                    <Pressable
-                      onPress={() => setComplianceVoucher(item)}
-                      hitSlop={8}
-                      style={styles.gstLink}
-                    >
-                      <Feather name="shield" size={13} color={colors.primary} />
-                      <Text style={styles.gstText}>GST</Text>
-                    </Pressable>
-                    {canVoid ? (
-                      <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
-                        <Text style={styles.voidText}>Void</Text>
-                      </Pressable>
-                    ) : null}
-                    <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-                  </View>
-                </View>
-              </Pressable>
+              />
             );
           }}
           ListEmptyComponent={
@@ -1346,6 +1296,7 @@ export function ShopBooksSaleScreen() {
           voucher={detailVoucher}
           visible={Boolean(detailVoucher)}
           onClose={() => setDetailVoucher(null)}
+          onVoid={(voucher) => void onVoid(voucher)}
           onReturned={async () => {
             await load();
             if (detailVoucher) {
@@ -1371,78 +1322,65 @@ export function ShopBooksSaleScreen() {
           onClose={() => setComplianceVoucher(null)}
         />
 
-        <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={() => setFilterOpen(false)}>
-          <View style={filterSheetStyles.backdrop}>
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setFilterOpen(false)} />
-            <View style={[filterSheetStyles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-              <View style={filterSheetStyles.handle} />
-              <View style={filterSheetStyles.headerRow}>
-                <Text style={filterSheetStyles.title}>Filter invoices</Text>
-                <Pressable onPress={() => setFilterOpen(false)} hitSlop={8} accessibilityLabel="Close filters">
-                  <Feather name="x" size={22} color={colors.mutedForeground} />
-                </Pressable>
-              </View>
-
-              <ScrollView
-                style={filterSheetStyles.scroll}
-                contentContainerStyle={filterSheetStyles.stack}
-                keyboardShouldPersistTaps="handled"
-              >
-                <SelectField
-                  label="Period"
-                  value={draftPeriod}
-                  options={[
-                    { value: 'all', label: 'All time' },
-                    { value: 'today', label: 'Today' },
-                    { value: '7d', label: 'Last 7 days' },
-                    { value: 'month', label: 'This month' },
-                  ]}
-                  onChange={(value) => setDraftPeriod(value as VoucherPeriodFilter)}
-                  searchable={false}
-                />
-                <SelectField
-                  label="Payment"
-                  value={draftPay}
-                  options={[
-                    { value: 'all', label: 'All payments' },
-                    { value: 'paid', label: 'Paid' },
-                    { value: 'unpaid', label: 'Unpaid / due' },
-                  ]}
-                  onChange={(value) => setDraftPay(value as VoucherPayFilter)}
-                  searchable={false}
-                />
-                <SelectField
-                  label="Customer"
-                  value={draftCustomer}
-                  options={filterCustomerOptions}
-                  onChange={setDraftCustomer}
-                  searchable
-                  placeholder="All customers"
-                />
-                <SelectField
-                  label="Invoice type"
-                  value={draftInvoiceType}
-                  options={[
-                    { value: 'all', label: 'All types' },
-                    { value: 'b2b', label: 'B2B (with GSTIN)' },
-                    { value: 'b2c', label: 'B2C (no GSTIN)' },
-                  ]}
-                  onChange={(value) => setDraftInvoiceType(value as VoucherInvoiceTypeFilter)}
-                  searchable={false}
-                />
-              </ScrollView>
-
-              <View style={filterSheetStyles.footer}>
-                <View style={filterSheetStyles.footerBtn}>
-                  <Button label="Clear" variant="outline" fullWidth onPress={clearFilters} />
-                </View>
-                <View style={filterSheetStyles.footerBtn}>
-                  <Button label="Apply" fullWidth onPress={applyFilters} />
-                </View>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        <FilterSheet
+          visible={filterOpen}
+          onClose={() => setFilterOpen(false)}
+          onReset={() => {
+            clearFilters();
+            setSearch('');
+          }}
+        >
+          <FilterChoiceGroup
+            label="Period"
+            value={periodFilter}
+            options={[
+              { value: 'all', label: 'All time' },
+              { value: 'today', label: 'Today' },
+              { value: '7d', label: 'Last 7 days' },
+              { value: 'month', label: 'This month' },
+            ]}
+            onChange={(value) => setPeriodFilter(value as VoucherPeriodFilter)}
+          />
+          <FilterChoiceGroup
+            label="Payment"
+            value={payFilter}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'paid', label: 'Paid' },
+              { value: 'unpaid', label: 'Due' },
+            ]}
+            onChange={(value) => setPayFilter(value as VoucherPayFilter)}
+          />
+          <FilterChoiceGroup
+            label="Customer"
+            value={customerFilter}
+            options={filterCustomerOptions}
+            onChange={setCustomerFilter}
+            searchable
+          />
+          <FilterChoiceGroup
+            label="Invoice type"
+            value={invoiceTypeFilter}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'b2b', label: 'B2B' },
+              { value: 'b2c', label: 'B2C' },
+            ]}
+            onChange={(value) => setInvoiceTypeFilter(value as VoucherInvoiceTypeFilter)}
+          />
+          <FilterChoiceGroup
+            label="Sort"
+            value={sortBy}
+            options={[
+              { value: 'newest', label: 'Newest' },
+              { value: 'oldest', label: 'Oldest' },
+              { value: 'amount_desc', label: 'Amount high–low' },
+              { value: 'amount_asc', label: 'Amount low–high' },
+              { value: 'party', label: 'Customer' },
+            ]}
+            onChange={setSortBy}
+          />
+        </FilterSheet>
       </View>
     </DesktopPage>
   );
@@ -1451,45 +1389,19 @@ export function ShopBooksSaleScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   list: { flex: 1 },
-  topBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.sm },
-  searchFlex: { flex: 1, marginBottom: 0 },
-  filterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterBtnActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.tint,
-  },
-  filterBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  filterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  count: { color: colors.mutedForeground, fontSize: 13 },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
+  searchFlex: { flex: 1 },
+  resetRow: { alignSelf: 'flex-start', marginBottom: spacing.sm },
   clear: { color: colors.primary, fontFamily: fonts.bodySemi, fontSize: 13 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  pageHint: { color: colors.mutedForeground, fontSize: 12, marginBottom: spacing.sm, lineHeight: 16 },
+  chipScroll: { flexGrow: 0, marginBottom: spacing.sm },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingRight: spacing.md },
+  chipDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: colors.border,
+    marginHorizontal: 4,
+  },
   headerBtn: {
     width: 40,
     height: 40,
@@ -1500,19 +1412,25 @@ const styles = StyleSheet.create({
   },
   formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
   row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing.md,
     marginBottom: spacing.sm,
     backgroundColor: colors.card,
-    gap: 4,
+    ...shadows.soft,
   },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  rowVoided: { opacity: 0.72 },
+  rowBody: { flex: 1, gap: 4, minWidth: 0 },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
+  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 },
-  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
+  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground, flex: 1 },
   total: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
+  totalVoided: { textDecorationLine: 'line-through', color: colors.mutedForeground },
   meta: { color: colors.mutedForeground, fontSize: 13 },
   dueMeta: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.destructive },
   paidMeta: { fontFamily: fonts.bodyMedium, fontSize: 12, color: '#047857' },
@@ -1531,11 +1449,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
   lineCard: {
@@ -1631,24 +1550,46 @@ const detailStyles = StyleSheet.create({
   sheet: {
     maxHeight: '92%',
     backgroundColor: colors.card,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+  },
+  hero: {
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  heroKicker: { ...typography.caption, color: 'rgba(255,255,255,0.78)' },
+  heroAmount: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.primaryForeground,
+    letterSpacing: -0.4,
+  },
+  heroNumber: { ...typography.label, color: 'rgba(255,255,255,0.88)' },
+  heroClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   handle: {
     alignSelf: 'center',
     width: 40,
     height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.sm },
   title: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.foreground },
   meta: { color: colors.mutedForeground, fontSize: 13, marginTop: 2 },
   scroll: { flexGrow: 0, flexShrink: 1 },
-  stack: { gap: spacing.sm, paddingBottom: spacing.md },
+  stack: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
   badge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { fontSize: 11, fontWeight: '700' },
@@ -1717,48 +1658,14 @@ const detailStyles = StyleSheet.create({
     width: 64,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
+    borderRadius: radius.md,
     paddingHorizontal: 10,
     paddingVertical: 8,
     textAlign: 'center',
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   restockRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
-  footer: { gap: spacing.sm, paddingTop: spacing.md },
+  footer: { gap: spacing.sm, paddingTop: spacing.md, paddingHorizontal: spacing.lg },
 });
 
-const filterSheetStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    maxHeight: '88%',
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  title: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.foreground },
-  scroll: { flexGrow: 0, flexShrink: 1 },
-  stack: { gap: spacing.md, paddingBottom: spacing.md },
-  footer: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.md },
-  footerBtn: { flex: 1 },
-});

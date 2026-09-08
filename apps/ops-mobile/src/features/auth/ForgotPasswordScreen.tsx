@@ -61,14 +61,19 @@ export function ForgotPasswordScreen() {
       <Text style={styles.copy}>We&apos;ll email you a reset link if the account exists.</Text>
       <Input
         label="Email"
+        required
         leftIcon="mail"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(value) => {
+          setEmail(value);
+          setError(null);
+        }}
+        error={error && (error.startsWith('Email') || error.startsWith('Invalid email')) ? error : undefined}
       />
       {message ? <FormAlert message={message} tone="success" /> : null}
-      {error ? <FormAlert message={error} /> : null}
+      {error && !(error.startsWith('Email') || error.startsWith('Invalid email')) ? <FormAlert message={error} /> : null}
     </FormScreen>
   );
 }

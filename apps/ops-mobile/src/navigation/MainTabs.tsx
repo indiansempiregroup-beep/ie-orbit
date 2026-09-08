@@ -4,7 +4,8 @@ import { createBottomTabNavigator, BottomTabBar } from '@react-navigation/bottom
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { colors, fonts, spacing } from '../theme/tokens';
+import { colors, fonts, iconTones, spacing } from '../theme/tokens';
+import { withAlpha } from '../theme/colorUtils';
 import { TAB_BAR_RADIUS } from '../theme/layout';
 import { GlassTabBarBackground } from '../components/GlassTabBarBackground';
 import {
@@ -33,6 +34,14 @@ const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Feather.glyphMap> =
   Books: 'layers',
   Calendar: 'calendar',
   More: 'menu',
+};
+
+const TAB_COLORS: Record<keyof MainTabParamList, string> = {
+  Dashboard: iconTones.blue.foreground,
+  Bookings: iconTones.cyan.foreground,
+  Books: iconTones.violet.foreground,
+  Calendar: iconTones.coral.foreground,
+  More: iconTones.navy.foreground,
 };
 
 function AdaptiveTabBar({
@@ -112,8 +121,17 @@ export function MainTabs() {
         tabBarBackground: isDesktop ? undefined : () => <GlassTabBarBackground />,
         tabBarLabelStyle: styles.tabLabel,
         tabBarIcon: ({ color, focused }) => (
-          <View style={[styles.iconChip, focused && styles.iconChipActive]}>
-            <Feather name={TAB_ICONS[route.name]} size={22} color={color} />
+          <View
+            style={[
+              styles.iconChip,
+              focused && { backgroundColor: withAlpha(TAB_COLORS[route.name], 0.14) },
+            ]}
+          >
+            <Feather
+              name={TAB_ICONS[route.name]}
+              size={22}
+              color={focused ? TAB_COLORS[route.name] : color}
+            />
           </View>
         ),
       })}
@@ -169,9 +187,6 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconChipActive: {
-    backgroundColor: colors.tint,
   },
   tabLabel: {
     fontFamily: fonts.bodyMedium,

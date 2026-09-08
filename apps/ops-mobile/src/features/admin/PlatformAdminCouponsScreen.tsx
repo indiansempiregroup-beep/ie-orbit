@@ -12,6 +12,7 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import { shopListRefreshControl } from '../shop/shopRefreshControl';
 
@@ -65,6 +66,7 @@ export function PlatformAdminCouponsScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
+          {...groupedListProps(coupons.length)}
           data={coupons}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
@@ -107,11 +109,7 @@ export function PlatformAdminCouponsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
     padding: spacing.md,
-    marginBottom: spacing.sm,
     backgroundColor: colors.card,
     gap: 3,
   },

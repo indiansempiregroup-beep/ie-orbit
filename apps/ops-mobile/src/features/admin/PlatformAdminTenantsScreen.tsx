@@ -14,6 +14,7 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { PlatformTenantSummary } from '@ie-orbit/sdk';
@@ -57,6 +58,7 @@ export function PlatformAdminTenantsScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
+          {...groupedListProps(tenants.length)}
           data={tenants}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
@@ -102,11 +104,7 @@ export function PlatformAdminTenantsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
     padding: spacing.md,
-    marginBottom: spacing.sm,
     backgroundColor: colors.card,
     gap: 4,
   },

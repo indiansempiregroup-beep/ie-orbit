@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Eye, Plus } from 'lucide-react';
+import { Eye, Plus, SlidersHorizontal } from 'lucide-react';
 import type { ShopBooksVoucher, ShopEWayGenerateInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -11,6 +11,7 @@ import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
+import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
 import {
@@ -250,11 +251,13 @@ export function ShopVoucherList({
   newPath,
   title,
   emptyLabel,
+  heading,
 }: {
   voucherType: 'sale' | 'purchase';
   newPath: string;
   title: string;
   emptyLabel: string;
+  heading?: string;
 }) {
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency;
@@ -263,10 +266,13 @@ export function ShopVoucherList({
   const createdNumber = searchParams.get('created');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [payment, setPayment] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [selected, setSelected] = useState<ShopBooksVoucher | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const detailDialog = useDialog();
+  const isSale = voucherType === 'sale';
+  const pageTitle = heading ?? (isSale ? 'Sale invoices' : 'Purchases');
 
   const vouchers = useShopVouchers({
     type: voucherType,
@@ -279,6 +285,12 @@ export function ShopVoucherList({
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return (vouchers.data ?? []).filter((voucher) => {
+      const total = Number(voucher.total ?? 0);
+      const paidAmt = Number(voucher.amount_paid ?? 0);
+      const due = Math.max(0, total - paidAmt);
+      const isVoid = voucher.status === 'void';
+      if (payment === 'paid' && (isVoid || due > 0.009)) return false;
+      if (payment === 'unpaid' && (isVoid || due <= 0.009)) return false;
       if (!term) return true;
       const partyName = voucher.customer_name || voucher.supplier_name || '';
       return [voucher.voucher_number, partyName, String(voucher.total), voucher.notes ?? '']
@@ -286,7 +298,40 @@ export function ShopVoucherList({
         .toLowerCase()
         .includes(term);
     });
-  }, [vouchers.data, search]);
+  }, [vouchers.data, search, payment]);
+
+  const summary = useMemo(() => {
+    let total = 0;
+    let paidAmount = 0;
+    let unpaidAmount = 0;
+    let paidCount = 0;
+    let unpaidCount = 0;
+    for (const voucher of filtered) {
+      if (voucher.status === 'void') continue;
+      const amount = Number(voucher.total ?? 0);
+      const due = Math.max(0, amount - Number(voucher.amount_paid ?? 0));
+      total += amount;
+      if (due <= 0.009) {
+        paidAmount += amount;
+        paidCount += 1;
+      } else {
+        unpaidAmount += due;
+        unpaidCount += 1;
+      }
+    }
+    return { count: filtered.length, total, paidAmount, unpaidAmount, paidCount, unpaidCount };
+  }, [filtered]);
+
+  const extraFilterCount =
+    Number(Boolean(status)) + Number(Boolean(payment)) + Number(Boolean(dateFrom)) + Number(Boolean(dateTo));
+
+  function clearFilters() {
+    setSearch('');
+    setStatus('');
+    setPayment('');
+    setDateFrom('');
+    setDateTo('');
+  }
 
   function openDetail(voucher: ShopBooksVoucher) {
     setSelected(voucher);
@@ -306,115 +351,153 @@ export function ShopVoucherList({
 
   return (
     <div className="page-stack">
-      <Card>
-        <ShopFilterBar
-          search={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search voucher number, party…"
-          onClear={() => {
-            setSearch('');
-            setStatus('');
-            setDateFrom('');
-            setDateTo('');
-          }}
-          filters={[
-            {
-              id: 'status',
-              label: 'Status',
-              value: status,
-              onChange: setStatus,
-              options: [
-                { value: '', label: 'All statuses' },
-                { value: 'draft', label: 'Draft' },
-                { value: 'confirmed', label: 'Confirmed' },
-                { value: 'void', label: 'Void' },
-              ],
-            },
-          ]}
-          action={
-            <Link to={newPath}>
-              <Button type="button" variant="primary">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <Plus size={16} aria-hidden="true" />
-                  {title}
-                </span>
-              </Button>
-            </Link>
-          }
-        />
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-          <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-            From
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-            To
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }}
-            />
-          </label>
-        </div>
+      <div className="invoice-page-header">
+        <h1 className="invoice-page-title">{pageTitle}</h1>
+        <Link to={newPath}>
+          <Button type="button" variant="primary">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={16} aria-hidden="true" />
+              {title}
+            </span>
+          </Button>
+        </Link>
+      </div>
 
-        {createdNumber ? <p role="status">{decodeURIComponent(createdNumber)} saved successfully.</p> : null}
-        {vouchers.isLoading ? <p>Loading…</p> : null}
+      {createdNumber ? (
+        <p className="invoice-banner" role="status">
+          {decodeURIComponent(createdNumber)} saved successfully.
+        </p>
+      ) : null}
+
+      <div className="invoice-strip">
+        <button type="button" className="invoice-strip__cell" onClick={() => setPayment('')}>
+          <span>Total</span>
+          <strong>{formatMoney(summary.total, currency)}</strong>
+        </button>
+        <button type="button" className="invoice-strip__cell is-paid" onClick={() => setPayment(payment === 'paid' ? '' : 'paid')}>
+          <span>Paid</span>
+          <strong>{formatMoney(summary.paidAmount, currency)}</strong>
+        </button>
+        <button
+          type="button"
+          className="invoice-strip__cell is-due"
+          onClick={() => setPayment(payment === 'unpaid' ? '' : 'unpaid')}
+        >
+          <span>{isSale ? 'Due' : 'To pay'}</span>
+          <strong>{formatMoney(summary.unpaidAmount, currency)}</strong>
+        </button>
+      </div>
+
+      <Card>
+        <div className="invoice-toolbar">
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={isSale ? 'Search invoices' : 'Search bills'}
+            aria-label="Search"
+            className="invoice-search"
+          />
+          <button
+            type="button"
+            className={`invoice-filter-btn${extraFilterCount ? ' is-on' : ''}`}
+            onClick={() => setShowFilters((open) => !open)}
+            aria-expanded={showFilters}
+            aria-label="Filters"
+          >
+            <SlidersHorizontal size={16} />
+            {extraFilterCount ? <span className="invoice-filter-count">{extraFilterCount}</span> : null}
+          </button>
+        </div>
+        {showFilters ? (
+          <ShopFilterBar
+            hideSearch
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={isSale ? 'Search invoices' : 'Search bills'}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onClear={clearFilters}
+            filters={[
+              {
+                id: 'status',
+                label: 'Status',
+                value: status,
+                onChange: setStatus,
+                options: [
+                  { value: '', label: 'All statuses' },
+                  { value: 'draft', label: 'Draft' },
+                  { value: 'confirmed', label: 'Confirmed' },
+                  { value: 'void', label: 'Void' },
+                ],
+              },
+              {
+                id: 'payment',
+                label: 'Payment',
+                value: payment,
+                onChange: setPayment,
+                options: [
+                  { value: '', label: 'All' },
+                  { value: 'paid', label: 'Paid' },
+                  { value: 'unpaid', label: isSale ? 'Due' : 'Unpaid' },
+                ],
+              },
+            ]}
+          />
+        ) : extraFilterCount || search ? (
+          <button type="button" className="invoice-clear" onClick={clearFilters}>
+            Clear search & filters
+          </button>
+        ) : null}
+
+        {vouchers.isLoading ? <p className="invoice-muted">Loading…</p> : null}
         {vouchers.error ? <p role="alert">{(vouchers.error as Error).message}</p> : null}
 
-        <div style={{ display: 'grid', gap: 8 }}>
-          {filtered.map((voucher) => (
-            <div
-              key={voucher.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 12,
-                borderBottom: '1px solid var(--border, #eee)',
-                paddingBottom: 8,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <strong>{voucher.voucher_number}</strong>{' '}
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                    marginLeft: 6,
-                    background: voucher.status === 'void' ? '#fee2e2' : voucher.status === 'confirmed' ? '#dcfce7' : '#f3f4f6',
-                    color: voucher.status === 'void' ? '#b42318' : voucher.status === 'confirmed' ? '#166534' : '#374151',
-                  }}
-                >
-                  {voucher.status}
-                </span>
-                <div style={{ opacity: 0.8, fontSize: 13 }}>
-                  {voucher.voucher_date} · {voucher.customer_name || voucher.supplier_name || 'Cash'} ·{' '}
-                  {formatMoney(Number(voucher.total ?? 0), currency)}
-                  {Number(voucher.amount_paid ?? 0) < Number(voucher.total ?? 0)
-                    ? ` · Due ${formatMoney(Number(voucher.total ?? 0) - Number(voucher.amount_paid ?? 0), currency)}`
-                    : ''}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button type="button" variant="ghost" onClick={() => openDetail(voucher)}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <Eye size={14} aria-hidden="true" />
-                    View
+        <div className="invoice-list">
+          {filtered.map((voucher) => {
+            const party = voucher.customer_name || voucher.supplier_name || (isSale ? 'Walk-in' : 'Supplier');
+            const total = Number(voucher.total ?? 0);
+            const due = Math.max(0, total - Number(voucher.amount_paid ?? 0));
+            const isVoid = voucher.status === 'void';
+            const paid = !isVoid && due <= 0.009;
+            return (
+              <button
+                key={voucher.id}
+                type="button"
+                className={`invoice-row${isVoid ? ' invoice-row--void' : ''}`}
+                onClick={() => openDetail(voucher)}
+              >
+                <div className="invoice-row__main">
+                  <strong>{party}</strong>
+                  <span>
+                    {voucher.voucher_number}
+                    {voucher.voucher_date || voucher.created_at
+                      ? ` · ${formatVoucherWhen(voucher.voucher_date, voucher.created_at)}`
+                      : ''}
                   </span>
+                </div>
+                <div className="invoice-row__side">
+                  <strong>{formatMoney(total, currency)}</strong>
+                  <span className={`invoice-pill ${isVoid ? 'is-void' : paid ? 'is-paid' : 'is-due'}`}>
+                    {isVoid ? 'Void' : paid ? 'Paid' : `Due ${formatMoney(due, currency)}`}
+                  </span>
+                </div>
+                <Eye size={16} aria-hidden="true" className="invoice-row__icon" />
+              </button>
+            );
+          })}
+          {!vouchers.isLoading && !filtered.length ? (
+            <div className="invoice-empty">
+              <p>{emptyLabel}</p>
+              <Link to={newPath}>
+                <Button type="button" variant="primary">
+                  {title}
                 </Button>
-              </div>
+              </Link>
             </div>
-          ))}
-          {!vouchers.isLoading && !filtered.length ? <p>{emptyLabel}</p> : null}
+          ) : null}
         </div>
       </Card>
 
@@ -428,7 +511,7 @@ export function ShopVoucherList({
         {selected ? (
           <div style={{ display: 'grid', gap: 14, marginTop: 12, minWidth: 320 }}>
             <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
-              {selected.voucher_date} · {selected.customer_name || selected.supplier_name || 'Cash'} · {selected.status}
+              {formatVoucherWhen(selected.voucher_date, selected.created_at) || selected.voucher_date} · {selected.customer_name || selected.supplier_name || 'Cash'} · {selected.status}
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {(selected.line_items as VoucherLineItem[] | undefined ?? []).map((line, index) => (

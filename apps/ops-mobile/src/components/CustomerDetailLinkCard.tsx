@@ -12,6 +12,8 @@ type Props = {
   customerPhone?: string;
   customerEmail?: string;
   addressPreview?: string;
+  /** Close a parent modal before pushing customer details. */
+  onBeforeNavigate?: () => void;
 };
 
 export function CustomerDetailLinkCard({
@@ -20,14 +22,20 @@ export function CustomerDetailLinkCard({
   customerPhone,
   customerEmail,
   addressPreview,
+  onBeforeNavigate,
 }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  function openCustomer() {
+    onBeforeNavigate?.();
+    navigation.navigate('CustomerDetail', { customerId });
+  }
 
   return (
     <View style={styles.card}>
       <Pressable
         style={styles.pressable}
-        onPress={() => navigation.navigate('CustomerDetail', { customerId })}
+        onPress={openCustomer}
       >
         <View style={styles.header}>
           <View style={styles.titleRow}>

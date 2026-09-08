@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Any
 from uuid import uuid4
@@ -42,6 +43,8 @@ from apps.platform_admin.models import (
     SupportTicketNote,
 )
 from apps.tenancy.models import Tenant, TenantStatus
+
+logger = logging.getLogger("ie_orbit.platform_admin")
 
 
 class PlatformAdminService:
@@ -1192,10 +1195,26 @@ class PlatformAdminService:
     # --- tickets / announcements / help --------------------------------------------
 
     def list_tickets(self, *, tenant: Tenant | None = None) -> list[SupportTicket]:
-        qs = SupportTicket.objects.select_related("requester", "assignee", "tenant").all()
+        qs = (
+            SupportTicket.objects.select_related("requester", "assignee", "tenant")
+            .prefetch_related(_public_notes_prefetch())
+            .all()
+        )
         if tenant:
             qs = qs.filter(tenant=tenant)
         return list(qs[:100])
+
+    def list_visible_tickets(self, *, user: User, tenant: Tenant | None = None) -> list[SupportTicket]:
+        qs = SupportTicket.objects.select_related("requester", "assignee", "tenant").prefetch_related(
+            _public_notes_prefetch()
+        )
+        if tenant and user_can_manage_tenant_tickets(user, tenant):
+            qs = qs.filter(tenant=tenant)
+        else:
+            qs = qs.filter(requester=user)
+            if tenant:
+                qs = qs.filter(tenant=tenant)
+        return list(qs.order_by("-created_at")[:50])
 
     @transaction.atomic
     def create_ticket(
@@ -1207,6 +1226,8 @@ class PlatformAdminService:
         body: str,
         business: Business | None = None,
     ) -> SupportTicket:
+        if business is None:
+            business = Business.objects.filter(tenant=tenant).order_by("created_at").first()
         ticket = SupportTicket.objects.create(
             tenant=tenant,
             subject=subject.strip()[:255],
@@ -1223,6 +1244,9 @@ class PlatformAdminService:
             resource_id=str(ticket.id),
             reason=subject[:120],
         )
+        ticket_id = ticket.id
+        body_text = body
+        transaction.on_commit(lambda: notify_support_ticket_created(ticket_id, body=body_text))
         return ticket
 
     def active_announcements(self) -> list[PlatformAnnouncement]:
@@ -1246,6 +1270,365 @@ class PlatformAdminService:
 
 
 def models_q_title_body(q: str):
-    from django.db.models import Q
-
     return Q(title__icontains=q) | Q(body__icontains=q) | Q(keywords__icontains=q)
+
+
+def _public_notes_prefetch():
+    return Prefetch(
+        "notes",
+        queryset=SupportTicketNote.objects.filter(is_internal=False).order_by("created_at"),
+        to_attr="public_notes",
+    )
+
+
+def user_is_platform_admin(user: User | None) -> bool:
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    return user.user_roles.filter(
+        role__code__in={"platform_admin", "super_admin"},
+        role__is_active=True,
+    ).exists()
+
+
+def user_can_manage_tenant_tickets(user: User, tenant: Tenant | None) -> bool:
+    from apps.common.utils.workspace_access import is_workspace_manager_or_above
+
+    if user_is_platform_admin(user):
+        return True
+    return is_workspace_manager_or_above(user=user, tenant=tenant)
+
+
+def user_can_access_ticket(user: User, ticket: SupportTicket) -> bool:
+    if ticket.requester_id == getattr(user, "id", None):
+        return True
+    return user_can_manage_tenant_tickets(user, ticket.tenant)
+
+
+def _ticket_business(ticket: SupportTicket) -> Business | None:
+    if ticket.business_id:
+        return ticket.business
+    return Business.objects.filter(tenant=ticket.tenant).order_by("created_at").first()
+
+
+def _platform_admin_users() -> list[User]:
+    return list(
+        User.objects.filter(is_active=True)
+        .filter(
+            Q(is_superuser=True)
+            | Q(
+                user_roles__role__code__in=["platform_admin", "super_admin"],
+                user_roles__role__is_active=True,
+            )
+        )
+        .distinct()
+    )
+
+
+def notify_support_ticket_created(ticket_id: Any, *, body: str = "") -> None:
+    ticket = (
+        SupportTicket.objects.select_related("tenant", "requester", "business")
+        .filter(id=ticket_id)
+        .first()
+    )
+    if ticket is None:
+        return
+    try:
+        message = body.strip() or ticket.subject
+        requester = ticket.requester.email if ticket.requester_id else "someone"
+        tenant_name = ticket.tenant.display_name if ticket.tenant_id else "your workspace"
+        _notify_workspace_users(
+            ticket,
+            actor=ticket.requester,
+            subject=f"New support request · {ticket.subject}",
+            body=message,
+            event_type="SupportTicketCreated",
+            include_requester=True,
+            requester_subject="We’ve received your request",
+            requester_body=f"Thanks — “{ticket.subject}” is with our team. We’ll reply in Help & Support.",
+        )
+        admin_emails = _platform_admin_emails()
+        _send_ticket_emails(
+            ticket,
+            recipients=admin_emails,
+            headline="New support request",
+            intro=f"{requester} asked for help at {tenant_name}.",
+            message=message,
+            cta_label="Open ticket inbox",
+            cta_url=_frontend_url("/admin/tickets"),
+            accent="#0f766e",
+        )
+        admin_keys = {email.lower() for email in admin_emails}
+        manager_emails = [
+            user.email
+            for user in _ticket_managers(ticket)
+            if user.email
+            and user.id != getattr(ticket.requester, "id", None)
+            and user.email.strip().lower() not in admin_keys
+        ]
+        _send_ticket_emails(
+            ticket,
+            recipients=manager_emails,
+            headline="A customer needs help",
+            intro=f"{requester} sent a support request for {tenant_name}.",
+            message=message,
+            cta_label="View in workspace",
+            cta_url=_frontend_url("/settings/support"),
+            accent="#1A56DB",
+        )
+        if ticket.requester and ticket.requester.email:
+            _send_ticket_emails(
+                ticket,
+                recipients=[ticket.requester.email],
+                headline="We’ve got your request",
+                intro=f"Thanks for writing in. “{ticket.subject}” is open — we’ll follow up in the app.",
+                message=message,
+                cta_label="",
+                cta_url="",
+                accent="#1A56DB",
+                footer_note="You’re receiving this because you submitted a support request.",
+            )
+    except Exception:
+        logger.exception("support_ticket_notify_failed ticket_id=%s", ticket_id)
+
+
+def notify_support_ticket_public_note(ticket: SupportTicket, *, actor: User, body: str) -> None:
+    try:
+        message = body.strip()
+        actor_id = getattr(actor, "id", None)
+        is_requester = actor_id == ticket.requester_id
+        _notify_workspace_users(
+            ticket,
+            actor=actor,
+            subject=f"Update on “{ticket.subject}”",
+            body=message,
+            event_type="SupportTicketReply",
+            include_requester=True,
+            requester_subject=f"New reply on “{ticket.subject}”",
+            requester_body=message,
+        )
+        if is_requester:
+            _send_ticket_emails(
+                ticket,
+                recipients=_platform_admin_emails(),
+                headline="Customer replied",
+                intro=f"{actor.email or 'A customer'} added a note on “{ticket.subject}”.",
+                message=message,
+                cta_label="Open ticket inbox",
+                cta_url=_frontend_url("/admin/tickets"),
+                accent="#0f766e",
+            )
+            manager_emails = [
+                user.email for user in _ticket_managers(ticket) if user.email and user.id != actor_id
+            ]
+            _send_ticket_emails(
+                ticket,
+                recipients=manager_emails,
+                headline="New reply from your customer",
+                intro=f"{actor.email or 'A customer'} replied on “{ticket.subject}”.",
+                message=message,
+                cta_label="View conversation",
+                cta_url=_frontend_url("/settings/support"),
+                accent="#1A56DB",
+            )
+        else:
+            if ticket.requester and ticket.requester.email:
+                _send_ticket_emails(
+                    ticket,
+                    recipients=[ticket.requester.email],
+                    headline="Support replied",
+                    intro=f"There’s a new reply on “{ticket.subject}”. Open Help & Support in the app to continue.",
+                    message=message,
+                    cta_label="",
+                    cta_url="",
+                    accent="#1A56DB",
+                    footer_note="You’re receiving this because you have an open support request.",
+                )
+            manager_emails = [
+                user.email
+                for user in _ticket_managers(ticket)
+                if user.email and user.id != actor_id and user.id != ticket.requester_id
+            ]
+            _send_ticket_emails(
+                ticket,
+                recipients=manager_emails,
+                headline="Support ticket updated",
+                intro=f"{actor.email or 'Support'} replied on “{ticket.subject}”.",
+                message=message,
+                cta_label="View conversation",
+                cta_url=_frontend_url("/settings/support"),
+                accent="#1A56DB",
+            )
+    except Exception:
+        logger.exception("support_ticket_reply_notify_failed ticket_id=%s", ticket.id)
+
+
+def _frontend_url(path: str) -> str:
+    from django.conf import settings
+
+    base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+    return f"{base}{path}"
+
+
+def _platform_admin_emails() -> list[str]:
+    from django.conf import settings
+
+    fallback = getattr(settings, "CONTACT_FORM_RECIPIENT_EMAIL", "support@indiansempire.com")
+    emails: list[str] = []
+    seen: set[str] = set()
+    for admin in _platform_admin_users():
+        email = (admin.email or "").strip()
+        key = email.lower()
+        if email and key not in seen:
+            seen.add(key)
+            emails.append(email)
+    if fallback:
+        key = fallback.strip().lower()
+        if key not in seen:
+            emails.append(fallback.strip())
+    return emails
+
+
+def _ticket_managers(ticket: SupportTicket) -> list[User]:
+    from apps.common.utils.workspace_access import resolve_business_manager_users
+
+    business = _ticket_business(ticket)
+    if business is None:
+        return []
+    return resolve_business_manager_users(tenant=ticket.tenant, business=business)
+
+
+def _support_ticket_card_html(ticket: SupportTicket, *, message: str) -> str:
+    from apps.notifications.services.providers.email import escape_email
+
+    status = (ticket.status or "open").replace("_", " ")
+    status_colors = {"open": "#0f766e", "pending": "#b45309", "resolved": "#1d4ed8"}
+    pill = status_colors.get((ticket.status or "").lower(), "#0f1111")
+    requester = ticket.requester.email if ticket.requester_id else "Unknown"
+    tenant_name = ticket.tenant.display_name if ticket.tenant_id else "—"
+    opened = timezone.localtime(ticket.created_at).strftime("%d %b %Y · %I:%M %p")
+    quote = escape_email(message.strip() or "No message provided.").replace("\n", "<br />")
+    subject = escape_email(ticket.subject)
+    return (
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+        'style="margin:18px 0 0;border:1px solid #d5d9d9;border-radius:12px;overflow:hidden;background:#ffffff;">'
+        '<tr><td style="padding:16px 18px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb;">'
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>'
+        f'<td style="font-size:13px;font-weight:800;color:#0f1111;">{subject}</td>'
+        f'<td align="right"><span style="display:inline-block;padding:4px 10px;border-radius:999px;'
+        f'background:{pill};color:#ffffff;font-size:11px;font-weight:800;letter-spacing:0.04em;'
+        f'text-transform:uppercase;">{escape_email(status)}</span></td>'
+        "</tr></table></td></tr>"
+        '<tr><td style="padding:16px 18px;">'
+        f'<div style="margin:0 0 14px;padding:12px 14px;border-left:3px solid {pill};background:#f4f8ff;'
+        f'border-radius:0 10px 10px 0;font-size:14px;line-height:1.65;color:#0f1111;">{quote}</div>'
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;color:#565959;">'
+        f'<tr><td style="padding:4px 0;width:92px;font-weight:700;color:#0f1111;">From</td>'
+        f"<td style=\"padding:4px 0;\">{escape_email(requester)}</td></tr>"
+        f'<tr><td style="padding:4px 0;font-weight:700;color:#0f1111;">Business</td>'
+        f"<td style=\"padding:4px 0;\">{escape_email(tenant_name)}</td></tr>"
+        f'<tr><td style="padding:4px 0;font-weight:700;color:#0f1111;">Opened</td>'
+        f"<td style=\"padding:4px 0;\">{escape_email(opened)}</td></tr>"
+        "</table></td></tr></table>"
+    )
+
+
+def _send_ticket_emails(
+    ticket: SupportTicket,
+    *,
+    recipients: list[str],
+    headline: str,
+    intro: str,
+    message: str,
+    cta_label: str,
+    cta_url: str,
+    accent: str,
+    footer_note: str = "",
+) -> None:
+    from apps.notifications.services.providers.email import send_branded_email
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for email in recipients:
+        key = (email or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(email.strip())
+    extra = _support_ticket_card_html(ticket, message=message)
+    for recipient in unique:
+        try:
+            send_branded_email(
+                subject=f"{headline} · {ticket.subject}",
+                body=intro,
+                recipient=recipient,
+                business_name="IE Orbit",
+                headline=headline,
+                extra_html=extra,
+                cta_label=cta_label,
+                cta_url=cta_url,
+                accent_color=accent,
+                footer_note=footer_note or "You’re receiving this because of a support ticket on IE Orbit.",
+                fail_silently=False,
+            )
+        except Exception:
+            logger.exception("support_ticket_email_failed recipient=%s", recipient)
+
+
+def _notify_workspace_users(
+    ticket: SupportTicket,
+    *,
+    actor: User | None,
+    subject: str,
+    body: str,
+    event_type: str,
+    include_requester: bool,
+    requester_subject: str,
+    requester_body: str,
+) -> None:
+    from apps.notifications.constants import AUDIENCE_ADMIN, AUDIENCE_CUSTOMER
+    from apps.notifications.services.staff_direct import StaffDirectNotifier
+
+    business = _ticket_business(ticket)
+    if business is None:
+        return
+    notifier = StaffDirectNotifier()
+    wanted = {"in_app"}
+    actor_id = getattr(actor, "id", None)
+    managers = _ticket_managers(ticket)
+    notified: set[Any] = set()
+
+    for user in managers:
+        if actor_id and user.id == actor_id:
+            continue
+        result = notifier._notify_user(
+            tenant=ticket.tenant,
+            business=business,
+            user=user,
+            subject=subject,
+            body=body,
+            wanted=wanted,
+            meta={"event_type": event_type, "audience": AUDIENCE_ADMIN, "ticket_id": str(ticket.id)},
+        )
+        if result.get("sent_channels"):
+            notified.add(user.id)
+
+    requester = ticket.requester
+    if include_requester and requester is not None and requester.id not in notified:
+        if actor_id and requester.id == actor_id and event_type == "SupportTicketReply":
+            return
+        manager_ids = {user.id for user in managers}
+        notifier._notify_user(
+            tenant=ticket.tenant,
+            business=business,
+            user=requester,
+            subject=requester_subject,
+            body=requester_body,
+            wanted=wanted,
+            meta={
+                "event_type": event_type,
+                "audience": AUDIENCE_ADMIN if requester.id in manager_ids else AUDIENCE_CUSTOMER,
+                "ticket_id": str(ticket.id),
+            },
+        )

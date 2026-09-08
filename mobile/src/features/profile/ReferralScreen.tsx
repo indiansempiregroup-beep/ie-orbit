@@ -17,6 +17,7 @@ import type { MobileReferralSnapshot } from '@ie-orbit/sdk';
 import * as Clipboard from 'expo-clipboard';
 import { mobileClient } from '../../api/client';
 import { Button } from '../../components/ui/Button';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { Input } from '../../components/ui/Input';
 import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
@@ -239,15 +240,17 @@ export function ReferralScreen() {
 
           <Text style={styles.sectionLabel}>{t('referral.history')}</Text>
           {data.referrals.length ? (
-            data.referrals.map((item) => (
-              <View key={item.id} style={styles.historyRow}>
-                <Text style={styles.historyName}>{item.referred_name || t('referral.aFriend')}</Text>
-                <Text style={styles.muted}>
-                  {t(`referral.status.${item.status}`, { defaultValue: item.status })}
-                  {item.rewarded_at ? ` · ${new Date(item.rewarded_at).toLocaleDateString()}` : ''}
-                </Text>
-              </View>
-            ))
+            <GroupedList>
+              {data.referrals.map((item) => (
+                <View key={item.id} style={styles.historyRow}>
+                  <Text style={styles.historyName}>{item.referred_name || t('referral.aFriend')}</Text>
+                  <Text style={styles.muted}>
+                    {t(`referral.status.${item.status}`, { defaultValue: item.status })}
+                    {item.rewarded_at ? ` · ${new Date(item.rewarded_at).toLocaleDateString()}` : ''}
+                  </Text>
+                </View>
+              ))}
+            </GroupedList>
           ) : (
             <Text style={styles.muted}>{t('referral.emptyHistory')}</Text>
           )}
@@ -307,9 +310,6 @@ const styles = StyleSheet.create({
   error: { ...typography.caption, color: colors.destructive },
   historyRow: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
     gap: 2,
   },

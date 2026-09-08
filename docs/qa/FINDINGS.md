@@ -34,6 +34,14 @@ _No open bugs from this QA pass._
 
 ## Resolved / verified
 
+## QA-037 | P1 | resolved | Mobile / Forms
+- **Area:** OPS-Mobile and customer app forms
+- **Steps:** Submit empty or invalid fields on login, register, customer, staff, service, booking, address, pet, and related screens
+- **Expected:** Required markers, submit blocked, in-cell errors; invalid email copy includes the typed value
+- **Actual:** Many forms had asterisk-only or toast/alert-only validation
+- **Source:** Form QA contract (`docs/qa/CHECKLIST.md`); this pass
+- **Notes:** Applied the form contract across ops-mobile and customer-mobile (required markers, field errors, Indian mobile/email/password helpers). Open suggestions QA-014, QA-017, and QA-032 are unchanged.
+
 ## QA-018 | P1 | resolved | Marketing / Pricing
 - **Area:** Industry pages → header Pricing
 - **Steps:** Open Retail or Education & Training → click Pricing in the header

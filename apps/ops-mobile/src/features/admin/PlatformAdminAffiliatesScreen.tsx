@@ -11,6 +11,7 @@ import type {
 import { DesktopPage } from '../../components/DesktopPage';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
@@ -105,6 +106,7 @@ export function PlatformAdminAffiliatesScreen() {
 
         {tab === 'affiliates' ? (
           <FlatList
+            {...groupedListProps(affiliates.length)}
             data={affiliates}
             keyExtractor={(item) => item.id}
             refreshControl={shopListRefreshControl(refreshing, onRefresh)}
@@ -150,6 +152,7 @@ export function PlatformAdminAffiliatesScreen() {
 
         {tab === 'referrals' ? (
           <FlatList
+            {...groupedListProps(referrals.length)}
             data={referrals}
             keyExtractor={(item) => item.id}
             refreshControl={shopListRefreshControl(refreshing, onRefresh)}
@@ -175,6 +178,7 @@ export function PlatformAdminAffiliatesScreen() {
 
         {tab === 'history' ? (
           <FlatList
+            {...groupedListProps(ledger.length)}
             data={ledger}
             keyExtractor={(item) => item.id}
             refreshControl={shopListRefreshControl(refreshing, onRefresh)}
@@ -215,12 +219,8 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.destructive },
   row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
     padding: spacing.md,
     backgroundColor: colors.card,
-    marginBottom: spacing.sm,
     gap: 4,
   },
   name: { fontFamily: fonts.bodySemi, color: colors.foreground, fontSize: 15 },

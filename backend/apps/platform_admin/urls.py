@@ -31,6 +31,8 @@ from apps.platform_admin.api import (
     PlatformUserActionView,
     PlatformUserSearchView,
     PlatformInvoicePdfView,
+    SupportTicketDetailView,
+    SupportTicketNoteView,
     SupportTicketsView,
 )
 from apps.platform_admin.affiliate_api import (
@@ -211,5 +213,15 @@ urlpatterns = [
     path("platform/help/articles", PlatformHelpArticlesAdminView.as_view(), name="platform-help-admin"),
     path("help/articles", PlatformHelpPublicView.as_view(), name="help-articles-public"),
     path("support/tickets", SupportTicketsView.as_view(), name="support-tickets"),
+    path(
+        "support/tickets/<uuid:ticket_id>/notes",
+        SupportTicketNoteView.as_view(),
+        name="support-ticket-notes",
+    ),
+    path(
+        "support/tickets/<uuid:ticket_id>",
+        SupportTicketDetailView.as_view(),
+        name="support-ticket-detail",
+    ),
     path("platform/exports/<slug:export_type>", PlatformExportView.as_view(), name="platform-exports"),
 ]

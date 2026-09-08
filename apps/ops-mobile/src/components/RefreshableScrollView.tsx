@@ -17,6 +17,8 @@ export const RefreshableScrollView = forwardRef<ScrollView, Props>(function Refr
       {...rest}
       style={[styles.scroll, style]}
       contentContainerStyle={[styles.content, contentContainerStyle]}
+      contentInsetAdjustmentBehavior={rest.contentInsetAdjustmentBehavior ?? 'never'}
+      automaticallyAdjustContentInsets={rest.automaticallyAdjustContentInsets ?? false}
       alwaysBounceVertical
       bounces
       overScrollMode="always"

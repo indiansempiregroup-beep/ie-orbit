@@ -159,6 +159,7 @@ const ProductSettingsPage = lazy(() => import('./features/settings/ProductSettin
 const PaymentSettingsPage = lazy(() => import('./features/settings/PaymentSettingsPage').then((m) => ({ default: m.PaymentSettingsPage })));
 const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout').then((m) => ({ default: m.SettingsLayout })));
 const TeamSettingsPage = lazy(() => import('./features/settings/TeamSettingsPage').then((m) => ({ default: m.TeamSettingsPage })));
+const SupportTicketsPage = lazy(() => import('./features/settings/SupportTicketsPage').then((m) => ({ default: m.SupportTicketsPage })));
 const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const ProfileEditPage = lazy(() => import('./features/profile/ProfileEditPage').then((m) => ({ default: m.ProfileEditPage })));
 const ProfileSecurityPage = lazy(() => import('./features/profile/ProfileSecurityPage').then((m) => ({ default: m.ProfileSecurityPage })));
@@ -311,6 +312,7 @@ function App() {
                     <Route path="business/edit" element={<BusinessProfileEditPage />} />
                     <Route path="products" element={<ProductSettingsPage />} />
                     <Route path="payments" element={<PaymentSettingsPage />} />
+                    <Route path="support" element={<SupportTicketsPage />} />
                     <Route element={<PermissionGuard permission="iam:role:assign" />}>
                       <Route path="team" element={<TeamSettingsPage />} />
                     </Route>

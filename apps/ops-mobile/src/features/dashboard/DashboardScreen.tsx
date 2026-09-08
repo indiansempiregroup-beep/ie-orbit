@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
 import { TodayBookingsPanel } from '../../components/TodayBookingsPanel';
 import { TodayOrdersPanel } from '../../components/TodayOrdersPanel';
@@ -13,13 +14,14 @@ import { DesktopContent } from '../../components/DesktopContent';
 import { StatTile } from '../../components/ui/StatTile';
 import { TileGrid } from '../../components/ui/TileGrid';
 import { Button } from '../../components/ui/Button';
+import { IconBadge } from '../../components/ui/IconBadge';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
-import { useBookings, useCustomers, useServices, useStaffMembers, useDashboardSummary } from '../../hooks/useOpsData';
+import { useBookings, useDashboardSummary } from '../../hooks/useOpsData';
 import { useShopOrders } from '../../hooks/useShopOrders';
 import { useBIOverview, useEntityMaps, usePlanFeatures } from '../../hooks/useOpsExtended';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -32,20 +34,15 @@ import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/pro
 import { homeOrdersFromList } from '../../utils/shopOrderDisplay';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
 import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 import { formatDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksDashboard } from '@ie-orbit/sdk';
 import { formatMoney } from '../shop/shopBooksHelpers';
-
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+import { DashboardAnalytics } from './DashboardAnalytics';
 
 export function DashboardScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
   const { unreadCount, reload: reloadNotifications } = useNotifications();
@@ -59,10 +56,7 @@ export function DashboardScreen() {
   const today = formatDateKey(new Date());
   const { summary, todayCount, reload: reloadSummary } = useDashboardSummary();
   const { bookings, loading, reload: reloadBookings } = useBookings(today);
-  const { customers } = useCustomers();
-  const { services } = useServices();
-  const { staff } = useStaffMembers();
-  const { data: bi } = useBIOverview(showReports);
+  const { data: bi, reload: reloadBi } = useBIOverview(showReports);
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
   const [books, setBooks] = useState<ShopBooksDashboard | null>(null);
   const [fabOpen, setFabOpen] = useState(false);
@@ -113,10 +107,10 @@ export function DashboardScreen() {
       loadBooks(),
       reloadOrders(),
       reloadNotifications(),
+      reloadBi(),
     ]);
   };
   const { refreshing, onRefresh } = usePullToRefresh(reload);
-  const isRefreshing = refreshing || loading || (showOrders && ordersLoading);
 
   const upcoming = useMemo(() => filterUpcomingBookings(bookings).slice(0, 5), [bookings]);
   const openOrders = useMemo(() => homeOrdersFromList(shopOrders), [shopOrders]);
@@ -125,15 +119,11 @@ export function DashboardScreen() {
     () => bookings.filter((b) => String(b.status || '').toLowerCase() === 'completed').length,
     [bookings],
   );
-  const displayName = user?.first_name || user?.full_name || 'there';
   const appointie = summary?.appointie;
   const shopie = summary?.shopie;
   const pets = summary?.pets;
-  const revenueTeaser =
-    bi?.appointie?.revenue?.estimated_revenue ?? bi?.revenue?.estimated_revenue ?? bi?.shopie?.gmv ?? null;
   const revenueCurrency =
     bi?.appointie?.revenue?.currency ?? bi?.revenue?.currency ?? bi?.shopie?.currency ?? summary?.currency ?? '';
-  const revenueLabel = bi?.appointie || bi?.revenue ? 'Est. revenue · 30 days' : 'GMV · 30 days';
 
   const insightLines = useMemo(() => {
     const lines: Array<{ icon: keyof typeof Feather.glyphMap; text: string }> = [];
@@ -228,7 +218,6 @@ export function DashboardScreen() {
   }
 
   const showHomeTabs = hasAppointie && showOrders;
-  const headerHasCarousel = (hasAppointie && upcoming.length > 0) || (showOrders && openOrders.length > 0);
 
   const bookingsPanel = (
     <TodayBookingsPanel
@@ -260,161 +249,166 @@ export function DashboardScreen() {
 
   return (
     <View style={styles.screen}>
+      <OpsHeader
+        compact
+        title={t('nav.home')}
+        right={
+          <View style={styles.headerActions}>
+            <OpsHeaderIconButton
+              icon="search"
+              onPress={() => navigation.navigate('Search')}
+              accessibilityLabel="Search"
+            />
+            <OpsHeaderIconButton
+              icon="bell"
+              badge={unreadCount}
+              onPress={() => navigation.navigate('Alerts')}
+              accessibilityLabel="Alerts"
+            />
+          </View>
+        }
+      />
       <RefreshableScrollView
-        refreshing={isRefreshing}
+        refreshing={refreshing}
         onRefresh={onRefresh}
         contentContainerStyle={{ paddingBottom: contentInset }}
       >
-        <OpsHeader
-          title={displayName}
-          subtitle={greeting()}
-          compact={headerHasCarousel}
-          right={
-            <View style={styles.headerActions}>
-              <OpsHeaderIconButton
-                icon="search"
-                onPress={() => navigation.navigate('Search')}
-                accessibilityLabel="Search"
-              />
-              <OpsHeaderIconButton
-                icon="bell"
-                badge={unreadCount}
-                onPress={() => navigation.navigate('Alerts')}
-                accessibilityLabel="Alerts"
-              />
-            </View>
-          }
-        >
-          {showHomeTabs ? (
-            <HomeOpsTabs
-              bookingsCount={upcoming.length}
-              ordersCount={openOrders.length}
-              bookingsPanel={bookingsPanel}
-              ordersPanel={ordersPanel}
-            />
-          ) : hasAppointie ? (
-            bookingsPanel
-          ) : showOrders ? (
-            ordersPanel
-          ) : shopieEnabled ? (
-            <View style={styles.nextCard}>
-              <Text style={styles.nextLabel}>Orbit Mart today</Text>
-              <Text style={styles.nextTitle}>{shopie?.orders_today ?? 0} orders</Text>
-              <Text style={styles.nextHint}>
-                {shopie?.pending_returns ?? 0} pending returns · {shopie?.open_orders ?? 0} open
-              </Text>
-              <Button
-                label={showOrders ? 'Open online orders' : 'Open shop'}
-                size="sm"
-                variant="soft"
-                style={styles.nextBtn}
-                onPress={() => navigation.navigate(showOrders ? 'ShopOrders' : showPos ? 'ShopPos' : 'ShopBooks')}
-              />
-            </View>
-          ) : (
-            <View style={styles.nextCard}>
-              <Text style={styles.nextLabel}>Workspace</Text>
-              <Text style={styles.nextTitle}>Ready when you are</Text>
-              <Text style={styles.nextHint}>Subscribe to Orbit Appoint or Orbit Mart to see live ops metrics here.</Text>
-            </View>
-          )}
-        </OpsHeader>
-
         <View style={styles.body}>
           <DesktopContent>
             <View style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}>
               <SoftLockBanner />
+
+              <View style={styles.operationsCard}>
+                <Text style={styles.sectionTitle}>Today</Text>
+                {showHomeTabs ? (
+                  <HomeOpsTabs
+                    bookingsCount={upcoming.length}
+                    ordersCount={openOrders.length}
+                    bookingsPanel={bookingsPanel}
+                    ordersPanel={ordersPanel}
+                  />
+                ) : hasAppointie ? (
+                  bookingsPanel
+                ) : showOrders ? (
+                  ordersPanel
+                ) : shopieEnabled ? (
+                  <View style={styles.nextCard}>
+                    <Text style={styles.nextLabel}>Orbit Mart today</Text>
+                    <Text style={styles.nextTitle}>{shopie?.orders_today ?? 0} orders</Text>
+                    <Text style={styles.nextHint}>
+                      {shopie?.pending_returns ?? 0} pending returns · {shopie?.open_orders ?? 0} open
+                    </Text>
+                    <Button
+                      label={showOrders ? 'Open online orders' : 'Open shop'}
+                      size="sm"
+                      variant="soft"
+                      style={styles.nextBtn}
+                      onPress={() => navigation.navigate(showOrders ? 'ShopOrders' : showPos ? 'ShopPos' : 'ShopBooks')}
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.nextCard}>
+                    <Text style={styles.nextLabel}>Workspace</Text>
+                    <Text style={styles.nextTitle}>Ready when you are</Text>
+                    <Text style={styles.nextHint}>Subscribe to Orbit Appoint or Orbit Mart to see live ops metrics here.</Text>
+                  </View>
+                )}
+              </View>
 
               {insightLines.length ? (
                 <View style={styles.insightCard}>
                   <Text style={styles.insightTitle}>Today at a glance</Text>
                   {insightLines.map((line) => (
                     <View key={line.text} style={styles.insightRow}>
-                      <View style={styles.insightIcon}>
-                        <Feather name={line.icon} size={14} color={colors.primary} />
-                      </View>
+                      <IconBadge
+                        icon={line.icon}
+                        size="sm"
+                        tone={line.icon === 'alert-circle' ? 'coral' : line.icon === 'trending-up' ? 'green' : 'blue'}
+                      />
                       <Text style={styles.insightText}>{line.text}</Text>
                     </View>
                   ))}
                 </View>
               ) : null}
 
-              {shopieEnabled && books && (showCashTiles || showPartyTiles) ? (
+              {hasAppointie || shopieEnabled ? (
                 <TileGrid gap={spacing.md}>
-                  {showPartyTiles ? (
+                  {hasAppointie ? (
+                    <StatTile
+                      label="Today"
+                      value={String(appointie?.today_bookings ?? todayCount)}
+                      hint={`${upcoming.length} still ahead`}
+                      icon="calendar"
+                      iconTone="blue"
+                    />
+                  ) : null}
+                  {hasAppointie ? (
+                    <StatTile
+                      label="Month revenue"
+                      value={formatMoney(appointie?.estimated_revenue_month)}
+                      hint={revenueCurrency || 'Est.'}
+                      icon="trending-up"
+                      iconTone="green"
+                      onPress={showReports ? () => navigation.navigate('BI', { tab: 'revenue' }) : undefined}
+                    />
+                  ) : null}
+                  {shopieEnabled && showOrders ? (
+                    <StatTile
+                      label="Orders today"
+                      value={String(shopie?.orders_today ?? 0)}
+                      hint={`${shopie?.open_orders ?? 0} open`}
+                      icon="shopping-bag"
+                      iconTone="green"
+                      onPress={() => navigation.navigate('ShopOrders')}
+                    />
+                  ) : null}
+                  {shopieEnabled ? (
+                    <StatTile
+                      label="GMV this month"
+                      value={formatMoney(shopie?.gmv_month)}
+                      hint={summary?.currency ?? ''}
+                      icon="bar-chart-2"
+                      iconTone="violet"
+                    />
+                  ) : null}
+                  {showPartyTiles && books ? (
                     <StatTile
                       label="To collect"
                       value={formatMoney(books.to_collect)}
                       tone="positive"
                       hint="Receivable"
+                      icon="arrow-down-circle"
+                      iconTone="green"
                       onPress={() => navigation.navigate('ShopBooks')}
                     />
                   ) : null}
-                  {showPartyTiles ? (
-                    <StatTile
-                      label="To pay"
-                      value={formatMoney(books.to_pay)}
-                      tone="negative"
-                      hint="Payable"
-                      onPress={() => navigation.navigate('ShopBooks')}
-                    />
-                  ) : null}
-                  {showCashTiles ? (
-                    <StatTile label="Cash in hand" value={formatMoney(books.cash)} onPress={() => navigation.navigate('ShopBooksCash')} />
-                  ) : null}
-                  {showCashTiles ? (
-                    <StatTile label="Bank balance" value={formatMoney(books.bank)} onPress={() => navigation.navigate('ShopBooksCash')} />
-                  ) : null}
-                </TileGrid>
-              ) : null}
-
-              {hasAppointie ? (
-                <TileGrid>
-                  <StatTile label="Today" value={String(appointie?.today_bookings ?? todayCount)} hint="Bookings" />
-                  <StatTile label="Left today" value={String(upcoming.length)} hint="Upcoming" />
-                  <StatTile label="Customers" value={String(appointie?.active_customers ?? customers.length)} />
-                  {showStaff ? (
-                    <StatTile label="Staff" value={String(appointie?.staff_on_duty ?? staff.length)} />
-                  ) : (
-                    <StatTile label="Services" value={String(services.length)} />
-                  )}
-                </TileGrid>
-              ) : null}
-
-              {shopieEnabled && (showOrders || showReturns) ? (
-                <TileGrid>
-                  {showOrders ? <StatTile label="Orders today" value={String(shopie?.orders_today ?? 0)} /> : null}
-                  {showOrders ? <StatTile label="Open" value={String(shopie?.open_orders ?? 0)} /> : null}
                   {showReturns ? (
-                    <StatTile label="Returns" value={String(shopie?.pending_returns ?? 0)} tone="warning" />
+                    <StatTile
+                      label="Returns"
+                      value={String(shopie?.pending_returns ?? 0)}
+                      tone={(shopie?.pending_returns ?? 0) > 0 ? 'warning' : 'default'}
+                      icon="rotate-ccw"
+                      iconTone="coral"
+                    />
                   ) : null}
-                  {showOrders ? <StatTile label="Month" value={String(shopie?.orders_month ?? 0)} /> : null}
                 </TileGrid>
               ) : null}
 
-              {petsEnabled ? (
-                <TileGrid>
-                  <StatTile label="Pets" value={String(pets?.total ?? 0)} />
-                  <StatTile label="Bdays 7d" value={String(pets?.birthdays_next_7d ?? 0)} />
-                  <StatTile label="Bdays 30d" value={String(pets?.birthdays_next_30d ?? 0)} />
-                  <StatTile label="Photos" value={String(pets?.with_photo ?? 0)} />
-                </TileGrid>
-              ) : null}
-
-              {showReports && revenueTeaser != null ? (
-                <Pressable style={styles.revenueCard} onPress={() => navigation.navigate('BI', { tab: 'overview' })}>
-                  <View style={styles.revenueIcon}>
-                    <Feather name="trending-up" size={18} color={colors.primary} />
-                  </View>
-                  <View style={styles.revenueCopy}>
-                    <Text style={styles.revenueLabel}>{revenueLabel}</Text>
-                    <Text style={styles.revenueValue}>
-                      {revenueTeaser} {revenueCurrency}
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-                </Pressable>
-              ) : null}
+              <DashboardAnalytics
+                bi={bi}
+                summary={summary}
+                books={books}
+                bookings={bookings}
+                shopOrders={shopOrders}
+                hasAppointie={hasAppointie}
+                shopieEnabled={shopieEnabled}
+                petsEnabled={petsEnabled}
+                showCashTiles={showCashTiles}
+                showPartyTiles={showPartyTiles}
+                showReports={showReports}
+                currency={revenueCurrency}
+                onOpenBI={() => navigation.navigate('BI', { tab: 'overview' })}
+              />
 
               <View style={isDesktop ? styles.desktopSplit : undefined}>
                 <View style={isDesktop ? styles.desktopCol : undefined}>
@@ -444,20 +438,38 @@ export function DashboardScreen() {
                   </TileGrid>
 
                   {(showBooksHub || showPos || showReports) && (
-                    <>
+                    <View style={styles.reportsCard}>
                       <Text style={styles.sectionLabel}>Reports</Text>
-                      <View style={styles.reportRow}>
+                      <TileGrid gap={spacing.md}>
                         {has(PlanFeature.shopieGstReports) ? (
-                          <ReportLink label="Sale report" onPress={() => navigation.navigate('ShopBooksReports')} />
+                          <ReportLink
+                            icon="bar-chart-2"
+                            tone="violet"
+                            label="Sale report"
+                            hint="GST, P&L and books"
+                            onPress={() => navigation.navigate('ShopBooksReports')}
+                          />
                         ) : null}
                         {showPos ? (
-                          <ReportLink label="Sale (POS)" onPress={() => navigation.navigate('ShopPos')} />
+                          <ReportLink
+                            icon="shopping-cart"
+                            tone="green"
+                            label="Sale (POS)"
+                            hint="Open the counter"
+                            onPress={() => navigation.navigate('ShopPos')}
+                          />
                         ) : null}
                         {showReports ? (
-                          <ReportLink label="Business intelligence" onPress={() => navigation.navigate('BI', { tab: 'overview' })} />
+                          <ReportLink
+                            icon="pie-chart"
+                            tone="blue"
+                            label="Intelligence"
+                            hint="Overview & growth"
+                            onPress={() => navigation.navigate('BI', { tab: 'overview' })}
+                          />
                         ) : null}
-                      </View>
-                    </>
+                      </TileGrid>
+                    </View>
                   )}
                 </View>
               </View>
@@ -482,9 +494,7 @@ export function DashboardScreen() {
             <Text style={styles.fabSheetTitle}>Create</Text>
             {hasAppointie ? (
               <Pressable style={styles.fabOption} onPress={openCreateBooking}>
-                <View style={styles.fabOptionIcon}>
-                  <Feather name="calendar" size={18} color={colors.primary} />
-                </View>
+                <IconBadge icon="calendar" tone="blue" />
                 <View style={styles.fabOptionCopy}>
                   <Text style={styles.fabOptionLabel}>Booking</Text>
                   <Text style={styles.fabOptionHint}>New appointment</Text>
@@ -493,9 +503,7 @@ export function DashboardScreen() {
             ) : null}
             {showPos ? (
               <Pressable style={styles.fabOption} onPress={openSale}>
-                <View style={styles.fabOptionIcon}>
-                  <Feather name="shopping-cart" size={18} color={colors.primary} />
-                </View>
+                <IconBadge icon="shopping-cart" tone="green" />
                 <View style={styles.fabOptionCopy}>
                   <Text style={styles.fabOptionLabel}>Sale</Text>
                   <Text style={styles.fabOptionHint}>POS checkout</Text>
@@ -510,11 +518,28 @@ export function DashboardScreen() {
   );
 }
 
-function ReportLink({ label, onPress }: { label: string; onPress: () => void }) {
+function ReportLink({
+  icon,
+  tone,
+  label,
+  hint,
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  tone: IconTone;
+  label: string;
+  hint: string;
+  onPress: () => void;
+}) {
   return (
     <Pressable style={({ pressed }) => [styles.reportLink, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={styles.reportLinkText}>{label}</Text>
-      <Feather name="chevron-right" size={14} color={colors.primary} />
+      <IconBadge icon={icon} tone={tone} />
+      <Text style={styles.reportLinkText} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.reportHint} numberOfLines={1}>
+        {hint}
+      </Text>
     </Pressable>
   );
 }
@@ -528,11 +553,18 @@ function QuickAction({
   label: string;
   onPress: () => void;
 }) {
+  const tones: Partial<Record<keyof typeof Feather.glyphMap, IconTone>> = {
+    'plus-circle': 'blue',
+    'shopping-cart': 'green',
+    users: 'cyan',
+    package: 'amber',
+    layers: 'violet',
+    heart: 'rose',
+    'user-check': 'coral',
+  };
   return (
     <Pressable style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]} onPress={onPress}>
-      <View style={styles.quickIcon}>
-        <Feather name={icon} size={18} color={colors.primary} />
-      </View>
+      <IconBadge icon={icon} tone={tones[icon] ?? 'blue'} />
       <Text style={styles.quickLabel} numberOfLines={1}>
         {label}
       </Text>
@@ -544,7 +576,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nextCard: {
-    marginTop: spacing.xl,
     backgroundColor: colors.tint,
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -563,11 +594,17 @@ const styles = StyleSheet.create({
   nextMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   nextMetaText: { ...typography.caption, color: colors.mutedForeground },
   nextBtn: { alignSelf: 'flex-start', marginTop: spacing.md },
-  body: { paddingTop: spacing.xxl },
+  body: { paddingTop: spacing.xl },
   bodyInner: { paddingHorizontal: spacing.xl, gap: spacing.lg },
   bodyInnerDesktop: { paddingHorizontal: 0, gap: spacing.xl },
   desktopSplit: { flexDirection: 'row', gap: spacing.xl, alignItems: 'flex-start' },
   desktopCol: { flex: 1, gap: spacing.lg, minWidth: 0 },
+  operationsCard: { gap: spacing.md },
+  sectionTitle: {
+    ...typography.title,
+    color: colors.foreground,
+    fontSize: 19,
+  },
   insightCard: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
@@ -575,6 +612,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.md,
+    ...shadows.soft,
   },
   insightTitle: { ...typography.label, fontFamily: fonts.bodySemi, color: colors.foreground },
   insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
@@ -588,44 +626,25 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   insightText: { ...typography.body, color: colors.foreground, flex: 1, lineHeight: 20 },
-  revenueCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-  },
-  revenueIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  revenueCopy: { flex: 1 },
-  revenueLabel: { ...typography.caption, color: colors.mutedForeground },
-  revenueValue: { ...typography.title, color: colors.foreground, marginTop: 2 },
   sectionLabel: {
     ...typography.label,
     color: colors.mutedForeground,
   },
-  reportRow: { gap: spacing.sm },
+  reportsCard: { gap: spacing.md },
   reportLink: {
-    flexDirection: 'row',
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.sm,
     backgroundColor: colors.card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
+    ...shadows.soft,
   },
-  reportLinkText: { ...typography.body, fontFamily: fonts.bodyMedium, color: colors.foreground },
+  reportLinkText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground, textAlign: 'center' },
+  reportHint: { ...typography.tiny, color: colors.mutedForeground, textAlign: 'center' },
   quickCard: {
     flex: 1,
     alignItems: 'center',
@@ -636,16 +655,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.sm,
+    ...shadows.soft,
   },
   pressed: { opacity: 0.92 },
-  quickIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   quickLabel: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground },
   fab: {
     position: 'absolute',
@@ -684,14 +696,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.sm,
-  },
-  fabOptionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   fabOptionCopy: { flex: 1 },
   fabOptionLabel: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },

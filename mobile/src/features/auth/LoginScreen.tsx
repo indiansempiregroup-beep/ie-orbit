@@ -24,6 +24,8 @@ import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
 import { getApiErrorMessage } from '../../utils/format';
+import { emailFieldError } from '../../utils/emailValidation';
+import { requiredMessage } from '../../utils/formValidation';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { AuthStackParamList } from '../../navigation/types';
 import { GoogleSignInButton } from '../../components/GoogleSignInButton';
@@ -59,6 +61,7 @@ export function LoginScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
 
@@ -101,10 +104,15 @@ export function LoginScreen({ navigation }: Props) {
 
   async function onSubmit() {
     setError('');
-    if (!email.trim() || !password) {
-      setError('Email and password are required.');
+    const nextErrors = {
+      email: emailFieldError(email) ?? undefined,
+      password: password ? undefined : requiredMessage('Password'),
+    };
+    if (nextErrors.email || nextErrors.password) {
+      setFieldErrors(nextErrors);
       return;
     }
+    setFieldErrors({});
     setSubmitting(true);
     try {
       await login(email.trim(), password, remember);
@@ -166,20 +174,30 @@ export function LoginScreen({ navigation }: Props) {
 
           <Input
             label={t('common.email')}
+            required
             leftIcon="mail"
             placeholder="you@example.com"
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(value) => {
+              setEmail(value);
+              setFieldErrors((current) => ({ ...current, email: undefined }));
+            }}
+            error={fieldErrors.email}
           />
           <Input
             label={t('auth.password')}
+            required
             leftIcon="lock"
             placeholder="Your password"
             secureTextEntry
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(value) => {
+              setPassword(value);
+              setFieldErrors((current) => ({ ...current, password: undefined }));
+            }}
+            error={fieldErrors.password}
           />
 
           <View style={styles.row}>

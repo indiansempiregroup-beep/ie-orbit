@@ -1025,8 +1025,7 @@ def test_send_billing_ops_digest_task(monkeypatch: pytest.MonkeyPatch, settings)
     captured: dict[str, object] = {}
 
     def _fake_send_branded_email(**kwargs):
-        captured["subject"] = kwargs.get("subject")
-        captured["message"] = kwargs.get("body")
+        captured.update(kwargs)
         recipients = kwargs.get("recipient")
         captured["recipients"] = [recipients] if isinstance(recipients, str) else list(recipients or [])
         return None
@@ -1040,6 +1039,12 @@ def test_send_billing_ops_digest_task(monkeypatch: pytest.MonkeyPatch, settings)
     result = send_billing_ops_digest_task(window_hours=24)
     assert result["sent"] is True
     assert captured["recipients"] == ["ops@example.com"]
+    assert "Daily digest" in str(captured["subject"])
+    extra_html = str(captured.get("extra_html") or "")
+    assert "Workspaces" in extra_html
+    assert "Paying MRR" in extra_html
+    assert "Payment gateway" in extra_html
+    assert captured.get("cta_url")
 
 
 @pytest.mark.django_db

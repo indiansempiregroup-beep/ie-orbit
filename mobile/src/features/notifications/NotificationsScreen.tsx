@@ -5,6 +5,7 @@ import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-n
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { useBootstrap } from '../../contexts/BootstrapContext';
 import { useMobileNotifications } from '../../hooks/useMobileNotifications';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -58,7 +59,7 @@ export function NotificationsScreen() {
       <RefreshableScrollView
         style={styles.list}
         contentContainerStyle={[
-          !notifications.length ? styles.emptyContainer : undefined,
+          !notifications.length ? styles.emptyContainer : styles.listContent,
           { paddingBottom: contentInset },
         ]}
         refreshing={refreshing}
@@ -78,7 +79,8 @@ export function NotificationsScreen() {
           </View>
         ) : null}
 
-        {notifications.map((item) => {
+        <GroupedList>
+          {notifications.map((item) => {
           const type = (item.notification_type || 'booking') as keyof typeof iconMap;
           const icon = iconMap[type] ?? 'bell';
           return (
@@ -131,6 +133,7 @@ export function NotificationsScreen() {
             </Pressable>
           );
         })}
+        </GroupedList>
       </RefreshableScrollView>
     </View>
   );
@@ -151,6 +154,7 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, fontSize: 20, color: colors.foreground },
   markRead: { ...typography.caption, fontWeight: '600' },
   list: { flex: 1 },
+  listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   error: { ...typography.caption, color: colors.destructive, padding: spacing.lg },
   emptyContainer: { flexGrow: 1 },
   empty: { alignItems: 'center', padding: spacing.xxxl, gap: spacing.md },
@@ -158,10 +162,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: spacing.md,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
   },
   unread: { backgroundColor: `${colors.primary}06` },
   iconWrap: {

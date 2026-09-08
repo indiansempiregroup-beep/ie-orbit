@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { DesktopPage } from '../../components/DesktopPage';
 import { FormScreen } from '../../components/FormScreen';
@@ -20,7 +19,6 @@ import type { RootStackParamList } from '../../navigation/types';
 export function ProfileScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const insets = useSafeAreaInsets();
   const {
     user,
     logout,
@@ -104,7 +102,7 @@ export function ProfileScreen() {
 
   return (
     <DesktopPage>
-      <FormScreen contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl }]}>
+      <FormScreen contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Avatar name={displayName} size="xl" src={user?.profile_photo} />
           <Text style={styles.name}>{displayName}</Text>

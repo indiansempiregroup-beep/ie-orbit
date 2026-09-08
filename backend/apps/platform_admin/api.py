@@ -7,7 +7,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from django.db.models import Count, Q
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
@@ -36,7 +36,12 @@ from apps.platform_admin.models import (
     SupportTicket,
     SupportTicketNote,
 )
-from apps.platform_admin.services import PlatformAdminService
+from apps.platform_admin.services import (
+    PlatformAdminService,
+    notify_support_ticket_public_note,
+    user_can_access_ticket,
+    user_is_platform_admin,
+)
 from apps.tenancy.models import Tenant, TenantStatus
 from apps.tenancy.repositories import TenantRepository
 from apps.tenancy.services.tenants import TenantService
@@ -46,6 +51,18 @@ def _svc() -> PlatformAdminService:
     return PlatformAdminService()
 
 
+def _ticket_preview(ticket: SupportTicket) -> str:
+    public = getattr(ticket, "public_notes", None)
+    if public:
+        text = (public[0].body or "").strip()
+    else:
+        first = ticket.notes.filter(is_internal=False).order_by("created_at").only("body").first()
+        text = (first.body or "").strip() if first else ""
+    if len(text) > 160:
+        return f"{text[:157].rstrip()}…"
+    return text
+
+
 def _int_param(value: str | None) -> int | None:
     try:
         return int(value) if value not in (None, "") else None
@@ -53,7 +70,7 @@ def _int_param(value: str | None) -> int | None:
         return None
 
 
-def _serialize_ticket(ticket: SupportTicket, *, include_notes: bool = False) -> dict:
+def _serialize_ticket(ticket: SupportTicket, *, include_notes: bool = False, include_internal: bool = True) -> dict:
     row = {
         "id": str(ticket.id),
         "subject": ticket.subject,
@@ -66,8 +83,12 @@ def _serialize_ticket(ticket: SupportTicket, *, include_notes: bool = False) -> 
         "assignee_email": ticket.assignee.email if ticket.assignee else None,
         "created_at": ticket.created_at.isoformat(),
         "updated_at": ticket.updated_at.isoformat() if ticket.updated_at else None,
+        "preview": _ticket_preview(ticket),
     }
     if include_notes:
+        notes = ticket.notes.select_related("author").all()
+        if not include_internal:
+            notes = notes.filter(is_internal=False)
         row["notes"] = [
             {
                 "id": str(note.id),
@@ -76,7 +97,7 @@ def _serialize_ticket(ticket: SupportTicket, *, include_notes: bool = False) -> 
                 "author_email": note.author.email if note.author else None,
                 "created_at": note.created_at.isoformat(),
             }
-            for note in ticket.notes.select_related("author").all()
+            for note in notes
         ]
     return row
 
@@ -691,20 +712,8 @@ class SupportTicketsView(APIView):
 
     @extend_schema(tags=["Support"])
     def get(self, request: Request) -> Response:
-        tickets = SupportTicket.objects.filter(requester=request.user).order_by("-created_at")[:50]
-        return success_response(
-            {
-                "tickets": [
-                    {
-                        "id": str(t.id),
-                        "subject": t.subject,
-                        "status": t.status,
-                        "created_at": t.created_at.isoformat(),
-                    }
-                    for t in tickets
-                ]
-            }
-        )
+        tickets = _svc().list_visible_tickets(user=request.user, tenant=getattr(request, "tenant", None))
+        return success_response({"tickets": [_serialize_ticket(ticket) for ticket in tickets]})
 
     @extend_schema(tags=["Support"])
     def post(self, request: Request) -> Response:
@@ -716,13 +725,61 @@ class SupportTicketsView(APIView):
             tenant = Tenant.objects.filter(owner=request.user).first()
         if tenant is None:
             return Response({"error": {"message": "tenant required"}}, status=400)
+        business = getattr(request, "business", None)
         ticket = _svc().create_ticket(
             tenant=tenant,
             actor=request.user,
             subject=request.data.get("subject", "Support"),
             body=request.data.get("body", ""),
+            business=business if getattr(business, "tenant_id", None) == tenant.id else None,
         )
         return success_response({"id": str(ticket.id), "status": ticket.status}, status_code=201)
+
+
+def _workspace_ticket_or_404(user, ticket_id: str) -> SupportTicket:
+    ticket = get_object_or_404(
+        SupportTicket.objects.select_related("requester", "assignee", "tenant"),
+        id=ticket_id,
+    )
+    if not user_can_access_ticket(user, ticket):
+        raise Http404()
+    return ticket
+
+
+class SupportTicketDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Support"])
+    def get(self, request: Request, ticket_id: str) -> Response:
+        ticket = _workspace_ticket_or_404(request.user, ticket_id)
+        include_internal = user_is_platform_admin(request.user)
+        return success_response(_serialize_ticket(ticket, include_notes=True, include_internal=include_internal))
+
+
+class SupportTicketNoteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Support"])
+    def post(self, request: Request, ticket_id: str) -> Response:
+        ticket = _workspace_ticket_or_404(request.user, ticket_id)
+        body = (request.data.get("body") or "").strip()
+        if not body:
+            return Response({"error": {"message": "Note body is required"}}, status=400)
+        SupportTicketNote.objects.create(
+            ticket=ticket,
+            author=request.user,
+            body=body,
+            is_internal=False,
+        )
+        notify_support_ticket_public_note(ticket, actor=request.user, body=body)
+        return success_response(
+            _serialize_ticket(
+                ticket,
+                include_notes=True,
+                include_internal=user_is_platform_admin(request.user),
+            ),
+            status_code=201,
+        )
 
 
 class PlatformTicketNoteView(APIView):
@@ -745,6 +802,8 @@ class PlatformTicketNoteView(APIView):
                 _apply_ticket_updates(ticket, request.data, request.user)
             except ValueError as exc:
                 return Response({"error": {"message": str(exc)}}, status=400)
+        if not note.is_internal:
+            notify_support_ticket_public_note(ticket, actor=request.user, body=body)
         return success_response({"id": str(note.id), "status": ticket.status}, status_code=201)
 
 

@@ -21,6 +21,9 @@ type Props = {
   longitude: number | null;
   onChangeText: (value: string) => void;
   onPlaceSelected: (place: PlaceSelection) => void;
+  required?: boolean;
+  optional?: boolean;
+  fieldError?: string;
 };
 
 function asPlace(data: {
@@ -51,6 +54,9 @@ export function AddressLocationPicker({
   longitude,
   onChangeText,
   onPlaceSelected,
+  required,
+  optional,
+  fieldError,
 }: Props) {
   const mapRef = useRef<MapView | null>(null);
   const initialRegion = useRef<Region>({
@@ -115,6 +121,9 @@ export function AddressLocationPicker({
       <AddressPlacesField
         label="Search address, building or landmark"
         value={value}
+        required={required}
+        optional={optional}
+        fieldError={fieldError}
         onChangeText={(next) => {
           onChangeText(next);
           if (!next.trim()) onPlaceSelected(emptyPlace());

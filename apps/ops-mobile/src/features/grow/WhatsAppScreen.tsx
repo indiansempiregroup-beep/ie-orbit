@@ -23,6 +23,7 @@ import { FormScreen } from '../../components/FormScreen';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
+import { FieldLabel } from '../../components/ui/FieldLabel';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { uploadMedia } from '../../api/media';
 import type { Customer, ShopSupplier } from '@ie-orbit/sdk';
@@ -316,13 +317,12 @@ export function WhatsAppScreen() {
       }
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.formTitle}>WhatsApp</Text>
       <Text style={styles.help}>
         Pick a customer or supplier to fill their number, or enter it manually. Attach an image to share with your
         message.
       </Text>
 
-      <Text style={styles.label}>Send to</Text>
+      <FieldLabel label="Send to" required />
       <View style={styles.chipRow}>
         <Chip
           label="Manual"
@@ -353,6 +353,7 @@ export function WhatsAppScreen() {
       {partyMode !== 'manual' ? (
         <SelectField
           label={partyMode === 'customer' ? 'Customer' : 'Supplier'}
+          required
           value={partyId}
           options={partyOptions}
           onChange={onSelectParty}
@@ -362,6 +363,7 @@ export function WhatsAppScreen() {
 
       <SelectField
         label="Country"
+        required
         value={dialIso}
         options={dialCodeOptions()}
         onChange={setDialIso}
@@ -369,7 +371,7 @@ export function WhatsAppScreen() {
       />
 
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Phone</Text>
+        <FieldLabel label="Phone" required />
         <View style={styles.phoneRow}>
           <View style={styles.dialPrefix}>
             <Text style={styles.dialPrefixText}>+{selectedDial.dial}</Text>
@@ -386,7 +388,7 @@ export function WhatsAppScreen() {
       </View>
 
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Default message</Text>
+        <FieldLabel label="Default message" required />
         <TextInput
           style={[styles.input, styles.notes]}
           value={message}
@@ -397,7 +399,7 @@ export function WhatsAppScreen() {
       </View>
 
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Attachment</Text>
+        <FieldLabel label="Attachment" optional />
         {attachmentUrl ? (
           <View style={styles.attachPreview}>
             <Image source={{ uri: attachmentUrl }} style={styles.attachImage} />
@@ -446,11 +448,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 88, textAlignVertical: 'top' },
   attachEmpty: {

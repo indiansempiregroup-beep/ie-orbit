@@ -156,16 +156,26 @@ export function ShopPartiesPage() {
 
   return (
     <div className="page-stack">
-      <Card>
-        <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}>
-          <TabButton active={tab === 'customers'} onClick={() => setTab('customers')}>
-            Customers
-          </TabButton>
-          <TabButton active={tab === 'suppliers'} onClick={() => setTab('suppliers')}>
-            Suppliers
-          </TabButton>
-        </div>
-      </Card>
+      <div className="invoice-page-header">
+        <h1 className="invoice-page-title">Parties</h1>
+        {tab === 'suppliers' ? (
+          <Button type="button" variant="primary" onClick={openAddDialog}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={16} aria-hidden="true" />
+              Add supplier
+            </span>
+          </Button>
+        ) : null}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <TabButton active={tab === 'customers'} onClick={() => setTab('customers')}>
+          Customers
+        </TabButton>
+        <TabButton active={tab === 'suppliers'} onClick={() => setTab('suppliers')}>
+          Suppliers
+        </TabButton>
+      </div>
 
       {tab === 'customers' ? (
         <Card>
@@ -187,54 +197,42 @@ export function ShopPartiesPage() {
           <ShopFilterBar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search supplier name, phone, GSTIN…"
+            searchPlaceholder="Search suppliers"
             onClear={() => setSearch('')}
-            action={
-              <Button type="button" variant="primary" onClick={openAddDialog}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <Plus size={16} aria-hidden="true" />
-                  Add supplier
-                </span>
-              </Button>
-            }
           />
-          {suppliers.isLoading ? <p>Loading…</p> : null}
-          <div style={{ display: 'grid', gap: 8 }}>
+          {suppliers.isLoading ? <p className="invoice-muted">Loading…</p> : null}
+          <div className="invoice-list">
             {filtered.map((supplier) => (
-              <div
-                key={supplier.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  borderBottom: '1px solid var(--border, #eee)',
-                  paddingBottom: 8,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
+              <div key={supplier.id} className="invoice-row">
+                <div className="invoice-row__main">
                   <strong>{supplier.name}</strong>
-                  <div style={{ opacity: 0.8, fontSize: 13 }}>
-                    {supplier.phone || 'No phone'} · {supplier.gstin || 'No GSTIN'} · {supplier.billing_state || 'No state'}
-                  </div>
+                  <span>
+                    {supplier.phone || 'No phone'}
+                    {supplier.gstin ? ` · ${supplier.gstin}` : ''}
+                    {supplier.billing_state ? ` · ${supplier.billing_state}` : ''}
+                  </span>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div className="invoice-row__side">
                   <Button type="button" variant="ghost" onClick={() => openStatement(supplier)}>
                     Statement
                   </Button>
-                  <Button type="button" variant="neutral" onClick={() => openEditDialog(supplier)}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <Pencil size={14} aria-hidden="true" />
-                      Edit
-                    </span>
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => void handleDelete(supplier)}>
-                    Remove
-                  </Button>
                 </div>
+                <Button type="button" variant="ghost" onClick={() => openEditDialog(supplier)}>
+                  <Pencil size={14} aria-hidden="true" />
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => void handleDelete(supplier)}>
+                  Remove
+                </Button>
               </div>
             ))}
-            {!suppliers.isLoading && !filtered.length ? <p>No suppliers yet. Add one to start recording purchases.</p> : null}
+            {!suppliers.isLoading && !filtered.length ? (
+              <div className="invoice-empty">
+                <p>No suppliers yet. Add one to start recording purchases.</p>
+                <Button type="button" variant="primary" onClick={openAddDialog}>
+                  Add supplier
+                </Button>
+              </div>
+            ) : null}
           </div>
         </Card>
       )}

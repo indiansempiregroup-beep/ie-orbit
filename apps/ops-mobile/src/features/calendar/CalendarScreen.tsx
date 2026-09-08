@@ -1,17 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import type { BookingStatus } from '@ie-orbit/sdk';
 import { BookingRow } from '../../components/BookingRow';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { DesktopPage } from '../../components/DesktopPage';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { OpsHeader } from '../../components/OpsHeader';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
-import { SelectField } from '../../components/SelectField';
-import { Button } from '../../components/ui/Button';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -99,8 +99,7 @@ export function CalendarScreen() {
     <DesktopPage>
       <OpsHeader
         compact
-        title="Calendar"
-        subtitle={selected.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+        title={selected.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
         right={
           <View style={styles.nav}>
             <Pressable style={styles.navBtn} onPress={() => setSelected((d) => addDays(d, -1))} hitSlop={8}>
@@ -130,21 +129,7 @@ export function CalendarScreen() {
 
         <SectionHeader
           title="Day agenda"
-          action={
-            <Pressable
-              style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
-              onPress={() => setFiltersOpen(true)}
-            >
-              <Feather
-                name="sliders"
-                size={14}
-                color={activeFilterCount > 0 ? colors.primaryForeground : colors.foreground}
-              />
-              <Text style={[styles.filterBtnText, activeFilterCount > 0 && styles.filterBtnTextActive]}>
-                Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-              </Text>
-            </Pressable>
-          }
+          action={<FilterButton count={activeFilterCount} onPress={() => setFiltersOpen(true)} />}
         />
 
         <ScreenState
@@ -156,10 +141,11 @@ export function CalendarScreen() {
           actionLabel="New booking"
           onAction={() => navigation.navigate('CreateBooking', {})}
         />
-        <View style={styles.list}>
+        <GroupedList>
           {sorted.map((booking) => (
             <BookingRow
               key={booking.id}
+              attached
               serviceName={bookingServiceLabel(booking, serviceMap)}
               customerName={bookingCustomerLabel(booking, customerMap)}
               customerPhone={bookingCustomerPhone(booking)}
@@ -173,7 +159,7 @@ export function CalendarScreen() {
               onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
             />
           ))}
-        </View>
+        </GroupedList>
 
         <SectionHeader title="Open slots" />
         {slots.length === 0 ? (
@@ -200,39 +186,25 @@ export function CalendarScreen() {
         </View>
       </RefreshableScrollView>
 
-      <Modal visible={filtersOpen} animationType="slide" transparent onRequestClose={() => setFiltersOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setFiltersOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Agenda filters</Text>
-              <Pressable onPress={() => setFiltersOpen(false)}>
-                <Feather name="x" size={20} color={colors.mutedForeground} />
-              </Pressable>
-            </View>
-            <ScrollView contentContainerStyle={styles.sheetContent}>
-              <SelectField
-                label="Status"
-                value={statusFilter}
-                options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                onChange={(value) => setStatusFilter(value as '' | BookingStatus)}
-              />
-              {showStaffFilter ? (
-                <SelectField label="Staff" value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
-              ) : null}
-              <Button
-                label="Reset filters"
-                variant="outline"
-                fullWidth
-                onPress={() => {
-                  setStatusFilter('');
-                  setStaffFilter('');
-                }}
-              />
-              <Button label="Apply" fullWidth onPress={() => setFiltersOpen(false)} />
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <FilterSheet
+        visible={filtersOpen}
+        title="Agenda filters"
+        onClose={() => setFiltersOpen(false)}
+        onReset={() => {
+          setStatusFilter('');
+          setStaffFilter('');
+        }}
+      >
+        <FilterChoiceGroup
+          label="Status"
+          value={statusFilter}
+          options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+          onChange={(value) => setStatusFilter(value as '' | BookingStatus)}
+        />
+        {showStaffFilter ? (
+          <FilterChoiceGroup label="Staff" value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
+        ) : null}
+      </FilterSheet>
     </DesktopPage>
   );
 }
@@ -255,20 +227,6 @@ const styles = StyleSheet.create({
   },
   today: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
-  filterBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  filterBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterBtnText: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
-  filterBtnTextActive: { color: colors.primaryForeground },
   meta: { ...typography.caption, color: colors.mutedForeground, marginTop: -spacing.sm },
   slotRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: -spacing.sm },
   slot: {
@@ -281,23 +239,4 @@ const styles = StyleSheet.create({
   },
   slotPressed: { opacity: 0.9 },
   slotText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
-  list: { gap: spacing.md, marginTop: -spacing.sm },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    maxHeight: '75%',
-    paddingBottom: spacing.xxl,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.md,
-  },
-  sheetTitle: { ...typography.title, color: colors.foreground },
-  sheetContent: { paddingHorizontal: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xl },
 });

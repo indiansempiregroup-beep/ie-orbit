@@ -1,13 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Card } from '../../components/ui/Card';
-import { Chip } from '../../components/ui/Chip';
 import { ScreenState } from '../../components/ScreenState';
+import { StatTile } from '../../components/ui/StatTile';
+import { TileGrid } from '../../components/ui/TileGrid';
+import { BarChart } from '../../components/charts/BarChart';
+import { ChartCard } from '../../components/charts/ChartCard';
+import { ChartGrid } from '../../components/charts/ChartGrid';
+import { DonutChart } from '../../components/charts/DonutChart';
+import { LineAreaChart } from '../../components/charts/LineAreaChart';
+import { fillDailySeries, formatAxisValue } from '../../components/charts/chartUtils';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -20,17 +27,21 @@ import {
   useBusinessBillingSnapshot,
 } from '../../hooks/useOpsExtended';
 import { getSubscribedProductIds } from '../../utils/products';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { colors, fonts, iconTones, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
+import { InsightPanel } from './InsightPanel';
 
 type Tab = 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports';
 
-const TAB_LABELS: Record<Tab, string> = {
-  overview: 'Overview',
-  growth: 'Growth',
-  revenue: 'Revenue',
-  forecast: 'Forecast',
-  reports: 'Reports',
+const TAB_META: Record<
+  Tab,
+  { label: string; icon: keyof typeof Feather.glyphMap; hint: string }
+> = {
+  overview: { label: 'Overview', icon: 'pie-chart', hint: 'Snapshot' },
+  growth: { label: 'Growth', icon: 'users', hint: 'Customers' },
+  revenue: { label: 'Revenue', icon: 'dollar-sign', hint: 'Earnings' },
+  forecast: { label: 'Forecast', icon: 'trending-up', hint: 'Next 30 days' },
+  reports: { label: 'Reports', icon: 'file-text', hint: 'Operations' },
 };
 
 const APPOINTIE_ONLY_TABS: Tab[] = ['growth', 'revenue', 'forecast', 'reports'];
@@ -41,14 +52,30 @@ function pct(value?: number | null) {
 }
 
 function changeLabel(value?: number | null) {
-  if (value == null) return null;
+  if (value == null) return undefined;
   const prefix = value > 0 ? '+' : '';
-  return `${prefix}${value}% vs prior period`;
+  return `${prefix}${value}% vs prior`;
 }
 
 function money(amount?: number | null, currency?: string | null) {
   if (amount == null) return '—';
   return `${currency ?? ''} ${Number(amount).toFixed(2)}`.trim();
+}
+
+function appointieFromOverview(data: ReturnType<typeof useBIOverview>['data']) {
+  return (
+    data?.appointie ??
+    (data?.summary && data?.revenue && data?.trends
+      ? {
+          summary: data.summary,
+          revenue: data.revenue,
+          trends: data.trends,
+          growth: data.growth,
+          operations: data.operations,
+          insights: data.insights,
+        }
+      : null)
+  );
 }
 
 export function BIScreen() {
@@ -66,7 +93,7 @@ export function BIScreen() {
     [billing?.bi_features],
   );
   const visibleTabs = useMemo(
-    () => (Object.keys(TAB_LABELS) as Tab[]).filter((key) => !APPOINTIE_ONLY_TABS.includes(key) || hasAppointie),
+    () => (Object.keys(TAB_META) as Tab[]).filter((key) => !APPOINTIE_ONLY_TABS.includes(key) || hasAppointie),
     [hasAppointie],
   );
   const [tab, setTab] = useState<Tab>(route.params?.tab ?? 'overview');
@@ -77,8 +104,14 @@ export function BIScreen() {
   const reports = useBIReports();
 
   useEffect(() => {
-    if (!visibleTabs.includes(tab) || !allowed.has(tab)) setTab('overview');
-  }, [allowed, tab, visibleTabs]);
+    if (route.params?.tab && visibleTabs.includes(route.params.tab) && allowed.has(route.params.tab)) {
+      setTab(route.params.tab);
+    }
+  }, [allowed, route.params?.tab, visibleTabs]);
+
+  useEffect(() => {
+    if (!visibleTabs.includes(tab)) setTab('overview');
+  }, [tab, visibleTabs]);
 
   const reload = async () => {
     await Promise.all([
@@ -92,29 +125,18 @@ export function BIScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const loading =
     overview.loading || growth.loading || revenue.loading || forecast.loading || reports.loading;
+  const { isDesktop } = useBreakpoint();
   const tabLocked = !allowed.has(tab);
 
   return (
     <DesktopPage>
-      <View style={styles.tabs}>
-        {visibleTabs.map((key) => {
-          const locked = !allowed.has(key);
-          return (
-            <Chip
-              key={key}
-              label={locked ? `${TAB_LABELS[key]} · Pro` : TAB_LABELS[key]}
-              active={tab === key}
-              onPress={() => {
-                if (locked) {
-                  setTab('overview');
-                  return;
-                }
-                setTab(key);
-              }}
-            />
-          );
-        })}
-      </View>
+      <BITabBar
+        tabs={visibleTabs}
+        active={tab}
+        allowed={allowed}
+        isDesktop={isDesktop}
+        onChange={setTab}
+      />
       <RefreshableScrollView
         refreshing={refreshing || loading}
         onRefresh={onRefresh}
@@ -122,10 +144,9 @@ export function BIScreen() {
       >
         {tabLocked ? (
           <Card style={styles.lockCard}>
-            <Text style={styles.lockTitle}>Pro feature</Text>
+            <Text style={styles.lockTitle}>{TAB_META[tab].label} is on Pro</Text>
             <Text style={styles.lockMeta}>
-              Your current plan includes BI Overview only. Upgrade to Pro for Growth, Revenue, Forecast, and
-              Reports.
+              Overview is included on your current plan. Upgrade to unlock Growth, Revenue, Forecast, and Reports.
             </Text>
             <Pressable style={styles.lockCta} onPress={() => navigation.navigate('ProductSettings')}>
               <Text style={styles.lockCtaText}>Upgrade plan</Text>
@@ -135,194 +156,306 @@ export function BIScreen() {
         {!tabLocked && tab === 'overview' ? <BIOverview data={overview.data} loading={overview.loading} /> : null}
         {!tabLocked && tab === 'growth' ? <BIGrowth data={growth.data} loading={growth.loading} /> : null}
         {!tabLocked && tab === 'revenue' ? <BIRevenue data={revenue.data} loading={revenue.loading} /> : null}
-        {!tabLocked && tab === 'forecast' ? <BIForecast data={forecast.data} loading={forecast.loading} /> : null}
+        {!tabLocked && tab === 'forecast' ? (
+          <BIForecast
+            data={forecast.data}
+            loading={forecast.loading}
+            recentBookings={appointieFromOverview(overview.data)?.summary?.bookings}
+          />
+        ) : null}
         {!tabLocked && tab === 'reports' ? <BIReports data={reports.data} loading={reports.loading} /> : null}
       </RefreshableScrollView>
     </DesktopPage>
   );
 }
 
-function Metric({
-  label,
-  value,
-  icon,
-  hint,
+function BITabBar({
+  tabs,
+  active,
+  allowed,
+  isDesktop,
+  onChange,
 }: {
-  label: string;
-  value: string | number;
-  icon: keyof typeof Feather.glyphMap;
-  hint?: string | null;
+  tabs: Tab[];
+  active: Tab;
+  allowed: Set<string>;
+  isDesktop: boolean;
+  onChange: (tab: Tab) => void;
 }) {
-  const { isDesktop } = useBreakpoint();
-  return (
-    <Card style={[styles.metric, isDesktop && styles.metricDesktop]}>
-      <View style={styles.metricIcon}>
-        <Feather name={icon} size={16} color={colors.primary} />
+  const buttons = tabs.map((key) => {
+    const meta = TAB_META[key];
+    const locked = !allowed.has(key);
+    const selected = active === key;
+    return (
+      <Pressable
+        key={key}
+        onPress={() => onChange(key)}
+        accessibilityRole="tab"
+        accessibilityState={{ selected, disabled: false }}
+        accessibilityLabel={locked ? `${meta.label}, Pro` : meta.label}
+        style={({ pressed }) => [
+          styles.tabBtn,
+          isDesktop && styles.tabBtnDesktop,
+          selected && styles.tabBtnActive,
+          locked && !selected && styles.tabBtnLocked,
+          pressed && styles.tabBtnPressed,
+        ]}
+      >
+        <View style={[styles.tabIconWrap, selected && styles.tabIconWrapActive]}>
+          <Feather name={meta.icon} size={15} color={selected ? colors.primaryForeground : colors.primary} />
+        </View>
+        <View style={styles.tabCopy}>
+          <View style={styles.tabLabelRow}>
+            <Text style={[styles.tabLabel, selected && styles.tabLabelActive]} numberOfLines={1}>
+              {meta.label}
+            </Text>
+            {locked ? <Feather name="lock" size={11} color={selected ? colors.primaryForeground : colors.mutedForeground} /> : null}
+          </View>
+          <Text style={[styles.tabHint, selected && styles.tabHintActive]} numberOfLines={1}>
+            {locked ? 'Pro' : meta.hint}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  });
+
+  if (isDesktop) {
+    return (
+      <View style={styles.tabBar} accessibilityRole="tablist">
+        <View style={styles.tabTrack}>{buttons}</View>
       </View>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-      {hint ? <Text style={styles.metricHint}>{hint}</Text> : null}
-    </Card>
-  );
-}
+    );
+  }
 
-function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <View style={styles.sectionHead}>
-      <Text style={styles.section}>{title}</Text>
-      {subtitle ? <Text style={styles.sectionSub}>{subtitle}</Text> : null}
-    </View>
-  );
-}
-
-function InsightCard({ title, detail }: { title: string; detail: string }) {
-  return (
-    <Card style={styles.insight}>
-      <Text style={styles.insightTitle}>{title}</Text>
-      <Text style={styles.insightDetail}>{detail}</Text>
-    </Card>
-  );
-}
-
-function MiniBar({ label, value, max }: { label: string; value: number; max: number }) {
-  const width = max > 0 ? Math.max((value / max) * 100, value > 0 ? 6 : 0) : 0;
-  return (
-    <View style={styles.barRow}>
-      <Text style={styles.barLabel}>{label}</Text>
-      <View style={styles.barTrack}>
-        <View style={[styles.barFill, { width: `${width}%` }]} />
-      </View>
-      <Text style={styles.barValue}>{value}</Text>
+    <View style={styles.tabBar} accessibilityRole="tablist">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabScroll}
+      >
+        {buttons}
+      </ScrollView>
     </View>
   );
 }
 
 function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>['data']; loading: boolean }) {
-  if (loading && !data) return <ScreenState loading />;
-
-  const appointieBundle =
-    data?.appointie ??
-    (data?.summary && data?.revenue && data?.trends
-      ? {
-          summary: data.summary,
-          revenue: data.revenue,
-          trends: data.trends,
-          growth: data.growth,
-          operations: data.operations,
-          insights: data.insights,
-        }
-      : null);
+  const appointieBundle = appointieFromOverview(data);
   const shopie = data?.shopie;
   const pets = data?.pets;
   const summary = appointieBundle?.summary;
   const comparison = summary?.comparison;
-  const operations = appointieBundle?.operations;
-  const weekdayMax = Math.max(...(operations?.by_weekday ?? []).map((row) => row.total), 1);
+  const currency = appointieBundle?.revenue?.currency ?? shopie?.currency ?? data?.currency ?? '';
+
+  const bookingTrend = useMemo(
+    () =>
+      fillDailySeries((appointieBundle?.trends?.rows ?? []).map((row) => ({ day: row.day, value: row.total }))),
+    [appointieBundle?.trends?.rows],
+  );
+  const gmvTrend = useMemo(
+    () => fillDailySeries((shopie?.trend ?? []).map((row) => ({ day: row.day, value: Number(row.gmv || 0) }))),
+    [shopie?.trend],
+  );
+  const weekdayBars = useMemo(() => {
+    const busiest = appointieBundle?.operations?.busiest_day;
+    return (appointieBundle?.operations?.by_weekday ?? []).map((row) => ({
+      label: row.weekday_name.slice(0, 3),
+      value: row.total,
+      highlight: busiest === row.weekday_name,
+    }));
+  }, [appointieBundle?.operations]);
+  const bookingMix = useMemo(() => {
+    if (!summary || !summary.bookings) return [];
+    const other = Math.max(
+      0,
+      summary.bookings - (summary.completed ?? 0) - (summary.cancelled ?? 0) - (summary.no_shows ?? 0),
+    );
+    return [
+      { label: 'Completed', value: summary.completed ?? 0, color: iconTones.green.foreground },
+      { label: 'Cancelled', value: summary.cancelled ?? 0, color: iconTones.rose.foreground },
+      { label: 'No-show', value: summary.no_shows ?? 0, color: iconTones.coral.foreground },
+      { label: 'Open', value: other, color: iconTones.blue.foreground },
+    ].filter((slice) => slice.value > 0);
+  }, [summary]);
+  const serviceMix = useMemo(() => {
+    const palette = [
+      iconTones.blue.foreground,
+      iconTones.violet.foreground,
+      iconTones.cyan.foreground,
+      iconTones.amber.foreground,
+      iconTones.coral.foreground,
+    ];
+    return (appointieBundle?.revenue?.by_service ?? [])
+      .filter((row) => Number(row.revenue) > 0)
+      .slice(0, 5)
+      .map((row, index) => ({
+        label: row.service_name || 'Service',
+        value: Number(row.revenue),
+        color: palette[index % palette.length],
+      }));
+  }, [appointieBundle?.revenue?.by_service]);
+  const staffBars = useMemo(
+    () =>
+      (appointieBundle?.operations?.by_staff ?? []).slice(0, 7).map((row, index) => ({
+        label: row.staff_name.split(' ')[0] || row.staff_name,
+        value: row.bookings,
+        highlight: index === 0,
+      })),
+    [appointieBundle?.operations?.by_staff],
+  );
+  const orderMix = useMemo(() => {
+    if (!shopie) return [];
+    return [
+      { label: 'Orders', value: shopie.orders, color: iconTones.green.foreground },
+      { label: 'Cancelled', value: shopie.cancelled_orders, color: iconTones.rose.foreground },
+      { label: 'Returns', value: shopie.returns, color: iconTones.coral.foreground },
+    ].filter((slice) => slice.value > 0);
+  }, [shopie]);
+  const highlights = useMemo(
+    () => [...(appointieBundle?.insights ?? []), ...(shopie?.insights ?? [])],
+    [appointieBundle?.insights, shopie?.insights],
+  );
+
+  if (loading && !data) return <ScreenState loading />;
 
   return (
     <View style={styles.stack}>
-      <SectionTitle
-        title="Last 30 days"
-        subtitle={
-          data?.products?.length
-            ? `Snapshot for ${data.products.join(' · ')}.`
-            : 'Snapshot of bookings, revenue, and demand.'
-        }
-      />
+      <View>
+        <Text style={styles.heroTitle}>Last 30 days</Text>
+        <Text style={styles.heroHint}>
+          Hover or tap a chart to see the exact count. {data?.products?.length ? data.products.join(' · ') : ''}
+        </Text>
+      </View>
 
       {appointieBundle ? (
-        <View style={styles.stack}>
-          <SectionTitle title="Orbit Appoint" subtitle="Bookings and estimated revenue." />
-          <View style={styles.grid}>
-            <Metric
+        <>
+          <TileGrid gap={spacing.md}>
+            <StatTile
               label="Bookings"
-              value={summary?.bookings ?? 0}
-              icon="calendar"
+              value={String(summary?.bookings ?? 0)}
               hint={changeLabel(comparison?.bookings_change_pct)}
+              icon="calendar"
+              iconTone="blue"
             />
-            <Metric
+            <StatTile
               label="Est. revenue"
-              value={money(appointieBundle.revenue?.estimated_revenue, appointieBundle.revenue?.currency)}
-              icon="dollar-sign"
+              value={money(appointieBundle.revenue?.estimated_revenue, currency)}
               hint={changeLabel(comparison?.revenue_change_pct)}
+              icon="trending-up"
+              iconTone="green"
             />
-            <Metric label="Completed" value={summary?.completed ?? 0} icon="check-circle" hint={pct(summary?.completion_rate)} />
-            <Metric label="No-shows" value={summary?.no_shows ?? 0} icon="user-x" hint={pct(summary?.no_show_rate)} />
-            <Metric label="Cancelled" value={summary?.cancelled ?? 0} icon="x-circle" hint={pct(summary?.cancellation_rate)} />
-            <Metric
+            <StatTile
+              label="Completed"
+              value={String(summary?.completed ?? 0)}
+              hint={pct(summary?.completion_rate)}
+              icon="check-circle"
+              iconTone="green"
+            />
+            <StatTile
               label="Avg / day"
-              value={summary?.avg_bookings_per_day ?? 0}
+              value={String(summary?.avg_bookings_per_day ?? 0)}
+              hint={appointieBundle.operations?.busiest_day ? `Peak ${appointieBundle.operations.busiest_day}` : undefined}
               icon="activity"
-              hint={operations?.busiest_day ? `Peak: ${operations.busiest_day}` : null}
+              iconTone="violet"
             />
-          </View>
-
-          {(appointieBundle.insights ?? []).length ? (
-            <View style={styles.stack}>
-              <SectionTitle title="What stands out" />
-              {(appointieBundle.insights ?? []).map((insight) => (
-                <InsightCard key={`${insight.type}-${insight.title}`} title={insight.title} detail={insight.detail} />
-              ))}
-            </View>
-          ) : null}
-
-          {operations?.by_weekday?.length ? (
-            <Card>
-              <SectionTitle title="Demand by weekday" subtitle="Plan staffing around busy days." />
-              <View style={styles.barList}>
-                {operations.by_weekday.map((row) => (
-                  <MiniBar key={row.weekday} label={row.weekday_name.slice(0, 3)} value={row.total} max={weekdayMax} />
-                ))}
-              </View>
-            </Card>
-          ) : null}
-
-          {(operations?.by_staff ?? []).length ? (
-            <View style={styles.stack}>
-              <SectionTitle title="Top staff" subtitle="By bookings this period." />
-              {(operations?.by_staff ?? []).slice(0, 5).map((row) => (
-                <Card key={row.staff_id} style={styles.serviceRow}>
-                  <View style={styles.flex}>
-                    <Text style={styles.serviceName}>{row.staff_name}</Text>
-                    <Text style={styles.rowMeta}>
-                      {row.completed} completed · {row.no_shows} no-show
-                    </Text>
-                  </View>
-                  <Text style={styles.serviceValue}>{row.bookings}</Text>
-                </Card>
-              ))}
-            </View>
-          ) : null}
-        </View>
+          </TileGrid>
+        </>
       ) : null}
 
       {shopie ? (
-        <View style={styles.stack}>
-          <SectionTitle title="Orbit Mart" subtitle="Orders, GMV, returns, and delivery." />
-          <View style={styles.grid}>
-            <Metric label="Orders" value={shopie.orders} icon="shopping-cart" />
-            <Metric label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" />
-            <Metric label="Avg order" value={money(shopie.avg_order_value, shopie.currency)} icon="tag" />
-            <Metric label="Returns" value={shopie.returns} icon="rotate-ccw" hint={pct(shopie.return_rate)} />
-            <Metric label="Pending returns" value={shopie.pending_returns} icon="clock" />
-            <Metric label="Delivery fees" value={money(shopie.delivery_fee_total, shopie.currency)} icon="truck" />
-          </View>
-          {(shopie.insights ?? []).map((insight) => (
-            <InsightCard key={`${insight.type}-${insight.title}`} title={insight.title} detail={insight.detail} />
-          ))}
-        </View>
+        <>
+          {appointieBundle ? <Text style={styles.section}>Orbit Mart</Text> : null}
+          <TileGrid gap={spacing.md}>
+            <StatTile label="Orders" value={String(shopie.orders)} icon="shopping-bag" iconTone="green" />
+            <StatTile label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" iconTone="green" />
+            <StatTile
+              label="Avg order"
+              value={money(shopie.avg_order_value, shopie.currency)}
+              icon="tag"
+              iconTone="amber"
+            />
+            <StatTile
+              label="Returns"
+              value={String(shopie.returns)}
+              hint={pct(shopie.return_rate)}
+              icon="rotate-ccw"
+              iconTone="coral"
+            />
+          </TileGrid>
+        </>
+      ) : null}
+
+      <InsightPanel
+        title="What stands out"
+        subtitle="Signals from the last 30 days — what to act on next."
+        insights={highlights}
+      />
+
+      {appointieBundle ? (
+        <>
+          {bookingTrend.some((row) => row.value > 0) ? (
+            <ChartCard title="Bookings over time" subtitle="Daily volume · hover a day for the count">
+              <LineAreaChart data={bookingTrend} color={iconTones.blue.foreground} unit="bookings" />
+            </ChartCard>
+          ) : null}
+
+          <ChartGrid>
+            {bookingMix.length ? (
+              <ChartCard title="Booking mix" subtitle="Outcomes this period">
+                <DonutChart data={bookingMix} centerLabel="bookings" />
+              </ChartCard>
+            ) : null}
+            {weekdayBars.some((row) => row.value > 0) ? (
+              <ChartCard title="Demand by weekday" subtitle="Plan staffing around busy days">
+                <BarChart data={weekdayBars} unit="bookings" />
+              </ChartCard>
+            ) : null}
+            {serviceMix.length ? (
+              <ChartCard title="Revenue by service" subtitle="Top services">
+                <DonutChart data={serviceMix} centerLabel={currency || 'rev'} formatValue={formatAxisValue} />
+              </ChartCard>
+            ) : null}
+            {staffBars.length ? (
+              <ChartCard title="Top staff" subtitle="Bookings this period">
+                <BarChart data={staffBars} unit="bookings" />
+              </ChartCard>
+            ) : null}
+          </ChartGrid>
+        </>
+      ) : null}
+
+      {shopie ? (
+        <>
+          {gmvTrend.some((row) => row.value > 0) ? (
+            <ChartCard title="Sales (GMV)" subtitle="Daily sales · hover a day for the amount">
+              <LineAreaChart
+                data={gmvTrend}
+                color={iconTones.green.foreground}
+                formatValue={(value) => Number(value).toFixed(2)}
+                unit={shopie.currency ?? currency}
+              />
+            </ChartCard>
+          ) : null}
+          {orderMix.length ? (
+            <ChartCard title="Order mix" subtitle="Orders, cancellations, and returns">
+              <DonutChart data={orderMix} centerLabel="orders" />
+            </ChartCard>
+          ) : null}
+        </>
       ) : null}
 
       {pets ? (
-        <View style={styles.stack}>
-          <SectionTitle title="Pets pack" subtitle="Roster and birthday pipeline." />
-          <View style={styles.grid}>
-            <Metric label="Pets" value={pets.total} icon="heart" />
-            <Metric label="Birthdays 7d" value={pets.birthdays_next_7d} icon="gift" />
-            <Metric label="Birthdays 30d" value={pets.birthdays_next_30d} icon="calendar" />
-            <Metric label="With photo" value={pets.with_photo} icon="camera" />
-          </View>
-        </View>
+        <ChartCard title="Pets pack" subtitle={`${pets.birthdays_next_7d} birthdays in 7 days`}>
+          <DonutChart
+            data={[
+              { label: 'With photo', value: pets.with_photo, color: iconTones.rose.foreground },
+              { label: 'No photo', value: Math.max(0, pets.total - pets.with_photo), color: colors.muted },
+            ]}
+            centerValue={String(pets.total)}
+            centerLabel="pets"
+          />
+        </ChartCard>
       ) : null}
 
       {!appointieBundle && !shopie && !pets ? (
@@ -336,98 +469,183 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
 
 function BIGrowth({ data, loading }: { data: ReturnType<typeof useBIGrowth>['data']; loading: boolean }) {
   if (loading && !data) return <ScreenState loading />;
+  const mix = [
+    { label: 'New', value: data?.new_customers ?? 0, color: iconTones.cyan.foreground },
+    { label: 'Returning', value: data?.returning_customers ?? 0, color: iconTones.violet.foreground },
+  ].filter((slice) => slice.value > 0);
+  const customerBars = (data?.top_customers ?? []).slice(0, 7).map((row, index) => ({
+    label: row.customer_name.split(' ')[0] || row.customer_name,
+    value: row.bookings,
+    highlight: index === 0,
+  }));
+
   return (
     <View style={styles.stack}>
-      <SectionTitle title="Customer growth" subtitle="Who is booking — and who comes back." />
-      <View style={styles.grid}>
-        <Metric label="New customers" value={data?.new_customers ?? 0} icon="user-plus" />
-        <Metric label="Returning" value={data?.returning_customers ?? 0} icon="refresh-cw" />
-        <Metric label="Repeat rate" value={pct(data?.repeat_rate)} icon="repeat" />
-        <Metric label="Avg visits" value={data?.avg_visits_per_customer ?? 0} icon="layers" />
+      <View>
+        <Text style={styles.heroTitle}>Customer growth</Text>
+        <Text style={styles.heroHint}>Who is booking — and who comes back.</Text>
       </View>
-      {(data?.top_customers ?? []).length ? (
-        <View style={styles.stack}>
-          <SectionTitle title="Most active customers" />
-          {(data?.top_customers ?? []).map((row) => (
-            <Card key={row.customer_id} style={styles.serviceRow}>
-              <View style={styles.flex}>
-                <Text style={styles.serviceName}>{row.customer_name}</Text>
-                <Text style={styles.rowMeta}>
-                  {row.bookings} bookings{row.is_returning ? ' · returning' : ' · new'}
-                </Text>
-              </View>
-              <Text style={styles.serviceValue}>{Number(row.revenue).toFixed(0)}</Text>
-            </Card>
-          ))}
-        </View>
-      ) : (
+      <TileGrid gap={spacing.md}>
+        <StatTile label="New" value={String(data?.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
+        <StatTile label="Returning" value={String(data?.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
+        <StatTile label="Repeat rate" value={pct(data?.repeat_rate)} icon="repeat" iconTone="green" />
+        <StatTile label="Avg visits" value={String(data?.avg_visits_per_customer ?? 0)} icon="layers" iconTone="blue" />
+      </TileGrid>
+      <ChartGrid>
+        {mix.length ? (
+          <ChartCard title="New vs returning" subtitle="Hover a slice for the count">
+            <DonutChart data={mix} centerLabel="customers" />
+          </ChartCard>
+        ) : null}
+        {customerBars.length ? (
+          <ChartCard title="Most active customers" subtitle="Bookings this period">
+            <BarChart data={customerBars} unit="bookings" />
+          </ChartCard>
+        ) : null}
+      </ChartGrid>
+      {!customerBars.length ? (
         <Card>
           <Text style={styles.empty}>No customer booking activity in this period yet.</Text>
         </Card>
-      )}
+      ) : null}
     </View>
   );
 }
 
 function BIRevenue({ data, loading }: { data: ReturnType<typeof useBIRevenue>['data']; loading: boolean }) {
   if (loading && !data) return <ScreenState loading />;
+  const palette = [
+    iconTones.blue.foreground,
+    iconTones.violet.foreground,
+    iconTones.cyan.foreground,
+    iconTones.amber.foreground,
+    iconTones.coral.foreground,
+    iconTones.green.foreground,
+  ];
+  const mix = (data?.by_service ?? [])
+    .filter((row) => Number(row.revenue) > 0)
+    .slice(0, 6)
+    .map((row, index) => ({
+      label: row.service_name || 'Service',
+      value: Number(row.revenue),
+      color: palette[index % palette.length],
+    }));
+  const bars = (data?.by_service ?? []).slice(0, 7).map((row, index) => ({
+    label: (row.service_name || 'Service').slice(0, 10),
+    value: Number(row.revenue),
+    highlight: index === 0,
+  }));
+
   return (
     <View style={styles.stack}>
-      <SectionTitle title="Revenue" subtitle="Estimated from service list prices × bookings." />
-      <View style={styles.grid}>
-        <Metric
+      <View>
+        <Text style={styles.heroTitle}>Revenue</Text>
+        <Text style={styles.heroHint}>Estimated from service list prices × bookings.</Text>
+      </View>
+      <TileGrid gap={spacing.md}>
+        <StatTile
           label="Estimated"
           value={money(data?.estimated_revenue, data?.currency)}
           icon="dollar-sign"
+          iconTone="green"
         />
-        <Metric
+        <StatTile
           label="Completed"
           value={money(data?.completed_revenue, data?.currency)}
           icon="check-circle"
+          iconTone="green"
         />
-        <Metric
+        <StatTile
           label="Avg booking"
           value={money(data?.avg_booking_value, data?.currency)}
           icon="tag"
+          iconTone="amber"
         />
-      </View>
-      {(data?.by_service ?? []).slice(0, 8).map((row) => (
-        <Card key={row.service_id ?? row.service_name} style={styles.serviceRow}>
-          <View style={styles.flex}>
-            <Text style={styles.serviceName}>{row.service_name ?? row.service_id}</Text>
-            <Text style={styles.rowMeta}>
-              {row.bookings ?? 0} bookings · {row.completed ?? 0} completed
-            </Text>
-          </View>
-          <Text style={styles.serviceValue}>{Number(row.revenue).toFixed(2)}</Text>
-        </Card>
-      ))}
+      </TileGrid>
+      <ChartGrid>
+        {mix.length ? (
+          <ChartCard title="Mix by service" subtitle="Hover a slice for the amount">
+            <DonutChart data={mix} centerLabel={data?.currency || 'rev'} formatValue={formatAxisValue} />
+          </ChartCard>
+        ) : null}
+        {bars.length ? (
+          <ChartCard title="Top services" subtitle="Estimated revenue">
+            <BarChart data={bars} formatValue={formatAxisValue} unit={data?.currency} />
+          </ChartCard>
+        ) : null}
+      </ChartGrid>
     </View>
   );
 }
 
-function BIForecast({ data, loading }: { data: ReturnType<typeof useBIForecast>['data']; loading: boolean }) {
+function BIForecast({
+  data,
+  loading,
+  recentBookings,
+}: {
+  data: ReturnType<typeof useBIForecast>['data'];
+  loading: boolean;
+  recentBookings?: number;
+}) {
   if (loading && !data) return <ScreenState loading />;
+  const bookingCompare = [
+    { label: 'Last 30d', value: recentBookings ?? data?.based_on_bookings ?? 0 },
+    { label: 'Next 30d', value: data?.projected_bookings ?? 0, highlight: true },
+  ];
+  const revenueCompare = [
+    {
+      label: 'Avg / day',
+      value: Number(data?.avg_daily_revenue ?? 0),
+    },
+    {
+      label: 'Projected',
+      value: Number(data?.projected_revenue ?? 0),
+      highlight: true,
+    },
+  ];
+
   return (
     <View style={styles.stack}>
-      <SectionTitle
-        title={`Next ${data?.horizon_days ?? 30} days`}
-        subtitle={`Based on the last ${data?.based_on_days ?? 30} days (${data?.based_on_bookings ?? 0} bookings).`}
-      />
-      <View style={styles.grid}>
-        <Metric label="Projected bookings" value={data?.projected_bookings ?? 0} icon="calendar" />
-        <Metric
+      <View>
+        <Text style={styles.heroTitle}>{`Next ${data?.horizon_days ?? 30} days`}</Text>
+        <Text style={styles.heroHint}>
+          Based on the last {data?.based_on_days ?? 30} days ({data?.based_on_bookings ?? 0} bookings).
+        </Text>
+      </View>
+      <TileGrid gap={spacing.md}>
+        <StatTile
+          label="Projected bookings"
+          value={String(data?.projected_bookings ?? 0)}
+          icon="calendar"
+          iconTone="blue"
+        />
+        <StatTile
           label="Projected revenue"
           value={money(data?.projected_revenue, data?.currency)}
           icon="dollar-sign"
+          iconTone="green"
         />
-        <Metric label="Avg daily bookings" value={data?.avg_daily_bookings ?? 0} icon="activity" />
-        <Metric
+        <StatTile
+          label="Avg daily bookings"
+          value={String(data?.avg_daily_bookings ?? 0)}
+          icon="activity"
+          iconTone="violet"
+        />
+        <StatTile
           label="Avg daily revenue"
           value={money(data?.avg_daily_revenue, data?.currency)}
           icon="trending-up"
+          iconTone="green"
         />
-      </View>
+      </TileGrid>
+      <ChartGrid>
+        <ChartCard title="Bookings outlook" subtitle="Hover a bar for the count">
+          <BarChart data={bookingCompare} unit="bookings" />
+        </ChartCard>
+        <ChartCard title="Revenue outlook" subtitle="Hover a bar for the amount">
+          <BarChart data={revenueCompare} formatValue={formatAxisValue} unit={data?.currency} />
+        </ChartCard>
+      </ChartGrid>
     </View>
   );
 }
@@ -435,55 +653,119 @@ function BIForecast({ data, loading }: { data: ReturnType<typeof useBIForecast>[
 function BIReports({ data, loading }: { data: ReturnType<typeof useBIReports>['data']; loading: boolean }) {
   if (loading && !data) return <ScreenState loading />;
   const summary = data?.summary;
-  const trendMax = Math.max(...(data?.trends?.rows ?? []).map((row) => row.total), 1);
-  const recent = (data?.trends?.rows ?? []).slice(-10);
+  const trend = fillDailySeries((data?.trends?.rows ?? []).map((row) => ({ day: row.day, value: row.total })));
+  const mix = summary
+    ? [
+        { label: 'Completed', value: summary.completed ?? 0, color: iconTones.green.foreground },
+        { label: 'Cancelled', value: summary.cancelled ?? 0, color: iconTones.rose.foreground },
+        { label: 'No-show', value: summary.no_shows ?? 0, color: iconTones.coral.foreground },
+      ].filter((slice) => slice.value > 0)
+    : [];
 
   return (
     <View style={styles.stack}>
-      <SectionTitle title="Operations report" subtitle="Combined summary for the last 30 days." />
-      <View style={styles.grid}>
-        <Metric label="Bookings" value={summary?.bookings ?? 0} icon="calendar" />
-        <Metric label="Completion" value={pct(summary?.completion_rate)} icon="check-circle" />
-        <Metric
+      <View>
+        <Text style={styles.heroTitle}>Operations report</Text>
+        <Text style={styles.heroHint}>Combined summary for the last 30 days.</Text>
+      </View>
+      <TileGrid gap={spacing.md}>
+        <StatTile label="Bookings" value={String(summary?.bookings ?? 0)} icon="calendar" iconTone="blue" />
+        <StatTile label="Completion" value={pct(summary?.completion_rate)} icon="check-circle" iconTone="green" />
+        <StatTile
           label="Est. revenue"
           value={money(data?.revenue?.estimated_revenue, data?.revenue?.currency)}
           icon="trending-up"
+          iconTone="green"
         />
-        <Metric label="Repeat rate" value={pct(data?.growth?.repeat_rate)} icon="repeat" />
-      </View>
-
-      {recent.length ? (
-        <Card>
-          <SectionTitle title="Recent daily trend" />
-          <View style={styles.barList}>
-            {recent.map((row) => (
-              <MiniBar key={row.day} label={row.day.slice(5)} value={row.total} max={trendMax} />
-            ))}
-          </View>
-        </Card>
+        <StatTile label="Repeat rate" value={pct(data?.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
+      </TileGrid>
+      <InsightPanel
+        title="Insights"
+        subtitle="What this report is telling you — and what to do about it."
+        insights={data?.insights ?? []}
+      />
+      {trend.some((row) => row.value > 0) ? (
+        <ChartCard title="Daily trend" subtitle="Hover a day for the booking count">
+          <LineAreaChart data={trend} color={iconTones.blue.foreground} unit="bookings" />
+        </ChartCard>
       ) : null}
-
-      {(data?.insights ?? []).length ? (
-        <View style={styles.stack}>
-          <SectionTitle title="Insights" />
-          {(data?.insights ?? []).map((insight) => (
-            <InsightCard key={`${insight.type}-${insight.title}`} title={insight.title} detail={insight.detail} />
-          ))}
-        </View>
+      {mix.length ? (
+        <ChartCard title="Outcomes" subtitle="Hover a slice for the count">
+          <DonutChart data={mix} centerLabel="bookings" />
+        </ChartCard>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+  tabBar: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
   },
+  tabTrack: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 4,
+    gap: 4,
+  },
+  tabScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: spacing.sm,
+  },
+  tabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minWidth: 132,
+  },
+  tabBtnDesktop: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+  tabBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  tabBtnLocked: {
+    opacity: 0.78,
+  },
+  tabBtnPressed: {
+    opacity: 0.92,
+  },
+  tabIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconWrapActive: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  tabCopy: { flex: 1, minWidth: 0, gap: 1 },
+  tabLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tabLabel: { ...typography.label, fontFamily: fonts.bodySemi, color: colors.foreground },
+  tabLabelActive: { color: colors.primaryForeground },
+  tabHint: { ...typography.tiny, color: colors.mutedForeground },
+  tabHintActive: { color: 'rgba(255,255,255,0.78)' },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
   lockCard: { gap: spacing.sm },
   lockTitle: { ...typography.title, fontSize: 18, color: colors.foreground },
@@ -497,44 +779,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   lockCtaText: { ...typography.caption, fontWeight: '700', color: '#fff' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   stack: { gap: spacing.md },
-  metric: { width: '47%' },
-  metricDesktop: { width: '23%' },
-  metricIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    backgroundColor: colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  metricLabel: { ...typography.caption, color: colors.mutedForeground },
-  metricValue: { ...typography.heading, fontSize: 18, color: colors.primary, marginTop: 4 },
-  metricHint: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
-  sectionHead: { gap: 4 },
+  heroTitle: { ...typography.title, fontSize: 20, color: colors.foreground },
+  heroHint: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
   section: { ...typography.title, fontSize: 16, color: colors.foreground },
-  sectionSub: { ...typography.caption, color: colors.mutedForeground },
-  serviceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  serviceName: { ...typography.body, color: colors.foreground, fontWeight: '600' },
-  serviceValue: { ...typography.label, color: colors.primary, fontWeight: '700' },
-  rowMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
-  flex: { flex: 1 },
-  insight: { gap: 4 },
-  insightTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
-  insightDetail: { ...typography.caption, color: colors.mutedForeground },
-  barList: { gap: spacing.sm, marginTop: spacing.md },
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  barLabel: { width: 36, ...typography.caption, color: colors.mutedForeground },
-  barTrack: {
-    flex: 1,
-    height: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.secondary,
-    overflow: 'hidden',
-  },
-  barFill: { height: '100%', backgroundColor: colors.primary, borderRadius: radius.full },
-  barValue: { width: 28, textAlign: 'right', ...typography.caption, color: colors.foreground },
   empty: { ...typography.body, color: colors.mutedForeground },
 });

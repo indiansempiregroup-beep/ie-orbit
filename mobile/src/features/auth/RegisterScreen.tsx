@@ -11,6 +11,8 @@ import { Input } from '../../components/ui/Input';
 import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { emailFieldError } from '../../utils/emailValidation';
+import { indianMobileError, passwordFieldError, requiredMessage } from '../../utils/formValidation';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import { mobileClient } from '../../api/client';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -44,6 +46,7 @@ export function RegisterScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function applyReferralIfNeeded() {
@@ -63,10 +66,19 @@ export function RegisterScreen({ navigation }: Props) {
 
   async function onSubmit() {
     setError('');
-    if (!email.trim() || !password) {
-      setError('Email and password are required.');
+    const nextErrors: Record<string, string> = {};
+    if (!firstName.trim()) nextErrors.firstName = requiredMessage('First name');
+    const emailError = emailFieldError(email);
+    if (emailError) nextErrors.email = emailError;
+    const phoneError = indianMobileError(phone, false);
+    if (phoneError) nextErrors.phone = phoneError;
+    const passwordError = passwordFieldError(password);
+    if (passwordError) nextErrors.password = passwordError;
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
       return;
     }
+    setFieldErrors({});
     setSubmitting(true);
     try {
       await register({
@@ -100,7 +112,17 @@ export function RegisterScreen({ navigation }: Props) {
         <View style={styles.form}>
           <View style={styles.nameRow}>
             <View style={styles.nameField}>
-              <Input label="First name" placeholder="Sarah" value={firstName} onChangeText={setFirstName} />
+              <Input
+                label="First name"
+                required
+                placeholder="Sarah"
+                value={firstName}
+                onChangeText={(value) => {
+                  setFirstName(value);
+                  setFieldErrors((current) => ({ ...current, firstName: '' }));
+                }}
+                error={fieldErrors.firstName}
+              />
             </View>
             <View style={styles.nameField}>
               <Input label="Last name" placeholder="Mitchell" value={lastName} onChangeText={setLastName} />
@@ -108,33 +130,49 @@ export function RegisterScreen({ navigation }: Props) {
           </View>
           <Input
             label="Email"
+            required
             leftIcon="mail"
             placeholder="you@example.com"
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(value) => {
+              setEmail(value);
+              setFieldErrors((current) => ({ ...current, email: '' }));
+            }}
+            error={fieldErrors.email}
           />
           <Input
-            label="Phone (optional)"
+            label="Phone"
+            optional
             leftIcon="phone"
             placeholder="+1 555 000 0000"
             keyboardType="phone-pad"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) => {
+              setPhone(value);
+              setFieldErrors((current) => ({ ...current, phone: '' }));
+            }}
+            error={fieldErrors.phone}
           />
           <Input
             label="Password"
+            required
             leftIcon="lock"
             placeholder="Min. 8 characters"
             secureTextEntry
             hint="Use a mix of letters, numbers, and symbols"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(value) => {
+              setPassword(value);
+              setFieldErrors((current) => ({ ...current, password: '' }));
+            }}
+            error={fieldErrors.password}
           />
           {bootstrap?.referral?.enabled ? (
             <Input
-              label="Invite code (optional)"
+              label="Invite code"
+              optional
               leftIcon="gift"
               placeholder="Friend's code"
               autoCapitalize="characters"

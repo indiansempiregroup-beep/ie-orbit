@@ -173,6 +173,8 @@ export function useBIOverview(enabled = true) {
       const start = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
       const response = await client.bi.overview({ start_date: start, end_date: end });
       setData(response.data);
+    } catch {
+      setData(null);
     } finally {
       setLoading(false);
     }

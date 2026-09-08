@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { passwordFieldError } from '../../utils/formValidation';
 import type { AuthStackParamList } from '../../navigation/types';
 
 export function ResetPasswordScreen() {
@@ -32,6 +33,11 @@ export function ResetPasswordScreen() {
             setLoading(true);
             setError(null);
             try {
+              const passwordError = passwordFieldError(password);
+              if (passwordError) {
+                setError(passwordError);
+                return;
+              }
               await opsClient.auth.resetPassword({ token, new_password: password });
               navigation.navigate('Login');
             } catch (err) {
@@ -44,8 +50,19 @@ export function ResetPasswordScreen() {
       }
     >
       <Text style={styles.copy}>Choose a new password for your OPS-Mobile account.</Text>
-      <Input label="New password" secureTextEntry value={password} onChangeText={setPassword} />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Input
+        label="New password"
+        required
+        secureTextEntry
+        value={password}
+        onChangeText={(value) => {
+          setPassword(value);
+          setError(null);
+        }}
+        error={error && error.toLowerCase().includes('password') ? error : undefined}
+        hint="At least 8 characters, with upper, lower, and a number."
+      />
+      {error && !error.toLowerCase().includes('password') ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
   );
 }

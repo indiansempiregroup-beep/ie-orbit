@@ -7,6 +7,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { FormAlert } from '../../components/ui/FormAlert';
@@ -166,14 +167,11 @@ export function ShopDeliverySettingsScreen() {
         />
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>Instant delivery</Text>
-        <Text style={styles.help}>
-          Connect your own Porter or Shiprocket Quick account. The provider bills your account
-          directly. Orbit Mart quotes the customer at checkout and books a rider only when you tap
-          Dispatch on a packed order.
-        </Text>
-      </View>
+      <FormHero
+        icon="truck"
+        title="Instant delivery"
+        subtitle="Connect your own Porter or Shiprocket Quick account. Orbit Mart quotes the customer at checkout and books a rider when you dispatch a packed order."
+      />
 
       {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
       {error ? <FormAlert message={error} /> : null}
@@ -205,6 +203,7 @@ export function ShopDeliverySettingsScreen() {
 
       <SelectField
         label="Delivery provider"
+        required
         value={provider}
         options={PROVIDER_OPTIONS}
         onChange={(next) => {
@@ -219,6 +218,7 @@ export function ShopDeliverySettingsScreen() {
         <>
           <Input
             label="API base URL"
+            optional
             value={baseUrl}
             onChangeText={setBaseUrl}
             placeholder="https://…"
@@ -232,11 +232,9 @@ export function ShopDeliverySettingsScreen() {
             }
           />
           <Input
-            label={
-              provider === 'porter'
-                ? 'Porter API key'
-                : 'API token (optional if email/password is set)'
-            }
+            label={provider === 'porter' ? 'Porter API key' : 'API token'}
+            required={provider === 'porter' && !storedSecrets.api_key}
+            optional={provider !== 'porter'}
             value={apiKey}
             onChangeText={setApiKey}
             secureTextEntry
@@ -261,6 +259,7 @@ export function ShopDeliverySettingsScreen() {
               </View>
               <Input
                 label="API user email"
+                required
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -269,6 +268,7 @@ export function ShopDeliverySettingsScreen() {
               />
               <Input
                 label="API user password"
+                required={!storedSecrets.password}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -282,12 +282,14 @@ export function ShopDeliverySettingsScreen() {
               />
               <Input
                 label="Pickup location name"
+                required
                 value={pickupLocation}
                 onChangeText={setPickupLocation}
                 hint="Must match the nickname in Shiprocket Settings → Pickup."
               />
               <Input
                 label="Default parcel weight (kg)"
+                optional
                 value={parcelWeight}
                 onChangeText={setParcelWeight}
                 keyboardType="decimal-pad"
@@ -296,6 +298,7 @@ export function ShopDeliverySettingsScreen() {
           ) : null}
           <Input
             label="Webhook signing secret"
+            optional
             value={webhookSecret}
             onChangeText={setWebhookSecret}
             secureTextEntry
@@ -333,12 +336,14 @@ export function ShopDeliverySettingsScreen() {
 
       <SelectField
         label="Who pays the delivery fee?"
+        required
         value={chargeBearer}
         options={BEARER_OPTIONS}
         onChange={setChargeBearer}
       />
       <Input
         label="Free delivery above order value"
+        optional
         value={freeMin}
         onChangeText={setFreeMin}
         keyboardType="decimal-pad"
@@ -347,6 +352,7 @@ export function ShopDeliverySettingsScreen() {
       {chargeBearer === 'split' ? (
         <Input
           label="Shop absorbs up to"
+          optional
           value={absorbCap}
           onChangeText={setAbsorbCap}
           keyboardType="decimal-pad"
@@ -358,9 +364,6 @@ export function ShopDeliverySettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  intro: { gap: spacing.sm },
-  title: { fontFamily: fonts.bodyBold, fontSize: 20, color: colors.foreground },
-  help: { ...typography.body, color: colors.mutedForeground, lineHeight: 20 },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.md,

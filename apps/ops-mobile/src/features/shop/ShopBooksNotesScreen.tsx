@@ -19,14 +19,19 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
-import { colors, fonts, radius, spacing } from '../../theme/tokens';
+import { SearchBar } from '../../components/SearchBar';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksVoucher } from '@ie-orbit/sdk';
 import {
   formatMoney,
+  formatVoucherDateTime,
   isVoidedVoucher,
+  summarizeVouchers,
   voucherPartyLabel,
-  voucherStatusStyle,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 
@@ -43,6 +48,7 @@ export function ShopBooksNotesScreen() {
   const [vouchers, setVouchers] = useState<ShopBooksVoucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -82,6 +88,16 @@ export function ShopBooksNotesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
+  const filtered = vouchers.filter((item) => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+    return [item.voucher_number, voucherPartyLabel(item), String(item.total), item.voucher_date ?? '']
+      .join(' ')
+      .toLowerCase()
+      .includes(term);
+  });
+  const summary = summarizeVouchers(filtered);
+
   async function onVoid(voucher: ShopBooksVoucher) {
     if (!client) return;
     Alert.alert('Void note', `Void ${voucher.voucher_number}? This cannot be undone.`, [
@@ -105,62 +121,56 @@ export function ShopBooksNotesScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <Text style={styles.pageHint}>
-          Create notes with the Sale counter UI. Credit notes are for customers; debit notes are for
-          suppliers.
-        </Text>
+        <View style={styles.chipRow}>
+          <Chip
+            label="Credit note"
+            active={noteKind === 'credit_note'}
+            onPress={() => setNoteKind('credit_note')}
+          />
+          <Chip
+            label="Debit note"
+            active={noteKind === 'debit_note'}
+            onPress={() => setNoteKind('debit_note')}
+          />
+        </View>
+        <VoucherSummaryCards summary={summary} mode="expense" />
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search notes" style={styles.search} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
-          data={vouchers}
+          {...groupedListProps(filtered.length)}
+          data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-          ListHeaderComponent={
-            <View style={styles.chipRow}>
-              <Chip
-                label="Credit note"
-                active={noteKind === 'credit_note'}
-                onPress={() => setNoteKind('credit_note')}
-              />
-              <Chip
-                label="Debit note"
-                active={noteKind === 'debit_note'}
-                onPress={() => setNoteKind('debit_note')}
-              />
-            </View>
-          }
           renderItem={({ item }) => {
-            const badge = voucherStatusStyle(item.status);
-            const canVoid = !isVoidedVoucher(item.status);
+            const voided = isVoidedVoucher(item.status);
             return (
-              <View style={styles.row}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.voucher_number}</Text>
-                  <Text style={styles.total}>{formatMoney(item.total)}</Text>
-                </View>
-                <Text style={styles.meta}>
-                  {voucherPartyLabel(item)}
-                  {item.voucher_date ? ` · ${item.voucher_date}` : ''}
-                </Text>
-                <View style={styles.rowBottom}>
-                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                  </View>
-                  {canVoid ? (
-                    <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
-                      <Text style={styles.voidText}>Void</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
+              <BooksDocumentRow
+                title={voucherPartyLabel(item) === '—' ? (noteKind === 'credit_note' ? 'Customer' : 'Supplier') : voucherPartyLabel(item)}
+                amount={formatMoney(item.total)}
+                meta={`${item.voucher_number}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}`}
+                badge={item.status}
+                badgeKind={voided ? 'void' : 'neutral'}
+                icon={noteKind === 'credit_note' ? 'minus-circle' : 'plus-circle'}
+                iconTone={voided ? 'rose' : noteKind === 'credit_note' ? 'coral' : 'violet'}
+                dimmed={voided}
+                actionLabel={!voided ? 'Void' : undefined}
+                onAction={!voided ? () => void onVoid(item) : undefined}
+              />
             );
           }}
           ListEmptyComponent={
             !loading ? (
               <EmptyState
                 icon="file-minus"
-                title={noteKind === 'credit_note' ? 'No credit notes yet' : 'No debit notes yet'}
+                title={
+                  search
+                    ? 'No matching notes'
+                    : noteKind === 'credit_note'
+                      ? 'No credit notes yet'
+                      : 'No debit notes yet'
+                }
                 message={
                   noteKind === 'credit_note'
                     ? 'Issue credit notes against customer sales for returns or adjustments.'
@@ -179,7 +189,8 @@ export function ShopBooksNotesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  pageHint: { color: colors.mutedForeground, fontSize: 12, marginBottom: spacing.sm, lineHeight: 16 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.sm },
+  search: { marginBottom: spacing.sm },
   headerBtn: {
     width: 40,
     height: 40,
@@ -188,23 +199,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.tint,
   },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md },
-  row: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.card,
-    gap: 4,
-  },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
-  total: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
-  meta: { color: colors.mutedForeground, fontSize: 13 },
-  badge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
-  voidText: { color: colors.destructive, fontSize: 13, fontWeight: '700' },
   error: { color: colors.destructive, marginBottom: spacing.sm },
 });

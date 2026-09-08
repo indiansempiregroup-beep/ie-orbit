@@ -586,6 +586,237 @@ h6 {
   gap: 16px;
 }
 
+.invoice-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.invoice-page-title {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.4px;
+}
+
+.invoice-strip {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.invoice-strip__cell {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+}
+
+.invoice-strip__cell:last-child { border-right: 0; }
+
+.invoice-strip__cell span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.invoice-strip__cell strong {
+  font-size: 15px;
+  letter-spacing: -0.2px;
+}
+
+.invoice-strip__cell.is-paid strong { color: #059669; }
+.invoice-strip__cell.is-due strong { color: #d97706; }
+
+.invoice-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.invoice-search {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  padding: 0 14px;
+  background: var(--card, #fff);
+}
+
+.invoice-filter-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--card, #fff);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.invoice-filter-btn.is-on {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.invoice-filter-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.invoice-clear {
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 0 12px;
+  cursor: pointer;
+}
+
+.invoice-banner {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ecfdf3;
+  color: #166534;
+  font-size: 14px;
+}
+
+.invoice-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.invoice-kpi {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.invoice-kpi span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.invoice-kpi strong {
+  font-size: 22px;
+  letter-spacing: -0.4px;
+}
+
+.invoice-kpi em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.invoice-kpi--ok strong { color: #059669; }
+.invoice-kpi--due strong { color: #d97706; }
+
+.invoice-list {
+  display: grid;
+  gap: 8px;
+}
+
+.invoice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.invoice-row:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+
+.invoice-row--void { opacity: 0.7; }
+
+.invoice-row__main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.invoice-row__main strong {
+  font-size: 15px;
+}
+
+.invoice-row__main span,
+.invoice-row__icon {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.invoice-row__side {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.invoice-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.invoice-pill.is-paid { background: #dcfce7; color: #166534; }
+.invoice-pill.is-due { background: #fef3c7; color: #92400e; }
+.invoice-pill.is-void { background: #fee2e2; color: #b42318; }
+
+.invoice-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+.invoice-muted {
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 720px) {
+  .invoice-kpis { grid-template-columns: 1fr; }
+}
+
 .settings-layout {
   display: grid;
   gap: 24px;

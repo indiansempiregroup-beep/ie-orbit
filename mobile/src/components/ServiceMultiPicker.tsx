@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { Card } from './ui/Card';
+import { Chip } from './ui/Chip';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { withAlpha } from '../theme/colorUtils';
 import { formatMoney } from '../utils/format';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
@@ -24,22 +25,16 @@ type Props = {
   emptyLabel?: string;
 };
 
-function compactSummaryLabel(services: DiscoverServiceOption[]): string {
-  if (!services.length) return '';
-  if (services.length === 1) return services[0].name;
-  if (services.length === 2) return `${services[0].name}, ${services[1].name}`;
-  return `${services[0].name}, ${services[1].name} + ${services.length - 2} more`;
-}
-
 export function ServiceMultiPicker({
   services,
   selectedIds,
   onChange,
   primaryColor = colors.primary,
-  emptyLabel = 'Choose services below to build your visit',
+  emptyLabel = 'Choose services to build your visit',
 }: Props) {
-  const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [category, setCategory] = useState('All');
 
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedServices = useMemo(
     () =>
       selectedIds
@@ -48,274 +43,196 @@ export function ServiceMultiPicker({
     [selectedIds, services],
   );
 
-  const availableServices = useMemo(() => {
-    if (!selectedIds.length) return services;
-    return services.filter((service) => !selectedIds.includes(service.id));
-  }, [services, selectedIds]);
+  const categories = useMemo(() => {
+    const names = [...new Set(services.map((service) => service.category_name || 'General'))];
+    return names.length > 1 ? ['All', ...names] : [];
+  }, [services]);
 
-  const groupedAvailable = useMemo(() => {
-    const groups = new Map<string, DiscoverServiceOption[]>();
-    for (const service of availableServices) {
-      const key = service.category_name || 'General';
-      const list = groups.get(key) ?? [];
-      list.push(service);
-      groups.set(key, list);
-    }
-    return Array.from(groups.entries());
-  }, [availableServices]);
+  const visible = useMemo(() => {
+    if (category === 'All') return services;
+    return services.filter((service) => (service.category_name || 'General') === category);
+  }, [services, category]);
 
   const totalDuration = selectedServices.reduce((sum, service) => sum + (service.duration_minutes || 0), 0);
   const totalPrice = selectedServices.reduce((sum, service) => sum + (Number(service.price) || 0), 0);
   const bookingCurrency = selectedServices[0]?.currency;
-  const summaryLine = compactSummaryLabel(selectedServices);
 
-  function addService(serviceId: string) {
-    if (selectedIds.includes(serviceId)) return;
+  function toggleService(serviceId: string) {
+    if (selectedSet.has(serviceId)) {
+      onChange(selectedIds.filter((id) => id !== serviceId));
+      return;
+    }
     onChange([...selectedIds, serviceId]);
   }
 
-  function removeService(serviceId: string) {
-    const next = selectedIds.filter((id) => id !== serviceId);
-    onChange(next);
-    if (next.length === 0) setSummaryExpanded(false);
-  }
-
-  function clearAll() {
-    onChange([]);
-    setSummaryExpanded(false);
+  if (!services.length) {
+    return (
+      <View style={styles.emptyCard}>
+        <Feather name="layers" size={18} color={colors.mutedForeground} />
+        <Text style={styles.emptyText}>{emptyLabel}</Text>
+      </View>
+    );
   }
 
   return (
     <View style={styles.root}>
       {selectedServices.length > 0 ? (
-        <Card style={styles.summaryCard}>
-          <View style={styles.summaryHeader}>
-            <View style={styles.summaryCopy}>
-              <View style={styles.summaryTitleRow}>
-                <Text style={styles.summaryTitle}>Your visit</Text>
-                <View style={[styles.countBadge, { backgroundColor: primaryColor }]}>
-                  <Text style={styles.countBadgeText}>{selectedServices.length}</Text>
-                </View>
-              </View>
-              {!summaryExpanded ? (
-                <Text style={styles.summaryLine} numberOfLines={2}>
-                  {summaryLine}
-                </Text>
-              ) : null}
+        <View style={styles.visitCard}>
+          <View style={styles.visitHeader}>
+            <View style={[styles.countBadge, { backgroundColor: primaryColor }]}>
+              <Text style={styles.countBadgeText}>{selectedServices.length}</Text>
             </View>
-            <View style={styles.summaryActions}>
-              <Pressable onPress={clearAll} hitSlop={8}>
-                <Text style={[styles.clearLink, { color: primaryColor }]}>Clear</Text>
-              </Pressable>
+            <View style={styles.visitCopy}>
+              <Text style={styles.visitTitle}>Your visit</Text>
+              <Text style={styles.visitMeta}>
+                {totalDuration} min · {formatMoney(totalPrice, bookingCurrency)}
+              </Text>
+            </View>
+            <Pressable onPress={() => onChange([])} hitSlop={8}>
+              <Text style={[styles.clearLink, { color: primaryColor }]}>Clear</Text>
+            </Pressable>
+          </View>
+          <View style={styles.selectedChips}>
+            {selectedServices.map((service, index) => (
               <Pressable
-                onPress={() => setSummaryExpanded((value) => !value)}
-                hitSlop={8}
-                style={styles.expandBtn}
+                key={service.id}
+                onPress={() => toggleService(service.id)}
+                style={styles.selectedChip}
               >
-                <Feather
-                  name={summaryExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={18}
-                  color={primaryColor}
-                />
+                <Text style={styles.selectedChipIndex}>{index + 1}</Text>
+                <Text style={styles.selectedChipLabel} numberOfLines={1}>
+                  {service.name}
+                </Text>
+                <Feather name="x" size={12} color={colors.mutedForeground} />
               </Pressable>
-            </View>
+            ))}
           </View>
-
-          {summaryExpanded ? (
-            <ScrollView style={styles.summaryList} nestedScrollEnabled>
-              {selectedServices.map((service, index) => (
-                <View key={service.id} style={styles.summaryRow}>
-                  <View style={[styles.orderBadge, { backgroundColor: primaryColor }]}>
-                    <Text style={styles.orderText}>{index + 1}</Text>
-                  </View>
-                  <View style={styles.summaryBody}>
-                    <Text style={styles.summaryRowTitle} numberOfLines={1}>
-                      {service.name}
-                    </Text>
-                    <Text style={styles.summaryRowMeta}>
-                      {service.duration_minutes} min · {service.currency} {service.price}
-                    </Text>
-                  </View>
-                  <Pressable onPress={() => removeService(service.id)} hitSlop={8}>
-                    <Feather name="x" size={16} color={colors.mutedForeground} />
-                  </Pressable>
-                </View>
-              ))}
-            </ScrollView>
+          {selectedServices.length > 1 ? (
+            <Text style={styles.sequenceHint}>Scheduled in the order you tap them.</Text>
           ) : null}
-
-          <View style={styles.totalsRow}>
-            <Text style={styles.totalsMeta}>{totalDuration} min total</Text>
-            <Text style={[styles.totalsPrice, { color: primaryColor }]}>
-              {formatMoney(totalPrice, bookingCurrency)}
-            </Text>
-          </View>
-        </Card>
+        </View>
       ) : (
-        <Card style={styles.emptyCard}>
-          <Feather name="layers" size={18} color={colors.mutedForeground} />
+        <View style={styles.emptyCard}>
+          <Feather name="plus-circle" size={18} color={primaryColor} />
           <Text style={styles.emptyText}>{emptyLabel}</Text>
-        </Card>
+        </View>
       )}
 
-      <View style={styles.browseHeader}>
-        <Text style={styles.browseTitle}>
-          {selectedServices.length > 0 ? 'Add another service' : 'Choose services'}
-        </Text>
-        {selectedServices.length > 0 ? (
-          <Text style={styles.browseMeta}>{availableServices.length} available</Text>
-        ) : null}
-      </View>
-
-      {groupedAvailable.length === 0 ? (
-        <Card style={styles.emptyCard}>
-          <Text style={styles.emptyText}>
-            {selectedServices.length > 0
-              ? 'All services added. Expand your visit summary above to review or remove items.'
-              : 'No services available right now.'}
-          </Text>
-        </Card>
-      ) : (
-        <ScrollView
-          style={styles.browseList}
-          contentContainerStyle={styles.browseListContent}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-          keyboardShouldPersistTaps="handled"
-        >
-          {groupedAvailable.map(([category, categoryServices]) => (
-            <View key={category} style={styles.categoryBlock}>
-              <Text style={styles.categoryLabel}>{category}</Text>
-              {categoryServices.map((service) => (
-                <Pressable key={service.id} style={styles.option} onPress={() => addService(service.id)}>
-                  {service.image_url ? (
-                    <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.thumb} />
-                  ) : (
-                    <View style={[styles.thumb, { backgroundColor: `${primaryColor}12` }]}>
-                      <Feather name="plus" size={18} color={primaryColor} />
-                    </View>
-                  )}
-                  <View style={styles.optionBody}>
-                    <Text style={styles.optionTitle}>{service.name}</Text>
-                    <Text style={styles.optionMeta}>{service.duration_minutes} min</Text>
-                  </View>
-                  <View style={styles.optionRight}>
-                    <Text style={styles.optionPrice}>
-                      {service.currency} {service.price}
-                    </Text>
-                    <View style={[styles.addBtn, { borderColor: primaryColor, backgroundColor: `${primaryColor}12` }]}>
-                      <Feather name="plus" size={14} color={primaryColor} />
-                    </View>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
+      {categories.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {categories.map((name) => (
+            <Chip
+              key={name}
+              label={name}
+              active={category === name}
+              primaryColor={primaryColor}
+              onPress={() => setCategory(name)}
+            />
           ))}
         </ScrollView>
-      )}
-
-      {selectedServices.length > 1 ? (
-        <Text style={styles.sequenceHint}>Services are scheduled in the order you add them.</Text>
       ) : null}
+
+      {visible.map((service) => {
+        const selected = selectedSet.has(service.id);
+        return (
+          <Pressable
+            key={service.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            onPress={() => toggleService(service.id)}
+            style={[
+              styles.option,
+              selected && { borderColor: primaryColor, backgroundColor: withAlpha(primaryColor, 0.06) },
+            ]}
+          >
+            {service.image_url ? (
+              <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.thumb} />
+            ) : (
+              <View style={[styles.thumb, { backgroundColor: withAlpha(primaryColor, 0.12) }]}>
+                <Feather name="scissors" size={18} color={primaryColor} />
+              </View>
+            )}
+            <View style={styles.optionBody}>
+              <Text style={styles.optionTitle}>{service.name}</Text>
+              <Text style={styles.optionMeta}>{service.duration_minutes} min</Text>
+            </View>
+            <View style={styles.optionRight}>
+              <Text style={styles.optionPrice}>
+                {formatMoney(Number(service.price) || 0, service.currency)}
+              </Text>
+              <View
+                style={[
+                  styles.check,
+                  selected
+                    ? { backgroundColor: primaryColor, borderColor: primaryColor }
+                    : { borderColor: colors.border },
+                ]}
+              >
+                {selected ? <Feather name="check" size={12} color="#fff" /> : <Feather name="plus" size={12} color={primaryColor} />}
+              </View>
+            </View>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { gap: spacing.md },
-  summaryCard: { gap: spacing.sm },
-  summaryHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  summaryCopy: { flex: 1, gap: 4 },
-  summaryTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  summaryTitle: { ...typography.label, fontWeight: '700', color: colors.foreground },
-  summaryLine: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
-  summaryActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  clearLink: { ...typography.caption, fontWeight: '600' },
-  expandBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  visitCard: {
     backgroundColor: colors.card,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
+  visitHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  visitCopy: { flex: 1 },
+  visitTitle: { ...typography.label, fontWeight: '700', color: colors.foreground },
+  visitMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
+  clearLink: { ...typography.caption, fontWeight: '600' },
   countBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 6,
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  countBadgeText: { ...typography.tiny, color: '#fff', fontWeight: '700' },
-  summaryList: { maxHeight: 168 },
-  summaryRow: {
+  countBadgeText: { ...typography.caption, color: '#fff', fontWeight: '700' },
+  selectedChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  selectedChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    gap: 6,
+    maxWidth: '100%',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.inputBackground,
   },
-  orderBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
+  selectedChipIndex: {
+    ...typography.tiny,
+    fontWeight: '700',
+    color: colors.mutedForeground,
   },
-  orderText: { ...typography.tiny, color: '#fff', fontWeight: '700' },
-  summaryBody: { flex: 1, minWidth: 0 },
-  summaryRowTitle: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
-  summaryRowMeta: { ...typography.tiny, color: colors.mutedForeground, marginTop: 2 },
-  totalsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  totalsMeta: { ...typography.caption, color: colors.mutedForeground },
-  totalsPrice: { ...typography.label, fontWeight: '800' },
+  selectedChipLabel: { ...typography.caption, color: colors.foreground, fontWeight: '600', maxWidth: 160 },
+  sequenceHint: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
   emptyCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
     borderStyle: 'dashed',
+    borderColor: colors.border,
+    backgroundColor: colors.card,
   },
-  emptyText: { ...typography.caption, color: colors.mutedForeground, flex: 1 },
-  browseHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  browseTitle: {
-    ...typography.caption,
-    color: colors.mutedForeground,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  browseMeta: { ...typography.caption, color: colors.mutedForeground },
-  browseList: { maxHeight: 360 },
-  browseListContent: { gap: spacing.sm, paddingBottom: spacing.xs },
-  categoryBlock: { gap: spacing.sm },
-  categoryLabel: {
-    ...typography.caption,
-    color: colors.mutedForeground,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
+  emptyText: { ...typography.caption, color: colors.mutedForeground, flex: 1, lineHeight: 18 },
+  chips: { gap: spacing.sm, paddingVertical: 2 },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -327,8 +244,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   thumb: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -338,19 +255,14 @@ const styles = StyleSheet.create({
   optionTitle: { ...typography.label, color: colors.foreground, fontWeight: '600' },
   optionMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   optionRight: { alignItems: 'flex-end', gap: spacing.sm },
-  optionPrice: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
-  addBtn: {
+  optionPrice: { ...typography.caption, color: colors.foreground, fontWeight: '700' },
+  check: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sequenceHint: {
-    ...typography.caption,
-    color: colors.mutedForeground,
-    marginBottom: spacing.md,
-    lineHeight: 18,
+    backgroundColor: colors.inputBackground,
   },
 });

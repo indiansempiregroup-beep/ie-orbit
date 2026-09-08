@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, spacing, typography } from '../../theme/tokens';
+import { colors, spacing, typography } from '../../theme/tokens';
 
 export function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
@@ -21,7 +21,6 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.title,
-    fontFamily: fonts.displayMedium,
     color: colors.foreground,
   },
 });

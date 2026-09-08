@@ -39,6 +39,8 @@ import { StaffDetailScreen } from '../features/staff/StaffDetailScreen';
 import { StaffScheduleScreen } from '../features/staff/StaffScheduleScreen';
 import { StaffAvailabilityScreen } from '../features/staff/StaffAvailabilityScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
+import { SupportTicketsScreen } from '../features/support/SupportTicketsScreen';
+import { SupportTicketDetailScreen } from '../features/support/SupportTicketDetailScreen';
 import { BusinessProfileScreen } from '../features/settings/BusinessProfileScreen';
 import { BusinessEditScreen } from '../features/settings/BusinessEditScreen';
 import { PaymentSettingsScreen } from '../features/settings/PaymentSettingsScreen';
@@ -212,6 +214,8 @@ export function RootNavigator() {
           {stackScreen('PlatformAdminAudit', PlatformAdminAuditScreen, 'Audit')}
           {stackScreen('PlatformAdminCoupons', PlatformAdminCouponsScreen, 'Coupons')}
           {stackScreen('PlatformAdminAffiliates', PlatformAdminAffiliatesScreen, 'Affiliates')}
+          {stackScreen('SupportTickets', SupportTicketsScreen, 'Tickets')}
+          {stackScreen('SupportTicketDetail', SupportTicketDetailScreen, 'Ticket')}
         </Stack.Navigator>
       ) : !opsAccess ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -246,6 +250,8 @@ export function RootNavigator() {
             {stackScreen('StaffSchedule', StaffScheduleScreen, t('nav.weeklySchedule'))}
             {stackScreen('StaffAvailability', StaffAvailabilityScreen, t('nav.staffAvailability'))}
             {stackScreen('Settings', SettingsScreen, t('nav.settings'))}
+            {stackScreen('SupportTickets', SupportTicketsScreen, 'Support tickets')}
+            {stackScreen('SupportTicketDetail', SupportTicketDetailScreen, 'Ticket')}
             {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
             {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
             {stackScreen('PaymentSettings', PaymentSettingsScreen, 'Payments')}

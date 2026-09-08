@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Feather } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { BookingStatus } from '@ie-orbit/sdk';
 import { BookingRow } from '../../components/BookingRow';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { DesktopPage } from '../../components/DesktopPage';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { OpsHeader } from '../../components/OpsHeader';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
-import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { ScreenState } from '../../components/ScreenState';
@@ -22,12 +22,12 @@ import { useEntityMaps } from '../../hooks/useOpsExtended';
 import { entityLabel } from '../../utils/entities';
 import { bookingCustomerLabel, bookingCustomerPhone, bookingServiceLabel, bookingStaffLabel } from '../../utils/bookingDisplay';
 import { canAccessStaffDirectory } from '../../utils/roles';
-import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { colors, spacing } from '../../theme/tokens';
 import { formatDateKey } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
 const STATUS_OPTIONS: Array<{ value: '' | BookingStatus; label: string }> = [
-  { value: '', label: 'All statuses' },
+  { value: '', label: 'All' },
   { value: 'pending', label: 'Pending' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'checked_in', label: 'Checked in' },
@@ -38,8 +38,8 @@ const STATUS_OPTIONS: Array<{ value: '' | BookingStatus; label: string }> = [
 ];
 
 const SORT_OPTIONS = [
-  { value: 'start_asc', label: 'Time · earliest' },
-  { value: 'start_desc', label: 'Time · latest' },
+  { value: 'start_asc', label: 'Earliest' },
+  { value: 'start_desc', label: 'Latest' },
   { value: 'status', label: 'Status' },
   { value: 'customer', label: 'Customer' },
 ] as const;
@@ -124,66 +124,42 @@ export function BookingsScreen() {
 
   return (
     <DesktopPage>
-      <OpsHeader
-        compact
-        title={t('bookings.title')}
-        subtitle={range === 'today' ? t('bookings.todaySchedule') : t('bookings.allBookings')}
-      />
+      <OpsHeader compact title={t('nav.bookings')} />
       <View style={styles.toolbar}>
         <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder={t('bookings.search')} />
+        <FilterButton count={activeFilterCount} onPress={() => setFiltersOpen(true)} />
         <Button label={t('common.new')} onPress={() => navigation.navigate('CreateBooking', {})} />
       </View>
       <View style={styles.filters}>
         <Chip label={t('common.today')} active={range === 'today'} onPress={() => setRange('today')} />
         <Chip label={t('common.all')} active={range === 'all'} onPress={() => setRange('all')} />
-        <Pressable style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]} onPress={() => setFiltersOpen(true)}>
-          <Feather name="sliders" size={14} color={activeFilterCount > 0 ? colors.primaryForeground : colors.foreground} />
-          <Text style={[styles.filterBtnText, activeFilterCount > 0 && styles.filterBtnTextActive]}>
-            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-          </Text>
-        </Pressable>
       </View>
 
-      <Modal visible={filtersOpen} animationType="slide" transparent onRequestClose={() => setFiltersOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setFiltersOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Sort & filter</Text>
-              <Pressable onPress={() => setFiltersOpen(false)}>
-                <Feather name="x" size={20} color={colors.mutedForeground} />
-              </Pressable>
-            </View>
-            <ScrollView contentContainerStyle={styles.sheetContent}>
-              <SelectField
-                label={t('bookings.status')}
-                value={statusFilter}
-                options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                onChange={(value) => setStatusFilter(value as '' | BookingStatus)}
-              />
-              {showStaffFilter ? (
-                <SelectField label={t('bookings.staff')} value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
-              ) : null}
-              <SelectField
-                label="Sort by"
-                value={sortBy}
-                options={SORT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                onChange={(value) => setSortBy(value as SortKey)}
-              />
-              <Button
-                label="Reset filters"
-                variant="outline"
-                fullWidth
-                onPress={() => {
-                  setStatusFilter('');
-                  setStaffFilter('');
-                  setSortBy('start_asc');
-                }}
-              />
-              <Button label="Apply" fullWidth onPress={() => setFiltersOpen(false)} />
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <FilterSheet
+        visible={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        onReset={() => {
+          setStatusFilter('');
+          setStaffFilter('');
+          setSortBy('start_asc');
+        }}
+      >
+        <FilterChoiceGroup
+          label={t('bookings.status')}
+          value={statusFilter}
+          options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+          onChange={(value) => setStatusFilter(value as '' | BookingStatus)}
+        />
+        {showStaffFilter ? (
+          <FilterChoiceGroup label={t('bookings.staff')} value={staffFilter} options={staffOptions} onChange={setStaffFilter} />
+        ) : null}
+        <FilterChoiceGroup
+          label="Sort"
+          value={sortBy}
+          options={SORT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+          onChange={(value) => setSortBy(value as SortKey)}
+        />
+      </FilterSheet>
 
       <RefreshableScrollView
         refreshing={refreshing || loading}
@@ -199,22 +175,25 @@ export function BookingsScreen() {
           actionLabel="New booking"
           onAction={() => navigation.navigate('CreateBooking', {})}
         />
-        {sorted.map((booking) => (
-          <BookingRow
-            key={booking.id}
-            serviceName={bookingServiceLabel(booking, serviceMap)}
-            customerName={bookingCustomerLabel(booking, customerMap)}
-            customerPhone={bookingCustomerPhone(booking)}
-            staffName={bookingStaffLabel(booking, staffMap)}
-            startAt={booking.start_at}
-            endAt={booking.end_at}
-            durationMinutes={booking.duration_minutes}
-            serviceCount={booking.line_items?.length || undefined}
-            bookingNumber={booking.booking_number}
-            status={booking.status}
-            onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-          />
-        ))}
+        <GroupedList>
+          {sorted.map((booking) => (
+            <BookingRow
+              key={booking.id}
+              attached
+              serviceName={bookingServiceLabel(booking, serviceMap)}
+              customerName={bookingCustomerLabel(booking, customerMap)}
+              customerPhone={bookingCustomerPhone(booking)}
+              staffName={bookingStaffLabel(booking, staffMap)}
+              startAt={booking.start_at}
+              endAt={booking.end_at}
+              durationMinutes={booking.duration_minutes}
+              serviceCount={booking.line_items?.length || undefined}
+              bookingNumber={booking.booking_number}
+              status={booking.status}
+              onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+            />
+          ))}
+        </GroupedList>
       </RefreshableScrollView>
     </DesktopPage>
   );
@@ -238,37 +217,5 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     alignItems: 'center',
   },
-  filterBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  filterBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterBtnText: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
-  filterBtnTextActive: { color: colors.primaryForeground },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    maxHeight: '75%',
-    paddingBottom: spacing.xxl,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.md,
-  },
-  sheetTitle: { ...typography.title, color: colors.foreground },
-  sheetContent: { paddingHorizontal: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xl },
   content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl, backgroundColor: colors.background },
 });

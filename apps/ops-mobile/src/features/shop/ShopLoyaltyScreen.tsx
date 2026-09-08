@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
@@ -129,7 +130,6 @@ export function ShopLoyaltyScreen() {
       }
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.formTitle}>Reward points</Text>
       <Text style={styles.help}>
         Same program as Products & billing. One balance for bookings, online orders, POS, and Books
         sales.
@@ -146,50 +146,39 @@ export function ShopLoyaltyScreen() {
         />
       </View>
 
-      <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Points per ₹1 off</Text>
-        <TextInput
-          style={styles.input}
-          value={pointsPerUnit}
-          onChangeText={(value) => setPointsPerUnit(value.replace(/[^0-9]/g, ''))}
-          keyboardType="number-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
-      <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Max redeem %</Text>
-        <TextInput
-          style={styles.input}
-          value={maxRedeemPercent}
-          onChangeText={(value) => setMaxRedeemPercent(value.replace(/[^0-9]/g, ''))}
-          keyboardType="number-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
-      <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Minimum redeem points</Text>
-        <TextInput
-          style={styles.input}
-          value={minRedeemPoints}
-          onChangeText={(value) => setMinRedeemPoints(value.replace(/[^0-9]/g, ''))}
-          keyboardType="number-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
-      <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Points per ₹100 spent</Text>
-        <TextInput
-          style={styles.input}
-          value={earnPointsPer100}
-          onChangeText={(value) => setEarnPointsPer100(value.replace(/[^0-9]/g, ''))}
-          keyboardType="number-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
+      <Input
+        label="Points per ₹1 off"
+        required
+        value={pointsPerUnit}
+        onChangeText={(value) => setPointsPerUnit(value.replace(/[^0-9]/g, ''))}
+        keyboardType="number-pad"
+      />
+      <Input
+        label="Max redeem %"
+        required
+        value={maxRedeemPercent}
+        onChangeText={(value) => setMaxRedeemPercent(value.replace(/[^0-9]/g, ''))}
+        keyboardType="number-pad"
+      />
+      <Input
+        label="Minimum redeem points"
+        required
+        value={minRedeemPoints}
+        onChangeText={(value) => setMinRedeemPoints(value.replace(/[^0-9]/g, ''))}
+        keyboardType="number-pad"
+      />
+      <Input
+        label="Points per ₹100 spent"
+        required
+        value={earnPointsPer100}
+        onChangeText={(value) => setEarnPointsPer100(value.replace(/[^0-9]/g, ''))}
+        keyboardType="number-pad"
+      />
 
       <Text style={styles.section}>Customer lookup</Text>
       <SelectField
         label="Customer"
+        optional
         value={customerId}
         options={customerOptions}
         onChange={setCustomerId}
@@ -251,10 +240,11 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
 });

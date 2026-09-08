@@ -135,6 +135,7 @@ export function ShopBooksComplianceScreen() {
           <Text style={styles.sectionTitle}>GSP / portal provider</Text>
           <SelectField
             label="Provider"
+            required
             value={compliance.provider ?? 'mock'}
             options={PROVIDER_OPTIONS}
             onChange={(value) => setField('provider', value as ShopGstComplianceProvider)}
@@ -146,17 +147,19 @@ export function ShopBooksComplianceScreen() {
             </Text>
           ) : (
             <>
-              <Input label="Username" value={compliance.username} onChangeText={(value) => setField('username', value)} autoCapitalize="none" />
+              <Input label="Username" required value={compliance.username} onChangeText={(value) => setField('username', value)} autoCapitalize="none" />
               <Input
                 label="Password"
+                required
                 value={compliance.password}
                 onChangeText={(value) => setField('password', value)}
                 secureTextEntry
                 autoCapitalize="none"
               />
-              <Input label="Client ID" value={compliance.client_id} onChangeText={(value) => setField('client_id', value)} autoCapitalize="none" />
+              <Input label="Client ID" optional value={compliance.client_id} onChangeText={(value) => setField('client_id', value)} autoCapitalize="none" />
               <Input
                 label="Client secret"
+                optional
                 value={compliance.client_secret}
                 onChangeText={(value) => setField('client_secret', value)}
                 secureTextEntry
@@ -164,6 +167,7 @@ export function ShopBooksComplianceScreen() {
               />
               <Input
                 label="Base URL"
+                optional
                 value={compliance.base_url}
                 onChangeText={(value) => setField('base_url', value)}
                 autoCapitalize="none"
@@ -176,14 +180,15 @@ export function ShopBooksComplianceScreen() {
 
         <Card style={styles.card}>
           <Text style={styles.sectionTitle}>Seller address (as per GST registration)</Text>
-          <Input label="Legal name" value={compliance.seller_legal_name} onChangeText={(value) => setField('seller_legal_name', value)} />
-          <Input label="Trade name" value={compliance.seller_trade_name} onChangeText={(value) => setField('seller_trade_name', value)} />
-          <Input label="Address line 1" value={compliance.seller_addr1} onChangeText={(value) => setField('seller_addr1', value)} />
-          <Input label="Address line 2" value={compliance.seller_addr2} onChangeText={(value) => setField('seller_addr2', value)} />
-          <Input label="City / locality" value={compliance.seller_loc} onChangeText={(value) => setField('seller_loc', value)} />
-          <Input label="PIN code" value={compliance.seller_pin} onChangeText={(value) => setField('seller_pin', value)} keyboardType="number-pad" />
+          <Input label="Legal name" required value={compliance.seller_legal_name} onChangeText={(value) => setField('seller_legal_name', value)} />
+          <Input label="Trade name" optional value={compliance.seller_trade_name} onChangeText={(value) => setField('seller_trade_name', value)} />
+          <Input label="Address line 1" required value={compliance.seller_addr1} onChangeText={(value) => setField('seller_addr1', value)} />
+          <Input label="Address line 2" optional value={compliance.seller_addr2} onChangeText={(value) => setField('seller_addr2', value)} />
+          <Input label="City / locality" required value={compliance.seller_loc} onChangeText={(value) => setField('seller_loc', value)} />
+          <Input label="PIN code" required value={compliance.seller_pin} onChangeText={(value) => setField('seller_pin', value)} keyboardType="number-pad" />
           <Input
             label="State code (GST)"
+            required
             value={compliance.seller_state_code}
             onChangeText={(value) => setField('seller_state_code', value)}
             placeholder="e.g. 27"

@@ -9,6 +9,7 @@ import { HtmlContent } from '../../components/HtmlContent';
 import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
@@ -296,9 +297,13 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
             </Card>
           ) : null}
 
-          {visibleReviews.map((item) => (
-            <ReviewCard key={item.id} review={item} />
-          ))}
+          {visibleReviews.length ? (
+            <GroupedList>
+              {visibleReviews.map((item) => (
+                <ReviewCard key={item.id} review={item} />
+              ))}
+            </GroupedList>
+          ) : null}
 
           {product.can_review || product.my_review ? (
             <Card style={styles.writeCard}>
@@ -366,7 +371,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
 
 function ReviewCard({ review }: { review: ShopProductReview }) {
   return (
-    <Card style={styles.reviewCard}>
+    <View style={styles.reviewCard}>
       <View style={styles.reviewHead}>
         <Text style={styles.reviewer}>{review.reviewer_name}</Text>
         <StarRating rating={review.rating} size={13} />
@@ -375,7 +380,7 @@ function ReviewCard({ review }: { review: ShopProductReview }) {
       {review.title ? <Text style={styles.reviewTitle}>{review.title}</Text> : null}
       {review.comment ? <Text style={styles.reviewBody}>{review.comment}</Text> : null}
       {review.created_at ? <Text style={styles.reviewDate}>{formatDateTime(review.created_at)}</Text> : null}
-    </Card>
+    </View>
   );
 }
 
@@ -450,7 +455,7 @@ const styles = StyleSheet.create({
   },
   toolChipText: { ...typography.caption, fontWeight: '600', color: colors.foreground },
   clearFilters: { ...typography.caption, fontWeight: '700' },
-  reviewCard: { gap: spacing.sm },
+  reviewCard: { gap: spacing.sm, padding: spacing.md, backgroundColor: colors.card },
   reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   reviewer: { ...typography.label, fontWeight: '700', color: colors.foreground },
   reviewYou: { ...typography.caption, fontWeight: '700', color: colors.mutedForeground, textTransform: 'uppercase' },

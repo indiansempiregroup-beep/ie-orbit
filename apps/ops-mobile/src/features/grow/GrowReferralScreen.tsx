@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { CustomerReferral } from '@ie-orbit/sdk';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -9,6 +9,8 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
+import { Input } from '../../components/ui/Input';
+import { FieldLabel } from '../../components/ui/FieldLabel';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { readGrowMetadata, withGrowMetadata } from './growSettings';
 
@@ -102,30 +104,26 @@ export function GrowReferralScreen() {
       footer={<Button label={busy ? 'Saving…' : 'Save settings'} loading={busy} fullWidth size="lg" onPress={() => void save()} />}
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.formTitle}>Customer referrals</Text>
       <Text style={styles.help}>
         When a customer shares their invite code and the referred person completes the success event, award loyalty
         points.
       </Text>
 
-      <Text style={styles.label}>Program</Text>
+      <FieldLabel label="Program" required />
       <View style={styles.chips}>
         <Chip label="Enabled" active={enabled} onPress={() => setEnabled(true)} />
         <Chip label="Disabled" active={!enabled} onPress={() => setEnabled(false)} />
       </View>
 
-      <View style={styles.field}>
-        <Text style={styles.label}>Points per successful referral</Text>
-        <TextInput
-          style={styles.input}
-          value={points}
-          onChangeText={(value) => setPoints(value.replace(/[^0-9]/g, ''))}
-          keyboardType="number-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
+      <Input
+        label="Points per successful referral"
+        required
+        value={points}
+        onChangeText={(value) => setPoints(value.replace(/[^0-9]/g, ''))}
+        keyboardType="number-pad"
+      />
 
-      <Text style={styles.label}>Success when</Text>
+      <FieldLabel label="Success when" required />
       <View style={styles.chips}>
         <Chip label="Signup" active={successEvent === 'signup'} onPress={() => setSuccessEvent('signup')} />
         <Chip
@@ -168,11 +166,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   row: {
     borderWidth: 1,

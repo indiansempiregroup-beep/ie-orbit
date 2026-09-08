@@ -206,6 +206,7 @@ export function SubscriptionUpiPaySheet({
                     </Text>
                     <Input
                       label="UTR / UPI reference"
+                      required
                       value={utr}
                       onChangeText={setUtr}
                       autoCapitalize="characters"

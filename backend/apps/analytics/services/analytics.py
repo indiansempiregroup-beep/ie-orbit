@@ -659,8 +659,16 @@ class AnalyticsService:
             insights.append(
                 {
                     "type": "commerce",
-                    "title": f"{len(active_orders)} orders · {business.currency or ''} {round(gmv, 2)} GMV",
-                    "detail": f"{cancelled} cancelled in this period.",
+                    "title": f"{len(active_orders)} shop orders this period",
+                    "detail": (
+                        f"GMV {business.currency or ''} {round(gmv, 2)}. "
+                        f"{cancelled} cancelled"
+                        + (
+                            " — follow up if that feels high."
+                            if cancelled
+                            else "."
+                        )
+                    ),
                 }
             )
         if returns:
@@ -668,15 +676,18 @@ class AnalyticsService:
                 {
                     "type": "returns",
                     "title": f"{len(returns)} returns ({round(return_rate * 100)}% of orders)",
-                    "detail": f"Refunds {business.currency or ''} {round(refund_total, 2)} · {pending_returns} pending.",
+                    "detail": (
+                        f"Refunds {business.currency or ''} {round(refund_total, 2)}. "
+                        f"{pending_returns} still pending — clear them this week."
+                    ),
                 }
             )
         if delivery_fee_total > 0:
             insights.append(
                 {
                     "type": "delivery",
-                    "title": f"Delivery fees {business.currency or ''} {round(delivery_fee_total, 2)}",
-                    "detail": "Fees collected from zoned delivery orders.",
+                    "title": f"Delivery added {business.currency or ''} {round(delivery_fee_total, 2)}",
+                    "detail": "Fees collected from zoned delivery. Check zones if this is climbing faster than orders.",
                 }
             )
 
@@ -885,45 +896,64 @@ class AnalyticsService:
 
         bookings_change = comparison.get("bookings_change_pct")
         if bookings_change is not None:
-            direction = "up" if bookings_change >= 0 else "down"
+            rising = bookings_change >= 0
             insights.append(
                 {
                     "type": "trend",
-                    "title": f"Bookings {direction} {abs(bookings_change)}%",
-                    "detail": "Compared with the previous period of the same length.",
+                    "title": (
+                        f"Bookings are up {abs(bookings_change)}%"
+                        if rising
+                        else f"Bookings are down {abs(bookings_change)}%"
+                    ),
+                    "detail": (
+                        "You booked more appointments than the previous 30 days. Protect peak slots."
+                        if rising
+                        else "Demand is softer than the previous 30 days. Push reminders and open last-minute slots."
+                    ),
                 }
             )
 
         revenue_change = comparison.get("revenue_change_pct")
         if revenue_change is not None:
-            direction = "up" if revenue_change >= 0 else "down"
+            rising = revenue_change >= 0
             insights.append(
                 {
                     "type": "revenue",
-                    "title": f"Estimated revenue {direction} {abs(revenue_change)}%",
-                    "detail": f"Current estimate: {currency} {revenue.get('estimated_revenue', 0)}.",
+                    "title": (
+                        f"Estimated revenue is up {abs(revenue_change)}%"
+                        if rising
+                        else f"Estimated revenue is down {abs(revenue_change)}%"
+                    ),
+                    "detail": (
+                        f"This period is about {currency} {revenue.get('estimated_revenue', 0)} from booked services."
+                    ),
                 }
             )
 
         if operations.get("busiest_day"):
+            peak_hour = operations.get("busiest_hour")
             insights.append(
                 {
                     "type": "demand",
-                    "title": f"Busiest day: {operations['busiest_day']}",
+                    "title": f"{operations['busiest_day']} is your busiest day",
                     "detail": (
-                        f"Peak hour around {operations['busiest_hour']}."
-                        if operations.get("busiest_hour")
-                        else "Use this to plan staffing."
+                        f"Peak around {peak_hour}. Put experienced staff on that shift."
+                        if peak_hour
+                        else "Staff this day first — it carries the most bookings."
                     ),
                 }
             )
 
         if growth.get("customers_with_bookings"):
+            repeat_pct = round((growth.get("repeat_rate") or 0) * 100)
             insights.append(
                 {
                     "type": "growth",
-                    "title": f"{growth['new_customers']} new · {growth['returning_customers']} returning",
-                    "detail": f"Repeat rate {round((growth.get('repeat_rate') or 0) * 100)}% this period.",
+                    "title": f"{repeat_pct}% of guests came back",
+                    "detail": (
+                        f"{growth['new_customers']} new customers and {growth['returning_customers']} returning "
+                        "this period. A follow-up after first visits lifts repeat rate."
+                    ),
                 }
             )
 
@@ -932,8 +962,11 @@ class AnalyticsService:
             insights.append(
                 {
                     "type": "service",
-                    "title": f"Top service: {top_service['service_name']}",
-                    "detail": f"{currency} {top_service['revenue']} from {top_service.get('bookings', 0)} bookings.",
+                    "title": f"{top_service['service_name']} is your top earner",
+                    "detail": (
+                        f"{currency} {top_service['revenue']} from {top_service.get('bookings', 0)} bookings. "
+                        "Feature it on slow days."
+                    ),
                 }
             )
 
@@ -943,10 +976,10 @@ class AnalyticsService:
             insights.append(
                 {
                     "type": "risk",
-                    "title": "Watch cancellations and no-shows",
+                    "title": "Cancellations and no-shows need attention",
                     "detail": (
-                        f"Cancellation {round(cancellation_rate * 100)}% · "
-                        f"No-show {round(no_show_rate * 100)}%."
+                        f"Cancellation {round(cancellation_rate * 100)}% · no-show {round(no_show_rate * 100)}%. "
+                        "Send reminders the day before, or take a small deposit."
                     ),
                 }
             )

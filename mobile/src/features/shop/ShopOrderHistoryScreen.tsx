@@ -303,7 +303,12 @@ export function ShopOrderHistoryScreen() {
         data={visibleOrders}
         keyExtractor={(item) => item.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, flexGrow: 1 }}
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: insets.bottom + 40,
+          flexGrow: 1,
+          gap: 6,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -412,10 +417,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+    padding: spacing.md,
   },
   cardMetaRow: { flexDirection: 'row', gap: spacing.md },
   cardMeta: { minWidth: 78 },

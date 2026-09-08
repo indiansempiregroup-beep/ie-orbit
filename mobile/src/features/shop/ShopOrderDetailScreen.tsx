@@ -973,21 +973,23 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 </Pressable>
               </View>
             ) : null}
-            {returns.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.returnRow}
-                onPress={() => navigation.navigate('ReturnDetail', { returnId: item.id })}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itemName}>{item.return_number}</Text>
-                  <Text style={styles.itemMeta}>
-                    {item.status} · {formatShopMoney(item.refund_total, item.currency || order.currency)}
-                  </Text>
-                  {item.refund_instruction ? <Text style={styles.itemMeta}>{item.refund_instruction}</Text> : null}
-                </View>
-                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-              </Pressable>
+            {returns.map((item, index) => (
+              <View key={item.id}>
+                {index > 0 ? <View style={styles.listSeparator} /> : null}
+                <Pressable
+                  style={styles.returnRow}
+                  onPress={() => navigation.navigate('ReturnDetail', { returnId: item.id })}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemName}>{item.return_number}</Text>
+                    <Text style={styles.itemMeta}>
+                      {item.status} · {formatShopMoney(item.refund_total, item.currency || order.currency)}
+                    </Text>
+                    {item.refund_instruction ? <Text style={styles.itemMeta}>{item.refund_instruction}</Text> : null}
+                  </View>
+                  <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                </Pressable>
+              </View>
             ))}
           </View>
         ) : null}
@@ -1224,7 +1226,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   proof: { width: '100%', height: 160, borderRadius: radius.md, marginTop: spacing.sm },
-  returnRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
+  returnRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md },
+  listSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   returnHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: spacing.sm },
   returnStartBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   returnStartText: { color: '#fff', fontWeight: '700', fontSize: 13 },

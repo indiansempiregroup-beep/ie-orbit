@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { Feather } from '@expo/vector-icons';
 import { mobileClient } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { FieldLabel } from './ui/FieldLabel';
 
 export type PlaceSelection = {
   formattedAddress: string;
@@ -23,6 +24,8 @@ type Props = {
   primaryColor?: string;
   latitude?: number | null;
   longitude?: number | null;
+  required?: boolean;
+  fieldError?: string;
 };
 
 type Prediction = {
@@ -44,6 +47,8 @@ export function AddressPlacesField({
   primaryColor = colors.primary,
   latitude,
   longitude,
+  required,
+  fieldError,
 }: Props) {
   const [query, setQuery] = useState(value);
   const [searchTerm, setSearchTerm] = useState('');
@@ -149,8 +154,8 @@ export function AddressPlacesField({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.field}>
+      <FieldLabel label={label} required={required} />
+      <View style={[styles.field, fieldError ? styles.fieldError : null]}>
         <Feather name="map-pin" size={16} color={colors.mutedForeground} />
         <TextInput
           value={query}
@@ -177,14 +182,13 @@ export function AddressPlacesField({
           ))}
         </View>
       ) : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {fieldError ? <Text style={styles.error}>{fieldError}</Text> : error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
   field: {
     minHeight: 44,
     borderRadius: radius.md,
@@ -197,6 +201,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing.sm,
   },
+  fieldError: { borderColor: colors.destructive },
   input: {
     flex: 1,
     ...typography.body,

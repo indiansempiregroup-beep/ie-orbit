@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DesktopPage } from '../../components/DesktopPage';
 import { SearchBar } from '../../components/SearchBar';
 import { ListRow } from '../../components/ui/ListRow';
+import { GroupedList } from '../../components/ui/GroupedList';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { ScreenState } from '../../components/ScreenState';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
@@ -44,7 +45,7 @@ export function SearchScreen() {
         {results?.customers?.length ? (
           <View style={styles.section}>
             <SectionHeader title="Customers" />
-            <View style={styles.list}>
+            <GroupedList>
               {results.customers.map((item) => {
                 const name = item.display_name ?? item.full_name ?? item.email ?? 'Customer';
                 return (
@@ -57,14 +58,14 @@ export function SearchScreen() {
                   />
                 );
               })}
-            </View>
+            </GroupedList>
           </View>
         ) : null}
 
         {staffResults.length ? (
           <View style={styles.section}>
             <SectionHeader title="Staff" />
-            <View style={styles.list}>
+            <GroupedList>
               {staffResults.map((item) => {
                 const name = item.display_name ?? item.full_name ?? item.email ?? 'Staff';
                 return (
@@ -77,14 +78,14 @@ export function SearchScreen() {
                   />
                 );
               })}
-            </View>
+            </GroupedList>
           </View>
         ) : null}
 
         {results?.services?.length ? (
           <View style={styles.section}>
             <SectionHeader title="Services" />
-            <View style={styles.list}>
+            <GroupedList>
               {results.services.map((item) => (
                 <ListRow
                   key={`v-${item.id}`}
@@ -94,7 +95,7 @@ export function SearchScreen() {
                   onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
                 />
               ))}
-            </View>
+            </GroupedList>
           </View>
         ) : null}
 
@@ -116,6 +117,5 @@ const styles = StyleSheet.create({
   },
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
   section: { gap: spacing.sm },
-  list: { gap: spacing.md, marginTop: -spacing.sm },
   hint: { ...typography.caption, color: colors.mutedForeground, textAlign: 'center', marginTop: spacing.lg },
 });

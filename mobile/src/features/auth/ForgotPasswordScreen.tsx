@@ -65,14 +65,21 @@ export function ForgotPasswordScreen({ navigation }: Props) {
           <View style={styles.form}>
             <Input
               label="Email address"
+              required
               leftIcon="mail"
               placeholder="you@example.com"
               autoCapitalize="none"
               keyboardType="email-address"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(value) => {
+                setEmail(value);
+                setError('');
+              }}
+              error={error && (error.startsWith('Email') || error.startsWith('Invalid email')) ? error : undefined}
             />
-            {error ? <FormAlert message={error} /> : null}
+            {error && !(error.startsWith('Email') || error.startsWith('Invalid email')) ? (
+              <FormAlert message={error} />
+            ) : null}
             <Button label="Send reset link" size="lg" fullWidth loading={submitting} primaryColor={primary} onPress={onSubmit} />
           </View>
         </>

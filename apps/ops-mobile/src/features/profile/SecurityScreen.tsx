@@ -7,6 +7,7 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { passwordFieldError } from '../../utils/formValidation';
 
 export function SecurityScreen() {
   const client = useOpsClient();
@@ -31,6 +32,12 @@ export function SecurityScreen() {
             setLoading(true);
             setError(null);
             try {
+              const currentError = current ? null : 'Current password is required';
+              const nextError = passwordFieldError(next);
+              if (currentError || nextError) {
+                setError(currentError || nextError);
+                return;
+              }
               await client.auth.changePassword({ current_password: current, new_password: next });
               if (biometricEnabled) {
                 await disableBiometrics();
@@ -49,10 +56,25 @@ export function SecurityScreen() {
         />
       }
     >
-      <Text style={styles.title}>Change password</Text>
       <Text style={styles.subtitle}>Use a strong password you don&apos;t reuse elsewhere.</Text>
-      <Input label="Current password" secureTextEntry leftIcon="lock" value={current} onChangeText={setCurrent} />
-      <Input label="New password" secureTextEntry leftIcon="lock" value={next} onChangeText={setNext} />
+      <Input
+        label="Current password"
+        required
+        secureTextEntry
+        leftIcon="lock"
+        value={current}
+        onChangeText={setCurrent}
+        error={error === 'Current password is required' ? error : undefined}
+      />
+      <Input
+        label="New password"
+        required
+        secureTextEntry
+        leftIcon="lock"
+        value={next}
+        onChangeText={setNext}
+        error={error && error !== 'Current password is required' && error.toLowerCase().includes('password') ? error : undefined}
+      />
       {message ? <Text style={styles.success}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
@@ -60,8 +82,7 @@ export function SecurityScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.foreground },
-  subtitle: { ...typography.body, color: colors.mutedForeground, marginTop: -4 },
+  subtitle: { ...typography.body, color: colors.mutedForeground },
   success: { ...typography.caption, color: colors.success },
   error: { ...typography.caption, color: colors.destructive },
 });

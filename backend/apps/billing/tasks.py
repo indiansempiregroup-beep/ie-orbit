@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from django.conf import settings
-
 from celery import shared_task
+from django.conf import settings
 
 
 @shared_task(name="billing.apply_period_end_plan_changes")
@@ -40,41 +39,46 @@ def reconcile_billing_sessions_task(tenant_id: str, lookback_hours: int = 72) ->
     ).as_dict()
 
 
-@shared_task(name="billing.send_ops_digest")
-def send_billing_ops_digest_task(window_hours: int = 24) -> dict[str, object]:
-    from apps.billing.services.ops_digest import build_ops_digest
-    from apps.notifications.services.providers.email import email_info_card, send_branded_email
-    from apps.tenancy.models import Tenant
-
+def _ops_digest_recipients() -> list[str]:
     recipients_raw = (
         getattr(settings, "BILLING_OPS_DIGEST_RECIPIENTS", "")
         or getattr(settings, "BILLING_WEBHOOK_ALERT_RECIPIENTS", "")
     )
-    recipients = [item.strip() for item in recipients_raw.split(",") if item.strip()]
+    recipients = [item.strip() for item in str(recipients_raw).split(",") if item.strip()]
+    if recipients:
+        return recipients
+    from apps.platform_admin.services import _platform_admin_emails
+
+    return _platform_admin_emails()
+
+
+@shared_task(name="billing.send_ops_digest")
+def send_billing_ops_digest_task(window_hours: int = 24) -> dict[str, object]:
+    from apps.billing.services.ops_digest import build_platform_digest
+    from apps.notifications.services.providers.email import send_branded_email
+
+    recipients = _ops_digest_recipients()
     if not recipients:
         return {"sent": False, "reason": "no_recipients"}
 
-    tenants = Tenant.objects.filter(status="active").order_by("display_name")
-    digests = [build_ops_digest(tenant=tenant, window_hours=window_hours) for tenant in tenants]
-    lines = []
-    for digest in digests:
-        lines.append(
-            f"{digest['tenant_name']} [{digest['tenant_slug']}]: "
-            f"{'READY' if digest['ready'] else 'NOT READY'} | "
-            f"failed={digest['metrics']['failed']} dead_letter={digest['metrics']['dead_letter']} "
-            f"failure_rate={round(float(digest['metrics']['failure_rate']) * 100, 2)}%"
-        )
+    digest = build_platform_digest(window_hours=window_hours)
     send_branded_email(
-        subject=f"[IE Orbit] Billing Ops Digest ({window_hours}h)",
-        body=f"Billing ops digest for the last {window_hours} hours.",
+        subject=digest["subject"],
+        body=digest["body"],
         recipient=recipients,
         business_name="IE Orbit",
-        headline=f"Billing ops digest ({window_hours}h)",
-        extra_html=email_info_card(title="Tenants", lines=lines or ["No active tenants."]),
+        headline=digest["headline"],
+        extra_html=digest["extra_html"],
+        help_html=digest["help_html"],
+        cta_label=digest["cta_label"],
+        cta_url=digest["cta_url"],
+        accent_color=digest["accent_color"],
+        footer_note=digest["footer_note"],
         fail_silently=True,
     )
     return {
         "sent": True,
-        "tenant_count": len(digests),
+        "tenant_count": digest["tenant_count"],
+        "attention_count": digest["attention_count"],
         "recipient_count": len(recipients),
     }

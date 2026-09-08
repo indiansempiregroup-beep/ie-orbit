@@ -1,19 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
 import { CommonActions, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { FormSection } from '../../components/ui/FormSection';
+import { FieldRow } from '../../components/ui/FieldRow';
 import { Input } from '../../components/ui/Input';
 import { ScreenState } from '../../components/ScreenState';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomer } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
-import { colors, fonts, typography } from '../../theme/tokens';
 import { parseCustomerAddress, type ParsedCustomerAddress } from '../../utils/customerAddress';
 import { getApiErrorMessage } from '../../utils/format';
+import { emailFieldError } from '../../utils/emailValidation';
+import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 import { normalizeGstin, validateGstin } from '../../utils/gstin';
 import { hasShopie } from '../../utils/products';
 import type { RootStackParamList } from '../../navigation/types';
@@ -91,6 +94,7 @@ export function CustomerFormScreen() {
   const [address, setAddress] = useState<ParsedCustomerAddress>({ line1: '', latitude: null, longitude: null });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!customer) return;
@@ -117,16 +121,32 @@ export function CustomerFormScreen() {
             setSubmitting(true);
             setError(null);
             try {
-              const line1 = address.line1.trim();
+              const nextErrors: Record<string, string> = {};
+              const identity = displayName.trim() || `${firstName.trim()} ${lastName.trim()}`.trim();
+              if (!identity) nextErrors.displayName = requiredMessage('Display name or first name');
+              const emailError = emailFieldError(email, false);
+              if (emailError) nextErrors.email = emailError;
+              const phoneError = indianMobileError(phone, false);
+              if (phoneError) nextErrors.phone = phoneError;
+              if (!email.trim() && !phone.trim()) {
+                nextErrors.email = 'Email or phone is required';
+                nextErrors.phone = 'Email or phone is required';
+              }
               let resolvedGstin = '';
               if (showGstFields) {
                 const gstinResult = validateGstin(gstin);
                 if (!gstinResult.ok) {
-                  setError(gstinResult.message);
-                  return;
+                  nextErrors.gstin = gstinResult.message;
+                } else {
+                  resolvedGstin = gstinResult.gstin;
                 }
-                resolvedGstin = gstinResult.gstin;
               }
+              if (Object.keys(nextErrors).length) {
+                setFieldErrors(nextErrors);
+                return;
+              }
+              setFieldErrors({});
+              const line1 = address.line1.trim();
               const payload = {
                 display_name: displayName || `${firstName} ${lastName}`.trim() || email,
                 first_name: firstName,
@@ -185,26 +205,53 @@ export function CustomerFormScreen() {
         />
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>{isEdit ? 'Edit customer' : 'Add customer'}</Text>
-        <Text style={styles.subtitle}>Contact details used across bookings and search.</Text>
-      </View>
+      <FormHero
+        icon="user-plus"
+        title={isEdit ? 'Edit customer' : 'Add customer'}
+        subtitle="Contact details used across bookings and search."
+      />
 
       <FormSection title="Identity">
-        <Input label="Display name" value={displayName} onChangeText={setDisplayName} />
-        <Input label="First name" value={firstName} onChangeText={setFirstName} />
-        <Input label="Last name" value={lastName} onChangeText={setLastName} />
+        <Input
+          label="Display name"
+          required
+          value={displayName}
+          onChangeText={(value) => {
+            setDisplayName(value);
+            setFieldErrors((current) => ({ ...current, displayName: '' }));
+          }}
+          error={fieldErrors.displayName}
+        />
+        <FieldRow>
+          <Input label="First name" optional value={firstName} onChangeText={setFirstName} />
+          <Input label="Last name" optional value={lastName} onChangeText={setLastName} />
+        </FieldRow>
       </FormSection>
 
-      <FormSection title="Contact">
+      <FormSection title="Contact" subtitle="Email or phone is required.">
         <Input
           label="Email"
+          required
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            setFieldErrors((current) => ({ ...current, email: '' }));
+          }}
+          error={fieldErrors.email}
           autoCapitalize="none"
           keyboardType="email-address"
         />
-        <Input label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+        <Input
+          label="Phone"
+          required
+          value={phone}
+          onChangeText={(value) => {
+            setPhone(value);
+            setFieldErrors((current) => ({ ...current, phone: '' }));
+          }}
+          error={fieldErrors.phone}
+          keyboardType="phone-pad"
+        />
       </FormSection>
 
       {showGstFields ? (
@@ -212,17 +259,23 @@ export function CustomerFormScreen() {
           <Input
             label="GSTIN"
             value={gstin}
-            onChangeText={(value) => setGstin(normalizeGstin(value))}
+            onChangeText={(value) => {
+              setGstin(normalizeGstin(value));
+              setFieldErrors((current) => ({ ...current, gstin: '' }));
+            }}
             autoCapitalize="characters"
             autoCorrect={false}
             maxLength={15}
             placeholder="29AABCU9603R1ZJ"
+            error={fieldErrors.gstin}
+            optional
           />
         </FormSection>
       ) : null}
 
       <FormSection title="Address" subtitle="Optional — helps with location-aware booking.">
         <AddressLocationPicker
+          optional
           value={address.line1}
           latitude={address.latitude ?? null}
           longitude={address.longitude ?? null}
@@ -241,14 +294,7 @@ export function CustomerFormScreen() {
         />
       </FormSection>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <FormAlert message={error} /> : null}
     </FormScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  intro: { gap: 4, marginBottom: 4 },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
-  error: { ...typography.caption, color: colors.destructive },
-});

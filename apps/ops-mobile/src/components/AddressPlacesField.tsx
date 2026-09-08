@@ -3,6 +3,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { Feather } from '@expo/vector-icons';
 import { opsClient } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { FieldLabel } from './ui/FieldLabel';
+import { fieldStyles, inputReset } from './ui/fieldStyles';
 
 export type PlaceSelection = {
   formattedAddress: string;
@@ -22,6 +24,9 @@ type Props = {
   onPlaceSelected?: (place: PlaceSelection) => void;
   latitude?: number | null;
   longitude?: number | null;
+  required?: boolean;
+  optional?: boolean;
+  fieldError?: string;
 };
 
 type Prediction = {
@@ -42,6 +47,9 @@ export function AddressPlacesField({
   onPlaceSelected,
   latitude,
   longitude,
+  required,
+  optional,
+  fieldError,
 }: Props) {
   const [query, setQuery] = useState(value);
   const [searchTerm, setSearchTerm] = useState('');
@@ -147,16 +155,17 @@ export function AddressPlacesField({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.field}>
+      <FieldLabel label={label} required={required} optional={optional} />
+      <View style={[styles.field, fieldError ? fieldStyles.controlError : null]}>
         <Feather name="map-pin" size={16} color={colors.mutedForeground} />
         <TextInput
           value={query}
           onChangeText={handleTyping}
           placeholder="Search address on Google Maps"
           placeholderTextColor={colors.mutedForeground}
-          style={styles.input}
+          style={[inputReset, styles.input]}
           multiline
+          underlineColorAndroid="transparent"
         />
         {loading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       </View>
@@ -175,14 +184,13 @@ export function AddressPlacesField({
           ))}
         </View>
       ) : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {fieldError ? <Text style={styles.error}>{fieldError}</Text> : error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
   field: {
     minHeight: 44,
     borderRadius: radius.md,

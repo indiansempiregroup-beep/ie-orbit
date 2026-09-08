@@ -19,6 +19,7 @@ import { persistLanguagePreference } from '../../i18n';
 import { useScreenInsets } from '../../theme/layout';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 
 function roundCoord(value: number | null): number | null {
   if (value == null || Number.isNaN(value)) return null;
@@ -50,6 +51,7 @@ export function ProfileEditScreen() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
@@ -77,6 +79,15 @@ export function ProfileEditScreen() {
   async function onSave() {
     setError('');
     setSuccess('');
+    const nextErrors: Record<string, string> = {};
+    if (!firstName.trim()) nextErrors.firstName = requiredMessage('First name');
+    const phoneError = indianMobileError(phone, false);
+    if (phoneError) nextErrors.phone = phoneError;
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+    setFieldErrors({});
     setSaving(true);
     try {
       if (photoAsset && token && tenantSlug && businessCode) {
@@ -145,7 +156,17 @@ export function ProfileEditScreen() {
           }}
           helperText={t('profile.photoHelper')}
         />
-        <Input label={t('common.firstName')} value={firstName} onChangeText={setFirstName} placeholder={t('common.firstName')} />
+        <Input
+          label={t('common.firstName')}
+          required
+          value={firstName}
+          onChangeText={(value) => {
+            setFirstName(value);
+            setFieldErrors((current) => ({ ...current, firstName: '' }));
+          }}
+          error={fieldErrors.firstName}
+          placeholder={t('common.firstName')}
+        />
         <Input label={t('common.lastName')} value={lastName} onChangeText={setLastName} placeholder={t('common.lastName')} />
         <Input
           label={t('common.email')}
@@ -156,8 +177,13 @@ export function ProfileEditScreen() {
         />
         <Input
           label={t('common.phone')}
+          optional
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(value) => {
+            setPhone(value);
+            setFieldErrors((current) => ({ ...current, phone: '' }));
+          }}
+          error={fieldErrors.phone}
           placeholder={t('common.phone')}
           leftIcon="phone"
           keyboardType="phone-pad"

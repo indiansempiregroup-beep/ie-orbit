@@ -16,9 +16,11 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomers } from '../../hooks/useOpsData';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
-import { SelectField } from '../../components/SelectField';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { DesktopPage } from '../../components/DesktopPage';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { RemoteImage } from '../../components/RemoteImage';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useUpdateBusinessAddons, useBusinessBillingSnapshot } from '../../hooks/useOpsExtended';
@@ -48,6 +50,8 @@ export function ShopPetsScreen() {
   const [search, setSearch] = useState('');
   const [speciesFilter, setSpeciesFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
+  const [sortBy, setSortBy] = useState('name_asc');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -159,7 +163,7 @@ export function ShopPetsScreen() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return pets.filter((pet) => {
+    const list = pets.filter((pet) => {
       if (speciesFilter && (pet.species || '').toLowerCase() !== speciesFilter.toLowerCase()) {
         return false;
       }
@@ -170,9 +174,15 @@ export function ShopPetsScreen() {
         .toLowerCase()
         .includes(term);
     });
-  }, [pets, search, speciesFilter, customerFilter]);
+    return [...list].sort((a, b) => {
+      if (sortBy === 'name_desc') return String(b.name).localeCompare(String(a.name));
+      if (sortBy === 'species') return String(a.species || '').localeCompare(String(b.species || ''));
+      return String(a.name).localeCompare(String(b.name));
+    });
+  }, [pets, search, speciesFilter, customerFilter, sortBy]);
 
-  const activeFilterCount = [speciesFilter, customerFilter, search.trim()].filter(Boolean).length;
+  const activeFilterCount =
+    Number(Boolean(speciesFilter)) + Number(Boolean(customerFilter)) + Number(sortBy !== 'name_asc');
 
   return (
     <DesktopPage>
@@ -206,31 +216,43 @@ export function ShopPetsScreen() {
           </RefreshableScrollView>
         ) : (
           <>
-            <SearchBar
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search pet, breed, owner…"
-              style={styles.search}
-            />
-            <View style={styles.filters}>
-              <View style={styles.filterHalf}>
-                <SelectField
-                  label="Species"
-                  value={speciesFilter}
-                  options={speciesOptions}
-                  onChange={setSpeciesFilter}
-                />
-              </View>
-              <View style={styles.filterHalf}>
-                <SelectField
-                  label="Owner"
-                  value={customerFilter}
-                  options={customerOptions}
-                  onChange={setCustomerFilter}
-                  searchable
-                />
-              </View>
+            <View style={styles.topBar}>
+              <SearchBar
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search pet, breed, owner…"
+                style={styles.searchFlex}
+              />
+              <FilterButton count={activeFilterCount} onPress={() => setFiltersOpen(true)} />
             </View>
+            <FilterSheet
+              visible={filtersOpen}
+              onClose={() => setFiltersOpen(false)}
+              onReset={() => {
+                setSpeciesFilter('');
+                setCustomerFilter('');
+                setSortBy('name_asc');
+              }}
+            >
+              <FilterChoiceGroup label="Species" value={speciesFilter} options={speciesOptions} onChange={setSpeciesFilter} />
+              <FilterChoiceGroup
+                label="Owner"
+                value={customerFilter}
+                options={customerOptions}
+                onChange={setCustomerFilter}
+                searchable
+              />
+              <FilterChoiceGroup
+                label="Sort"
+                value={sortBy}
+                options={[
+                  { value: 'name_asc', label: 'Name A–Z' },
+                  { value: 'name_desc', label: 'Name Z–A' },
+                  { value: 'species', label: 'Species' },
+                ]}
+                onChange={setSortBy}
+              />
+            </FilterSheet>
             {activeFilterCount ? (
               <View style={styles.filterMetaRow}>
                 <Text style={styles.meta}>
@@ -255,39 +277,24 @@ export function ShopPetsScreen() {
 
             {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
             <FlatList
+              {...groupedListProps(filtered.length)}
               data={filtered}
               keyExtractor={(item) => item.id}
               refreshControl={shopListRefreshControl(refreshing, onRefresh)}
               contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
               renderItem={({ item }) => {
-                const photoUri = resolveMediaUrl(item.photo_url);
+                const owner = item.customer_name ? `Owner: ${item.customer_name}` : 'No owner name';
                 return (
-                  <Pressable
-                    style={styles.row}
+                  <BooksDocumentRow
+                    title={item.name}
+                    meta={[[item.species, item.breed].filter(Boolean).join(' · ') || 'No species', item.birthday ? `birthday ${item.birthday}` : '', owner, item.sex]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    badge={item.species || 'Pet'}
+                    icon="heart"
+                    iconTone="rose"
                     onPress={() => navigation.navigate('ShopPetDetail', { petId: item.id })}
-                  >
-                    <View style={styles.rowInner}>
-                      {photoUri ? (
-                        <RemoteImage uri={photoUri} style={styles.thumb} />
-                      ) : (
-                        <View style={[styles.thumb, styles.thumbEmpty]}>
-                          <Feather name="heart" size={18} color={colors.mutedForeground} />
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.name}>{item.name}</Text>
-                        <Text style={styles.meta}>
-                          {[item.species, item.breed].filter(Boolean).join(' · ') || 'No species'}
-                          {item.birthday ? ` · birthday ${item.birthday}` : ''}
-                        </Text>
-                        <Text style={styles.meta}>
-                          {item.customer_name ? `Owner: ${item.customer_name}` : 'No owner name'}
-                          {item.sex ? ` · ${item.sex}` : ''}
-                        </Text>
-                      </View>
-                      <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-                    </View>
-                  </Pressable>
+                  />
                 );
               }}
               ListEmptyComponent={
@@ -324,6 +331,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.tint,
   },
   search: { marginBottom: spacing.sm },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.sm },
+  searchFlex: { flex: 1 },
   filters: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },
   filterHalf: { flex: 1 },
   filterMetaRow: {

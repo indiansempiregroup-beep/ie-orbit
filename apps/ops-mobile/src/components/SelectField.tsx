@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -11,7 +10,9 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FieldLabel } from './ui/FieldLabel';
+import { fieldStyles, inputReset } from './ui/fieldStyles';
+import { useSheetKeyboardLayout } from '../hooks/useSheetKeyboardLayout';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 
 export type SelectOption = { value: string; label: string };
@@ -24,6 +25,10 @@ type Props = {
   placeholder?: string;
   /** Show search box. Defaults to true when there are more than 5 options. */
   searchable?: boolean;
+  required?: boolean;
+  optional?: boolean;
+  error?: string;
+  hint?: string;
 };
 
 export function SelectField({
@@ -33,8 +38,12 @@ export function SelectField({
   onChange,
   placeholder = 'Select…',
   searchable,
+  required,
+  optional,
+  error,
+  hint,
 }: Props) {
-  const insets = useSafeAreaInsets();
+  const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.7);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const selected = options.find((option) => option.value === value);
@@ -51,29 +60,42 @@ export function SelectField({
   }, [options, query]);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={fieldStyles.wrap}>
+      <FieldLabel label={label} required={required} optional={optional} />
       <Pressable
-        style={({ pressed }) => [styles.field, pressed && styles.fieldPressed]}
+        style={({ pressed }) => [
+          fieldStyles.control,
+          pressed && fieldStyles.controlPressed,
+          error ? fieldStyles.controlError : null,
+        ]}
         onPress={() => setOpen(true)}
       >
-        <Text style={[styles.value, !selected && styles.placeholder]} numberOfLines={1}>
+        <Text style={[fieldStyles.value, !selected && fieldStyles.placeholder]} numberOfLines={1}>
           {selected?.label ?? placeholder}
         </Text>
-        <Feather name="chevron-down" size={18} color={colors.mutedForeground} />
+        <Feather name="chevron-down" size={16} color={colors.mutedForeground} />
       </Pressable>
+      {error ? <Text style={fieldStyles.error}>{error}</Text> : null}
+      {hint && !error ? <Text style={fieldStyles.hint}>{hint}</Text> : null}
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
         <View style={styles.overlay}>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Close" />
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
+          <View
+            style={[
+              styles.sheet,
+              {
+                marginBottom: lift,
+                paddingBottom: bottomPad,
+                maxHeight,
+                height: maxHeight,
+              },
+            ]}
           >
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
               <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>{label}</Text>
+                <Text style={styles.sheetTitle}>{label || 'Select'}</Text>
                 <Text style={styles.sheetSubtitle}>
                   {filtered.length} option{filtered.length === 1 ? '' : 's'}
                   {query.trim() ? ' found' : ''}
@@ -90,12 +112,12 @@ export function SelectField({
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
-                  placeholder={`Search ${label.toLowerCase()}…`}
+                  placeholder={`Search ${label.toLowerCase() || 'options'}…`}
                   placeholderTextColor={colors.mutedForeground}
                   autoCorrect={false}
                   autoCapitalize="none"
                   clearButtonMode="while-editing"
-                  style={styles.searchInput}
+                  style={[inputReset, styles.searchInput]}
                 />
                 {query.length > 0 && Platform.OS !== 'ios' ? (
                   <Pressable onPress={() => setQuery('')} hitSlop={8}>
@@ -109,6 +131,7 @@ export function SelectField({
               data={filtered}
               keyExtractor={(item) => item.value}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
               style={styles.list}
               contentContainerStyle={filtered.length === 0 ? styles.listEmptyContent : styles.listContent}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -141,7 +164,7 @@ export function SelectField({
                 );
               }}
             />
-          </KeyboardAvoidingView>
+          </View>
         </View>
       </Modal>
     </View>
@@ -149,31 +172,14 @@ export function SelectField({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
-  label: { ...typography.label, color: colors.foreground },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 48,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-  },
-  fieldPressed: { backgroundColor: colors.muted },
-  value: { ...typography.body, color: colors.foreground, flex: 1 },
-  placeholder: { color: colors.mutedForeground },
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
   sheet: {
     backgroundColor: colors.sheet,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '82%',
-    height: '72%',
+    width: '100%',
+    minHeight: 280,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     shadowColor: '#142033',
@@ -214,7 +220,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: 44,
     borderRadius: radius.md,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.field,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: spacing.md,

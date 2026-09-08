@@ -62,7 +62,6 @@ export function UtilitiesScreen() {
 
   return (
     <FormScreen>
-      <Text style={styles.formTitle}>Utilities</Text>
       <Text style={styles.help}>Local GST, margin, discount, and EMI calculators — no API needed.</Text>
 
       <View style={styles.chips}>
@@ -170,11 +169,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.background,
+    backgroundColor: colors.inputBackground,
   },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   resultLabel: { ...typography.body, color: colors.mutedForeground },

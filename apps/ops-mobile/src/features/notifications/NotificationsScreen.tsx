@@ -1,45 +1,46 @@
-import React, { useCallback, useLayoutEffect } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { Notification } from '@ie-orbit/sdk';
 import { Feather } from '@expo/vector-icons';
 import { DesktopPage } from '../../components/DesktopPage';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenState } from '../../components/ScreenState';
+import { Chip } from '../../components/ui/Chip';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { IconBadge } from '../../components/ui/IconBadge';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { setStackSubtitle } from '../../navigation/OpsStackHeader';
+import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 import { formatRelativeTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
-const iconMap = {
-  booking: 'calendar',
-  reminder: 'clock',
-  review: 'star',
-  cancel: 'x',
-  payment: 'credit-card',
-  order: 'package',
-  return: 'rotate-ccw',
-  pet: 'gift',
-} as const;
+const TYPE_META: Record<string, { icon: keyof typeof Feather.glyphMap; tone: IconTone; label: string }> = {
+  booking: { icon: 'calendar', tone: 'navy', label: 'Booking' },
+  reminder: { icon: 'clock', tone: 'cyan', label: 'Reminder' },
+  review: { icon: 'star', tone: 'amber', label: 'Review' },
+  cancel: { icon: 'x', tone: 'rose', label: 'Cancelled' },
+  payment: { icon: 'credit-card', tone: 'green', label: 'Payment' },
+  order: { icon: 'package', tone: 'violet', label: 'Order' },
+  return: { icon: 'rotate-ccw', tone: 'coral', label: 'Return' },
+  pet: { icon: 'gift', tone: 'rose', label: 'Pet' },
+};
 
-type NotificationType = keyof typeof iconMap;
-
-function iconWrapStyle(type: string) {
-  if (type === 'review') return styles.iconAmber;
-  if (type === 'cancel') return styles.iconRed;
-  if (type === 'order' || type === 'return') return styles.iconGreen;
-  if (type === 'pet') return styles.iconPink;
-  return styles.iconBlue;
+function typeMeta(type?: string) {
+  return TYPE_META[type || ''] ?? { icon: 'bell' as const, tone: 'navy' as IconTone, label: 'Alert' };
 }
 
-function iconColor(type: string) {
-  if (type === 'review') return colors.warning;
-  if (type === 'cancel') return colors.destructive;
-  if (type === 'order' || type === 'return') return colors.success;
-  if (type === 'pet') return '#DB2777';
-  return colors.primary;
+function dayGroup(iso?: string) {
+  if (!iso) return 'Earlier';
+  const date = new Date(iso);
+  const startOf = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const diff = Math.round((startOf(new Date()) - startOf(date)) / 86_400_000);
+  if (diff <= 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return 'Earlier';
 }
 
 function openRelatedItem(
@@ -59,22 +60,44 @@ export function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { notifications, loading, reload, markRead, markAllRead, unreadCount } = useNotifications();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
-  const hasUnread = unreadCount > 0;
+  const [readFilter, setReadFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const filtered = useMemo(() => {
+    const list = notifications.filter((notification) => {
+      if (readFilter === 'unread' && notification.is_read) return false;
+      if (readFilter === 'read' && !notification.is_read) return false;
+      if (typeFilter && String(notification.notification_type || '') !== typeFilter) return false;
+      return true;
+    });
+    return [...list].sort((a, b) => {
+      if (sortBy === 'oldest') return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+  }, [notifications, readFilter, typeFilter, sortBy]);
+
+  const grouped = useMemo(() => {
+    const sections: Array<{ title: string; items: Notification[] }> = [];
+    for (const item of filtered) {
+      const title = dayGroup(item.created_at);
+      const last = sections[sections.length - 1];
+      if (last?.title === title) last.items.push(item);
+      else sections.push({ title, items: [item] });
+    }
+    return sections;
+  }, [filtered]);
+
+  const extraFilterCount = Number(Boolean(typeFilter)) + Number(sortBy !== 'newest');
 
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          disabled={!hasUnread}
-          onPress={() => void markAllRead()}
-          hitSlop={8}
-          style={styles.markReadHit}
-        >
-          <Text style={[styles.markRead, !hasUnread && styles.markReadDisabled]}>Mark all read</Text>
-        </Pressable>
-      ),
-    });
-  }, [hasUnread, markAllRead, navigation]);
+    navigation.setOptions({ headerRight: undefined });
+    setStackSubtitle(
+      navigation,
+      unreadCount ? `${unreadCount} unread` : notifications.length ? 'You’re all caught up' : 'No alerts yet',
+    );
+  }, [navigation, notifications.length, unreadCount]);
 
   useFocusEffect(
     useCallback(() => {
@@ -84,93 +107,195 @@ export function NotificationsScreen() {
 
   return (
     <DesktopPage>
-      <RefreshableScrollView refreshing={refreshing || loading} onRefresh={onRefresh} contentContainerStyle={styles.content}>
-        <ScreenState
-          loading={loading && !notifications.length}
-          empty={!loading && notifications.length === 0}
-          emptyMessage="No alerts yet."
-        />
-        {notifications.map((notification) => {
-          const type = (notification.notification_type || 'booking') as NotificationType;
-          const icon = iconMap[type] ?? 'bell';
+      <View style={styles.toolbar}>
+        <View style={styles.chips}>
+          <Chip label="All" active={!readFilter} onPress={() => setReadFilter('')} />
+          <Chip
+            label={unreadCount ? `Unread · ${unreadCount}` : 'Unread'}
+            active={readFilter === 'unread'}
+            onPress={() => setReadFilter(readFilter === 'unread' ? '' : 'unread')}
+          />
+        </View>
+        <FilterButton count={extraFilterCount} onPress={() => setFiltersOpen(true)} />
+      </View>
 
-          return (
-            <Pressable
-              key={notification.id}
-              onPress={() => {
-                if (!notification.is_read) void markRead(notification.id);
-                openRelatedItem(navigation, notification);
-              }}
-            >
-              <View style={[styles.card, !notification.is_read && styles.unread]}>
-                <View style={styles.row}>
-                  <View style={[styles.iconWrap, iconWrapStyle(type)]}>
-                    <Feather name={icon} size={18} color={iconColor(type)} />
-                  </View>
-                  <View style={styles.copy}>
-                    <Text style={styles.subject}>{notification.subject ?? 'Notification'}</Text>
-                    <Text style={styles.body} numberOfLines={3}>
-                      {notification.body ?? ''}
-                    </Text>
-                    <View style={styles.footer}>
-                      <Text style={styles.time}>{formatRelativeTime(notification.created_at)}</Text>
-                      {!notification.is_read ? (
-                        <View style={styles.dotRow}>
-                          <View style={styles.dot} />
-                          <Text style={styles.unreadLabel}>New</Text>
+      {unreadCount > 0 ? (
+        <View style={styles.actionRow}>
+          <Pressable onPress={() => void markAllRead()} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.markAll}>Mark all as read</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <FilterSheet
+        visible={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        onReset={() => {
+          setTypeFilter('');
+          setSortBy('newest');
+        }}
+      >
+        <FilterChoiceGroup
+          label="Type"
+          value={typeFilter}
+          options={[
+            { value: '', label: 'All' },
+            { value: 'booking', label: 'Bookings' },
+            { value: 'order', label: 'Orders' },
+            { value: 'payment', label: 'Payments' },
+            { value: 'return', label: 'Returns' },
+            { value: 'review', label: 'Reviews' },
+            { value: 'pet', label: 'Pets' },
+          ]}
+          onChange={setTypeFilter}
+        />
+        <FilterChoiceGroup
+          label="Sort"
+          value={sortBy}
+          options={[
+            { value: 'newest', label: 'Newest' },
+            { value: 'oldest', label: 'Oldest' },
+          ]}
+          onChange={setSortBy}
+        />
+      </FilterSheet>
+
+      <RefreshableScrollView
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        contentContainerStyle={styles.content}
+      >
+        <ScreenState loading={loading && !notifications.length} />
+        {!loading && filtered.length === 0 ? (
+          <EmptyState
+            icon="bell"
+            tone="navy"
+            title={notifications.length ? 'No matching alerts' : 'No alerts yet'}
+            message={
+              notifications.length
+                ? 'Try All, or clear type filters.'
+                : 'Booking, order, and payment updates will show up here.'
+            }
+            actionLabel={notifications.length ? 'Clear filters' : undefined}
+            onAction={
+              notifications.length
+                ? () => {
+                    setReadFilter('');
+                    setTypeFilter('');
+                    setSortBy('newest');
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+
+        {grouped.map((section) => (
+          <View key={section.title} style={styles.section}>
+            <Text style={styles.sectionLabel}>{section.title}</Text>
+            <View style={styles.group}>
+              {section.items.map((notification, index) => {
+                const meta = typeMeta(notification.notification_type);
+                const unread = !notification.is_read;
+                return (
+                  <Pressable
+                    key={notification.id}
+                    onPress={() => {
+                      if (unread) void markRead(notification.id);
+                      openRelatedItem(navigation, notification);
+                    }}
+                    style={({ pressed }) => [pressed && styles.pressed]}
+                  >
+                    <View style={[styles.row, index > 0 && styles.rowDivider, unread && styles.rowUnread]}>
+                      {unread ? <View style={styles.unreadBar} /> : <View style={styles.unreadSpacer} />}
+                      <IconBadge icon={meta.icon} tone={meta.tone} />
+                      <View style={styles.copy}>
+                        <View style={styles.metaRow}>
+                          <Text style={styles.typeLabel}>{meta.label}</Text>
+                          <Text style={styles.time}>{formatRelativeTime(notification.created_at)}</Text>
                         </View>
-                      ) : (
-                        <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
-                      )}
+                        <Text style={[styles.subject, unread && styles.subjectUnread]} numberOfLines={2}>
+                          {notification.subject ?? 'Notification'}
+                        </Text>
+                        {notification.body ? (
+                          <Text style={styles.body} numberOfLines={2}>
+                            {notification.body}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
                     </View>
-                  </View>
-                </View>
-              </View>
-            </Pressable>
-          );
-        })}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
       </RefreshableScrollView>
     </DesktopPage>
   );
 }
 
 const styles = StyleSheet.create({
-  markReadHit: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  markRead: { ...typography.caption, fontWeight: '600', color: colors.primary },
-  markReadDisabled: { opacity: 0.45 },
-  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
-  card: {
+  toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  chips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  actionRow: {
+    alignItems: 'flex-end',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+  },
+  markAll: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
+  section: { gap: spacing.sm },
+  sectionLabel: {
+    ...typography.caption,
+    fontFamily: fonts.bodySemi,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    paddingHorizontal: 4,
+  },
+  group: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+    overflow: 'hidden',
+    ...shadows.soft,
   },
-  unread: { borderColor: colors.primary, backgroundColor: colors.secondary },
-  row: { flexDirection: 'row', gap: spacing.md },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingRight: spacing.md,
+    backgroundColor: colors.card,
   },
-  iconBlue: { backgroundColor: colors.tint },
-  iconAmber: { backgroundColor: colors.warningSoft },
-  iconRed: { backgroundColor: colors.destructiveSoft },
-  iconGreen: { backgroundColor: colors.successSoft },
-  iconPink: { backgroundColor: '#FCE7F3' },
-  copy: { flex: 1, minWidth: 0 },
-  subject: { ...typography.title, fontSize: 15, color: colors.foreground },
-  body: { ...typography.body, color: colors.mutedForeground, marginTop: 4, lineHeight: 20 },
-  footer: {
+  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  rowUnread: { backgroundColor: colors.secondary },
+  unreadBar: {
+    width: 3,
+    alignSelf: 'stretch',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  unreadSpacer: { width: 3 },
+  copy: { flex: 1, minWidth: 0, paddingTop: 2 },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.sm,
+    gap: spacing.sm,
+    marginBottom: 2,
   },
+  typeLabel: { ...typography.tiny, fontFamily: fonts.bodySemi, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5 },
   time: { ...typography.caption, color: colors.mutedForeground },
-  dotRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
-  unreadLabel: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
+  subject: { ...typography.body, fontFamily: fonts.bodyMedium, color: colors.foreground, fontSize: 15 },
+  subjectUnread: { fontFamily: fonts.bodySemi },
+  body: { ...typography.caption, color: colors.mutedForeground, marginTop: 4, lineHeight: 18 },
+  pressed: { opacity: 0.92 },
 });

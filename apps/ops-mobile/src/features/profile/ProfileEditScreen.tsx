@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 import { applyAppLanguage, setActiveIntlLocale } from '@ie-orbit/i18n';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { FormSection } from '../../components/ui/FormSection';
+import { FieldRow } from '../../components/ui/FieldRow';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
@@ -15,8 +18,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { persistLanguagePreference } from '../../i18n';
-import { colors, fonts, typography } from '../../theme/tokens';
+import { colors, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 
 export function ProfileEditScreen() {
   const { t } = useTranslation();
@@ -32,6 +36,7 @@ export function ProfileEditScreen() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(user?.profile_photo ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,6 +73,15 @@ export function ProfileEditScreen() {
             setLoading(true);
             setError(null);
             try {
+              const nextErrors: Record<string, string> = {};
+              if (!firstName.trim()) nextErrors.firstName = requiredMessage('First name');
+              const phoneError = indianMobileError(phone, false);
+              if (phoneError) nextErrors.phone = phoneError;
+              if (Object.keys(nextErrors).length) {
+                setFieldErrors(nextErrors);
+                return;
+              }
+              setFieldErrors({});
               let profilePhoto = user?.profile_photo ?? undefined;
               if (photoAsset) {
                 const uploaded = await uploadProfilePhoto({
@@ -110,14 +124,16 @@ export function ProfileEditScreen() {
         />
       }
     >
-      <View style={styles.intro}>
-        <Text style={styles.title}>{t('profile.editTitle')}</Text>
-        <Text style={styles.subtitle}>{t('profile.editSubtitle')}</Text>
-      </View>
+      <FormHero
+        icon="user"
+        title={t('profile.editTitle')}
+        subtitle={t('profile.editSubtitle')}
+      />
 
       <FormSection title={t('profile.identity')}>
         <ImagePickerButton
           label={t('common.profilePhoto')}
+          optional
           variant="avatar"
           valueUri={photoPreview}
           onPicked={(asset) => {
@@ -126,33 +142,50 @@ export function ProfileEditScreen() {
           }}
           helperText={t('profile.photoHelper')}
         />
-        <Input label={t('common.firstName')} value={firstName} onChangeText={setFirstName} />
-        <Input label={t('common.lastName')} value={lastName} onChangeText={setLastName} />
+        <FieldRow>
+          <Input
+            label={t('common.firstName')}
+            required
+            value={firstName}
+            onChangeText={(value) => {
+              setFirstName(value);
+              setFieldErrors((current) => ({ ...current, firstName: '' }));
+            }}
+            error={fieldErrors.firstName}
+          />
+          <Input label={t('common.lastName')} optional value={lastName} onChangeText={setLastName} />
+        </FieldRow>
       </FormSection>
 
       <FormSection title={t('profile.contactRegion')}>
-        <Input label={t('common.phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+        <Input
+          label={t('common.phone')}
+          optional
+          value={phone}
+          onChangeText={(value) => {
+            setPhone(value);
+            setFieldErrors((current) => ({ ...current, phone: '' }));
+          }}
+          error={fieldErrors.phone}
+          keyboardType="phone-pad"
+        />
         <SelectField
           label={t('common.language')}
+          required
           value={language}
           options={languageOptions}
           onChange={setLanguage}
         />
         <Text style={styles.hint}>{t('profile.languageHint')}</Text>
-        <SelectField label={t('common.timezone')} value={timezone} options={timezoneOptions} onChange={setTimezone} />
+        <SelectField label={t('common.timezone')} required value={timezone} options={timezoneOptions} onChange={setTimezone} />
       </FormSection>
 
-      {message ? <Text style={styles.success}>{message}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {message ? <FormAlert message={message} tone="success" /> : null}
+      {error ? <FormAlert message={error} /> : null}
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  intro: { gap: 4, marginBottom: 4 },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.foreground, letterSpacing: -0.4 },
-  subtitle: { ...typography.body, color: colors.mutedForeground },
   hint: { ...typography.caption, color: colors.mutedForeground, marginTop: -4 },
-  success: { ...typography.caption, color: colors.success },
-  error: { ...typography.caption, color: colors.destructive },
 });

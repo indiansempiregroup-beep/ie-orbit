@@ -25,6 +25,8 @@ import { layout } from '../../theme/layout';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { markBiometricPromptShown, wasBiometricPromptShown } from '../../utils/biometrics';
 import { getApiErrorMessage } from '../../utils/format';
+import { emailFieldError } from '../../utils/emailValidation';
+import { requiredMessage } from '../../utils/formValidation';
 import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../utils/googleAuth';
 import type { AuthStackParamList } from '../../navigation/types';
 import { GoogleSignInButton } from '../../components/GoogleSignInButton';
@@ -49,6 +51,7 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [googleSignup, setGoogleSignup] = useState<{
     googleIdToken: string;
     email?: string;
@@ -96,10 +99,15 @@ export function LoginScreen() {
 
   async function onSubmit() {
     setError(null);
-    if (!email.trim() || !password) {
-      setError('Email and password are required.');
+    const nextErrors = {
+      email: emailFieldError(email) ?? undefined,
+      password: password ? undefined : requiredMessage('Password'),
+    };
+    if (nextErrors.email || nextErrors.password) {
+      setFieldErrors(nextErrors);
       return;
     }
+    setFieldErrors({});
     try {
       await login(email.trim(), password, remember);
       await offerBiometricEnrollment();
@@ -145,20 +153,30 @@ export function LoginScreen() {
 
       <Input
         label={t('common.email')}
+        required
         leftIcon="mail"
         placeholder={t('auth.emailPlaceholder')}
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(value) => {
+          setEmail(value);
+          setFieldErrors((current) => ({ ...current, email: undefined }));
+        }}
+        error={fieldErrors.email}
       />
       <Input
         label={t('auth.password')}
+        required
         leftIcon="lock"
         placeholder={t('auth.passwordPlaceholder')}
         secureTextEntry
         value={password}
-        onChangeText={setPassword}
+        onChangeText={(value) => {
+          setPassword(value);
+          setFieldErrors((current) => ({ ...current, password: undefined }));
+        }}
+        error={fieldErrors.password}
       />
 
       <View style={styles.row}>
@@ -249,7 +267,7 @@ export function LoginScreen() {
       ) : (
         <>
           <LinearGradient
-            colors={[brand.primary, brand.primaryDark]}
+            colors={[brand.gradientStart, brand.gradientEnd]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[styles.hero, { paddingTop: insets.top + spacing.xxxl }]}

@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -20,19 +19,24 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
 import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
+import { SearchBar } from '../../components/SearchBar';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksVoucher, ShopCashAccount } from '@ie-orbit/sdk';
 import {
   formatMoney,
+  formatVoucherDateTime,
   isVoidedVoucher,
   summarizeVouchers,
   todayIso,
-  voucherStatusStyle,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
@@ -66,6 +70,7 @@ export function ShopBooksExpenseScreen() {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [listKind, setListKind] = useState<EntryKind>('expense');
+  const [search, setSearch] = useState('');
   const [entryKind, setEntryKind] = useState<EntryKind>('expense');
 
   const [category, setCategory] = useState('');
@@ -131,10 +136,17 @@ export function ShopBooksExpenseScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const visibleVouchers = useMemo(
-    () => vouchers.filter((v) => (v.voucher_type || 'expense') === listKind),
-    [vouchers, listKind],
-  );
+  const visibleVouchers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return vouchers.filter((v) => {
+      if ((v.voucher_type || 'expense') !== listKind) return false;
+      if (!term) return true;
+      return [v.voucher_number, v.notes ?? '', v.cash_account_name ?? '', String(v.total)]
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [vouchers, listKind, search]);
   const summary = useMemo(() => summarizeVouchers(visibleVouchers), [visibleVouchers]);
 
   const categoryOptions = useMemo(() => {
@@ -216,7 +228,11 @@ export function ShopBooksExpenseScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>{entryKind === 'expense' ? 'New expense' : 'Other income'}</Text>
+        <FormHero
+          icon={entryKind === 'expense' ? 'credit-card' : 'trending-up'}
+          title={entryKind === 'expense' ? 'New expense' : 'Other income'}
+          subtitle="Record the amount, account, date, and supporting notes."
+        />
 
         <View style={styles.chipRow}>
           <Chip
@@ -239,44 +255,46 @@ export function ShopBooksExpenseScreen() {
 
         <SelectField
           label="Category"
+          required
           value={category}
           options={categoryOptions}
           onChange={setCategory}
           placeholder="Choose or type below"
         />
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Category name"
+          required
           value={category}
           onChangeText={setCategory}
           placeholder={entryKind === 'expense' ? 'Category (e.g. Rent)' : 'Category (e.g. Interest)'}
-          placeholderTextColor={colors.mutedForeground}
         />
 
-        <TextInput
-          style={styles.input}
+        <Input
+          label="Amount"
+          required
           value={amount}
           onChangeText={(value) => setAmount(value.replace(/[^0-9.]/g, ''))}
           placeholder="Amount"
           keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
         />
 
         <SelectField
           label={entryKind === 'expense' ? 'Paid from' : 'Received into'}
+          required
           value={cashAccountId}
           options={accountOptions}
           onChange={setCashAccountId}
         />
 
-        <DateField label="Date" value={voucherDate} onChange={setVoucherDate} allowClear={false} />
+        <DateField label="Date" required value={voucherDate} onChange={setVoucherDate} allowClear={false} />
 
-        <TextInput
-          style={[styles.input, styles.notes]}
+        <Input
+          label="Notes"
+          optional
           value={notes}
           onChangeText={setNotes}
           placeholder="Notes (optional)"
           multiline
-          placeholderTextColor={colors.mutedForeground}
         />
       </FormScreen>
     );
@@ -285,52 +303,45 @@ export function ShopBooksExpenseScreen() {
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
+        <View style={styles.chipRow}>
+          <Chip label="Expense" active={listKind === 'expense'} onPress={() => setListKind('expense')} />
+          <Chip
+            label="Other income"
+            active={listKind === 'other_income'}
+            onPress={() => setListKind('other_income')}
+          />
+        </View>
+        <VoucherSummaryCards summary={summary} mode="expense" />
+        <SearchBar
+          style={styles.search}
+          value={search}
+          onChangeText={setSearch}
+          placeholder={listKind === 'expense' ? 'Search expenses' : 'Search income'}
+        />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
+          {...groupedListProps(visibleVouchers.length)}
           data={visibleVouchers}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
-          ListHeaderComponent={
-            <View style={styles.listHeader}>
-              <View style={styles.chipRow}>
-                <Chip label="Expense" active={listKind === 'expense'} onPress={() => setListKind('expense')} />
-                <Chip
-                  label="Other income"
-                  active={listKind === 'other_income'}
-                  onPress={() => setListKind('other_income')}
-                />
-              </View>
-              {visibleVouchers.length ? <VoucherSummaryCards summary={summary} mode="expense" /> : null}
-            </View>
-          }
           renderItem={({ item }) => {
-            const badge = voucherStatusStyle(item.status);
-            const canVoid = !isVoidedVoucher(item.status);
+            const voided = isVoidedVoucher(item.status);
             const isIncome = item.voucher_type === 'other_income';
             return (
-              <View style={styles.row}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.voucher_number}</Text>
-                  <Text style={[styles.total, isIncome && styles.incomeTotal]}>{formatMoney(item.total)}</Text>
-                </View>
-                <Text style={styles.meta}>
-                  {item.cash_account_name || 'No account'}
-                  {item.voucher_date ? ` · ${item.voucher_date}` : ''}
-                </Text>
-                {item.notes ? <Text style={styles.meta}>{item.notes}</Text> : null}
-                <View style={styles.rowBottom}>
-                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                  </View>
-                  {canVoid ? (
-                    <Pressable onPress={() => void onVoid(item)} hitSlop={8}>
-                      <Text style={styles.voidText}>Void</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
+              <BooksDocumentRow
+                title={item.notes?.trim() || item.voucher_number}
+                amount={formatMoney(item.total)}
+                meta={`${item.voucher_number}${item.cash_account_name ? ` · ${item.cash_account_name}` : ''}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}`}
+                badge={voided ? 'Void' : isIncome ? 'Income' : 'Expense'}
+                badgeKind={voided ? 'void' : isIncome ? 'paid' : 'neutral'}
+                icon={isIncome ? 'trending-up' : 'credit-card'}
+                iconTone={voided ? 'rose' : isIncome ? 'green' : 'navy'}
+                dimmed={voided}
+                actionLabel={!voided ? 'Void' : undefined}
+                onAction={!voided ? () => void onVoid(item) : undefined}
+              />
             );
           }}
           ListEmptyComponent={
@@ -368,8 +379,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.tint,
   },
   listHeader: { gap: spacing.md, marginBottom: spacing.sm },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  search: { marginBottom: spacing.sm },
   row: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -389,14 +400,4 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
   voidText: { color: colors.destructive, fontSize: 13, fontWeight: '700' },
   error: { color: colors.destructive, marginBottom: spacing.sm },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.foreground,
-    backgroundColor: colors.card,
-  },
-  notes: { minHeight: 72, textAlignVertical: 'top' },
 });

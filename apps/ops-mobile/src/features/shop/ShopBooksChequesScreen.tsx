@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -20,19 +19,25 @@ import { SelectField } from '../../components/SelectField';
 import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
+import { SearchBar } from '../../components/SearchBar';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopCashAccount, ShopCheque, ShopSupplier } from '@ie-orbit/sdk';
 import {
   customerLabel,
   formatMoney,
+  formatVoucherDate,
+  formatVoucherDateTime,
   supplierLabel,
-  voucherStatusStyle,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { BooksDocumentRow } from './BooksDocumentRow';
+import { groupedListProps } from '../../components/ui/GroupedList';
 
 type DirectionFilter = 'in' | 'out';
 
@@ -67,6 +72,7 @@ export function ShopBooksChequesScreen() {
   const [partyId, setPartyId] = useState('');
   const [cashAccountId, setCashAccountId] = useState('');
   const [notes, setNotes] = useState('');
+  const [search, setSearch] = useState('');
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -132,10 +138,27 @@ export function ShopBooksChequesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(
-    () => cheques.filter((cheque) => (cheque.direction || '').toLowerCase() === filter),
-    [cheques, filter],
-  );
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return cheques.filter((cheque) => {
+      if ((cheque.direction || '').toLowerCase() !== filter) return false;
+      if (!term) return true;
+      return [cheque.cheque_number, cheque.customer_name ?? '', cheque.supplier_name ?? '', cheque.bank_name ?? '', String(cheque.amount)]
+        .join(' ')
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [cheques, filter, search]);
+
+  const chequeSummary = useMemo(() => {
+    let total = 0;
+    let pending = 0;
+    for (const item of filtered) {
+      total += Number(item.amount ?? 0);
+      if (isPending(item.status)) pending += 1;
+    }
+    return { total, pending, count: filtered.length };
+  }, [filtered]);
 
   const partyOptions = useMemo(() => {
     if (direction === 'in') {
@@ -238,55 +261,48 @@ export function ShopBooksChequesScreen() {
         </View>
         <SelectField
           label={direction === 'in' ? 'Customer' : 'Supplier'}
+          required
           value={partyId}
           options={partyOptions}
           onChange={setPartyId}
           searchable
         />
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Cheque number</Text>
-          <TextInput
-            style={styles.input}
-            value={chequeNumber}
-            onChangeText={setChequeNumber}
-            placeholder="Cheque #"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Amount</Text>
-          <TextInput
-            style={styles.input}
-            value={amount}
-            onChangeText={(value) => setAmount(value.replace(/[^0-9.]/g, ''))}
-            keyboardType="decimal-pad"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Bank</Text>
-          <TextInput
-            style={styles.input}
-            value={bankName}
-            onChangeText={setBankName}
-            placeholder="Bank name (optional)"
-            placeholderTextColor={colors.mutedForeground}
-          />
-        </View>
-        <DateField label="Due date" value={dueDate} onChange={setDueDate} helperText="Optional" />
+        <Input
+          label="Cheque number"
+          required
+          value={chequeNumber}
+          onChangeText={setChequeNumber}
+          placeholder="Cheque #"
+        />
+        <Input
+          label="Amount"
+          required
+          value={amount}
+          onChangeText={(value) => setAmount(value.replace(/[^0-9.]/g, ''))}
+          keyboardType="decimal-pad"
+        />
+        <Input
+          label="Bank"
+          optional
+          value={bankName}
+          onChangeText={setBankName}
+          placeholder="Bank name"
+        />
+        <DateField label="Due date" optional value={dueDate} onChange={setDueDate} />
         <SelectField
           label="Cash / bank account"
+          required
           value={cashAccountId}
           options={accountOptions}
           onChange={setCashAccountId}
         />
-        <TextInput
-          style={[styles.input, styles.notes]}
+        <Input
+          label="Notes"
+          optional
           value={notes}
           onChangeText={setNotes}
-          placeholder="Notes (optional)"
+          placeholder="Notes"
           multiline
-          placeholderTextColor={colors.mutedForeground}
         />
       </FormScreen>
     );
@@ -299,46 +315,50 @@ export function ShopBooksChequesScreen() {
           <Chip label="In" active={filter === 'in'} onPress={() => setFilter('in')} />
           <Chip label="Out" active={filter === 'out'} onPress={() => setFilter('out')} />
         </View>
+        <VoucherSummaryCards
+          metrics={[
+            { label: 'Total', value: formatMoney(chequeSummary.total), hint: String(chequeSummary.count) },
+            { label: 'Pending', value: String(chequeSummary.pending), tone: 'due' },
+          ]}
+        />
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search cheques" style={styles.search} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
+          {...groupedListProps(filtered.length)}
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
-            const badge = voucherStatusStyle(item.status);
             const party = item.customer_name || item.supplier_name || '—';
             const acting = actionId === item.id;
+            const pending = isPending(item.status);
             return (
-              <View style={styles.row}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.name}>#{item.cheque_number}</Text>
-                  <Text style={styles.total}>{formatMoney(item.amount)}</Text>
-                </View>
-                <Text style={styles.meta}>
-                  {party}
-                  {item.bank_name ? ` · ${item.bank_name}` : ''}
-                  {item.due_date ? ` · Due ${item.due_date}` : ''}
-                </Text>
-                <View style={styles.rowBottom}>
-                  <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                  </View>
-                  {isPending(item.status) ? (
-                    <View style={styles.actions}>
-                      <Pressable onPress={() => void onClear(item)} disabled={acting} hitSlop={8}>
-                        <Text style={[styles.actionText, acting && styles.disabled]}>
-                          {acting ? '…' : 'Clear'}
-                        </Text>
-                      </Pressable>
-                      <Pressable onPress={() => void onBounce(item)} disabled={acting} hitSlop={8}>
-                        <Text style={[styles.bounceText, acting && styles.disabled]}>Bounce</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
+              <BooksDocumentRow
+                title={`#${item.cheque_number}`}
+                amount={formatMoney(item.amount)}
+                meta={[
+                  party,
+                  item.bank_name,
+                  item.due_date ? `Due ${formatVoucherDate(item.due_date)}` : '',
+                  item.created_at ? formatVoucherDateTime(item.created_at, item.created_at) : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                badge={item.status}
+                badgeKind={pending ? 'due' : item.status.toLowerCase().includes('bounce') ? 'void' : 'paid'}
+                icon="credit-card"
+                iconTone={pending ? 'amber' : 'green'}
+                extraActions={
+                  pending
+                    ? [
+                        { label: acting ? '…' : 'Clear', onPress: () => void onClear(item) },
+                        { label: 'Bounce', onPress: () => void onBounce(item), destructive: true },
+                      ]
+                    : undefined
+                }
+              />
             );
           }}
           ListEmptyComponent={
@@ -371,7 +391,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.tint,
   },
-  chips: { flexDirection: 'row', gap: 8, marginBottom: spacing.md },
+  chips: { flexDirection: 'row', gap: 8, marginBottom: spacing.sm },
+  search: { marginBottom: spacing.sm },
   formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
   fieldBlock: { gap: 6 },
   row: {
@@ -399,11 +420,12 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
+    backgroundColor: colors.inputBackground,
   },
   notes: { minHeight: 72, textAlignVertical: 'top' },
 });

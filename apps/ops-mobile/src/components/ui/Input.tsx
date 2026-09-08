@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { colors, spacing } from '../../theme/tokens';
+import { FieldLabel } from './FieldLabel';
+import { fieldStyles, inputReset } from './fieldStyles';
 
 type Props = TextInputProps & {
   label?: string;
   error?: string;
   hint?: string;
   leftIcon?: keyof typeof Feather.glyphMap;
+  required?: boolean;
+  optional?: boolean;
 };
 
 export function Input({
@@ -15,10 +19,14 @@ export function Input({
   error,
   hint,
   leftIcon,
+  required,
+  optional,
   secureTextEntry,
   style,
   onFocus,
   onBlur,
+  multiline,
+  editable,
   ...rest
 }: Props) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
@@ -26,21 +34,26 @@ export function Input({
   const isPassword = Boolean(secureTextEntry);
 
   return (
-    <View style={styles.wrap}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+    <View style={fieldStyles.wrap}>
+      <FieldLabel label={label} required={required} optional={optional} />
       <View
         style={[
-          styles.field,
-          focused && styles.fieldFocused,
-          error ? styles.fieldError : null,
+          fieldStyles.control,
+          focused && fieldStyles.controlFocused,
+          error ? fieldStyles.controlError : null,
+          multiline && fieldStyles.controlMultiline,
+          editable === false && fieldStyles.controlDisabled,
         ]}
       >
         {leftIcon ? (
           <Feather name={leftIcon} size={16} color={colors.mutedForeground} style={styles.leftIcon} />
         ) : null}
         <TextInput
-          placeholderTextColor="#9B9EB8"
+          placeholderTextColor={colors.mutedForeground}
           secureTextEntry={isPassword ? hidden : false}
+          multiline={multiline}
+          editable={editable}
+          underlineColorAndroid="transparent"
           onFocus={(e) => {
             setFocused(true);
             onFocus?.(e);
@@ -49,51 +62,37 @@ export function Input({
             setFocused(false);
             onBlur?.(e);
           }}
-          style={[styles.input, leftIcon ? styles.inputWithIcon : null, style]}
+          style={[
+            fieldStyles.value,
+            inputReset,
+            styles.input,
+            leftIcon ? styles.inputWithIcon : null,
+            multiline ? styles.inputMultiline : null,
+            style,
+          ]}
           {...rest}
         />
         {isPassword ? (
-          <Pressable onPress={() => setHidden((v) => !v)} hitSlop={8} style={styles.eye}>
+          <Pressable
+            onPress={() => setHidden((v) => !v)}
+            hitSlop={8}
+            style={styles.eye}
+            accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+          >
             <Feather name={hidden ? 'eye' : 'eye-off'} size={16} color={colors.mutedForeground} />
           </Pressable>
         ) : null}
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {hint && !error ? <Text style={styles.hint}>{hint}</Text> : null}
+      {error ? <Text style={fieldStyles.error}>{error}</Text> : null}
+      {hint && !error ? <Text style={fieldStyles.hint}>{hint}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
-  label: {
-    fontFamily: fonts.body,
-    fontSize: 12,
-    color: colors.mutedForeground,
-  },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
-    paddingHorizontal: spacing.md,
-  },
-  fieldFocused: {
-    borderColor: colors.primary,
-  },
-  fieldError: { borderColor: colors.destructive },
   leftIcon: { marginRight: spacing.sm },
-  input: {
-    flex: 1,
-    ...typography.body,
-    color: colors.foreground,
-    paddingVertical: spacing.sm,
-  },
+  input: { paddingVertical: spacing.sm },
   inputWithIcon: { paddingLeft: 0 },
+  inputMultiline: { minHeight: 72, textAlignVertical: 'top', paddingTop: 0 },
   eye: { marginLeft: spacing.sm },
-  error: { ...typography.caption, color: colors.destructive },
-  hint: { ...typography.caption, color: colors.mutedForeground },
 });

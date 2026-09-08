@@ -5,7 +5,7 @@ import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { layout } from '../theme/layout';
-import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { colors, spacing, typography } from '../theme/tokens';
 
 export type OpsStackHeaderOptions = {
   /** Optional line under the title (set via navigation.setOptions). */
@@ -20,7 +20,7 @@ export function setStackSubtitle(
   navigation.setOptions({ subtitle } satisfies OpsStackHeaderOptions);
 }
 
-/** Flat white stack header with navy back control. */
+/** Customer-style canvas header with balanced navigation and centered title. */
 export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderProps) {
   const insets = useSafeAreaInsets();
   const { isDesktop } = useBreakpoint();
@@ -33,7 +33,7 @@ export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderP
       style={[
         styles.wrap,
         {
-          paddingTop: isDesktop ? spacing.md : insets.top + spacing.sm,
+          paddingTop: isDesktop ? spacing.md : Math.max(insets.top, spacing.sm),
           paddingHorizontal: isDesktop ? layout.desktopGutter : spacing.lg,
           paddingBottom: isDesktop ? spacing.sm : spacing.md,
         },
@@ -52,7 +52,7 @@ export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderP
             accessibilityLabel="Go back"
             hitSlop={8}
           >
-            <Feather name="chevron-left" size={isDesktop ? 20 : 22} color={colors.primary} />
+            <Feather name="arrow-left" size={isDesktop ? 20 : 22} color={colors.foreground} />
           </Pressable>
         ) : (
           <View style={styles.backSpacer} />
@@ -90,8 +90,6 @@ export const opsStackScreenOptions = {
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: colors.headerBg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.headerBorder,
   },
   row: {
     flexDirection: 'row',
@@ -108,29 +106,28 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.tint,
   },
   backBtnDesktop: {
     width: 36,
     height: 36,
   },
   backBtnPressed: {
-    backgroundColor: colors.tintStrong,
+    opacity: 0.55,
   },
   backSpacer: { width: 40 },
-  copy: { flex: 1, gap: 2, justifyContent: 'center' },
+  copy: { flex: 1, gap: 2, justifyContent: 'center', alignItems: 'center' },
   title: {
-    fontFamily: fonts.bodySemi,
+    ...typography.title,
     fontSize: 18,
     color: colors.foreground,
+    textAlign: 'center',
   },
   subtitle: {
     ...typography.caption,
-    fontFamily: fonts.bodyMedium,
     color: colors.mutedForeground,
+    textAlign: 'center',
   },
   right: {
     minWidth: 40,

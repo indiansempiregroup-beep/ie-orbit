@@ -59,8 +59,13 @@ export function VerifyEmailScreen() {
         </View>
         <Input
           label="Verification code"
+          required
           value={token}
-          onChangeText={setToken}
+          onChangeText={(value) => {
+            setToken(value);
+            setError(null);
+          }}
+          error={error && error.startsWith('Enter the') ? error : undefined}
           keyboardType="number-pad"
           inputMode="numeric"
           autoComplete="one-time-code"
@@ -69,7 +74,7 @@ export function VerifyEmailScreen() {
           placeholder="6-digit code"
         />
         {message ? <Text style={styles.success}>{message}</Text> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error && !error.startsWith('Enter the') ? <Text style={styles.error}>{error}</Text> : null}
         <Button
           label="Verify email"
           loading={loading}
