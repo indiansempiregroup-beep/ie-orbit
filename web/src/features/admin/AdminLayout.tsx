@@ -17,6 +17,7 @@ import {
   Users,
   Handshake,
 } from 'lucide-react';
+import { IE_ORBIT_LOGO_SRC } from '../../components/BrandLockup';
 import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { usePageMeta } from '../../hooks/usePageMeta';
@@ -84,7 +85,7 @@ export function AdminLayout() {
       <aside className="admin-sidebar">
         <div className="admin-brand">
           <div className="admin-brand__mark" aria-hidden>
-            IE
+            <img src={IE_ORBIT_LOGO_SRC} alt="" />
           </div>
           <div>
             <p className="admin-brand__title">Platform Admin</p>

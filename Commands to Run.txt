@@ -287,3 +287,7 @@ corepack pnpm eas:build:production-preview
 cd mobile
 corepack pnpm exec eas login
 corepack pnpm eas:build:sanket:production-preview
+
+# VPS CPU, RAM Usage
+Login to server and run
+htop

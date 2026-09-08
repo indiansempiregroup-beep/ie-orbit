@@ -4,10 +4,10 @@ export const DEFAULT_TITLE = 'IE Orbit — Orbit Appoint and Orbit Mart for Indi
 export const TITLE_TEMPLATE = '%s — IE Orbit';
 export const DEFAULT_DESCRIPTION =
   'One workspace for appointments and retail. Orbit Appoint for bookings, Orbit Mart for POS, GST books, and Grow. 15-day full-Pro trial, UPI billing, no credit card to start.';
-export const DEFAULT_OG_IMAGE_PATH = '/og/default.svg';
+export const DEFAULT_OG_IMAGE_PATH = '/og/default.png';
 export const DEFAULT_LOCALE = 'en_IN';
 export const DEFAULT_LANGUAGE = 'en';
-export const THEME_COLOR = '#1a56db';
+export const THEME_COLOR = '#1c718f';
 export const TWITTER_CARD = 'summary_large_image';
 export const CONTACT_EMAIL = 'support@indiansempire.com';
 export const CONTACT_PHONE_DISPLAY = '+91 9766855617';

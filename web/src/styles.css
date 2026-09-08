@@ -1,26 +1,32 @@
 @import './public-site.css';
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #0f1623;
-  background: #f7f8fa;
-  --background: #f7f8fa;
-  --foreground: #0f1623;
+  color: #0f172a;
+  background: #f8fafc;
+  --ink: #0f172a;
+  --blue: #1c718f;
+  --amber: #f59e0b;
+  --cream: #f8fafc;
+  --line: #dbe3ee;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #0f1623;
-  --primary: #1a56db;
+  --card-foreground: #0f172a;
+  --primary: #1c718f;
   --primary-foreground: #ffffff;
   --muted: #e8ecf4;
-  --muted-foreground: #6b7a99;
-  --border: rgba(15, 22, 35, 0.08);
-  --ring: #1a56db;
+  --muted-foreground: #64748b;
+  --border: #dbe3ee;
+  --ring: #1c718f;
   --sidebar: #ffffff;
-  --sidebar-foreground: #0f1623;
-  --sidebar-accent: #eef2ff;
-  --sidebar-accent-foreground: #1a56db;
-  --sidebar-border: rgba(15, 22, 35, 0.06);
+  --sidebar-foreground: #0f172a;
+  --sidebar-accent: #eef5f7;
+  --sidebar-accent-foreground: #1c718f;
+  --sidebar-border: #dbe3ee;
+  --serif: 'Outfit', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -49,11 +55,17 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 
 .button,
 .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
   transition: background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
@@ -72,12 +84,12 @@ h6 {
 .button:focus-visible,
 .icon-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.32);
+  box-shadow: 0 0 0 4px rgba(28, 113, 143, 0.32);
 }
 
 .button.ghost:hover,
 .icon-button.ghost:hover {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(28, 113, 143, 0.12);
 }
 
 .button.neutral:hover,
@@ -87,7 +99,7 @@ h6 {
 
 .button.primary:hover,
 .icon-button.primary:hover {
-  background: #3730a3;
+  background: #165f78;
 }
 
 .sr-only {
@@ -211,16 +223,18 @@ h6 {
 }
 
 .app-shell-brand-mark {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--primary), #60a5fa);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--ink);
   color: white;
   display: grid;
   place-items: center;
-  font-weight: 800;
-  font-size: 18px;
-  box-shadow: 0 10px 24px rgba(26, 86, 219, 0.2);
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.06em;
+  box-shadow: none;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -242,7 +256,7 @@ h6 {
 
 .app-shell-brand-label {
   margin: 0 0 4px;
-  color: #10b981;
+  color: var(--muted-foreground);
   font-size: 11px;
   letter-spacing: 1.2px;
   text-transform: uppercase;
@@ -280,7 +294,7 @@ h6 {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 8px;
   font-weight: 600;
   color: var(--sidebar-foreground);
   transition: background-color 180ms ease, color 180ms ease;
@@ -721,25 +735,55 @@ h6 {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 24px;
-  background: var(--background);
+  padding: 48px 24px;
+  background:
+    radial-gradient(circle at 83% 18%, #d4e8ee 0, #f8fafc 42%);
 }
 
 .auth-layout-panel {
-  width: min(100%, 420px);
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 32px;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+  width: min(100%, 480px);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 0 24px;
+  box-shadow: none;
+  text-align: center;
+}
+
+.auth-layout-panel form,
+.auth-layout-panel .google-signin {
+  text-align: left;
+}
+
+.auth-layout-panel form {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 24px;
+  margin-top: 12px;
 }
 
 .auth-layout-brand {
-  display: inline-block;
-  margin-bottom: 16px;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 28px;
   text-decoration: none;
-  color: var(--primary);
+  color: var(--ink);
+}
+
+.auth-layout-brand .brand-lockup-mark {
+  height: 44px;
+}
+
+.auth-layout-panel h1 {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  margin: 0 0 12px;
+}
+
+.auth-layout-panel .auth-lead {
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .auth-layout-footer {
@@ -843,21 +887,82 @@ h6 {
 /* Wizard */
 .wizard-shell {
   min-height: 100vh;
-  padding: 24px;
-  background: var(--background);
+  padding: 48px 24px;
+  background: #0f172a;
+  color: #fff;
 }
 
 .wizard-shell-inner {
-  max-width: 860px;
+  max-width: 1080px;
   margin: 0 auto;
 }
 
 .wizard-card {
-  padding: 28px;
+  padding: 32px 35px;
+  border-radius: 10px;
 }
 
 .wizard-card-header h1 {
   margin: 12px 0 0;
+  font-size: clamp(1.8rem, 3vw, 2.2rem);
+}
+
+.register-landing {
+  min-height: 100vh;
+  padding: 70px 24px;
+  background: #0f172a;
+  color: #fff;
+}
+
+.register-landing-grid {
+  width: min(1160px, calc(100% - 48px));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 80px;
+  align-items: start;
+}
+
+.register-landing-aside {
+  padding-top: 45px;
+}
+
+.register-landing-aside h1 {
+  font-size: clamp(40px, 6vw, 58px);
+  margin: 16px 0 20px;
+}
+
+.register-landing-aside p {
+  color: #a8b8cb;
+  max-width: 380px;
+  line-height: 1.7;
+}
+
+.register-landing-panel {
+  background: #fff;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 32px 35px;
+}
+
+.register-landing-panel h2 {
+  margin: 0 0 8px;
+}
+
+.register-landing-panel > p {
+  color: var(--muted-foreground);
+  margin: 0;
+}
+
+@media (max-width: 800px) {
+  .register-landing-grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .register-landing-aside {
+    padding-top: 10px;
+  }
 }
 
 .wizard-subtitle {
@@ -866,9 +971,14 @@ h6 {
 }
 
 .wizard-brand {
-  font-weight: 800;
-  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
   text-decoration: none;
+  color: var(--ink);
+}
+
+.wizard-brand .brand-lockup-mark {
+  height: 36px;
 }
 
 .wizard-stepper {
@@ -1142,6 +1252,13 @@ h6 {
   margin-top: 24px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wizard-actions-start {
+  display: flex;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -2725,8 +2842,8 @@ h6 {
 .admin-shell {
   --admin-ink: #0b1220;
   --admin-ink-soft: #151d2e;
-  --admin-accent: #2563eb;
-  --admin-accent-soft: rgba(37, 99, 235, 0.12);
+  --admin-accent: #1c718f;
+  --admin-accent-soft: rgba(28, 113, 143, 0.12);
   --admin-mint: #14b8a6;
   --admin-amber: #f59e0b;
   --admin-rose: #f43f5e;
@@ -2736,7 +2853,7 @@ h6 {
   --muted: #e8ecf4;
   --muted-foreground: #6b7a99;
   --border: rgba(15, 22, 35, 0.08);
-  --primary: #1a56db;
+  --primary: #1c718f;
   color: var(--foreground);
   position: relative;
   display: grid;
@@ -2795,23 +2912,27 @@ h6 {
 }
 
 .admin-brand__mark {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   display: grid;
   place-items: center;
-  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
-  font-weight: 800;
-  font-size: 14px;
-  letter-spacing: -0.02em;
-  color: white;
-  background: linear-gradient(145deg, #2563eb, #0ea5e9 55%, #14b8a6);
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+  background: #0b1220;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.admin-brand__mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .admin-brand__title {
   margin: 0;
-  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  font-family: 'Outfit', Inter, sans-serif;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -2859,15 +2980,15 @@ h6 {
 .admin-nav__link:hover {
   background: #eef2ff;
   border-color: rgba(37, 99, 235, 0.08);
-  color: #1a56db;
+  color: #1c718f;
   transform: translateX(2px);
 }
 
 .admin-nav__link.is-active {
   background: #eef2ff;
   border-color: rgba(37, 99, 235, 0.16);
-  color: #1a56db;
-  box-shadow: inset 3px 0 0 #2563eb;
+  color: #1c718f;
+  box-shadow: inset 3px 0 0 #1c718f;
   font-weight: 600;
 }
 
@@ -2889,7 +3010,7 @@ h6 {
 
 .admin-nav__link.is-active .admin-nav__icon {
   background: rgba(37, 99, 235, 0.14);
-  color: #1a56db;
+  color: #1c718f;
 }
 
 .admin-sidebar__footer {
@@ -2931,7 +3052,7 @@ h6 {
 }
 
 .admin-sidebar .admin-btn--secondary {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: linear-gradient(135deg, #1c718f, #165f78);
   border-color: transparent;
   color: #fff;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
@@ -2946,7 +3067,7 @@ h6 {
 .admin-sidebar .admin-btn--ghost:hover:not(:disabled) {
   background: #eef2ff;
   border-color: rgba(37, 99, 235, 0.2);
-  color: #1a56db;
+  color: #1c718f;
 }
 
 .admin-main {
@@ -3061,7 +3182,7 @@ h6 {
   margin: 8px 0 0;
   position: relative;
   z-index: 1;
-  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  font-family: 'Outfit', Inter, sans-serif;
   font-size: 1.85rem;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -3342,7 +3463,7 @@ h6 {
 }
 
 .admin-btn--primary {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: linear-gradient(135deg, #1c718f, #165f78);
   color: white;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
 }
@@ -3507,7 +3628,7 @@ h6 {
 .admin-chip.is-active {
   background: #eef2ff;
   border-color: rgba(37, 99, 235, 0.22);
-  color: #1a56db;
+  color: #1c718f;
 }
 
 .admin-field {
@@ -3745,7 +3866,7 @@ h6 {
   display: grid;
   place-items: center;
   background: #eef2ff;
-  color: #1a56db;
+  color: #1c718f;
 }
 
 .admin-shortcut strong {
@@ -3859,7 +3980,7 @@ h6 {
 }
 
 .admin-package-card__price {
-  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  font-family: 'Outfit', Inter, sans-serif;
   font-size: 1.25rem;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -4133,7 +4254,7 @@ h6 {
 }
 
 .admin-toggle.is-on .admin-toggle__switch {
-  background: #2563eb;
+  background: #1c718f;
 }
 
 .admin-toggle.is-on .admin-toggle__switch::after {
@@ -4282,7 +4403,7 @@ h6 {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #1a56db;
+  color: #1c718f;
   background: #eef2ff;
   border: 1px solid rgba(37, 99, 235, 0.18);
 }

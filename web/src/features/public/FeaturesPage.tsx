@@ -1,142 +1,295 @@
-import { Link } from 'react-router-dom';
-import {
-  BarChart3,
-  BookOpen,
-  CalendarDays,
-  PawPrint,
-  Sparkles,
-  Store,
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { ArrowRight, BookOpen, PawPrint, Sparkles } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicBackLink } from './PublicBackLink';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 
-const featureGroups = [
+const TAB_IDS = ['appoint', 'mart', 'both'] as const;
+type ProductTabId = (typeof TAB_IDS)[number];
+
+const productTabs: Array<{
+  id: ProductTabId;
+  label: string;
+  kicker: string;
+  title: string;
+  body: string;
+  features: string[];
+}> = [
   {
+    id: 'appoint',
+    label: 'Appoint',
     kicker: 'Orbit Appoint',
-    title: 'Bookings and daily operations',
-    lead: 'Built for salons, clinics, trainers, and other appointment-based teams.',
-    icon: CalendarDays,
-    items: [
-      'Online bookings from any device',
-      'Calendar and staff scheduling',
-      'Customers, services, and reviews',
-      'Pro adds full BI and reward points (earn and redeem)',
+    title: 'Bookings without the back-and-forth.',
+    body: 'Give customers a beautiful way to discover availability, book instantly, and keep coming back.',
+    features: [
+      'Smart availability and staff calendars',
+      'Automated booking confirmations and reminders',
+      'Customer history and reviews in one place',
+      'Pro adds full BI and reward points',
     ],
   },
   {
-    kicker: 'Orbit Mart Commerce',
-    title: 'Counter, catalog, and orders',
-    lead: 'Run the shop floor and online orders from the same workspace.',
-    icon: Store,
-    teal: true,
-    items: [
+    id: 'mart',
+    label: 'Mart',
+    kicker: 'Orbit Mart',
+    title: 'Your products, in their pocket.',
+    body: 'Create a storefront that makes your products easy to browse, buy, and remember — with POS and GST books in the same workspace.',
+    features: [
+      'Branded product storefront and catalog',
       'POS / GST counter sales',
-      'Product catalog and inventory',
       'Online orders with pickup and delivery',
-      'Returns, delivery zones, and shop loyalty',
+      'Books: GST reports, e-invoice, and e-way bill',
     ],
   },
   {
-    kicker: 'Orbit Mart Books',
-    title: 'Accounting and GST compliance',
-    lead: 'Keep sales, purchases, and GST in one books suite — not a separate product.',
-    icon: BookOpen,
-    teal: true,
-    items: [
-      'Sales, purchases, cash and bank, expenses',
-      'Parties, quotations, stock, godowns, and challans',
-      'GST reports, e-invoice (IRN), and e-way bill',
-      'Cheques and loans when you need them',
-    ],
-  },
-  {
-    kicker: 'Orbit Mart Grow',
-    title: 'Marketing helpers for the shop',
-    lead: 'Share, list, and calculate without leaving operations.',
-    icon: Sparkles,
-    teal: true,
-    items: [
-      'WhatsApp default message and share links',
-      'AI promo poster and share',
-      'Google Profile listing helpers',
-      'GST, margin, discount, and EMI calculators',
-    ],
-  },
-  {
-    kicker: 'Pets pack',
-    title: 'Optional add-on for pet retailers',
-    lead: 'Not included in the Orbit Mart base plan — add it when you keep pet records.',
-    icon: PawPrint,
-    items: [
-      'Pet records for shops that need them',
-      'Priced as a monthly Orbit Mart add-on',
-      'Works alongside catalog, POS, and orders',
-    ],
-  },
-  {
-    kicker: 'Platform',
-    title: 'Shared across Orbit Appoint and Orbit Mart',
-    lead: 'One workspace, one trial, and the same billing for both products.',
-    icon: BarChart3,
-    items: [
-      '15-day full-Pro trial, then upgrade to keep running',
-      'Starter and Pro plans, with extra staff and office add-ons',
-      'White-label customer app for booking and shop',
-      'Business intelligence: Overview on Starter, full suite on Pro',
+    id: 'both',
+    label: 'Both together',
+    kicker: 'Orbit Appoint + Orbit Mart',
+    title: 'One brand. Every way to buy.',
+    body: 'The most complete version of IE Orbit — appointments and ecommerce sharing one customer relationship.',
+    features: [
+      'Unified customer profiles',
+      'Cross-sell bookings and products',
+      'White-label customer app for book and shop',
+      'One 15-day trial, one workspace, UPI billing',
     ],
   },
 ];
 
+const extraGroups = [
+  {
+    kicker: 'Orbit Mart Books',
+    title: 'Accounting and GST compliance',
+    lead: 'Sales, purchases, cash, GST reports, e-invoice, and e-way bill — not a separate product.',
+    icon: BookOpen,
+    tone: 'yellow' as const,
+  },
+  {
+    kicker: 'Orbit Mart Grow',
+    title: 'Marketing helpers for the shop',
+    lead: 'WhatsApp share, promo posters, Google listing helpers, and GST calculators.',
+    icon: Sparkles,
+    tone: 'purple' as const,
+  },
+  {
+    kicker: 'Pets pack',
+    title: 'Optional add-on for pet retailers',
+    lead: 'Pet records priced as a monthly Orbit Mart add-on. Not included in the base plan.',
+    icon: PawPrint,
+    tone: 'peach' as const,
+  },
+];
+
+const bookings = [
+  { initials: 'NS', name: 'Nisha Shah', detail: 'Haircut + styling · 10:30', status: 'Confirmed', tone: 'peach' },
+  { initials: 'AK', name: 'Arjun Kapoor', detail: 'Consultation · 11:15', status: 'Pending', tone: 'blue' },
+  { initials: 'RM', name: 'Rhea Mehta', detail: 'Premium package · 12:30', status: 'Confirmed', tone: 'purple' },
+];
+
+function tabFromHash(hash: string): ProductTabId {
+  const id = hash.replace('#', '') as ProductTabId;
+  return TAB_IDS.includes(id) ? id : 'appoint';
+}
+
+function AppointPreview() {
+  return (
+    <div className="public-preview" aria-hidden="true">
+      <div className="public-preview__top">
+        <span className="public-preview-brand">ie orbit</span>
+        <span className="public-preview-status">● Live</span>
+      </div>
+      <p className="public-preview-label">Appointments · Today</p>
+      {bookings.map((row) => (
+        <div key={row.initials} className="public-booking-row">
+          <span className={`public-avatar public-avatar--${row.tone}`}>{row.initials}</span>
+          <div style={{ flex: 1 }}>
+            <b>{row.name}</b>
+            <small style={{ display: 'block', color: '#8291a5' }}>{row.detail}</small>
+          </div>
+          <span className={`public-pill${row.status === 'Pending' ? ' public-pill--yellow' : ''}`}>{row.status}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MartPreview() {
+  return (
+    <div className="public-preview" aria-hidden="true">
+      <div className="public-preview__top">
+        <span className="public-preview-brand">ie orbit</span>
+        <span className="public-preview-status">● Live</span>
+      </div>
+      <p className="public-preview-label">Storefront · Today</p>
+      <div className="public-store-row">
+        <div className="public-product-art">✦</div>
+        <div>
+          <b>Curated for your day</b>
+          <small>12 products · 4 collections</small>
+        </div>
+        <button type="button" tabIndex={-1}>
+          View shop
+        </button>
+      </div>
+      <div className="public-store-row">
+        <div className="public-product-art public-product-art--blue">◒</div>
+        <div>
+          <b>Order #1048</b>
+          <small>Ready for dispatch</small>
+        </div>
+        <span className="public-pill">Paid</span>
+      </div>
+      <div className="public-store-row">
+        <div className="public-product-art">₹</div>
+        <div>
+          <b>GST counter</b>
+          <small>3 bills · e-invoice ready</small>
+        </div>
+        <span className="public-pill">Live</span>
+      </div>
+    </div>
+  );
+}
+
+function BothPreview() {
+  return (
+    <div className="public-preview" aria-hidden="true">
+      <div className="public-preview__top">
+        <span className="public-preview-brand">ie orbit</span>
+        <span className="public-preview-status">● Live</span>
+      </div>
+      <p className="public-preview-greeting">
+        Good morning, Mira <span>✦</span>
+      </p>
+      <div className="public-preview-stats">
+        <div>
+          <small>Bookings</small>
+          <b>24</b>
+          <em>+8%</em>
+        </div>
+        <div>
+          <small>Orders</small>
+          <b>18</b>
+          <em>+12%</em>
+        </div>
+      </div>
+      <div className="public-booking-row" style={{ marginTop: 8 }}>
+        <span className="public-avatar public-avatar--peach">NS</span>
+        <div style={{ flex: 1 }}>
+          <b>Nisha Shah</b>
+          <small style={{ display: 'block', color: '#8291a5' }}>Haircut + take-home kit</small>
+        </div>
+        <span className="public-pill">Both</span>
+      </div>
+    </div>
+  );
+}
+
 export function FeaturesPage() {
+  const location = useLocation();
+  const [tab, setTab] = useState<ProductTabId>(() => tabFromHash(location.hash));
+  const item = productTabs.find((entry) => entry.id === tab) ?? productTabs[0];
+
+  useEffect(() => {
+    setTab(tabFromHash(location.hash));
+  }, [location.hash]);
+
+  function selectTab(id: ProductTabId) {
+    setTab(id);
+    window.history.replaceState(null, '', `#${id}`);
+  }
+
   return (
     <>
       <section className="public-hero-band">
         <div className="public-hero-inner public-hero-inner--solo">
           <div>
-            <p className="public-badge">Orbit Appoint · Orbit Mart</p>
+            <p className="public-badge">Products</p>
             <h1>
-              Features for <span className="public-gradient-text">service and retail</span> businesses
+              Everything your customer
+              <br />
+              <span className="public-gradient-text">needs to come back.</span>
             </h1>
             <p className="public-lead">
-              Orbit Appoint is for bookings, calendar, and staff. Orbit Mart is for the counter, catalog, GST books, and
-              Grow. Use one product or both in the same workspace.
+              IE Orbit connects the front door of your business to the work happening behind it. Orbit Appoint for
+              bookings, Orbit Mart for retail — or both in one workspace.
             </p>
-            <div className="public-hero-actions">
-              <Link to="/pricing">
-                <Button variant="primary">See pricing</Button>
-              </Link>
-              <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
-                <Button variant="neutral">Create account</Button>
-              </Link>
-            </div>
           </div>
         </div>
       </section>
-      <div className="public-page">
-        <PublicBackLink />
-        <div className="public-product-grid">
-          {featureGroups.map((group) => {
-            const Icon = group.icon;
-            return (
-              <article key={group.title} className="public-card">
-                <div className={`public-card-icon${group.teal ? ' public-card-icon--teal' : ''}`}>
-                  <Icon size={22} />
-                </div>
-                <p className="public-kicker">{group.kicker}</p>
-                <h2 style={{ fontSize: '1.25rem' }}>{group.title}</h2>
-                <p>{group.lead}</p>
-                <ul className="public-list">
-                  {group.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </article>
-            );
-          })}
+
+      <div className="public-tabs" role="tablist" aria-label="Products">
+        {productTabs.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className={`public-tab${tab === entry.id ? ' is-active' : ''}`}
+            role="tab"
+            aria-selected={tab === entry.id}
+            id={`product-tab-${entry.id}`}
+            aria-controls={`product-panel-${entry.id}`}
+            onClick={() => selectTab(entry.id)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      <section
+        className="public-product-feature"
+        role="tabpanel"
+        id={`product-panel-${item.id}`}
+        aria-labelledby={`product-tab-${item.id}`}
+      >
+        <div className="public-feature-copy">
+          <PublicBackLink />
+          <p className="public-kicker">{item.kicker}</p>
+          <h2>{item.title}</h2>
+          <p>{item.body}</p>
+          <ul className="public-list">
+            {item.features.map((feature) => (
+              <li key={feature}>{feature}</li>
+            ))}
+          </ul>
+          <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
+            <Button variant="primary">
+              Create account <ArrowRight size={16} aria-hidden="true" />
+            </Button>
+          </Link>
         </div>
+        <div className="public-feature-visual">
+          {item.id === 'appoint' ? <AppointPreview /> : null}
+          {item.id === 'mart' ? <MartPreview /> : null}
+          {item.id === 'both' ? <BothPreview /> : null}
+        </div>
+      </section>
+
+      <div className="public-page">
+        <section className="public-section" style={{ marginTop: 0 }}>
+          <div className="public-section__head">
+            <p className="public-kicker">Also in the workspace</p>
+            <h2>Books, Grow, and the Pets pack</h2>
+            <p className="public-lead">Orbit Mart includes accounting and shop helpers. Add Pets when you keep pet records.</p>
+          </div>
+          <div className="public-product-grid">
+            {extraGroups.map((group) => {
+              const Icon = group.icon;
+              return (
+                <article key={group.title} className={`public-card public-card--${group.tone}`}>
+                  <div className="public-card-icon">
+                    <Icon size={22} />
+                  </div>
+                  <p className="public-kicker">{group.kicker}</p>
+                  <h2>{group.title}</h2>
+                  <p style={{ marginBottom: 0 }}>{group.lead}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       </div>
       <PublicCtaBand title="Try every Pro feature for 15 days" />
     </>

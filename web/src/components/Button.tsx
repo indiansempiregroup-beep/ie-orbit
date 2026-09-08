@@ -20,16 +20,16 @@ export function Button({
 }: ButtonProps) {
   const base: React.CSSProperties = {
     border: 'none',
-    borderRadius: 12,
-    padding: '10px 14px',
-    fontWeight: 700,
+    borderRadius: 7,
+    padding: '10px 16px',
+    fontWeight: 600,
     cursor: loading || disabled ? 'not-allowed' : 'pointer',
     transition: 'background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease',
     boxShadow: '0 1px 2px rgba(15, 22, 35, 0.04)',
     opacity: loading || disabled ? 0.72 : 1,
   };
   const variants: Record<string, React.CSSProperties> = {
-    primary: { background: 'var(--primary)', color: 'var(--primary-foreground)', boxShadow: '0 8px 16px rgba(26, 86, 219, 0.18)' },
+    primary: { background: 'var(--primary)', color: 'var(--primary-foreground)', boxShadow: '0 8px 18px rgba(28, 113, 143, 0.22)' },
     neutral: { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)' },
     ghost: { background: 'transparent', color: 'var(--muted-foreground)', boxShadow: 'none' },
   };
@@ -56,7 +56,7 @@ export function Button({
 export function IconButton({ icon, label, variant = 'ghost', style, className, ...rest }: IconButtonProps) {
   const base: React.CSSProperties = {
     border: 'none',
-    borderRadius: 14,
+    borderRadius: 8,
     width: 56,
     height: 56,
     display: 'grid',
@@ -69,7 +69,7 @@ export function IconButton({ icon, label, variant = 'ghost', style, className, .
   };
 
   const variants: Record<string, React.CSSProperties> = {
-    primary: { background: 'var(--primary)', color: 'var(--primary-foreground)', boxShadow: '0 8px 16px rgba(26, 86, 219, 0.18)' },
+    primary: { background: 'var(--primary)', color: 'var(--primary-foreground)', boxShadow: '0 8px 18px rgba(28, 113, 143, 0.22)' },
     neutral: { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)' },
     ghost: { background: 'transparent', color: 'var(--muted-foreground)', boxShadow: 'none' },
   };
