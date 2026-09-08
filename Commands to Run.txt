@@ -267,12 +267,82 @@ corepack pnpm exec eas init --id b897b310-e21b-49ab-b58f-56b8da1867f3 --force --
 corepack pnpm eas:build:production-preview
 
 
+# Production (prod branch at /opt/ie-orbit) — does not update UAT
+# First time switching this folder from main: git fetch && git checkout prod
 ssh ie-orbit-vps
 cd /opt/ie-orbit
-git pull origin main
+git fetch origin
+git checkout prod
+git pull origin prod
 docker compose -f docker-compose.prod.yml up --build -d --force-recreate
 docker compose -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput
 exit
+
+# UAT (separate folder /opt/ie-orbit-uat, branch uat — includes website UI not on prod)
+# First-time: clone, copy prod .env with host rewrites, create volumes, then up.
+# ssh ie-orbit-vps
+# git clone --branch uat https://github.com/indiansempiregroup-beep/ie-orbit.git /opt/ie-orbit-uat
+# /opt/ie-orbit-uat/scripts/sync-uat-env-from-prod.sh /opt/ie-orbit/.env /opt/ie-orbit-uat/.env
+# docker volume create ie-orbit-uat_postgres-data
+# docker volume create ie-orbit-uat_redis-data
+# docker volume create ie-orbit-uat_backend-static
+# docker volume create ie-orbit-uat_backend-logs
+# docker volume create ie-orbit-uat_celerybeat-data
+# cd /opt/ie-orbit-uat
+# docker compose -f docker-compose.uat.yml up --build -d
+# docker compose -f docker-compose.uat.yml exec -T backend python manage.py migrate --noinput
+#
+# Everyday UAT deploy (prod is untouched):
+# ssh ie-orbit-vps
+# cd /opt/ie-orbit-uat
+# git fetch origin
+# git checkout uat
+# git pull origin uat
+# docker compose -f docker-compose.uat.yml up --build -d
+# docker compose -f docker-compose.uat.yml exec -T backend python manage.py migrate --noinput
+#
+# UAT URLs (IP allowlist — not public):
+#   https://uat.ie-orbit.com
+#   https://app-uat.ie-orbit.com
+#   https://ops-uat.ie-orbit.com
+#   https://api-uat.ie-orbit.com
+#
+# UAT IP allowlist lives in the UAT folder, not prod:
+#   /opt/ie-orbit-uat/docker/nginx/uat-allowlist.conf
+# Unlisted IPs get 403. Production URLs are unchanged.
+# git pull on /opt/ie-orbit-uat can overwrite this file — confirm your allow lines after pull.
+#
+# First time — add IPs, then rebuild UAT nginx only (prod is untouched):
+#   curl -4 ifconfig.me
+#   ssh ie-orbit-vps
+#   cd /opt/ie-orbit-uat
+#   git pull origin uat
+#   nano docker/nginx/uat-allowlist.conf
+#   # add a line per IP, keep "deny all;" last:
+#   #   allow 1.2.3.4;   # Sanket home
+#   #   deny all;
+#   docker compose -f docker-compose.uat.yml up --build -d --no-deps --force-recreate nginx
+#
+# Add / change / remove an IP later (home ISP change, new tester, etc.):
+# edit the UAT file, then reload UAT nginx. Do not run prod compose.
+#   curl -4 ifconfig.me
+#   ssh ie-orbit-vps
+#   nano /opt/ie-orbit-uat/docker/nginx/uat-allowlist.conf
+#   # add, replace, or delete an "allow x.x.x.x;" line
+#   cd /opt/ie-orbit-uat
+#   docker compose -f docker-compose.uat.yml exec nginx nginx -s reload
+#
+# One-time prod nginx: bind-mount docker/nginx/uat-edge.conf (already in docker-compose.prod.yml)
+# then recreate nginx only — no SPA rebuild:
+#   cd /opt/ie-orbit
+#   git fetch origin && git checkout prod && git pull origin prod
+#   docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate nginx
+#
+# Expand Let's Encrypt after DNS A records for uat, app-uat, ops-uat, api-uat:
+#   certbot certonly --webroot -w /opt/ie-orbit/certbot-www --expand \
+#     -d ie-orbit.com -d www.ie-orbit.com -d app.ie-orbit.com -d ops.ie-orbit.com -d api.ie-orbit.com \
+#     -d uat.ie-orbit.com -d app-uat.ie-orbit.com -d ops-uat.ie-orbit.com -d api-uat.ie-orbit.com
+#   /opt/ie-orbit/scripts/install-letsencrypt-certs.sh
 
 # Post-deploy QA (after VPS is up — see docs/qa/automation.md):
 # cd /path/to/ie-orbit && cp e2e/.env.example e2e/.env && ./scripts/qa-post-deploy.sh

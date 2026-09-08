@@ -5,7 +5,8 @@ ENV PATH="${PNPM_HOME}:$PATH"
 ENV CI=1
 ENV EXPO_NO_TELEMETRY=1
 ENV EXPO_NO_METRO_WORKSPACE_ROOT=1
-ENV NODE_OPTIONS=--max-old-space-size=4096
+ARG NODE_MAX_OLD_SPACE_SIZE=4096
+ENV NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}
 
 RUN corepack enable \
     && corepack prepare pnpm@9.15.0 --activate \
@@ -67,8 +68,10 @@ FROM nginx:1.27-alpine
 
 RUN apk add --no-cache curl openssl
 
+ARG NGINX_TEMPLATES_DIR=docker/nginx/templates
+
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
-COPY docker/nginx/templates /etc/nginx/templates
+COPY ${NGINX_TEMPLATES_DIR} /etc/nginx/templates
 COPY docker/nginx/docker-entrypoint.d/40-generate-self-signed.sh /docker-entrypoint.d/40-generate-self-signed.sh
 COPY --from=web-build /app/web/dist /usr/share/nginx/html
 COPY --from=web-build /app/apps/ops-mobile/dist /usr/share/nginx/ops

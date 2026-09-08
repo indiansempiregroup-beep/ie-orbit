@@ -38,6 +38,7 @@ pnpm-debug.log*
 !.env.example
 !.env.docker.example
 !.env.production.example
+!.env.uat.example
 
 ############################################################
 # Python
@@ -175,6 +176,7 @@ redis-data/
 
 tmp/
 temp/
+.tmp-ui-shots/
 
 ############################################################
 # Cache

@@ -80,6 +80,8 @@ Production nginx serves:
 
 Add DNS A records for `@`, `www`, `app`, `ops`, and `api` to the VPS. `www` redirects to the apex site.
 
+UAT is a second clone at `/opt/ie-orbit-uat` with `docker-compose.uat.yml`. Hostnames: `uat`, `app-uat`, `ops-uat`, `api-uat`. Copy prod `.env` with `scripts/sync-uat-env-from-prod.sh` so secrets stay the same. Prod nginx bind-mounts `docker/nginx/uat-edge.conf` and only proxies those hosts (TLS + hostname routing). IP allowlist lives on UAT nginx: `docker/nginx/uat-allowlist.conf`. Unlisted clients get 403. Production hostnames are not filtered. See `Commands to Run.txt` for IP update steps.
+
 Canonical runbooks live in the sibling `ie-orbit-docs` repository under `docs/09-devops/`:
 
 - IE-0901 Production Infrastructure Architecture

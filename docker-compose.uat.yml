@@ -1,18 +1,18 @@
-name: ie-orbit-prod
+name: ie-orbit-uat
 
 x-backend-environment: &backend-environment
   DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
   DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
-  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api.ie-orbit.com,app.ie-orbit.com,ie-orbit.com,www.ie-orbit.com,127.0.0.1,localhost,backend}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api-uat.ie-orbit.com,app-uat.ie-orbit.com,uat.ie-orbit.com,ops-uat.ie-orbit.com,127.0.0.1,localhost,backend}
   DJANGO_LOG_LEVEL: ${DJANGO_LOG_LEVEL:-INFO}
   DATABASE_URL: ${DATABASE_URL:-postgresql://ie_orbit:change-me-in-production@postgres:5432/ie_orbit}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@ie-orbit.com}
-  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://ie-orbit.com,https://www.ie-orbit.com,https://app.ie-orbit.com,https://ops.ie-orbit.com}
-  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api.ie-orbit.com,https://ie-orbit.com,https://www.ie-orbit.com,https://app.ie-orbit.com,https://ops.ie-orbit.com}
-  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://ie-orbit.com}
-  PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-https://api.ie-orbit.com}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://uat.ie-orbit.com,https://app-uat.ie-orbit.com,https://ops-uat.ie-orbit.com}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api-uat.ie-orbit.com,https://uat.ie-orbit.com,https://app-uat.ie-orbit.com,https://ops-uat.ie-orbit.com}
+  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://uat.ie-orbit.com}
+  PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-https://api-uat.ie-orbit.com}
   EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
   EMAIL_HOST: ${EMAIL_HOST:-}
   EMAIL_PORT: ${EMAIL_PORT:-587}
@@ -22,9 +22,9 @@ x-backend-environment: &backend-environment
   EMAIL_USE_SSL: ${EMAIL_USE_SSL:-false}
   CELERY_TASK_ALWAYS_EAGER: "false"
   PYTHONPATH: /app/backend
-  GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+  GUNICORN_WORKERS: "1"
   GUNICORN_THREADS: ${GUNICORN_THREADS:-8}
-  CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-1}
+  CELERY_CONCURRENCY: "1"
   PLATFORM_MEDIA_STORAGE_PROVIDER: ${PLATFORM_MEDIA_STORAGE_PROVIDER:-r2}
   R2_ENDPOINT: ${R2_ENDPOINT:-}
   R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
@@ -34,7 +34,7 @@ x-backend-environment: &backend-environment
   R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
   R2_SIGNED_URL_TTL_PUBLIC: ${R2_SIGNED_URL_TTL_PUBLIC:-86400}
   R2_SIGNED_URL_TTL_PRIVATE: ${R2_SIGNED_URL_TTL_PRIVATE:-900}
-  BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-backups/postgres}
+  BACKUP_S3_PREFIX: backups/postgres-uat
   BACKUP_LOCAL_RETENTION_DAYS: ${BACKUP_LOCAL_RETENTION_DAYS:-}
   BILLING_CURRENCY_DEFAULT: ${BILLING_CURRENCY_DEFAULT:-INR}
   BILLING_OPS_DIGEST_RECIPIENTS: ${BILLING_OPS_DIGEST_RECIPIENTS:-}
@@ -67,34 +67,31 @@ services:
       context: .
       dockerfile: docker/nginx/Dockerfile
       args:
+        NODE_MAX_OLD_SPACE_SIZE: "1536"
+        NGINX_TEMPLATES_DIR: docker/nginx/uat-templates
         VITE_GOOGLE_PLACES_API_KEY: ${VITE_GOOGLE_PLACES_API_KEY:-${GOOGLE_PLACES_API_KEY:-}}
         VITE_GOOGLE_OAUTH_CLIENT_ID: ${VITE_GOOGLE_OAUTH_CLIENT_ID:-${GOOGLE_OAUTH_CLIENT_ID:-}}
         GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-        VITE_OPS_MOBILE_WEB_URL: ${VITE_OPS_MOBILE_WEB_URL:-https://ops.ie-orbit.com}
-        VITE_PUBLIC_SITE_URL: ${VITE_PUBLIC_SITE_URL:-https://ie-orbit.com}
-        VITE_ADMIN_APP_URL: ${VITE_ADMIN_APP_URL:-https://app.ie-orbit.com}
-        VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-G-3Z5PSGMWJW}
+        VITE_OPS_MOBILE_WEB_URL: ${VITE_OPS_MOBILE_WEB_URL:-https://ops-uat.ie-orbit.com}
+        VITE_PUBLIC_SITE_URL: ${VITE_PUBLIC_SITE_URL:-https://uat.ie-orbit.com}
+        VITE_ADMIN_APP_URL: ${VITE_ADMIN_APP_URL:-https://app-uat.ie-orbit.com}
+        VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-}
         GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
         EXPO_PUBLIC_GOOGLE_PLACES_API_KEY: ${EXPO_PUBLIC_GOOGLE_PLACES_API_KEY:-${GOOGLE_PLACES_API_KEY:-}}
         EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: ${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY:-${GOOGLE_PLACES_API_KEY:-}}
-        EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:-https://api.ie-orbit.com/api/v1}
-        EXPO_PUBLIC_REFERRAL_LINK_BASE_URL: ${EXPO_PUBLIC_REFERRAL_LINK_BASE_URL:-https://ie-orbit.com}
-        EXPO_PUBLIC_APP_DOWNLOAD_URL: ${EXPO_PUBLIC_APP_DOWNLOAD_URL:-https://ie-orbit.com/download}
+        EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:-https://api-uat.ie-orbit.com/api/v1}
+        EXPO_PUBLIC_REFERRAL_LINK_BASE_URL: ${EXPO_PUBLIC_REFERRAL_LINK_BASE_URL:-https://uat.ie-orbit.com}
+        EXPO_PUBLIC_APP_DOWNLOAD_URL: ${EXPO_PUBLIC_APP_DOWNLOAD_URL:-https://uat.ie-orbit.com/download}
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
     environment:
-      API_HOST: ${API_HOST:-api.ie-orbit.com}
-      WEB_HOST: ${WEB_HOST:-app.ie-orbit.com}
-      OPS_WEB_HOST: ${OPS_WEB_HOST:-ops.ie-orbit.com}
-      SITE_HOST: ${SITE_HOST:-ie-orbit.com}
-      WWW_HOST: ${WWW_HOST:-www.ie-orbit.com}
+      API_HOST: ${API_HOST:-api-uat.ie-orbit.com}
+      WEB_HOST: ${WEB_HOST:-app-uat.ie-orbit.com}
+      OPS_WEB_HOST: ${OPS_WEB_HOST:-ops-uat.ie-orbit.com}
+      SITE_HOST: ${SITE_HOST:-uat.ie-orbit.com}
+      WWW_HOST: ${WWW_HOST:-uat.ie-orbit.com}
     volumes:
-      - ./certs:/etc/nginx/certs
-      - ./certbot-www:/var/www/certbot:ro
       - backend-static:/var/www/static:ro
-      - ./docker/nginx/uat-edge.conf:/etc/nginx/conf.d/uat-edge.conf:ro
+      - ./docker/nginx/uat-allowlist.conf:/etc/nginx/uat-allowlist.conf:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -106,11 +103,13 @@ services:
       start_period: 20s
     networks:
       edge:
+        aliases:
+          - uat-nginx
       app:
         aliases:
           - nginx
-    mem_limit: 128m
-    cpus: 0.20
+    mem_limit: 64m
+    cpus: 0.15
 
   backend:
     build:
@@ -140,14 +139,14 @@ services:
         ]
       interval: 20s
       timeout: 5s
-      retries: 10
-      start_period: 40s
+      retries: 15
+      start_period: 180s
     networks:
       app:
         aliases:
           - backend
-    mem_limit: 512m
-    cpus: 0.50
+    mem_limit: 256m
+    cpus: 0.35
 
   celery-worker:
     build:
@@ -182,8 +181,8 @@ services:
       app:
         aliases:
           - celery-worker
-    mem_limit: 384m
-    cpus: 0.25
+    mem_limit: 192m
+    cpus: 0.15
 
   celery-beat:
     build:
@@ -219,7 +218,7 @@ services:
         aliases:
           - celery-beat
     mem_limit: 128m
-    cpus: 0.10
+    cpus: 0.05
 
   postgres:
     image: postgres:16-alpine
@@ -231,9 +230,9 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=128MB
+      - shared_buffers=64MB
       - -c
-      - max_connections=50
+      - max_connections=30
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -246,8 +245,8 @@ services:
       app:
         aliases:
           - postgres
-    mem_limit: 512m
-    cpus: 0.40
+    mem_limit: 256m
+    cpus: 0.25
 
   redis:
     image: redis:7.2-alpine
@@ -257,7 +256,7 @@ services:
       - --appendonly
       - "yes"
       - --maxmemory
-      - 128mb
+      - 64mb
       - --maxmemory-policy
       - allkeys-lru
     volumes:
@@ -272,29 +271,30 @@ services:
       app:
         aliases:
           - redis
-    mem_limit: 128m
-    cpus: 0.10
+    mem_limit: 64m
+    cpus: 0.05
 
 volumes:
   postgres-data:
     external: true
-    name: ie-orbit-prod_postgres-data
+    name: ie-orbit-uat_postgres-data
   redis-data:
     external: true
-    name: ie-orbit-prod_redis-data
+    name: ie-orbit-uat_redis-data
   backend-static:
     external: true
-    name: ie-orbit-prod_backend-static
+    name: ie-orbit-uat_backend-static
   backend-logs:
     external: true
-    name: ie-orbit-prod_backend-logs
+    name: ie-orbit-uat_backend-logs
   celerybeat-data:
     external: true
-    name: ie-orbit-prod_celerybeat-data
+    name: ie-orbit-uat_celerybeat-data
 
 networks:
   edge:
-    driver: bridge
+    external: true
+    name: ie-orbit-prod_edge
   app:
     driver: bridge
     internal: false
