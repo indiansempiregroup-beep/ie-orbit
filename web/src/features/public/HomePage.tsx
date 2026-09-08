@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
 import {
+  ArrowRight,
   BarChart3,
-  CalendarDays,
   IndianRupee,
   Smartphone,
-  Store,
   TrendingUp,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
@@ -13,24 +12,34 @@ import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import { trackEvent } from '../../seo/analytics';
 
-const products = [
+const paths = [
   {
-    kicker: 'Orbit Appoint',
-    title: 'Appointments for service businesses',
-    body: 'Online bookings, calendar, staff, customers, and reviews. Pro adds full business intelligence and reward points.',
-    points: ['Online bookings from any device', 'Staff calendar and availability', 'Customers, reminders, and reviews'],
-    icon: CalendarDays,
-    to: '/features',
+    kicker: 'I need bookings',
+    title: 'Appointments that run themselves.',
+    body: 'Let customers find a time, a service, and a reason to come back.',
+    tone: 'peach' as const,
+    to: '/features#appoint',
   },
   {
-    kicker: 'Orbit Mart',
-    title: 'Retail, POS, and GST books',
-    body: 'Counter sales, catalog, orders and returns, GST books, and Grow tools. Add the Pets pack when you need pet records.',
-    points: ['POS and GST counter sales', 'Catalog, orders, and returns', 'Books, e-invoice, and Grow tools'],
-    icon: Store,
-    to: '/features',
-    teal: true,
+    kicker: 'I need ecommerce',
+    title: 'A storefront that feels like yours.',
+    body: 'Turn your products into an always-open channel your customers can carry.',
+    tone: 'blue' as const,
+    to: '/features#mart',
   },
+  {
+    kicker: 'I need both',
+    title: 'The full customer experience.',
+    body: 'Bookings and orders, joined up under one memorable brand.',
+    tone: 'dark' as const,
+    to: '/features#both',
+  },
+];
+
+const differences = [
+  { index: '01', title: 'Your brand front and centre', body: 'White-label customer app branded to your business.' },
+  { index: '02', title: 'Every customer in one orbit', body: 'Bookings, orders, and the same customer record.' },
+  { index: '03', title: 'Built to grow with you', body: '15-day full-Pro trial, then Starter or Pro with UPI billing.' },
 ];
 
 const sharedBenefits = [
@@ -57,9 +66,15 @@ const sharedBenefits = [
 ];
 
 const steps = [
-  { title: 'Create your workspace', body: 'Sign up, add your business profile, and invite your team.' },
-  { title: 'Pick your products', body: 'Choose Orbit Appoint, Orbit Mart, or both in the same workspace.' },
-  { title: 'Go live in minutes', body: 'Start the 15-day full-Pro trial and run bookings or the counter today.' },
+  { title: 'Choose your starting point', body: 'Tell us how your business grows today — through bookings, products, or both.' },
+  { title: 'Make it yours', body: 'Add your business profile, services or catalog, and invite your team.' },
+  { title: 'Keep customers close', body: 'Start the 15-day full-Pro trial and run bookings or the counter today.' },
+];
+
+const bookings = [
+  { initials: 'NS', name: 'Nisha Shah', detail: 'Haircut + styling · 10:30', status: 'Confirmed', tone: 'peach' },
+  { initials: 'AK', name: 'Arjun Kapoor', detail: 'Consultation · 11:15', status: 'Pending', tone: 'blue' },
+  { initials: 'RM', name: 'Rhea Mehta', detail: 'Premium package · 12:30', status: 'Confirmed', tone: 'purple' },
 ];
 
 export function HomePage() {
@@ -68,13 +83,13 @@ export function HomePage() {
       <section className="public-hero-band">
         <div className="public-hero-inner">
           <div>
-            <p className="public-badge">15-day full-Pro trial</p>
+            <p className="public-eyebrow">Business, reimagined</p>
             <h1>
-              One workspace for <span className="public-gradient-text">appointments and retail</span>
+              Make your business <span className="public-gradient-text">impossible to forget.</span>
             </h1>
             <p className="public-lead">
-              Orbit Appoint runs bookings and staff. Orbit Mart runs the counter, catalog, and GST books. Start with a
-              15-day full-Pro trial, then pick the product — or both — that your business needs.
+              Launch a branded booking and ecommerce experience your customers will love to return to — Orbit Appoint
+              for services, Orbit Mart for retail. Start a 15-day full-Pro trial. No credit card.
             </p>
             <div className="public-hero-actions">
               <Link
@@ -82,57 +97,168 @@ export function HomePage() {
                 state={REGISTER_FRESH_START_STATE}
                 onClick={() => trackEvent('generate_lead', { method: 'home_create_account' })}
               >
-                <Button variant="primary">Create account</Button>
+                <Button variant="primary">
+                  Create account <ArrowRight size={16} aria-hidden="true" />
+                </Button>
               </Link>
-              <Link to="/features">
-                <Button variant="neutral">Explore features</Button>
-              </Link>
-              <Link to="/pricing">
-                <Button variant="ghost">See pricing</Button>
+              <Link to="/features" className="public-signin-link">
+                See how it works
               </Link>
             </div>
-            <div className="public-chip-row" aria-label="Highlights">
-              <span className="public-chip">No credit card to start</span>
-              <span className="public-chip">UPI billing</span>
-              <span className="public-chip">White-label customer app</span>
-              <span className="public-chip">Yearly = 2 months free</span>
-            </div>
+            <p className="public-hero-note">15-day full-Pro trial · UPI billing · No credit card to start</p>
           </div>
           <div className="public-hero-visual" aria-hidden="true">
-            <div className="public-preview public-preview--appoint">
+            <div className="public-visual-tag public-visual-tag--one">One connected experience</div>
+            <div className="public-preview">
               <div className="public-preview__top">
-                <span>Today · Orbit Appoint</span>
-                <span>3 visits</span>
+                <span className="public-preview-brand">ie orbit</span>
+                <span className="public-preview-status">● Live</span>
               </div>
-              <div className="public-preview-slot">
-                <span>10:00</span>
-                <strong>Haircut · Ananya</strong>
+              <p className="public-preview-greeting">
+                Good morning, Mira <span>✦</span>
+              </p>
+              <div className="public-preview-hero">
+                <small>Your business, in their pocket</small>
+                <strong>Book. Shop. Repeat.</strong>
               </div>
-              <div className="public-preview-slot is-live">
-                <span>11:30</span>
-                <strong>Facial · Rahul</strong>
-              </div>
-              <div className="public-preview-slot">
-                <span>14:00</span>
-                <strong>Consultation</strong>
+              <div className="public-preview-stats">
+                <div>
+                  <small>Today's bookings</small>
+                  <b>24</b>
+                  <em>+18%</em>
+                </div>
+                <div>
+                  <small>Orders today</small>
+                  <b>18</b>
+                  <em>+12%</em>
+                </div>
               </div>
             </div>
-            <div className="public-preview public-preview--mart">
+            <div className="public-visual-tag public-visual-tag--two">
+              <span className="public-mini-dot" />
+              Your brand, everywhere
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="public-path-section" aria-label="Products">
+        <div className="public-path-inner">
+          <div className="public-section-intro">
+            <div>
+              <p className="public-kicker">Start with what matters</p>
+              <h2>
+                One orbit. <em>Your way.</em>
+              </h2>
+            </div>
+            <p>Choose the momentum you need today. Add the rest when you're ready.</p>
+          </div>
+          <div className="public-path-grid">
+            {paths.map((path) => (
+              <Link key={path.kicker} to={path.to} className={`public-path-card public-path-card--${path.tone}`}>
+                <div className="public-path-card-top">
+                  <span>{path.kicker}</span>
+                  <ArrowRight size={16} aria-hidden="true" />
+                </div>
+                <h3>{path.title}</h3>
+                <p>{path.body}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-dark-band" aria-label="The IE Orbit difference">
+        <div className="public-dark-inner public-dark-grid">
+          <div>
+            <p className="public-kicker" style={{ color: '#fbbf24' }}>
+              The IE Orbit difference
+            </p>
+            <h2>
+              Stop renting attention.
+              <br />
+              <span>Start owning it.</span>
+            </h2>
+            <p>
+              IE Orbit gives you the digital front door your business deserves — Orbit Appoint, Orbit Mart, or both,
+              designed around how your customers actually move.
+            </p>
+            <Link to="/features">
+              <Button variant="neutral">Explore the platform</Button>
+            </Link>
+          </div>
+          <div className="public-orbit-stats">
+            {differences.map((item) => (
+              <div key={item.index}>
+                <strong>{item.index}</strong>
+                <span>
+                  {item.title}
+                  <br />
+                  {item.body}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-preview-section" aria-label="Workspace preview">
+        <div className="public-preview-inner">
+          <div className="public-section-intro">
+            <div>
+              <p className="public-kicker">A better day at work</p>
+              <h2>
+                Your whole business, <em>in one view.</em>
+              </h2>
+            </div>
+            <p>Owner dashboard and today's appointments, together.</p>
+          </div>
+          <div className="public-owner-grid">
+            <div className="public-owner-panel" aria-hidden="true">
               <div className="public-preview__top">
-                <span>Counter · Orbit Mart</span>
-                <span>GST incl.</span>
+                <span>Owner dashboard</span>
+                <span className="public-preview-status">● Live now</span>
               </div>
-              <div className="public-preview-line">
-                <span>Shampoo 500ml</span>
-                <strong>₹249</strong>
+              <p className="public-preview-greeting">
+                Good morning, Mira <span>✦</span>
+              </p>
+              <div className="public-metric-grid">
+                <div>
+                  <small>Revenue today</small>
+                  <b>₹42,800</b>
+                  <span>↑ 12.8%</span>
+                </div>
+                <div>
+                  <small>Bookings</small>
+                  <b>24</b>
+                  <span>↑ 8.4%</span>
+                </div>
+                <div>
+                  <small>Orders</small>
+                  <b>18</b>
+                  <span>↑ 21.2%</span>
+                </div>
               </div>
-              <div className="public-preview-line">
-                <span>Pet food 2kg</span>
-                <strong>₹890</strong>
-              </div>
-              <div className="public-preview-total">
-                <span>Total</span>
-                <strong>₹1,139</strong>
+            </div>
+            <div className="public-customer-panel" aria-hidden="true">
+              <div className="public-preview">
+                <div className="public-preview__top">
+                  <span className="public-preview-brand">ie orbit</span>
+                  <span className="public-preview-status">● Live</span>
+                </div>
+                <p className="public-preview-label">Appointments · Today</p>
+                {bookings.map((row) => (
+                  <div key={row.initials} className="public-booking-row">
+                    <span className={`public-avatar public-avatar--${row.tone}`}>{row.initials}</span>
+                    <div style={{ flex: 1 }}>
+                      <b>{row.name}</b>
+                      <small style={{ display: 'block', color: '#8291a5' }}>{row.detail}</small>
+                    </div>
+                    <span className={`public-pill${row.status === 'Pending' ? ' public-pill--yellow' : ''}`}>
+                      {row.status}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -159,56 +285,6 @@ export function HomePage() {
           </div>
         </div>
 
-        <section className="public-section" aria-label="Products">
-          <div className="public-section__head">
-            <p className="public-kicker">Products</p>
-            <h2>Pick one product, or run both together</h2>
-            <p className="public-lead">
-              Same business, staff, customers, and billing — whether you book services or sell from the counter.
-            </p>
-          </div>
-          <div className="public-product-grid">
-            {products.map((product) => {
-              const Icon = product.icon;
-              return (
-                <Link key={product.kicker} to={product.to} className="public-card-link">
-                  <article className="public-card">
-                    <div className={`public-card-icon${product.teal ? ' public-card-icon--teal' : ''}`}>
-                      <Icon size={22} />
-                    </div>
-                    <p className="public-kicker">{product.kicker}</p>
-                    <h3>{product.title}</h3>
-                    <p>{product.body}</p>
-                    <ul className="public-list">
-                      {product.points.map((point) => (
-                        <li key={point}>{point}</li>
-                      ))}
-                    </ul>
-                  </article>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="public-section" aria-label="Industries">
-          <div className="public-section__head">
-            <p className="public-kicker">Industries</p>
-            <h2>Built for service and retail teams</h2>
-            <p className="public-lead">
-              See how Orbit Appoint and Orbit Mart fit salons, clinics, fitness, retail, and more.
-            </p>
-          </div>
-          <div className="public-hero-actions">
-            <Link to="/industries">
-              <Button variant="neutral">Browse industries</Button>
-            </Link>
-            <Link to="/integrations">
-              <Button variant="ghost">View integrations</Button>
-            </Link>
-          </div>
-        </section>
-
         <section className="public-section" aria-label="Platform benefits">
           <div className="public-section__head">
             <p className="public-kicker">Platform</p>
@@ -233,12 +309,12 @@ export function HomePage() {
         <section className="public-section" aria-label="How it works">
           <div className="public-section__head">
             <p className="public-kicker">How it works</p>
-            <h2>Live in three steps</h2>
+            <h2>From idea to your orbit</h2>
           </div>
           <div className="public-steps">
             {steps.map((step, index) => (
               <article key={step.title} className="public-card public-step">
-                <span className="public-step__index">{index + 1}</span>
+                <span className="public-step__index">0{index + 1}</span>
                 <h3>{step.title}</h3>
                 <p style={{ marginBottom: 0 }}>{step.body}</p>
               </article>

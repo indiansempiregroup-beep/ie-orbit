@@ -24,8 +24,8 @@ import { useShopOrders } from '../shop/shopHooks';
 function KpiCard({ label, value }: { label: string; value: string | number }) {
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120, padding: 20 }}>
-      <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{label}</p>
-      <p style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{value}</p>
+      <p style={{ margin: 0, color: 'var(--muted-foreground)', fontSize: 12 }}>{label}</p>
+      <p style={{ margin: 0, fontSize: 28, fontWeight: 500, fontFamily: 'var(--serif)' }}>{value}</p>
     </Card>
   );
 }

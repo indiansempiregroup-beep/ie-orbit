@@ -17,6 +17,7 @@ export function organizationSchema(siteUrl: string) {
     name: ORGANIZATION_NAME,
     legalName: ORGANIZATION_NAME,
     url: siteUrl,
+    logo: `${siteUrl}/brand/ie-orbit-logo.png`,
     email: CONTACT_EMAIL,
     telephone: CONTACT_PHONE_DISPLAY,
     brand: { '@type': 'Brand', name: SITE_NAME },
@@ -45,6 +46,7 @@ export function softwareApplicationSchema(siteUrl: string) {
     operatingSystem: 'Web, iOS, Android',
     description: DEFAULT_DESCRIPTION,
     url: siteUrl,
+    image: `${siteUrl}/brand/ie-orbit-logo.png`,
     offers: [
       {
         '@type': 'Offer',

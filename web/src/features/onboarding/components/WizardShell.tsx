@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { BrandLockup } from '../../../components/BrandLockup';
 import { Card } from '../../../components/Card';
 import { WizardStepper } from './WizardStepper';
 import type { RegisterWizardStepId } from '../../../config/onboarding';
@@ -18,7 +19,7 @@ export function WizardShell({ title, subtitle, currentStep, children }: WizardSh
         <Card className="wizard-card">
           <div className="wizard-card-header">
             <Link to="/" className="wizard-brand" aria-label="IE Orbit home">
-              IE Orbit
+              <BrandLockup />
             </Link>
             <h1>{title}</h1>
             {subtitle ? <p className="wizard-subtitle">{subtitle}</p> : null}

@@ -1,12 +1,13 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, Menu, X } from 'lucide-react';
+import { BrandLockup } from '../../components/BrandLockup';
 import { Button } from '../../components/Button';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import { trackEvent } from '../../seo/analytics';
 
-const navLinks = [
+const primaryNavLinks = [
   { to: '/', label: 'Home' },
   { to: '/features', label: 'Features' },
   { to: '/industries', label: 'Industries' },
@@ -14,6 +15,11 @@ const navLinks = [
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },
   { to: '/faq', label: 'FAQ' },
+];
+
+const moreNavLinks = [
+  { to: '/help', label: 'Help Center' },
+  { to: '/integrations', label: 'Integrations' },
 ];
 
 const footerColumns = [
@@ -49,9 +55,13 @@ const footerColumns = [
 export function PublicLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const moreActive = moreNavLinks.some((link) => location.pathname === link.to);
 
   useEffect(() => {
     setMenuOpen(false);
+    setMoreOpen(false);
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
@@ -62,6 +72,24 @@ export function PublicLayout() {
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    function onPointerDown(event: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) {
+        setMoreOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMoreOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [moreOpen]);
+
   return (
     <div className="public-layout">
       <a className="public-skip" href="#public-main">
@@ -70,13 +98,7 @@ export function PublicLayout() {
       <header className={`public-header${menuOpen ? ' is-open' : ''}`}>
         <div className="public-header-inner">
           <Link to="/" className="public-brand" aria-label="IE Orbit home">
-            <span className="public-brand-mark" aria-hidden="true">
-              IE
-            </span>
-            <span>
-              <strong>IE Orbit</strong>
-              <small>by Indians Empire</small>
-            </span>
+            <BrandLockup />
           </Link>
           <button
             type="button"
@@ -89,7 +111,7 @@ export function PublicLayout() {
             {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <nav className="public-nav" id="public-nav" aria-label="Main navigation">
-            {navLinks.map((link) => (
+            {primaryNavLinks.map((link) => (
               <Link
                 key={link.to}
                 to={link.to}
@@ -99,10 +121,37 @@ export function PublicLayout() {
                 {link.label}
               </Link>
             ))}
+            <div
+              className={`public-nav-more${moreOpen ? ' is-open' : ''}${moreActive ? ' is-active' : ''}`}
+              ref={moreRef}
+            >
+              <button
+                type="button"
+                className="public-nav-more-toggle"
+                aria-expanded={moreOpen}
+                aria-controls="public-nav-more"
+                onClick={() => setMoreOpen((open) => !open)}
+              >
+                More
+                <ChevronDown size={14} aria-hidden="true" />
+              </button>
+              <div className="public-nav-more-panel" id="public-nav-more">
+                {moreNavLinks.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={location.pathname === link.to ? 'active' : undefined}
+                    aria-current={location.pathname === link.to ? 'page' : undefined}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </nav>
           <div className="public-header-actions">
-            <Link to="/auth">
-              <Button variant="ghost">Sign in</Button>
+            <Link to="/auth" className="public-signin-link">
+              Sign in
             </Link>
             <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE} onClick={() => trackEvent('generate_lead', { method: 'header_create_account' })}>
               <Button variant="primary">Create account</Button>
@@ -116,7 +165,9 @@ export function PublicLayout() {
       <footer className="public-footer">
         <div className="public-footer-inner">
           <div>
-            <strong>IE Orbit</strong>
+            <Link to="/" className="public-brand" aria-label="IE Orbit home">
+              <BrandLockup />
+            </Link>
             <p>One workspace for appointments and retail — Orbit Appoint and Orbit Mart, built for Indian businesses.</p>
           </div>
           {footerColumns.map((column) => (

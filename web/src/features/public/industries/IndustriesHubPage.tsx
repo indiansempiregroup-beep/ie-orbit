@@ -13,7 +13,7 @@ export function IndustriesHubPage() {
           <div>
             <p className="public-badge">Orbit Appoint · Orbit Mart</p>
             <h1>
-              Software for <span className="public-gradient-text">service and retail</span> teams
+              Made for the way <span className="public-gradient-text">your business moves</span>
             </h1>
             <p className="public-lead">
               IE Orbit is not a single-vertical salon app. Orbit Appoint schedules people and time. Orbit Mart runs the
@@ -33,9 +33,9 @@ export function IndustriesHubPage() {
       <div className="public-page">
         <PublicBreadcrumbs path="/industries" />
         <div className="public-product-grid">
-          {INDUSTRIES.map((industry) => (
+          {INDUSTRIES.map((industry, index) => (
             <Link key={industry.slug} to={industry.path} className="public-card-link">
-              <article className="public-card">
+              <article className={`public-card public-card--${['peach', 'blue', 'yellow', 'purple'][index % 4]}`}>
                 <div className={`public-card-icon${industry.products.includes('mart') && !industry.products.includes('appoint') ? ' public-card-icon--teal' : ''}`}>
                   {industry.products.includes('appoint') ? <CalendarDays size={22} /> : <Store size={22} />}
                 </div>

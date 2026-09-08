@@ -53,8 +53,8 @@ export function buildHeadSnippet(page: SeoPage, siteUrl: string, jsonLd: object[
     `<meta name="twitter:image" content="${escapeAttr(meta.ogImage)}" />`,
     `<meta name="theme-color" content="${THEME_COLOR}" />`,
     `<link rel="manifest" href="/manifest.webmanifest" />`,
-    `<link rel="icon" href="/favicon.svg" type="image/svg+xml" />`,
-    `<link rel="apple-touch-icon" href="/apple-touch-icon.svg" />`,
+    `<link rel="icon" href="/favicon.png" type="image/png" />`,
+    `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
     `<html lang placeholder>`,
   ];
   const json = jsonLd

@@ -34,6 +34,18 @@ test.describe('Marketing navigation', () => {
     await expect(page).toHaveURL(/\/auth\/register/);
   });
 
+  test('More menu opens Help Center and Integrations', async ({ page }) => {
+    const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    await page.getByRole('button', { name: 'More' }).click();
+    await nav.getByRole('link', { name: 'Help Center' }).click();
+    await expect(page).toHaveURL(/\/help$/);
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'More' }).click();
+    await nav.getByRole('link', { name: 'Integrations' }).click();
+    await expect(page).toHaveURL(/\/integrations$/);
+  });
+
   test('footer Product links are reachable', async ({ page }) => {
     const footer = page.locator('footer');
     for (const label of ['Features', 'Pricing', 'FAQ', 'Help Center']) {
