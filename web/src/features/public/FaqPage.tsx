@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { PublicCtaBand } from './PublicCtaBand';
+import { PublicBackLink } from './PublicBackLink';
 import { faqSections, type FaqAnswer } from './faqContent';
 
 function renderAnswer(answer: FaqAnswer) {
@@ -40,6 +41,7 @@ export function FaqPage() {
         </div>
       </section>
       <div className="public-page">
+        <PublicBackLink />
         {faqSections.map((section) => (
           <section key={section.title} className="public-section">
             <div className="public-section__head">

@@ -1,9 +1,11 @@
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { stripPlanProductPrefix } from '../../config/products';
 import { PublicCtaBand } from './PublicCtaBand';
+import { PublicBackLink } from './PublicBackLink';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import {
@@ -82,6 +84,9 @@ function planFeatures(plan: BillingPlanCatalogItem): string[] {
 }
 
 export function PricingPage() {
+  const [searchParams] = useSearchParams();
+  const leadProduct = searchParams.get('product') === 'shopie' ? 'shopie' : 'appointie';
+
   const catalogQuery = useQuery({
     queryKey: ['public', 'plans'],
     queryFn: async () => (await publicClient.billing.publicPlans()).data,
@@ -96,6 +101,28 @@ export function PricingPage() {
   const staffAddon = catalog?.addon_staff_price_paise ?? STAFF_ADDON_INR * 100;
   const officeAddon = catalog?.addon_office_price_paise ?? OFFICE_ADDON_INR * 100;
   const petsAddon = catalog?.addon_pets_price_paise ?? PETS_ADDON_INR * 100;
+  const productSections = [
+    {
+      id: 'appointie' as const,
+      plans: appointie,
+      title: 'Bookings, calendar, staff, and customers',
+      lead: 'For salons, clinics, trainers, and other appointment-based teams.',
+    },
+    {
+      id: 'shopie' as const,
+      plans: shopie,
+      title: 'Commerce, books, and GST',
+      lead: 'Counter, catalog, and GST books on the same workspace.',
+    },
+  ];
+  const orderedSections =
+    leadProduct === 'shopie' ? [...productSections].reverse() : productSections;
+
+  useEffect(() => {
+    if (!hasLivePlans) return;
+    const target = document.getElementById(leadProduct);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [hasLivePlans, leadProduct]);
 
   return (
     <>
@@ -104,7 +131,7 @@ export function PricingPage() {
           <div>
             <p className="public-badge">Transparent INR pricing</p>
             <h1>
-              Simple, scalable <span className="public-gradient-text">pricing</span>
+              Choose the path that matches <span className="public-gradient-text">your next chapter</span>
             </h1>
             <p className="public-lead">
               Pick Orbit Appoint, Orbit Mart, or both in one workspace. Start with a {trialDays}-day free trial, then add
@@ -119,30 +146,28 @@ export function PricingPage() {
         </div>
       </section>
       <div className="public-page">
+        <PublicBackLink />
         {catalogQuery.isLoading && !hasLivePlans ? (
           <PricingFallback trialDays={trialDays} />
         ) : hasLivePlans ? (
           <>
-            {appointie.length > 0 ? (
-              <section className="public-section" style={{ marginTop: 0 }}>
-                <div className="public-section__head">
-                  <p className="public-kicker">{PRODUCT_LABELS.appointie}</p>
-                  <h2>Bookings, calendar, staff, and customers</h2>
-                  <p className="public-lead">For salons, clinics, trainers, and other appointment-based teams.</p>
-                </div>
-                <PlanGrid trialDays={trialDays} plans={appointie} productLabel={PRODUCT_LABELS.appointie} />
-              </section>
-            ) : null}
-            {shopie.length > 0 ? (
-              <section className="public-section">
-                <div className="public-section__head">
-                  <p className="public-kicker">{PRODUCT_LABELS.shopie}</p>
-                  <h2>Commerce, books, and GST</h2>
-                  <p className="public-lead">Counter, catalog, and GST books on the same workspace.</p>
-                </div>
-                <PlanGrid trialDays={trialDays} plans={shopie} productLabel={PRODUCT_LABELS.shopie} />
-              </section>
-            ) : null}
+            {orderedSections
+              .filter((section) => section.plans.length > 0)
+              .map((section, index) => (
+                <section
+                  key={section.id}
+                  id={section.id}
+                  className="public-section"
+                  style={index === 0 ? { marginTop: 0 } : undefined}
+                >
+                  <div className="public-section__head">
+                    <p className="public-kicker">{PRODUCT_LABELS[section.id]}</p>
+                    <h2>{section.title}</h2>
+                    <p className="public-lead">{section.lead}</p>
+                  </div>
+                  <PlanGrid trialDays={trialDays} plans={section.plans} productLabel={PRODUCT_LABELS[section.id]} />
+                </section>
+              ))}
             <p className="public-lead" style={{ marginTop: 28 }}>
               Extra staff {formatInr(staffAddon)}/month · extra office {formatInr(officeAddon)}/month
               {petsAddon ? ` · Pets pack ${formatInr(petsAddon)}/month` : ''}. Yearly billing is 10× monthly (two months
@@ -279,7 +304,7 @@ function PlanGrid({
                 trackEvent('select_content', { content_type: 'pricing_cta', item_id: plan.plan_code })
               }
             >
-              <Button variant={featured ? 'primary' : 'neutral'}>Choose {planTitle(plan)}</Button>
+              <Button variant="primary">Select plan</Button>
             </Link>
           </article>
         );

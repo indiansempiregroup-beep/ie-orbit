@@ -12,6 +12,7 @@ import { ColorInput } from '../../components/ColorInput';
 import { LogoUploadField } from '../../components/LogoUploadField';
 import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
+import { preferHumanAddress, placeToAddressFields } from '../../lib/placeAddress';
 import { WizardShell } from './components/WizardShell';
 import { PasswordStrengthIndicator } from '../auth/components/PasswordStrengthIndicator';
 import { useOnboardingDraft } from './hooks/useOnboardingDraft';
@@ -149,7 +150,7 @@ export function RegisterWizard() {
     mode: 'onBlur',
   });
 
-  const { register, watch, setValue, trigger, formState: { errors } } = form;
+  const { register, watch, setValue, trigger, getValues, clearErrors, formState: { errors } } = form;
   const values = watch();
   const publicClient = useMemo(() => createAuthenticatedClient(), []);
   const catalogQuery = useQuery({
@@ -227,9 +228,9 @@ export function RegisterWizard() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const timer = window.setTimeout(() => saveDraft(values), 400);
+    const timer = window.setTimeout(() => saveDraft(getValues()), 400);
     return () => window.clearTimeout(timer);
-  }, [values, hydrated, saveDraft]);
+  }, [values, hydrated, saveDraft, getValues]);
 
   useEffect(() => {
     const next = { ...values.planCodes };
@@ -271,6 +272,40 @@ export function RegisterWizard() {
     if (index >= 0) setStepIndex(index);
   }
 
+  function applyPlace(place: Parameters<typeof preferHumanAddress>[0]) {
+    const resolved = placeToAddressFields(preferHumanAddress(place, getValues('address')));
+    setValue('address', resolved.address, { shouldDirty: true, shouldValidate: true });
+    setValue('city', resolved.city, { shouldDirty: true, shouldValidate: true });
+    setValue('state', resolved.state, { shouldDirty: true, shouldValidate: true });
+    setValue('country', resolved.country, { shouldDirty: true, shouldValidate: true });
+    setValue('postalCode', resolved.postalCode, { shouldDirty: true, shouldValidate: true });
+    setValue('latitude', resolved.latitude, { shouldDirty: true });
+    setValue('longitude', resolved.longitude, { shouldDirty: true });
+    clearErrors(['address', 'city', 'state', 'country', 'postalCode']);
+  }
+
+  function clearCurrentStep() {
+    const defaults = getDefaultRegisterValues();
+    const fields = [...(stepFieldMap[currentStep as keyof typeof stepFieldMap] ?? [])] as Array<
+      keyof RegisterWizardFormValues
+    >;
+    for (const field of fields) {
+      setValue(field, defaults[field], { shouldDirty: true, shouldValidate: false });
+    }
+    if (currentStep === 'business') {
+      setValue('latitude', null, { shouldDirty: true });
+      setValue('longitude', null, { shouldDirty: true });
+    }
+    if (currentStep === 'owner') {
+      setAffiliateCode('');
+      persistAffiliateCode('');
+    }
+    if (currentStep === 'branding') {
+      setBrandingLogoFile(null);
+    }
+    if (fields.length) clearErrors(fields);
+  }
+
   function handleCancel() {
     clearDraft();
     form.reset(getDefaultRegisterValues());
@@ -306,8 +341,14 @@ export function RegisterWizard() {
 
     return (
       <div className="wizard-form-grid">
-        <Input label="Business name" required {...register('businessName')} aria-invalid={Boolean(errors.businessName)} />
-        {errors.businessName ? <span className="field-error">{errors.businessName.message}</span> : null}
+        <Input
+          label="Business name"
+          required
+          autoComplete="organization"
+          {...register('businessName')}
+          error={errors.businessName?.message}
+          aria-invalid={Boolean(errors.businessName)}
+        />
         <Select
           label="Business category"
           required
@@ -315,6 +356,14 @@ export function RegisterWizard() {
           {...register('businessCategory')}
           error={errors.businessCategory?.message}
         />
+        {values.businessCategory === 'Other' ? (
+          <Input
+            label="Describe your category"
+            required
+            {...register('businessCategoryOther')}
+            error={errors.businessCategoryOther?.message}
+          />
+        ) : null}
         <Select
           label="Industry"
           required
@@ -322,8 +371,22 @@ export function RegisterWizard() {
           {...register('industry')}
           error={errors.industry?.message}
         />
-        <Input label="Business email" required type="email" {...register('businessEmail')} />
-        {errors.businessEmail ? <span className="field-error">{errors.businessEmail.message}</span> : null}
+        {values.industry === 'Other' ? (
+          <Input
+            label="Describe your industry"
+            required
+            {...register('industryOther')}
+            error={errors.industryOther?.message}
+          />
+        ) : null}
+        <Input
+          label="Business email"
+          required
+          type="email"
+          autoComplete="off"
+          {...register('businessEmail')}
+          error={errors.businessEmail?.message}
+        />
         <Input
           label="Business phone"
           required
@@ -331,10 +394,9 @@ export function RegisterWizard() {
           inputMode="numeric"
           autoComplete="tel"
           {...register('businessPhone')}
+          error={errors.businessPhone?.message}
         />
-        {errors.businessPhone ? <span className="field-error">{errors.businessPhone.message}</span> : null}
-        <Input label="Website (optional)" {...register('website')} />
-        {errors.website ? <span className="field-error">{errors.website.message}</span> : null}
+        <Input label="Website (optional)" {...register('website')} error={errors.website?.message} />
         <div style={{ gridColumn: '1 / -1' }}>
           <AddressLocationPicker
             label="Business address"
@@ -342,26 +404,42 @@ export function RegisterWizard() {
             latitude={values.latitude}
             longitude={values.longitude}
             onChangeText={(value) => setValue('address', value, { shouldDirty: true, shouldValidate: true })}
-            onPlaceSelected={(place) => {
-              setValue('address', place.line1 || place.formattedAddress, { shouldDirty: true });
-              setValue('city', place.city || '', { shouldDirty: true });
-              setValue('state', place.state || '', { shouldDirty: true });
-              setValue('country', place.country || '', { shouldDirty: true });
-              setValue('postalCode', place.postalCode || '', { shouldDirty: true });
-              setValue('latitude', place.latitude ?? null, { shouldDirty: true });
-              setValue('longitude', place.longitude ?? null, { shouldDirty: true });
-            }}
+            onPlaceSelected={applyPlace}
           />
           {errors.address ? <span className="field-error">{errors.address.message}</span> : null}
         </div>
-        <Input label="Country" required readOnly={addressLocked} style={readOnlyFieldStyle} {...register('country')} />
-        {errors.country ? <span className="field-error">{errors.country.message}</span> : null}
-        <Input label="State" required readOnly={addressLocked} style={readOnlyFieldStyle} {...register('state')} />
-        {errors.state ? <span className="field-error">{errors.state.message}</span> : null}
-        <Input label="City" required {...register('city')} />
-        {errors.city ? <span className="field-error">{errors.city.message}</span> : null}
-        <Input label="Postal code" required {...register('postalCode')} />
-        {errors.postalCode ? <span className="field-error">{errors.postalCode.message}</span> : null}
+        <Input
+          label="Country"
+          required
+          readOnly={addressLocked}
+          style={readOnlyFieldStyle}
+          {...register('country')}
+          error={errors.country?.message}
+        />
+        <Input
+          label="State"
+          required
+          readOnly={addressLocked}
+          style={readOnlyFieldStyle}
+          {...register('state')}
+          error={errors.state?.message}
+        />
+        <Input
+          label="City"
+          required
+          readOnly={addressLocked}
+          style={readOnlyFieldStyle}
+          {...register('city')}
+          error={errors.city?.message}
+        />
+        <Input
+          label="Postal code"
+          required
+          readOnly={addressLocked}
+          style={readOnlyFieldStyle}
+          {...register('postalCode')}
+          error={errors.postalCode?.message}
+        />
       </div>
     );
   }
@@ -369,12 +447,27 @@ export function RegisterWizard() {
   function renderOwnerStep() {
     return (
       <div className="wizard-form-grid">
-        <Input label="First name" required {...register('firstName')} autoComplete="given-name" />
-        {errors.firstName ? <span className="field-error">{errors.firstName.message}</span> : null}
-        <Input label="Last name" required {...register('lastName')} autoComplete="family-name" />
-        {errors.lastName ? <span className="field-error">{errors.lastName.message}</span> : null}
-        <Input label="Display name" required {...register('displayName')} />
-        {errors.displayName ? <span className="field-error">{errors.displayName.message}</span> : null}
+        <Input
+          label="First name"
+          required
+          {...register('firstName')}
+          autoComplete="given-name"
+          error={errors.firstName?.message}
+        />
+        <Input
+          label="Last name"
+          required
+          {...register('lastName')}
+          autoComplete="family-name"
+          error={errors.lastName?.message}
+        />
+        <Input
+          label="Display name"
+          required
+          {...register('displayName')}
+          autoComplete="nickname"
+          error={errors.displayName?.message}
+        />
         <Input
           label="Email"
           required
@@ -382,21 +475,40 @@ export function RegisterWizard() {
           {...register('email')}
           autoComplete="email"
           readOnly={Boolean(values.googleIdToken)}
+          error={errors.email?.message}
         />
-        {errors.email ? <span className="field-error">{errors.email.message}</span> : null}
-        <Input label="Mobile" required type="tel" inputMode="numeric" {...register('mobile')} autoComplete="tel" />
-        {errors.mobile ? <span className="field-error">{errors.mobile.message}</span> : null}
+        <Input
+          label="Mobile"
+          required
+          type="tel"
+          inputMode="numeric"
+          {...register('mobile')}
+          autoComplete="tel"
+          error={errors.mobile?.message}
+        />
         {values.googleIdToken ? (
           <p className="wizard-google-note">Continuing with Google. A password is not required.</p>
         ) : (
           <>
             <div className="wizard-password-field">
-              <Input label="Password" required type="password" {...register('password')} autoComplete="new-password" />
+              <Input
+                label="Password"
+                required
+                type="password"
+                {...register('password')}
+                autoComplete="new-password"
+                error={errors.password?.message}
+              />
               <PasswordStrengthIndicator password={values.password} />
-              {errors.password ? <span className="field-error">{errors.password.message}</span> : null}
             </div>
-            <Input label="Confirm password" required type="password" {...register('confirmPassword')} autoComplete="new-password" />
-            {errors.confirmPassword ? <span className="field-error">{errors.confirmPassword.message}</span> : null}
+            <Input
+              label="Confirm password"
+              required
+              type="password"
+              {...register('confirmPassword')}
+              autoComplete="new-password"
+              error={errors.confirmPassword?.message}
+            />
             <div style={{ gridColumn: '1 / -1' }}>
               <GoogleSignInButton
                 disabled={auth.loading}
@@ -444,16 +556,19 @@ export function RegisterWizard() {
           </span>
         </label>
         {errors.acceptPrivacy ? <span className="field-error">{errors.acceptPrivacy.message}</span> : null}
-        <Input
-          label="Affiliate code (optional)"
-          value={affiliateCode}
-          onChange={(event) => {
-            const next = event.target.value.toUpperCase();
-            setAffiliateCode(next);
-            persistAffiliateCode(next);
-          }}
-          autoComplete="off"
-        />
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Input
+            label="Affiliate code (optional)"
+            value={affiliateCode}
+            onChange={(event) => {
+              const next = event.target.value.toUpperCase();
+              setAffiliateCode(next);
+              persistAffiliateCode(next);
+            }}
+            autoComplete="off"
+          />
+          <p className="wizard-hint">If a partner referred you, enter their code. You can leave this blank.</p>
+        </div>
       </div>
     );
   }
@@ -665,7 +780,13 @@ export function RegisterWizard() {
             <h2>Business</h2>
             <Button type="button" variant="ghost" onClick={() => jumpToStep('business')}>Edit</Button>
           </div>
-          <p>{values.businessName} · {values.businessCategory} · {values.industry}</p>
+          <p>
+            {values.businessName} · {values.businessCategory}
+            {values.businessCategory === 'Other' && values.businessCategoryOther ? ` (${values.businessCategoryOther})` : ''}
+            {' · '}
+            {values.industry}
+            {values.industry === 'Other' && values.industryOther ? ` (${values.industryOther})` : ''}
+          </p>
           <p>{values.businessEmail} · {values.businessPhone}</p>
           <p>{values.address}, {values.city}, {values.state}, {values.country} {values.postalCode}</p>
         </section>
@@ -740,15 +861,22 @@ export function RegisterWizard() {
       {stepContent[currentStep]()}
       {currentStep !== 'provision' ? (
         <div className="wizard-actions">
-          {stepIndex > 0 ? (
-            <Button type="button" variant="neutral" onClick={goBack}>
-              Back
-            </Button>
-          ) : (
-            <Button type="button" variant="ghost" onClick={handleCancel}>
-              Cancel
-            </Button>
-          )}
+          <div className="wizard-actions-start">
+            {stepIndex > 0 ? (
+              <Button type="button" variant="neutral" onClick={goBack}>
+                Back
+              </Button>
+            ) : (
+              <Button type="button" variant="ghost" onClick={handleCancel}>
+                Cancel
+              </Button>
+            )}
+            {currentStep !== 'review' ? (
+              <Button type="button" variant="ghost" onClick={clearCurrentStep}>
+                Clear
+              </Button>
+            ) : null}
+          </div>
           <Button type="button" variant="primary" onClick={goNext} disabled={provisioning}>
             {currentStep === 'review' ? (provisioning ? 'Creating account…' : 'Create account') : 'Continue'}
           </Button>

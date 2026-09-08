@@ -186,10 +186,10 @@ export function ProfileEditScreen() {
           }}
           primaryColor={primary}
         />
-        <Input label="City" value={city} onChangeText={setCity} />
-        <Input label="State" value={state} onChangeText={setState} />
-        <Input label="Country" value={country} onChangeText={setCountry} />
-        <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} keyboardType="number-pad" />
+        <Input label="City" value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
+        <Input label="State" value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
+        <Input label="Country" value={country} onChangeText={setCountry} editable={!(latitude != null && longitude != null)} />
+        <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} keyboardType="number-pad" editable={!(latitude != null && longitude != null)} />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {success ? <Text style={styles.success}>{success}</Text> : null}

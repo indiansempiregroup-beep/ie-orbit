@@ -10,6 +10,7 @@ import { Input } from '../../components/ui/Input';
 import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { invalidEmailMessage } from '../../utils/emailValidation';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
@@ -25,8 +26,9 @@ export function ForgotPasswordScreen({ navigation }: Props) {
 
   async function onSubmit() {
     setError('');
-    if (!email.trim()) {
-      setError('Email is required.');
+    const emailError = invalidEmailMessage(email);
+    if (emailError) {
+      setError(emailError);
       return;
     }
     setSubmitting(true);

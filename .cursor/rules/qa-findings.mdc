@@ -17,10 +17,11 @@ Canonical backlog: `docs/qa/FINDINGS.md`
 ## Workflow
 
 1. Read `docs/qa/FINDINGS.md` first — not PDF/XLSX binaries
-2. For test coverage context, read `docs/qa/scenarios/test-scenarios.md`
-3. Fix by ID when user asks (e.g. "fix QA-004")
-4. After resolving, update the finding: status → `resolved`, add brief note under **Notes**
-5. Raw daily dumps live in `docs/qa/findings/YYYY-MM-DD.md` — normalize new items into `FINDINGS.md` with the next `QA-###` ID
+2. Read `docs/qa/CHECKLIST.md` when changing forms or public pages
+3. For test coverage context, read `docs/qa/scenarios/test-scenarios.md`
+4. Fix by ID when user asks (e.g. "fix QA-004")
+5. After resolving, update the finding: status → `resolved`, add brief note under **Notes**
+6. Raw daily dumps live in `docs/qa/findings/YYYY-MM-DD.md` — normalize new items into `FINDINGS.md` with the next `QA-###` ID
 
 ## Finding format
 

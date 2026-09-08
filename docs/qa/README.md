@@ -7,6 +7,7 @@ This folder is the **source of truth for Cursor agents** when triaging bugs, sug
 | Path | Purpose |
 |------|---------|
 | [`FINDINGS.md`](FINDINGS.md) | Backlog: open bugs, suggestions, and recently resolved items (use `QA-###` IDs) |
+| [`CHECKLIST.md`](CHECKLIST.md) | Form/page QA contract for web, ops-mobile, and customer apps |
 | [`findings/`](findings/) | Daily raw notes from QA — paste here first, then normalize into `FINDINGS.md` |
 | [`scenarios/test-scenarios.md`](scenarios/test-scenarios.md) | Test scenario matrix (export of the Excel sheet) |
 | [`archive/`](archive/) | Monthly rollups of resolved items (optional) |

@@ -9,6 +9,7 @@ import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
+import { invalidEmailMessage } from '../../utils/emailValidation';
 import type { AuthStackParamList } from '../../navigation/types';
 
 export function ForgotPasswordScreen() {
@@ -29,6 +30,11 @@ export function ForgotPasswordScreen() {
             fullWidth
             size="lg"
             onPress={async () => {
+              const emailError = invalidEmailMessage(email);
+              if (emailError) {
+                setError(emailError);
+                return;
+              }
               setLoading(true);
               setError(null);
               setMessage(null);

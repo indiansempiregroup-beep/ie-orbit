@@ -198,10 +198,10 @@ export function BusinessEditScreen() {
             setLongitude(place.longitude ?? null);
           }}
         />
-        <Input label="City" value={city} onChangeText={setCity} />
-        <Input label="State" value={state} onChangeText={setState} />
-        <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} />
-        <Input label="Country" value={country} onChangeText={setCountry} />
+        <Input label="City" value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
+        <Input label="State" value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
+        <Input label="Postal code" value={postalCode} onChangeText={setPostalCode} editable={!(latitude != null && longitude != null)} />
+        <Input label="Country" value={country} onChangeText={setCountry} editable={!(latitude != null && longitude != null)} />
       </FormSection>
 
       <FormSection title="Tax & GST">

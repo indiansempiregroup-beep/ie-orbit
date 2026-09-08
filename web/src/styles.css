@@ -938,6 +938,7 @@ h6 {
   display: grid;
   gap: 4px 16px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
 }
 
 .wizard-password-field {
@@ -1509,11 +1510,10 @@ h6 {
 }
 
 .field-error {
-  grid-column: 1 / -1;
   display: block;
   color: #dc2626;
   font-size: 12px;
-  margin: -4px 0 8px;
+  margin: 4px 0 0;
 }
 
 .wizard-hint {

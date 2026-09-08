@@ -1,0 +1,22 @@
+---
+description: Form and public-page QA contract for web, ops-mobile, and customer apps
+globs: web/src/**/*.{ts,tsx},apps/ops-mobile/src/**/*.{ts,tsx},mobile/src/**/*.{ts,tsx},docs/qa/**
+alwaysApply: false
+---
+
+# Form QA contract
+
+Full checklist: `docs/qa/CHECKLIST.md`. Findings: `docs/qa/FINDINGS.md`.
+
+When adding or changing a form:
+
+- Required fields need a marker, real validation, and in-cell errors (no grid shift).
+- Email: empty and invalid both show a message; invalid copy includes the typed value.
+- Address picker: search, current location, and pin fill derived fields; filling clears errors; clearing search clears city/state/country/postal/coords; lock derived fields while coords exist; do not prefer Plus Codes.
+- Back / remount must not wipe or shift values (`getValues()` draft, distinct `autoComplete`).
+- Reject disallowed file types in JS, not only `accept=`.
+- `Other` needs required free text.
+
+If the form exists in another client (web / ops-mobile / customer), apply the same contract there.
+
+Website-only: public Back, industry `?product=` pricing. Do not copy those to mobile. Header Help/Integrations stay footer-only until a compact treatment.

@@ -35,6 +35,11 @@ export function ImagePickerButton({
   const preview = localPreview || resolveMediaUrl(valueUri) || null;
 
   function applyPicked(asset: ImagePickerAsset) {
+    const mime = asset.mimeType || '';
+    if (mime && !mime.startsWith('image/')) {
+      Alert.alert('Invalid file', 'Choose a PNG, JPG, WebP, or SVG image.');
+      return;
+    }
     setLocalPreview(asset.uri);
     onPicked(asset);
   }

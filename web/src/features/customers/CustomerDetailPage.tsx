@@ -295,9 +295,15 @@ export function CustomerDetailPage() {
                 <input
                   key={field}
                   value={addressForm[field]}
+                  readOnly={addressForm.latitude != null && addressForm.longitude != null}
                   onChange={(event) => setAddressForm((current) => ({ ...current, [field]: event.target.value }))}
                   placeholder={field === 'postal_code' ? 'Postal code' : field[0].toUpperCase() + field.slice(1)}
-                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    border: '1px solid #e5e7eb',
+                    background: addressForm.latitude != null && addressForm.longitude != null ? '#f9fafb' : '#fff',
+                  }}
                 />
               ))}
             </div>

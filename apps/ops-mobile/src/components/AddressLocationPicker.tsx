@@ -6,6 +6,7 @@ import MapView, { Marker, PROVIDER_GOOGLE, type MapPressEvent, type Region } fro
 import { opsClient } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { AddressPlacesField, type PlaceSelection } from './AddressPlacesField';
+import { emptyPlace, preferHumanAddress } from '../utils/placeAddress';
 
 const DEFAULT_REGION: Region = {
   latitude: 19.076,
@@ -82,7 +83,7 @@ export function AddressLocationPicker({
     setPin({ latitude: lat, longitude: lng });
     try {
       const response = await opsClient.places.reverse({ latitude: lat, longitude: lng });
-      onPlaceSelected(asPlace(response.data));
+      onPlaceSelected(preferHumanAddress(asPlace(response.data), value));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to identify this map location.');
       onPlaceSelected({ formattedAddress: value, line1: value, latitude: lat, longitude: lng });
@@ -114,7 +115,10 @@ export function AddressLocationPicker({
       <AddressPlacesField
         label="Search address, building or landmark"
         value={value}
-        onChangeText={onChangeText}
+        onChangeText={(next) => {
+          onChangeText(next);
+          if (!next.trim()) onPlaceSelected(emptyPlace());
+        }}
         onPlaceSelected={onPlaceSelected}
         latitude={latitude}
         longitude={longitude}

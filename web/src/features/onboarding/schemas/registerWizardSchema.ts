@@ -48,7 +48,9 @@ export const registerWizardSchema = z
   .object({
     businessName: z.string().min(2, 'Business name is required'),
     businessCategory: z.string().min(1, 'Select a category'),
+    businessCategoryOther: z.string(),
     industry: z.string().min(1, 'Select an industry'),
+    industryOther: z.string(),
     businessEmail: z.string().email('Enter a valid business email'),
     businessPhone: phoneSchema,
     website: optionalWebsiteSchema,
@@ -120,6 +122,20 @@ export const registerWizardSchema = z
         message: 'Open at least one day and make sure closing time is after opening time.',
       });
     }
+    if (data.businessCategory === 'Other' && !data.businessCategoryOther.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['businessCategoryOther'],
+        message: 'Describe your business category',
+      });
+    }
+    if (data.industry === 'Other' && !data.industryOther.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['industryOther'],
+        message: 'Describe your industry',
+      });
+    }
     for (const product of data.selectedProducts) {
       if (!data.planCodes[product]) {
         ctx.addIssue({
@@ -137,7 +153,9 @@ export const stepFieldMap = {
   business: [
     'businessName',
     'businessCategory',
+    'businessCategoryOther',
     'industry',
+    'industryOther',
     'businessEmail',
     'businessPhone',
     'website',
@@ -179,7 +197,9 @@ export function getDefaultRegisterValues(): RegisterWizardFormValues {
   return {
     businessName: '',
     businessCategory: '',
+    businessCategoryOther: '',
     industry: '',
+    industryOther: '',
     businessEmail: '',
     businessPhone: '',
     website: '',

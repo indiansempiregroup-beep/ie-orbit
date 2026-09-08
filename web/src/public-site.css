@@ -343,6 +343,12 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.public-page .public-chip {
+  color: #0f172a;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
 .public-hero-visual {
   position: relative;
   min-height: 360px;
@@ -925,6 +931,8 @@
 }
 
 .public-back-link {
+  display: inline-flex;
+  margin: 0 0 20px;
   color: #2563eb;
   text-decoration: none;
   font-weight: 600;

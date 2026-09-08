@@ -232,10 +232,10 @@ export function BranchFormScreen() {
 
       <View style={styles.row}>
         <View style={styles.rowHalf}>
-          <Input label="City" value={form.city} onChangeText={(value) => setField('city', value)} />
+          <Input label="City" value={form.city} onChangeText={(value) => setField('city', value)} editable={!(latitude != null && longitude != null)} />
         </View>
         <View style={styles.rowHalf}>
-          <Input label="State" value={form.state} onChangeText={(value) => setField('state', value)} />
+          <Input label="State" value={form.state} onChangeText={(value) => setField('state', value)} editable={!(latitude != null && longitude != null)} />
         </View>
       </View>
       <View style={styles.row}>
@@ -244,6 +244,7 @@ export function BranchFormScreen() {
             label="Country"
             value={form.country}
             onChangeText={(value) => setField('country', value)}
+            editable={!(latitude != null && longitude != null)}
           />
         </View>
         <View style={styles.rowHalf}>
@@ -252,6 +253,7 @@ export function BranchFormScreen() {
             value={form.postalCode}
             onChangeText={(value) => setField('postalCode', value)}
             keyboardType="number-pad"
+            editable={!(latitude != null && longitude != null)}
           />
         </View>
       </View>

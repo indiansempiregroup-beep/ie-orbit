@@ -57,8 +57,14 @@ export async function provisionWorkspace({
     business_name: values.businessName,
     display_name: values.displayName || values.businessName,
     business_code: slug,
-    business_type: values.businessCategory,
-    industry_category: values.industry,
+    business_type:
+      values.businessCategory === 'Other' && values.businessCategoryOther.trim()
+        ? `Other: ${values.businessCategoryOther.trim()}`
+        : values.businessCategory,
+    industry_category:
+      values.industry === 'Other' && values.industryOther.trim()
+        ? `Other: ${values.industryOther.trim()}`
+        : values.industry,
     business_email: values.businessEmail,
     primary_contact: values.businessPhone,
     website: normalizeWebsite(values.website),

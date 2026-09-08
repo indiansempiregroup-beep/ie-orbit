@@ -32,7 +32,10 @@ export function LogoUploadField({
   const inputId = useId();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const displayUrl = previewUrl ?? currentLogoUrl;
+  const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
+  const allowedExtensions = /\.(png|jpe?g|webp|svg)$/i;
 
   useEffect(() => {
     if (!value) {
@@ -61,10 +64,25 @@ export function LogoUploadField({
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
+    event.target.value = '';
+    if (!file) {
+      onChange(null);
+      setFileError(null);
+      return;
+    }
+    const typeOk = !file.type || allowedTypes.has(file.type);
+    const nameOk = allowedExtensions.test(file.name);
+    if (!typeOk || !nameOk) {
+      setFileError('Upload a PNG, JPG, WebP, or SVG image.');
+      onChange(null);
+      return;
+    }
+    setFileError(null);
     onChange(file);
   }
 
   function handleClear() {
+    setFileError(null);
     onChange(null);
   }
 
@@ -112,7 +130,13 @@ export function LogoUploadField({
           onChange={handleFileChange}
         />
       </div>
-      <p className="wizard-hint">{hint}</p>
+      {fileError ? (
+        <p className="field-error" role="alert" style={{ marginTop: 8 }}>
+          {fileError}
+        </p>
+      ) : (
+        <p className="wizard-hint">{hint}</p>
+      )}
     </div>
   );
 }

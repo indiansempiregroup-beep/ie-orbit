@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { CalendarDays, Mail, Phone, Store, Users } from 'lucide-react';
 import { PublicCtaBand } from './PublicCtaBand';
+import { PublicBackLink } from './PublicBackLink';
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, CONTACT_PHONE_TEL } from '../../seo/config';
 
 export function AboutPage() {
@@ -22,6 +23,7 @@ export function AboutPage() {
         </div>
       </section>
       <div className="public-page">
+        <PublicBackLink />
         <div className="public-product-grid">
           <article className="public-card">
             <div className="public-card-icon">

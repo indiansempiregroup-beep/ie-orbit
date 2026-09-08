@@ -7,6 +7,7 @@ import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { PostAuthRedirect } from '../../components/PostAuthRedirect';
+import { invalidEmailMessage } from '../../lib/emailValidation';
 
 export function ForgotPasswordPage() {
   usePageMeta({ title: 'Forgot password — IE Orbit' });
@@ -22,6 +23,11 @@ export function ForgotPasswordPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const emailError = invalidEmailMessage(email);
+    if (emailError) {
+      setError(emailError);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -47,9 +53,16 @@ export function ForgotPasswordPage() {
       {submitted ? (
         <p role="status">If an account exists for {email}, you will receive a reset link shortly.</p>
       ) : (
-        <form onSubmit={handleSubmit}>
-          <Input label="Email address" type="email" value={email} required onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          {error ? <div role="alert" className="auth-error">{error}</div> : null}
+        <form onSubmit={handleSubmit} noValidate>
+          <Input
+            label="Email address"
+            type="email"
+            value={email}
+            required
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            error={error ?? undefined}
+          />
           <Button type="submit" variant="primary" disabled={loading} style={{ width: '100%' }}>
             {loading ? 'Sending…' : 'Send reset link'}
           </Button>

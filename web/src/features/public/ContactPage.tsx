@@ -5,8 +5,10 @@ import { createApiClient } from '@ie-orbit/sdk';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { getApiErrorMessage } from '../../lib/apiClient';
+import { invalidEmailMessage } from '../../lib/emailValidation';
 import { trackEvent } from '../../seo/analytics';
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, CONTACT_PHONE_TEL } from '../../seo/config';
+import { PublicBackLink } from './PublicBackLink';
 
 const contactClient = createApiClient({ baseUrl: '/api/v1' });
 
@@ -15,6 +17,7 @@ export function ContactPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; message?: string }>({});
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,6 +33,13 @@ export function ContactPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    const nextErrors = {
+      name: name.trim() ? undefined : 'Name is required',
+      email: invalidEmailMessage(email) ?? undefined,
+      message: message.trim() ? undefined : 'Message is required',
+    };
+    setFieldErrors(nextErrors);
+    if (nextErrors.name || nextErrors.email || nextErrors.message) return;
     setLoading(true);
     const formData = new FormData(event.currentTarget);
     try {
@@ -69,6 +79,7 @@ export function ContactPage() {
         </div>
       </section>
       <div className="public-page">
+        <PublicBackLink />
         <div className="public-contact-grid">
           <article className="public-card public-form">
             {submitted ? (
@@ -76,7 +87,7 @@ export function ContactPage() {
                 Thank you. We will respond within two business days.
               </p>
             ) : (
-              <form onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit} noValidate>
                 <h2 style={{ marginTop: 0 }}>Send a message</h2>
                 {error ? (
                   <p className="public-status public-status--error" role="alert">
@@ -91,6 +102,7 @@ export function ContactPage() {
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   disabled={loading}
+                  error={fieldErrors.name}
                 />
                 <Input
                   label="Email"
@@ -101,9 +113,10 @@ export function ContactPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   disabled={loading}
+                  error={fieldErrors.email}
                 />
                 <label className="public-form-label">
-                  <span>Message</span>
+                  <span>Message *</span>
                   <textarea
                     name="message"
                     required
@@ -112,6 +125,11 @@ export function ContactPage() {
                     onChange={(event) => setMessage(event.target.value)}
                     disabled={loading}
                   />
+                  {fieldErrors.message ? (
+                    <span className="field-error" role="alert">
+                      {fieldErrors.message}
+                    </span>
+                  ) : null}
                 </label>
                 <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>
                   <label>

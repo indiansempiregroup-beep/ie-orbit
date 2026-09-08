@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Forgot password', () => {
-  test('QA-008 invalid email is rejected by browser validation', async ({ page }) => {
+  test('QA-036 invalid email shows an in-page error', async ({ page }) => {
     await page.goto('/auth/forgot-password');
     const email = page.getByLabel(/email/i);
     await email.fill('not-an-email');
     await page.getByRole('button', { name: /send reset link/i }).click();
-    const validationMessage = await email.evaluate((el: HTMLInputElement) => el.validationMessage);
-    expect(validationMessage.length).toBeGreaterThan(0);
+    await expect(page.getByRole('alert')).toContainText(/invalid email address: not-an-email/i);
   });
 
   test('valid email submits forgot-password form', async ({ page }) => {

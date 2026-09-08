@@ -392,16 +392,20 @@ export function BranchesPanel() {
                 ['Postal code', postalCode, setPostalCode],
                 ['Phone (rider contact)', phoneNumber, setPhoneNumber],
               ] as const
-            ).map(([label, value, setValue]) => (
+            ).map(([label, value, setValue]) => {
+              const locked = label !== 'Phone (rider contact)' && latitude != null && longitude != null;
+              return (
               <label key={label} style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{label}</span>
                 <input
                   value={value}
+                  readOnly={locked}
                   onChange={(event) => setValue(event.target.value)}
-                  style={INPUT_STYLE}
+                  style={{ ...INPUT_STYLE, background: locked ? '#f9fafb' : INPUT_STYLE.background }}
                 />
               </label>
-            ))}
+            );
+            })}
           </div>
 
           {latitude != null && longitude != null ? (

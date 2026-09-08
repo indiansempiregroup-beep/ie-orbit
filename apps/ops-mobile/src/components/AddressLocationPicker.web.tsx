@@ -5,6 +5,7 @@ import * as Location from 'expo-location';
 import { opsClient } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { AddressPlacesField, type PlaceSelection } from './AddressPlacesField';
+import { emptyPlace, preferHumanAddress } from '../utils/placeAddress';
 
 const DEFAULT_CENTER = { lat: 19.076, lng: 72.8777 };
 
@@ -133,7 +134,7 @@ export function AddressLocationPicker({
     mapRef.current?.panTo({ lat, lng });
     try {
       const response = await opsClient.places.reverse({ latitude: lat, longitude: lng });
-      onPlaceSelected(asPlace(response.data));
+      onPlaceSelected(preferHumanAddress(asPlace(response.data), value));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to identify this map location.');
       onPlaceSelected({ formattedAddress: value, line1: value, latitude: lat, longitude: lng });
@@ -218,7 +219,10 @@ export function AddressLocationPicker({
       <AddressPlacesField
         label="Search address, building or landmark"
         value={value}
-        onChangeText={onChangeText}
+        onChangeText={(next) => {
+          onChangeText(next);
+          if (!next.trim()) onPlaceSelected(emptyPlace());
+        }}
         onPlaceSelected={onPlaceSelected}
         latitude={latitude}
         longitude={longitude}

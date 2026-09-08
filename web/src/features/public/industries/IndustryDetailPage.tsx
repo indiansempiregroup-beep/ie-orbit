@@ -12,6 +12,8 @@ export function IndustryDetailPage() {
   if (!industry) return <Navigate to="/industries" replace />;
 
   const related = INDUSTRIES.filter((item) => industry.related.includes(item.slug));
+  const pricingProduct =
+    industry.products.includes('mart') && !industry.products.includes('appoint') ? 'shopie' : 'appointie';
 
   return (
     <>
@@ -28,8 +30,8 @@ export function IndustryDetailPage() {
               <Link to="/features">
                 <Button variant="neutral">Features</Button>
               </Link>
-              <Link to="/pricing">
-                <Button variant="ghost">Pricing</Button>
+              <Link to={`/pricing?product=${pricingProduct}`}>
+                <Button variant="neutral">Pricing</Button>
               </Link>
             </div>
           </div>
@@ -118,7 +120,7 @@ export function IndustryDetailPage() {
             <h2>Related industries</h2>
           </div>
           <p className="public-lead">
-            Also see <Link to="/features">features</Link>, <Link to="/pricing">pricing</Link>, and the{' '}
+            Also see <Link to="/features">features</Link>, <Link to={`/pricing?product=${pricingProduct}`}>pricing</Link>, and the{' '}
             <Link to="/faq">FAQ</Link>.
           </p>
           <div className="public-chip-row">

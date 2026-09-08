@@ -45,8 +45,13 @@ export function ImagePickerButton({
     });
 
     if (result.canceled || !result.assets[0]) return;
-    setPreview(result.assets[0].uri);
-    onPicked(result.assets[0]);
+    const asset = result.assets[0];
+    if (asset.mimeType && !asset.mimeType.startsWith('image/')) {
+      Alert.alert('Invalid file', 'Choose a PNG, JPG, or WebP image.');
+      return;
+    }
+    setPreview(asset.uri);
+    onPicked(asset);
   }
 
   async function takePhoto() {
@@ -64,8 +69,13 @@ export function ImagePickerButton({
     });
 
     if (result.canceled || !result.assets[0]) return;
-    setPreview(result.assets[0].uri);
-    onPicked(result.assets[0]);
+    const asset = result.assets[0];
+    if (asset.mimeType && !asset.mimeType.startsWith('image/')) {
+      Alert.alert('Invalid file', 'Choose a PNG, JPG, or WebP image.');
+      return;
+    }
+    setPreview(asset.uri);
+    onPicked(asset);
   }
 
   function openPicker() {

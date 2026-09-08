@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { PublicCtaBand } from './PublicCtaBand';
+import { PublicBackLink } from './PublicBackLink';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 
@@ -100,8 +101,8 @@ export function FeaturesPage() {
               Features for <span className="public-gradient-text">service and retail</span> businesses
             </h1>
             <p className="public-lead">
-              Orbit Appoint covers appointments. Orbit Mart covers the counter, books, and Grow. Use one product or both
-              in the same workspace.
+              Orbit Appoint is for bookings, calendar, and staff. Orbit Mart is for the counter, catalog, GST books, and
+              Grow. Use one product or both in the same workspace.
             </p>
             <div className="public-hero-actions">
               <Link to="/pricing">
@@ -115,6 +116,7 @@ export function FeaturesPage() {
         </div>
       </section>
       <div className="public-page">
+        <PublicBackLink />
         <div className="public-product-grid">
           {featureGroups.map((group) => {
             const Icon = group.icon;

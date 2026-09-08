@@ -4,6 +4,7 @@ import { mobileClient } from '../api/client';
 import { colors, typography } from '../theme/tokens';
 import { AddressMapPicker } from './AddressMapPicker';
 import { AddressPlacesField, type PlaceSelection } from './AddressPlacesField';
+import { emptyPlace, preferHumanAddress } from '../utils/placeAddress';
 
 type Props = {
   value: string;
@@ -52,7 +53,7 @@ export function AddressLocationPicker({
     setError(null);
     try {
       const response = await mobileClient.places.reverse({ latitude: lat, longitude: lng });
-      onPlaceSelected(asPlace(response.data));
+      onPlaceSelected(preferHumanAddress(asPlace(response.data), value));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to identify this map location.');
       onPlaceSelected({
@@ -71,7 +72,10 @@ export function AddressLocationPicker({
       <AddressPlacesField
         label="Search address, building or landmark"
         value={value}
-        onChangeText={onChangeText}
+        onChangeText={(next) => {
+          onChangeText(next);
+          if (!next.trim()) onPlaceSelected(emptyPlace());
+        }}
         onPlaceSelected={onPlaceSelected}
         primaryColor={primaryColor}
         latitude={latitude}

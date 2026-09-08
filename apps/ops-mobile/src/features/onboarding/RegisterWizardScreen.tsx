@@ -244,6 +244,52 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
     return null;
   }
 
+  function clearCurrentStep() {
+    const defaults = defaultValues();
+    if (step === 0) {
+      patch({
+        firstName: '',
+        lastName: '',
+        email: values.googleIdToken ? values.email : '',
+        mobile: '',
+        password: '',
+        affiliateCode: '',
+      });
+      setConfirmPassword('');
+    } else if (step === 1) {
+      patch({
+        businessName: '',
+        displayName: '',
+        businessEmail: '',
+        businessPhone: '',
+        address: '',
+        city: '',
+        state: '',
+        country: defaults.country,
+        postalCode: '',
+        latitude: null,
+        longitude: null,
+      });
+    } else if (step === 2) {
+      patch({
+        timezone: defaults.timezone,
+        currency: defaults.currency,
+        language: defaults.language,
+        selectedProducts: defaults.selectedProducts,
+        planCodes: defaults.planCodes,
+        skipHours: defaults.skipHours,
+        businessHours: defaultWeeklyHours(),
+      });
+    } else {
+      patch({
+        primaryColor: defaults.primaryColor,
+        secondaryColor: defaults.secondaryColor,
+        logoAsset: null,
+      });
+    }
+    setError(null);
+  }
+
   async function finish() {
     setSubmitting(true);
     setError(null);
@@ -328,6 +374,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
             autoCapitalize="characters"
             value={values.affiliateCode || ''}
             onChangeText={(v) => patch({ affiliateCode: v.toUpperCase() })}
+            hint="If a partner referred you, enter their code. You can leave this blank."
           />
         </>
       ) : null}
@@ -370,15 +417,16 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
               })
             }
           />
-          <Input label="City" value={values.city} onChangeText={(v) => patch({ city: v })} />
-          <Input label="State" value={values.state} onChangeText={(v) => patch({ state: v })} />
-          <Input
-            label="Country code"
-            value={values.country}
-            onChangeText={(v) => patch({ country: v })}
-            autoCapitalize="characters"
-          />
-          <Input label="Postal code" value={values.postalCode} onChangeText={(v) => patch({ postalCode: v })} />
+        <Input label="City" value={values.city} onChangeText={(v) => patch({ city: v })} editable={!(values.latitude != null && values.longitude != null)} />
+        <Input label="State" value={values.state} onChangeText={(v) => patch({ state: v })} editable={!(values.latitude != null && values.longitude != null)} />
+        <Input
+          label="Country code"
+          value={values.country}
+          onChangeText={(v) => patch({ country: v })}
+          autoCapitalize="characters"
+          editable={!(values.latitude != null && values.longitude != null)}
+        />
+        <Input label="Postal code" value={values.postalCode} onChangeText={(v) => patch({ postalCode: v })} editable={!(values.latitude != null && values.longitude != null)} />
         </>
       ) : null}
 
@@ -530,6 +578,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
 
       <View style={styles.actions}>
         {step > 0 ? <Button label="Back" variant="outline" onPress={() => setStep((s) => s - 1)} /> : null}
+        <Button label="Clear" variant="ghost" onPress={clearCurrentStep} />
         {step < STEPS.length - 1 ? (
           <Button
             label="Continue"

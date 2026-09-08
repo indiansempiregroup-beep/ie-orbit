@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createAuthenticatedClient } from '../lib/apiClient';
 import { useAuth } from '../hooks/useAuth';
+import { emptyPlace, preferHumanAddress } from '../lib/placeAddress';
 import { AddressMapPin } from './AddressMapPin';
 import type { PlaceSelection } from './AddressPlacesField';
 
@@ -131,6 +132,9 @@ export function AddressLocationPicker({
     typedValueRef.current = next;
     setTypedTerm(next);
     onChangeText(next);
+    if (!next.trim()) {
+      onPlaceSelected(emptyPlace());
+    }
   }
 
   async function selectPrediction(prediction: Prediction) {
@@ -164,8 +168,8 @@ export function AddressLocationPicker({
         latitude: latitudeValue,
         longitude: longitudeValue,
       });
-      const place = asPlace(response.data);
-      typedValueRef.current = place.formattedAddress;
+      const place = preferHumanAddress(asPlace(response.data), value);
+      typedValueRef.current = place.line1 || place.formattedAddress;
       setTypedTerm('');
       setPredictions([]);
       onPlaceSelected(place);

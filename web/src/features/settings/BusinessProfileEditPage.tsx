@@ -222,10 +222,10 @@ export function BusinessProfileEditPage() {
               }}
             />
             <div style={fieldGridStyle}>
-              <Input label="Country" value={formState.country} onChange={(e) => updateField('country', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="State" value={formState.state} onChange={(e) => updateField('state', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="City" value={formState.city} onChange={(e) => updateField('city', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Postal code" value={formState.postal_code} onChange={(e) => updateField('postal_code', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label="Country" value={formState.country} onChange={(e) => updateField('country', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
+              <Input label="State" value={formState.state} onChange={(e) => updateField('state', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
+              <Input label="City" value={formState.city} onChange={(e) => updateField('city', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
+              <Input label="Postal code" value={formState.postal_code} onChange={(e) => updateField('postal_code', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
             </div>
           </Section>
 

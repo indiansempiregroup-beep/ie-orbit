@@ -410,9 +410,15 @@ export function CustomersPage() {
                 <input
                   key={field}
                   value={formState[field]}
+                  readOnly={formState.latitude != null && formState.longitude != null}
                   onChange={(event) => setFormState((current) => ({ ...current, [field]: event.target.value }))}
                   placeholder={field === 'postal_code' ? 'Postal code' : field[0].toUpperCase() + field.slice(1)}
-                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    border: '1px solid #e5e7eb',
+                    background: formState.latitude != null && formState.longitude != null ? '#f9fafb' : '#fff',
+                  }}
                 />
               ))}
             </div>

@@ -199,10 +199,10 @@ export function AddressFormScreen() {
           />
           <View style={styles.row}>
             <View style={styles.rowItem}>
-              <Input label="City" placeholder="City" value={city} onChangeText={setCity} />
+              <Input label="City" placeholder="City" value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
             </View>
             <View style={styles.rowItem}>
-              <Input label="State" placeholder="State" value={state} onChangeText={setState} />
+              <Input label="State" placeholder="State" value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
             </View>
           </View>
           <View style={styles.row}>
@@ -213,10 +213,11 @@ export function AddressFormScreen() {
                 value={postalCode}
                 onChangeText={setPostalCode}
                 keyboardType="number-pad"
+                editable={!(latitude != null && longitude != null)}
               />
             </View>
             <View style={styles.rowItem}>
-              <Input label="Country" placeholder="Country" value={country} onChangeText={setCountry} />
+              <Input label="Country" placeholder="Country" value={country} onChangeText={setCountry} editable={!(latitude != null && longitude != null)} />
             </View>
           </View>
         </Card>
