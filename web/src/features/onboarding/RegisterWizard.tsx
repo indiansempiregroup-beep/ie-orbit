@@ -516,7 +516,7 @@ export function RegisterWizard() {
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <Button
                 type="button"
-                variant="secondary"
+                variant="neutral"
                 disabled={!values.email || ownerOtpSending}
                 onClick={() => void sendOwnerOtp()}
               >
