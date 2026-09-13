@@ -24,6 +24,9 @@ export function PlatformSubscriptionsPage() {
   const byProduct = subsQuery.data?.by_product ?? [];
   const maxProduct = Math.max(1, ...byProduct.map((row) => row.count));
   const maxStatus = Math.max(1, ...byStatus.map((row) => row.count));
+  const expiring = subsQuery.data?.expiring_soon ?? [];
+  const locked = subsQuery.data?.locked ?? [];
+  const pendingClaims = subsQuery.data?.pending_claims ?? [];
   const recentTenants = (tenantsQuery.data ?? []).slice(0, 8);
 
   return (
@@ -54,6 +57,68 @@ export function PlatformSubscriptionsPage() {
           />
         ))}
       </div>
+
+      <div className="admin-split">
+        <AdminSection
+          title="Payment pending"
+          description="UPI claims waiting for confirm."
+          actions={
+            <Link className="admin-btn admin-btn--ghost" to="/admin/claims">
+              Open inbox
+            </Link>
+          }
+        >
+          {pendingClaims.length === 0 ? (
+            <AdminEmpty>No claims waiting.</AdminEmpty>
+          ) : (
+            <AdminTable columns={['Workspace', 'Product', 'Amount']}>
+              {pendingClaims.slice(0, 8).map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    {row.tenant_id ? <Link to={`/admin/tenants/${row.tenant_id}`}>{row.tenant_name}</Link> : row.tenant_name}
+                  </td>
+                  <td>{productLabel(row.product_code)}</td>
+                  <td>₹{Math.round((row.amount_paise || 0) / 100).toLocaleString('en-IN')}</td>
+                </tr>
+              ))}
+            </AdminTable>
+          )}
+        </AdminSection>
+        <AdminSection title="Expiring in 5 days" description="Trials and paid periods that need a renewal.">
+          {expiring.length === 0 ? (
+            <AdminEmpty>Nothing due in the next 5 days.</AdminEmpty>
+          ) : (
+            <AdminTable columns={['Workspace', 'Product', 'Due']}>
+              {expiring.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    {row.tenant_id ? <Link to={`/admin/tenants/${row.tenant_id}`}>{row.tenant_name}</Link> : row.tenant_name}
+                  </td>
+                  <td>{productLabel(row.product_code)}</td>
+                  <td>{row.due_at ? new Date(row.due_at).toLocaleDateString() : '—'}</td>
+                </tr>
+              ))}
+            </AdminTable>
+          )}
+        </AdminSection>
+      </div>
+      <AdminSection title="Locked" description="Products waiting on payment to restore access.">
+        {locked.length === 0 ? (
+          <AdminEmpty>No locked subscriptions.</AdminEmpty>
+        ) : (
+          <AdminTable columns={['Workspace', 'Product', 'Due']}>
+            {locked.map((row) => (
+              <tr key={row.id}>
+                <td>
+                  {row.tenant_id ? <Link to={`/admin/tenants/${row.tenant_id}`}>{row.tenant_name}</Link> : row.tenant_name}
+                </td>
+                <td>{productLabel(row.product_code)}</td>
+                <td>{row.due_at ? new Date(row.due_at).toLocaleDateString() : '—'}</td>
+              </tr>
+            ))}
+          </AdminTable>
+        )}
+      </AdminSection>
 
       <div className="admin-split">
         <AdminSection title="By product" description="Share of billed product subscriptions.">

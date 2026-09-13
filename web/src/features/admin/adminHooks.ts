@@ -56,11 +56,11 @@ export function usePlatformTenantPaymentsQuery(tenantId: string | undefined) {
   });
 }
 
-export function usePlatformUpiClaimsQuery() {
+export function usePlatformUpiClaimsQuery(scope: 'pending' | 'history' | 'all' = 'pending') {
   const client = useApiClient();
   return useQuery({
-    queryKey: ['platform', 'upi-claims'],
-    queryFn: async () => (await client.platform.upiClaims({ limit: 100 })).data.claims,
+    queryKey: ['platform', 'upi-claims', scope],
+    queryFn: async () => (await client.platform.upiClaims({ limit: 100, scope })).data.claims,
     retry: false,
   });
 }

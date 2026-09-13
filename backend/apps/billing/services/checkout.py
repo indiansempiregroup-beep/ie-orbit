@@ -373,48 +373,106 @@ class CheckoutService:
                 extra={"session_id": str(session.id), "tenant_id": str(session.tenant_id)},
             )
 
+    def _normalize_upi_line_item(self, raw: dict[str, Any], *, business: Business) -> dict[str, Any]:
+        from apps.businesses.models import BusinessProductSubscriptionStatus
+        from apps.businesses.services.entitlements import EntitlementService
+
+        product_code = str(raw.get("product_code") or "").strip().lower()
+        plan_code = str(raw.get("plan_code") or "").strip().lower()
+        extra_staff = max(0, int(raw.get("extra_staff") or 0))
+        extra_offices = max(0, int(raw.get("extra_offices") or 0))
+        pets_pack_enabled = bool(raw.get("pets_pack_enabled"))
+        if product_code not in VALID_PRODUCT_CODES:
+            raise ValidationError({"product_code": "Unknown product code."})
+        if get_plan_definition(product_code, plan_code) is None:
+            raise ValidationError({"plan_code": "Unknown plan for this product."})
+
+        EntitlementService().ensure_addon_caps(
+            business=business,
+            product_code=product_code,
+            extra_staff=extra_staff,
+            extra_offices=extra_offices,
+            plan_code=plan_code,
+        )
+        subscription = (
+            business.product_subscriptions.filter(product_code=product_code).select_related("plan").first()
+        )
+        interval = "monthly"
+        if subscription is not None and subscription.billing_interval:
+            interval = subscription.billing_interval
+        base = self._resolve_plan_price_paise(plan_code, interval)
+        if base is None:
+            raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
+        addon_prices = get_addon_prices()
+        multiplier = YEARLY_PRICE_MULTIPLIER if interval == "yearly" else 1
+        amount_paise = (
+            base
+            + extra_staff * addon_prices["staff_price_paise"] * multiplier
+            + extra_offices * addon_prices["office_price_paise"] * multiplier
+            + (addon_prices["pets_price_paise"] * multiplier if pets_pack_enabled else 0)
+        )
+        intent = "subscribe"
+        if subscription is not None and subscription.status in {
+            BusinessProductSubscriptionStatus.TRIALING,
+            BusinessProductSubscriptionStatus.ACTIVE,
+            BusinessProductSubscriptionStatus.SOFT_LOCKED,
+        }:
+            intent = "renew"
+        return {
+            "product_code": product_code,
+            "plan_code": plan_code,
+            "extra_staff": extra_staff,
+            "extra_offices": extra_offices,
+            "pets_pack_enabled": pets_pack_enabled,
+            "billing_interval": interval,
+            "amount_paise": int(amount_paise),
+            "intent": intent,
+        }
+
     def create_upi_checkout_session(
         self,
         *,
         tenant: Tenant,
         business: Business,
-        product_code: str,
-        plan_code: str,
+        product_code: str = "",
+        plan_code: str = "",
         amount_paise: int | None = None,
         extra_staff: int = 0,
         extra_offices: int = 0,
         pets_pack_enabled: bool = False,
+        items: list[dict[str, Any]] | None = None,
         actor_id: str | None = None,
     ) -> dict[str, Any]:
         from apps.common.upi import build_upi_pay_url
 
-        normalized_product = product_code.strip().lower()
-        normalized_plan = plan_code.strip().lower()
-        if normalized_product not in VALID_PRODUCT_CODES:
-            raise ValidationError({"product_code": "Unknown product code."})
-        if get_plan_definition(normalized_product, normalized_plan) is None:
-            raise ValidationError({"plan_code": "Unknown plan for this product."})
+        raw_items = list(items or [])
+        if not raw_items:
+            raw_items = [
+                {
+                    "product_code": product_code,
+                    "plan_code": plan_code,
+                    "extra_staff": extra_staff,
+                    "extra_offices": extra_offices,
+                    "pets_pack_enabled": pets_pack_enabled,
+                }
+            ]
+        if len(raw_items) > 8:
+            raise ValidationError({"items": "Select up to 8 products to pay at once."})
 
-        from apps.businesses.services.entitlements import EntitlementService
+        seen: set[str] = set()
+        line_items: list[dict[str, Any]] = []
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                raise ValidationError({"items": "Each item must include a product and plan."})
+            item = self._normalize_upi_line_item(raw, business=business)
+            if item["product_code"] in seen:
+                raise ValidationError({"items": "Each product can appear once in a payment."})
+            seen.add(item["product_code"])
+            line_items.append(item)
 
-        EntitlementService().ensure_addon_caps(
-            business=business,
-            product_code=normalized_product,
-            extra_staff=extra_staff,
-            extra_offices=extra_offices,
-            plan_code=normalized_plan,
-        )
-
-        base = self._resolve_plan_price_paise(normalized_plan)
-        if base is None:
-            raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
-        addon_prices = get_addon_prices()
-        total = amount_paise if amount_paise is not None else (
-            base
-            + max(0, int(extra_staff)) * addon_prices["staff_price_paise"]
-            + max(0, int(extra_offices)) * addon_prices["office_price_paise"]
-            + (addon_prices["pets_price_paise"] if pets_pack_enabled else 0)
-        )
+        first = line_items[0]
+        computed_total = sum(int(item["amount_paise"]) for item in line_items)
+        total = int(amount_paise) if amount_paise is not None else computed_total
         if total <= 0:
             raise ValidationError({"amount": "Checkout amount must be positive."})
 
@@ -425,18 +483,20 @@ class CheckoutService:
         order_id = f"upi_{uuid.uuid4().hex}"
         expires_at = timezone.now() + timedelta(hours=CHECKOUT_SESSION_TTL_HOURS)
         amount_rupees = total / 100
+        note = ",".join(f"{item['product_code']}-{item['plan_code']}" for item in line_items)[:80]
         pay_url = build_upi_pay_url(
             vpa=vpa,
             payee_name=str(getattr(settings, "PLATFORM_UPI_NAME", "") or "IE Orbit"),
             amount=amount_rupees,
-            note=f"{normalized_product}-{normalized_plan}",
+            note=note,
             currency=DEFAULT_CHECKOUT_CURRENCY,
         )
+        intent = "renew" if any(item["intent"] == "renew" for item in line_items) else "subscribe"
         session = BillingCheckoutSession.objects.create(
             tenant=tenant,
             business=business,
-            product_code=normalized_product,
-            plan_code=normalized_plan,
+            product_code=first["product_code"],
+            plan_code=first["plan_code"],
             razorpay_order_id=order_id,
             amount_paise=total,
             currency=DEFAULT_CHECKOUT_CURRENCY,
@@ -446,11 +506,13 @@ class CheckoutService:
                 "payment_channel": "upi_claim",
                 "payment_status": "due",
                 "created_by": actor_id,
-                "extra_staff": int(extra_staff),
-                "extra_offices": int(extra_offices),
-                "pets_pack_enabled": bool(pets_pack_enabled),
+                "extra_staff": int(first["extra_staff"]),
+                "extra_offices": int(first["extra_offices"]),
+                "pets_pack_enabled": bool(first["pets_pack_enabled"]),
                 "upi_pay_url": pay_url,
                 "upi_vpa": vpa,
+                "line_items": line_items,
+                "claim_intent": intent,
             },
         )
         return {
@@ -464,6 +526,8 @@ class CheckoutService:
             "upi_pay_url": pay_url,
             "payment_qr_url": str(getattr(settings, "PLATFORM_PAYMENT_QR_URL", "") or ""),
             "payment_status": "due",
+            "claim_intent": intent,
+            "line_items": line_items,
             "expires_at": expires_at.isoformat(),
         }
 
@@ -474,7 +538,11 @@ class CheckoutService:
         business: Business,
         upi_utr: str,
         payment_proof_url: str = "",
+        payment_proof_media_id: str = "",
     ) -> BillingCheckoutSession:
+        from apps.billing.services.upi_notifications import notify_upi_claim_submitted
+        from apps.billing.services.upi_proof import resolve_payment_proof_url
+
         session = BillingCheckoutSession.objects.filter(id=session_id, business=business).first()
         if session is None:
             raise ValidationError({"session": "Checkout session not found."})
@@ -484,7 +552,22 @@ class CheckoutService:
         if session.status == CheckoutSessionStatus.PAID:
             raise ValidationError({"session": "Already paid."})
         utr = str(upi_utr or "").strip()
-        proof = str(payment_proof_url or "").strip()
+        proof, media_id = resolve_payment_proof_url(
+            payment_proof_url=payment_proof_url,
+            payment_proof_media_id=payment_proof_media_id,
+        )
+        if media_id:
+            from uuid import UUID
+
+            from apps.platform_media.models import Media
+
+            try:
+                UUID(str(media_id))
+            except ValueError as exc:
+                raise ValidationError({"payment_proof_media_id": "Screenshot not found."}) from exc
+            media = Media.objects.filter(id=media_id, business=business).first()
+            if media is None:
+                raise ValidationError({"payment_proof_media_id": "Screenshot not found."})
         if len(utr) < 6 and not proof:
             raise ValidationError(
                 {"upi_utr": "Enter a UPI / UTR reference or upload a payment screenshot."}
@@ -494,11 +577,16 @@ class CheckoutService:
                 "payment_status": "awaiting_confirmation",
                 "upi_utr": utr,
                 "payment_proof_url": proof,
+                "payment_proof_media_id": media_id,
                 "claimed_at": timezone.now().isoformat(),
             }
         )
         session.metadata = meta
         session.save(update_fields=["metadata", "updated_at"])
+        try:
+            notify_upi_claim_submitted(session)
+        except Exception:
+            logger.exception("upi_claim_notify_failed session_id=%s", session.id)
         return session
 
     def confirm_upi_session(
@@ -509,6 +597,8 @@ class CheckoutService:
         note: str = "",
         actor_id: str | None = None,
     ) -> BillingCheckoutSession:
+        from apps.billing.services.upi_notifications import notify_upi_claim_resolved
+
         session = BillingCheckoutSession.objects.filter(id=session_id).first()
         if session is None:
             raise ValidationError({"session": "Checkout session not found."})
@@ -525,42 +615,70 @@ class CheckoutService:
             meta["payment_status"] = "paid"
             meta["confirm_note"] = str(note or "").strip()
             meta["confirmed_by"] = actor_id
+            meta["confirmed_at"] = timezone.now().isoformat()
             session.metadata = meta
             session.save(update_fields=["metadata", "updated_at"])
             self._activate_subscription_for_session(session)
+            try:
+                notify_upi_claim_resolved(session, action="confirm", note=str(note or ""))
+            except Exception:
+                logger.exception("upi_confirm_notify_failed session_id=%s", session.id)
             return session
         if act == "reject":
             meta["payment_status"] = "rejected"
             meta["reject_note"] = str(note or "").strip()
             meta["rejected_by"] = actor_id
+            meta["rejected_at"] = timezone.now().isoformat()
             session.metadata = meta
             session.save(update_fields=["metadata", "updated_at"])
+            try:
+                notify_upi_claim_resolved(session, action="reject", note=str(note or ""))
+            except Exception:
+                logger.exception("upi_reject_notify_failed session_id=%s", session.id)
             return session
         raise ValidationError({"action": "action must be confirm or reject."})
 
+    def _line_items_for_session(self, session: BillingCheckoutSession) -> list[dict[str, Any]]:
+        meta = session.metadata or {}
+        items = meta.get("line_items")
+        if isinstance(items, list) and items:
+            return [item for item in items if isinstance(item, dict)]
+        return [
+            {
+                "product_code": session.product_code,
+                "plan_code": session.plan_code,
+                "extra_staff": int(meta.get("extra_staff") or 0),
+                "extra_offices": int(meta.get("extra_offices") or 0),
+                "pets_pack_enabled": bool(meta.get("pets_pack_enabled")),
+            }
+        ]
+
     def _activate_subscription_for_session(self, session: BillingCheckoutSession) -> None:
+        from apps.billing.services.webhooks import default_product_billing_service
         from apps.businesses.models import BusinessProductSubscriptionStatus
         from apps.businesses.repositories import BusinessRepository
         from apps.businesses.services import BusinessService
-        from apps.billing.services.webhooks import default_product_billing_service
 
         billing_service = default_product_billing_service()
         business_service = BusinessService(
             repository=BusinessRepository(),
             billing_service=billing_service,
         )
-        subscription = business_service.subscribe_to_product(
-            business=session.business,
-            product_code=session.product_code,
-            plan_code=session.plan_code,
-            actor=None,
-            set_active=True,
-        )
         meta = session.metadata or {}
-        if "extra_staff" in meta or "extra_offices" in meta or "pets_pack_enabled" in meta:
-            subscription.extra_staff = int(meta.get("extra_staff") or 0)
-            subscription.extra_offices = int(meta.get("extra_offices") or 0)
-            subscription.pets_pack_enabled = bool(meta.get("pets_pack_enabled"))
+        reference = str(meta.get("upi_utr") or session.razorpay_order_id)
+        for item in self._line_items_for_session(session):
+            product_code = str(item.get("product_code") or session.product_code)
+            plan_code = str(item.get("plan_code") or session.plan_code)
+            subscription = business_service.subscribe_to_product(
+                business=session.business,
+                product_code=product_code,
+                plan_code=plan_code,
+                actor=None,
+                set_active=True,
+            )
+            subscription.extra_staff = int(item.get("extra_staff") or 0)
+            subscription.extra_offices = int(item.get("extra_offices") or 0)
+            subscription.pets_pack_enabled = bool(item.get("pets_pack_enabled"))
             subscription.status = BusinessProductSubscriptionStatus.ACTIVE
             subscription.save(
                 update_fields=[
@@ -571,10 +689,7 @@ class CheckoutService:
                     "updated_at",
                 ]
             )
-        else:
-            subscription.status = BusinessProductSubscriptionStatus.ACTIVE
-            subscription.save(update_fields=["status", "updated_at"])
-        billing_service.attach_external_billing_reference(
-            subscription=subscription,
-            external_reference=str((meta or {}).get("upi_utr") or session.razorpay_order_id),
-        )
+            billing_service.attach_external_billing_reference(
+                subscription=subscription,
+                external_reference=reference,
+            )

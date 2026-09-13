@@ -30,9 +30,11 @@ from apps.billing.api.serializers import (
     BillingWebhookEventSerializer,
 )
 from apps.billing.constants import BULK_REPROCESS_COOLDOWN_SECONDS
-from apps.billing.models import BillingWebhookEvent, WebhookEventStatus
+from apps.billing.models import BillingCheckoutSession, BillingWebhookEvent, WebhookEventStatus
 from apps.billing.services.checkout import CheckoutService
 from apps.billing.services.ops_digest import build_ops_digest
+from apps.billing.services.orders import serialize_checkout_order
+from apps.billing.services.upi_proof import proof_url_from_meta
 from apps.billing.services.platform_revenue import build_platform_revenue_insights
 from apps.billing.services.reconciliation import BillingReconciliationService
 from apps.billing.services.webhooks import WebhookService
@@ -160,6 +162,7 @@ class BillingUpiCheckoutView(APIView):
         if not business_id:
             raise ValidationError({"business_id": "Business context is required."})
         business = Business.objects.get(id=business_id, tenant=tenant)
+        raw_items = request.data.get("items")
         checkout = CheckoutService().create_upi_checkout_session(
             tenant=tenant,
             business=business,
@@ -169,6 +172,7 @@ class BillingUpiCheckoutView(APIView):
             extra_staff=int(request.data.get("extra_staff") or 0),
             extra_offices=int(request.data.get("extra_offices") or 0),
             pets_pack_enabled=bool(request.data.get("pets_pack_enabled")),
+            items=raw_items if isinstance(raw_items, list) else None,
             actor_id=str(request.user.id),
         )
         return success_response(checkout, status_code=status.HTTP_201_CREATED)
@@ -191,13 +195,43 @@ class BillingUpiClaimView(APIView):
             business=business,
             upi_utr=str(request.data.get("upi_utr") or ""),
             payment_proof_url=str(request.data.get("payment_proof_url") or ""),
+            payment_proof_media_id=str(request.data.get("payment_proof_media_id") or ""),
         )
+        meta = session.metadata or {}
         return success_response(
             {
                 "session_id": str(session.id),
-                "payment_status": (session.metadata or {}).get("payment_status"),
-                "upi_utr": (session.metadata or {}).get("upi_utr"),
+                "payment_status": meta.get("payment_status"),
+                "upi_utr": meta.get("upi_utr"),
+                "payment_proof_url": proof_url_from_meta(meta),
+                "payment_proof_media_id": meta.get("payment_proof_media_id"),
             }
+        )
+
+
+class BillingOrdersView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(
+        tags=["Billing"],
+        description="List subscription payment orders for the current business.",
+    )
+    def get(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        business = get_object_or_404(Business, id=business_id, tenant=tenant)
+        sessions = (
+            BillingCheckoutSession.objects.filter(tenant=tenant, business=business)
+            .select_related("business")
+            .order_by("-created_at")[:200]
+        )
+        return success_response(
+            {"orders": [serialize_checkout_order(session) for session in sessions]},
+            request_id=getattr(request, "request_id", None),
         )
 
 
@@ -891,11 +925,48 @@ class BillingPlatformSubscriptionsView(APIView):
             .annotate(count=Count("id"))
             .order_by("product_code")
         )
+        now = timezone.now()
+        soon = now + timedelta(days=5)
+        expiring_qs = (
+            BusinessProductSubscription.objects.filter(status__in=["trialing", "active"])
+            .filter(
+                Q(current_period_ends_at__gte=now, current_period_ends_at__lte=soon)
+                | Q(status="trialing", trial_ends_at__gte=now, trial_ends_at__lte=soon)
+            )
+            .select_related("tenant", "business", "plan")
+            .order_by("current_period_ends_at", "trial_ends_at")[:50]
+        )
+        locked_qs = (
+            BusinessProductSubscription.objects.filter(status="soft_locked")
+            .select_related("tenant", "business", "plan")
+            .order_by("-updated_at")[:50]
+        )
+
+        def _subscription_row(row: BusinessProductSubscription) -> dict:
+            due = row.trial_ends_at if row.status == "trialing" else row.current_period_ends_at
+            return {
+                "id": str(row.id),
+                "tenant_id": str(row.tenant_id) if row.tenant_id else None,
+                "tenant_name": row.tenant.display_name if row.tenant_id else "",
+                "business_id": str(row.business_id) if row.business_id else None,
+                "business_name": row.business.display_name if row.business_id else "",
+                "product_code": row.product_code,
+                "plan_code": row.plan.code if row.plan_id else "",
+                "status": row.status,
+                "due_at": due.isoformat() if due else None,
+            }
+
+        from apps.platform_admin.services import PlatformAdminService
+
+        pending_claims = PlatformAdminService().list_pending_upi_claims(limit=50)
         return success_response(
             {
                 "total_subscriptions": BusinessProductSubscription.objects.count(),
                 "by_status": by_status,
                 "by_product": by_product,
+                "expiring_soon": [_subscription_row(row) for row in expiring_qs],
+                "locked": [_subscription_row(row) for row in locked_qs],
+                "pending_claims": pending_claims,
             },
             request_id=getattr(request, "request_id", None),
         )

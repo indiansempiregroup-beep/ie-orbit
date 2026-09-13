@@ -53,6 +53,10 @@ function openRelatedItem(
   }
   if (notification.booking_id) {
     navigation.navigate('BookingDetail', { bookingId: notification.booking_id });
+    return;
+  }
+  if (notification.notification_type === 'payment') {
+    navigation.navigate('ProductSettings');
   }
 }
 

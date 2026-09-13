@@ -7,6 +7,7 @@ import type {
   BIGrowthReport,
   BIRevenueReport,
   BillingStatus,
+  BillingOrder,
   Booking,
   BookingCreateInput,
   BookingLineItemStaffInput,
@@ -364,6 +365,32 @@ export function useBusinessBillingSnapshot(productCode?: string) {
   }, [reload]);
 
   return { billing, loading, reload };
+}
+
+export function useBillingOrders() {
+  const client = useOpsClient();
+  const { businessId, ready } = useWorkspace();
+  const [orders, setOrders] = useState<BillingOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const reload = useCallback(async () => {
+    if (!client || !ready || !businessId) return;
+    setLoading(true);
+    try {
+      const response = await client.billing.orders();
+      setOrders(response.data.orders ?? []);
+    } catch {
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, ready, businessId]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { orders, loading, reload };
 }
 
 export function usePlanFeatures() {

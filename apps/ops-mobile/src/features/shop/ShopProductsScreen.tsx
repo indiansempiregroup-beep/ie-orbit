@@ -23,7 +23,6 @@ import { Button } from '../../components/ui/Button';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
-import { RemoteImage } from '../../components/RemoteImage';
 import { colors, fonts, iconTones, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-orbit/sdk';
@@ -31,12 +30,7 @@ import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
 import { canWriteShopCatalog } from '../../utils/roles';
 import { getPersistentItem, setPersistentItem } from '../../utils/persistentStore';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import {
-  MAX_PRODUCT_IMAGES,
-  galleryFromProduct,
-  normalizeProductGallery,
-  primaryProductImageUrl,
-} from './productImages';
+import { primaryProductImageUrl } from './productImages';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { SearchBar } from '../../components/SearchBar';
@@ -339,7 +333,7 @@ export function ShopProductsScreen() {
             <Pressable onPress={toggleSelectFiltered} style={styles.selectAll}>
               <Feather
                 name={allFilteredSelected ? 'check-square' : 'square'}
-                size={18}
+                size={20}
                 color={allFilteredSelected ? colors.primary : colors.mutedForeground}
               />
               <Text style={styles.selectAllText}>Select all ({filtered.length})</Text>
@@ -370,36 +364,35 @@ export function ShopProductsScreen() {
             const categoryLabel =
               SHOP_PRODUCT_CATEGORIES.find((c) => c.value === item.category)?.label || item.category;
             return (
-              <View style={styles.productRow}>
-                {canWrite ? (
-                  <Pressable
-                    onPress={() => toggleSelected(item.id)}
-                    hitSlop={8}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: selected }}
-                    accessibilityLabel={`Select ${item.name}`}
-                    style={styles.productCheck}
-                  >
-                    <Feather
-                      name={selected ? 'check-square' : 'square'}
-                      size={20}
-                      color={selected ? colors.primary : colors.mutedForeground}
-                    />
-                  </Pressable>
-                ) : null}
-                <View style={styles.productCard}>
-                  <BooksDocumentRow
-                    title={item.name}
-                    amount={`${item.currency} ${item.price}`}
-                    meta={`SKU ${item.sku || '—'} · stock ${item.stock_on_hand}${categoryLabel ? ` · ${categoryLabel}` : ''}`}
-                    badge={item.status}
-                    badgeKind={item.status === 'active' ? 'paid' : item.status === 'inactive' ? 'void' : 'neutral'}
-                    icon="package"
-                    iconTone="amber"
-                    onPress={() => navigation.navigate('ShopProductAdd', { productId: item.id })}
-                  />
-                </View>
-              </View>
+              <BooksDocumentRow
+                title={item.name}
+                amount={`${item.currency} ${item.price}`}
+                meta={`SKU ${item.sku || '—'} · stock ${item.stock_on_hand}${categoryLabel ? ` · ${categoryLabel}` : ''}`}
+                badge={item.status}
+                badgeKind={item.status === 'active' ? 'paid' : item.status === 'inactive' ? 'void' : 'neutral'}
+                icon="package"
+                iconTone="amber"
+                imageUri={resolveMediaUrl(primaryProductImageUrl(item)) || undefined}
+                onPress={() => navigation.navigate('ShopProductAdd', { productId: item.id })}
+                leading={
+                  canWrite ? (
+                    <Pressable
+                      onPress={() => toggleSelected(item.id)}
+                      hitSlop={8}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected }}
+                      accessibilityLabel={`Select ${item.name}`}
+                      style={styles.productCheck}
+                    >
+                      <Feather
+                        name={selected ? 'check-square' : 'square'}
+                        size={20}
+                        color={selected ? colors.primary : colors.mutedForeground}
+                      />
+                    </Pressable>
+                  ) : undefined
+                }
+              />
             );
           }}
           ListEmptyComponent={
@@ -551,7 +544,13 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: spacing.sm,
   },
-  selectAll: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  selectAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flexShrink: 1,
+    paddingLeft: spacing.md,
+  },
   selectAllText: { color: colors.foreground, fontSize: 13, fontFamily: fonts.bodySemi },
   bulkChip: {
     flexDirection: 'row',
@@ -580,9 +579,7 @@ const styles = StyleSheet.create({
   },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.sm },
   searchFlex: { flex: 1, marginBottom: 0 },
-  productRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  productCheck: { paddingTop: 18 },
-  productCard: { flex: 1, minWidth: 0 },
+  productCheck: { width: 20, height: 52, alignItems: 'center', justifyContent: 'center' },
   popupHeader: {
     flexDirection: 'row',
     alignItems: 'center',

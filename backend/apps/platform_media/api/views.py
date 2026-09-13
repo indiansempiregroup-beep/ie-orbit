@@ -3,7 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 
 from django.db import connection
-from django.http import FileResponse, HttpResponseRedirect
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
@@ -240,8 +240,7 @@ class MediaFileView(APIView):
             ),
         ],
         responses={
-            200: OpenApiResponse(description="Local file bytes."),
-            302: OpenApiResponse(description="Redirect to a signed object-storage URL."),
+            200: OpenApiResponse(description="File bytes."),
         },
         description="Deliver a media file. Public files are anonymous; private files need auth.",
     )
@@ -273,11 +272,6 @@ class MediaFileView(APIView):
             content_type = "image/webp"
 
         provider = get_storage_provider(media.storage_provider)
-        if getattr(provider, "code", media.storage_provider) in {"s3", "r2"}:
-            if media.visibility == MediaVisibility.PUBLIC:
-                return HttpResponseRedirect(provider.public_url(path=storage_path))
-            return HttpResponseRedirect(provider.private_url(path=storage_path))
-
         try:
             payload = BytesIO(provider.read_bytes(path=storage_path))
         except FileNotFoundError as exc:

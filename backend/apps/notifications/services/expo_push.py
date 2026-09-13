@@ -61,8 +61,8 @@ def send_expo_push_messages(messages: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def push_enabled_for_user(user: Any) -> bool:
-    from apps.notifications.services.preferences import channel_enabled
     from apps.notifications.models import NotificationChannel
+    from apps.notifications.services.preferences import channel_enabled
 
     return channel_enabled(user, NotificationChannel.FIREBASE_PUSH)
 
@@ -76,6 +76,7 @@ def send_push_to_user(
     data: dict[str, Any] | None = None,
     channel_id: str = "default",
     category_id: str = "",
+    across_tenants: bool = False,
 ) -> dict[str, Any]:
     """Send Expo push to all active devices for a user; deactivate bad tokens."""
     from apps.notifications.models import MobileDevice
@@ -83,21 +84,26 @@ def send_push_to_user(
     if not push_enabled_for_user(user):
         return {"skipped": "push_disabled", "data": []}
 
-    devices = list(
-        MobileDevice.objects.filter(
-            tenant=tenant,
-            user=user,
-            is_active=True,
-            deleted_at__isnull=True,
-        ).only("id", "expo_push_token")
+    queryset = MobileDevice.objects.filter(
+        user=user,
+        is_active=True,
+        deleted_at__isnull=True,
     )
+    if tenant is not None and not across_tenants:
+        queryset = queryset.filter(tenant=tenant)
+    devices: list[Any] = []
+    seen_tokens: set[str] = set()
+    for device in queryset.only("id", "expo_push_token"):
+        token = str(device.expo_push_token or "").strip()
+        if not token or token in seen_tokens:
+            continue
+        seen_tokens.add(token)
+        devices.append(device)
     if not devices:
         return {"skipped": "no_devices", "data": []}
 
     messages = []
     for device in devices:
-        if not device.expo_push_token:
-            continue
         message: dict[str, Any] = {
             "to": device.expo_push_token,
             "sound": "default",
@@ -131,7 +137,10 @@ def _deactivate_invalid_tokens(*, devices: list[Any], tickets: list[Any]) -> Non
     if not invalid_tokens:
         return
 
-    updated = MobileDevice.objects.filter(expo_push_token__in=invalid_tokens, is_active=True).update(
+    updated = MobileDevice.objects.filter(
+        expo_push_token__in=invalid_tokens,
+        is_active=True,
+    ).update(
         is_active=False,
         updated_at=timezone.now(),
     )

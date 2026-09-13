@@ -38,6 +38,15 @@ export function useBusinessBillingSnapshotQuery(businessId: string | undefined, 
   });
 }
 
+export function useBillingOrdersQuery(businessId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['business', businessId, 'billing-orders'],
+    queryFn: async () => (await client.billing.orders()).data.orders,
+    enabled: Boolean(businessId),
+  });
+}
+
 export function useUpdateBusinessAddonsMutation(businessId: string | undefined) {
   const client = useApiClient();
   const queryClient = useQueryClient();

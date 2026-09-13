@@ -249,14 +249,14 @@ class MobileReviewCreateSerializer(serializers.Serializer):
 
 
 class MobileDeviceRegisterSerializer(serializers.Serializer):
-    tenant_slug = serializers.SlugField()
-    business_code = serializers.SlugField()
+    tenant_slug = serializers.SlugField(required=False, allow_blank=True)
+    business_code = serializers.SlugField(required=False, allow_blank=True)
     expo_push_token = serializers.CharField(max_length=255)
     platform = serializers.CharField(required=False, allow_blank=True, max_length=32)
     app_flavor = serializers.CharField(required=False, allow_blank=True, max_length=120)
 
 
 class MobileDeviceUnregisterSerializer(serializers.Serializer):
-    tenant_slug = serializers.SlugField()
-    business_code = serializers.SlugField()
+    tenant_slug = serializers.SlugField(required=False, allow_blank=True)
+    business_code = serializers.SlugField(required=False, allow_blank=True)
     expo_push_token = serializers.CharField(max_length=255)

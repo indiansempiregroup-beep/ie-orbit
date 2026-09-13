@@ -6,21 +6,28 @@ from apps.notifications.models import Notification, NotificationTemplate
 
 
 def notification_type_from_metadata(metadata: dict | None) -> str:
-    event_type = str((metadata or {}).get("event_type") or "").lower()
+    raw = metadata or {}
+    event_type = str(raw.get("event_type") or raw.get("type") or "").lower()
     if "pet" in event_type:
         return "pet"
     if "cancel" in event_type:
         return "cancel"
     if "return" in event_type:
         return "return"
-    if "shoporder" in event_type or "order" in event_type:
+    if "shoporder" in event_type or ("order" in event_type and "billing" not in event_type):
         return "order"
+    billing_event = (
+        "billing" in event_type
+        or "upi" in event_type
+        or "subscription" in event_type
+        or "payment" in event_type
+    )
+    if billing_event:
+        return "payment"
     if "reminder" in event_type:
         return "reminder"
     if "complete" in event_type:
         return "review"
-    if "payment" in event_type:
-        return "payment"
     return "booking"
 
 

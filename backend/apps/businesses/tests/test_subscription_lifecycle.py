@@ -248,3 +248,20 @@ def test_schedule_downgrade_blocked_when_usage_exceeds(business: Business) -> No
             plan_code="appointie-starter",
             actor=business.tenant.owner,
         )
+
+
+@pytest.mark.django_db
+def test_owner_cannot_unlock_soft_lock_without_payment(business: Business) -> None:
+    subscription = _active_pro(business, days_left=0)
+    subscription.status = BusinessProductSubscriptionStatus.SOFT_LOCKED
+    subscription.current_period_ends_at = timezone.now() - timedelta(minutes=1)
+    subscription.save(update_fields=["status", "current_period_ends_at", "updated_at"])
+    with pytest.raises(ValidationError) as exc:
+        BusinessService().change_product_plan(
+            business=business,
+            product_code="appointie",
+            plan_code="appointie-pro",
+            actor=business.tenant.owner,
+        )
+    assert "Pay with UPI" in str(exc.value)
+

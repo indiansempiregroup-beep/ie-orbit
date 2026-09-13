@@ -78,6 +78,37 @@ def _resolve_tenant_business(*, tenant_slug: str, business_code: str) -> tuple[T
     return resolve_tenant_business(tenant_slug=tenant_slug, business_code=business_code)
 
 
+def _resolve_device_workspace(
+    *,
+    user,
+    tenant_slug: str,
+    business_code: str,
+) -> tuple[Tenant, Business]:
+    slug = str(tenant_slug or "").strip()
+    code = str(business_code or "").strip()
+    if slug and code:
+        return _resolve_tenant_business(tenant_slug=slug, business_code=code)
+    from apps.platform_admin.services import user_is_platform_admin
+    from apps.tenancy.models import TenantStatus
+
+    if not user_is_platform_admin(user):
+        raise ValueError("Workspace is required to register this device.")
+    owned = (
+        Tenant.objects.filter(owner=user, status=TenantStatus.ACTIVE)
+        .order_by("created_at")
+        .first()
+    )
+    tenant = owned or (
+        Tenant.objects.filter(status=TenantStatus.ACTIVE).order_by("created_at").first()
+    )
+    if tenant is None:
+        raise ValueError("No workspace is available to register this device.")
+    business = Business.objects.filter(tenant=tenant).order_by("created_at").first()
+    if business is None:
+        raise ValueError("No business is available to register this device.")
+    return tenant, business
+
+
 def _resolve_white_label_profile(
     *,
     flavor_key: str | None = None,
@@ -1301,9 +1332,10 @@ class MobileDeviceRegisterView(APIView):
         serializer = MobileDeviceRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            tenant, _business = _resolve_tenant_business(
-                tenant_slug=serializer.validated_data["tenant_slug"],
-                business_code=serializer.validated_data["business_code"],
+            tenant, _business = _resolve_device_workspace(
+                user=request.user,
+                tenant_slug=serializer.validated_data.get("tenant_slug") or "",
+                business_code=serializer.validated_data.get("business_code") or "",
             )
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
@@ -1337,9 +1369,10 @@ class MobileDeviceUnregisterView(APIView):
         serializer = MobileDeviceUnregisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            tenant, _business = _resolve_tenant_business(
-                tenant_slug=serializer.validated_data["tenant_slug"],
-                business_code=serializer.validated_data["business_code"],
+            tenant, _business = _resolve_device_workspace(
+                user=request.user,
+                tenant_slug=serializer.validated_data.get("tenant_slug") or "",
+                business_code=serializer.validated_data.get("business_code") or "",
             )
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)

@@ -10,16 +10,24 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.businesses.constants import DEFAULT_PRODUCT_CODE, get_plan_definition
 from apps.businesses.models import BusinessProductSubscription, BusinessProductSubscriptionStatus
 from apps.businesses.services.entitlements import EntitlementService
 from apps.businesses.services.product_billing import ProductBillingService
 from apps.common.utils.workspace_access import resolve_business_manager_users
-from apps.notifications.models import Notification, NotificationChannel, NotificationStatus
+from apps.notifications.constants import AUDIENCE_ADMIN
+from apps.notifications.services.subscription_direct import (
+    SubscriptionEmailStyle,
+    notify_subscription_users,
+)
 
 logger = logging.getLogger("ie_orbit.businesses")
 
 REMINDER_WINDOW_DAYS = 5
+
+
+def _headline(subject: str) -> str:
+    text = str(subject)
+    return text.split("·", 1)[0].strip() if "·" in text else text
 
 
 def _business_tz(business: Any) -> ZoneInfo:
@@ -113,6 +121,7 @@ class SubscriptionLifecycleService:
                     f"Your {subscription.product_code} access ended on "
                     f"{subscription.current_period_ends_at}. Renew from Settings → Billing to continue."
                 ),
+                event_type="billing.subscription_ended",
             )
             return "soft_locked"
 
@@ -140,6 +149,7 @@ class SubscriptionLifecycleService:
                         f"({detail}). Your workspace is soft-locked until you reduce usage, cancel the pending "
                         "change, or renew a higher plan."
                     ),
+                    event_type="billing.plan_apply_blocked",
                 )
                 return "blocked"
 
@@ -178,6 +188,7 @@ class SubscriptionLifecycleService:
                     f"Your {subscription.product_code} plan is now {plan.code}. "
                     f"New period ends {subscription.current_period_ends_at}."
                 ),
+                event_type="billing.plan_updated",
             )
             return "applied"
 
@@ -193,6 +204,7 @@ class SubscriptionLifecycleService:
                     "Renew or change your plan from Settings → Billing to restore full access. "
                     "There is no automatic charge until you renew."
                 ),
+                event_type="billing.renewal_required",
             )
             return "soft_locked"
         return "soft_locked"
@@ -236,7 +248,11 @@ class SubscriptionLifecycleService:
         pending = (
             "canceled at period end"
             if subscription.pending_cancel
-            else (subscription.pending_plan.code if subscription.pending_plan_id else "same plan (renew to continue)")
+            else (
+                subscription.pending_plan.code
+                if subscription.pending_plan_id
+                else "same plan (renew to continue)"
+            )
         )
         renews = subscription.current_period_ends_at
         frontend = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
@@ -247,7 +263,13 @@ class SubscriptionLifecycleService:
             f"Renew or change your subscription here: {frontend}/settings/products\n\n"
             "There is no automatic charge — renew before the date above to avoid a soft lock."
         )
-        self._notify_operators(subscription=subscription, subject=subject, body=body)
+        self._notify_operators(
+            subscription=subscription,
+            subject=subject,
+            body=body,
+            event_type="billing.renewal_reminder",
+            notify_platform_admins=False,
+        )
 
     def _notify_operators(
         self,
@@ -255,8 +277,13 @@ class SubscriptionLifecycleService:
         subscription: BusinessProductSubscription,
         subject: str,
         body: str,
+        event_type: str = "billing.renewal_reminder",
+        notify_platform_admins: bool = True,
     ) -> None:
-        users = resolve_business_manager_users(tenant=subscription.tenant, business=subscription.business)
+        users = resolve_business_manager_users(
+            tenant=subscription.tenant,
+            business=subscription.business,
+        )
         # Prefer tenant operators over pure platform admins when possible.
         recipients = [
             user
@@ -270,37 +297,74 @@ class SubscriptionLifecycleService:
         if not recipients:
             recipients = users
 
-        for user in recipients:
-            Notification.objects.create(
+        frontend = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+        meta = {
+            "product_code": subscription.product_code,
+            "subscription_id": str(subscription.id),
+            "business_id": str(subscription.business_id),
+            "screen": "ProductSettings",
+        }
+        owner_style = self._owner_email_style(subscription=subscription, subject=subject)
+        notify_subscription_users(
+            tenant=subscription.tenant,
+            business=subscription.business,
+            users=recipients,
+            subject=subject,
+            body=body,
+            event_type=event_type,
+            metadata=meta,
+            audience=AUDIENCE_ADMIN,
+            email_style=owner_style,
+        )
+        if not notify_platform_admins:
+            return
+        try:
+            from apps.platform_admin.services import _platform_admin_users
+
+            admin_ids = {str(user.id) for user in recipients}
+            admins = [user for user in _platform_admin_users() if str(user.id) not in admin_ids]
+            if not admins:
+                return
+            notify_subscription_users(
                 tenant=subscription.tenant,
                 business=subscription.business,
-                user=user,
-                channel=NotificationChannel.IN_APP,
-                subject=subject[:255],
+                users=admins,
+                subject=subject,
                 body=body,
-                status=NotificationStatus.SENT,
-                metadata={
-                    "type": "billing.renewal_reminder",
-                    "product_code": subscription.product_code,
-                    "subscription_id": str(subscription.id),
-                },
+                event_type=event_type,
+                metadata={**meta, "screen": "PlatformAdminTenantDetail"},
+                audience=AUDIENCE_ADMIN,
+                email_style=SubscriptionEmailStyle(
+                    business_name="IE Orbit",
+                    headline=_headline(subject),
+                    cta_label="Open tenant",
+                    cta_url=f"{frontend}/admin/tenants/{subscription.tenant_id}",
+                    footer_note="You’re receiving this because of an IE Orbit subscription update.",
+                    fail_silently=True,
+                ),
             )
-            email = (getattr(user, "email", "") or "").strip()
-            if email:
-                try:
-                    from apps.notifications.services.branding import business_email_brand
-                    from apps.notifications.services.providers.email import send_branded_email
+        except Exception:
+            logger.exception(
+                "subscription_admin_notify_failed subscription_id=%s",
+                subscription.id,
+            )
 
-                    brand = business_email_brand(subscription.business)
-                    send_branded_email(
-                        subject=subject,
-                        body=body,
-                        recipient=email,
-                        business_name=brand.get("business_name") or "IE Orbit",
-                        logo_url=brand.get("business_logo") or "",
-                        accent_color=brand.get("accent_color") or "#1A56DB",
-                        headline=str(subject).split("·", 1)[0].strip() if "·" in str(subject) else str(subject),
-                        fail_silently=True,
-                    )
-                except Exception:
-                    logger.exception("Failed sending renewal email", extra={"user_id": str(user.id)})
+    def _owner_email_style(
+        self,
+        *,
+        subscription: BusinessProductSubscription,
+        subject: str,
+    ) -> SubscriptionEmailStyle:
+        from apps.notifications.services.branding import business_email_brand
+
+        frontend = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+        brand = business_email_brand(subscription.business)
+        return SubscriptionEmailStyle(
+            business_name=brand.get("business_name") or "IE Orbit",
+            logo_url=brand.get("business_logo") or "",
+            accent_color=brand.get("accent_color") or "#1A56DB",
+            headline=_headline(subject),
+            cta_label="View subscriptions",
+            cta_url=f"{frontend}/settings/products",
+            fail_silently=True,
+        )

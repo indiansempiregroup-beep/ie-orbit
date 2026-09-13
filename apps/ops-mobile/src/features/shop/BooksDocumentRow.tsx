@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { IconBadge } from '../../components/ui/IconBadge';
+import { RemoteImage } from '../../components/RemoteImage';
 import { colors, fonts, radius, spacing, type IconTone } from '../../theme/tokens';
 
 type ExtraAction = {
@@ -19,11 +20,13 @@ type Props = {
   badgeKind?: 'paid' | 'due' | 'void' | 'neutral';
   icon: keyof typeof Feather.glyphMap;
   iconTone?: IconTone;
+  imageUri?: string | null;
   dimmed?: boolean;
   actionLabel?: string;
   onAction?: () => void;
   extraActions?: ExtraAction[];
   onPress?: () => void;
+  leading?: React.ReactNode;
   children?: React.ReactNode;
 };
 
@@ -36,11 +39,13 @@ export function BooksDocumentRow({
   badgeKind = 'neutral',
   icon,
   iconTone = 'navy',
+  imageUri,
   dimmed,
   actionLabel,
   onAction,
   extraActions,
   onPress,
+  leading,
   children,
 }: Props) {
   const showFooter = Boolean(badge || actionLabel || extraActions?.length || onPress);
@@ -51,7 +56,11 @@ export function BooksDocumentRow({
 
   const body = (
     <View style={styles.rowInner}>
-      <IconBadge icon={icon} tone={iconTone} size="md" />
+      {imageUri ? (
+        <RemoteImage uri={imageUri} style={styles.thumb} />
+      ) : (
+        <IconBadge icon={icon} tone={iconTone} size="md" />
+      )}
       <View style={styles.body}>
         <View style={styles.top}>
           <Text style={styles.title} numberOfLines={1}>
@@ -118,6 +127,21 @@ export function BooksDocumentRow({
     </View>
   );
 
+  if (leading) {
+    return (
+      <View style={[styles.row, styles.rowSplit, dimmed && styles.dim]}>
+        <View style={styles.leading}>{leading}</View>
+        {onPress ? (
+          <Pressable style={styles.rowMain} onPress={onPress}>
+            {body}
+          </Pressable>
+        ) : (
+          <View style={styles.rowMain}>{body}</View>
+        )}
+      </View>
+    );
+  }
+
   if (onPress) {
     return (
       <Pressable style={[styles.row, dimmed && styles.dim]} onPress={onPress}>
@@ -134,7 +158,17 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.card,
   },
+  rowSplit: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  leading: { height: 52, justifyContent: 'center', alignItems: 'center' },
+  rowMain: { flex: 1, minWidth: 0 },
   rowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  thumb: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.muted,
+    flexShrink: 0,
+  },
   dim: { opacity: 0.72 },
   body: { flex: 1, minWidth: 0, gap: 4 },
   top: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },

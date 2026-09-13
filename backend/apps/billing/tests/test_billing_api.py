@@ -1266,3 +1266,252 @@ def test_webhook_failure_moves_to_dead_letter_when_retries_exhausted(
         event_type="billing.webhook.dead_letter",
         aggregate_id=str(event.id),
     ).exists()
+
+
+def _upi_workspace(api_client: APIClient, user: User, *, slug: str, business_code: str):
+    access = authenticate(api_client, user)
+    response = api_client.post(
+        reverse("tenant-list-create"),
+        {
+            "slug": slug,
+            "display_name": slug.replace("-", " ").title(),
+            "timezone": "Asia/Kolkata",
+            "currency": "INR",
+            "language": "en-IN",
+        },
+        format="json",
+    )
+    tenant_id = response.json()["data"]["id"]
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_response = api_client.post(
+        reverse("business-list-create"),
+        {
+            "business_code": business_code,
+            "business_name": business_code,
+            "display_name": business_code,
+        },
+        format="json",
+    )
+    business_id = business_response.json()["data"]["id"]
+    api_client.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+        HTTP_X_TENANT_ID=tenant_id,
+        HTTP_X_BUSINESS_ID=business_id,
+    )
+    return access, tenant_id, business_id
+
+
+@pytest.mark.django_db
+def test_upi_claim_screenshot_without_utr_notifies_admin(
+    api_client: APIClient, user: User, settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    settings.PUBLIC_API_ORIGIN = "https://api.example.com"
+    settings.CONTACT_FORM_RECIPIENT_EMAIL = "ops@example.com"
+    sent: list[dict[str, object]] = []
+
+    def _fake_send_branded_email(**kwargs):
+        sent.append(kwargs)
+        return None
+
+    monkeypatch.setattr(
+        "apps.notifications.services.providers.email.send_branded_email",
+        _fake_send_branded_email,
+    )
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    _upi_workspace(api_client, user, slug="upi-claim-tenant", business_code="upi-claim-biz")
+    created = api_client.post(
+        reverse("billing-upi-checkout"),
+        {"product_code": "appointie", "plan_code": "appointie-starter"},
+        format="json",
+    )
+    assert created.status_code == 201
+    session_id = created.json()["data"]["session_id"]
+    claimed = api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "", "payment_proof_url": "/api/v1/media/11111111-1111-1111-1111-111111111111/file"},
+        format="json",
+    )
+    assert claimed.status_code in {400, 422}
+
+    claimed = api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "", "payment_proof_url": "https://cdn.example.com/proof.png"},
+        format="json",
+    )
+    assert claimed.status_code == 200
+    payload = claimed.json()["data"]
+    assert payload["payment_status"] == "awaiting_confirmation"
+    assert payload["payment_proof_url"] == "https://cdn.example.com/proof.png"
+    admin_subjects = [str(item.get("subject") or "") for item in sent]
+    assert any("UPI claim waiting" in subject for subject in admin_subjects)
+    assert any("We received your" in subject for subject in admin_subjects)
+
+
+@pytest.mark.django_db
+def test_multi_item_upi_checkout_confirm_activates_both(
+    api_client: APIClient, user: User, settings
+) -> None:
+    from apps.businesses.models import Business, BusinessProductSubscriptionStatus
+
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    _access, tenant_id, business_id = _upi_workspace(
+        api_client, user, slug="upi-bundle-tenant", business_code="upi-bundle-biz"
+    )
+    created = api_client.post(
+        reverse("billing-upi-checkout"),
+        {
+            "items": [
+                {"product_code": "appointie", "plan_code": "appointie-starter"},
+                {"product_code": "shopie", "plan_code": "shopie-starter"},
+            ]
+        },
+        format="json",
+    )
+    assert created.status_code == 201
+    data = created.json()["data"]
+    assert len(data["line_items"]) == 2
+    assert data["amount"] > data["line_items"][0]["amount_paise"]
+    session_id = data["session_id"]
+    claimed = api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "ABCDEF123456"},
+        format="json",
+    )
+    assert claimed.status_code == 200
+    confirmed = api_client.post(
+        reverse("platform-payment-confirm", kwargs={"tenant_id": tenant_id, "payment_id": session_id}),
+        {"action": "confirm", "reason": "Matched UTR"},
+        format="json",
+    )
+    assert confirmed.status_code == 200
+    business = Business.objects.get(id=business_id)
+    statuses = set(
+        business.product_subscriptions.values_list("product_code", "status")
+    )
+    assert ("appointie", BusinessProductSubscriptionStatus.ACTIVE) in statuses
+    assert ("shopie", BusinessProductSubscriptionStatus.ACTIVE) in statuses
+
+
+@pytest.mark.django_db
+def test_billing_snapshot_includes_pending_upi_claim(
+    api_client: APIClient, user: User, settings
+) -> None:
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    _access, _tenant_id, business_id = _upi_workspace(
+        api_client, user, slug="upi-pending-tenant", business_code="upi-pending-biz"
+    )
+    created = api_client.post(
+        reverse("billing-upi-checkout"),
+        {"product_code": "appointie", "plan_code": "appointie-starter"},
+        format="json",
+    )
+    session_id = created.json()["data"]["session_id"]
+    api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "UTRREADY1234"},
+        format="json",
+    )
+    snapshot = api_client.get(
+        reverse("business-billing-snapshot", kwargs={"pk": business_id}),
+        {"product_code": "appointie"},
+    )
+    assert snapshot.status_code == 200
+    payload = snapshot.json()["data"]
+    assert payload["pending_upi_claim"]["session_id"] == session_id
+    assert payload["pending_upi_claim"]["payment_status"] == "awaiting_confirmation"
+
+
+@pytest.mark.django_db
+def test_owner_billing_orders_lists_submitted_claim(
+    api_client: APIClient, user: User, settings
+) -> None:
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    _upi_workspace(api_client, user, slug="upi-orders-tenant", business_code="upi-orders-biz")
+    created = api_client.post(
+        reverse("billing-upi-checkout"),
+        {"product_code": "appointie", "plan_code": "appointie-starter"},
+        format="json",
+    )
+    session_id = created.json()["data"]["session_id"]
+    api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "ORDERHIST1234"},
+        format="json",
+    )
+    orders = api_client.get(reverse("billing-orders"))
+    assert orders.status_code == 200
+    rows = orders.json()["data"]["orders"]
+    assert rows[0]["id"] == session_id
+    assert rows[0]["payment_status"] == "awaiting_confirmation"
+    assert rows[0]["upi_utr"] == "ORDERHIST1234"
+    assert rows[0]["order_number"]
+
+
+def test_proof_url_from_meta_strips_loopback(settings) -> None:
+    from apps.billing.services.upi_proof import proof_url_from_meta
+
+    settings.PUBLIC_API_ORIGIN = "http://localhost:8000"
+    media_id = "11111111-1111-1111-1111-111111111111"
+    assert (
+        proof_url_from_meta(
+            {
+                "payment_proof_media_id": media_id,
+                "payment_proof_url": "http://localhost:8000/api/v1/media/old/file",
+            }
+        )
+        == f"/api/v1/media/{media_id}/file"
+    )
+
+
+def test_proof_url_from_meta_keeps_public_origin(settings) -> None:
+    from apps.billing.services.upi_proof import proof_url_from_meta
+
+    settings.PUBLIC_API_ORIGIN = "https://api.example.com"
+    media_id = "11111111-1111-1111-1111-111111111111"
+    assert (
+        proof_url_from_meta({"payment_proof_media_id": media_id})
+        == f"https://api.example.com/api/v1/media/{media_id}/file"
+    )
+
+
+@pytest.mark.django_db
+def test_platform_upi_claims_history_includes_confirmed(
+    api_client: APIClient, user: User, settings
+) -> None:
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    _access, tenant_id, _business_id = _upi_workspace(
+        api_client, user, slug="upi-history-tenant", business_code="upi-history-biz"
+    )
+    created = api_client.post(
+        reverse("billing-upi-checkout"),
+        {"product_code": "appointie", "plan_code": "appointie-starter"},
+        format="json",
+    )
+    session_id = created.json()["data"]["session_id"]
+    api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "HISTORYUTR123"},
+        format="json",
+    )
+    confirmed = api_client.post(
+        reverse("platform-payment-confirm", kwargs={"tenant_id": tenant_id, "payment_id": session_id}),
+        {"action": "confirm", "reason": "Matched UTR"},
+        format="json",
+    )
+    assert confirmed.status_code == 200
+    pending = api_client.get(reverse("platform-upi-claims"), {"scope": "pending"})
+    history = api_client.get(reverse("platform-upi-claims"), {"scope": "history"})
+    assert pending.status_code == 200
+    assert history.status_code == 200
+    pending_ids = {row["id"] for row in pending.json()["data"]["claims"]}
+    history_ids = {row["id"] for row in history.json()["data"]["claims"]}
+    assert session_id not in pending_ids
+    assert session_id in history_ids
+    row = next(item for item in history.json()["data"]["claims"] if item["id"] == session_id)
+    assert row["payment_status"] == "paid"
+    assert row["upi_utr"] == "HISTORYUTR123"
+
+

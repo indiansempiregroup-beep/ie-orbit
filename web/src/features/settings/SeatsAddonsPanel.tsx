@@ -81,8 +81,10 @@ function Stepper({
 
 export function SeatsAddonsPanel({
   subscribedProductIds,
+  onPayProduct,
 }: {
   subscribedProductIds: string[];
+  onPayProduct?: (productId: string) => void;
 }) {
   const workspace = useWorkspace();
   const snackbar = useSnackbar();
@@ -167,11 +169,13 @@ export function SeatsAddonsPanel({
               <span>/{snapshot.billing_interval === 'yearly' ? 'year' : 'month'}</span>
             </p>
             <p className="product-settings-lead">
-              {snapshot.soft_locked
-                ? 'Locked until you upgrade or renew.'
-                : snapshot.status === 'trialing'
-                  ? `This product's trial ends ${formatDate(snapshot.trial_ends_at)}. Pay it separately — we do not charge automatically.`
-                  : `This product renews ${formatDate(snapshot.renews_at ?? snapshot.current_period_ends_at)}. Other products keep their own due date.`}
+              {snapshot.pending_upi_claim
+                ? 'Payment received — waiting for IE to confirm (usually same day).'
+                : snapshot.soft_locked
+                  ? 'Locked until you pay this product. We do not charge automatically.'
+                  : snapshot.status === 'trialing'
+                    ? `This product's trial ends ${formatDate(snapshot.trial_ends_at)}. Pay it separately — we do not charge automatically.`
+                    : `Next payment due ${formatDate(snapshot.renews_at ?? snapshot.current_period_ends_at)}. Other products keep their own due date.`}
             </p>
           </div>
 
@@ -260,6 +264,15 @@ export function SeatsAddonsPanel({
           >
             {updateAddons.isPending ? 'Saving…' : 'Save extras'}
           </Button>
+          {onPayProduct ? (
+            <Button
+              variant="neutral"
+              disabled={Boolean(snapshot.pending_upi_claim)}
+              onClick={() => onPayProduct(productCode)}
+            >
+              {snapshot.pending_upi_claim ? 'Payment under review' : `Renew ${getProductName(productCode)}`}
+            </Button>
+          ) : null}
         </div>
       ) : (
         <p className="product-settings-lead">Subscribe to a product above to see seats and add extras.</p>

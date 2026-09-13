@@ -7,6 +7,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { uploadMedia } from '../../api/media';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
+import { getApiBaseUrl } from '../../config/apiBaseUrl';
+import { getProductName } from '../../utils/products';
 import { getApiErrorMessage } from '../../utils/format';
 
 /** Metro/babel interop sometimes leaves the default export nested under `.default`. */
@@ -22,14 +24,21 @@ function PaymentQrCode({ value, size }: { value: string; size: number }) {
 }
 
 export type SubscriptionUpiPayRequest = {
-  productCode: string;
-  planCode: string;
-  productName: string;
+  productCode?: string;
+  planCode?: string;
+  productName?: string;
   planName?: string;
   extraStaff?: number;
   extraOffices?: number;
   petsPackEnabled?: boolean;
-  mode: 'subscribe' | 'change_plan' | 'addons';
+  items?: Array<{
+    productCode: string;
+    planCode: string;
+    extraStaff?: number;
+    extraOffices?: number;
+    petsPackEnabled?: boolean;
+  }>;
+  mode: 'subscribe' | 'change_plan' | 'addons' | 'renew';
   /** When true, generate QR immediately when the sheet opens. */
   autoStart?: boolean;
 };
@@ -76,25 +85,63 @@ export function SubscriptionUpiPaySheet({
   const [claiming, setClaiming] = useState(false);
   const [utr, setUtr] = useState('');
   const [proofUrl, setProofUrl] = useState('');
+  const [proofMediaId, setProofMediaId] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'ready' | 'awaiting' | 'done'>('idle');
 
+  const payItems = useMemo(() => {
+    if (request.items?.length) return request.items;
+    if (request.productCode && request.planCode) {
+      return [
+        {
+          productCode: request.productCode,
+          planCode: request.planCode,
+          extraStaff: request.extraStaff,
+          extraOffices: request.extraOffices,
+          petsPackEnabled: request.petsPackEnabled,
+        },
+      ];
+    }
+    return [];
+  }, [request]);
+
   const title = useMemo(() => {
-    if (request.mode === 'change_plan') return `Upgrade ${request.productName}`;
-    if (request.mode === 'addons') return `Pay current total · ${request.productName}`;
-    return `Subscribe · ${request.productName}`;
-  }, [request.mode, request.productName]);
+    const names = payItems.map((item) => getProductName(item.productCode));
+    if (request.mode === 'renew' || request.mode === 'addons') {
+      return names.length > 1 ? `Pay selected · ${names.join(' + ')}` : `Renew ${names[0] || request.productName || 'subscription'}`;
+    }
+    if (request.mode === 'change_plan') return `Upgrade ${request.productName || names[0] || 'plan'}`;
+    return `Subscribe · ${request.productName || names[0] || 'product'}`;
+  }, [request.mode, request.productName, payItems]);
 
   async function startCheckout() {
+    if (payItems.length === 0) {
+      onError('Choose a plan first.');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await client.billing.createUpiCheckout({
-        product_code: request.productCode,
-        plan_code: request.planCode,
-        business_id: businessId,
-        extra_staff: request.extraStaff ?? 0,
-        extra_offices: request.extraOffices ?? 0,
-        pets_pack_enabled: Boolean(request.petsPackEnabled),
-      });
+      const body =
+        payItems.length === 1
+          ? {
+              product_code: payItems[0].productCode,
+              plan_code: payItems[0].planCode,
+              business_id: businessId,
+              extra_staff: payItems[0].extraStaff ?? 0,
+              extra_offices: payItems[0].extraOffices ?? 0,
+              pets_pack_enabled: Boolean(payItems[0].petsPackEnabled),
+            }
+          : {
+              business_id: businessId,
+              items: payItems.map((item) => ({
+                product_code: item.productCode,
+                plan_code: item.planCode,
+                extra_staff: item.extraStaff ?? 0,
+                extra_offices: item.extraOffices ?? 0,
+                pets_pack_enabled: Boolean(item.petsPackEnabled),
+              })),
+            };
+      const res = await client.billing.createUpiCheckout(body);
       setSession(res.data);
       setStatus('ready');
     } catch (err) {
@@ -112,11 +159,17 @@ export function SubscriptionUpiPaySheet({
   }, [request.autoStart]);
 
   async function pickProof() {
-        const picked = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-        });
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      onError('Allow photo library access to upload a payment screenshot.');
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
     if (picked.canceled || !picked.assets[0]) return;
+    setUploading(true);
     try {
       const uploaded = await uploadMedia({
         token,
@@ -125,17 +178,25 @@ export function SubscriptionUpiPaySheet({
         asset: picked.assets[0],
         folderType: 'documents',
         tags: ['billing', 'upi_proof'],
-        displayName: `UPI proof ${request.productCode}`,
+        displayName: `UPI proof ${payItems.map((item) => item.productCode).join(' ')}`,
       });
-      setProofUrl(uploaded.public_url || uploaded.private_url || '');
+      const relative = uploaded.public_url || uploaded.private_url || '';
+      const origin = getApiBaseUrl().replace(/\/api\/v1\/?$/, '');
+      const absolute = relative.startsWith('http')
+        ? relative
+        : `${origin}${relative.startsWith('/') ? relative : `/${relative}`}`;
+      setProofMediaId(uploaded.id);
+      setProofUrl(absolute);
     } catch (err) {
       onError(getApiErrorMessage(err, 'Unable to upload screenshot.'));
+    } finally {
+      setUploading(false);
     }
   }
 
   async function submitClaim() {
     if (!session) return;
-    if (utr.trim().length < 6 && !proofUrl) {
+    if (utr.trim().length < 6 && !proofUrl && !proofMediaId) {
       onError('Enter a UTR / UPI reference or upload a payment screenshot.');
       return;
     }
@@ -144,6 +205,7 @@ export function SubscriptionUpiPaySheet({
       await client.billing.claimUpiCheckout(session.session_id, {
         upi_utr: utr.trim(),
         payment_proof_url: proofUrl || undefined,
+        payment_proof_media_id: proofMediaId || undefined,
         business_id: businessId,
       });
       setStatus('awaiting');
@@ -163,10 +225,10 @@ export function SubscriptionUpiPaySheet({
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.meta}>
-            {request.planName || request.planCode}
-            {request.extraStaff ? ` · +${request.extraStaff} staff` : ''}
-            {request.extraOffices ? ` · +${request.extraOffices} offices` : ''}
-            {request.petsPackEnabled ? ' · Pets pack' : ''}
+            {request.planName || payItems.map((item) => item.planCode).join(' + ')}
+            {payItems.some((item) => item.extraStaff) ? ' · extra staff' : ''}
+            {payItems.some((item) => item.extraOffices) ? ' · extra offices' : ''}
+            {payItems.some((item) => item.petsPackEnabled) ? ' · Pets pack' : ''}
           </Text>
 
           <ScrollView
@@ -206,16 +268,23 @@ export function SubscriptionUpiPaySheet({
                     </Text>
                     <Input
                       label="UTR / UPI reference"
-                      required
+                      optional
                       value={utr}
                       onChangeText={setUtr}
                       autoCapitalize="characters"
-                      placeholder="From your UPI app"
+                      placeholder="From your UPI app — optional if you upload a screenshot"
                     />
                     <Button
-                      label={proofUrl ? 'Change payment screenshot' : 'Upload payment screenshot'}
+                      label={
+                        uploading
+                          ? 'Uploading…'
+                          : proofUrl
+                            ? 'Change payment screenshot'
+                            : 'Upload payment screenshot'
+                      }
                       variant="outline"
                       fullWidth
+                      disabled={uploading}
                       onPress={() => void pickProof()}
                     />
                     {proofUrl ? (
@@ -226,8 +295,8 @@ export function SubscriptionUpiPaySheet({
                   <View style={styles.awaiting}>
                     <Text style={styles.awaitingTitle}>Awaiting platform confirmation</Text>
                     <Text style={styles.meta}>
-                      Your payment claim was submitted{utr ? ` · UTR ${utr}` : ''}. Plan activates after IE confirms —
-                      the trial banner updates to “Payment under review” until then.
+                      Your payment claim was submitted{utr ? ` · UTR ${utr}` : ''}. Payment received — waiting for IE
+                      to confirm (usually same day).
                     </Text>
                   </View>
                 )}

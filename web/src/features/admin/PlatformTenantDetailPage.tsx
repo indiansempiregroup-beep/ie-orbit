@@ -5,19 +5,32 @@ import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { buildOpsMobileImpersonationUrl } from '../../lib/impersonation';
 import { formatDate, formatTimestamp } from '../../lib/datetime';
+import { resolveBillingProofUrl } from '../../lib/mediaUrl';
 import {
+  AdminChip,
   AdminDrawer,
   AdminEmpty,
   AdminField,
   AdminKpi,
   AdminPage,
   AdminPageHeader,
+  AdminSearch,
   AdminSection,
   AdminStatus,
   AdminTable,
   planLabel,
   productLabel,
 } from './AdminChrome';
+import {
+  filterBillingOrders,
+  ORDER_RANGE_FILTERS,
+  ORDER_STATUS_FILTERS,
+  orderHistoryCounts,
+  type OrderHistoryRange,
+  type OrderHistoryStatusFilter,
+} from '../settings/subscriptionUx';
+import { Dialog } from '../../components/Dialog';
+import { ProofImage } from '../../components/ProofImage';
 import {
   useInvalidatePlatform,
   usePlatformPlanPackagesQuery,
@@ -135,6 +148,11 @@ export function PlatformTenantDetailPage() {
   const [lifecycleAction, setLifecycleAction] = useState<LifecycleAction | null>(null);
   const [confirmSlug, setConfirmSlug] = useState('');
   const [planSelection, setPlanSelection] = useState<Record<string, string>>({});
+  const [historyQueryText, setHistoryQueryText] = useState('');
+  const [historyStatus, setHistoryStatus] = useState<OrderHistoryStatusFilter>('all');
+  const [historyRange, setHistoryRange] = useState<OrderHistoryRange>('all');
+  const [historyProduct, setHistoryProduct] = useState('');
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
   const [addonInputs, setAddonInputs] = useState<
     Record<string, { extra_staff: string; extra_offices: string; pets_pack_enabled: boolean }>
   >({});
@@ -143,6 +161,21 @@ export function PlatformTenantDetailPage() {
   const payments = paymentsQuery.data ?? [];
   const pendingClaims = useMemo(() => payments.filter(isAwaitingClaim), [payments]);
   const historyPayments = useMemo(() => payments.filter((payment) => !isAwaitingClaim(payment)), [payments]);
+  const filteredHistory = useMemo(
+    () =>
+      filterBillingOrders(historyPayments, {
+        query: historyQueryText,
+        status: historyStatus,
+        range: historyRange,
+        productCode: historyProduct,
+        productName: productLabel,
+      }),
+    [historyPayments, historyQueryText, historyStatus, historyRange, historyProduct],
+  );
+  const historyCounts = useMemo(() => orderHistoryCounts(historyPayments), [historyPayments]);
+  const historyFiltersActive = Boolean(
+    historyQueryText.trim() || historyStatus !== 'all' || historyRange !== 'all' || historyProduct,
+  );
 
   async function run(label: string, fn: () => Promise<unknown>) {
     if (!tenantId) return;
@@ -467,7 +500,10 @@ export function PlatformTenantDetailPage() {
                               label="Period"
                               value={`${formatDate(billing.current_period_starts_at)} → ${formatDate(billing.current_period_ends_at)}`}
                             />
-                            <BillingFact label="Renews" value={formatDate(billing.renews_at)} />
+                            <BillingFact label="Next payment due" value={formatDate(billing.renews_at || billing.current_period_ends_at)} />
+                            {billing.pending_upi_claim ? (
+                              <BillingFact label="Payment" value="Under review" />
+                            ) : null}
                             {billing.canceled_at ? (
                               <BillingFact label="Canceled" value={formatDate(billing.canceled_at)} />
                             ) : null}
@@ -754,7 +790,9 @@ export function PlatformTenantDetailPage() {
               <AdminEmpty>No UPI claims waiting. Confirmed payments appear in history below.</AdminEmpty>
             ) : (
               <div className="admin-claim-grid">
-                {pendingClaims.map((payment) => (
+                {pendingClaims.map((payment) => {
+                  const proofUrl = resolveBillingProofUrl(payment);
+                  return (
                   <article key={payment.id} className="admin-claim-card">
                     <div className="admin-claim-card__meta">
                       <strong>
@@ -765,10 +803,14 @@ export function PlatformTenantDetailPage() {
                       <p>Submitted {formatTimestamp(payment.claimed_at || payment.created_at)}</p>
                     </div>
                     <div className="admin-claim-card__proof">
-                      {payment.payment_proof_url ? (
-                        <a href={payment.payment_proof_url} target="_blank" rel="noreferrer">
-                          <img src={payment.payment_proof_url} alt="Payment proof" />
-                        </a>
+                      {proofUrl ? (
+                        <button
+                          type="button"
+                          className="admin-proof-thumb"
+                          onClick={() => setProofPreviewUrl(proofUrl)}
+                        >
+                          <img src={proofUrl} alt="Payment proof" />
+                        </button>
                       ) : (
                         <p>No screenshot</p>
                       )}
@@ -806,32 +848,112 @@ export function PlatformTenantDetailPage() {
                       </div>
                     </div>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             )}
           </AdminSection>
 
-          <AdminSection title="Payment history">
+          <AdminSection title="Order history" description="Search this tenant’s paid and rejected orders by number, UTR, or product.">
+            <div className="admin-toolbar">
+              <AdminSearch
+                value={historyQueryText}
+                onChange={setHistoryQueryText}
+                placeholder="Search order #, UTR, or product"
+              />
+            </div>
+            <div className="admin-chip-row" style={{ marginBottom: 10 }}>
+              {ORDER_STATUS_FILTERS.map((item) => (
+                <AdminChip key={item.id} active={historyStatus === item.id} onClick={() => setHistoryStatus(item.id)}>
+                  {item.label}
+                  {historyCounts[item.id] ? ` (${historyCounts[item.id]})` : ''}
+                </AdminChip>
+              ))}
+            </div>
+            <div className="admin-chip-row" style={{ marginBottom: 10 }}>
+              {ORDER_RANGE_FILTERS.map((item) => (
+                <AdminChip key={item.id} active={historyRange === item.id} onClick={() => setHistoryRange(item.id)}>
+                  {item.label}
+                </AdminChip>
+              ))}
+              <AdminChip active={historyProduct === ''} onClick={() => setHistoryProduct('')}>
+                All products
+              </AdminChip>
+              <AdminChip active={historyProduct === 'appointie'} onClick={() => setHistoryProduct('appointie')}>
+                Orbit Appoint
+              </AdminChip>
+              <AdminChip active={historyProduct === 'shopie'} onClick={() => setHistoryProduct('shopie')}>
+                Orbit Mart
+              </AdminChip>
+            </div>
             {historyPayments.length === 0 ? (
               <AdminEmpty>No confirmed payments yet.</AdminEmpty>
+            ) : filteredHistory.length === 0 ? (
+              <AdminEmpty
+                title="No orders match these filters"
+                action={
+                  historyFiltersActive ? (
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn--secondary"
+                      onClick={() => {
+                        setHistoryQueryText('');
+                        setHistoryStatus('all');
+                        setHistoryRange('all');
+                        setHistoryProduct('');
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  ) : undefined
+                }
+              >
+                Try another order number, UTR, product, or date range.
+              </AdminEmpty>
             ) : (
-              <AdminTable columns={['Amount', 'Plan', 'Status', 'When', '']}>
-                {historyPayments.map((payment) => (
+              <AdminTable columns={['Order', 'Products', 'Amount', 'Status', 'UTR', 'When', '']}>
+                {filteredHistory.map((payment) => {
+                  const proofUrl = resolveBillingProofUrl(payment);
+                  return (
                   <tr key={payment.id}>
                     <td>
-                      <strong>{formatInrFromPaise(payment.amount_paise)}</strong>
+                      <strong>#{payment.order_number || payment.id.slice(0, 8).toUpperCase()}</strong>
                       {payment.invoice_number ? (
                         <div className="admin-table__muted">{payment.invoice_number}</div>
                       ) : null}
                     </td>
                     <td className="admin-table__muted">
-                      {productLabel(payment.product_code)} · {planLabel(payment.plan_code)}
+                      {(payment.product_codes?.length
+                        ? payment.product_codes
+                        : [payment.product_code]
+                      )
+                        .filter(Boolean)
+                        .map((code) => productLabel(code))
+                        .join(' + ')}{' '}
+                      · {planLabel(payment.plan_code)}
+                    </td>
+                    <td>
+                      <strong>{formatInrFromPaise(payment.amount_paise)}</strong>
                     </td>
                     <td>
                       <AdminStatus status={payment.payment_status || payment.status} />
                     </td>
                     <td className="admin-table__muted">
-                      {formatTimestamp(payment.paid_at || payment.created_at)}
+                      {payment.upi_utr || '—'}
+                      {proofUrl ? (
+                        <div>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn--secondary"
+                            onClick={() => setProofPreviewUrl(proofUrl)}
+                          >
+                            Screenshot
+                          </button>
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="admin-table__muted">
+                      {formatTimestamp(payment.paid_at || payment.resolved_at || payment.created_at)}
                     </td>
                     <td className="admin-table__actions">
                       {payment.status === 'paid' ? (
@@ -848,7 +970,8 @@ export function PlatformTenantDetailPage() {
                       ) : null}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </AdminTable>
             )}
           </AdminSection>
@@ -927,6 +1050,14 @@ export function PlatformTenantDetailPage() {
           </div>
         </div>
       </AdminDrawer>
+      <Dialog
+        open={Boolean(proofPreviewUrl)}
+        onClose={() => setProofPreviewUrl(null)}
+        title="Payment screenshot"
+        labelledBy="tenant-proof-title"
+      >
+        {proofPreviewUrl ? <ProofImage src={proofPreviewUrl} /> : null}
+      </Dialog>
     </AdminPage>
   );
 }

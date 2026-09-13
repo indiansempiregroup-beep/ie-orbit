@@ -402,6 +402,15 @@ class BusinessService:
         upgrade = is_plan_upgrade(current_plan_code=current_plan_code, target_plan_code=plan_code)
         # Only platform admins / superusers may bypass period lock.
         force = bool(force_immediate) and _actor_can_force_immediate_plan_change(actor)
+        if self.entitlements.is_soft_locked(subscription) and not force:
+            raise ValidationError(
+                {
+                    "status": (
+                        "This product is locked. Pay with UPI and wait for confirmation to renew. "
+                        "Plan changes while locked require a confirmed payment."
+                    )
+                }
+            )
         period_active = (
             subscription.status == BusinessProductSubscriptionStatus.ACTIVE
             and subscription.current_period_ends_at is not None

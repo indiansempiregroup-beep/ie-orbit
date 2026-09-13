@@ -718,7 +718,47 @@ class EntitlementService:
             tenant=business.tenant,
             key=GOOGLE_ADS_FLAG,
         ) and FEATURE_AD_FREE not in payload["entitled_features"]
+        claims = self.pending_upi_claims(business=business)
+        product = payload["product_code"]
+        payload["pending_upi_claims"] = claims
+        payload["pending_upi_claim"] = next(
+            (row for row in claims if product in (row.get("product_codes") or [])),
+            None,
+        )
         return payload
+
+    def pending_upi_claims(self, *, business: Business) -> list[dict[str, Any]]:
+        from apps.billing.models import BillingCheckoutSession
+
+        sessions = BillingCheckoutSession.objects.filter(
+            business=business,
+            metadata__payment_status="awaiting_confirmation",
+        ).order_by("-updated_at")[:20]
+        rows: list[dict[str, Any]] = []
+        for session in sessions:
+            meta = session.metadata or {}
+            product_codes: list[str] = []
+            for item in meta.get("line_items") or []:
+                if isinstance(item, dict):
+                    code = str(item.get("product_code") or "").strip()
+                    if code and code not in product_codes:
+                        product_codes.append(code)
+            if session.product_code and session.product_code not in product_codes:
+                product_codes.insert(0, session.product_code)
+            rows.append(
+                {
+                    "session_id": str(session.id),
+                    "payment_status": meta.get("payment_status") or "awaiting_confirmation",
+                    "claimed_at": meta.get("claimed_at"),
+                    "amount_paise": session.amount_paise,
+                    "product_code": session.product_code,
+                    "plan_code": session.plan_code,
+                    "product_codes": product_codes,
+                    "claim_intent": meta.get("claim_intent") or "",
+                    "upi_utr": meta.get("upi_utr") or "",
+                }
+            )
+        return rows
 
     def billing_snapshots(self, *, business: Business) -> list[dict[str, Any]]:
         subscriptions = ordered_product_subscriptions(list(business.product_subscriptions.all()))

@@ -131,16 +131,20 @@ export function AdminStatus({ status }: { status?: string | null }) {
     normalized.includes('paying') ||
     normalized.includes('published') ||
     normalized.includes('resolved') ||
+    normalized.includes('confirmed') ||
     normalized === 'open'
       ? 'good'
       : normalized.includes('trial') ||
+          normalized.includes('awaiting') ||
           normalized.includes('pending') ||
+          normalized.includes('review') ||
           normalized.includes('public') ||
           normalized.includes('complimentary') ||
           normalized.includes('draft')
         ? 'warn'
         : normalized.includes('suspend') ||
             normalized.includes('fail') ||
+            normalized.includes('reject') ||
             normalized.includes('archiv') ||
             normalized.includes('lock') ||
             normalized.includes('inactive') ||
@@ -321,6 +325,7 @@ export function AdminListRow({
   onClick,
   href,
   style,
+  selected,
 }: {
   title: ReactNode;
   meta?: ReactNode;
@@ -328,7 +333,9 @@ export function AdminListRow({
   onClick?: () => void;
   href?: string;
   style?: CSSProperties;
+  selected?: boolean;
 }) {
+  const className = `admin-list-row${selected ? ' is-selected' : ''}`;
   const content = (
     <>
       <div className="admin-list-row__main">
@@ -341,7 +348,7 @@ export function AdminListRow({
 
   if (href) {
     return (
-      <Link className="admin-list-row" to={href} style={style}>
+      <Link className={className} to={href} style={style}>
         {content}
       </Link>
     );
@@ -349,14 +356,14 @@ export function AdminListRow({
 
   if (onClick) {
     return (
-      <button type="button" className="admin-list-row" onClick={onClick} style={style}>
+      <button type="button" className={className} onClick={onClick} style={style}>
         {content}
       </button>
     );
   }
 
   return (
-    <div className="admin-list-row admin-list-row--static" style={style}>
+    <div className={`${className} admin-list-row--static`} style={style}>
       {content}
     </div>
   );

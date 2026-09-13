@@ -30,7 +30,7 @@ export function BillingDates({ billing, className }: Props) {
     },
     { label: 'Period start', value: formatDate(billing.current_period_starts_at) },
     { label: 'Period end', value: formatDate(billing.current_period_ends_at) },
-    { label: 'Renews on', value: formatDate(billing.renews_at) },
+    { label: 'Next payment due', value: formatDate(billing.renews_at || billing.current_period_ends_at) },
   ];
 
   if (billing.plan_locked_until) {

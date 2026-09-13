@@ -658,10 +658,13 @@ class PlatformAdminService:
     # --- payments / refunds / ledger -----------------------------------------------
 
     def list_payments(self, *, tenant: Tenant) -> list[dict[str, Any]]:
+        from apps.billing.services.orders import product_codes_for_session, serialize_checkout_order
+        from apps.billing.services.upi_proof import proof_url_from_meta
+
         sessions = (
             BillingCheckoutSession.objects.filter(tenant=tenant)
             .select_related("business")
-            .order_by("-created_at")[:100]
+            .order_by("-created_at")[:200]
         )
         rows = []
         for session in sessions:
@@ -673,66 +676,47 @@ class PlatformAdminService:
                     tenant=tenant, razorpay_payment_id=payment_id
                 ).first()
             )
-            rows.append(
+            row = serialize_checkout_order(session)
+            row.update(
                 {
-                    "id": str(session.id),
-                    "order_id": session.razorpay_order_id,
-                    "payment_id": payment_id,
-                    "amount_paise": session.amount_paise,
-                    "currency": session.currency,
-                    "status": session.status,
-                    "plan_code": session.plan_code,
-                    "product_code": session.product_code,
-                    "business_id": str(session.business_id),
-                    "business_name": session.business.display_name if session.business_id else "",
-                    "paid_at": session.paid_at.isoformat() if session.paid_at else None,
-                    "created_at": session.created_at.isoformat(),
                     "refunded_paise": invoice.refunded_paise if invoice else 0,
                     "invoice_id": str(invoice.id) if invoice else None,
                     "invoice_number": invoice.invoice_number if invoice else None,
-                    "payment_channel": meta.get("payment_channel") or "",
-                    "payment_status": meta.get("payment_status") or session.status,
-                    "upi_utr": meta.get("upi_utr") or "",
-                    "payment_proof_url": meta.get("payment_proof_url") or "",
-                    "claimed_at": meta.get("claimed_at"),
+                    "product_codes": product_codes_for_session(session),
+                    "payment_proof_url": proof_url_from_meta(meta),
                 }
             )
+            rows.append(row)
         return rows
 
-    def list_pending_upi_claims(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        sessions = (
-            BillingCheckoutSession.objects.filter(metadata__payment_status="awaiting_confirmation")
-            .select_related("tenant", "business")
-            .order_by("-updated_at")[: max(1, min(int(limit), 200))]
+    def list_upi_orders(self, *, scope: str = "pending", limit: int = 100) -> list[dict[str, Any]]:
+        from apps.billing.services.orders import serialize_checkout_order
+
+        cap = max(1, min(int(limit), 200))
+        queryset = BillingCheckoutSession.objects.select_related("tenant", "business").order_by(
+            "-updated_at"
         )
-        rows = []
-        for session in sessions:
-            meta = session.metadata or {}
-            rows.append(
-                {
-                    "id": str(session.id),
-                    "tenant_id": str(session.tenant_id) if session.tenant_id else None,
-                    "tenant_name": session.tenant.display_name if session.tenant_id else "Tenant",
-                    "tenant_slug": session.tenant.slug if session.tenant_id else "",
-                    "order_id": session.razorpay_order_id,
-                    "payment_id": meta.get("payment_id") or "",
-                    "amount_paise": session.amount_paise,
-                    "currency": session.currency,
-                    "status": session.status,
-                    "plan_code": session.plan_code,
-                    "product_code": session.product_code,
-                    "business_id": str(session.business_id) if session.business_id else None,
-                    "business_name": session.business.display_name if session.business_id else "",
-                    "paid_at": session.paid_at.isoformat() if session.paid_at else None,
-                    "created_at": session.created_at.isoformat(),
-                    "payment_channel": meta.get("payment_channel") or "upi",
-                    "payment_status": meta.get("payment_status") or session.status,
-                    "upi_utr": meta.get("upi_utr") or "",
-                    "payment_proof_url": meta.get("payment_proof_url") or "",
-                    "claimed_at": meta.get("claimed_at"),
-                }
+        wanted = str(scope or "pending").strip().lower()
+        if wanted == "history":
+            queryset = queryset.filter(
+                Q(metadata__payment_status__in=["paid", "rejected"])
+                | Q(status=CheckoutSessionStatus.PAID)
+            ).exclude(metadata__payment_status="awaiting_confirmation")
+        elif wanted == "all":
+            queryset = queryset.filter(
+                Q(metadata__payment_channel="upi_claim")
+                | Q(metadata__payment_status__in=["awaiting_confirmation", "paid", "rejected"])
+                | Q(status=CheckoutSessionStatus.PAID)
             )
-        return rows
+        else:
+            queryset = queryset.filter(metadata__payment_status="awaiting_confirmation")
+        return [
+            serialize_checkout_order(session, include_tenant=True)
+            for session in queryset[:cap]
+        ]
+
+    def list_pending_upi_claims(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        return self.list_upi_orders(scope="pending", limit=limit)
 
     @transaction.atomic
     def confirm_upi_claim(

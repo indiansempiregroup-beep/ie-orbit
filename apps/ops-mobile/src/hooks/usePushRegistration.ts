@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { createScopedClient } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
+import { isPlatformAdminOnly } from '../utils/roles';
 
 function resolveEasProjectId(): string {
   const fromExtra = Constants.expoConfig?.extra?.eas?.projectId;
@@ -48,25 +49,31 @@ export function usePushRegistration(enabled: boolean) {
   const { user, token } = useAuth();
   const { ready, tenants, tenantId, activeBusiness } = useWorkspace();
   const registeredToken = useRef<string | null>(null);
+  const platformAdminOnly = isPlatformAdminOnly(user);
 
   useEffect(() => {
-    if (!enabled || !ready || !user || !token || !tenantId || !activeBusiness?.business_code) return;
+    if (!enabled || !user || !token) return;
     const prefs = (user.notification_preferences ?? {}) as Record<string, boolean>;
     if (prefs.push === false) return;
 
     const tenant = tenants.find((item) => item.id === tenantId);
     const tenantSlug = tenant?.slug;
-    if (!tenantSlug) return;
+    const canRegisterWorkspace = Boolean(ready && tenantId && tenantSlug && activeBusiness?.business_code);
+    if (!canRegisterWorkspace && !platformAdminOnly) return;
 
     let cancelled = false;
     void (async () => {
       try {
         const expoToken = await getExpoPushToken();
         if (!expoToken || cancelled || registeredToken.current === expoToken) return;
-        const client = createScopedClient(token, tenantId, activeBusiness.id);
+        const client = createScopedClient(token, tenantId, activeBusiness?.id);
         await client.mobile.registerDevice({
-          tenant_slug: tenantSlug,
-          business_code: activeBusiness.business_code!,
+          ...(canRegisterWorkspace
+            ? {
+                tenant_slug: tenantSlug,
+                business_code: activeBusiness?.business_code,
+              }
+            : {}),
           expo_push_token: expoToken,
           platform: Platform.OS,
           app_flavor: 'ops-mobile',
@@ -80,5 +87,5 @@ export function usePushRegistration(enabled: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, ready, user, token, tenantId, tenants, activeBusiness]);
+  }, [enabled, ready, user, token, tenantId, tenants, activeBusiness, platformAdminOnly]);
 }

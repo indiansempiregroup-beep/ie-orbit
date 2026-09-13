@@ -481,6 +481,28 @@ export type BusinessBillingSnapshot = {
     addon_amount_paise: number;
     total_amount_paise: number;
   };
+  pending_upi_claim?: {
+    session_id: string;
+    payment_status?: string;
+    claimed_at?: string | null;
+    amount_paise?: number;
+    product_code?: string;
+    plan_code?: string;
+    product_codes?: string[];
+    claim_intent?: string;
+    upi_utr?: string;
+  } | null;
+  pending_upi_claims?: Array<{
+    session_id: string;
+    payment_status?: string;
+    claimed_at?: string | null;
+    amount_paise?: number;
+    product_code?: string;
+    plan_code?: string;
+    product_codes?: string[];
+    claim_intent?: string;
+    upi_utr?: string;
+  }>;
 };
 
 export type BillingWebhookEvent = {
@@ -675,6 +697,29 @@ export type BillingPlatformSubscriptions = {
   total_subscriptions: number;
   by_status: Array<{ status: string; count: number }>;
   by_product: Array<{ product_code: string; count: number }>;
+  expiring_soon?: Array<{
+    id: string;
+    tenant_id?: string | null;
+    tenant_name?: string;
+    business_id?: string | null;
+    business_name?: string;
+    product_code: string;
+    plan_code?: string;
+    status: string;
+    due_at?: string | null;
+  }>;
+  locked?: Array<{
+    id: string;
+    tenant_id?: string | null;
+    tenant_name?: string;
+    business_id?: string | null;
+    business_name?: string;
+    product_code: string;
+    plan_code?: string;
+    status: string;
+    due_at?: string | null;
+  }>;
+  pending_claims?: PlatformPaymentRow[];
 };
 
 export type BillingPlatformRevenue = {
@@ -1142,11 +1187,9 @@ export type PlatformAuditResult = {
   resource_types: string[];
 };
 
-export type PlatformPaymentRow = {
+export type BillingOrder = {
   id: string;
-  tenant_id?: string | null;
-  tenant_name?: string;
-  tenant_slug?: string;
+  order_number?: string;
   order_id?: string;
   payment_id?: string;
   amount_paise: number;
@@ -1154,18 +1197,38 @@ export type PlatformPaymentRow = {
   status: string;
   plan_code?: string;
   product_code?: string;
-  business_id?: string;
+  product_codes?: string[];
+  business_id?: string | null;
   business_name?: string;
   paid_at?: string | null;
   created_at: string;
-  refunded_paise?: number;
-  invoice_id?: string | null;
-  invoice_number?: string | null;
   payment_channel?: string;
   payment_status?: string;
   upi_utr?: string;
   payment_proof_url?: string;
+  payment_proof_media_id?: string;
   claimed_at?: string | null;
+  claim_intent?: string;
+  resolved_at?: string | null;
+  note?: string;
+  line_items?: Array<{
+    product_code: string;
+    plan_code: string;
+    extra_staff?: number;
+    extra_offices?: number;
+    pets_pack_enabled?: boolean;
+    amount_paise?: number;
+    intent?: string;
+  }>;
+};
+
+export type PlatformPaymentRow = BillingOrder & {
+  tenant_id?: string | null;
+  tenant_name?: string;
+  tenant_slug?: string;
+  refunded_paise?: number;
+  invoice_id?: string | null;
+  invoice_number?: string | null;
 };
 
 export type PlatformPlanPackage = {
@@ -4448,7 +4511,7 @@ class ApiClient {
       this.request<{ flags: PlatformFeatureFlag[] }>(`/platform/tenants/${tenantId}/flags`, { method: 'PATCH', body }),
     tenantPayments: (tenantId: string) =>
       this.request<{ payments: PlatformPaymentRow[] }>(`/platform/tenants/${tenantId}/payments`, { method: 'GET' }),
-    upiClaims: (query?: { limit?: number }) =>
+    upiClaims: (query?: { limit?: number; scope?: 'pending' | 'history' | 'all' }) =>
       this.request<{ claims: PlatformPaymentRow[] }>('/platform/upi-claims', { method: 'GET', query }),
     refundPayment: (tenantId: string, paymentId: string, body: { reason: string; amount_paise?: number }) =>
       this.request<Record<string, unknown>>(`/platform/tenants/${tenantId}/payments/${paymentId}/refund`, {
@@ -4780,14 +4843,22 @@ class ApiClient {
     runReconciliation: (body?: { lookback_hours?: number }) =>
       this.request<BillingReconciliationResult>('/billing/reconciliation/run', { method: 'POST', body }),
     checkout: (body: BillingCheckoutInput) => this.request<BillingCheckoutSession>('/billing/checkout', { method: 'POST', body }),
+    orders: () => this.request<{ orders: BillingOrder[] }>('/billing/orders', { method: 'GET' }),
     createUpiCheckout: (body: {
-      product_code: string;
-      plan_code: string;
+      product_code?: string;
+      plan_code?: string;
       business_id?: string;
       amount_paise?: number;
       extra_staff?: number;
       extra_offices?: number;
       pets_pack_enabled?: boolean;
+      items?: Array<{
+        product_code: string;
+        plan_code: string;
+        extra_staff?: number;
+        extra_offices?: number;
+        pets_pack_enabled?: boolean;
+      }>;
     }) =>
       this.request<{
         session_id: string;
@@ -4800,13 +4871,29 @@ class ApiClient {
         upi_pay_url: string;
         payment_qr_url?: string;
         payment_status: string;
+        claim_intent?: string;
+        line_items?: Array<{
+          product_code: string;
+          plan_code: string;
+          extra_staff?: number;
+          extra_offices?: number;
+          pets_pack_enabled?: boolean;
+          amount_paise?: number;
+          intent?: string;
+        }>;
         expires_at: string;
       }>('/billing/checkout/upi', { method: 'POST', body }),
     claimUpiCheckout: (
       sessionId: string,
-      body: { upi_utr: string; payment_proof_url?: string; business_id?: string },
+      body: { upi_utr: string; payment_proof_url?: string; payment_proof_media_id?: string; business_id?: string },
     ) =>
-      this.request<{ session_id: string; payment_status?: string; upi_utr?: string }>(
+      this.request<{
+        session_id: string;
+        payment_status?: string;
+        upi_utr?: string;
+        payment_proof_url?: string;
+        payment_proof_media_id?: string;
+      }>(
         `/billing/checkout/upi/${sessionId}/claim`,
         { method: 'POST', body },
       ),
@@ -4926,15 +5013,15 @@ class ApiClient {
       points_to_redeem: number;
     }) => this.request<MobileLoyaltyQuote>('/mobile/loyalty/quote', { method: 'POST', body }),
     registerDevice: (body: {
-      tenant_slug: string;
-      business_code: string;
+      tenant_slug?: string;
+      business_code?: string;
       expo_push_token: string;
       platform?: string;
       app_flavor?: string;
     }) => this.request<MobileDeviceRegistration>('/mobile/devices/register', { method: 'POST', body }),
     unregisterDevice: (body: {
-      tenant_slug: string;
-      business_code: string;
+      tenant_slug?: string;
+      business_code?: string;
       expo_push_token: string;
     }) => this.request<{ unregistered: number }>('/mobile/devices/unregister', { method: 'POST', body }),
     listNotifications: (query: { tenant_slug: string; business_code: string }) =>

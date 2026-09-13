@@ -186,7 +186,13 @@ export function RootNavigator() {
     }
   }, [authLoading]);
 
-  usePushRegistration(Boolean(isAuthenticated && opsAccess && ready && user?.email_verified_at));
+  usePushRegistration(
+    Boolean(
+      isAuthenticated &&
+        user?.email_verified_at &&
+        ((opsAccess && ready) || platformAdminOnly),
+    ),
+  );
 
   if (!bootstrapped) {
     return (

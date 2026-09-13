@@ -391,11 +391,12 @@ class PlatformUpiClaimsView(APIView):
 
     @extend_schema(
         tags=["Platform Admin"],
-        description="List UPI subscription claims awaiting confirmation.",
+        description="List UPI subscription claims. scope=pending (default), history, or all.",
     )
     def get(self, request: Request) -> Response:
         limit = max(1, min(int(request.query_params.get("limit") or 100), 200))
-        return success_response({"claims": _svc().list_pending_upi_claims(limit=limit)})
+        scope = str(request.query_params.get("scope") or "pending").strip().lower()
+        return success_response({"claims": _svc().list_upi_orders(scope=scope, limit=limit)})
 
 
 class PlatformPaymentRefundView(APIView):
