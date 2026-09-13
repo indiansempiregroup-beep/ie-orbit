@@ -27,14 +27,14 @@ export function trimOrigin(value: string): string {
 }
 
 export const OPS_ANDROID_STORE_URL =
-  trimOrigin(String(import.meta.env.VITE_OPS_ANDROID_STORE_URL ?? '')) ||
+  trimOrigin(String(import.meta.env?.VITE_OPS_ANDROID_STORE_URL ?? '')) ||
   `https://play.google.com/store/apps/details?id=${OPS_ANDROID_PACKAGE_ID}&hl=en_IN`;
 export const OPS_IOS_STORE_URL =
-  trimOrigin(String(import.meta.env.VITE_OPS_IOS_STORE_URL ?? '')) ||
+  trimOrigin(String(import.meta.env?.VITE_OPS_IOS_STORE_URL ?? '')) ||
   'https://apps.apple.com/in/search?term=IE%20Orbit';
 
 export function configuredSiteUrl(): string {
-  const fromEnv = trimOrigin(String(import.meta.env.VITE_PUBLIC_SITE_URL ?? ''));
+  const fromEnv = trimOrigin(String(import.meta.env?.VITE_PUBLIC_SITE_URL ?? ''));
   if (fromEnv) return fromEnv;
   return FALLBACK_SITE_URL;
 }
