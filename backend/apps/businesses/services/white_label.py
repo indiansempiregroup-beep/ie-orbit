@@ -199,7 +199,19 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         "loyalty": _loyalty_program_summary(business),
         "referral": _referral_program_summary(business),
         "build_metadata": profile.build_metadata,
+        "otp_auth": _otp_auth_capabilities(business),
     }
+
+
+def _otp_auth_capabilities(business: Business) -> dict[str, object]:
+    from apps.authentication.services.auth_otp import AuthOtpService
+
+    tenant = business.tenant
+    return AuthOtpService().capabilities(
+        client="customer",
+        tenant_slug=tenant.slug,
+        business_code=business.business_code,
+    ).as_dict()
 
 
 def ensure_white_label_profile(*, business: Business) -> WhiteLabelProfile:

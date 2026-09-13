@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from apps.authentication.models import Permission, Role, User, UserStatus
 from apps.authentication.permissions import HasPlatformPermission
 from apps.authentication.services.roles import RoleService
+from apps.authentication.tests.otp_helpers import otp_login_ops
 
 
 @pytest.fixture
@@ -19,25 +20,21 @@ def api_client() -> APIClient:
 
 @pytest.fixture
 def user() -> User:
-    return User.objects.create_user(
+    created = User.objects.create_user(
         email="iam-user@example.com",
-        password="ValidPass123",
+        password=None,
         first_name="IAM",
         last_name="User",
         status=UserStatus.PENDING_VERIFICATION,
     )
+    created.is_superuser = True
+    created.save(update_fields=["is_superuser", "updated_at"])
+    return created
 
 
 @pytest.mark.django_db
 def test_login_refresh_logout_flow(api_client: APIClient, user: User) -> None:
-    login_response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123", "remember_me": True},
-        format="json",
-    )
-
-    assert login_response.status_code == 200
-    login_payload = login_response.json()["data"]
+    login_payload = otp_login_ops(api_client, user)
     assert login_payload["token_type"] == "Bearer"
     assert login_payload["access"]
     assert login_payload["refresh"]
@@ -65,46 +62,26 @@ def test_login_refresh_logout_flow(api_client: APIClient, user: User) -> None:
 
 
 @pytest.mark.django_db
-def test_password_reset_flow(api_client: APIClient, user: User) -> None:
+def test_password_reset_disabled(api_client: APIClient, user: User) -> None:
     forgot_response = api_client.post(
         reverse("auth-forgot-password"),
         {"email": user.email},
         format="json",
     )
-
-    assert forgot_response.status_code == 200
-    assert mail.outbox
-    message = mail.outbox[-1].body
-    assert "/auth/reset-password?token=" in message
-    token = message.rsplit(" ", maxsplit=1)[-1]
-
-    reset_response = api_client.post(
-        reverse("auth-reset-password"),
-        {"token": token, "new_password": "BetterPass123"},
-        format="json",
-    )
-
-    assert reset_response.status_code == 200
-    user.refresh_from_db()
-    assert user.check_password("BetterPass123")
+    assert forgot_response.status_code == 410
 
 
 @pytest.mark.django_db
 def test_email_verification_flow(api_client: APIClient, user: User) -> None:
-    login_response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = login_response.json()["data"]["access"]
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+    api_client.force_authenticate(user=user)
 
+    mail.outbox.clear()
     resend_response = api_client.post(reverse("auth-resend-verification"), {}, format="json")
 
     assert resend_response.status_code == 200
     assert mail.outbox
     message = mail.outbox[-1].body
-    assert "verification code" in mail.outbox[-1].subject.lower()
+    assert "verification" in mail.outbox[-1].subject.lower() or "verify" in mail.outbox[-1].subject.lower()
     assert "/auth/verify-email?token=" in message
     token_match = re.search(r"Verification code: (\d{6})", message)
     if token_match is None:
@@ -122,12 +99,7 @@ def test_email_verification_flow(api_client: APIClient, user: User) -> None:
 
 @pytest.mark.django_db
 def test_me_profile_patch(api_client: APIClient, user: User) -> None:
-    login_response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = login_response.json()["data"]["access"]
+    access = otp_login_ops(api_client, user)["access"]
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 
     patch_response = api_client.patch(

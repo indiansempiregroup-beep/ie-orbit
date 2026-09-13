@@ -158,8 +158,10 @@ class BookingListCreateView(APIView):
     def post(self, request: Request) -> Response:
         serializer = BookingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        business = self._business(request, serializer.validated_data.get("business"))
-        staff_id = serializer.validated_data.get("staff_id")
+        payload = dict(serializer.validated_data)
+        whatsapp_opt_in = payload.pop("whatsapp_opt_in", None)
+        business = self._business(request, payload.get("business"))
+        staff_id = payload.get("staff_id")
         if staff_id is not None:
             _ensure_staff_record_access(request, str(staff_id))
         elif not is_workspace_manager_or_above(user=request.user, tenant=request.current_tenant):
@@ -169,16 +171,24 @@ class BookingListCreateView(APIView):
                 business=business,
             )
             if len(own_ids) == 1:
-                serializer.validated_data["staff_id"] = own_ids[0]
+                payload["staff_id"] = own_ids[0]
         try:
             booking = self.service.create_booking(
                 tenant=request.current_tenant,
                 business=business,
-                data=dict(serializer.validated_data),
+                data=payload,
                 actor=request.user,
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc)) from exc
+        if whatsapp_opt_in:
+            from apps.notifications.services.whatsapp_opt_in import set_whatsapp_opt_in
+
+            set_whatsapp_opt_in(
+                enabled=True,
+                user=request.user if getattr(request.user, "is_authenticated", False) else None,
+                customer=getattr(booking, "customer", None),
+            )
         return _serialize_booking(
             tenant=request.current_tenant,
             booking=booking,

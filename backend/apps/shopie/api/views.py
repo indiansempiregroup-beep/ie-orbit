@@ -450,6 +450,10 @@ class ShopOrderListCreateView(APIView):
             raise _validation_error(exc) from exc
         except ShopProduct.DoesNotExist as exc:
             raise ValidationError({"lines": "One or more products were not found."}) from exc
+        if data.get("whatsapp_opt_in") and customer is not None:
+            from apps.notifications.services.whatsapp_opt_in import set_whatsapp_opt_in
+
+            set_whatsapp_opt_in(enabled=True, user=request.user, customer=customer)
         return success_response(ShopOrderSerializer(order).data, status_code=status.HTTP_201_CREATED)
 
 

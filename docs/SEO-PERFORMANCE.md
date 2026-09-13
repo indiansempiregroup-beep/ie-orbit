@@ -15,7 +15,7 @@
 - robots.txt + sitemap.xml
 - Eager `HomePage` import; other marketing pages remain lazy
 - Fonts moved to `preconnect` + stylesheet with `display=swap` in `index.html`
-- Pricing static fallback (Starter ₹999 / Pro ₹1,999 / add-ons)
+- Pricing static fallback (Starter ₹399 / Pro ₹799 / add-ons)
 - GA4 gated to marketing host/paths only
 - nginx exact locations for robots/sitemap; `X-Robots-Tag` on app prefixes
 

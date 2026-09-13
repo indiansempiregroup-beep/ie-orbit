@@ -36,8 +36,8 @@ export function VerifyEmailScreen({ navigation, route }: Props) {
 
   async function onVerify() {
     setError('');
-    if (code.trim().length < 4) {
-      setError('Enter the verification code from your email.');
+    if (code.trim().length !== 6) {
+      setError('Enter the 6-digit verification code from your email.');
       return;
     }
     setSubmitting(true);

@@ -10,6 +10,7 @@ from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserStatus
+from apps.authentication.tests.otp_helpers import authenticate_api_client
 from apps.platform_media.models import Media
 
 
@@ -28,14 +29,7 @@ def user() -> User:
 
 
 def authenticate(api_client: APIClient, user: User) -> str:
-    response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = response.json()["data"]["access"]
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-    return access
+    return authenticate_api_client(api_client, user)
 
 
 def create_tenant(api_client: APIClient) -> str:

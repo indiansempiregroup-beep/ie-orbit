@@ -20,7 +20,7 @@ Implemented platform core infrastructure through M8:
 - Swagger UI at `/api/docs/`
 - Base utilities for UUID, dates, validators, pagination, and permissions
 - Database foundation with abstract models, mixins, managers, soft delete, UUID v7 helpers, tenant model base classes, and reusable database utilities
-- IAM foundation with custom users, JWT, roles, permissions, sessions, password reset, email verification, OTP infrastructure, and security audit events
+- IAM foundation with custom users, JWT, roles, permissions, sessions, OTP/Google sign-in, email verification, and security audit events
 - Tenant and organization foundation with tenant resolution, tenant context, tenant-scoped query helpers, branding, subscription readiness, organization settings, Django Admin, and documented REST APIs
 - Business domain management with tenant-owned businesses, profiles, settings, media references, verification status foundation, tenant-scoped search, Django Admin, and documented REST APIs
 - Platform media management with provider-agnostic storage interface, local storage provider, upload validation, duplicate detection, image utilities, folder management, Django Admin, and documented REST APIs

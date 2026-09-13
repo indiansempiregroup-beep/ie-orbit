@@ -6,46 +6,52 @@ Milestone M4 implements reusable IAM infrastructure for IE Orbit products.
 
 Implemented:
 
-- Custom UUID user model with email login
+- Custom UUID user model with email identity
 - JWT access and refresh tokens
 - Refresh token rotation and blacklist support
 - Logout for current session and all sessions
 - Roles and permissions
 - Default role seeding
-- Password reset and password change
+- **OTP sign-in** (email; WhatsApp when workspace/platform sender is live)
+- Google sign-in (web, ops-mobile, customer apps)
 - Email verification and resend
-- OTP challenge infrastructure with mock provider
+- OTP challenge infrastructure
 - Active session tracking and revocation
-- Failed login tracking and account lockout
-- IP address and user-agent logging
 - Security audit events
 - Profile read/update APIs
 
-Not implemented:
+Password login, forgot-password, reset-password, and change-password endpoints remain for API compatibility but return **401** or **410** — clients must use OTP.
 
-- Businesses
-- Customers
-- Services
-- Bookings
-- Calendar
-- Notifications
-- Analytics
-- Business dashboards
+Not implemented in this module alone:
+
+- Businesses, customers, bookings, etc. (other apps)
 
 ## Endpoints
 
 ```text
-POST  /api/v1/auth/login
+GET   /api/v1/auth/otp/capabilities
+POST  /api/v1/auth/otp/send
+POST  /api/v1/auth/otp/verify
+POST  /api/v1/auth/login              (disabled — use OTP)
 POST  /api/v1/auth/refresh
 POST  /api/v1/auth/logout
-POST  /api/v1/auth/forgot-password
-POST  /api/v1/auth/reset-password
-POST  /api/v1/auth/change-password
+POST  /api/v1/auth/forgot-password    (410 — use OTP)
+POST  /api/v1/auth/reset-password     (410)
+POST  /api/v1/auth/change-password    (410)
 POST  /api/v1/auth/verify-email
 POST  /api/v1/auth/resend-verification
 GET   /api/v1/auth/me
 PATCH /api/v1/auth/me
 ```
+
+### Ops WhatsApp OTP sender
+
+Pre-login WhatsApp OTP for **ops-mobile** uses a **platform sender business** chosen in **Platform Admin → Auth** (`PUT /api/v1/platform/auth-settings`). That business must have `notifications_whatsapp`, a live WhatsApp connection, and the `auth_otp` template approved.
+
+Optional env fallback if the database row is empty:
+
+- `OPS_OTP_WHATSAPP_TENANT_SLUG`
+- `OPS_OTP_WHATSAPP_BUSINESS_CODE`
 
 ## Default Roles
 
@@ -76,18 +82,3 @@ backend/.venv/bin/ruff check backend
 backend/.venv/bin/black --check backend
 backend/.venv/bin/pytest backend
 ```
-
-## Password Policy
-
-Passwords must satisfy Django password validators and the platform password policy:
-
-- At least 10 characters
-- At least one uppercase character
-- At least one lowercase character
-- At least one digit
-
-Password history is stored for future reuse prevention.
-
-## OTP
-
-OTP infrastructure supports generation, hashed storage, expiry, retry limits, validation, and provider abstraction. No SMS provider integration is included in this milestone.

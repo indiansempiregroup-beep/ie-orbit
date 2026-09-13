@@ -3,11 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 
+from django.db import transaction
 from django.utils import timezone
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -18,9 +20,10 @@ from apps.api.mobile_helpers import (
     ensure_customer_for_user,
     get_customer_booking,
     resolve_customers_for_user,
+    resolve_tenant_business,
     serialize_mobile_customer_profile,
 )
-from apps.api.mobile_permissions import IsEmailVerified
+from apps.api.mobile_permissions import IsEmailVerified, MatchesCustomerAppTenant
 from apps.api.mobile_serializers import (
     MobileAvailabilityQuerySerializer,
     MobileBookingCancelSerializer,
@@ -68,17 +71,11 @@ from apps.services.models import Service, ServiceCategory, ServiceImage, Service
 from apps.staff.models import EmploymentStatus, Staff
 from apps.tenancy.models import Tenant
 
-MOBILE_CUSTOMER_PERMISSIONS = [IsAuthenticated, IsEmailVerified]
+MOBILE_CUSTOMER_PERMISSIONS = [IsAuthenticated, IsEmailVerified, MatchesCustomerAppTenant]
 
 
 def _resolve_tenant_business(*, tenant_slug: str, business_code: str) -> tuple[Tenant, Business]:
-    tenant = Tenant.objects.filter(slug=tenant_slug).first()
-    if tenant is None:
-        raise ValueError("Tenant not found.")
-    business = Business.objects.require_tenant(tenant).filter(business_code=business_code).first()
-    if business is None:
-        raise ValueError("Business not found.")
-    return tenant, business
+    return resolve_tenant_business(tenant_slug=tenant_slug, business_code=business_code)
 
 
 def _resolve_white_label_profile(
@@ -657,19 +654,27 @@ class MobileCustomerRegisterView(APIView):
     def post(self, request: Request) -> Response:
         serializer = MobileCustomerRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = AuthenticationService().register(
-            email=serializer.validated_data["email"],
-            password=serializer.validated_data["password"],
-            first_name=serializer.validated_data.get("first_name", ""),
-            last_name=serializer.validated_data.get("last_name", ""),
-            role_code=CUSTOMER_ROLE_CODE,
-            ip_address=client_ip(request),
-            user_agent=user_agent(request),
-        )
-        phone_number = serializer.validated_data.get("phone_number", "")
-        if phone_number:
-            user.phone_number = phone_number
-            user.save(update_fields=["phone_number", "updated_at"])
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            user = AuthenticationService().register_passwordless(
+                email=serializer.validated_data["email"],
+                first_name=serializer.validated_data.get("first_name", ""),
+                last_name=serializer.validated_data.get("last_name", ""),
+                role_code=CUSTOMER_ROLE_CODE,
+                ip_address=client_ip(request),
+                user_agent=user_agent(request),
+            )
+            phone_number = serializer.validated_data.get("phone_number", "")
+            if phone_number:
+                user.phone_number = phone_number
+                user.save(update_fields=["phone_number", "updated_at"])
+            ensure_customer_for_user(tenant=tenant, business=business, user=user)
         return success_response(
             UserProfileSerializer(user).data,
             status_code=status.HTTP_201_CREATED,
@@ -714,6 +719,31 @@ class MobileCustomerProfileView(APIView):
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
 
         customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        customer_payload: dict[str, object] = {}
+        if "first_name" in serializer.validated_data:
+            customer_payload["first_name"] = serializer.validated_data["first_name"].strip()
+        if "last_name" in serializer.validated_data:
+            customer_payload["last_name"] = serializer.validated_data["last_name"].strip()
+        if "phone_number" in serializer.validated_data:
+            customer_payload["phone_number"] = serializer.validated_data["phone_number"].strip()
+        if customer_payload:
+            first = str(customer_payload.get("first_name", customer.first_name) or customer.first_name)
+            last = str(customer_payload.get("last_name", customer.last_name) or "")
+            customer_payload["display_name"] = " ".join(part for part in [first, last] if part).strip() or customer.display_name
+            try:
+                self.customer_service.update_customer(
+                    customer=customer,
+                    data=customer_payload,
+                    actor=request.user,
+                )
+            except (DjangoValidationError, DRFValidationError) as exc:
+                if isinstance(exc, DRFValidationError):
+                    detail = exc.detail
+                    message = str(detail) if not isinstance(detail, dict) else str(next(iter(detail.values())))
+                else:
+                    message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+                return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
+            customer.refresh_from_db()
         address_payload = {
             key: serializer.validated_data[key]
             for key in (
@@ -734,7 +764,6 @@ class MobileCustomerProfileView(APIView):
             except DjangoValidationError as exc:
                 message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
                 return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
-        customer.refresh_from_db()
         return success_response(
             serialize_mobile_customer_profile(customer, user=request.user),
             request_id=getattr(request, "request_id", None),
@@ -1125,7 +1154,7 @@ class MobileCustomerProfilePhotoView(APIView):
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
 
-        ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
         try:
             result = self.media_service.upload(
                 uploaded_file=uploaded,
@@ -1135,20 +1164,23 @@ class MobileCustomerProfilePhotoView(APIView):
                 folder_type=MediaFolderType.CUSTOMERS,
                 visibility=MediaVisibility.PUBLIC,
                 tags=["profile", "photo", "customer"],
-                display_name=f"{request.user.full_name or request.user.email} profile photo",
+                display_name=f"{customer.display_name or request.user.email} profile photo",
             )
         except DjangoValidationError as exc:
             message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
             return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
 
-        public_url = str(result.media.metadata.get("public_url") or "")
-        if public_url:
-            request.user.profile_photo = public_url
-            request.user.save(update_fields=["profile_photo", "updated_at"])
+        from apps.customers.models import CustomerProfile
 
+        CustomerService().ensure_foundation_records(customer)
+        profile, _ = CustomerProfile.objects.get_or_create(tenant=tenant, customer=customer)
+        profile.photo = result.media
+        profile.save(update_fields=["photo", "updated_at"])
+
+        public_url = str(result.media.metadata.get("public_url") or "")
         return success_response(
             {
-                "profile_photo": request.user.profile_photo,
+                "profile_photo": public_url,
                 "media_id": str(result.media.id),
             },
             request_id=getattr(request, "request_id", None),

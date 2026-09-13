@@ -365,6 +365,10 @@ class MobileShopOrderListCreateView(APIView):
             if isinstance(exc, DjangoValidationError) and hasattr(exc, "message_dict"):
                 raise ValidationError(exc.message_dict) from exc
             raise ValidationError({"detail": str(exc)}) from exc
+        if request.data.get("whatsapp_opt_in"):
+            from apps.notifications.services.whatsapp_opt_in import set_whatsapp_opt_in
+
+            set_whatsapp_opt_in(enabled=True, user=request.user, customer=customer)
         return success_response(
             MobileShopOrderSerializer(order).data, status_code=status.HTTP_201_CREATED
         )

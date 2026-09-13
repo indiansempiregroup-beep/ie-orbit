@@ -26,7 +26,6 @@ import { MyPetsScreen } from '../features/pets/MyPetsScreen';
 import { PetDetailScreen } from '../features/pets/PetDetailScreen';
 import { PetFormScreen } from '../features/pets/PetFormScreen';
 import {
-  ChangePasswordScreen,
   HelpArticleScreen,
   HelpSupportScreen,
   NotificationPreferencesScreen,
@@ -108,7 +107,6 @@ export function RootNavigator() {
               component={ProfileEditScreen}
               options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
             />
-            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
             <Stack.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
             <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
             <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />

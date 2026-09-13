@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type { BrandTheme } from '../theme/brandTheme';
 import { colors } from '../theme/tokens';
 
@@ -33,11 +34,23 @@ export const mobileRuntime = {
   appDownloadUrl: process.env.EXPO_PUBLIC_APP_DOWNLOAD_URL ?? '',
 };
 
+function readWebDevFlavorKey(): string | null {
+  const isDev = (typeof __DEV__ !== 'undefined' && __DEV__) || mobileRuntime.isDevMode;
+  if (!isDev || Platform.OS !== 'web' || typeof window === 'undefined') {
+    return null;
+  }
+  return new URLSearchParams(window.location.search).get('flavor_key');
+}
+
 export function resolveBootstrapQuery(): {
   flavor_key?: string;
   tenant_slug?: string;
   business_code?: string;
 } {
+  const webFlavorKey = readWebDevFlavorKey();
+  if (webFlavorKey) {
+    return { flavor_key: webFlavorKey };
+  }
   if (mobileRuntime.flavorKey) {
     return { flavor_key: mobileRuntime.flavorKey };
   }

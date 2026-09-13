@@ -31,7 +31,7 @@ export const INDUSTRIES: IndustryContent[] = [
     path: '/industries/salon-spa',
     name: 'Salon & Spa',
     h1: 'Salon and spa booking software',
-    lead: 'Orbit Appoint runs chairs, rooms, and staff calendars. Orbit Mart runs the front desk retail counter and GST bills when you also sell products.',
+    lead: 'Give clients an app under your salon name. Orbit Appoint runs chairs, rooms, and staff calendars. Orbit Mart runs the front desk retail counter and GST bills when you also sell products.',
     problemTitle: 'The salon floor problem',
     problem:
       'Walk-ins, phone bookings, and a paper diary compete for the same chairs. Stylists double-book, no-shows empty slots, and product sales sit on a separate till. Owners cannot see who is free, what is billed, or which services actually make money.',
@@ -40,6 +40,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'Use Orbit Appoint so clients book online, staff see a live calendar, and reminders go out before the visit. If you sell shampoo, colour, or spa kits, add Orbit Mart in the same workspace for POS, catalog, and GST books — one login, one customer list.',
     featuresTitle: 'Features that match salon work',
     features: [
+      { title: 'White-label customer app', body: 'Clients book and shop in an app branded to your salon — not a generic IE Orbit listing.' },
       { title: 'Online booking', body: 'Clients pick a service and time from any device instead of calling the front desk.' },
       { title: 'Staff calendar', body: 'See who is with a client, who is free, and which chair or room is taken.' },
       { title: 'Customers and reviews', body: 'Keep visit history, send reminders, and collect reviews after the appointment.' },
@@ -53,10 +54,10 @@ export const INDUSTRIES: IndustryContent[] = [
     ],
     benefitsTitle: 'What changes for the business',
     benefits: [
+      'White-label customer app branded to your salon',
       'Fewer missed slots from confirmations and a shared calendar',
       'One customer record for services and product sales',
       'UPI billing for your IE Orbit subscription — no credit card to start the 15-day trial',
-      'White-label customer app branded to your salon when you go live',
     ],
     customerTitle: 'What clients experience',
     customer:
@@ -86,7 +87,7 @@ export const INDUSTRIES: IndustryContent[] = [
     path: '/industries/clinic-healthcare',
     name: 'Clinic & Healthcare',
     h1: 'Clinic appointment software',
-    lead: 'Orbit Appoint schedules practitioners and rooms. Orbit Mart can sit beside it if you also run a counter for billed items with GST books.',
+    lead: 'Patients book on your branded app. Orbit Appoint schedules practitioners and rooms. Orbit Mart can sit beside it if you also run a counter for billed items with GST books.',
     problemTitle: 'The clinic front-desk problem',
     problem:
       'Patients call, WhatsApp, and walk in for the same slots. Reception juggles practitioner availability, follow-up visits, and a queue that is invisible until someone is standing at the desk. If you also dispense items, that billing often lives on another system.',
@@ -95,6 +96,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'Orbit Appoint puts bookings, staff calendars, and customer records in one place so reception is not the only source of truth. Pair Orbit Mart when you need GST counter sales and books for items you sell — still the same business, staff, and billing.',
     featuresTitle: 'Features for clinic operations',
     features: [
+      { title: 'White-label customer app', body: 'Patients book or manage visits under your clinic name instead of a generic marketplace.' },
       { title: 'Appointment calendar', body: 'Map visits to practitioners and rooms instead of a shared spreadsheet.' },
       { title: 'Online booking', body: 'Let patients request a slot without blocking the phone line.' },
       { title: 'Reminders and records', body: 'Keep customer history and send reminders before the visit.' },
@@ -108,10 +110,10 @@ export const INDUSTRIES: IndustryContent[] = [
     ],
     benefitsTitle: 'Clinic-side benefits',
     benefits: [
+      'White-label customer app for patient bookings',
       'Fewer double-booked practitioners',
       'A single customer list for visits and counter sales',
       '15-day full-Pro trial with no credit card',
-      'INR subscription billing over UPI when you upgrade',
     ],
     customerTitle: 'What patients experience',
     customer:
@@ -141,7 +143,7 @@ export const INDUSTRIES: IndustryContent[] = [
     path: '/industries/fitness-wellness',
     name: 'Fitness & Wellness',
     h1: 'Fitness and wellness booking software',
-    lead: 'Trainers, studios, and wellness rooms need a calendar that clients can actually book. Orbit Appoint does that. Orbit Mart covers merch or supplement retail if you sell from the desk.',
+    lead: 'Members book on your branded app. Orbit Appoint runs the calendar. Orbit Mart covers merch or supplement retail if you sell from the desk.',
     problemTitle: 'The studio scheduling problem',
     problem:
       'Class lists live in chat groups. Personal training slots live in a trainer’s phone. The front desk does not know who is coming until they arrive, and retail (bottles, bands, kits) is a cash drawer on the side.',
@@ -150,6 +152,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'Put sessions on Orbit Appoint so clients book against real availability. Keep customers, reminders, and reviews with the visit. Turn on Orbit Mart when you want POS, catalog, and GST books for what you sell in the studio.',
     featuresTitle: 'Features for studios and trainers',
     features: [
+      { title: 'White-label customer app', body: 'Members install your studio brand to book sessions and buy retail.' },
       { title: 'Session booking', body: 'Online bookings for training slots and wellness appointments from any device.' },
       { title: 'Staff availability', body: 'Trainers and therapists see their own calendar instead of a group chat.' },
       { title: 'Customer history', body: 'Know who is returning, who no-showed, and what they booked last.' },
@@ -163,9 +166,9 @@ export const INDUSTRIES: IndustryContent[] = [
     ],
     benefitsTitle: 'Studio benefits',
     benefits: [
+      'White-label customer app for booking and shop',
       'A shared calendar instead of scattered chat bookings',
       'Optional retail without a second software login',
-      'White-label customer app for booking and shop',
       'Yearly IE Orbit billing at 10× monthly (two months free)',
     ],
     customerTitle: 'What members experience',
@@ -196,7 +199,7 @@ export const INDUSTRIES: IndustryContent[] = [
     path: '/industries/professional-services',
     name: 'Professional Services',
     h1: 'Consultant and professional booking software',
-    lead: 'Consultants, advisors, and client-facing professionals need bookable time — not a salon chair. Orbit Appoint is built for that. Add Orbit Mart only if you also sell packaged products.',
+    lead: 'Clients book on an app under your firm name. Orbit Appoint is built for consultations, not a salon chair. Add Orbit Mart only if you also sell packaged products.',
     problemTitle: 'The consulting calendar problem',
     problem:
       'Discovery calls, paid sessions, and follow-ups live in email threads. Assistants retype the same slot three times. There is no shared view of who is booked, and invoices for any physical products sit elsewhere.',
@@ -205,6 +208,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'Clients book against your real availability in Orbit Appoint. Staff calendars, reminders, and reviews stay with the customer record. If you sell kits, books, or packaged offers at a counter, Orbit Mart adds POS and GST books without a second workspace.',
     featuresTitle: 'Features for consultants and firms',
     features: [
+      { title: 'White-label customer app', body: 'A professional booking flow branded to your practice, not IE Orbit.' },
       { title: 'Bookable consultations', body: 'Publish services and let clients pick a time instead of emailing back and forth.' },
       { title: 'Staff and rooms', body: 'Map people and offices so multi-advisor teams do not collide.' },
       { title: 'Customer records', body: 'Keep who you met, when, and what they booked next.' },
@@ -218,8 +222,8 @@ export const INDUSTRIES: IndustryContent[] = [
     ],
     benefitsTitle: 'Practice benefits',
     benefits: [
-      'Less time spent coordinating slots over email',
       'A professional booking flow on a white-label customer app',
+      'Less time spent coordinating slots over email',
       'Same UPI subscription billing as other IE Orbit products',
       'BI Overview on Starter; full BI on Pro',
     ],
@@ -251,7 +255,7 @@ export const INDUSTRIES: IndustryContent[] = [
     path: '/industries/retail',
     name: 'Retail',
     h1: 'Retail POS and GST software',
-    lead: 'Orbit Mart is the shop floor product: counter sales, catalog, online orders, GST books, e-invoice, e-way, and Grow tools. Add Orbit Appoint only if you also sell timed services.',
+    lead: 'Shoppers browse on an app under your shop name. Orbit Mart is the shop floor product. Starter runs the counter, online orders, and returns. Pro adds Instant Delivery with Porter/Shiprocket, GST e-invoice, e-way, and Grow. Add Orbit Appoint only if you also sell timed services.',
     problemTitle: 'The counter-and-books problem',
     problem:
       'The till, the stock list, and GST paperwork are three different habits. Online orders arrive in a chat. Returns are a notebook. Pet retailers also keep animal records that do not fit a generic SKU list.',
@@ -260,10 +264,11 @@ export const INDUSTRIES: IndustryContent[] = [
       'Run POS / GST counter sales, catalog, inventory, pickup and delivery orders, and returns in Orbit Mart. Books cover sales, purchases, cash, expenses, parties, stock, GST reports, e-invoice (IRN), and e-way bill. Grow adds WhatsApp share, listing helpers, and calculators. Pets pack is an optional add-on for pet records.',
     featuresTitle: 'Retail features in the product today',
     features: [
-      { title: 'POS and catalog', body: 'GST counter sales, products, inventory, and shop loyalty.' },
-      { title: 'Orders and delivery', body: 'Online orders, returns, delivery zones, and courier-related flows including Shiprocket where you use them.' },
-      { title: 'GST books', body: 'Day-to-day books plus GST reports, e-invoice, and e-way bill — not a separate accounting SKU.' },
-      { title: 'Grow and Pets pack', body: 'WhatsApp and listing helpers in Grow. Pets pack is optional monthly add-on for pet retailers.' },
+      { title: 'White-label customer app', body: 'Shoppers browse, order, and track under your shop brand — not a marketplace listing.' },
+      { title: 'POS and catalog', body: 'GST counter sales, products, stock, online orders, and returns on Starter. Shop loyalty on Pro.' },
+      { title: 'Orders and delivery', body: 'Online orders and returns on Starter. Instant Delivery with Porter/Shiprocket on Orbit Mart Pro.' },
+      { title: 'GST books', body: 'Day-book on Starter. Purchases, GST reports, e-invoice, and e-way bill on Pro.' },
+      { title: 'Grow and Pets pack', body: 'Calculators on Starter. WhatsApp and listing helpers on Pro. Pets pack is an optional monthly add-on.' },
     ],
     workflowTitle: 'How a shop day closes',
     workflow: [
@@ -273,10 +278,10 @@ export const INDUSTRIES: IndustryContent[] = [
     ],
     benefitsTitle: 'Retailer benefits',
     benefits: [
+      'White-label customer app so shoppers buy under your brand',
       'One product for commerce, books, and Grow — not three subscriptions',
       'Optional Pets pack instead of a separate pet-shop system',
       'Connect Razorpay on eligible Pro plans so customers pay you for shop orders',
-      '15-day full-Pro trial, then Starter or Pro in INR',
     ],
     customerTitle: 'What shoppers experience',
     customer:
@@ -295,7 +300,7 @@ export const INDUSTRIES: IndustryContent[] = [
       },
       {
         q: 'Does Orbit Mart include e-invoice?',
-        a: 'Yes. GST reports, e-invoice (IRN), and e-way bill are part of Orbit Mart Books as implemented in the product.',
+        a: 'On Orbit Mart Pro. GST reports, e-invoice (IRN), and e-way bill are part of Mart Books on Pro. Starter covers the counter, online orders, returns, and day-book.',
       },
     ],
     related: ['salon-spa', 'home-services', 'fitness-wellness'],
@@ -306,7 +311,7 @@ export const INDUSTRIES: IndustryContent[] = [
     path: '/industries/education-training',
     name: 'Education & Training',
     h1: 'Class and tutoring booking software',
-    lead: 'Coaching centres, tutors, and trainers schedule people and rooms. Orbit Appoint holds that calendar. Orbit Mart is optional if you sell notes, kits, or merchandise.',
+    lead: 'Learners book on your branded app. Orbit Appoint holds the class calendar. Orbit Mart is optional if you sell notes, kits, or merchandise.',
     problemTitle: 'The batch-and-slot problem',
     problem:
       'Batches are announced on WhatsApp. Parents message for a makeup class. Trainers keep their own Excel sheet. There is no single view of who is in which slot, and selling printed material is a side cash sale.',
@@ -315,6 +320,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'Treat classes and tutoring slots as bookable services on Orbit Appoint. Staff calendars show who is teaching when. Customers (students or parents) get reminders. Use Orbit Mart if you also need a counter, catalog, and GST books for materials you sell.',
     featuresTitle: 'Features for training teams',
     features: [
+      { title: 'White-label customer app', body: 'Learners or parents book a slot under your centre’s name.' },
       { title: 'Bookable classes', body: 'Publish session types so learners book instead of chasing a coordinator.' },
       { title: 'Trainer calendars', body: 'Staff availability drives what can be booked.' },
       { title: 'Customer records', body: 'Keep who attended, who is due back, and reviews where you collect them.' },
@@ -328,8 +334,8 @@ export const INDUSTRIES: IndustryContent[] = [
     ],
     benefitsTitle: 'Centre benefits',
     benefits: [
-      'One calendar for coordinators and trainers',
       'White-label customer app for bookings',
+      'One calendar for coordinators and trainers',
       'Same trial and UPI subscription model as other IE Orbit industries',
       'Add staff or offices when the centre grows',
     ],
@@ -361,7 +367,7 @@ export const INDUSTRIES: IndustryContent[] = [
     path: '/industries/home-services',
     name: 'Home Services',
     h1: 'Home services booking software',
-    lead: 'On-site teams need a calendar for visits, not a shop floor first. Orbit Appoint books the job. Orbit Mart helps if you also sell parts or products with GST invoicing.',
+    lead: 'Households book visits on an app branded to your trade. Orbit Appoint books the job. Orbit Mart helps if you also sell parts or products with GST invoicing.',
     problemTitle: 'The field-visit problem',
     problem:
       'Jobs are promised on a phone call. Technicians do not share one calendar. Customers do not get a confirmation they can trust. Spare parts, if sold, are billed on a handwritten slip.',
@@ -370,6 +376,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'Book visits against staff availability in Orbit Appoint. Keep the customer, the reminder, and the review with the job. If you sell parts or packaged products, Orbit Mart adds POS, catalog, and GST books — including e-invoice and e-way where you use them.',
     featuresTitle: 'Features for field and home visits',
     features: [
+      { title: 'White-label customer app', body: 'Households book a visit under your trade name instead of only a phone promise.' },
       { title: 'Visit booking', body: 'Customers request a slot online against real staff calendars.' },
       { title: 'Staff dispatch view', body: 'See who is booked so two technicians are not sent to the same window.' },
       { title: 'Customer history', body: 'Know what was done last visit before you roll out.' },
@@ -383,8 +390,8 @@ export const INDUSTRIES: IndustryContent[] = [
     ],
     benefitsTitle: 'Operator benefits',
     benefits: [
-      'Fewer overlapping visits',
       'A customer app branded to your trade',
+      'Fewer overlapping visits',
       'Optional GST-ready product sales',
       '15-day full-Pro trial without a credit card',
     ],
@@ -393,7 +400,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'Households book a visit on your white-label app and receive reminders instead of only a verbal promise.',
     businessTitle: 'What the operator experiences',
     business:
-      'Dispatchers look at one calendar. Extra staff and extra offices (with maps) are add-ons when you grow beyond plan limits.',
+      'Dispatchers look at one calendar. Starter is one location (add 1 extra staff). Extra offices and 4+ staff are on Pro.',
     faqs: [
       {
         q: 'Does IE Orbit include live GPS tracking of technicians?',

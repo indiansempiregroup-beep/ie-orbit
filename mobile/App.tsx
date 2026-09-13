@@ -8,6 +8,7 @@ import { LanguageSync } from './src/components/LanguageSync';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { BootstrapProvider } from './src/contexts/BootstrapContext';
 import { NotificationsProvider } from './src/contexts/NotificationsContext';
+import { ToastProvider } from './src/contexts/ToastContext';
 import { CartProvider } from './src/features/shop/CartContext';
 import { SplashGate } from './src/components/SplashGate';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -22,16 +23,18 @@ export default function App() {
         <BootstrapProvider>
           <AuthProvider>
             <NotificationsProvider>
-              <CartProvider>
-                <LanguageSync>
-                  <DateTimeZoneSync>
-                    <StatusBar style="dark" />
-                    <SplashGate>
-                      <RootNavigator />
-                    </SplashGate>
-                  </DateTimeZoneSync>
-                </LanguageSync>
-              </CartProvider>
+              <ToastProvider>
+                <CartProvider>
+                  <LanguageSync>
+                    <DateTimeZoneSync>
+                      <StatusBar style="dark" />
+                      <SplashGate>
+                        <RootNavigator />
+                      </SplashGate>
+                    </DateTimeZoneSync>
+                  </LanguageSync>
+                </CartProvider>
+              </ToastProvider>
             </NotificationsProvider>
           </AuthProvider>
         </BootstrapProvider>

@@ -15,14 +15,22 @@ export const PRODUCT_CATALOG: ProductDefinition[] = [
   {
     id: 'appointie',
     name: 'Orbit Appoint',
-    description: 'Booking, scheduling, and customer operations for service businesses.',
-    highlights: ['Online bookings and calendar', 'Staff schedules and availability', 'Customers, reminders, and visits'],
+    description: 'White-label customer app plus booking, scheduling, and staff operations.',
+    highlights: [
+      'White-label customer app under your brand',
+      'Online bookings and calendar',
+      'Staff schedules and availability',
+    ],
   },
   {
     id: 'shopie',
     name: 'Orbit Mart',
-    description: 'Catalog, POS, inventory, and billing for retail businesses.',
-    highlights: ['POS, catalog, and inventory', 'GST books, e-invoice, and reports', 'WhatsApp, ads, and online orders'],
+    description: 'White-label customer app plus POS, catalog, and GST books.',
+    highlights: [
+      'White-label customer app under your brand',
+      'POS, catalog, online orders, and returns',
+      'GST books, Instant Delivery with Porter/Shiprocket, and Grow on Pro',
+    ],
   },
 ];
 
@@ -75,6 +83,38 @@ function strippedOrCode(name?: string | null, code?: string | null): string {
 export function formatInrFromPaise(paise?: number | null): string | null {
   if (paise == null) return null;
   return `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
+}
+
+/** Null cap means unlimited. Grandfather current extras above the published cap. */
+export function allowedExtraCount(cap: number | null | undefined, current: number): number | null {
+  if (cap == null) return null;
+  return Math.max(cap, current);
+}
+
+export function starterAddonCapHint(
+  maxExtraStaff: number | null | undefined,
+  maxExtraOffices: number | null | undefined,
+): string | null {
+  if (maxExtraStaff == null && maxExtraOffices == null) return null;
+  if (maxExtraOffices === 0 && maxExtraStaff === 1) {
+    return 'Second office and 4+ staff are on Pro.';
+  }
+  if (maxExtraOffices === 0) return 'A second office is on Pro.';
+  if (maxExtraStaff != null) return 'Upgrade to Pro for higher staff limits.';
+  return 'Upgrade to Pro for higher office limits.';
+}
+
+export function planSeatLine(plan: {
+  max_staff?: number;
+  max_branches?: number;
+  max_extra_offices?: number | null;
+}): string {
+  const staff = plan.max_staff ?? 1;
+  const offices = plan.max_branches ?? 1;
+  if (plan.max_extra_offices === 0) {
+    return `${staff} staff · 1 location`;
+  }
+  return `${staff} staff · ${offices} office${offices === 1 ? '' : 's'}`;
 }
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['trialing', 'active', 'soft_locked']);

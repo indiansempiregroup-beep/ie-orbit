@@ -52,6 +52,7 @@ export function ReferralScreen() {
   const [applying, setApplying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [codeFocused, setCodeFocused] = useState(false);
   const keyboardHeight = useKeyboardHeight();
   const scrollRef = useRef<ScrollView>(null);
@@ -128,7 +129,12 @@ export function ReferralScreen() {
   }
 
   async function onApply() {
-    if (!tenantSlug || !businessCode || !friendCode.trim()) return;
+    if (!tenantSlug || !businessCode) return;
+    if (!friendCode.trim()) {
+      setCodeError(t('referral.friendCodeRequired'));
+      return;
+    }
+    setCodeError(null);
     Keyboard.dismiss();
     setApplying(true);
     setError(null);
@@ -212,11 +218,15 @@ export function ReferralScreen() {
                 autoCorrect={false}
                 returnKeyType="done"
                 value={friendCode}
-                onChangeText={(value) => setFriendCode(value.toUpperCase())}
+                onChangeText={(value) => {
+                  setFriendCode(value.toUpperCase());
+                  if (codeError) setCodeError(null);
+                }}
                 onFocus={() => setCodeFocused(true)}
                 onBlur={() => setCodeFocused(false)}
                 onSubmitEditing={() => void onApply()}
                 hint={t('referral.friendCodeHint')}
+                error={codeError ?? undefined}
               />
               <Button
                 label={t('referral.apply')}

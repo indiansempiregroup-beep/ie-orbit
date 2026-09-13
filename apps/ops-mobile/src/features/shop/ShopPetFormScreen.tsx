@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useCustomers } from '../../hooks/useOpsData';
@@ -73,6 +74,7 @@ export function ShopPetFormScreen() {
   const client = useOpsClient();
   const { token } = useAuth();
   const { businessId, tenantId } = useWorkspace();
+  const toast = useToast();
   const { customers, reload: refreshCustomers } = useCustomers();
   const petId = route.params?.petId;
   const isEdit = Boolean(petId);
@@ -192,9 +194,11 @@ export function ShopPetFormScreen() {
       };
       if (isEdit && petId) {
         const response = await client.shop.patchPet(petId, payload);
+        toast.push('Pet updated.', 'success');
         navigation.replace('ShopPetDetail', { petId: response.data.id });
       } else {
         const response = await client.shop.createPet(payload);
+        toast.push('Pet created.', 'success');
         navigation.replace('ShopPetDetail', { petId: response.data.id });
       }
     } catch (err) {

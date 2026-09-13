@@ -7,9 +7,20 @@ from django.db.models import Q, QuerySet
 from apps.authentication.models import User
 from apps.bookings.models import Booking
 from apps.businesses.models import Business
+from apps.common.utils.urls import normalize_stored_asset_url
 from apps.customers.models import Customer
 from apps.customers.services import CustomerService
 from apps.tenancy.models import Tenant
+
+
+def resolve_tenant_business(*, tenant_slug: str, business_code: str) -> tuple[Tenant, Business]:
+    tenant = Tenant.objects.filter(slug=tenant_slug).first()
+    if tenant is None:
+        raise ValueError("Tenant not found.")
+    business = Business.objects.require_tenant(tenant).filter(business_code=business_code).first()
+    if business is None:
+        raise ValueError("Business not found.")
+    return tenant, business
 
 
 def resolve_customers_for_user(*, tenant: Tenant, business: Business, user: User) -> QuerySet[Customer]:
@@ -61,16 +72,39 @@ def serialize_customer_address(customer: Customer) -> dict | None:
     }
 
 
+def mobile_customer_profile_photo(customer: Customer) -> str:
+    profile = getattr(customer, "profile", None)
+    if profile is None or not profile.photo_id:
+        return ""
+    media = profile.photo
+    if media is None:
+        return ""
+    raw = str(media.metadata.get("public_url") or media.metadata.get("thumbnail_url") or "")
+    return normalize_stored_asset_url(raw) if raw else ""
+
+
+def reload_customer_for_mobile_profile(customer: Customer) -> Customer:
+    loaded = (
+        Customer.objects.select_related("profile__photo")
+        .filter(id=customer.id)
+        .first()
+    )
+    return loaded or customer
+
+
 def serialize_mobile_customer_profile(customer: Customer, *, user: User | None = None) -> dict:
-    profile_photo = ""
-    if user is not None:
-        profile_photo = getattr(user, "profile_photo", "") or ""
+    customer = reload_customer_for_mobile_profile(customer)
+    email = customer.email
+    if not email and user is not None:
+        email = getattr(user, "email", "") or ""
     return {
         "id": str(customer.id),
+        "first_name": customer.first_name,
+        "last_name": customer.last_name,
         "display_name": customer.display_name,
-        "email": customer.email,
+        "email": email,
         "phone_number": customer.phone_number,
-        "profile_photo": profile_photo,
+        "profile_photo": mobile_customer_profile_photo(customer),
         "address": serialize_customer_address(customer),
     }
 

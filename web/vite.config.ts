@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
   const googleOAuthClientId =
     env.VITE_GOOGLE_OAUTH_CLIENT_ID || env.GOOGLE_OAUTH_CLIENT_ID || '';
   const opsWebUrl = (env.VITE_OPS_MOBILE_WEB_URL || process.env.VITE_OPS_MOBILE_WEB_URL || '').trim();
+  const opsAndroidStoreUrl = (env.VITE_OPS_ANDROID_STORE_URL || process.env.VITE_OPS_ANDROID_STORE_URL || '').trim();
+  const opsIosStoreUrl = (env.VITE_OPS_IOS_STORE_URL || process.env.VITE_OPS_IOS_STORE_URL || '').trim();
   const publicSiteUrl = (env.VITE_PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || '').trim();
   const adminAppUrl = (env.VITE_ADMIN_APP_URL || process.env.VITE_ADMIN_APP_URL || '').trim();
   const gaMeasurementId = (env.VITE_GA_MEASUREMENT_ID || process.env.VITE_GA_MEASUREMENT_ID || '').trim();
@@ -69,6 +71,12 @@ export default defineConfig(({ mode }) => {
         : {}),
       ...(opsWebUrl
         ? { 'import.meta.env.VITE_OPS_MOBILE_WEB_URL': JSON.stringify(opsWebUrl) }
+        : {}),
+      ...(opsAndroidStoreUrl
+        ? { 'import.meta.env.VITE_OPS_ANDROID_STORE_URL': JSON.stringify(opsAndroidStoreUrl) }
+        : {}),
+      ...(opsIosStoreUrl
+        ? { 'import.meta.env.VITE_OPS_IOS_STORE_URL': JSON.stringify(opsIosStoreUrl) }
         : {}),
       ...(publicSiteUrl
         ? { 'import.meta.env.VITE_PUBLIC_SITE_URL': JSON.stringify(publicSiteUrl) }

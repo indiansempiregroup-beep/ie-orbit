@@ -14,17 +14,17 @@ export type SeoPage = {
 export const MARKETING_PAGES: SeoPage[] = [
   {
     path: '/',
-    title: 'IE Orbit — Orbit Appoint and Orbit Mart for Indian businesses',
+    title: 'IE Orbit — White-label booking and retail apps for Indian businesses',
     description:
-      'One workspace for appointments and retail. Orbit Appoint for bookings and staff, Orbit Mart for POS, GST books, and Grow. Start a 15-day full-Pro trial with UPI billing.',
+      'Ship a customer app under your brand — not ours. Orbit Appoint for bookings, Orbit Mart for POS and GST. White-label included on Starter and Pro. 15-day full-Pro trial, UPI billing.',
     index: true,
     schemas: ['organization', 'website', 'software'],
   },
   {
     path: '/features',
-    title: 'Features — Orbit Appoint bookings and Orbit Mart POS & GST',
+    title: 'Features — White-label app, Orbit Appoint, and Orbit Mart',
     description:
-      'Orbit Appoint covers online bookings, calendar, staff, and reviews. Orbit Mart covers POS, catalog, online orders, GST books, e-invoice, Grow tools, and an optional Pets pack.',
+      'Every plan includes a white-label customer app branded to your business. Orbit Appoint covers bookings and staff. Orbit Mart covers POS, catalog, online orders, GST books on Pro, and Grow.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [
@@ -36,7 +36,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/pricing',
     title: 'Pricing — IE Orbit Starter, Pro, and 15-day trial',
     description:
-      'INR pricing for Orbit Appoint and Orbit Mart. 15-day full-Pro trial with no credit card, then Starter and Pro plans plus staff, office, and Pets pack add-ons. Pay with UPI.',
+      'INR pricing for Orbit Appoint and Orbit Mart. White-label customer app on every plan. 15-day full-Pro trial, then Starter ₹399 (one location) and Pro ₹799 (second office, WhatsApp or GST). Extra staff capped on Starter; Pets pack is a Mart add-on.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [
@@ -48,7 +48,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries',
     title: 'Industries — Appointment and retail software for Indian businesses',
     description:
-      'IE Orbit for salons and spas, clinics, fitness studios, professional services, retail shops, education, and home services. Bookings, POS, and GST books in one workspace.',
+      'White-label customer apps for salons, clinics, fitness studios, professional services, retail, education, and home services. Bookings, POS, and GST books in one workspace.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [
@@ -60,7 +60,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries/salon-spa',
     title: 'Salon & Spa Booking Software — Orbit Appoint | IE Orbit',
     description:
-      'Run salon and spa appointments, staff calendars, and retail POS from one workspace. Online booking, reminders, reviews, GST counter sales, and a 15-day full-Pro trial.',
+      'Give salon clients a white-label app under your brand. Orbit Appoint runs chairs and calendars; Orbit Mart runs retail POS. 15-day full-Pro trial.',
     index: true,
     schemas: ['organization', 'software', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -73,7 +73,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries/clinic-healthcare',
     title: 'Clinic Appointment Software — Orbit Appoint | IE Orbit',
     description:
-      'Schedule clinic visits, manage practitioners, and keep patient-facing bookings online. Pair with Orbit Mart for pharmacy-style retail, GST books, and a 15-day trial.',
+      'Patients book on your white-label customer app. Orbit Appoint schedules practitioners; pair Orbit Mart for counter retail and GST books. 15-day trial.',
     index: true,
     schemas: ['organization', 'software', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -86,7 +86,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries/fitness-wellness',
     title: 'Fitness & Wellness Booking Software — IE Orbit',
     description:
-      'Book trainers, classes, and wellness sessions with Orbit Appoint. Sell memberships or retail from Orbit Mart POS with GST books. 15-day full-Pro trial, UPI billing.',
+      'Members book trainers and sessions on your white-label app. Orbit Appoint for the calendar; Orbit Mart for studio retail. 15-day full-Pro trial.',
     index: true,
     schemas: ['organization', 'software', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -99,7 +99,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries/professional-services',
     title: 'Consultant Booking Software — Professional Services | IE Orbit',
     description:
-      'Let clients book consultations online. Manage staff availability, reminders, and reviews in Orbit Appoint. Add Orbit Mart if you also sell products. 15-day trial.',
+      'Clients book consultations on your white-label customer app. Staff calendars, reminders, and reviews in Orbit Appoint. Add Orbit Mart if you also sell products.',
     index: true,
     schemas: ['organization', 'software', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -112,7 +112,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries/retail',
     title: 'Retail POS and GST Software — Orbit Mart | IE Orbit',
     description:
-      'Run counter sales, catalog, online orders, returns, GST books, e-invoice, and e-way bill in Orbit Mart. Optional Pets pack for pet retailers. 15-day full-Pro trial.',
+      'Shoppers browse and order on your white-label app. Orbit Mart runs counter sales, catalog, GST books, e-invoice, and e-way. Optional Pets pack. 15-day trial.',
     index: true,
     schemas: ['organization', 'software', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -125,7 +125,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries/education-training',
     title: 'Class & Tutoring Booking Software — IE Orbit',
     description:
-      'Schedule classes, coaching, and training sessions with Orbit Appoint. Sell materials from Orbit Mart when you need a counter and GST books. 15-day full-Pro trial.',
+      'Learners book classes on your white-label app. Orbit Appoint schedules sessions; Orbit Mart sells materials with GST books. 15-day full-Pro trial.',
     index: true,
     schemas: ['organization', 'software', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -138,7 +138,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/industries/home-services',
     title: 'Home Services Booking Software — IE Orbit',
     description:
-      'Book on-site visits, manage staff calendars, and keep customer records in Orbit Appoint. Use Orbit Mart if you also sell parts or products with GST invoicing.',
+      'Households book visits on your white-label app. Orbit Appoint manages staff calendars; Orbit Mart bills parts with GST invoicing. 15-day trial.',
     index: true,
     schemas: ['organization', 'software', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -151,7 +151,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/integrations',
     title: 'Integrations — Razorpay, UPI, Google, WhatsApp, GST | IE Orbit',
     description:
-      'IE Orbit connects to Razorpay, Cashfree, UPI payment claims, Google Sign-In, Maps, Calendar, WhatsApp Grow tools, Shiprocket, and GST e-invoice / e-way bill.',
+      'IE Orbit connects to Razorpay, Cashfree, UPI payment claims, Google Sign-In, Maps, Calendar, Analytics, AdMob, Firebase, WhatsApp Grow tools, Shiprocket, and GST e-invoice / e-way bill.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [
@@ -163,7 +163,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/about',
     title: 'About Indians Empire Technologies and IE Orbit',
     description:
-      'IE Orbit is the appointments-and-retail workspace from Indians Empire Technologies — Orbit Appoint and Orbit Mart for Indian service and shop businesses.',
+      'IE Orbit ships a white-label customer app on every plan. Orbit Appoint and Orbit Mart from Indians Empire Technologies for Indian service and shop businesses.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [
@@ -175,7 +175,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/contact',
     title: 'Contact IE Orbit — Support, sales, and demos',
     description:
-      'Contact Indians Empire Technologies about Orbit Appoint and Orbit Mart. Email support@indiansempire.com or call +91 9766855617. We reply within two business days.',
+      'Book a demo of the white-label customer app, or ask about Orbit Appoint and Orbit Mart. Email support@indiansempire.com or call +91 9766855617.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [
@@ -187,7 +187,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/faq',
     title: 'FAQ — IE Orbit trials, pricing, Orbit Appoint, and Orbit Mart',
     description:
-      'Answers about IE Orbit products, 15-day trials, Starter and Pro plans, UPI billing, add-ons, the customer app, and support for Indian businesses.',
+      'Answers about the white-label customer app, 15-day trials, Starter and Pro plans, UPI billing, add-ons, and support for Indian businesses.',
     index: true,
     schemas: ['organization', 'faq', 'breadcrumb'],
     breadcrumb: [
@@ -211,7 +211,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/privacy',
     title: 'Privacy Policy — IE Orbit',
     description:
-      'How IE Orbit collects and uses account, business, booking, and retail data to operate Orbit Appoint and Orbit Mart workspaces.',
+      'How Indians Empire Technologies collects, uses, shares, and retains IE Orbit account, booking, retail, billing, and analytics data, and how to exercise DPDP rights.',
     index: true,
     schemas: ['breadcrumb'],
     breadcrumb: [
@@ -223,7 +223,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/terms',
     title: 'Terms & Conditions — IE Orbit',
     description:
-      'Terms for using IE Orbit, including Orbit Appoint and Orbit Mart trials, paid subscriptions, UPI billing, and acceptable use.',
+      'Terms for IE Orbit: Orbit Appoint and Orbit Mart, 15-day trial, UPI subscription claims, white-label apps, acceptable use, and Indian governing law.',
     index: true,
     schemas: ['breadcrumb'],
     breadcrumb: [
@@ -235,7 +235,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/cookies',
     title: 'Cookie Policy — IE Orbit',
     description:
-      'How IE Orbit uses cookies and similar storage for authentication, session, and optional Google Analytics on the public website.',
+      'Cookies and browser storage IE Orbit uses for sign-in, workspace, preferences, Google Sign-In, Maps, and optional Analytics on public marketing pages.',
     index: true,
     schemas: ['breadcrumb'],
     breadcrumb: [
@@ -247,7 +247,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/download',
     title: 'Download IE Orbit apps — Customer and ops access',
     description:
-      'IE Orbit customer apps are white-label apps branded to each business. Owners and staff use the ops workspace. Start on the web with a 15-day trial.',
+      'Download the IE Orbit ops app for iOS and Android. Customer apps are white-label and branded to each business. Start on the web with a 15-day trial.',
     index: true,
     schemas: ['breadcrumb'],
     breadcrumb: [
@@ -286,13 +286,13 @@ export const NOINDEX_PAGES: SeoPage[] = [
   {
     path: '/auth/register',
     title: 'Register — IE Orbit',
-    description: 'Create an IE Orbit workspace for Orbit Appoint and Orbit Mart.',
+    description: 'Create a white-label IE Orbit workspace for Orbit Appoint and Orbit Mart.',
     index: false,
   },
   {
     path: '/auth/register/start',
     title: 'Create account — IE Orbit',
-    description: 'Self-service business onboarding for Orbit Appoint and Orbit Mart.',
+    description: 'Create a white-label workspace for Orbit Appoint, Orbit Mart, or both. 15-day full-Pro trial.',
     index: false,
   },
   {

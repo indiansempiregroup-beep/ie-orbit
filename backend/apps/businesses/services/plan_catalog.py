@@ -4,7 +4,7 @@ from typing import Any
 
 from django.db.utils import OperationalError, ProgrammingError
 
-from apps.businesses.constants import PRODUCT_PLAN_CATALOG
+from apps.businesses.constants import PRODUCT_PLAN_CATALOG, plan_extra_cap
 
 
 def _fallback_definitions(product_code: str) -> list[dict[str, Any]]:
@@ -20,6 +20,8 @@ def _fallback_definitions(product_code: str) -> list[dict[str, Any]]:
             "is_default": bool(plan.get("is_default", False)),
             "max_staff": int(plan.get("max_staff", 1) or 1),
             "max_branches": int(plan.get("max_branches", 1) or 1),
+            "max_extra_staff": plan_extra_cap(plan, "max_extra_staff"),
+            "max_extra_offices": plan_extra_cap(plan, "max_extra_offices"),
             "bi_features": list(plan.get("bi_features") or []),
             "features": list(plan.get("features") or []),
             "is_public": True,
@@ -40,6 +42,8 @@ def _serialize_row(row: Any) -> dict[str, Any]:
         "is_default": row.is_default,
         "max_staff": row.max_staff,
         "max_branches": row.max_branches,
+        "max_extra_staff": getattr(row, "max_extra_staff", None),
+        "max_extra_offices": getattr(row, "max_extra_offices", None),
         "bi_features": list(row.bi_features or []),
         "features": list(row.features or []),
         "amount_paise": row.amount_paise,

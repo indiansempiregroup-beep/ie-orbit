@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
-from rest_framework import status
+from rest_framework import exceptions, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -42,6 +42,20 @@ from apps.platform_media.services import MediaService
 from apps.tenancy.models import Tenant
 
 
+def _customer_auth_scope(data: dict) -> tuple[object | None, object | None]:
+    if data.get("client") != "customer":
+        return None, None
+    from apps.api.mobile_helpers import resolve_tenant_business
+
+    try:
+        return resolve_tenant_business(
+            tenant_slug=data["tenant_slug"],
+            business_code=data["business_code"],
+        )
+    except ValueError as exc:
+        raise exceptions.ValidationError(str(exc)) from exc
+
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -51,13 +65,20 @@ class LoginView(APIView):
     def post(self, request: Request) -> Response:
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        tenant, business = _customer_auth_scope(serializer.validated_data)
         result = AuthenticationService().login(
             email=serializer.validated_data["email"],
             password=serializer.validated_data["password"],
             remember_me=serializer.validated_data["remember_me"],
             ip_address=client_ip(request),
             user_agent=user_agent(request),
+            tenant=tenant,
+            business=business,
         )
+        if tenant is not None and business is not None:
+            from apps.api.mobile_helpers import ensure_customer_for_user
+
+            ensure_customer_for_user(tenant=tenant, business=business, user=result.user)
         user = RoleService().ensure_superuser_platform_role(user=result.user)
         return success_response(
             {
@@ -81,13 +102,20 @@ class GoogleLoginView(APIView):
     def post(self, request: Request) -> Response:
         serializer = GoogleLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        tenant, business = _customer_auth_scope(serializer.validated_data)
         result = AuthenticationService().login_with_google(
             id_token=serializer.validated_data["id_token"],
             client=serializer.validated_data["client"],
             remember_me=serializer.validated_data["remember_me"],
             ip_address=client_ip(request),
             user_agent=user_agent(request),
+            tenant=tenant,
+            business=business,
         )
+        if tenant is not None and business is not None:
+            from apps.api.mobile_helpers import ensure_customer_for_user
+
+            ensure_customer_for_user(tenant=tenant, business=business, user=result.user)
         user = RoleService().ensure_superuser_platform_role(user=result.user)
         return success_response(
             {
@@ -112,7 +140,7 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user = AuthenticationService().register(
             email=serializer.validated_data["email"],
-            password=serializer.validated_data["password"],
+            password=None,
             first_name=serializer.validated_data.get("first_name", ""),
             last_name=serializer.validated_data.get("last_name", ""),
             ip_address=client_ip(request),
@@ -227,51 +255,33 @@ class LogoutView(APIView):
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_scope = "password_reset"
-    serializer_class = ForgotPasswordSerializer
 
     def post(self, request: Request) -> Response:
-        serializer = ForgotPasswordSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        reset = PasswordService().request_reset(
-            email=serializer.validated_data["email"],
-            ip_address=client_ip(request),
-            user_agent=user_agent(request),
+        return Response(
+            {"error": {"message": "Password reset is disabled. Sign in with OTP from the login page."}},
+            status=status.HTTP_410_GONE,
         )
-        data: dict[str, str | bool] = {"accepted": True}
-        if settings.DEBUG and reset:
-            data["debug_token"] = reset.token
-        return success_response(data, request_id=getattr(request, "request_id", None))
 
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    serializer_class = ResetPasswordSerializer
 
     def post(self, request: Request) -> Response:
-        serializer = ResetPasswordSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        PasswordService().reset_password(
-            token=serializer.validated_data["token"],
-            new_password=serializer.validated_data["new_password"],
+        return Response(
+            {"error": {"message": "Password reset is disabled. Sign in with OTP from the login page."}},
+            status=status.HTTP_410_GONE,
         )
-        return success_response({"reset": True}, request_id=getattr(request, "request_id", None))
 
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = ChangePasswordSerializer
 
     def post(self, request: Request) -> Response:
-        serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        PasswordService().change_password(
-            user=request.user,
-            current_password=serializer.validated_data["current_password"],
-            new_password=serializer.validated_data["new_password"],
+        return Response(
+            {"error": {"message": "Password changes are disabled. Your account uses OTP sign-in."}},
+            status=status.HTTP_410_GONE,
         )
-        return success_response({"changed": True}, request_id=getattr(request, "request_id", None))
 
 
 class VerifyEmailView(APIView):

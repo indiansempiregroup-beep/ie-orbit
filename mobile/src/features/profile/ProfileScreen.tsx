@@ -9,6 +9,7 @@ import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useMobileBookings } from '../../hooks/useMobileBookings';
+import { useMobileCustomerProfile } from '../../hooks/useMobileCustomerProfile';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Avatar } from '../../components/ui/Avatar';
@@ -43,6 +44,7 @@ export function ProfileScreen() {
   const { headerPaddingTop } = useScreenInsets();
   const { contentInset } = useTabBarLayout();
   const { bookings, reload } = useMobileBookings();
+  const { profile, reload: reloadCustomerProfile } = useMobileCustomerProfile(Boolean(user));
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(Boolean(bootstrap?.loyalty?.enabled));
   const [orders, setOrders] = useState<ShopOrder[]>([]);
@@ -93,7 +95,7 @@ export function ProfileScreen() {
   }, [showShop, tenantSlug, businessCode]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await Promise.all([reload(), loadLoyalty(), loadOrders()]);
+    await Promise.all([reload(), reloadCustomerProfile(), loadLoyalty(), loadOrders()]);
   });
   useFocusEffect(
     useCallback(() => {
@@ -107,7 +109,11 @@ export function ProfileScreen() {
     void loadOrders();
   }, [loadLoyalty, loadOrders]);
 
-  const displayName = user?.full_name || [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Guest';
+  const displayName =
+    profile?.display_name ||
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+    user?.full_name ||
+    'Guest';
   const completedBookings = bookings.filter((booking) => booking.status === 'completed').length;
   const stats = [
     ...(showBooking
@@ -147,7 +153,7 @@ export function ProfileScreen() {
     >
       <LinearGradient colors={[`${primary}22`, colors.background]} style={[styles.hero, { paddingTop: headerPaddingTop }]}>
         <View style={styles.avatarWrap}>
-          <Avatar name={displayName} size="xl" src={user?.profile_photo} />
+          <Avatar name={displayName} size="xl" src={profile?.profile_photo} />
           <Pressable style={[styles.editBadge, { backgroundColor: primary }]} onPress={() => navigation.navigate('ProfileEdit')}>
             <Feather name="edit-2" size={12} color="#fff" />
           </Pressable>

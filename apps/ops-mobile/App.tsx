@@ -17,11 +17,12 @@ import { NotificationsProvider } from './src/contexts/NotificationsContext';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { WorkspaceProvider } from './src/contexts/WorkspaceContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { captureImpersonationHandoff } from './src/utils/impersonationHandoff';
+import { captureImpersonationHandoff, redirectOpsWebAdminPathToVite } from './src/utils/impersonationHandoff';
 import { i18n } from './src/i18n';
 
 WebBrowser.maybeCompleteAuthSession();
 captureImpersonationHandoff();
+redirectOpsWebAdminPathToVite();
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // Expo Go may reject if splash is already controlled.

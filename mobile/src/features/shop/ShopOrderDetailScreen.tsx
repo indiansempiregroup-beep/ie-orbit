@@ -18,11 +18,13 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { Input } from '../../components/ui/Input';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { getApiBaseUrl } from '../../config/apiBaseUrl';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateTime } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
@@ -256,6 +258,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const { token } = useAuth();
   const { bootstrap, branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const toast = useToast();
   const [order, setOrder] = useState<ShopOrder | null>(null);
   const [returns, setReturns] = useState<ShopReturn[]>([]);
   const [returnMode, setReturnMode] = useState(false);
@@ -263,6 +266,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [reason, setReason] = useState('');
   const [utr, setUtr] = useState('');
   const [proofUrl, setProofUrl] = useState('');
+  const [paymentError, setPaymentError] = useState('');
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -414,6 +418,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
   }
 
   async function claimPayment() {
+    if (utr.trim().length < 6 && !proofUrl) {
+      setPaymentError('Enter a UTR of at least 6 characters or upload a payment screenshot.');
+      return;
+    }
+    setPaymentError('');
     setBusy(true);
     setMessage(null);
     try {
@@ -547,6 +556,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       setMessage(
         `Return ${response.data.return_number} submitted. Refund ${formatShopMoney(response.data.refund_total, response.data.currency || currentOrder.currency)} will be given as recorded below.`,
       );
+      toast.push(`Return ${response.data.return_number} submitted.`, 'success');
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Unable to submit return');
@@ -827,13 +837,16 @@ export function ShopOrderDetailScreen({ route }: Props) {
           <View style={styles.card}>
             <Text style={styles.section}>I’ve paid</Text>
             <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="UTR / UPI reference"
+            <Input
+              label="UTR / UPI reference"
               value={utr}
-              onChangeText={setUtr}
-              placeholderTextColor={colors.mutedForeground}
+              onChangeText={(value) => {
+                setUtr(value);
+                if (paymentError) setPaymentError('');
+              }}
+              placeholder="UTR / UPI reference"
               autoCapitalize="characters"
+              error={paymentError || undefined}
             />
             <Pressable
               style={[styles.secondaryBtn, { borderColor: primary }]}
@@ -846,7 +859,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
             {proofUrl ? <Image source={{ uri: proofUrl }} style={styles.proof} /> : null}
             <Pressable
               style={[styles.button, { backgroundColor: primary }]}
-              disabled={busy || (utr.trim().length < 6 && !proofUrl)}
+              disabled={busy}
               onPress={() => void claimPayment()}
             >
               <Text style={styles.buttonText}>{busy ? 'Submitting…' : 'Submit for confirmation'}</Text>

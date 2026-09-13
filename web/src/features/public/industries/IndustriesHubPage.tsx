@@ -16,8 +16,9 @@ export function IndustriesHubPage() {
               Made for the way <span className="public-gradient-text">your business moves</span>
             </h1>
             <p className="public-lead">
-              IE Orbit is not a single-vertical salon app. Orbit Appoint schedules people and time. Orbit Mart runs the
-              counter, catalog, and GST books. Pick the industry page that matches how you actually work.
+              IE Orbit is not a single-vertical salon app. Every plan includes a white-label customer app under your
+              brand. Orbit Appoint schedules people and time. Orbit Mart runs the counter, catalog, and GST books. Pick
+              the industry page that matches how you actually work.
             </p>
             <div className="public-hero-actions">
               <Link to="/features">

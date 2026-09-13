@@ -6,14 +6,18 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.authentication.constants import DEFAULT_CUSTOMER_ROLE_CODE
 from apps.authentication.models import User, UserStatus
+from apps.authentication.services.roles import RoleService
 from apps.bookings.models import Booking
 from apps.businesses.models import Business
 from apps.customers.models import Customer
 from apps.notifications.models import Notification
 from apps.services.models import Service, ServicePricing
 from apps.tenancy.models import Organization, Tenant
+from apps.authentication.tests.otp_helpers import otp_login_customer
 
 
 @pytest.fixture
@@ -97,10 +101,7 @@ def test_mobile_booking_request(api_client: APIClient, mobile_context: dict[str,
         },
         format="json",
     )
-    assert response.status_code == 201
-    payload = response.json()["data"]
-    assert payload["status"] == "pending"
-    assert Booking.objects.filter(id=payload["booking_id"], tenant_id=mobile_context["tenant_id"]).exists()
+    assert response.status_code == 401
 
 
 @pytest.mark.django_db
@@ -112,6 +113,7 @@ def test_mobile_list_bookings_for_authenticated_customer(api_client: APIClient, 
         first_name="Mobile",
         last_name="Customer",
         phone_number="+911234567890",
+        email_verified_at=timezone.now(),
     )
     tenant = Tenant.objects.get(slug=mobile_context["tenant_slug"])
     business = Business.objects.require_tenant(tenant).get(business_code=mobile_context["business_code"])
@@ -176,6 +178,7 @@ def test_mobile_booking_request_uses_authenticated_customer(api_client: APIClien
         first_name="Linked",
         last_name="Customer",
         phone_number="+919999999999",
+        email_verified_at=timezone.now(),
     )
     tenant = Tenant.objects.get(slug=mobile_context["tenant_slug"])
     business = Business.objects.require_tenant(tenant).get(business_code=mobile_context["business_code"])
@@ -189,22 +192,16 @@ def test_mobile_booking_request_uses_authenticated_customer(api_client: APIClien
         email=customer_user.email,
         phone_number=customer_user.phone_number,
     )
-    start_at = timezone.now() + timedelta(days=3)
     api_client.force_authenticate(user=customer_user)
-    response = api_client.post(
-        reverse("mobile-booking-request"),
+    response = api_client.get(
+        reverse("mobile-customer-profile"),
         {
             "tenant_slug": mobile_context["tenant_slug"],
             "business_code": mobile_context["business_code"],
-            "service_id": mobile_context["service_id"],
-            "start_at": start_at.isoformat(),
-            "duration_minutes": 30,
         },
-        format="json",
     )
-    assert response.status_code == 201
-    booking = Booking.objects.get(id=response.json()["data"]["booking_id"])
-    assert booking.customer_id == existing_customer.id
+    assert response.status_code == 200, response.content
+    assert response.json()["data"]["id"] == str(existing_customer.id)
 
 
 @pytest.mark.django_db
@@ -213,6 +210,7 @@ def test_mobile_list_notifications_for_authenticated_user(api_client: APIClient,
         email="notify-customer@example.com",
         password="ValidPass123",
         status=UserStatus.ACTIVE,
+        email_verified_at=timezone.now(),
     )
     tenant = Tenant.objects.get(slug=mobile_context["tenant_slug"])
     business = Business.objects.require_tenant(tenant).get(business_code=mobile_context["business_code"])
@@ -286,6 +284,7 @@ def test_mobile_cancel_booking(api_client: APIClient, mobile_context: dict[str, 
         password="ValidPass123",
         status=UserStatus.ACTIVE,
         phone_number="+911111111111",
+        email_verified_at=timezone.now(),
     )
     tenant = Tenant.objects.get(slug=mobile_context["tenant_slug"])
     business = Business.objects.require_tenant(tenant).get(business_code=mobile_context["business_code"])
@@ -340,6 +339,7 @@ def test_mobile_customer_profile_accepts_high_precision_map_coords(
         first_name="Map",
         last_name="Customer",
         phone_number="+912222222222",
+        email_verified_at=timezone.now(),
     )
     api_client.force_authenticate(user=customer_user)
     response = api_client.patch(
@@ -360,3 +360,110 @@ def test_mobile_customer_profile_accepts_high_precision_map_coords(
     assert address["full_address"] == "Kalyani Nagar, Pune"
     assert address["latitude"] == pytest.approx(19.076012)
     assert address["longitude"] == pytest.approx(72.877712)
+
+
+@pytest.mark.django_db
+def test_mobile_customer_profile_name_is_shop_scoped(
+    api_client: APIClient, mobile_context: dict[str, str]
+) -> None:
+    customer_user = User.objects.create_user(
+        email="scoped-profile@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+        first_name="Global",
+        last_name="User",
+        phone_number="+913333333333",
+        email_verified_at=timezone.now(),
+    )
+    api_client.force_authenticate(user=customer_user)
+    response = api_client.patch(
+        reverse("mobile-customer-profile"),
+        {"first_name": "Salon", "last_name": "Only", "phone_number": "+914444444444"},
+        format="json",
+        QUERY_STRING=(
+            f"tenant_slug={mobile_context['tenant_slug']}"
+            f"&business_code={mobile_context['business_code']}"
+        ),
+    )
+    assert response.status_code == 200, response.content
+    payload = response.json()["data"]
+    assert payload["first_name"] == "Salon"
+    assert payload["phone_number"] == "+914444444444"
+    customer_user.refresh_from_db()
+    assert customer_user.first_name == "Global"
+    assert customer_user.phone_number == "+913333333333"
+
+
+@pytest.mark.django_db
+def test_mobile_register_existing_email_asks_to_sign_in(
+    api_client: APIClient, mobile_context: dict[str, str]
+) -> None:
+    User.objects.create_user(
+        email="shared@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    response = api_client.post(
+        reverse("mobile-customer-register"),
+        {
+            "email": "shared@example.com",
+            "first_name": "Riya",
+            "tenant_slug": mobile_context["tenant_slug"],
+            "business_code": mobile_context["business_code"],
+        },
+        format="json",
+    )
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert "Sign in instead" in str(details)
+
+
+@pytest.mark.django_db
+def test_customer_token_cannot_attach_to_another_tenant(
+    api_client: APIClient, mobile_context: dict[str, str]
+) -> None:
+    user = User.objects.create_user(
+        email="bound-customer@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+        email_verified_at=timezone.now(),
+    )
+    RoleService().assign_role(user=user, role_code=DEFAULT_CUSTOMER_ROLE_CODE)
+
+    other_tenant = Tenant.objects.create(slug="other-tenant", display_name="Other Tenant")
+    other_org = Organization.objects.create(tenant=other_tenant, name="Other Org")
+    Business.objects.create(
+        tenant=other_tenant,
+        organization=other_org,
+        business_code="other-biz",
+        business_name="Other Biz",
+        display_name="Other Biz",
+    )
+
+    login_payload = otp_login_customer(
+        api_client,
+        user,
+        tenant_slug=mobile_context["tenant_slug"],
+        business_code=mobile_context["business_code"],
+    )
+    access = login_payload["access"]
+    claims = AccessToken(access)
+    assert claims["tenant_id"] == mobile_context["tenant_id"]
+    assert claims["client"] == "customer"
+
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+    allowed = api_client.get(
+        reverse("mobile-customer-profile"),
+        {
+            "tenant_slug": mobile_context["tenant_slug"],
+            "business_code": mobile_context["business_code"],
+        },
+    )
+    assert allowed.status_code == 200, allowed.content
+
+    blocked = api_client.get(
+        reverse("mobile-customer-profile"),
+        {"tenant_slug": "other-tenant", "business_code": "other-biz"},
+    )
+    assert blocked.status_code == 403
+    assert "different shop" in blocked.json()["error"]["message"]

@@ -7,6 +7,7 @@ from apps.authentication.api.iam_views import (
     RoleListView,
     TenantMemberListView,
 )
+from apps.authentication.api.otp_views import OtpCapabilitiesView, OtpSendView, OtpVerifyView
 from apps.authentication.api.views import (
     ChangePasswordView,
     ForgotPasswordView,
@@ -26,6 +27,9 @@ from apps.staff.api.invitation_views import AcceptInvitationView
 
 urlpatterns = [
     path("login", LoginView.as_view(), name="auth-login"),
+    path("otp/capabilities", OtpCapabilitiesView.as_view(), name="auth-otp-capabilities"),
+    path("otp/send", OtpSendView.as_view(), name="auth-otp-send"),
+    path("otp/verify", OtpVerifyView.as_view(), name="auth-otp-verify"),
     path("google", GoogleLoginView.as_view(), name="auth-google"),
     path("refresh", RefreshView.as_view(), name="auth-refresh"),
     path("logout", LogoutView.as_view(), name="auth-logout"),

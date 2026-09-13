@@ -184,6 +184,7 @@ REST_FRAMEWORK = {
         "anon": "100/hour",
         "user": "1000/hour",
         "auth_login": "10/minute",
+        "auth_otp": "20/minute",
         "password_reset": "5/minute",
         "contact_form": "5/minute",
         "places": "60/minute",
@@ -226,6 +227,9 @@ IAM_SETTINGS = {
     "EMAIL_VERIFICATION_TOKEN_MINUTES": 60 * 24,
     "OTP_EXPIRY_MINUTES": 10,
     "OTP_MAX_ATTEMPTS": 5,
+    # Platform business used to send WhatsApp OTP for ops-mobile pre-login sign-in.
+    "OPS_OTP_WHATSAPP_TENANT_SLUG": os.getenv("OPS_OTP_WHATSAPP_TENANT_SLUG", "").strip(),
+    "OPS_OTP_WHATSAPP_BUSINESS_CODE": os.getenv("OPS_OTP_WHATSAPP_BUSINESS_CODE", "").strip(),
 }
 
 REDIS_URL = ENV.redis_url
@@ -315,6 +319,8 @@ PLATFORM_UPI_NAME = os.getenv("PLATFORM_UPI_NAME", "IE Orbit")
 PLATFORM_PAYMENT_QR_URL = os.getenv("PLATFORM_PAYMENT_QR_URL", "")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 PUBLIC_API_ORIGIN = os.getenv("PUBLIC_API_ORIGIN", "http://localhost:8000")
+WHATSAPP_GRAPH_API_VERSION = os.getenv("WHATSAPP_GRAPH_API_VERSION", "v21.0").strip() or "v21.0"
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "").strip()
 EXPO_ACCESS_TOKEN = os.getenv("EXPO_ACCESS_TOKEN", "").strip()
 ADMIN_HOST = os.getenv("ADMIN_HOST", "")
 BILLING_CURRENCY_DEFAULT = os.getenv("BILLING_CURRENCY_DEFAULT", "INR")

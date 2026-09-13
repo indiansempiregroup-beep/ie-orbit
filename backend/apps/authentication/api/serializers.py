@@ -10,16 +10,83 @@ from apps.common.api.fields import CoordinateField
 from apps.common.utils.urls import normalize_stored_asset_url
 
 
+class OtpCapabilitiesQuerySerializer(serializers.Serializer):
+    client = serializers.ChoiceField(choices=("customer", "ops"))
+    tenant_slug = serializers.SlugField(required=False)
+    business_code = serializers.SlugField(required=False)
+
+
+class OtpSendSerializer(serializers.Serializer):
+    client = serializers.ChoiceField(choices=("customer", "ops"))
+    channel = serializers.ChoiceField(choices=("email", "whatsapp", "sms"))
+    identifier = serializers.CharField(max_length=255)
+    tenant_slug = serializers.SlugField(required=False)
+    business_code = serializers.SlugField(required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("client") == "customer" and attrs.get("channel") == "whatsapp":
+            if not attrs.get("tenant_slug") or not attrs.get("business_code"):
+                raise serializers.ValidationError(
+                    "tenant_slug and business_code are required for customer WhatsApp OTP."
+                )
+        return attrs
+
+
+class OtpVerifySerializer(serializers.Serializer):
+    client = serializers.ChoiceField(choices=("customer", "ops"))
+    channel = serializers.ChoiceField(choices=("email", "whatsapp", "sms"))
+    identifier = serializers.CharField(max_length=255)
+    code = serializers.CharField(max_length=12, trim_whitespace=True)
+    remember_me = serializers.BooleanField(default=True)
+    tenant_slug = serializers.SlugField(required=False)
+    business_code = serializers.SlugField(required=False)
+    create_if_missing = serializers.BooleanField(default=False)
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=120)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("client") == "customer" and (
+            not attrs.get("tenant_slug") or not attrs.get("business_code")
+        ):
+            raise serializers.ValidationError(
+                "tenant_slug and business_code are required for customer sign-in."
+            )
+        return attrs
+
+
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, required=False, allow_blank=True)
     remember_me = serializers.BooleanField(default=False)
+    client = serializers.ChoiceField(choices=("customer", "ops"), required=False)
+    tenant_slug = serializers.SlugField(required=False)
+    business_code = serializers.SlugField(required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("client") == "customer" and (
+            not attrs.get("tenant_slug") or not attrs.get("business_code")
+        ):
+            raise serializers.ValidationError(
+                "tenant_slug and business_code are required for customer sign-in."
+            )
+        return attrs
 
 
 class GoogleLoginSerializer(serializers.Serializer):
     id_token = serializers.CharField(write_only=True, trim_whitespace=False)
     client = serializers.ChoiceField(choices=("customer", "ops"), default="customer")
     remember_me = serializers.BooleanField(default=True)
+    tenant_slug = serializers.SlugField(required=False)
+    business_code = serializers.SlugField(required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("client") == "customer" and (
+            not attrs.get("tenant_slug") or not attrs.get("business_code")
+        ):
+            raise serializers.ValidationError(
+                "tenant_slug and business_code are required for customer sign-in."
+            )
+        return attrs
 
 
 class RefreshSerializer(serializers.Serializer):
@@ -55,13 +122,11 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    password = serializers.CharField(
+        write_only=True, trim_whitespace=False, required=False, allow_blank=True
+    )
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
-
-    def validate_password(self, value: str) -> str:
-        validate_password(value)
-        return value
 
 
 class VerifyEmailSerializer(serializers.Serializer):
@@ -77,6 +142,8 @@ class RegisterBusinessSerializer(serializers.Serializer):
     password = serializers.CharField(
         write_only=True, trim_whitespace=False, required=False, allow_blank=True
     )
+    otp_verified = serializers.BooleanField(required=False, default=False)
+    otp_code = serializers.CharField(required=False, allow_blank=True, max_length=12)
     google_id_token = serializers.CharField(write_only=True, required=False, allow_blank=True)
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
@@ -129,12 +196,24 @@ class RegisterBusinessSerializer(serializers.Serializer):
         from apps.businesses.services.plan_catalog import get_plan_definition_resolved
 
         google_id_token = str(attrs.get("google_id_token") or "").strip()
-        password = str(attrs.get("password") or "")
-        if not google_id_token and not password:
+        otp_verified = bool(attrs.get("otp_verified"))
+        otp_code = str(attrs.get("otp_code") or "").strip()
+        if not google_id_token and not otp_verified and not otp_code:
             raise serializers.ValidationError(
-                {"password": "Password or Google sign-in is required."}
+                {"email": "Verify your email with OTP or continue with Google before registering."}
             )
+        if otp_code and not google_id_token:
+            from apps.authentication.models import OtpPurpose
+            from apps.authentication.services.auth_otp import EMAIL_IDENTIFIER_PREFIX
+            from apps.authentication.services.otp import OtpService
+
+            email = str(attrs.get("email") or "").strip().lower()
+            otp_id = f"{EMAIL_IDENTIFIER_PREFIX}{email}"
+            if not OtpService().validate(identifier=otp_id, purpose=OtpPurpose.LOGIN, code=otp_code):
+                raise serializers.ValidationError({"otp_code": "That code is invalid or expired."})
+            otp_verified = True
         attrs["google_id_token"] = google_id_token
+        attrs["otp_verified"] = otp_verified
 
         products: list[str] = []
         for code in attrs.get("selected_products") or []:

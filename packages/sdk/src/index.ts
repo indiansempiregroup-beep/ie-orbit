@@ -49,14 +49,54 @@ export type RequestOptions = {
 
 export type LoginRequest = {
   email: string;
-  password: string;
+  password?: string;
   remember_me?: boolean;
+  client?: 'customer' | 'ops';
+  tenant_slug?: string;
+  business_code?: string;
+};
+
+export type OtpCapabilities = {
+  email_otp: boolean;
+  mobile_otp: boolean;
+  mobile_otp_via_whatsapp: boolean;
+  mobile_otp_via_sms: boolean;
+  whatsapp_status: string;
+};
+
+export type OtpSendRequest = {
+  client: 'customer' | 'ops';
+  channel: 'email' | 'whatsapp' | 'sms';
+  identifier: string;
+  tenant_slug?: string;
+  business_code?: string;
+};
+
+export type OtpSendResponse = {
+  sent: boolean;
+  channel: string;
+  debug_code?: string;
+};
+
+export type OtpVerifyRequest = {
+  client: 'customer' | 'ops';
+  channel: 'email' | 'whatsapp' | 'sms';
+  identifier: string;
+  code: string;
+  remember_me?: boolean;
+  tenant_slug?: string;
+  business_code?: string;
+  create_if_missing?: boolean;
+  first_name?: string;
+  last_name?: string;
 };
 
 export type GoogleLoginRequest = {
   id_token: string;
   client: 'customer' | 'ops';
   remember_me?: boolean;
+  tenant_slug?: string;
+  business_code?: string;
 };
 
 export type RefreshRequest = {
@@ -267,6 +307,7 @@ export type BookingCreateInput = {
   recurrence_frequency?: string;
   recurrence_rule?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  whatsapp_opt_in?: boolean;
 };
 
 export type AvailabilitySlot = {
@@ -311,6 +352,8 @@ export type ProductPlan = {
   is_default?: boolean;
   max_staff?: number;
   max_branches?: number;
+  max_extra_staff?: number | null;
+  max_extra_offices?: number | null;
   bi_features?: string[];
   features?: string[];
 };
@@ -381,6 +424,8 @@ export type BillingPlanCatalogItem = {
   is_default: boolean;
   max_staff?: number;
   max_branches?: number;
+  max_extra_staff?: number | null;
+  max_extra_offices?: number | null;
   bi_features?: string[];
   features?: string[];
   amount_paise?: number | null;
@@ -417,6 +462,8 @@ export type BusinessBillingSnapshot = {
   extra_staff: number;
   extra_offices: number;
   pets_pack_enabled?: boolean;
+  max_extra_staff?: number | null;
+  max_extra_offices?: number | null;
   effective_max_staff: number;
   effective_max_branches: number;
   used_staff: number;
@@ -760,6 +807,8 @@ export type MobileNotificationItem = {
 
 export type MobileCustomerProfile = {
   id: string;
+  first_name: string;
+  last_name?: string;
   display_name: string;
   email?: string;
   phone_number?: string;
@@ -979,6 +1028,7 @@ export type MobileBootstrapResponse = {
   show_google_ads: boolean;
   loyalty?: MobileLoyaltyProgram;
   referral?: MobileReferralProgram;
+  otp_auth?: OtpCapabilities;
   build_metadata?: Record<string, unknown>;
 };
 
@@ -1129,6 +1179,8 @@ export type PlatformPlanPackage = {
   is_default: boolean;
   max_staff: number;
   max_branches: number;
+  max_extra_staff?: number | null;
+  max_extra_offices?: number | null;
   bi_features: string[];
   features: string[];
   amount_paise: number;
@@ -1261,6 +1313,8 @@ export type PlatformPlanPackageUpsertInput = {
   is_default?: boolean;
   max_staff?: number;
   max_branches?: number;
+  max_extra_staff?: number | null;
+  max_extra_offices?: number | null;
   bi_features?: string[];
   features?: string[];
   amount_paise?: number;
@@ -1279,6 +1333,44 @@ export type PlatformAddonPricing = {
   staff_price_inr: number;
   office_price_inr: number;
   pets_price_inr: number;
+};
+
+export type PlatformWhatsAppCatalogEntry = {
+  event_type: string;
+  title: string;
+  group: string;
+  meta_name: string;
+  whatsapp_template_code: string;
+  notification_template_code: string;
+  audience: string;
+  language: string;
+  body: string;
+};
+
+export type PlatformAuthSettings = {
+  tenant_slug: string | null;
+  business_code: string | null;
+  business_id: string | null;
+  business_name: string | null;
+  whatsapp_status: string;
+  whatsapp_status_label?: string;
+  ops_mobile_whatsapp_otp_enabled: boolean;
+  configured?: boolean;
+  enabled?: boolean;
+  display_number?: string;
+  last_error?: string;
+  last_tested_at?: string | null;
+  quality_rating?: string;
+  template_counts?: {
+    total: number;
+    approved: number;
+    pending: number;
+    rejected: number;
+  };
+  catalog?: {
+    mapped: PlatformWhatsAppCatalogEntry[];
+    unmapped: Array<{ event_type: string; audience: string; note: string }>;
+  };
 };
 
 export type PlatformFeatureFlag = {
@@ -2134,6 +2226,75 @@ export type MerchantCashfreeSettings = {
   last_tested_at?: string | null;
   webhook_url: string;
   env: string;
+};
+
+export type WhatsAppNotificationSettings = {
+  configured: boolean;
+  connected: boolean;
+  plan_entitled: boolean;
+  available: boolean;
+  enabled: boolean;
+  status: 'not_in_plan' | 'not_configured' | 'verification_required' | 'paused' | 'live';
+  phone_number_id: string;
+  waba_id: string;
+  access_token_masked: string;
+  display_number: string;
+  quality_rating: string;
+  last_error: string;
+  last_tested_at?: string | null;
+  webhook_url: string;
+  webhook_verify_token?: string;
+  template_counts: {
+    total: number;
+    approved: number;
+    pending: number;
+    rejected: number;
+  };
+};
+
+export type WhatsAppTemplate = {
+  code: string;
+  title: string;
+  group: string;
+  meta_name: string;
+  language: string;
+  body: string;
+  body_params: string[];
+  sample_values: string[];
+  event_type: string;
+  audience: string;
+  notification_template_code: string;
+  meta_template_id: string;
+  status: string;
+  enabled: boolean;
+  rejection_reason: string;
+  last_synced_at?: string | null;
+};
+
+export type WhatsAppMappingRow = {
+  event_type: string;
+  audience: string;
+  notification_template_code: string;
+  whatsapp_template_code: string;
+  title: string;
+  status: string;
+  enabled: boolean;
+};
+
+export type WhatsAppMappings = {
+  mapped: WhatsAppMappingRow[];
+  unmapped: Array<{ event_type: string; audience: string; note: string }>;
+};
+
+export type WhatsAppActivityRow = {
+  id: string;
+  created_at: string;
+  status: string;
+  event_type: string;
+  whatsapp_template_code: string;
+  response_code: string;
+  error: string;
+  external_id: string;
 };
 
 export type MerchantPaymentSettings = {
@@ -3495,6 +3656,8 @@ export type RegisterRequest = {
 };
 
 export type RegisterBusinessInput = RegisterRequest & {
+  otp_verified?: boolean;
+  otp_code?: string;
   slug: string;
   business_name: string;
   display_name?: string;
@@ -3568,6 +3731,15 @@ class ApiClient {
 
   auth = {
     login: (body: LoginRequest) => this.request<LoginResponse>('/auth/login', { method: 'POST', body }),
+    getOtpCapabilities: (query: {
+      client: 'customer' | 'ops';
+      tenant_slug?: string;
+      business_code?: string;
+    }) => this.request<OtpCapabilities>('/auth/otp/capabilities', { method: 'GET', query, auth: false }),
+    sendOtp: (body: OtpSendRequest) =>
+      this.request<OtpSendResponse>('/auth/otp/send', { method: 'POST', body, auth: false }),
+    verifyOtp: (body: OtpVerifyRequest) =>
+      this.request<LoginResponse>('/auth/otp/verify', { method: 'POST', body, auth: false }),
     loginWithGoogle: (body: GoogleLoginRequest) =>
       this.request<LoginResponse>('/auth/google', { method: 'POST', body }),
     refresh: (body: RefreshRequest) => this.request<LoginResponse>('/auth/refresh', { method: 'POST', body }),
@@ -3944,6 +4116,39 @@ class ApiClient {
       this.request<ShopEWayBill[]>('/shop/books/eway', { method: 'GET', query }),
     cancelEWay: (ewayId: string, body: { reason: string }) =>
       this.request<ShopEWayBill>(`/shop/books/eway/${ewayId}/cancel`, { method: 'POST', body }),
+  };
+
+  whatsappNotifications = {
+    getSettings: (query: { business_id: string }) =>
+      this.request<WhatsAppNotificationSettings>('/notifications/whatsapp/settings', { method: 'GET', query }),
+    updateSettings: (body: {
+      business_id: string;
+      phone_number_id?: string;
+      waba_id?: string;
+      access_token?: string;
+      enabled?: boolean;
+      test_connection?: boolean;
+      disconnect?: boolean;
+    }) => this.request<WhatsAppNotificationSettings>('/notifications/whatsapp/settings', { method: 'PATCH', body }),
+    listTemplates: (query: { business_id: string }) =>
+      this.request<WhatsAppTemplate[]>('/notifications/whatsapp/templates', { method: 'GET', query }),
+    syncTemplates: (body: { business_id: string; code?: string; action?: 'sync' | 'refresh' }) =>
+      this.request<WhatsAppTemplate[]>('/notifications/whatsapp/templates', {
+        method: 'POST',
+        query: { action: body.action ?? 'sync' },
+        body: { business_id: body.business_id, code: body.code },
+      }),
+    setTemplateEnabled: (code: string, body: { business_id: string; enabled: boolean }) =>
+      this.request<WhatsAppTemplate>(`/notifications/whatsapp/templates/${code}`, { method: 'PATCH', body }),
+    testTemplate: (code: string, body: { business_id: string; to?: string }) =>
+      this.request<{ sent: boolean; external_id: string; to: string }>(
+        `/notifications/whatsapp/templates/${code}/test`,
+        { method: 'POST', body },
+      ),
+    listMappings: (query: { business_id: string }) =>
+      this.request<WhatsAppMappings>('/notifications/whatsapp/mappings', { method: 'GET', query }),
+    listActivity: (query: { business_id: string }) =>
+      this.request<WhatsAppActivityRow[]>('/notifications/whatsapp/activity', { method: 'GET', query }),
   };
 
   bookings = {
@@ -4447,6 +4652,13 @@ class ApiClient {
       pets_price_paise: number;
       reason: string;
     }) => this.request<PlatformAddonPricing>('/platform/addon-pricing', { method: 'PUT', body }),
+    authSettings: () =>
+      this.request<PlatformAuthSettings>('/platform/auth-settings', { method: 'GET' }),
+    updateAuthSettings: (body: {
+      tenant_slug?: string | null;
+      business_code?: string | null;
+      reason: string;
+    }) => this.request<PlatformAuthSettings>('/platform/auth-settings', { method: 'PUT', body }),
     tickets: (query?: { tenant_id?: string }) =>
       this.request<{ tickets: SupportTicketSummary[] }>('/platform/tickets', { method: 'GET', query }),
     ticket: (ticketId: string) =>
@@ -4676,11 +4888,16 @@ class ApiClient {
       first_name?: string;
       last_name?: string;
       phone_number?: string;
+      tenant_slug: string;
+      business_code: string;
     }) => this.request<UserProfile>('/mobile/auth/register', { method: 'POST', body, auth: false }),
     getCustomerProfile: (query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileCustomerProfile>('/mobile/customer/profile', { method: 'GET', query }),
     updateCustomerProfile: (
       body: {
+        first_name?: string;
+        last_name?: string;
+        phone_number?: string;
         full_address?: string;
         line1?: string;
         city?: string;
@@ -4790,6 +5007,7 @@ class ApiClient {
       payment_method?: string;
       coupon_code?: string;
       points_to_redeem?: number;
+      whatsapp_opt_in?: boolean;
       lines: Array<{ product_id: string; quantity?: string | number; barcode_scanned?: string }>;
     }) => this.request<ShopOrder>('/mobile/shop/orders', { method: 'POST', body }),
     validateShopCoupon: (body: {

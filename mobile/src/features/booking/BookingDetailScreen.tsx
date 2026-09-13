@@ -13,6 +13,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { filterFutureSlots, formatDateKey, formatDateTime, formatTime, mapBookingStatus } from '../../utils/format';
 import {
@@ -30,6 +31,7 @@ export function BookingDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BookingDetail'>>();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const toast = useToast();
   const primary = branding?.primaryColor ?? colors.primary;
   const businessPhone = bootstrap?.business.phone?.trim() || '';
 
@@ -40,6 +42,7 @@ export function BookingDetailScreen() {
   const [date, setDate] = useState(() => formatDateKey(new Date()));
   const [slots, setSlots] = useState<Array<{ start_at: string }>>([]);
   const [selectedSlot, setSelectedSlot] = useState('');
+  const [slotError, setSlotError] = useState('');
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [review, setReview] = useState<BookingReviewSummary | null>(null);
@@ -109,7 +112,7 @@ export function BookingDetailScreen() {
             }
           : current,
       );
-      Alert.alert('Thanks!', 'Your review has been submitted.');
+      toast.push('Review submitted.', 'success');
     } catch (err) {
       Alert.alert('Unable to submit review', err instanceof Error ? err.message : 'Please try again.');
     } finally {
@@ -150,7 +153,12 @@ export function BookingDetailScreen() {
   }
 
   async function onReschedule() {
-    if (!booking || !tenantSlug || !businessCode || !selectedSlot) return;
+    if (!booking || !tenantSlug || !businessCode) return;
+    if (!selectedSlot) {
+      setSlotError('Select an available time slot.');
+      return;
+    }
+    setSlotError('');
     setActionLoading(true);
     try {
       const response = await mobileClient.mobile.rescheduleBooking(booking.id, {
@@ -161,7 +169,7 @@ export function BookingDetailScreen() {
       });
       setBooking(response.data);
       setRescheduleMode(false);
-      Alert.alert('Rescheduled', 'Your appointment has been updated.');
+      toast.push('Appointment updated.', 'success');
     } catch (err) {
       Alert.alert('Unable to reschedule', err instanceof Error ? err.message : 'Please try again.');
     } finally {
@@ -331,7 +339,10 @@ export function BookingDetailScreen() {
               variant={selectedSlot === slot.start_at ? 'primary' : 'outline'}
               fullWidth
               primaryColor={primary}
-              onPress={() => setSelectedSlot(slot.start_at)}
+              onPress={() => {
+                setSelectedSlot(slot.start_at);
+                setSlotError('');
+              }}
             />
           ))}
           <Button
@@ -341,6 +352,7 @@ export function BookingDetailScreen() {
             primaryColor={primary}
             onPress={onReschedule}
           />
+          {slotError ? <Text style={styles.error}>{slotError}</Text> : null}
           <Button label="Cancel" variant="ghost" fullWidth onPress={() => setRescheduleMode(false)} />
         </Card>
       ) : null}
@@ -431,4 +443,5 @@ const styles = StyleSheet.create({
   ratingStars: { ...typography.title, fontSize: 22, letterSpacing: 1, marginBottom: spacing.sm },
   reviewComment: { ...typography.body, color: colors.mutedForeground, lineHeight: 20 },
   reviewMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
+  error: { ...typography.caption, color: colors.destructive },
 });

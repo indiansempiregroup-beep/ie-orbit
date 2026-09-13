@@ -58,7 +58,7 @@ def test_signup_opens_payment_account_without_earning(api_client: APIClient) -> 
         reverse("auth-register-business"),
         {
             "email": "newbiz@example.com",
-            "password": "ValidPass123",
+            "otp_verified": True,
             "first_name": "New",
             "last_name": "Biz",
             "slug": "new-biz",

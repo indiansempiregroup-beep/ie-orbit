@@ -65,7 +65,7 @@ def test_merge_notification_preferences_returns_canonical_keys() -> None:
         {"email_updates": True, "push": False},
         {"email": False, "in_app": False},
     )
-    assert merged == {"email": False, "push": False, "in_app": True, "sms": True}
+    assert merged == {"email": False, "push": False, "in_app": True, "sms": True, "whatsapp": False}
 
 
 @pytest.fixture

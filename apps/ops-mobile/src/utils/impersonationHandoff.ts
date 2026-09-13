@@ -1,5 +1,9 @@
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { setPersistentItem } from './persistentStore';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { resolvePublicSiteOrigin } = require('./publicSiteOrigin.cjs') as typeof import('./publicSiteOrigin.cjs');
 
 export const OPS_TENANT_KEY = 'ie.ops.active-tenant-id';
 export const IMPERSONATOR_KEY = 'ie.ops.impersonator-id';
@@ -23,6 +27,15 @@ function fromBase64Url(value: string): string {
   const binary = globalThis.atob(padded);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+function toBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function readHandoffPayload(): string | null {
@@ -118,6 +131,21 @@ export function jwtIsImpersonation(accessToken: string | null | undefined): bool
   }
 }
 
+export function defaultPublicSiteUrl(): string {
+  const extra = (Constants.expoConfig?.extra as { publicSiteUrl?: string } | undefined)?.publicSiteUrl;
+  const configured = (
+    extra ||
+    process.env.EXPO_PUBLIC_PUBLIC_SITE_URL ||
+    process.env.VITE_PUBLIC_SITE_URL ||
+    ''
+  ).trim();
+  return resolvePublicSiteOrigin({
+    configured,
+    protocol: typeof window !== 'undefined' ? window.location.protocol : 'http:',
+    hostname: typeof window !== 'undefined' ? window.location.hostname : 'localhost',
+  });
+}
+
 export function defaultAdminReturnUrl(tenantId?: string | null): string {
   const configured = (process.env.EXPO_PUBLIC_WEB_ADMIN_URL ?? '').trim().replace(/\/$/, '');
   const origin =
@@ -130,4 +158,52 @@ export function defaultAdminReturnUrl(tenantId?: string | null): string {
 export function redirectToAdminWeb(url: string) {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
   window.location.assign(url);
+}
+
+/**
+ * Expo web has no /admin routes. Send /admin* to the Vite Platform Admin app
+ * (localhost:3000 locally, app.ie-orbit.com in production).
+ */
+export function redirectOpsWebAdminPathToVite(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const path = window.location.pathname || '';
+  if (!path.startsWith('/admin')) return false;
+
+  let origin = 'http://localhost:3000';
+  try {
+    origin = new URL(defaultAdminReturnUrl()).origin;
+  } catch {
+    // keep default
+  }
+  if (origin === window.location.origin) return false;
+
+  const target = new URL(`${path}${window.location.search}`, `${origin}/`);
+  try {
+    const access =
+      capturedHandoff?.access ||
+      window.localStorage.getItem('ie.ops.access') ||
+      window.localStorage.getItem('ie:ops:access');
+    const refresh =
+      capturedHandoff?.refresh ||
+      window.localStorage.getItem('ie.ops.refresh') ||
+      window.localStorage.getItem('ie:ops:refresh');
+    if (access && refresh) {
+      target.searchParams.set(
+        'ie-session',
+        toBase64Url(JSON.stringify({ access, refresh })),
+      );
+    }
+  } catch {
+    // ignore storage / encoding failures
+  }
+  window.location.replace(target.toString());
+  return true;
+}
+
+/** Clear leftover Vite tokens after ops-web logout so Sign in cannot restore the previous user. */
+export function redirectToPublicSiteSignedOut() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  const origin = defaultPublicSiteUrl();
+  if (!origin || origin === window.location.origin) return;
+  window.location.assign(`${origin}/auth?signed-out=1`);
 }

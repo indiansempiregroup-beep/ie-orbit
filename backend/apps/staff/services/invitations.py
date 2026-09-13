@@ -125,11 +125,9 @@ class StaffInvitationService:
         user = User.objects.filter(email__iexact=invitation.email).first()
         created_user = False
         if not user:
-            if not password:
-                raise ValidationError({"password": "Password is required for new accounts."})
             user = User.objects.create_user(
                 email=invitation.email,
-                password=password,
+                password=None,
                 first_name=first_name or invitation.email.split("@")[0],
                 last_name=last_name,
                 status=UserStatus.ACTIVE,

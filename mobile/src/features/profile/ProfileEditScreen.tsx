@@ -10,6 +10,7 @@ import { uploadCustomerProfilePhoto } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useMobileCustomerProfile } from '../../hooks/useMobileCustomerProfile';
+import { useToast } from '../../contexts/ToastContext';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { LanguagePicker } from '../../components/LanguagePicker';
@@ -34,14 +35,15 @@ export function ProfileEditScreen() {
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
   const { profile, reload: reloadCustomerProfile } = useMobileCustomerProfile(Boolean(user));
+  const toast = useToast();
   const primary = branding?.primaryColor ?? colors.primary;
 
-  const [firstName, setFirstName] = useState(user?.first_name ?? '');
-  const [lastName, setLastName] = useState(user?.last_name ?? '');
-  const [phone, setPhone] = useState(user?.phone_number ?? '');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
   const [language, setLanguage] = useState(user?.language || 'en');
   const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(user?.profile_photo ?? null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [fullAddress, setFullAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
@@ -55,14 +57,18 @@ export function ProfileEditScreen() {
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    setFirstName(user?.first_name ?? '');
-    setLastName(user?.last_name ?? '');
-    setPhone(user?.phone_number ?? '');
     setLanguage(user?.language || 'en');
+  }, [user?.language]);
+
+  useEffect(() => {
+    if (!profile) return;
+    setFirstName(profile.first_name ?? '');
+    setLastName(profile.last_name ?? '');
+    setPhone(profile.phone_number ?? '');
     if (!photoAsset) {
-      setPhotoPreview(user?.profile_photo ?? null);
+      setPhotoPreview(profile.profile_photo ?? null);
     }
-  }, [user, photoAsset]);
+  }, [profile, photoAsset]);
 
   useEffect(() => {
     const address = profile?.address;
@@ -101,15 +107,13 @@ export function ProfileEditScreen() {
         setPhotoAsset(null);
       }
 
-      await mobileClient.auth.patchMe({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        phone_number: phone.trim() || null,
-        language,
-      });
+      await mobileClient.auth.patchMe({ language });
       if (tenantSlug && businessCode) {
         await mobileClient.mobile.updateCustomerProfile(
           {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            phone_number: phone.trim() || undefined,
             full_address: fullAddress.trim(),
             line1: fullAddress.trim(),
             city,
@@ -128,6 +132,7 @@ export function ProfileEditScreen() {
       await applyAppLanguage(language);
       await refreshProfile();
       setSuccess(t('profile.updated'));
+      toast.push(t('profile.updated'), 'success');
     } catch (err) {
       setError(getApiErrorMessage(err, t('profile.updateFailed')));
     } finally {
@@ -156,6 +161,7 @@ export function ProfileEditScreen() {
           }}
           helperText={t('profile.photoHelper')}
         />
+        <Text style={styles.hint}>{t('profile.sharedAccountNote')}</Text>
         <Input
           label={t('common.firstName')}
           required

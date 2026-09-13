@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.audit.models import AuditLogEntry, DomainEvent
 from apps.authentication.models import User, UserStatus
+from apps.authentication.tests.otp_helpers import authenticate_api_client
 from apps.authentication.services.roles import RoleService
 from apps.billing.models import BillingWebhookEvent, WebhookEventStatus
 from apps.billing.services.checkout import CheckoutService
@@ -32,14 +33,7 @@ def user() -> User:
 
 
 def authenticate(api_client: APIClient, user: User) -> str:
-    response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = response.json()["data"]["access"]
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-    return access
+    return authenticate_api_client(api_client, user)
 
 
 def create_tenant(api_client: APIClient) -> str:
@@ -86,6 +80,30 @@ def test_public_plan_catalog_unauthenticated(api_client: APIClient) -> None:
     payload = response.json()["data"]
     codes = [plan["plan_code"] for plan in payload["plans"]]
     assert "appointie-starter" in codes
+    starter = next(plan for plan in payload["plans"] if plan["plan_code"] == "appointie-starter")
+    pro = next(plan for plan in payload["plans"] if plan["plan_code"] == "appointie-pro")
+    mart_starter = next(plan for plan in payload["plans"] if plan["plan_code"] == "shopie-starter")
+    assert starter["amount_paise"] == 39900
+    assert starter["yearly_amount_paise"] == 399000
+    assert starter["max_staff"] == 2
+    assert starter["max_branches"] == 1
+    assert starter["max_extra_staff"] == 1
+    assert starter["max_extra_offices"] == 0
+    assert "white-label" in (starter.get("description") or "").lower()
+    assert "white-label" in (pro.get("description") or "").lower()
+    assert "white-label" in (mart_starter.get("description") or "").lower()
+    assert "notifications_whatsapp" not in (starter.get("features") or [])
+    assert pro["amount_paise"] == 79900
+    assert pro["max_branches"] == 2
+    assert pro["max_extra_staff"] is None
+    assert pro["max_extra_offices"] is None
+    assert "notifications_whatsapp" in (pro.get("features") or [])
+    assert "shopie_pos" in (mart_starter.get("features") or [])
+    assert "shopie_orders" in (mart_starter.get("features") or [])
+    assert "shopie_returns" in (mart_starter.get("features") or [])
+    assert "shopie_einvoice" not in (mart_starter.get("features") or [])
+    assert mart_starter["max_extra_staff"] == 1
+    assert mart_starter["max_extra_offices"] == 0
     assert payload["trial_days"] >= 1
     assert payload["addon_staff_price_paise"] > 0
     assert payload["addon_office_price_paise"] > 0
@@ -154,7 +172,7 @@ def test_billing_checkout_creates_mock_order(api_client: APIClient, user: User, 
     payload = response.json()["data"]
     assert payload["mock_mode"] is True
     assert payload["order_id"].startswith("order_mock_")
-    assert payload["amount"] == 99900
+    assert payload["amount"] == 39900
 
 
 @pytest.mark.django_db

@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { stripPlanProductPrefix } from '../../config/products';
+import { isProPlan, planFeatureDisplay } from '../../config/planFeatures';
+import { PlanFeatureList } from './PlanFeatureList';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicBackLink } from './PublicBackLink';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
@@ -45,44 +47,6 @@ function planKicker(plan: BillingPlanCatalogItem) {
   return plan.product_code;
 }
 
-function isProPlan(plan: BillingPlanCatalogItem) {
-  return plan.plan_code.toLowerCase().includes('pro');
-}
-
-function planFeatures(plan: BillingPlanCatalogItem): string[] {
-  const staff = plan.max_staff ?? 1;
-  const offices = plan.max_branches ?? 1;
-  const isShopie = plan.product_code === 'shopie';
-  const bullets = [
-    isShopie ? `${staff} staff` : `${staff} bookable staff`,
-    `${offices} office${offices === 1 ? '' : 's'} with address + Google Maps`,
-  ];
-  if (isShopie) {
-    bullets.push('POS, catalog, online orders, and returns');
-    bullets.push('Books: sales, purchases, cash, GST reports, e-invoice, e-way bill');
-    bullets.push('Grow: WhatsApp, promo posters, Google listing helpers');
-  }
-  const bi = plan.bi_features ?? [];
-  if (bi.length > 1) {
-    bullets.push('Full BI: Growth, Revenue, Forecast, Reports');
-  } else {
-    bullets.push('BI Overview only');
-  }
-  if ((plan.features ?? []).includes('reward_points')) {
-    bullets.push('Reward points for customers (earn & redeem)');
-  }
-  if ((plan.features ?? []).includes('ad_free')) {
-    bullets.push('Ad-free operations and customer apps');
-  } else {
-    bullets.push('Supported by Google Ads in the mobile apps');
-  }
-  if ((plan.features ?? []).includes('razorpay_payments')) {
-    bullets.push('Connect your Razorpay account for customer payments');
-  }
-  bullets.push('Self-serve staff and office add-ons');
-  return bullets;
-}
-
 export function PricingPage() {
   const [searchParams] = useSearchParams();
   const leadProduct = searchParams.get('product') === 'shopie' ? 'shopie' : 'appointie';
@@ -106,13 +70,13 @@ export function PricingPage() {
       id: 'appointie' as const,
       plans: appointie,
       title: 'Bookings, calendar, staff, and customers',
-      lead: 'For salons, clinics, trainers, and other appointment-based teams.',
+      lead: 'Solo scheduling on Starter. WhatsApp reminders, payments, and a second office on Pro.',
     },
     {
       id: 'shopie' as const,
       plans: shopie,
       title: 'Commerce, books, and GST',
-      lead: 'Counter, catalog, and GST books on the same workspace.',
+      lead: 'Counter, online orders, and returns on Starter. Instant Delivery with Porter/Shiprocket, GST books, and Grow on Pro.',
     },
   ];
   const orderedSections =
@@ -129,15 +93,16 @@ export function PricingPage() {
       <section className="public-hero-band">
         <div className="public-hero-inner public-hero-inner--solo">
           <div>
-            <p className="public-badge">Transparent INR pricing</p>
+            <p className="public-badge">White-label app on every plan</p>
             <h1>
-              Choose the path that matches <span className="public-gradient-text">your next chapter</span>
+              Plans that include <span className="public-gradient-text">your own branded app</span>
             </h1>
             <p className="public-lead">
-              Pick Orbit Appoint, Orbit Mart, or both in one workspace. Start with a {trialDays}-day free trial, then add
-              staff and offices when you grow.
+              Pick Orbit Appoint, Orbit Mart, or both. A white-label customer app is included on Starter and Pro — not
+              an add-on. Start with a {trialDays}-day free trial, then add staff and offices when you grow.
             </p>
             <div className="public-chip-row">
+              <span className="public-chip">White-label customer app</span>
               <span className="public-chip">No credit card to start</span>
               <span className="public-chip">UPI billing</span>
               <span className="public-chip">Yearly is 10× monthly</span>
@@ -165,11 +130,20 @@ export function PricingPage() {
                     <h2>{section.title}</h2>
                     <p className="public-lead">{section.lead}</p>
                   </div>
-                  <PlanGrid trialDays={trialDays} plans={section.plans} productLabel={PRODUCT_LABELS[section.id]} />
+                  <PlanGrid
+                    trialDays={trialDays}
+                    plans={section.plans}
+                    productLabel={PRODUCT_LABELS[section.id]}
+                  />
+                  <p className="public-plan-features-note">
+                    Function lists follow the live plan catalog. If a platform admin turns a function on or off, this
+                    page updates with it.
+                  </p>
                 </section>
               ))}
             <p className="public-lead" style={{ marginTop: 28 }}>
-              Extra staff {formatInr(staffAddon)}/month · extra office {formatInr(officeAddon)}/month
+              Extra staff {formatInr(staffAddon)}/month on Starter (max 1) and Pro. Extra offices{' '}
+              {formatInr(officeAddon)}/month on Pro only
               {petsAddon ? ` · Pets pack ${formatInr(petsAddon)}/month` : ''}. Yearly billing is 10× monthly (two months
               free).
             </p>
@@ -221,7 +195,7 @@ function PricingFallback({ trialDays }: { trialDays: number }) {
             {formatInrAmount(STARTER_MONTHLY_INR)}
             <span>/month</span>
           </p>
-          <p>Core operations with BI Overview. Available for Orbit Appoint and Orbit Mart.</p>
+          <p>Core operations, BI Overview, one location, and a white-label customer app. Available for Orbit Appoint and Orbit Mart.</p>
         </article>
         <article className="public-card public-price-card is-featured">
           <span className="public-popular">Most popular</span>
@@ -231,12 +205,12 @@ function PricingFallback({ trialDays }: { trialDays: number }) {
             {formatInrAmount(PRO_MONTHLY_INR)}
             <span>/month</span>
           </p>
-          <p>Full BI suite and higher limits. Yearly billing is 10× monthly.</p>
+          <p>Full BI, a second office, WhatsApp or GST tools, and an ad-free white-label app. Yearly billing is 10× monthly.</p>
         </article>
       </div>
       <p className="public-lead" style={{ marginTop: 28 }}>
-        Extra staff {formatInrAmount(STAFF_ADDON_INR)}/month · extra office {formatInrAmount(OFFICE_ADDON_INR)}/month ·
-        Pets pack {formatInrAmount(PETS_ADDON_INR)}/month.
+        Extra staff {formatInrAmount(STAFF_ADDON_INR)}/month on Starter (max 1) and Pro. Extra offices{' '}
+        {formatInrAmount(OFFICE_ADDON_INR)}/month on Pro only · Pets pack {formatInrAmount(PETS_ADDON_INR)}/month.
       </p>
     </section>
   );
@@ -260,9 +234,9 @@ function PlanGrid({
           <p className="public-kicker">Try first</p>
           <h2>Free</h2>
           <p className="public-price-amount">{trialDays} days</p>
-          <p>Full {productLabel} Pro access, then soft lock until you upgrade.</p>
           <ul className="public-list">
-            <li>Full Pro features during trial</li>
+            <li>Full {productLabel} Pro features during trial</li>
+            <li>White-label customer app under your brand</li>
             <li>No credit card required to start</li>
             <li>Upgrade any time to keep your data</li>
           </ul>
@@ -291,12 +265,7 @@ function PlanGrid({
                 or {formatInr(plan.yearly_amount_paise)}/year (10× monthly)
               </p>
             ) : null}
-            <p>{plan.description}</p>
-            <ul className="public-list">
-              {planFeatures(plan).map((feature) => (
-                <li key={feature}>{feature}</li>
-              ))}
-            </ul>
+            <PlanFeatureList groups={planFeatureDisplay(plan, plans)} />
             <Link
               to={registerStartPath()}
               state={REGISTER_FRESH_START_STATE}

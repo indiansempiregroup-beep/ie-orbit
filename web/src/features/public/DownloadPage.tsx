@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicBreadcrumbs } from './PublicBreadcrumbs';
+import { OpsStoreBadges } from './OpsStoreBadges';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 
@@ -11,9 +12,9 @@ export function DownloadPage() {
       <section className="public-hero-band">
         <div className="public-hero-inner public-hero-inner--solo">
           <div>
-            <p className="public-badge">Apps</p>
+            <p className="public-badge">White-label customer app</p>
             <h1>
-              How to get the <span className="public-gradient-text">IE Orbit</span> apps
+              Customers install <span className="public-gradient-text">your brand</span>
             </h1>
             <p className="public-lead">
               There is no single consumer “IE Orbit” store listing for every business. Customers use a white-label app
@@ -44,9 +45,10 @@ export function DownloadPage() {
           <article className="public-card">
             <h2>Owners and staff</h2>
             <p>
-              Operators sign in on the web and on the ops app used for day-to-day work. Start on this website with a
-              15-day full-Pro trial — no credit card required.
+              Operators sign in on the web and on the IE Orbit ops app for day-to-day work. Download it for iOS or
+              Android, then start on this website with a 15-day full-Pro trial — no credit card required.
             </p>
+            <OpsStoreBadges />
           </article>
         </div>
       </div>

@@ -70,6 +70,8 @@ class PlatformPlanPackage(BaseModel):
     is_default = models.BooleanField(default=False)
     max_staff = models.PositiveIntegerField(default=1)
     max_branches = models.PositiveIntegerField(default=1)
+    max_extra_staff = models.PositiveIntegerField(null=True, blank=True)
+    max_extra_offices = models.PositiveIntegerField(null=True, blank=True)
     bi_features = models.JSONField(default=list, blank=True)
     features = models.JSONField(default=list, blank=True)
     amount_paise = models.PositiveIntegerField(default=0)
@@ -85,6 +87,25 @@ class PlatformPlanPackage(BaseModel):
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return self.code
+
+
+class PlatformAuthSettings(BaseModel):
+    """Singleton IAM settings managed by platform admins (ops OTP WhatsApp sender, etc.)."""
+
+    key = models.SlugField(max_length=20, unique=True, default="default")
+    ops_otp_whatsapp_business = models.ForeignKey(
+        "businesses.Business",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    class Meta:
+        db_table = "platform_auth_settings"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return self.key
 
 
 class PlatformAddonPricing(BaseModel):

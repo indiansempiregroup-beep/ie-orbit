@@ -34,6 +34,9 @@ import {
   getRecommendedPlanCode,
   getSubscribedProducts,
   isRecommendedPlanCode,
+  allowedExtraCount,
+  starterAddonCapHint,
+  planSeatLine,
   PETS_PACK_PRICE_INR,
   PRODUCT_CATALOG,
 } from '../../utils/products';
@@ -428,8 +431,11 @@ export function ProductSettingsScreen() {
                       <Text style={styles.productName}>{formatPlanDisplayName(catalog?.name ?? plan.name, plan.code)}</Text>
                       <Text style={styles.planPrice}>{price ? `${price}/month` : 'Trial first'}</Text>
                       <Text style={styles.meta}>
-                        {catalog?.max_staff ?? plan.max_staff ?? 1} staff · {catalog?.max_branches ?? plan.max_branches ?? 1}{' '}
-                        office{(catalog?.max_branches ?? plan.max_branches ?? 1) === 1 ? '' : 's'}
+                        {planSeatLine({
+                          max_staff: catalog?.max_staff ?? plan.max_staff,
+                          max_branches: catalog?.max_branches ?? plan.max_branches,
+                          max_extra_offices: catalog?.max_extra_offices ?? plan.max_extra_offices,
+                        })}
                       </Text>
                     </Pressable>
                   );
@@ -662,12 +668,18 @@ export function ProductSettingsScreen() {
             />
 
             <Text style={styles.addonSectionTitle}>Need more?</Text>
+            {starterAddonCapHint(snapshot.max_extra_staff, snapshot.max_extra_offices) ? (
+              <Text style={styles.meta}>
+                {starterAddonCapHint(snapshot.max_extra_staff, snapshot.max_extra_offices)}
+              </Text>
+            ) : null}
             <AddonStepper
               label="Extra staff"
               hint={`${formatInrFromPaise(snapshot.pricing.addon_staff_unit_paise) ?? '₹199'} each / month`}
               value={extraStaff}
               onChange={setExtraStaff}
               disabled={snapshot.soft_locked}
+              max={allowedExtraCount(snapshot.max_extra_staff, snapshot.extra_staff ?? 0)}
             />
             <AddonStepper
               label="Extra offices"
@@ -675,6 +687,7 @@ export function ProductSettingsScreen() {
               value={extraOffices}
               onChange={setExtraOffices}
               disabled={snapshot.soft_locked}
+              max={allowedExtraCount(snapshot.max_extra_offices, snapshot.extra_offices ?? 0)}
             />
             {checkoutProductCode === 'shopie' ? (
               <View style={styles.addonRow}>
@@ -929,13 +942,16 @@ function AddonStepper({
   value,
   onChange,
   disabled,
+  max,
 }: {
   label: string;
   hint: string;
   value: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  max?: number | null;
 }) {
+  const plusDisabled = Boolean(disabled) || (max != null && value >= max);
   return (
     <View style={styles.addonRow}>
       <View style={{ flex: 1, gap: 2 }}>
@@ -953,8 +969,8 @@ function AddonStepper({
         <Text style={styles.stepperValue}>{value}</Text>
         <Pressable
           onPress={() => onChange(value + 1)}
-          disabled={disabled}
-          style={[styles.stepperBtn, disabled && styles.stepperBtnOff]}
+          disabled={plusDisabled}
+          style={[styles.stepperBtn, plusDisabled && styles.stepperBtnOff]}
         >
           <Text style={styles.stepperBtnText}>+</Text>
         </Pressable>

@@ -319,7 +319,7 @@ export function WhatsAppScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.help}>
         Pick a customer or supplier to fill their number, or enter it manually. Attach an image to share with your
-        message.
+        message. Automated booking and order alerts are under Settings → WhatsApp notifications.
       </Text>
 
       <FieldLabel label="Send to" required />

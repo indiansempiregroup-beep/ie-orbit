@@ -25,7 +25,7 @@ export function ContactPage() {
 
   useEffect(() => {
     if (isDemo) {
-      setMessage("I'd like a demo of IE Orbit for my business.");
+      setMessage("I'd like a demo of the white-label customer app for my business.");
       trackEvent('generate_lead', { method: 'demo_intent' });
     }
   }, [isDemo]);
@@ -73,7 +73,8 @@ export function ContactPage() {
               Talk to the <span className="public-gradient-text">IE Orbit</span> team
             </h1>
             <p className="public-lead">
-              Reach out for demos, support, or partnership inquiries about Orbit Appoint and Orbit Mart.
+              Reach out for demos of the white-label customer app, support, or partnership inquiries about Orbit Appoint
+              and Orbit Mart.
             </p>
           </div>
         </div>

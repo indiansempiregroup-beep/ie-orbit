@@ -3,9 +3,11 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import {
   adminAppIsSeparateHost,
+  getAdminAppOrigin,
   getPublicSiteOrigin,
   isAdminAppHost,
   isPublicMarketingPath,
+  originsAreSameApp,
 } from '../lib/hosts';
 import { continueAfterAuth, redirectToAdminApp } from '../lib/authRedirect';
 import { isPlatformAdmin, needsEmailVerification, VERIFY_EMAIL_PATH } from '../utils/roles';
@@ -35,7 +37,11 @@ export function HostGate({ children }: { children: ReactNode }) {
       window.location.replace(`${getPublicSiteOrigin()}${suffix}`);
       return;
     }
-    if (!onAdmin && path.startsWith('/admin')) {
+    if (
+      !onAdmin &&
+      path.startsWith('/admin') &&
+      !originsAreSameApp(window.location.origin, getAdminAppOrigin())
+    ) {
       redirectToAdminApp(suffix);
     }
   }, [separate, onAdmin, path, suffix, auth.user]);
@@ -63,6 +69,9 @@ export function HostGate({ children }: { children: ReactNode }) {
   }
 
   if (!onAdmin && path.startsWith('/admin')) {
+    if (originsAreSameApp(window.location.origin, getAdminAppOrigin())) {
+      return children;
+    }
     return <Status>Opening platform admin…</Status>;
   }
 

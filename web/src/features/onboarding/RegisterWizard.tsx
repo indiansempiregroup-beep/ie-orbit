@@ -14,7 +14,6 @@ import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { preferHumanAddress, placeToAddressFields } from '../../lib/placeAddress';
 import { WizardShell } from './components/WizardShell';
-import { PasswordStrengthIndicator } from '../auth/components/PasswordStrengthIndicator';
 import { useOnboardingDraft } from './hooks/useOnboardingDraft';
 import { provisionWorkspace } from './provisionWorkspace';
 import {
@@ -42,7 +41,7 @@ import {
   WEEK_START_DAYS,
   type RegisterWizardStepId,
 } from '../../config/onboarding';
-import { PRODUCT_CATALOG, getProductName, getRecommendedPlanCode, isRecommendedPlanCode, stripPlanProductPrefix } from '../../config/products';
+import { PRODUCT_CATALOG, getProductName, getRecommendedPlanCode, isRecommendedPlanCode, planSeatLine, stripPlanProductPrefix } from '../../config/products';
 import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { createAuthenticatedClient, getApiErrorMessage } from '../../lib/apiClient';
@@ -57,24 +56,28 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       product_code: 'appointie',
       plan_code: 'appointie-starter',
       name: 'Orbit Appoint Starter',
-      description: 'Scheduling and bookings for a single location.',
+      description: 'White-label customer app plus scheduling for a single location.',
       billing_interval: 'monthly',
       trial_days: 15,
       is_default: true,
-      max_staff: 1,
+      max_staff: 2,
       max_branches: 1,
+      max_extra_staff: 1,
+      max_extra_offices: 0,
       currency: 'INR',
     },
     {
       product_code: 'appointie',
       plan_code: 'appointie-pro',
       name: 'Orbit Appoint Pro',
-      description: 'Multi-location scheduling with full business intelligence.',
+      description: 'Ad-free white-label customer app, WhatsApp reminders, and full BI.',
       billing_interval: 'monthly',
       trial_days: 15,
       is_default: false,
       max_staff: 5,
-      max_branches: 5,
+      max_branches: 2,
+      max_extra_staff: null,
+      max_extra_offices: null,
       currency: 'INR',
     },
   ],
@@ -83,24 +86,28 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       product_code: 'shopie',
       plan_code: 'shopie-starter',
       name: 'Orbit Mart Starter',
-      description: 'Catalog, POS, inventory, and billing for a single location.',
+      description: 'White-label customer app plus counter POS, online orders, and returns.',
       billing_interval: 'monthly',
       trial_days: 15,
       is_default: true,
       max_staff: 2,
       max_branches: 1,
+      max_extra_staff: 1,
+      max_extra_offices: 0,
       currency: 'INR',
     },
     {
       product_code: 'shopie',
       plan_code: 'shopie-pro',
       name: 'Orbit Mart Pro',
-      description: 'Multi-location commerce with advanced inventory and billing.',
+      description: 'Ad-free white-label customer app, Instant Delivery with Porter/Shiprocket, GST books, and Grow.',
       billing_interval: 'monthly',
       trial_days: 15,
       is_default: false,
       max_staff: 5,
-      max_branches: 5,
+      max_branches: 2,
+      max_extra_staff: null,
+      max_extra_offices: null,
       currency: 'INR',
     },
   ],
@@ -119,7 +126,7 @@ function planTitle(plan: Pick<BillingPlanCatalogItem, 'name'> | string) {
 export function RegisterWizard() {
   usePageMeta({
     title: 'Create account — IE Orbit',
-    description: 'Self-service business onboarding for Orbit Appoint and Orbit Mart.',
+    description: 'Create a white-label workspace for Orbit Appoint, Orbit Mart, or both. 15-day full-Pro trial.',
   });
 
   const navigate = useNavigate();
@@ -140,6 +147,8 @@ export function RegisterWizard() {
   const [brandingLogoFile, setBrandingLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [affiliateCode, setAffiliateCode] = useState(() => captureAffiliateCodeFromLocation());
+  const [ownerOtpSending, setOwnerOtpSending] = useState(false);
+  const [ownerOtpSent, setOwnerOtpSent] = useState(false);
   const draftLoadedRef = useRef(false);
 
   const currentStep = REGISTER_WIZARD_STEPS[stepIndex]?.id ?? 'business';
@@ -163,6 +172,20 @@ export function RegisterWizard() {
   function plansForProduct(productId: string) {
     const fromCatalog = catalogPlans.filter((plan) => plan.product_code === productId);
     return fromCatalog.length > 0 ? fromCatalog : FALLBACK_PACKAGES[productId] ?? [];
+  }
+
+  async function sendOwnerOtp() {
+    const email = getValues('email')?.trim();
+    if (!email) return;
+    setOwnerOtpSending(true);
+    try {
+      await publicClient.auth.sendOtp({ client: 'ops', channel: 'email', identifier: email });
+      setOwnerOtpSent(true);
+    } catch (err) {
+      setProvisionError(getApiErrorMessage(err, 'Unable to send verification code.'));
+    } finally {
+      setOwnerOtpSending(false);
+    }
   }
 
   useEffect(() => {
@@ -252,7 +275,7 @@ export function RegisterWizard() {
   async function goNext() {
     const fields = [...(stepFieldMap[currentStep as keyof typeof stepFieldMap] ?? [])].filter(
       (field) =>
-        !(values.googleIdToken && (field === 'password' || field === 'confirmPassword')),
+        !(values.googleIdToken && field === 'ownerOtpCode'),
     ) as (keyof RegisterWizardFormValues)[];
     const valid = fields.length === 0 ? true : await trigger(fields);
     if (!valid) return;
@@ -487,27 +510,27 @@ export function RegisterWizard() {
           error={errors.mobile?.message}
         />
         {values.googleIdToken ? (
-          <p className="wizard-google-note">Continuing with Google. A password is not required.</p>
+          <p className="wizard-google-note">Continuing with Google. Email verification is not required.</p>
         ) : (
           <>
-            <div className="wizard-password-field">
-              <Input
-                label="Password"
-                required
-                type="password"
-                {...register('password')}
-                autoComplete="new-password"
-                error={errors.password?.message}
-              />
-              <PasswordStrengthIndicator password={values.password} />
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!values.email || ownerOtpSending}
+                onClick={() => void sendOwnerOtp()}
+              >
+                {ownerOtpSending ? 'Sending…' : 'Send email code'}
+              </Button>
+              {ownerOtpSent ? <span style={{ color: '#6b7280', fontSize: 14 }}>Code sent to {values.email}</span> : null}
             </div>
             <Input
-              label="Confirm password"
+              label="Email verification code"
               required
-              type="password"
-              {...register('confirmPassword')}
-              autoComplete="new-password"
-              error={errors.confirmPassword?.message}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              {...register('ownerOtpCode')}
+              error={errors.ownerOtpCode?.message}
             />
             <div style={{ gridColumn: '1 / -1' }}>
               <GoogleSignInButton
@@ -724,10 +747,7 @@ export function RegisterWizard() {
                             )}
                             <p>{plan.description}</p>
                             <div className="wizard-package-meta">
-                              <span>{plan.max_staff ?? 1} staff</span>
-                              <span>
-                                {plan.max_branches ?? 1} office{(plan.max_branches ?? 1) === 1 ? '' : 's'}
-                              </span>
+                              <span>{planSeatLine(plan)}</span>
                             </div>
                           </button>
                         );

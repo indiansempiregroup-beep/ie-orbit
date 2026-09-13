@@ -10,7 +10,7 @@ import { useProfileRoutes } from './profileRoutes';
 const notificationPreferenceLabels: Record<string, string> = {
   email: 'Email notifications',
   push: 'Push notifications',
-  sms: 'SMS reminders',
+  whatsapp: 'WhatsApp notifications',
   email_updates: 'Email notifications',
   sms_reminders: 'SMS reminders',
 };

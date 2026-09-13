@@ -4,7 +4,14 @@ from typing import Any
 
 from apps.notifications.models import NotificationChannel
 
-CANONICAL_PREFERENCE_KEYS = ("email", "push", "in_app", "sms")
+CANONICAL_PREFERENCE_KEYS = ("email", "push", "in_app", "sms", "whatsapp")
+_DEFAULT_ENABLED = {
+    "email": True,
+    "push": True,
+    "in_app": True,
+    "sms": True,
+    "whatsapp": False,
+}
 
 _LEGACY_KEY_MAP = {
     "email_updates": "email",
@@ -14,12 +21,11 @@ _LEGACY_KEY_MAP = {
 
 def normalize_notification_preferences(prefs: dict[str, Any] | None) -> dict[str, bool]:
     """Return canonical notification preference keys with boolean values."""
+    normalized = dict(_DEFAULT_ENABLED)
     if not isinstance(prefs, dict):
-        normalized = {key: True for key in CANONICAL_PREFERENCE_KEYS}
         normalized["in_app"] = True
         return normalized
 
-    normalized: dict[str, bool] = {key: True for key in CANONICAL_PREFERENCE_KEYS}
     for key, value in prefs.items():
         canonical = _LEGACY_KEY_MAP.get(str(key), str(key))
         if canonical in normalized and isinstance(value, bool):
@@ -57,7 +63,7 @@ def _pref_enabled(prefs: dict[str, Any], *keys: str) -> bool:
 def channel_enabled(user: Any, channel: str) -> bool:
     prefs = getattr(user, "notification_preferences", None)
     if not isinstance(prefs, dict):
-        return True
+        return channel != NotificationChannel.WHATSAPP
 
     if channel == NotificationChannel.EMAIL:
         return _pref_enabled(prefs, "email", "email_updates")
@@ -67,7 +73,19 @@ def channel_enabled(user: Any, channel: str) -> bool:
         return _pref_enabled(prefs, "push")
     if channel == NotificationChannel.IN_APP:
         return True
+    if channel == NotificationChannel.WHATSAPP:
+        return prefs.get("whatsapp") is True
     return True
+
+
+def whatsapp_opted_in(*, user: Any = None, customer: Any = None) -> bool:
+    if user is not None and channel_enabled(user, NotificationChannel.WHATSAPP):
+        return True
+    if customer is None:
+        return False
+    from apps.notifications.services.whatsapp_opt_in import customer_whatsapp_opted_in
+
+    return customer_whatsapp_opted_in(customer)
 
 
 def any_channel_enabled(user: Any, channels: list[str]) -> bool:

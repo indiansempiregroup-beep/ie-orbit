@@ -1,4 +1,5 @@
-import { writeAuthTokens } from './impersonation';
+import { clearAuthTokens, writeAuthTokens } from './impersonation';
+import { suppressGoogleAutoSignIn } from './googleAuth';
 
 function fromBase64Url(value: string): string {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
@@ -20,6 +21,15 @@ export function encodeSessionHandoff(params: { access: string; refresh: string }
   return toBase64Url(JSON.stringify({ access: params.access, refresh: params.refresh }));
 }
 
+function replaceSearchParams(params: URLSearchParams) {
+  const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`;
+  try {
+    history.replaceState(null, '', next);
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Apply `?ie-session=` tokens before AuthProvider reads localStorage.
  * Call from main.tsx, not inside a React effect.
@@ -37,10 +47,20 @@ export function captureWebSessionHandoff() {
     return;
   }
   params.delete('ie-session');
-  const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`;
-  try {
-    history.replaceState(null, '', next);
-  } catch {
-    // ignore
-  }
+  replaceSearchParams(params);
+}
+
+/**
+ * Ops-mobile logout lands here so leftover Vite tokens cannot silently restore
+ * the previous user when they click Sign in on the marketing site.
+ */
+export function captureSignedOut() {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams(window.location.search);
+  const signedOut = params.get('signed-out');
+  if (signedOut !== '1' && signedOut !== 'true') return;
+  clearAuthTokens();
+  void suppressGoogleAutoSignIn();
+  params.delete('signed-out');
+  replaceSearchParams(params);
 }

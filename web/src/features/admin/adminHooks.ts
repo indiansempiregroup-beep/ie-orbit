@@ -208,6 +208,30 @@ export function useUpdateAddonPricingMutation() {
   });
 }
 
+export function usePlatformAuthSettingsQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'auth-settings'],
+    queryFn: async () => (await client.platform.authSettings()).data,
+    retry: false,
+  });
+}
+
+export function useUpdatePlatformAuthSettingsMutation() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      tenant_slug: string | null;
+      business_code: string | null;
+      reason: string;
+    }) => (await client.platform.updateAuthSettings(body)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'auth-settings'] });
+    },
+  });
+}
+
 export function usePlatformWhiteLabelProfilesQuery() {
   const client = useApiClient();
   return useQuery({

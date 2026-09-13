@@ -71,8 +71,9 @@ corepack pnpm web
 #   https://app.ie-orbit.com    Platform Admin (after platform-admin login)
 #   https://ops.ie-orbit.com    Expo ops workspace (owners and staff)
 #
-# Local Vite web/ (:3000) is the public site. Platform admin is sent to
-# http://127.0.0.1:3000/admin. Owners/staff open Expo at :8082.
+# Local Vite web/ (:3000) is the public site. Platform admin:
+#   http://localhost:3000/admin  or  http://127.0.0.1:3000/admin
+# http://localhost:8082/admin redirects to the Vite admin. Owners/staff use :8082.
 
 
 To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not localhost)

@@ -367,7 +367,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
           key: 'profile',
           label: t('profile.title'),
           icon: 'user',
-          match: ['Profile', 'ProfileEdit', 'Security', 'Sessions', 'VerifyEmail'],
+          match: ['Profile', 'ProfileEdit', 'Sessions', 'VerifyEmail'],
           onPress: () => go('Profile'),
         },
         {

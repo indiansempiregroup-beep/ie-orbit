@@ -14,6 +14,7 @@ import { Input } from '../../components/ui/Input';
 import { ScreenState } from '../../components/ScreenState';
 import { uploadStaffPhoto } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useIamMutations, useStaffMember, useStaffMutations, useTeamMembers } from '../../hooks/useOpsExtended';
@@ -36,6 +37,7 @@ export function StaffFormScreen() {
   const client = useOpsClient();
   const { token } = useAuth();
   const { businessId, tenantId } = useWorkspace();
+  const toast = useToast();
   const isEdit = Boolean(route.params?.staffId);
   const { member, loading } = useStaffMember(route.params?.staffId ?? '');
   const { members, reload: reloadMembers } = useTeamMembers();
@@ -174,6 +176,7 @@ export function StaffFormScreen() {
                   });
                 }
 
+                toast.push('Staff updated.', 'success');
                 navigation.replace('StaffDetail', { staffId: route.params.staffId });
               } else {
                 const code = `staff-${Date.now().toString(36)}`;
@@ -196,11 +199,13 @@ export function StaffFormScreen() {
                         'Staff saved, but the login invitation could not be sent.',
                       ),
                     );
+                    toast.push('Staff created.', 'success');
                     navigation.replace('StaffDetail', { staffId: created.id });
                     return;
                   }
                 }
 
+                toast.push('Staff created.', 'success');
                 navigation.replace('StaffDetail', { staffId: created.id });
               }
             } catch (err) {
@@ -318,7 +323,7 @@ export function StaffFormScreen() {
                 {isEdit ? 'Send login invitation with this role' : 'Send login invitation'}
               </Text>
               <Text style={styles.helper}>
-                Emails a link so they can set a password and sign in to OPS-Mobile.
+                Emails a link so they can accept the invite and sign in to OPS-Mobile with a one-time code.
               </Text>
             </View>
           </Pressable>

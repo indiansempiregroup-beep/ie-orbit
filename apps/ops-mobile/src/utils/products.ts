@@ -22,7 +22,7 @@ export const PRODUCT_CATALOG: ProductDefinition[] = [
     id: 'shopie',
     name: 'Orbit Mart',
     description: 'Catalog, POS, inventory, and billing for retail businesses.',
-    highlights: ['POS, catalog, and inventory', 'GST books, e-invoice, and reports', 'WhatsApp, ads, and online orders'],
+    highlights: ['POS, catalog, online orders, and returns', 'GST books, e-invoice, and reports', 'Instant Delivery with Porter/Shiprocket on Pro'],
   },
 ];
 
@@ -68,6 +68,38 @@ export function formatPlanDisplayName(name?: string | null, code?: string | null
 export function formatInrFromPaise(paise?: number | null) {
   if (paise == null) return null;
   return `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
+}
+
+/** Null cap means unlimited. Grandfather current extras above the published cap. */
+export function allowedExtraCount(cap: number | null | undefined, current: number): number | null {
+  if (cap == null) return null;
+  return Math.max(cap, current);
+}
+
+export function starterAddonCapHint(
+  maxExtraStaff: number | null | undefined,
+  maxExtraOffices: number | null | undefined,
+): string | null {
+  if (maxExtraStaff == null && maxExtraOffices == null) return null;
+  if (maxExtraOffices === 0 && maxExtraStaff === 1) {
+    return 'Second office and 4+ staff are on Pro.';
+  }
+  if (maxExtraOffices === 0) return 'A second office is on Pro.';
+  if (maxExtraStaff != null) return 'Upgrade to Pro for higher staff limits.';
+  return 'Upgrade to Pro for higher office limits.';
+}
+
+export function planSeatLine(plan: {
+  max_staff?: number;
+  max_branches?: number;
+  max_extra_offices?: number | null;
+}): string {
+  const staff = plan.max_staff ?? 1;
+  const offices = plan.max_branches ?? 1;
+  if (plan.max_extra_offices === 0) {
+    return `${staff} staff · 1 location`;
+  }
+  return `${staff} staff · ${offices} office${offices === 1 ? '' : 's'}`;
 }
 
 export function getSubscribedProducts(subscriptions?: ProductSubscriptionLike[] | null) {

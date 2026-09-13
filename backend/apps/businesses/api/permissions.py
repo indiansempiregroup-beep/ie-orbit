@@ -42,3 +42,14 @@ class BusinessAccessPermission(BasePermission):
             role__role_permissions__permission__code__in=self.manager_permissions,
             role__role_permissions__permission__is_active=True,
         ).exists()
+
+
+class BusinessManagePermission(BusinessAccessPermission):
+    """Owners and managers only — no staff-only GET access."""
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if not getattr(request, "current_tenant", None):
+            return False
+        return self._can_modify_tenant(request)

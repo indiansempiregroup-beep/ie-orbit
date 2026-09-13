@@ -15,6 +15,7 @@ import { SelectField } from '../../components/SelectField';
 import { uploadProfilePhoto } from '../../api/media';
 import { LANGUAGES, TIMEZONES } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { persistLanguagePreference } from '../../i18n';
@@ -26,6 +27,7 @@ export function ProfileEditScreen() {
   const { t } = useTranslation();
   const { user, token, refreshProfile } = useAuth();
   const { businessId, tenantId } = useWorkspace();
+  const toast = useToast();
   const client = useOpsClient();
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -75,7 +77,8 @@ export function ProfileEditScreen() {
             try {
               const nextErrors: Record<string, string> = {};
               if (!firstName.trim()) nextErrors.firstName = requiredMessage('First name');
-              const phoneError = indianMobileError(phone, false);
+              if (!lastName.trim()) nextErrors.lastName = requiredMessage('Last name');
+              const phoneError = indianMobileError(phone, true);
               if (phoneError) nextErrors.phone = phoneError;
               if (Object.keys(nextErrors).length) {
                 setFieldErrors(nextErrors);
@@ -115,6 +118,7 @@ export function ProfileEditScreen() {
               setPhotoAsset(null);
               setPhotoPreview(profilePhoto && !profilePhoto.startsWith('file:') ? profilePhoto : null);
               setMessage(t('profile.updated'));
+              toast.push(t('profile.updated'), 'success');
             } catch (err) {
               setError(getApiErrorMessage(err, t('profile.updateFailed')));
             } finally {
@@ -153,14 +157,23 @@ export function ProfileEditScreen() {
             }}
             error={fieldErrors.firstName}
           />
-          <Input label={t('common.lastName')} optional value={lastName} onChangeText={setLastName} />
+          <Input
+            label={t('common.lastName')}
+            required
+            value={lastName}
+            onChangeText={(value) => {
+              setLastName(value);
+              setFieldErrors((current) => ({ ...current, lastName: '' }));
+            }}
+            error={fieldErrors.lastName}
+          />
         </FieldRow>
       </FormSection>
 
       <FormSection title={t('profile.contactRegion')}>
         <Input
           label={t('common.phone')}
-          optional
+          required
           value={phone}
           onChangeText={(value) => {
             setPhone(value);

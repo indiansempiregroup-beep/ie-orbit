@@ -10,6 +10,7 @@ import {
   getProductName,
   getRecommendedPlanCode,
   isRecommendedPlanCode,
+  planSeatLine,
 } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
@@ -420,8 +421,11 @@ export function ProductSettingsPage() {
                           </p>
                           <p>{plan.description}</p>
                           <p className="product-settings-plan-limits">
-                            {catalog?.max_staff ?? plan.max_staff ?? 1} staff · {catalog?.max_branches ?? plan.max_branches ?? 1}{' '}
-                            office{(catalog?.max_branches ?? plan.max_branches ?? 1) === 1 ? '' : 's'}
+                            {planSeatLine({
+                              max_staff: catalog?.max_staff ?? plan.max_staff,
+                              max_branches: catalog?.max_branches ?? plan.max_branches,
+                              max_extra_offices: catalog?.max_extra_offices ?? plan.max_extra_offices,
+                            })}
                           </p>
                         </button>
                       );

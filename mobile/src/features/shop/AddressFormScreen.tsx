@@ -22,6 +22,7 @@ import { Card } from '../../components/ui/Card';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { ADDRESS_TYPES, toCoordinate, type AddressTypeKey } from './addressUtils';
 import type { RootStackParamList } from '../../navigation/types';
@@ -34,6 +35,7 @@ export function AddressFormScreen() {
   const route = useRoute<AddressFormRoute>();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const toast = useToast();
   const primary = branding?.primaryColor ?? colors.primary;
 
   const addressId = route.params?.addressId;
@@ -131,6 +133,7 @@ export function AddressFormScreen() {
             business_code: businessCode,
             ...payload,
           });
+      toast.push(editing ? 'Address updated.' : 'Address saved.', 'success');
       if (selectOnSave && saved.data?.id) {
         navigation.navigate('Cart', { selectedAddressId: saved.data.id });
         return;

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 # Plan prices in paise (INR × 100). Update when Razorpay plans are configured.
 PLAN_PRICE_PAISE: dict[str, int] = {
-    "appointie-starter": 99900,
-    "appointie-pro": 199900,
-    "shopie-starter": 99900,
-    "shopie-pro": 199900,
+    "appointie-starter": 39900,
+    "appointie-pro": 79900,
+    "shopie-starter": 39900,
+    "shopie-pro": 79900,
 }
 
 # Yearly = 10 × monthly (2 months free).

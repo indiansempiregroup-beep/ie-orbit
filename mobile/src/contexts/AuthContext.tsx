@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import type { LoginResponse, UserProfile } from '@ie-orbit/sdk';
 import { mobileClient } from '../api/client';
+import { useBusinessContext } from './BootstrapContext';
 import {
   authenticateForBiometricLogin,
   disableBiometricLogin as clearBiometricLogin,
@@ -58,7 +59,16 @@ type AuthState = {
   biometricEnabled: boolean;
   biometricAvailable: boolean;
   biometricLabel: string;
-  login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string }) => Promise<void>;
+  loginWithOtp: (input: {
+    channel: 'email' | 'whatsapp';
+    identifier: string;
+    code: string;
+    remember?: boolean;
+    createIfMissing?: boolean;
+    firstName?: string;
+    lastName?: string;
+  }) => Promise<void>;
   loginWithGoogle: (idToken: string, remember?: boolean) => Promise<void>;
   loginWithBiometrics: () => Promise<void>;
   /** Enable Face ID / fingerprint using the current session (Face ID only — no password). */
@@ -67,7 +77,7 @@ type AuthState = {
   refreshBiometricState: () => Promise<void>;
   register: (input: {
     email: string;
-    password: string;
+    code: string;
     first_name?: string;
     last_name?: string;
     phone_number?: string;
@@ -104,6 +114,7 @@ async function migrateLegacyAuthKeys() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { tenantSlug, businessCode } = useBusinessContext();
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,6 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
   const refreshTokenRef = useRef<string | null>(null);
   const userEmailRef = useRef<string | null>(null);
+  /** When false, tokens stay in memory only (Remember me unchecked). */
+  const persistSessionRef = useRef(true);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -155,14 +168,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mobileClient.setToken(access);
         setToken(access);
         refreshTokenRef.current = nextRefresh;
-        await writeToken(ACCESS_KEY, access);
-        await writeToken(REFRESH_KEY, nextRefresh);
-
-        if (await isBiometricLoginEnabled()) {
-          const biometricSession = await getStoredBiometricSession();
-          const email = biometricSession?.email;
-          if (email) {
-            await storeBiometricSession(email, nextRefresh);
+        if (persistSessionRef.current) {
+          await writeToken(ACCESS_KEY, access);
+          await writeToken(REFRESH_KEY, nextRefresh);
+          if (await isBiometricLoginEnabled()) {
+            const biometricSession = await getStoredBiometricSession();
+            const email = biometricSession?.email;
+            if (email) {
+              await storeBiometricSession(email, nextRefresh);
+            }
           }
         }
         return access;
@@ -207,7 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return token;
   }, [performRefresh, scheduleRefresh, token]);
 
-  const applySession = useCallback(async (payload: LoginResponse) => {
+  const applySession = useCallback(async (payload: LoginResponse, remember = true) => {
     if (!payload.access) {
       throw new Error('Sign-in did not return an access token. Please try again.');
     }
@@ -228,8 +242,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(nextUser);
     refreshTokenRef.current = refresh;
     userEmailRef.current = nextUser.email?.trim() || null;
-    await writeToken(ACCESS_KEY, payload.access);
-    await writeToken(REFRESH_KEY, refresh);
+    persistSessionRef.current = remember;
+    if (remember) {
+      await writeToken(ACCESS_KEY, payload.access);
+      await writeToken(REFRESH_KEY, refresh);
+    } else {
+      await writeToken(ACCESS_KEY, null);
+      await writeToken(REFRESH_KEY, null);
+    }
     const jwtRemaining = remainingAccessSeconds(payload.access);
     scheduleRefresh(
       jwtRemaining > 0
@@ -239,7 +259,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : ACCESS_TTL_SECONDS,
     );
 
-    if (await isBiometricLoginEnabled()) {
+    if (remember && (await isBiometricLoginEnabled())) {
       const email = nextUser.email;
       if (email) {
         await storeBiometricSession(email, refresh);
@@ -255,6 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const access = migrated.access;
       const refresh = migrated.refresh;
       refreshTokenRef.current = refresh;
+      persistSessionRef.current = Boolean(access || refresh);
 
       if (!access && !refresh) {
         setToken(null);
@@ -336,36 +357,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [ensureFreshAccess]);
 
-  const login = useCallback(
-    async (email: string, password: string, remember = true) => {
+  const sendOtp = useCallback(
+    async (input: { channel: 'email' | 'whatsapp'; identifier: string }) => {
+      if (!tenantSlug || !businessCode) {
+        throw new Error('This app is not linked to a shop yet. Try again in a moment.');
+      }
+      await mobileClient.auth.sendOtp({
+        client: 'customer',
+        channel: input.channel,
+        identifier: input.identifier.trim(),
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+      });
+    },
+    [tenantSlug, businessCode],
+  );
+
+  const loginWithOtp = useCallback(
+    async (input: {
+      channel: 'email' | 'whatsapp';
+      identifier: string;
+      code: string;
+      remember?: boolean;
+      createIfMissing?: boolean;
+      firstName?: string;
+      lastName?: string;
+    }) => {
+      if (!tenantSlug || !businessCode) {
+        throw new Error('This app is not linked to a shop yet. Try again in a moment.');
+      }
       setLoading(true);
       try {
-        const response = await mobileClient.auth.login({ email, password, remember_me: remember });
-        await applySession(response.data);
+        const response = await mobileClient.auth.verifyOtp({
+          client: 'customer',
+          channel: input.channel,
+          identifier: input.identifier.trim(),
+          code: input.code.trim(),
+          remember_me: input.remember ?? true,
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+          create_if_missing: input.createIfMissing ?? false,
+          first_name: input.firstName,
+          last_name: input.lastName,
+        });
+        await applySession(response.data, input.remember ?? true);
         await refreshBiometricState();
       } finally {
         setLoading(false);
       }
     },
-    [applySession, refreshBiometricState],
+    [applySession, refreshBiometricState, tenantSlug, businessCode],
   );
 
   const loginWithGoogle = useCallback(
     async (idToken: string, remember = true) => {
+      if (!tenantSlug || !businessCode) {
+        throw new Error('This app is not linked to a shop yet. Try again in a moment.');
+      }
       setLoading(true);
       try {
         const response = await mobileClient.auth.loginWithGoogle({
           id_token: idToken,
           client: 'customer',
           remember_me: remember,
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
         });
-        await applySession(response.data);
+        await applySession(response.data, remember);
         await refreshBiometricState();
       } finally {
         setLoading(false);
       }
     },
-    [applySession, refreshBiometricState],
+    [applySession, refreshBiometricState, tenantSlug, businessCode],
   );
 
   const loginWithBiometrics = useCallback(async () => {
@@ -384,13 +448,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!session) {
         await clearBiometricLogin();
         await refreshBiometricState();
-        throw new Error('Saved sign-in was removed. Please sign in with email and password.');
+        throw new Error('Saved sign-in was removed. Please sign in with OTP.');
       }
       const response = await mobileClient.auth.refresh({ refresh: session.refresh });
-      await applySession(response.data);
+      await applySession(response.data, true);
       await refreshBiometricState();
     } catch (err) {
-      // Invalid/expired biometric session — clear and ask for password login.
+      // Invalid/expired biometric session — clear and ask for OTP login.
       if (await isBiometricLoginEnabled()) {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (
@@ -401,7 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ) {
           await clearBiometricLogin();
           await refreshBiometricState();
-          throw new Error('Saved session expired. Sign in with email and password, then re-enable Face ID.');
+          throw new Error('Saved session expired. Sign in with OTP, then re-enable Face ID.');
         }
       }
       throw err;
@@ -426,7 +490,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!email || !refresh) {
       throw new Error(
-        'Your saved session is incomplete. Sign out, sign in with email and password once, then enable Face ID.',
+        'Your saved session is incomplete. Sign out, sign in with OTP once, then enable Face ID.',
       );
     }
 
@@ -454,15 +518,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(
     async (input: {
       email: string;
-      password: string;
+      code: string;
       first_name?: string;
       last_name?: string;
       phone_number?: string;
     }) => {
-      await mobileClient.mobile.registerCustomer(input);
-      await login(input.email, input.password, true);
+      await loginWithOtp({
+        channel: 'email',
+        identifier: input.email,
+        code: input.code,
+        remember: true,
+        createIfMissing: true,
+        firstName: input.first_name,
+        lastName: input.last_name,
+      });
+      if (input.phone_number) {
+        await mobileClient.auth.patchMe({ phone_number: input.phone_number });
+      }
     },
-    [login],
+    [loginWithOtp],
   );
 
   const logout = useCallback(async () => {
@@ -525,7 +599,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       biometricEnabled,
       biometricAvailable,
       biometricLabel,
-      login,
+      sendOtp,
+      loginWithOtp,
       loginWithGoogle,
       loginWithBiometrics,
       enableBiometrics,
@@ -544,7 +619,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       biometricEnabled,
       biometricAvailable,
       biometricLabel,
-      login,
+      sendOtp,
+      loginWithOtp,
       loginWithGoogle,
       loginWithBiometrics,
       enableBiometrics,

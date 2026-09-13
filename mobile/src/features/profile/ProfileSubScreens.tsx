@@ -19,11 +19,12 @@ import { useTranslation } from 'react-i18next';
 import type { HelpArticleSummary, MobileReview, SupportTicketSummary } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { GroupedList } from '../../components/ui/GroupedList';
 import { Input } from '../../components/ui/Input';
-import { passwordFieldError, requiredMessage } from '../../utils/formValidation';
+import { requiredMessage } from '../../utils/formValidation';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDate, getApiErrorMessage } from '../../utils/format';
@@ -35,91 +36,10 @@ import { HtmlContent } from '../../components/HtmlContent';
 import { StarRating } from '../shop/StarRating';
 import { SupportTicketsPanel } from './SupportTicketsPanel';
 
-export function ChangePasswordScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { branding } = useBootstrap();
-  const { biometricEnabled, disableBiometrics } = useAuth();
-  const primary = branding?.primaryColor ?? colors.primary;
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  async function onSubmit() {
-    const nextErrors: Record<string, string> = {};
-    if (!currentPassword) nextErrors.currentPassword = requiredMessage('Current password');
-    const newError = passwordFieldError(newPassword, { confirm: confirmPassword });
-    if (newError) nextErrors.newPassword = newError;
-    if (!confirmPassword) nextErrors.confirmPassword = requiredMessage('Confirm password');
-    if (Object.keys(nextErrors).length) {
-      setFieldErrors(nextErrors);
-      return;
-    }
-    setFieldErrors({});
-    setLoading(true);
-    try {
-      await mobileClient.auth.changePassword({ current_password: currentPassword, new_password: newPassword });
-      if (biometricEnabled) {
-        await disableBiometrics();
-        Alert.alert(
-          'Password updated',
-          'Biometric login was disabled — re-enable it in Privacy & Security.',
-        );
-      } else {
-        Alert.alert('Password updated', 'Your password has been changed successfully.');
-      }
-      navigation.goBack();
-    } catch (err) {
-      Alert.alert('Unable to update', getApiErrorMessage(err, 'Please try again.'));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <ProfileMenuScreen title="Change Password" onBack={() => navigation.goBack()}>
-      <Input
-        label="Current password"
-        required
-        secureTextEntry
-        value={currentPassword}
-        onChangeText={(value) => {
-          setCurrentPassword(value);
-          setFieldErrors((current) => ({ ...current, currentPassword: '' }));
-        }}
-        error={fieldErrors.currentPassword}
-      />
-      <Input
-        label="New password"
-        required
-        secureTextEntry
-        value={newPassword}
-        onChangeText={(value) => {
-          setNewPassword(value);
-          setFieldErrors((current) => ({ ...current, newPassword: '' }));
-        }}
-        error={fieldErrors.newPassword}
-      />
-      <Input
-        label="Confirm new password"
-        required
-        secureTextEntry
-        value={confirmPassword}
-        onChangeText={(value) => {
-          setConfirmPassword(value);
-          setFieldErrors((current) => ({ ...current, confirmPassword: '', newPassword: '' }));
-        }}
-        error={fieldErrors.confirmPassword}
-      />
-      <Button label="Update password" size="lg" fullWidth loading={loading} primaryColor={primary} onPress={onSubmit} />
-    </ProfileMenuScreen>
-  );
-}
-
 export function NotificationPreferencesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, refreshProfile } = useAuth();
+  const toast = useToast();
   const { branding } = useBootstrap();
   const primary = branding?.primaryColor ?? colors.primary;
   const prefs = (user?.notification_preferences ?? {}) as Record<string, boolean>;
@@ -128,16 +48,17 @@ export function NotificationPreferencesScreen() {
   );
   const [push, setPush] = useState(prefs.push !== false);
   const [sms, setSms] = useState(Boolean(prefs.sms ?? prefs.sms_reminders));
+  const [whatsapp, setWhatsapp] = useState(prefs.whatsapp === true);
   const [loading, setLoading] = useState(false);
 
   async function onSave() {
     setLoading(true);
     try {
       await mobileClient.auth.patchMe({
-        notification_preferences: { email, push, sms },
+        notification_preferences: { email, push, sms, whatsapp },
       });
       await refreshProfile();
-      Alert.alert('Saved', 'Notification preferences updated.');
+      toast.push('Notification preferences updated.', 'success');
       navigation.goBack();
     } catch (err) {
       Alert.alert('Unable to save', err instanceof Error ? err.message : 'Please try again.');
@@ -150,6 +71,7 @@ export function NotificationPreferencesScreen() {
     <ProfileMenuScreen title="Notification Preferences" onBack={() => navigation.goBack()}>
       <PrefRow label="Email notifications" value={email} onChange={setEmail} />
       <PrefRow label="Push notifications" value={push} onChange={setPush} />
+      <PrefRow label="WhatsApp notifications" value={whatsapp} onChange={setWhatsapp} />
       <PrefRow label="SMS reminders" value={sms} onChange={setSms} />
       <Button label="Save preferences" size="lg" fullWidth loading={loading} primaryColor={primary} onPress={onSave} />
     </ProfileMenuScreen>
@@ -240,6 +162,12 @@ export function PrivacySecurityScreen() {
       <Text style={styles.body}>
         Your data is stored securely and used only to manage your appointments with {branding?.appName ?? 'this business'}.
       </Text>
+      <Text style={styles.body}>
+        Name, photo, and phone in Personal Information are saved only for this shop. Your email is shared for sign-in across shop apps that use OTP. Bookings, orders, and loyalty stay in this shop only.
+      </Text>
+      <Text style={styles.body}>
+        There is no account password. Sign in with a one-time code (email or WhatsApp when available), then optionally enable {biometricLabel} for quick unlock on this device.
+      </Text>
 
       <View style={styles.biometricRow}>
         <View style={styles.biometricCopy}>
@@ -262,7 +190,6 @@ export function PrivacySecurityScreen() {
         />
       </View>
 
-      <Button label="Change password" fullWidth primaryColor={primary} onPress={() => navigation.navigate('ChangePassword')} />
       <Text style={styles.body}>
         We never sell your personal information. You can update your profile details or sign out at any time from the Profile tab.
       </Text>
@@ -391,12 +318,12 @@ function customerFaqs(options: {
     {
       category: 'account',
       q: 'How do I update my phone number or name?',
-      a: 'Go to Profile → Personal Information, edit the details, and save.',
+      a: 'Go to Profile → Personal Information, edit the details, and save. Those details apply only in this shop’s app.',
     },
     {
       category: 'account',
-      q: 'How do I change my password?',
-      a: 'Open Profile → Privacy & Security → Change password. If you use biometric login, you’ll need to turn it back on after the password change.',
+      q: 'I already have an account from another shop. How do I use this app?',
+      a: 'Don’t create a new account. Tap Sign in with OTP using the same email. This app only shows this shop’s bookings and orders.',
     },
     {
       category: 'account',
@@ -405,8 +332,8 @@ function customerFaqs(options: {
     },
     {
       category: 'account',
-      q: 'I forgot my password. What should I do?',
-      a: 'On the login screen, tap Forgot password and we’ll email a reset link. Check spam if it doesn’t arrive quickly.',
+      q: 'How do I sign in?',
+      a: 'On the login screen, tap Sign in with OTP and enter the code we email you. You can also use Google or biometric unlock after your first sign-in.',
     },
   );
   if (options.loyaltyEnabled) {
@@ -626,6 +553,7 @@ export function HelpSupportScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { bootstrap, branding } = useBootstrap();
   const { tenantId } = useBusinessContext();
+  const toast = useToast();
   const business = bootstrap?.business;
   const { showBooking, showShop, showPets } = customerAppFeatures(bootstrap?.features);
   const primary = branding?.primaryColor ?? colors.primary;
@@ -679,6 +607,7 @@ export function HelpSupportScreen() {
       setSubject('');
       setBody('');
       setStatus(t('help.ticketSubmitted'));
+      toast.push('Support ticket submitted.', 'success');
       await loadTickets();
     } catch (err) {
       Alert.alert('Could not submit', getApiErrorMessage(err, 'Please try again.'));

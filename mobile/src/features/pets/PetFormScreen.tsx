@@ -23,6 +23,7 @@ import { Chip } from '../../components/ui/Chip';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { PET_SEX, PET_SPECIES } from './petHelpers';
 import type { RootStackParamList } from '../../navigation/types';
@@ -34,6 +35,7 @@ export function PetFormScreen({ navigation, route }: Props) {
   const { token } = useAuth();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const toast = useToast();
   const petId = route.params?.petId;
   const isEdit = Boolean(petId);
   const primary = branding?.primaryColor ?? colors.primary;
@@ -106,12 +108,14 @@ export function PetFormScreen({ navigation, route }: Props) {
           tenant_slug: tenantSlug,
           business_code: businessCode,
         });
+        toast.push('Pet updated.', 'success');
       } else {
         await mobileClient.mobile.createMyPet({
           tenant_slug: tenantSlug,
           business_code: businessCode,
           ...payload,
         });
+        toast.push('Pet added.', 'success');
       }
       navigation.goBack();
     } catch (err) {

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { formatInrFromPaise, formatPlanDisplayName } from '../../config/products';
+import { allowedExtraCount, formatInrFromPaise, formatPlanDisplayName, starterAddonCapHint } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatTimestamp } from '../../lib/datetime';
@@ -161,14 +161,24 @@ export function BillingPlanFoundation() {
                 ? ` · Pets ${billing.pets_pack_enabled ? 'on' : 'off'} (+₹${((billing.pricing.addon_pets_unit_paise ?? 50000) / 100).toFixed(0)}/mo)`
                 : ''}
             </p>
+            {starterAddonCapHint(billing.max_extra_staff, billing.max_extra_offices) ? (
+              <p className="billing-section-meta" style={{ margin: 0 }}>
+                {starterAddonCapHint(billing.max_extra_staff, billing.max_extra_offices)}
+              </p>
+            ) : null}
             <div className="billing-addons-row">
               <label>
                 Extra staff
                 <input
                   type="number"
                   min={0}
+                  max={allowedExtraCount(billing.max_extra_staff, billing.extra_staff) ?? undefined}
                   value={extraStaff}
-                  onChange={(event) => setExtraStaff(Number(event.target.value) || 0)}
+                  onChange={(event) => {
+                    const next = Number(event.target.value) || 0;
+                    const cap = allowedExtraCount(billing.max_extra_staff, billing.extra_staff);
+                    setExtraStaff(cap == null ? next : Math.min(next, cap));
+                  }}
                 />
               </label>
               <label>
@@ -176,8 +186,13 @@ export function BillingPlanFoundation() {
                 <input
                   type="number"
                   min={0}
+                  max={allowedExtraCount(billing.max_extra_offices, billing.extra_offices) ?? undefined}
                   value={extraOffices}
-                  onChange={(event) => setExtraOffices(Number(event.target.value) || 0)}
+                  onChange={(event) => {
+                    const next = Number(event.target.value) || 0;
+                    const cap = allowedExtraCount(billing.max_extra_offices, billing.extra_offices);
+                    setExtraOffices(cap == null ? next : Math.min(next, cap));
+                  }}
                 />
               </label>
               {checkoutProductCode === 'shopie' ? (
@@ -239,6 +254,9 @@ export function BillingPlanFoundation() {
 
       <div className="billing-section">
         <p className="billing-section-title">Plan catalog</p>
+        <p className="billing-section-meta">
+          Every Starter and Pro plan includes a white-label customer app under your brand. Pro is ad-free.
+        </p>
         {plansQuery.isLoading ? (
           <p className="billing-section-meta">Loading plans...</p>
         ) : plans.length === 0 ? (
@@ -385,7 +403,8 @@ export function BillingPlanFoundation() {
             variant="ghost"
             onClick={async () => {
               try {
-                const accessToken = localStorage.getItem('ie:auth:access');
+                const accessToken =
+                  sessionStorage.getItem('ie:auth:access') ?? localStorage.getItem('ie:auth:access');
                 const tenantId = localStorage.getItem(ACTIVE_TENANT_STORAGE_KEY);
                 const businessId = localStorage.getItem(ACTIVE_BUSINESS_STORAGE_KEY);
                 const headers = new Headers();

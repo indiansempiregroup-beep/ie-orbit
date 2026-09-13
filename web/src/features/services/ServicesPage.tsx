@@ -257,6 +257,10 @@ export function ServicesPage() {
             event.preventDefault();
             setCreationError(null);
             const priceValue = formState.price.trim();
+            if (!priceValue || !Number.isFinite(Number(priceValue)) || Number(priceValue) < 0) {
+              setCreationError('Price is required');
+              return;
+            }
             const serviceName = formState.display_name || formState.name;
 
             void (async () => {
@@ -293,15 +297,11 @@ export function ServicesPage() {
                     cleanup_minutes: formState.cleanup_minutes,
                     is_default: true,
                   },
-                  ...(priceValue
-                    ? {
-                        default_price: {
-                          base_price: priceValue,
-                          currency,
-                          is_default: true,
-                        },
-                      }
-                    : {}),
+                  default_price: {
+                    base_price: priceValue,
+                    currency,
+                    is_default: true,
+                  },
                   ...(primaryImage ? { primary_image: primaryImage } : {}),
                 });
 
@@ -357,6 +357,7 @@ export function ServicesPage() {
             <label style={{ display: 'grid', gap: 8 }}>
               Price ({currency})
               <input
+                required
                 type="number"
                 min={0}
                 step={0.01}

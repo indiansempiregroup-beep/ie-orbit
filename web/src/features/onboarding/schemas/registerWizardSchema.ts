@@ -28,16 +28,6 @@ const optionalWebsiteSchema = z
     message: 'Enter a valid website URL (for example, https://yoursalon.com)',
   });
 
-const passwordSchema = z
-  .string()
-  .min(8, 'Password must be at least 8 characters')
-  .regex(/[A-Z]/, 'Include at least one uppercase letter')
-  .regex(/[a-z]/, 'Include at least one lowercase letter')
-  .regex(/[0-9]/, 'Include at least one number')
-  .refine((value) => !/^(password|qwerty|12345678)/i.test(value), {
-    message: 'Choose a less common password',
-  });
-
 const dayHoursSchema = z.object({
   open: z.boolean(),
   start: z.string().min(1),
@@ -66,8 +56,7 @@ export const registerWizardSchema = z
     displayName: z.string().min(1, 'Display name is required'),
     email: z.string().email('Enter a valid email'),
     mobile: phoneSchema,
-    password: z.string(),
-    confirmPassword: z.string(),
+    ownerOtpCode: z.string(),
     googleIdToken: z.string(),
     acceptTerms: z.boolean().refine((value) => value, 'Accept the terms to continue'),
     acceptPrivacy: z.boolean().refine((value) => value, 'Accept the privacy policy to continue'),
@@ -94,26 +83,12 @@ export const registerWizardSchema = z
     theme: z.literal('light'),
   })
   .superRefine((data, ctx) => {
-    if (!data.googleIdToken) {
-      const parsed = passwordSchema.safeParse(data.password);
-      if (!parsed.success) {
-        for (const issue of parsed.error.issues) {
-          ctx.addIssue({ ...issue, path: ['password'] });
-        }
-      }
-      if (!data.confirmPassword) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['confirmPassword'],
-          message: 'Confirm your password',
-        });
-      } else if (data.password !== data.confirmPassword) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['confirmPassword'],
-          message: 'Passwords do not match',
-        });
-      }
+    if (!data.googleIdToken && !/^\d{6}$/.test(data.ownerOtpCode.trim())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ownerOtpCode'],
+        message: 'Enter the 6-digit code from your email',
+      });
     }
     if (!data.skipHours && !weeklyHoursAreValid(data.businessHours as WeeklyHours)) {
       ctx.addIssue({
@@ -171,8 +146,7 @@ export const stepFieldMap = {
     'displayName',
     'email',
     'mobile',
-    'password',
-    'confirmPassword',
+    'ownerOtpCode',
     'acceptTerms',
     'acceptPrivacy',
   ],
@@ -215,8 +189,7 @@ export function getDefaultRegisterValues(): RegisterWizardFormValues {
     displayName: '',
     email: '',
     mobile: '',
-    password: '',
-    confirmPassword: '',
+    ownerOtpCode: '',
     googleIdToken: '',
     acceptTerms: false,
     acceptPrivacy: false,

@@ -508,6 +508,16 @@ class PlatformPlanPackagesView(APIView):
                 return data.get(key)
             return getattr(existing, key) if existing is not None else default
 
+        def _optional_extra_cap(key: str, current: PlatformPlanPackage | None) -> int | None:
+            if key in data:
+                value = data.get(key)
+                if value in (None, "", "unlimited"):
+                    return None
+                return max(0, int(value))
+            if current is not None:
+                return getattr(current, key, None)
+            return None
+
         package = _svc().upsert_plan_package(
             actor=request.user,
             code=_field("code", existing.code if existing else ""),
@@ -519,6 +529,8 @@ class PlatformPlanPackagesView(APIView):
             is_default=bool(_field("is_default", False)),
             max_staff=int(_field("max_staff", 1) or 1),
             max_branches=int(_field("max_branches", 1) or 1),
+            max_extra_staff=_optional_extra_cap("max_extra_staff", existing),
+            max_extra_offices=_optional_extra_cap("max_extra_offices", existing),
             bi_features=_field("bi_features", []) or [],
             features=_field("features", []) or [],
             amount_paise=int(_field("amount_paise", 0) or 0),
@@ -564,6 +576,30 @@ class PlatformAddonPricingView(APIView):
             user_agent=user_agent(request),
         )
         return success_response(pricing, request_id=getattr(request, "request_id", None))
+
+
+class PlatformAuthSettingsView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request) -> Response:
+        return success_response(
+            _svc().serialize_platform_auth_settings(),
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Platform Admin"])
+    def put(self, request: Request) -> Response:
+        data = request.data
+        payload = _svc().update_platform_auth_settings(
+            actor=request.user,
+            tenant_slug=data.get("tenant_slug"),
+            business_code=data.get("business_code"),
+            reason=data.get("reason", "platform auth settings update"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(payload, request_id=getattr(request, "request_id", None))
 
 
 class PlatformAuditFeedView(APIView):

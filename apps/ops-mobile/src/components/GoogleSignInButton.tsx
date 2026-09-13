@@ -1,8 +1,21 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type View as ViewType,
+} from 'react-native';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 import { getApiErrorMessage } from '../utils/format';
-import { useGoogleIdTokenAuth } from '../utils/googleAuth';
+import {
+  googleOriginAllowlistHint,
+  isGoogleSignInConfigured,
+  mountGoogleSignInButton,
+  useGoogleIdTokenAuth,
+} from '../utils/googleAuth';
 
 type Props = {
   onIdToken: (idToken: string) => Promise<void>;
@@ -10,8 +23,68 @@ type Props = {
   label?: string;
 };
 
-export function GoogleSignInButton({ onIdToken, disabled, label = 'Continue with Google' }: Props) {
-  const { configured, promptForIdToken } = useGoogleIdTokenAuth();
+function GoogleSignInButtonWeb({ onIdToken, disabled }: Props) {
+  const hostRef = useRef<ViewType | null>(null);
+  const onIdTokenRef = useRef(onIdToken);
+  const [error, setError] = useState<string | null>(null);
+
+  onIdTokenRef.current = onIdToken;
+
+  useEffect(() => {
+    if (!isGoogleSignInConfigured()) return;
+    const parent = hostRef.current as unknown as HTMLElement | null;
+    if (!parent || typeof document === 'undefined') return;
+
+    const host = document.createElement('div');
+    host.style.width = '100%';
+    host.style.display = 'flex';
+    host.style.justifyContent = 'center';
+    parent.replaceChildren(host);
+
+    let cancelled = false;
+    void mountGoogleSignInButton(host, (idToken) => {
+      if (cancelled) return;
+      setError(null);
+      void onIdTokenRef.current(idToken).catch((err) => {
+        setError(getApiErrorMessage(err, 'Google sign-in failed. Please try again.', 'login'));
+      });
+    }).catch((err) => {
+      if (!cancelled) {
+        setError(
+          `${getApiErrorMessage(err, 'Google sign-in failed to load.', 'login')} ${googleOriginAllowlistHint()}`,
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+      parent.replaceChildren();
+    };
+  }, []);
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.dividerRow}>
+        <View style={styles.line} />
+        <Text style={styles.or}>or</Text>
+        <View style={styles.line} />
+      </View>
+      <View
+        ref={hostRef}
+        collapsable={false}
+        style={[styles.webHost, disabled ? styles.disabled : null]}
+        pointerEvents={disabled ? 'none' : 'auto'}
+      />
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </View>
+  );
+}
+
+function GoogleSignInButtonNative({
+  onIdToken,
+  disabled,
+  label = 'Continue with Google',
+}: Props) {
+  const { configured, promptForIdToken, ready } = useGoogleIdTokenAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +93,7 @@ export function GoogleSignInButton({ onIdToken, disabled, label = 'Continue with
   }
 
   async function onPress() {
-    if (busy || disabled) return;
+    if (busy || disabled || !ready) return;
     setError(null);
     setBusy(true);
     try {
@@ -43,9 +116,13 @@ export function GoogleSignInButton({ onIdToken, disabled, label = 'Continue with
       </View>
       <Pressable
         accessibilityRole="button"
-        disabled={disabled || busy}
+        disabled={disabled || busy || !ready}
         onPress={() => void onPress()}
-        style={({ pressed }) => [styles.button, (disabled || busy) && styles.disabled, pressed && styles.pressed]}
+        style={({ pressed }) => [
+          styles.button,
+          (disabled || busy || !ready) && styles.disabled,
+          pressed && styles.pressed,
+        ]}
       >
         {busy ? (
           <ActivityIndicator color={colors.foreground} />
@@ -63,11 +140,27 @@ export function GoogleSignInButton({ onIdToken, disabled, label = 'Continue with
   );
 }
 
+export function GoogleSignInButton(props: Props) {
+  if (!isGoogleSignInConfigured()) {
+    return null;
+  }
+  if (Platform.OS === 'web') {
+    return <GoogleSignInButtonWeb {...props} />;
+  }
+  return <GoogleSignInButtonNative {...props} />;
+}
+
 const styles = StyleSheet.create({
   wrap: { gap: spacing.md },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
   or: { ...typography.caption, color: colors.mutedForeground },
+  webHost: {
+    minHeight: 48,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   button: {
     minHeight: 48,
     borderRadius: radius.pill,

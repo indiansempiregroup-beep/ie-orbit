@@ -89,15 +89,11 @@ export function ServiceDetailPage() {
         cleanup_minutes: formState.cleanup_minutes,
         is_default: true,
       },
-      ...(priceValue
-        ? {
-            default_price: {
-              base_price: priceValue,
-              currency,
-              is_default: true,
-            },
-          }
-        : {}),
+      default_price: {
+        base_price: priceValue,
+        currency,
+        is_default: true,
+      },
       ...(primaryImage ? { primary_image: primaryImage } : {}),
     };
   }
@@ -213,6 +209,10 @@ export function ServiceDetailPage() {
             event.preventDefault();
             setEditError(null);
             if (!serviceId) return;
+            if (!formState.price.trim() || !Number.isFinite(Number(formState.price)) || Number(formState.price) < 0) {
+              setEditError('Price is required');
+              return;
+            }
 
             void (async () => {
               setSaving(true);
@@ -281,6 +281,7 @@ export function ServiceDetailPage() {
             <label style={{ display: 'grid', gap: 8 }}>
               Price ({currency})
               <input
+                required
                 type="number"
                 min={0}
                 step={0.01}

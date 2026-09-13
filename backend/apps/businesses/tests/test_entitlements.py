@@ -68,7 +68,7 @@ def test_trial_uses_pro_limits(business: Business) -> None:
     )
     entitlements = EntitlementService().resolve(business=business)
     assert entitlements.effective_max_staff == 5
-    assert entitlements.effective_max_branches == 5
+    assert entitlements.effective_max_branches == 2
     assert "forecast" in entitlements.bi_features
     assert "reward_points" in entitlements.features
     assert "appointie_bookings" in entitlements.features
@@ -199,8 +199,17 @@ def test_staff_limit_counts_bookable_only(business: Business) -> None:
         employment_status=EmploymentStatus.ACTIVE,
         is_bookable=True,
     )
+    Staff.objects.create(
+        tenant=business.tenant,
+        business=business,
+        staff_code="stylist-two",
+        first_name="Alex",
+        display_name="Alex",
+        employment_status=EmploymentStatus.ACTIVE,
+        is_bookable=True,
+    )
     service = EntitlementService()
-    assert service.count_bookable_staff(business=business) == 1
+    assert service.count_bookable_staff(business=business) == 2
     with pytest.raises(ValidationError):
         service.ensure_can_add_staff(business=business, is_bookable=True)
 
@@ -222,8 +231,8 @@ def test_addon_increases_effective_limits(business: Business) -> None:
     )
     entitlements = EntitlementService().resolve(business=business)
     assert entitlements.effective_max_staff == 7
-    assert entitlements.effective_max_branches == 8
-    assert entitlements.total_amount_paise == 199900 + (2 * 19900) + (3 * 29900)
+    assert entitlements.effective_max_branches == 5
+    assert entitlements.total_amount_paise == 79900 + (2 * 19900) + (3 * 29900)
 
 
 @pytest.mark.django_db
@@ -298,4 +307,151 @@ def test_downgrade_blocked_when_over_limit(business: Business) -> None:
         EntitlementService().ensure_can_downgrade(
             business=business,
             target_plan_code="appointie-starter",
+        )
+
+
+@pytest.mark.django_db
+def test_paid_starter_blocks_extra_office_and_second_extra_staff(business: Business) -> None:
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+    )
+    service = EntitlementService()
+    entitlements = service.resolve(business=business)
+    assert entitlements.max_extra_staff == 1
+    assert entitlements.max_extra_offices == 0
+    snapshot = entitlements.to_dict()
+    assert snapshot["max_extra_staff"] == 1
+    assert snapshot["max_extra_offices"] == 0
+    service.ensure_addon_caps(
+        business=business,
+        product_code="appointie",
+        extra_staff=1,
+        extra_offices=0,
+    )
+    with pytest.raises(ValidationError):
+        service.ensure_addon_caps(
+            business=business,
+            product_code="appointie",
+            extra_staff=2,
+            extra_offices=0,
+        )
+    with pytest.raises(ValidationError):
+        service.ensure_addon_caps(
+            business=business,
+            product_code="appointie",
+            extra_staff=0,
+            extra_offices=1,
+        )
+
+
+@pytest.mark.django_db
+def test_starter_grandfathers_existing_extras_but_blocks_increase(business: Business) -> None:
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+        extra_staff=2,
+        extra_offices=1,
+    )
+    service = EntitlementService()
+    service.ensure_addon_caps(
+        business=business,
+        product_code="appointie",
+        extra_staff=2,
+        extra_offices=1,
+    )
+    service.ensure_addon_caps(
+        business=business,
+        product_code="appointie",
+        extra_staff=1,
+        extra_offices=0,
+    )
+    with pytest.raises(ValidationError):
+        service.ensure_addon_caps(
+            business=business,
+            product_code="appointie",
+            extra_staff=3,
+            extra_offices=1,
+        )
+    with pytest.raises(ValidationError):
+        service.ensure_addon_caps(
+            business=business,
+            product_code="appointie",
+            extra_staff=2,
+            extra_offices=2,
+        )
+
+
+@pytest.mark.django_db
+def test_trial_uses_pro_extra_addon_caps(business: Business) -> None:
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.TRIALING,
+        plan=plan,
+        trial_ends_at=timezone.now() + timedelta(days=10),
+    )
+    service = EntitlementService()
+    entitlements = service.resolve(business=business)
+    assert entitlements.max_extra_staff is None
+    assert entitlements.max_extra_offices is None
+    service.ensure_addon_caps(
+        business=business,
+        product_code="appointie",
+        extra_staff=2,
+        extra_offices=1,
+    )
+
+
+def test_extra_addon_cap_helper_grandfathers_current() -> None:
+    from apps.businesses.services.entitlements import ensure_extra_addons_within_cap
+
+    ensure_extra_addons_within_cap(
+        extra_staff=1,
+        extra_offices=0,
+        max_extra_staff=1,
+        max_extra_offices=0,
+    )
+    with pytest.raises(ValidationError):
+        ensure_extra_addons_within_cap(
+            extra_staff=0,
+            extra_offices=1,
+            max_extra_staff=1,
+            max_extra_offices=0,
+        )
+    ensure_extra_addons_within_cap(
+        extra_staff=2,
+        extra_offices=1,
+        max_extra_staff=1,
+        max_extra_offices=0,
+        current_extra_staff=2,
+        current_extra_offices=1,
+    )
+    with pytest.raises(ValidationError):
+        ensure_extra_addons_within_cap(
+            extra_staff=2,
+            extra_offices=2,
+            max_extra_staff=1,
+            max_extra_offices=0,
+            current_extra_staff=2,
+            current_extra_offices=1,
         )

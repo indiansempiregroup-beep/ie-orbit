@@ -248,6 +248,7 @@ class BusinessSettings(TenantModel):
     holiday_handling = models.JSONField(default=dict, blank=True)
     time_slot_interval = models.PositiveIntegerField(default=15)
     notification_preferences = models.JSONField(default=dict, blank=True)
+    whatsapp_integration = models.JSONField(default=dict, blank=True)
     invoice_preferences = models.JSONField(default=dict, blank=True)
     localization = models.JSONField(default=dict, blank=True)
     theme_overrides = models.JSONField(default=dict, blank=True)

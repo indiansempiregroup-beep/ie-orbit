@@ -8,7 +8,8 @@ from apps.authentication.constants import DEFAULT_CUSTOMER_ROLE_CODE, DEFAULT_OW
 from apps.authentication.models import SocialAccount, User, UserStatus
 from apps.authentication.services.google import GoogleIdentity
 from apps.authentication.services.roles import RoleService
-from apps.tenancy.models import Tenant
+from apps.businesses.models import Business
+from apps.tenancy.models import Organization, Tenant
 
 
 def _own_tenant(user: User, slug: str = "ada-salon") -> Tenant:
@@ -18,6 +19,19 @@ def _own_tenant(user: User, slug: str = "ada-salon") -> Tenant:
         legal_name="Ada Salon",
         owner=user,
     )
+
+
+def _customer_shop() -> tuple[Tenant, Business]:
+    tenant = Tenant.objects.create(slug="mobile-shop", display_name="Mobile Shop")
+    organization = Organization.objects.create(tenant=tenant, name="Mobile Shop Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="main",
+        business_name="Mobile Shop",
+        display_name="Mobile Shop",
+    )
+    return tenant, business
 
 GOOGLE_IDENTITY = GoogleIdentity(
     subject="google-sub-123",
@@ -44,9 +58,16 @@ def test_google_customer_signup_creates_verified_user(
         lambda token: GOOGLE_IDENTITY,
     )
 
+    tenant, business = _customer_shop()
     response = api_client.post(
         reverse("auth-google"),
-        {"id_token": "fake-google-token", "client": "customer", "remember_me": True},
+        {
+            "id_token": "fake-google-token",
+            "client": "customer",
+            "remember_me": True,
+            "tenant_slug": tenant.slug,
+            "business_code": business.business_code,
+        },
         format="json",
     )
 
@@ -83,9 +104,15 @@ def test_google_customer_login_links_existing_password_user(
         lambda token: GOOGLE_IDENTITY,
     )
 
+    tenant, business = _customer_shop()
     response = api_client.post(
         reverse("auth-google"),
-        {"id_token": "fake-google-token", "client": "customer"},
+        {
+            "id_token": "fake-google-token",
+            "client": "customer",
+            "tenant_slug": tenant.slug,
+            "business_code": business.business_code,
+        },
         format="json",
     )
 

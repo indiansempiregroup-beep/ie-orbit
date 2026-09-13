@@ -175,6 +175,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         process.env.GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID ||
         '',
     },
+    publicSiteUrl: (
+      process.env.EXPO_PUBLIC_PUBLIC_SITE_URL ||
+      process.env.VITE_PUBLIC_SITE_URL ||
+      ''
+    ).trim(),
     eas: {
       ...(typeof config.extra?.eas === 'object' && config.extra.eas ? config.extra.eas : {}),
       projectId:

@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserStatus
+from apps.authentication.tests.otp_helpers import authenticate_api_client
 from apps.bookings.models import Booking, BookingReview, BookingStatus
 from apps.businesses.models import Business
 from apps.customers.models import Customer
@@ -71,12 +72,7 @@ def review_context(api_client: APIClient) -> dict:
         duration_minutes=30,
         status=BookingStatus.COMPLETED,
     )
-    login = api_client.post(
-        reverse("auth-login"),
-        {"email": owner.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = login.json()["data"]["access"]
+    access = authenticate_api_client(api_client, owner)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=str(tenant.id))
     return {
         "owner": owner,

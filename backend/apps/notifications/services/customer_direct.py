@@ -167,6 +167,36 @@ class CustomerDirectNotifier:
                 )
                 notification_ids.append(str(notification.id))
 
+        try:
+            from apps.notifications.services.whatsapp_send import send_whatsapp_for_event
+
+            wa = send_whatsapp_for_event(
+                tenant=tenant,
+                business=business,
+                event_type=event_type,
+                audience="customer",
+                user=user,
+                customer=customer,
+                context={
+                    "customer_name": customer.display_name
+                    or f"{customer.first_name} {customer.last_name}".strip()
+                    or "Customer",
+                    "business_name": business.display_name or business.business_name or "",
+                    "order_number": str((metadata or {}).get("order_number") or ""),
+                    "subject": subject,
+                    "body": body,
+                },
+                extra_metadata=meta,
+            )
+            if wa is not None:
+                sent_channels.append("whatsapp")
+                notification_ids.append(str(wa.id))
+        except Exception:
+            logger.exception(
+                "Customer WhatsApp notify failed",
+                extra={"customer_id": str(customer.id), "event_type": event_type},
+            )
+
         return {
             "sent_channels": sent_channels,
             "notification_ids": notification_ids,

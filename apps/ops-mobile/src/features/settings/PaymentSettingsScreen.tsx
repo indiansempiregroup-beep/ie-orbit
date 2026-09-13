@@ -10,6 +10,7 @@ import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Input } from '../../components/ui/Input';
 import { uploadBrandingLogo } from '../../api/media';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { colors, fonts, typography } from '../../theme/tokens';
@@ -36,6 +37,7 @@ export function PaymentSettingsScreen() {
   const client = useOpsClient();
   const { token } = useAuth();
   const { activeBusiness, businessId, tenantId, refreshWorkspace } = useWorkspace();
+  const toast = useToast();
   const [configured, setConfigured] = useState(false);
   const [connected, setConnected] = useState(false);
   const [providerStatus, setProviderStatus] = useState<MerchantPaymentSettings['status']>('not_configured');
@@ -177,7 +179,11 @@ export function PaymentSettingsScreen() {
         setCashfreeSecret('');
       }
       await refreshWorkspace();
-      setMessage(testConnection ? 'Saved and verified with the payment providers.' : 'Payment settings saved.');
+      const successMessage = testConnection
+        ? 'Saved and verified with the payment providers.'
+        : 'Payment settings saved.';
+      setMessage(successMessage);
+      toast.push(successMessage, 'success');
     } catch (err) {
       setError(getApiErrorMessage(err, 'Unable to save payment settings.'));
     } finally {

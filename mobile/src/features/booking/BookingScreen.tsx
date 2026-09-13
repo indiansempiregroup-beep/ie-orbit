@@ -14,6 +14,7 @@ import { TimeSlotGrid } from '../../components/TimeSlotGrid';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -66,6 +67,7 @@ export function BookingScreen() {
   const { user } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const toast = useToast();
   const { headerPaddingTop } = useScreenInsets();
   const { contentInset } = useTabBarLayout();
   const primary = branding?.primaryColor ?? colors.primary;
@@ -314,6 +316,7 @@ export function BookingScreen() {
       setBookingRef(response.data.booking_number || response.data.booking_id);
       setBookingId(response.data.booking_id);
       setStep(confirmedStep);
+      toast.push('Booking requested.', 'success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to request booking.');
     } finally {

@@ -21,9 +21,9 @@ import { brand, colors, radius, shadows, spacing, typography } from '../../theme
 import { layout } from '../../theme/layout';
 import { getApiErrorMessage } from '../../utils/format';
 import { emailFieldError } from '../../utils/emailValidation';
-import { indianMobileError, passwordFieldError, requiredMessage } from '../../utils/formValidation';
+import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../utils/googleAuth';
-import { PRODUCT_CATALOG, formatInrFromPaise, formatPlanDisplayName, getProductName, getRecommendedPlanCode, isRecommendedPlanCode } from '../../utils/products';
+import { PRODUCT_CATALOG, formatInrFromPaise, formatPlanDisplayName, getProductName, getRecommendedPlanCode, isRecommendedPlanCode, planSeatLine } from '../../utils/products';
 import { opsClient } from '../../api/client';
 import {
   defaultWeeklyHours,
@@ -65,8 +65,10 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       billing_interval: 'monthly',
       trial_days: 15,
       is_default: true,
-      max_staff: 1,
+      max_staff: 2,
       max_branches: 1,
+      max_extra_staff: 1,
+      max_extra_offices: 0,
       currency: 'INR',
     },
     {
@@ -78,7 +80,9 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       trial_days: 15,
       is_default: false,
       max_staff: 5,
-      max_branches: 5,
+      max_branches: 2,
+      max_extra_staff: null,
+      max_extra_offices: null,
       currency: 'INR',
     },
   ],
@@ -93,6 +97,8 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       is_default: true,
       max_staff: 2,
       max_branches: 1,
+      max_extra_staff: 1,
+      max_extra_offices: 0,
       currency: 'INR',
     },
     {
@@ -104,7 +110,9 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       trial_days: 15,
       is_default: false,
       max_staff: 5,
-      max_branches: 5,
+      max_branches: 2,
+      max_extra_staff: null,
+      max_extra_offices: null,
       currency: 'INR',
     },
   ],
@@ -127,7 +135,7 @@ function defaultValues(): RegisterWizardValues {
     lastName: '',
     email: '',
     mobile: '',
-    password: '',
+    ownerOtpCode: '',
     timezone: 'Asia/Kolkata',
     currency: 'INR',
     language: 'en',
@@ -165,7 +173,8 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
   const { initializeWorkspace } = useWorkspace();
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<RegisterWizardValues>(() => initialValues(route.params));
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [ownerOtpSent, setOwnerOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -236,10 +245,8 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
       if (emailError) next.email = emailError;
       const mobileError = indianMobileError(values.mobile, true);
       if (mobileError) next.mobile = mobileError;
-      if (!values.googleIdToken) {
-        const passwordError = passwordFieldError(values.password, { confirm: confirmPassword });
-        if (passwordError) next.password = passwordError;
-        if (!confirmPassword) next.confirmPassword = requiredMessage('Confirm password');
+      if (!values.googleIdToken && !/^\d{6}$/.test(values.ownerOtpCode.trim())) {
+        next.ownerOtpCode = 'Enter the 6-digit code from your email';
       }
     }
     if (step === 1) {
@@ -279,10 +286,10 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
         lastName: '',
         email: values.googleIdToken ? values.email : '',
         mobile: '',
-        password: '',
+        ownerOtpCode: '',
         affiliateCode: '',
       });
-      setConfirmPassword('');
+      setOwnerOtpSent(false);
     } else if (step === 1) {
       patch({
         businessName: '',
@@ -399,24 +406,42 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
           />
           {!values.googleIdToken ? (
             <>
-              <Input
-                label="Password"
-                required
-                secureTextEntry
-                value={values.password}
-                onChangeText={(v) => patch({ password: v })}
-                error={fieldErrors.password}
+              <Button
+                label={sendingOtp ? 'Sending…' : ownerOtpSent ? 'Resend email code' : 'Send email verification code'}
+                variant="outline"
+                disabled={sendingOtp || !values.email.trim()}
+                onPress={() => {
+                  void (async () => {
+                    const emailError = emailFieldError(values.email);
+                    if (emailError) {
+                      setFieldErrors({ email: emailError });
+                      return;
+                    }
+                    setSendingOtp(true);
+                    try {
+                      await opsClient.auth.sendOtp({
+                        client: 'ops',
+                        channel: 'email',
+                        identifier: values.email.trim(),
+                      });
+                      setOwnerOtpSent(true);
+                      setError(null);
+                    } catch (err) {
+                      setError(getApiErrorMessage(err, 'Unable to send verification code.'));
+                    } finally {
+                      setSendingOtp(false);
+                    }
+                  })();
+                }}
               />
               <Input
-                label="Confirm password"
+                label="Email verification code"
                 required
-                secureTextEntry
-                value={confirmPassword}
-                onChangeText={(value) => {
-                  setConfirmPassword(value);
-                  setFieldErrors((current) => ({ ...current, confirmPassword: '', password: current.password || '' }));
-                }}
-                error={fieldErrors.confirmPassword}
+                keyboardType="number-pad"
+                value={values.ownerOtpCode}
+                onChangeText={(v) => patch({ ownerOtpCode: v })}
+                error={fieldErrors.ownerOtpCode}
+                hint={ownerOtpSent ? `Code sent to ${values.email}` : 'Send a code first, then enter it here.'}
               />
             </>
           ) : null}
@@ -580,8 +605,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
                       </Text>
                       <Text style={styles.hint}>{plan.description}</Text>
                       <Text style={styles.packageMeta}>
-                        {plan.max_staff ?? 1} staff · {plan.max_branches ?? 1} office
-                        {(plan.max_branches ?? 1) === 1 ? '' : 's'}
+                        {planSeatLine(plan)}
                       </Text>
                     </Pressable>
                   );

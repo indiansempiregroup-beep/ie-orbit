@@ -7,7 +7,7 @@ export function OpsMobileRedirect({ tenantId }: { tenantId?: string | null }) {
   const nextTenantId = tenantId ?? workspace.tenantId;
 
   useEffect(() => {
-    redirectToOpsMobileWeb({ tenantId: nextTenantId });
+    redirectToOpsMobileWeb({ tenantId: nextTenantId, clearLocalSession: true });
   }, [nextTenantId]);
 
   return <p role="status">Opening your workspace…</p>;

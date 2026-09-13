@@ -22,7 +22,10 @@ export function ProfileSessionsPage() {
     if (typeof window !== 'undefined') {
       setUserAgent(navigator.userAgent);
       setPlatform(navigator.platform || 'Unknown');
-      setSessionStarted(localStorage.getItem('ie:auth:session_started'));
+      setSessionStarted(
+        sessionStorage.getItem('ie:auth:session_started') ??
+          localStorage.getItem('ie:auth:session_started'),
+      );
     }
   }, []);
 

@@ -275,6 +275,8 @@ class CheckoutService:
                     "is_default": bool(definition.get("is_default", False)),
                     "max_staff": int(definition.get("max_staff", 1) or 1),
                     "max_branches": int(definition.get("max_branches", 1) or 1),
+                    "max_extra_staff": definition.get("max_extra_staff"),
+                    "max_extra_offices": definition.get("max_extra_offices"),
                     "bi_features": list(definition.get("bi_features") or []),
                     "features": list(definition.get("features") or []),
                     "amount_paise": amount_paise,
@@ -392,6 +394,16 @@ class CheckoutService:
             raise ValidationError({"product_code": "Unknown product code."})
         if get_plan_definition(normalized_product, normalized_plan) is None:
             raise ValidationError({"plan_code": "Unknown plan for this product."})
+
+        from apps.businesses.services.entitlements import EntitlementService
+
+        EntitlementService().ensure_addon_caps(
+            business=business,
+            product_code=normalized_product,
+            extra_staff=extra_staff,
+            extra_offices=extra_offices,
+            plan_code=normalized_plan,
+        )
 
         base = self._resolve_plan_price_paise(normalized_plan)
         if base is None:

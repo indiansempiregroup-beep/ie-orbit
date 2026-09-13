@@ -71,6 +71,8 @@ services:
         VITE_GOOGLE_OAUTH_CLIENT_ID: ${VITE_GOOGLE_OAUTH_CLIENT_ID:-${GOOGLE_OAUTH_CLIENT_ID:-}}
         GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
         VITE_OPS_MOBILE_WEB_URL: ${VITE_OPS_MOBILE_WEB_URL:-https://ops.ie-orbit.com}
+        VITE_OPS_ANDROID_STORE_URL: ${VITE_OPS_ANDROID_STORE_URL:-https://play.google.com/store/apps/details?id=com.ieorbit.ops&hl=en_IN}
+        VITE_OPS_IOS_STORE_URL: ${VITE_OPS_IOS_STORE_URL:-}
         VITE_PUBLIC_SITE_URL: ${VITE_PUBLIC_SITE_URL:-https://ie-orbit.com}
         VITE_ADMIN_APP_URL: ${VITE_ADMIN_APP_URL:-https://app.ie-orbit.com}
         VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-G-3Z5PSGMWJW}

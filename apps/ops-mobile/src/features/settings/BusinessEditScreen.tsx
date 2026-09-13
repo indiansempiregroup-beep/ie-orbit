@@ -14,12 +14,14 @@ import { SelectField } from '../../components/SelectField';
 import { uploadBrandingLogo } from '../../api/media';
 import { CURRENCIES, TIMEZONES } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { colors, fonts, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import { emailFieldError } from '../../utils/emailValidation';
 import { indianMobileError, requiredMessage, websiteFieldError } from '../../utils/formValidation';
+import { normalizeGstin, validateGstin } from '../../utils/gstin';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function BusinessEditScreen() {
@@ -27,6 +29,7 @@ export function BusinessEditScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { token } = useAuth();
   const { activeBusiness, businessId, tenantId, refreshWorkspace } = useWorkspace();
+  const toast = useToast();
   const [businessName, setBusinessName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -116,17 +119,23 @@ export function BusinessEditScreen() {
             try {
               const nextErrors: Record<string, string> = {};
               if (!businessName.trim() && !displayName.trim()) nextErrors.businessName = requiredMessage('Business name');
-              const emailError = emailFieldError(email, false);
+              if (!logoAsset && !(logoPreview || activeBusiness?.logo)) {
+                nextErrors.logo = requiredMessage('Business logo');
+              }
+              const emailError = emailFieldError(email, true);
               if (emailError) nextErrors.email = emailError;
-              const phoneError = indianMobileError(primaryContact, false);
+              const phoneError = indianMobileError(primaryContact, true);
               if (phoneError) nextErrors.primaryContact = phoneError;
               const websiteError = websiteFieldError(website);
               if (websiteError) nextErrors.website = websiteError;
+              const gstinResult = validateGstin(gstTaxNumber);
+              if (!gstinResult.ok) nextErrors.gstin = gstinResult.message;
               if (Object.keys(nextErrors).length) {
                 setFieldErrors(nextErrors);
                 return;
               }
               setFieldErrors({});
+              const gstin = gstinResult.ok ? gstinResult.gstin : '';
               let logo = activeBusiness?.logo;
               if (logoAsset) {
                 const uploaded = await uploadBrandingLogo({
@@ -144,7 +153,7 @@ export function BusinessEditScreen() {
                 email,
                 timezone,
                 currency,
-                gst_tax_number: gstTaxNumber.trim().toUpperCase(),
+                gst_tax_number: gstin,
                 primary_contact: primaryContact || undefined,
                 website: website || undefined,
                 address_line1: addressLine1 || undefined,
@@ -158,6 +167,7 @@ export function BusinessEditScreen() {
               });
               await refreshWorkspace();
               setMessage('Business profile updated.');
+              toast.push('Business profile updated.', 'success');
             } catch (err) {
               setError(getApiErrorMessage(err, 'Unable to update business.'));
             } finally {
@@ -176,14 +186,16 @@ export function BusinessEditScreen() {
       <FormSection title="Branding">
         <ImagePickerButton
           label="Business logo"
-          optional
+          required
           variant="card"
           valueUri={logoPreview || activeBusiness?.logo}
           onPicked={(asset) => {
             setLogoAsset(asset);
             setLogoPreview(asset.uri);
+            setFieldErrors((current) => ({ ...current, logo: '' }));
           }}
           helperText="Shown in OPS-Mobile and customer-facing branding."
+          error={fieldErrors.logo}
         />
         <Input
           label="Legal / business name"
@@ -201,7 +213,7 @@ export function BusinessEditScreen() {
       <FormSection title="Contact">
         <Input
           label="Business email"
-          optional
+          required
           value={email}
           onChangeText={(value) => {
             setEmail(value);
@@ -213,13 +225,14 @@ export function BusinessEditScreen() {
         />
         <Input
           label="Primary contact"
-          optional
+          required
           value={primaryContact}
           onChangeText={(value) => {
             setPrimaryContact(value);
             setFieldErrors((current) => ({ ...current, primaryContact: '' }));
           }}
           error={fieldErrors.primaryContact}
+          keyboardType="phone-pad"
         />
         <Input
           label="Website"
@@ -262,10 +275,16 @@ export function BusinessEditScreen() {
           label="GSTIN"
           optional
           value={gstTaxNumber}
-          onChangeText={setGstTaxNumber}
+          onChangeText={(value) => {
+            setGstTaxNumber(normalizeGstin(value));
+            setFieldErrors((current) => ({ ...current, gstin: '' }));
+          }}
           autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={15}
           placeholder="22AAAAA0000A1Z5"
           hint="Business GST identification number used on invoices and e-invoicing."
+          error={fieldErrors.gstin}
         />
       </FormSection>
 

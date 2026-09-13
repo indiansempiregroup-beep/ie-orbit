@@ -5,6 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserStatus
+from apps.authentication.tests.otp_helpers import authenticate_api_client
 from apps.tenancy.models import Branding, Organization, Subscription, TenantSettings
 
 
@@ -23,14 +24,7 @@ def user() -> User:
 
 
 def authenticate(api_client: APIClient, user: User) -> str:
-    response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = response.json()["data"]["access"]
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-    return access
+    return authenticate_api_client(api_client, user)
 
 
 @pytest.mark.django_db

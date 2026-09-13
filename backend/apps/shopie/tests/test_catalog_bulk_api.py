@@ -7,6 +7,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserStatus
+from apps.authentication.tests.otp_helpers import authenticate_api_client
 from apps.businesses.models import Business
 from apps.shopie.models import ShopProduct
 from apps.tenancy.models import Organization, Tenant
@@ -46,12 +47,7 @@ def shop_workspace(owner: User) -> tuple[Tenant, Business]:
 
 
 def authenticate(api_client: APIClient, owner: User, tenant: Tenant) -> None:
-    response = api_client.post(
-        reverse("auth-login"),
-        {"email": owner.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = response.json()["data"]["access"]
+    access = authenticate_api_client(api_client, owner)
     api_client.credentials(
         HTTP_AUTHORIZATION=f"Bearer {access}",
         HTTP_X_TENANT_ID=str(tenant.id),

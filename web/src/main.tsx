@@ -3,9 +3,10 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
 import { AppProviders } from './providers/AppProviders';
-import { captureWebSessionHandoff } from './lib/sessionHandoff';
+import { captureSignedOut, captureWebSessionHandoff } from './lib/sessionHandoff';
 
 captureWebSessionHandoff();
+captureSignedOut();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

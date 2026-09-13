@@ -1,5 +1,5 @@
 import type { UserProfile } from '@ie-orbit/sdk';
-import { getAdminAppOrigin, isAdminAppHost } from './hosts';
+import { getAdminAppOrigin, isAdminAppHost, originsAreSameApp } from './hosts';
 import { redirectToOpsMobileWeb } from './impersonation';
 import { encodeSessionHandoff } from './sessionHandoff';
 import {
@@ -16,8 +16,16 @@ const REFRESH_KEY = 'ie:auth:refresh';
 
 export function redirectToAdminApp(pathAndQuery = '/admin') {
   if (typeof window === 'undefined') return;
-  const origin = getAdminAppOrigin();
   const path = pathAndQuery.startsWith('/') ? pathAndQuery : `/${pathAndQuery}`;
+  if (originsAreSameApp(window.location.origin, getAdminAppOrigin())) {
+    const local = new URL(path, `${window.location.origin}/`);
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` === `${local.pathname}${local.search}${local.hash}`) {
+      return;
+    }
+    window.location.assign(local.toString());
+    return;
+  }
+  const origin = getAdminAppOrigin();
   const target = new URL(path, `${origin}/`);
 
   if (window.location.origin === origin) {
@@ -28,8 +36,8 @@ export function redirectToAdminApp(pathAndQuery = '/admin') {
   let access: string | undefined;
   let refresh: string | undefined;
   try {
-    access = localStorage.getItem(ACCESS_KEY) || undefined;
-    refresh = localStorage.getItem(REFRESH_KEY) || undefined;
+    access = sessionStorage.getItem(ACCESS_KEY) || localStorage.getItem(ACCESS_KEY) || undefined;
+    refresh = sessionStorage.getItem(REFRESH_KEY) || localStorage.getItem(REFRESH_KEY) || undefined;
   } catch {
     // ignore
   }
@@ -51,17 +59,20 @@ export function continueAfterAuth(
     return;
   }
 
-  if (isAdminAppHost() && isPlatformAdmin(user)) {
+  if (
+    isPlatformAdmin(user) &&
+    (isAdminAppHost() || originsAreSameApp(window.location.origin, getAdminAppOrigin()))
+  ) {
     navigate(getPostLoginPath(user));
     return;
   }
 
   if (hasTenantOpsRole(user)) {
-    redirectToOpsMobileWeb();
+    redirectToOpsMobileWeb({ clearLocalSession: true });
     return;
   }
 
-  if (isPlatformAdminOnly(user) && window.location.origin !== getAdminAppOrigin()) {
+  if (isPlatformAdminOnly(user)) {
     redirectToAdminApp(getPostLoginPath(user));
     return;
   }

@@ -56,6 +56,7 @@ function loadRootEnv(fromDir = __dirname) {
     ['GOOGLE_OAUTH_OPS_IOS_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_OPS_IOS_CLIENT_ID'],
     ['GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_OPS_ANDROID_CLIENT_ID'],
     ['GOOGLE_OAUTH_CUSTOMER_ANDROID_CLIENT_ID', 'EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID'],
+    ['VITE_PUBLIC_SITE_URL', 'EXPO_PUBLIC_PUBLIC_SITE_URL'],
   ];
   for (const [source, target] of googleOAuthCopies) {
     const value = (process.env[source] || '').trim();

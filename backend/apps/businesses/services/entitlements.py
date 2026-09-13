@@ -25,6 +25,7 @@ from apps.businesses.constants import (
     PRODUCT_DISPLAY_NAMES,
     get_default_plan_code,
     get_plan_definition,
+    plan_extra_cap,
     product_code_for_feature,
 )
 from apps.businesses.models import (
@@ -74,6 +75,8 @@ class PlanEntitlements:
     features: tuple[str, ...]
     extra_staff: int
     extra_offices: int
+    max_extra_staff: int | None
+    max_extra_offices: int | None
     pets_pack_enabled: bool
     billing_interval: str
     status: str
@@ -192,6 +195,8 @@ class PlanEntitlements:
             "extra_staff": self.extra_staff,
             "extra_offices": self.extra_offices,
             "pets_pack_enabled": self.pets_pack_enabled,
+            "max_extra_staff": self.max_extra_staff,
+            "max_extra_offices": self.max_extra_offices,
             "effective_max_staff": self.effective_max_staff,
             "effective_max_branches": self.effective_max_branches,
             "used_staff": used_staff,
@@ -208,6 +213,57 @@ class PlanEntitlements:
                 "total_amount_paise": self.total_amount_paise,
             },
         }
+
+
+def allowed_extra_count(*, cap: int | None, current: int) -> int | None:
+    """Highest extra count allowed given a plan cap and grandfathered current extras."""
+    if cap is None:
+        return None
+    return max(int(cap), max(0, int(current or 0)))
+
+
+def ensure_extra_addons_within_cap(
+    *,
+    extra_staff: int,
+    extra_offices: int,
+    max_extra_staff: int | None,
+    max_extra_offices: int | None,
+    current_extra_staff: int = 0,
+    current_extra_offices: int = 0,
+) -> None:
+    extra_staff = int(extra_staff or 0)
+    extra_offices = int(extra_offices or 0)
+    errors: dict[str, str] = {}
+    if extra_staff < 0:
+        errors["extra_staff"] = "Must be zero or more."
+    if extra_offices < 0:
+        errors["extra_offices"] = "Must be zero or more."
+    staff_allowed = allowed_extra_count(cap=max_extra_staff, current=current_extra_staff)
+    if staff_allowed is not None and extra_staff > staff_allowed:
+        if current_extra_staff > (max_extra_staff or 0):
+            errors["extra_staff"] = (
+                f"You can keep your current {current_extra_staff} extra staff, "
+                "but cannot add more on this plan. Upgrade to Pro for more."
+            )
+        else:
+            errors["extra_staff"] = (
+                f"This plan allows {max_extra_staff} extra staff. Upgrade to Pro for more."
+            )
+    office_allowed = allowed_extra_count(cap=max_extra_offices, current=current_extra_offices)
+    if office_allowed is not None and extra_offices > office_allowed:
+        if current_extra_offices > (max_extra_offices or 0):
+            errors["extra_offices"] = (
+                f"You can keep your current {current_extra_offices} extra offices, "
+                "but cannot add more on this plan. Upgrade to Pro for another location."
+            )
+        elif (max_extra_offices or 0) == 0:
+            errors["extra_offices"] = "A second office is on Pro. Upgrade to add extra offices."
+        else:
+            errors["extra_offices"] = (
+                f"This plan allows {max_extra_offices} extra offices. Upgrade to Pro for more."
+            )
+    if errors:
+        raise ValidationError(errors)
 
 
 class EntitlementService:
@@ -267,13 +323,17 @@ class EntitlementService:
             and subscription.status == BusinessProductSubscriptionStatus.TRIALING
             and not soft_locked
         ):
-            pro_definition = get_plan_definition(normalized_product, f"{normalized_product}-pro") or definition
-            max_staff = 5
-            max_branches = 5
+            pro_definition = (
+                get_plan_definition(normalized_product, f"{normalized_product}-pro") or definition
+            )
+            max_staff = int(pro_definition.get("max_staff", 5) or 5)
+            max_branches = int(pro_definition.get("max_branches", 2) or 2)
             raw_bi = pro_definition.get("bi_features") or list(BI_FEATURES_FULL)
             bi_features = tuple(str(item) for item in raw_bi)
             raw_features = pro_definition.get("features") or list(PLAN_FEATURES_FULL)
             features = tuple(str(item) for item in raw_features)
+            max_extra_staff = plan_extra_cap(pro_definition, "max_extra_staff")
+            max_extra_offices = plan_extra_cap(pro_definition, "max_extra_offices")
         else:
             max_staff = int(definition.get("max_staff", 1) or 1)
             max_branches = int(definition.get("max_branches", 1) or 1)
@@ -281,6 +341,8 @@ class EntitlementService:
             bi_features = tuple(str(item) for item in raw_bi)
             raw_features = definition.get("features") or list(PLAN_FEATURES_LIMITED)
             features = tuple(str(item) for item in raw_features)
+            max_extra_staff = plan_extra_cap(definition, "max_extra_staff")
+            max_extra_offices = plan_extra_cap(definition, "max_extra_offices")
 
         return PlanEntitlements(
             plan_code=plan_code,
@@ -290,6 +352,8 @@ class EntitlementService:
             features=features,
             extra_staff=extra_staff,
             extra_offices=extra_offices,
+            max_extra_staff=max_extra_staff,
+            max_extra_offices=max_extra_offices,
             pets_pack_enabled=pets_pack_enabled,
             billing_interval=billing_interval,
             status=status,
@@ -565,6 +629,49 @@ class EntitlementService:
             )
         if errors:
             raise ValidationError(errors)
+
+    def extra_caps_for_plan(
+        self, *, product_code: str, plan_code: str
+    ) -> tuple[int | None, int | None]:
+        definition = get_plan_definition(product_code, plan_code) or {}
+        return (
+            plan_extra_cap(definition, "max_extra_staff"),
+            plan_extra_cap(definition, "max_extra_offices"),
+        )
+
+    def ensure_addon_caps(
+        self,
+        *,
+        business: Business,
+        product_code: str,
+        extra_staff: int,
+        extra_offices: int,
+        plan_code: str | None = None,
+    ) -> None:
+        normalized = product_code.strip().lower() or DEFAULT_PRODUCT_CODE
+        subscription = self.get_subscription(business=business, product_code=normalized)
+        current_extra_staff = 0
+        current_extra_offices = 0
+        if subscription is not None:
+            current_extra_staff = int(getattr(subscription, "extra_staff", 0) or 0)
+            current_extra_offices = int(getattr(subscription, "extra_offices", 0) or 0)
+        if plan_code:
+            max_extra_staff, max_extra_offices = self.extra_caps_for_plan(
+                product_code=normalized,
+                plan_code=plan_code,
+            )
+        else:
+            entitlements = self.resolve(business=business, product_code=normalized)
+            max_extra_staff = entitlements.max_extra_staff
+            max_extra_offices = entitlements.max_extra_offices
+        ensure_extra_addons_within_cap(
+            extra_staff=extra_staff,
+            extra_offices=extra_offices,
+            max_extra_staff=max_extra_staff,
+            max_extra_offices=max_extra_offices,
+            current_extra_staff=current_extra_staff,
+            current_extra_offices=current_extra_offices,
+        )
 
     def billing_snapshot(self, *, business: Business, product_code: str = DEFAULT_PRODUCT_CODE) -> dict[str, Any]:
         entitlements = self.resolve(business=business, product_code=product_code)

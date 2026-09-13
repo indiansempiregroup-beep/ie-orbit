@@ -6,7 +6,7 @@ Operations app for business owners, managers, and staff. Separate from the white
 
 | Area | Capabilities |
 |------|----------------|
-| **Auth** | Login, forgot/reset password, accept invitation, customer-account gate |
+| **Auth** | OTP (email / WhatsApp when configured), Google, biometrics, accept invitation, register business |
 | **Dashboard** | KPIs, upcoming bookings, quick actions, global search, FAB for new booking |
 | **Bookings** | List, search, create, detail, confirm, check-in, complete, cancel, reschedule |
 | **Calendar** | Day picker, availability slots, book from slot, day bookings |
@@ -18,7 +18,7 @@ Operations app for business owners, managers, and staff. Separate from the white
 | **Reports** | Operational summary + link to BI |
 | **Settings** | Business profile, edit business, products/billing, team |
 | **Team** | Invite staff/manager, list members, revoke pending invites |
-| **Profile** | View, edit, change password, sessions, verify email |
+| **Profile** | View, edit, biometric security, sessions, verify email |
 | **Workspace** | Multi-tenant / multi-business picker and switcher |
 
 Platform Admin (`platform_admin` / `super_admin`) uses the Expo ops app (Tenants / Coupons / Audit). Remaining admin pages (subscriptions, packages, tickets, branding) stay on the Vite console at `:3000` / `app.ie-orbit.com`.

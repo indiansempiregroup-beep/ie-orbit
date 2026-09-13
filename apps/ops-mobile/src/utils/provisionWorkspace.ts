@@ -49,7 +49,7 @@ export type RegisterWizardValues = {
   lastName: string;
   email: string;
   mobile: string;
-  password: string;
+  ownerOtpCode: string;
   timezone: string;
   currency: string;
   language: string;
@@ -105,8 +105,9 @@ export async function provisionWorkspace(values: RegisterWizardValues): Promise<
 
   const body: RegisterBusinessInput = {
     email: values.email,
-    password: values.googleIdToken ? undefined : values.password,
     google_id_token: values.googleIdToken,
+    otp_code: values.googleIdToken ? undefined : values.ownerOtpCode.trim(),
+    otp_verified: Boolean(values.googleIdToken),
     first_name: values.firstName,
     last_name: values.lastName,
     phone_number: values.mobile,

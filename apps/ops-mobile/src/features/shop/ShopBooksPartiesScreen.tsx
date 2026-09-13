@@ -29,6 +29,9 @@ import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
+import { emailFieldError } from '../../utils/emailValidation';
+import { indianMobileError, requiredMessage } from '../../utils/formValidation';
+import { normalizeGstin, validateGstin } from '../../utils/gstin';
 
 type SupplierForm = {
   name: string;
@@ -66,6 +69,7 @@ export function ShopBooksPartiesScreen() {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<SupplierForm>(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statement, setStatement] = useState<ShopPartyStatement | null>(null);
@@ -74,6 +78,7 @@ export function ShopBooksPartiesScreen() {
   const closeForm = useCallback(() => {
     setShowForm(false);
     setForm(EMPTY_FORM);
+    setFieldErrors({});
   }, []);
 
   useLayoutEffect(() => {
@@ -127,13 +132,25 @@ export function ShopBooksPartiesScreen() {
 
   function setField<K extends keyof SupplierForm>(key: K, value: SupplierForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => (current[key as string] ? { ...current, [key as string]: '' } : current));
   }
 
   async function saveSupplier() {
-    if (!client || !businessId || !form.name.trim()) {
-      toast.push('Enter a supplier name', 'error');
+    if (!client || !businessId) return;
+    const nextErrors: Record<string, string> = {};
+    if (!form.name.trim()) nextErrors.name = requiredMessage('Supplier name');
+    const phoneError = indianMobileError(form.phone, false);
+    if (phoneError) nextErrors.phone = phoneError;
+    const emailError = emailFieldError(form.email, false);
+    if (emailError) nextErrors.email = emailError;
+    const gstinResult = validateGstin(form.gstin);
+    if (!gstinResult.ok) nextErrors.gstin = gstinResult.message;
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
       return;
     }
+    setFieldErrors({});
+    const gstin = gstinResult.ok ? gstinResult.gstin : '';
     setBusy(true);
     try {
       await client.shop.createSupplier({
@@ -141,7 +158,7 @@ export function ShopBooksPartiesScreen() {
         name: form.name.trim(),
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
-        gstin: form.gstin.trim() || undefined,
+        gstin: gstin || undefined,
         billing_state: form.billingState.trim() || undefined,
         billing_address: form.billingAddress.trim() || undefined,
         credit_limit: form.creditLimit || undefined,
@@ -190,6 +207,7 @@ export function ShopBooksPartiesScreen() {
           required
           value={form.name}
           onChangeText={(value) => setField('name', value)}
+          error={fieldErrors.name}
         />
         <Input
           label="Phone"
@@ -197,6 +215,7 @@ export function ShopBooksPartiesScreen() {
           value={form.phone}
           onChangeText={(value) => setField('phone', value)}
           keyboardType="phone-pad"
+          error={fieldErrors.phone}
         />
         <Input
           label="Email"
@@ -205,13 +224,16 @@ export function ShopBooksPartiesScreen() {
           onChangeText={(value) => setField('email', value)}
           keyboardType="email-address"
           autoCapitalize="none"
+          error={fieldErrors.email}
         />
         <Input
           label="GSTIN"
           optional
           value={form.gstin}
-          onChangeText={(value) => setField('gstin', value.toUpperCase())}
+          onChangeText={(value) => setField('gstin', normalizeGstin(value))}
           autoCapitalize="characters"
+          maxLength={15}
+          error={fieldErrors.gstin}
         />
         <Input
           label="Billing state"

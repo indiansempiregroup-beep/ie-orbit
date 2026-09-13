@@ -68,9 +68,8 @@ class WorkspaceProvisioningService:
                 user_agent=user_agent,
             )
         else:
-            user = self.auth_service.register(
+            user = self.auth_service.register_passwordless(
                 email=data["email"],
-                password=data["password"],
                 first_name=data.get("first_name", ""),
                 last_name=data.get("last_name", ""),
                 ip_address=ip_address,
@@ -155,12 +154,12 @@ class WorkspaceProvisioningService:
                 event_type="google_login_succeeded",
             )
         else:
-            login_result = self.auth_service.login(
-                email=data["email"],
-                password=data["password"],
+            login_result = self.auth_service.issue_session(
+                user=user,
                 remember_me=True,
                 ip_address=ip_address,
                 user_agent=user_agent,
+                event_type="otp_login_succeeded",
             )
 
         return WorkspaceProvisionResult(

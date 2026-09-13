@@ -10,9 +10,9 @@ import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
 import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { getApiErrorMessage } from '../../utils/format';
+import { getApiErrorMessage, isExistingAccountError } from '../../utils/format';
 import { emailFieldError } from '../../utils/emailValidation';
-import { indianMobileError, passwordFieldError, requiredMessage } from '../../utils/formValidation';
+import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import { mobileClient } from '../../api/client';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -21,7 +21,7 @@ import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 export function RegisterScreen({ navigation }: Props) {
-  const { register, loginWithGoogle } = useAuth();
+  const { register, sendOtp, loginWithGoogle } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { headerPaddingTop } = useScreenInsets();
@@ -43,7 +43,8 @@ export function RegisterScreen({ navigation }: Props) {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -72,8 +73,24 @@ export function RegisterScreen({ navigation }: Props) {
     if (emailError) nextErrors.email = emailError;
     const phoneError = indianMobileError(phone, false);
     if (phoneError) nextErrors.phone = phoneError;
-    const passwordError = passwordFieldError(password);
-    if (passwordError) nextErrors.password = passwordError;
+    if (!codeSent) {
+      if (Object.keys(nextErrors).length) {
+        setFieldErrors(nextErrors);
+        return;
+      }
+      setFieldErrors({});
+      setSubmitting(true);
+      try {
+        await sendOtp({ channel: 'email', identifier: email.trim() });
+        setCodeSent(true);
+      } catch (err) {
+        setError(getApiErrorMessage(err, 'Unable to send verification code.', 'register'));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    if (!code.trim()) nextErrors.code = requiredMessage('Verification code');
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
       return;
@@ -83,13 +100,17 @@ export function RegisterScreen({ navigation }: Props) {
     try {
       await register({
         email: email.trim(),
-        password,
+        code: code.trim(),
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone_number: phone.trim() || undefined,
       });
       await applyReferralIfNeeded();
     } catch (err) {
+      if (isExistingAccountError(err)) {
+        navigation.navigate('Login', { email: email.trim() });
+        return;
+      }
       setError(
         getApiErrorMessage(
           err,
@@ -155,20 +176,21 @@ export function RegisterScreen({ navigation }: Props) {
             }}
             error={fieldErrors.phone}
           />
-          <Input
-            label="Password"
-            required
-            leftIcon="lock"
-            placeholder="Min. 8 characters"
-            secureTextEntry
-            hint="Use a mix of letters, numbers, and symbols"
-            value={password}
-            onChangeText={(value) => {
-              setPassword(value);
-              setFieldErrors((current) => ({ ...current, password: '' }));
-            }}
-            error={fieldErrors.password}
-          />
+          {codeSent ? (
+            <Input
+              label="Verification code"
+              required
+              leftIcon="key"
+              placeholder="6-digit code from email"
+              keyboardType="number-pad"
+              value={code}
+              onChangeText={(value) => {
+                setCode(value);
+                setFieldErrors((current) => ({ ...current, code: '' }));
+              }}
+              error={fieldErrors.code}
+            />
+          ) : null}
           {bootstrap?.referral?.enabled ? (
             <Input
               label="Invite code"
@@ -193,7 +215,14 @@ export function RegisterScreen({ navigation }: Props) {
 
           {error ? <FormAlert message={error} /> : null}
 
-          <Button label="Create account" size="lg" fullWidth loading={submitting} primaryColor={primary} onPress={onSubmit} />
+          <Button
+            label={codeSent ? 'Create account' : 'Send verification code'}
+            size="lg"
+            fullWidth
+            loading={submitting}
+            primaryColor={primary}
+            onPress={onSubmit}
+          />
           <GoogleSignInButton
             disabled={submitting}
             onIdToken={async (idToken) => {

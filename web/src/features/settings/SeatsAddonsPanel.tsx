@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { PETS_PACK_PRICE_INR, formatInrFromPaise, formatPlanDisplayName, getProductName } from '../../config/products';
+import { PETS_PACK_PRICE_INR, allowedExtraCount, formatInrFromPaise, formatPlanDisplayName, getProductName, starterAddonCapHint } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -50,13 +50,16 @@ function Stepper({
   value,
   onChange,
   disabled,
+  max,
 }: {
   label: string;
   hint: string;
   value: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  max?: number | null;
 }) {
+  const plusDisabled = Boolean(disabled) || (max != null && value >= max);
   return (
     <div className="seats-addon-row">
       <div>
@@ -68,7 +71,7 @@ function Stepper({
           −
         </button>
         <span>{value}</span>
-        <button type="button" disabled={disabled} onClick={() => onChange(value + 1)}>
+        <button type="button" disabled={plusDisabled} onClick={() => onChange(value + 1)}>
           +
         </button>
       </div>
@@ -117,6 +120,12 @@ export function SeatsAddonsPanel({
       pets
     );
   }, [snapshot, extraStaff, extraOffices, petsPackEnabled, productCode]);
+
+  const staffCap = snapshot ? allowedExtraCount(snapshot.max_extra_staff, snapshot.extra_staff ?? 0) : null;
+  const officeCap = snapshot ? allowedExtraCount(snapshot.max_extra_offices, snapshot.extra_offices ?? 0) : null;
+  const upgradeHint = snapshot
+    ? starterAddonCapHint(snapshot.max_extra_staff, snapshot.max_extra_offices)
+    : null;
 
   if (subscribedProductIds.length === 0) {
     return null;
@@ -180,12 +189,14 @@ export function SeatsAddonsPanel({
           />
 
           <p className="seats-need-more">Need more?</p>
+          {upgradeHint ? <p className="product-settings-lead">{upgradeHint}</p> : null}
           <Stepper
             label="Extra staff"
             hint={`${formatInrFromPaise(snapshot.pricing.addon_staff_unit_paise) ?? '₹199'} each / month`}
             value={extraStaff}
             onChange={setExtraStaff}
             disabled={snapshot.soft_locked}
+            max={staffCap}
           />
           <Stepper
             label="Extra offices"
@@ -193,6 +204,7 @@ export function SeatsAddonsPanel({
             value={extraOffices}
             onChange={setExtraOffices}
             disabled={snapshot.soft_locked}
+            max={officeCap}
           />
           {productCode === 'shopie' ? (
             <label className="seats-addon-row">

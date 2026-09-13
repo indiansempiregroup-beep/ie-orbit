@@ -5,6 +5,8 @@ type LogoUploadFieldProps = {
   onChange: (file: File | null) => void;
   currentLogoUrl?: string | null;
   label?: string;
+  required?: boolean;
+  error?: string;
   hint?: string;
   accentColor?: string;
   dropzoneTitle?: string;
@@ -22,7 +24,9 @@ export function LogoUploadField({
   value,
   onChange,
   currentLogoUrl = null,
-  label = 'Logo (optional)',
+  label,
+  required = false,
+  error,
   hint = 'PNG, JPG, WebP, or SVG. Square logos work best (at least 256×256).',
   accentColor = '#1A56DB',
   dropzoneTitle = 'Upload your business logo',
@@ -34,6 +38,8 @@ export function LogoUploadField({
   const [dimensions, setDimensions] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const displayUrl = previewUrl ?? currentLogoUrl;
+  const fieldLabel = label ?? (required ? 'Logo' : 'Logo (optional)');
+  const shownError = error || fileError;
   const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
   const allowedExtensions = /\.(png|jpe?g|webp|svg)$/i;
 
@@ -89,7 +95,8 @@ export function LogoUploadField({
   return (
     <div className="logo-upload-field">
       <label className="wizard-section-label" htmlFor={inputId}>
-        {label}
+        {fieldLabel}
+        {required ? <span aria-hidden="true" style={{ color: '#dc2626' }}> *</span> : null}
       </label>
       <div className="logo-upload-panel" style={{ borderColor: accentColor }}>
         {displayUrl ? (
@@ -130,9 +137,9 @@ export function LogoUploadField({
           onChange={handleFileChange}
         />
       </div>
-      {fileError ? (
+      {shownError ? (
         <p className="field-error" role="alert" style={{ marginTop: 8 }}>
-          {fileError}
+          {shownError}
         </p>
       ) : (
         <p className="wizard-hint">{hint}</p>

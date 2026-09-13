@@ -27,18 +27,26 @@ type GoogleIdApi = {
     auto_select?: boolean;
     cancel_on_tap_outside?: boolean;
     itp_support?: boolean;
-    ux_mode?: 'popup' | 'redirect';
-    use_fedcm_for_prompt?: boolean;
   }) => void;
-  prompt: (
-    cb?: (notification: {
-      isNotDisplayed: () => boolean;
-      isSkippedMoment: () => boolean;
-      isDismissedMoment: () => boolean;
-    }) => void,
+  renderButton: (
+    parent: HTMLElement,
+    options: {
+      type?: 'standard' | 'icon';
+      theme?: 'outline' | 'filled_blue' | 'filled_black';
+      size?: 'large' | 'medium' | 'small';
+      text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+      shape?: 'rectangular' | 'pill' | 'circle' | 'square';
+      logo_alignment?: 'left' | 'center';
+      width?: number;
+    },
   ) => void;
   cancel: () => void;
+  disableAutoSelect?: () => void;
+  revoke?: (hint: string, callback: () => void) => void;
 };
+
+let initializedForClientId: string | null = null;
+let credentialHandler: ((idToken: string) => void) | null = null;
 
 function getGoogleIdApi(): GoogleIdApi | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -71,6 +79,7 @@ function loadGoogleIdentityServices(): Promise<GoogleIdApi> {
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
+    script.referrerPolicy = 'strict-origin-when-cross-origin';
     script.onload = onReady;
     script.onerror = () =>
       reject(new Error('Unable to load Google sign-in. Check your network and try again.'));
@@ -78,12 +87,12 @@ function loadGoogleIdentityServices(): Promise<GoogleIdApi> {
   });
 }
 
-function currentGoogleOrigin(): string {
+export function currentGoogleOrigin(): string {
   if (typeof window === 'undefined') return '';
   return window.location.origin;
 }
 
-function googleOriginAllowlistHint(origin = currentGoogleOrigin()): string {
+export function googleOriginAllowlistHint(origin = currentGoogleOrigin()): string {
   const host = origin.replace(/^https?:\/\//, '');
   const withPort = origin;
   const withoutPort = origin.replace(/:\d+$/, '');
@@ -94,50 +103,7 @@ function googleOriginAllowlistHint(origin = currentGoogleOrigin()): string {
   } else if (host.startsWith('127.0.0.1')) {
     lines.push(origin.replace('127.0.0.1', 'localhost'));
   }
-  return `Add these exact values (no trailing slash) as Authorized JavaScript origins AND Authorized redirect URIs on the existing Web client: ${[...new Set(lines)].join(', ')}.`;
-}
-
-async function promptGoogleIdTokenOnWeb(clientId: string): Promise<string | null> {
-  const googleId = await loadGoogleIdentityServices();
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (error: Error | null, token?: string | null) => {
-      if (settled) return;
-      settled = true;
-      try {
-        googleId.cancel();
-      } catch {
-        /* already dismissed */
-      }
-      if (error) reject(error);
-      else resolve(token ?? null);
-    };
-
-    // Do not set ux_mode: 'popup' or use_fedcm_for_prompt. Those open a full
-    // OAuth window whose redirect_uri is this page origin. If that origin is
-    // missing on the Web client, Google shows "Access blocked".
-    googleId.initialize({
-      client_id: clientId,
-      callback: (response) => {
-        if (response.credential) finish(null, response.credential);
-        else finish(new Error('Google did not return a sign-in token. Please try again.'));
-      },
-      auto_select: false,
-      cancel_on_tap_outside: true,
-      itp_support: true,
-    });
-
-    googleId.prompt((notification) => {
-      if (settled) return;
-      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-        finish(
-          new Error(
-            `Google sign-in was blocked for ${currentGoogleOrigin()}. ${googleOriginAllowlistHint()}`,
-          ),
-        );
-      }
-    });
-  });
+  return `Add these exact values (no trailing slash) as Authorized JavaScript origins on the existing Web client: ${[...new Set(lines)].join(', ')}.`;
 }
 
 function googleOAuthExtra(): { clientId?: string; iosClientId?: string; androidClientId?: string } {
@@ -216,6 +182,84 @@ export function decodeGoogleIdToken(idToken: string): GoogleIdTokenClaims {
   }
 }
 
+async function ensureGoogleIdInitialized(): Promise<GoogleIdApi> {
+  const clientId = getGoogleOAuthClientId();
+  if (!clientId) {
+    throw new Error('Google sign-in is not configured for this build.');
+  }
+  const googleId = await loadGoogleIdentityServices();
+  if (initializedForClientId === clientId) return googleId;
+
+  // Do not set ux_mode: 'popup' — that starts a full OAuth redirect and needs
+  // Authorized redirect URIs. The button callback returns an ID token in-page.
+  googleId.initialize({
+    client_id: clientId,
+    callback: (response) => {
+      if (response.credential) credentialHandler?.(response.credential);
+    },
+    auto_select: false,
+    cancel_on_tap_outside: true,
+    itp_support: true,
+  });
+  initializedForClientId = clientId;
+  return googleId;
+}
+
+export async function suppressGoogleAutoSignIn(hint?: string | null): Promise<void> {
+  if (Platform.OS === 'web') {
+    initializedForClientId = null;
+    credentialHandler = null;
+    if (!getGoogleOAuthClientId()) return;
+    try {
+      const googleId = await ensureGoogleIdInitialized();
+      try {
+        googleId.cancel();
+      } catch {
+        /* already dismissed */
+      }
+      googleId.disableAutoSelect?.();
+      const email = hint?.trim();
+      if (email && googleId.revoke) {
+        try {
+          googleId.revoke(email, () => {});
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // GIS may be blocked or unconfigured
+    }
+    return;
+  }
+  if (isExpoGoRuntime()) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { GoogleSignin } = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin');
+    await GoogleSignin.signOut();
+  } catch {
+    // native Google session may not exist
+  }
+}
+
+export async function mountGoogleSignInButton(
+  parent: HTMLElement,
+  onIdToken: (idToken: string) => void,
+): Promise<void> {
+  credentialHandler = onIdToken;
+  const googleId = await ensureGoogleIdInitialized();
+  parent.replaceChildren();
+  const width = Math.min(400, Math.max(240, Math.floor(parent.clientWidth || 320)));
+  googleId.renderButton(parent, {
+    type: 'standard',
+    theme: 'outline',
+    size: 'large',
+    text: 'continue_with',
+    shape: 'pill',
+    logo_alignment: 'left',
+    width,
+  });
+}
+
 async function promptNativeGoogleIdToken(webClientId: string): Promise<string | null> {
   // Lazy so Expo Go can boot without the native module.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -270,10 +314,12 @@ export function useGoogleIdTokenAuth() {
       );
     }
     if (Platform.OS === 'web') {
-      return await promptGoogleIdTokenOnWeb(clientId);
+      throw new Error(
+        'Google sign-in on web uses the Google button on this page. Refresh if you do not see it.',
+      );
     }
     return await promptNativeGoogleIdToken(clientId);
   }
 
-  return { configured, promptForIdToken };
+  return { configured, promptForIdToken, ready: true };
 }

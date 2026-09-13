@@ -5,8 +5,9 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserStatus
+from apps.authentication.tests.otp_helpers import authenticate_api_client
 from apps.authentication.services.roles import RoleService
-from apps.staff.models import Staff
+from apps.staff.models import Staff, StaffInvitation
 from apps.staff.services.invitations import StaffInvitationService
 from apps.tenancy.repositories import TenantRepository
 
@@ -28,14 +29,7 @@ def owner() -> User:
 
 
 def authenticate(api_client: APIClient, user: User) -> str:
-    response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = response.json()["data"]["access"]
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-    return access
+    return authenticate_api_client(api_client, user)
 
 
 def bootstrap_workspace(api_client: APIClient, user: User) -> tuple[str, str]:
@@ -81,7 +75,6 @@ def test_staff_member_can_list_owned_tenant(api_client: APIClient, owner: User) 
 
     StaffInvitationService().accept_invitation(
         token=token,
-        password="ValidPass123",
         first_name="Linked",
         last_name="Staff",
     )

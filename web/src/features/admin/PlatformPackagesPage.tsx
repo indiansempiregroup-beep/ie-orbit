@@ -12,6 +12,7 @@ import {
   AdminStatus,
   productLabel,
 } from './AdminChrome';
+import { adminFeatureGroups, BI_FEATURE_OPTIONS } from '../../config/planFeatures';
 import { usePlatformAddonPricingQuery, usePlatformPlanPackagesQuery, useUpdateAddonPricingMutation, useUpsertPlanPackageMutation } from './adminHooks';
 
 const PRODUCT_LABELS: Record<string, string> = {
@@ -21,97 +22,7 @@ const PRODUCT_LABELS: Record<string, string> = {
 
 const PRODUCT_CODES = ['appointie', 'shopie'];
 
-const BI_FEATURE_OPTIONS = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'growth', label: 'Growth' },
-  { value: 'revenue', label: 'Revenue' },
-  { value: 'forecast', label: 'Forecast' },
-  { value: 'reports', label: 'Reports' },
-];
-
-const FEATURE_GROUPS: Array<{
-  title: string;
-  products: string[];
-  options: Array<{ value: string; label: string }>;
-}> = [
-  {
-    title: 'Orbit Appoint',
-    products: ['appointie'],
-    options: [
-      { value: 'appointie_bookings', label: 'Bookings' },
-      { value: 'appointie_calendar', label: 'Calendar' },
-      { value: 'appointie_customers', label: 'Customers' },
-      { value: 'appointie_reviews', label: 'Reviews' },
-      { value: 'appointie_services', label: 'Services' },
-      { value: 'appointie_staff', label: 'Staff' },
-    ],
-  },
-  {
-    title: 'Commerce',
-    products: ['shopie'],
-    options: [
-      { value: 'shopie_pos', label: 'POS / counter sale' },
-      { value: 'shopie_products', label: 'Products / catalog' },
-      { value: 'shopie_orders', label: 'Online orders' },
-      { value: 'shopie_returns', label: 'Returns' },
-      { value: 'shopie_delivery_zones', label: 'Delivery zones' },
-      { value: 'shopie_instant_delivery', label: 'Instant delivery (Porter / Shiprocket)' },
-      { value: 'shopie_coupons', label: 'Online order coupons' },
-      { value: 'shopie_loyalty', label: 'Shop loyalty rules' },
-    ],
-  },
-  {
-    title: 'Books',
-    products: ['shopie'],
-    options: [
-      { value: 'shopie_books_sale', label: 'Sales' },
-      { value: 'shopie_books_purchase', label: 'Purchases' },
-      { value: 'shopie_books_cash', label: 'Cash & bank' },
-      { value: 'shopie_books_expense', label: 'Expenses' },
-      { value: 'shopie_books_quotations', label: 'Quotations / estimates' },
-      { value: 'shopie_books_notes', label: 'Credit / debit notes' },
-      { value: 'shopie_books_stock', label: 'Stock adjust' },
-      { value: 'shopie_books_parties', label: 'Parties / suppliers' },
-      { value: 'shopie_books_sale_order', label: 'Sale orders' },
-      { value: 'shopie_books_purchase_order', label: 'Purchase orders' },
-      { value: 'shopie_books_challan', label: 'Delivery challan' },
-      { value: 'shopie_books_godowns', label: 'Godowns / transfers' },
-      { value: 'shopie_books_cheques', label: 'Cheques' },
-      { value: 'shopie_books_loans', label: 'Loans' },
-      { value: 'shopie_gst_reports', label: 'GST reports' },
-      { value: 'shopie_einvoice', label: 'GST e-invoice (IRN)' },
-      { value: 'shopie_eway', label: 'GST e-way bill' },
-    ],
-  },
-  {
-    title: 'Grow',
-    products: ['shopie'],
-    options: [
-      { value: 'shopie_grow_whatsapp', label: 'WhatsApp' },
-      { value: 'shopie_grow_google', label: 'Google Profile' },
-      { value: 'shopie_grow_sync', label: 'Sync & share' },
-      { value: 'shopie_grow_utilities', label: 'Utilities' },
-    ],
-  },
-  {
-    title: 'Marketing',
-    products: ['appointie', 'shopie'],
-    options: [
-      { value: 'shopie_grow_ads', label: 'Customer app ads (max 5)' },
-      { value: 'ad_free', label: 'Ad-free apps (hide Google Ads)' },
-      { value: 'razorpay_payments', label: 'Razorpay customer payments' },
-      { value: 'cashfree_payments', label: 'Cashfree customer payments' },
-    ],
-  },
-  {
-    title: 'Loyalty',
-    products: ['appointie', 'shopie'],
-    options: [
-      { value: 'reward_points', label: 'Reward points' },
-      { value: 'shopie_customer_referral', label: 'Customer referral points' },
-    ],
-  },
-];
+const FEATURE_GROUPS = adminFeatureGroups();
 
 type FormState = {
   id?: string;
@@ -124,6 +35,8 @@ type FormState = {
   is_default: boolean;
   max_staff: number;
   max_branches: number;
+  max_extra_staff: string;
+  max_extra_offices: string;
   amount_inr: string;
   yearly_amount_inr: string;
   is_active: boolean;
@@ -155,6 +68,8 @@ function emptyForm(productCode: string): FormState {
     is_default: false,
     max_staff: 1,
     max_branches: 1,
+    max_extra_staff: '',
+    max_extra_offices: '',
     amount_inr: '',
     yearly_amount_inr: '',
     is_active: true,
@@ -177,6 +92,8 @@ function formFromPackage(pkg: PlatformPlanPackage): FormState {
     is_default: pkg.is_default,
     max_staff: pkg.max_staff,
     max_branches: pkg.max_branches,
+    max_extra_staff: pkg.max_extra_staff == null ? '' : String(pkg.max_extra_staff),
+    max_extra_offices: pkg.max_extra_offices == null ? '' : String(pkg.max_extra_offices),
     amount_inr: paiseToInr(pkg.amount_paise),
     yearly_amount_inr: paiseToInr(pkg.yearly_amount_paise),
     is_active: pkg.is_active,
@@ -342,6 +259,8 @@ export function PlatformPackagesPage() {
         is_default: form.is_default,
         max_staff: Number(form.max_staff) || 1,
         max_branches: Number(form.max_branches) || 1,
+        max_extra_staff: form.max_extra_staff.trim() === '' ? null : Number(form.max_extra_staff),
+        max_extra_offices: form.max_extra_offices.trim() === '' ? null : Number(form.max_extra_offices),
         amount_paise: inrToPaise(form.amount_inr),
         yearly_amount_paise: form.yearly_amount_inr.trim() ? inrToPaise(form.yearly_amount_inr) : null,
         is_active: form.is_active,
@@ -362,7 +281,7 @@ export function PlatformPackagesPage() {
     <AdminPage>
       <AdminPageHeader
         title="Plan packages"
-        description="Plan prices, included limits, and add-on unit prices. Click a plan to edit it."
+        description="Every Starter and Pro plan includes a white-label customer app. Edit prices, limits, and add-on unit prices."
         actions={
           <button
             type="button"
@@ -647,6 +566,24 @@ export function PlatformPackagesPage() {
                         onChange={(e) => setForm({ ...form, max_branches: Number(e.target.value) })}
                       />
                     </AdminField>
+                    <AdminField label="Max extra staff">
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="Unlimited"
+                        value={form.max_extra_staff}
+                        onChange={(e) => setForm({ ...form, max_extra_staff: e.target.value })}
+                      />
+                    </AdminField>
+                    <AdminField label="Max extra offices">
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="Unlimited"
+                        value={form.max_extra_offices}
+                        onChange={(e) => setForm({ ...form, max_extra_offices: e.target.value })}
+                      />
+                    </AdminField>
                     <AdminField label="Sort order">
                       <input
                         type="number"
@@ -681,7 +618,8 @@ export function PlatformPackagesPage() {
               <div className="admin-feature-stack">
                 <p className="admin-panel__desc" style={{ margin: 0 }}>
                   Only {PRODUCT_LABELS[form.product_code] ?? form.product_code} functions are shown. Uncheck to hide
-                  the function in ops-mobile and block its APIs.
+                  the function in ops-mobile and block its APIs. Public plans also publish these flags to the website
+                  pricing page, with a short explanation for customers.
                 </p>
                 <FeatureGroup
                   title="Business intelligence"

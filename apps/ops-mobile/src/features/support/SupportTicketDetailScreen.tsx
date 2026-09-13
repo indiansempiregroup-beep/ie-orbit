@@ -9,6 +9,7 @@ import { Chip } from '../../components/ui/Chip';
 import { Input } from '../../components/ui/Input';
 import { StickyFooterBar } from '../../components/ui/StickyFooterBar';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatRelativeTime } from '../../utils/format';
@@ -25,6 +26,7 @@ export function SupportTicketDetailScreen() {
   const insets = useSafeAreaInsets();
   const client = useOpsClient();
   const { user } = useAuth();
+  const toast = useToast();
   const route = useRoute<RouteProp<RootStackParamList, 'SupportTicketDetail'>>();
   const mode = route.params.mode ?? 'workspace';
   const ticketId = route.params.ticketId;
@@ -67,6 +69,7 @@ export function SupportTicketDetailScreen() {
         setTicket(response.data);
       }
       setReply('');
+      toast.push('Reply sent.', 'success');
     } catch (err) {
       Alert.alert('Could not send', err instanceof Error ? err.message : 'Please try again.');
     } finally {
@@ -80,6 +83,7 @@ export function SupportTicketDetailScreen() {
     try {
       await client.platform.updateTicket(ticketId, { status });
       await load();
+      toast.push('Ticket updated.', 'success');
     } catch (err) {
       Alert.alert('Could not update', err instanceof Error ? err.message : 'Please try again.');
     } finally {

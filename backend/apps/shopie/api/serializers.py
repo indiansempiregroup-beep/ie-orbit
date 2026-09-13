@@ -563,6 +563,7 @@ class ShopOrderCreateSerializer(serializers.Serializer):
     )
     coupon_code = serializers.CharField(required=False, allow_blank=True, max_length=40)
     points_to_redeem = serializers.IntegerField(required=False, min_value=0, default=0)
+    whatsapp_opt_in = serializers.BooleanField(required=False)
     lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 
 

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { colors, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
@@ -29,6 +30,7 @@ export function NotificationPreferencesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const { user, refreshProfile } = useAuth();
+  const toast = useToast();
   const rawPrefs = (user?.notification_preferences ?? {}) as Record<string, boolean>;
   const [email, setEmail] = useState(prefValue(rawPrefs, 'email'));
   const [push, setPush] = useState(prefValue(rawPrefs, 'push'));
@@ -42,7 +44,10 @@ export function NotificationPreferencesScreen() {
         notification_preferences: { email, push },
       });
       await refreshProfile();
-      Alert.alert(t('common.saved', { defaultValue: 'Saved' }), t('profile.notificationPreferencesUpdated', { defaultValue: 'Notification preferences updated.' }));
+      toast.push(
+        t('profile.notificationPreferencesUpdated', { defaultValue: 'Notification preferences updated.' }),
+        'success',
+      );
       navigation.goBack();
     } catch (err) {
       Alert.alert(

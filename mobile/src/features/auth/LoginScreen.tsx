@@ -32,10 +32,11 @@ import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
-export function LoginScreen({ navigation }: Props) {
+export function LoginScreen({ navigation, route }: Props) {
   const { t } = useTranslation();
   const {
-    login,
+    sendOtp,
+    loginWithOtp,
     loginWithGoogle,
     loginWithBiometrics,
     enableBiometrics,
@@ -57,11 +58,19 @@ export function LoginScreen({ navigation }: Props) {
       ? `Shop ${appName} and keep your orders in one place.`
       : `Book with ${appName} and manage your visits in one place.`;
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(route.params?.email ?? '');
+  const mobileOtpEnabled = Boolean(bootstrap?.otp_auth?.mobile_otp_via_whatsapp);
+  const [loginChannel, setLoginChannel] = useState<'email' | 'whatsapp'>('email');
+  const [phone, setPhone] = useState('');
+  const [otpStep, setOtpStep] = useState<'idle' | 'code'>('idle');
+  const [code, setCode] = useState('');
   const [remember, setRemember] = useState(true);
-  const [error, setError] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [error, setError] = useState(
+    route.params?.email
+      ? 'An account with this email already exists. Sign in instead.'
+      : '',
+  );
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; code?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
 
@@ -102,23 +111,51 @@ export function LoginScreen({ navigation }: Props) {
     );
   }, [biometricAvailable, biometricEnabled, biometricLabel, enableBiometrics]);
 
-  async function onSubmit() {
+  async function onSendCode() {
     setError('');
-    const nextErrors = {
-      email: emailFieldError(email) ?? undefined,
-      password: password ? undefined : requiredMessage('Password'),
-    };
-    if (nextErrors.email || nextErrors.password) {
-      setFieldErrors(nextErrors);
+    if (loginChannel === 'email') {
+      const emailError = emailFieldError(email);
+      if (emailError) {
+        setFieldErrors({ email: emailError });
+        return;
+      }
+    } else if (!phone.trim()) {
+      setFieldErrors({ email: requiredMessage('Mobile number') });
       return;
     }
     setFieldErrors({});
     setSubmitting(true);
     try {
-      await login(email.trim(), password, remember);
+      await sendOtp({
+        channel: loginChannel === 'whatsapp' ? 'whatsapp' : 'email',
+        identifier: loginChannel === 'whatsapp' ? phone.trim() : email.trim(),
+      });
+      setOtpStep('code');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Unable to send sign-in code.', 'login'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function onVerifyCode() {
+    setError('');
+    if (!code.trim()) {
+      setFieldErrors({ code: requiredMessage('Sign-in code') });
+      return;
+    }
+    setFieldErrors({});
+    setSubmitting(true);
+    try {
+      await loginWithOtp({
+        channel: loginChannel === 'whatsapp' ? 'whatsapp' : 'email',
+        identifier: loginChannel === 'whatsapp' ? phone.trim() : email.trim(),
+        code: code.trim(),
+        remember,
+      });
       await offerBiometricEnrollment();
     } catch (err) {
-      setError(getApiErrorMessage(err, "That email or password doesn't look right. Please try again.", 'login'));
+      setError(getApiErrorMessage(err, 'That code is invalid or expired.', 'login'));
     } finally {
       setSubmitting(false);
     }
@@ -172,33 +209,64 @@ export function LoginScreen({ navigation }: Props) {
             </Pressable>
           ) : null}
 
-          <Input
-            label={t('common.email')}
-            required
-            leftIcon="mail"
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={(value) => {
-              setEmail(value);
-              setFieldErrors((current) => ({ ...current, email: undefined }));
-            }}
-            error={fieldErrors.email}
-          />
-          <Input
-            label={t('auth.password')}
-            required
-            leftIcon="lock"
-            placeholder="Your password"
-            secureTextEntry
-            value={password}
-            onChangeText={(value) => {
-              setPassword(value);
-              setFieldErrors((current) => ({ ...current, password: undefined }));
-            }}
-            error={fieldErrors.password}
-          />
+          {mobileOtpEnabled && otpStep === 'idle' ? (
+            <View style={styles.channelRow}>
+              <Button
+                label="Email OTP"
+                variant={loginChannel === 'email' ? 'primary' : 'outline'}
+                size="sm"
+                onPress={() => setLoginChannel('email')}
+              />
+              <Button
+                label="Mobile OTP"
+                variant={loginChannel === 'whatsapp' ? 'primary' : 'outline'}
+                size="sm"
+                onPress={() => setLoginChannel('whatsapp')}
+              />
+            </View>
+          ) : null}
+          {loginChannel === 'whatsapp' ? (
+            <Input
+              label="Mobile number"
+              required
+              leftIcon="phone"
+              placeholder="10-digit mobile"
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
+              error={fieldErrors.email}
+            />
+          ) : (
+            <Input
+              label={t('common.email')}
+              required
+              leftIcon="mail"
+              placeholder="you@example.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={(value) => {
+                setEmail(value);
+                setFieldErrors((current) => ({ ...current, email: undefined }));
+              }}
+              error={fieldErrors.email}
+            />
+          )}
+          {otpStep === 'code' ? (
+            <Input
+              label="Sign-in code"
+              required
+              leftIcon="key"
+              placeholder="6-digit code"
+              keyboardType="number-pad"
+              value={code}
+              onChangeText={(value) => {
+                setCode(value);
+                setFieldErrors((current) => ({ ...current, code: undefined }));
+              }}
+              error={fieldErrors.code}
+            />
+          ) : null}
 
           <View style={styles.row}>
             <Pressable style={styles.remember} onPress={() => setRemember((v) => !v)}>
@@ -207,21 +275,29 @@ export function LoginScreen({ navigation }: Props) {
               </View>
               <Text style={styles.rememberLabel}>Remember me</Text>
             </Pressable>
-            <Pressable onPress={() => navigation.navigate('ForgotPassword')}>
-              <Text style={[styles.link, { color: primary }]}>{t('auth.forgotPassword')}</Text>
-            </Pressable>
           </View>
 
           {error ? <FormAlert message={error} /> : null}
 
           <Button
-            label={t('auth.signIn')}
+            label={otpStep === 'code' ? 'Verify and sign in' : 'Sign in with OTP'}
             size="lg"
             fullWidth
             loading={(submitting || loading) && !biometricBusy}
             primaryColor={primary}
-            onPress={onSubmit}
+            onPress={() => void (otpStep === 'code' ? onVerifyCode() : onSendCode())}
           />
+          {otpStep === 'code' ? (
+            <Button
+              label="Use a different email"
+              variant="ghost"
+              fullWidth
+              onPress={() => {
+                setOtpStep('idle');
+                setCode('');
+              }}
+            />
+          ) : null}
           <GoogleSignInButton
             disabled={loading || submitting || biometricBusy}
             onIdToken={async (idToken) => {
@@ -251,6 +327,7 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, color: colors.foreground, marginBottom: 4 },
   subtitle: { ...typography.body, color: colors.mutedForeground, marginBottom: spacing.xxl },
   form: { gap: spacing.lg },
+  channelRow: { flexDirection: 'row', gap: spacing.sm },
   biometricCard: {
     flexDirection: 'row',
     alignItems: 'center',

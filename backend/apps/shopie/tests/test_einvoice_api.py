@@ -79,12 +79,9 @@ def b2b_customer(gst_workspace: tuple[Tenant, Business]) -> Customer:
 
 
 def authenticate(api_client: APIClient, owner: User, tenant: Tenant) -> None:
-    response = api_client.post(
-        reverse("auth-login"),
-        {"email": owner.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = response.json()["data"]["access"]
+    from apps.authentication.tests.otp_helpers import authenticate_api_client
+
+    access = authenticate_api_client(api_client, owner)
     api_client.credentials(
         HTTP_AUTHORIZATION=f"Bearer {access}",
         HTTP_X_TENANT_ID=str(tenant.id),

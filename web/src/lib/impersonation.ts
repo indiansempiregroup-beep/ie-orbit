@@ -1,4 +1,5 @@
 import { getAdminAppOrigin } from './hosts';
+import { suppressGoogleAutoSignIn } from './googleAuth';
 
 export const IMPERSONATOR_ID_KEY = 'ie:auth:impersonator_id';
 export const IMPERSONATION_TENANT_ID_KEY = 'ie:auth:impersonation_tenant_id';
@@ -6,9 +7,13 @@ export const ADMIN_TOKENS_BACKUP_KEY = 'ie_admin_tokens_backup';
 
 const ACCESS_KEY = 'ie:auth:access';
 const REFRESH_KEY = 'ie:auth:refresh';
+const SESSION_STARTED_KEY = 'ie:auth:session_started';
 /** Keep in sync with WorkspaceContext ACTIVE_TENANT_STORAGE_KEY / WORKSPACE_MODE_STORAGE_KEY. */
 const ACTIVE_TENANT_STORAGE_KEY = 'ie:active-tenant-id';
 const WORKSPACE_MODE_STORAGE_KEY = 'ie:workspace-mode';
+
+/** In-memory copy so ops handoff still works after storage is cleared (StrictMode remount). */
+let lastWrittenTokens: { access: string; refresh: string } | null = null;
 
 export type AdminTokenBackup = {
   access: string | null;
@@ -79,8 +84,26 @@ export function beginImpersonationSession(params: {
 }
 
 export function writeAuthTokens(access: string, refresh: string) {
+  lastWrittenTokens = { access, refresh };
   localStorage.setItem(ACCESS_KEY, access);
   localStorage.setItem(REFRESH_KEY, refresh);
+}
+
+export function rememberAuthTokens(access: string, refresh: string) {
+  lastWrittenTokens = { access, refresh };
+}
+
+export function clearAuthTokens() {
+  try {
+    localStorage.removeItem(ACCESS_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(SESSION_STARTED_KEY);
+    sessionStorage.removeItem(ACCESS_KEY);
+    sessionStorage.removeItem(REFRESH_KEY);
+    sessionStorage.removeItem(SESSION_STARTED_KEY);
+  } catch {
+    // ignore storage failures
+  }
 }
 
 export function restoreAdminTokenBackup(): AdminTokenBackup | null {
@@ -141,22 +164,49 @@ export function buildOpsMobileSessionUrl(params: {
   return `${getOpsMobileWebOrigin()}/?ie-session=${encodeURIComponent(encoded)}`;
 }
 
+/** StrictMode remounts PostAuthRedirect; a second assign without tokens would drop ie-session. */
+let pendingOpsMobileUrl: string | null = null;
+
 export function redirectToOpsMobileWeb(options?: {
   access?: string | null;
   refresh?: string | null;
   tenantId?: string | null;
+  /** Drop the marketing-site session after handoff so Sign in cannot restore it. */
+  clearLocalSession?: boolean;
 }) {
   if (typeof window === 'undefined') return;
+  if (pendingOpsMobileUrl) {
+    window.location.assign(pendingOpsMobileUrl);
+    return;
+  }
   let access = options?.access ?? undefined;
   let refresh = options?.refresh ?? undefined;
   try {
-    access = access || localStorage.getItem(ACCESS_KEY) || undefined;
-    refresh = refresh || localStorage.getItem(REFRESH_KEY) || undefined;
+    access =
+      access ||
+      lastWrittenTokens?.access ||
+      sessionStorage.getItem(ACCESS_KEY) ||
+      localStorage.getItem(ACCESS_KEY) ||
+      undefined;
+    refresh =
+      refresh ||
+      lastWrittenTokens?.refresh ||
+      sessionStorage.getItem(REFRESH_KEY) ||
+      localStorage.getItem(REFRESH_KEY) ||
+      undefined;
   } catch {
     // ignore storage failures
+    access = access || lastWrittenTokens?.access;
+    refresh = refresh || lastWrittenTokens?.refresh;
   }
   if (access && refresh) {
-    window.location.assign(buildOpsMobileSessionUrl({ access, refresh, tenantId: options?.tenantId }));
+    const url = buildOpsMobileSessionUrl({ access, refresh, tenantId: options?.tenantId });
+    pendingOpsMobileUrl = url;
+    if (options?.clearLocalSession) {
+      clearAuthTokens();
+      void suppressGoogleAutoSignIn();
+    }
+    window.location.assign(url);
     return;
   }
   window.location.assign(`${getOpsMobileWebOrigin()}/`);

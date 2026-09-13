@@ -40,9 +40,13 @@ def global_exception_handler(exc: Exception, context: dict[str, Any]) -> Any:
         )
 
     if isinstance(exc, (exceptions.PermissionDenied, PermissionDenied)):
+        detail = getattr(exc, "detail", None)
+        message = _message_from_detail(detail) if detail else ""
+        if not message or message == "One or more request fields are invalid.":
+            message = "You do not have permission to perform this action."
         return error_response(
             code="PERMISSION_DENIED",
-            message="You do not have permission to perform this action.",
+            message=message,
             details=_response_details(response),
             status_code=status.HTTP_403_FORBIDDEN,
         )

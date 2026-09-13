@@ -11,8 +11,6 @@ export type AuthStackParamList = {
         lastName?: string;
       }
     | undefined;
-  ForgotPassword: undefined;
-  ResetPassword: { token?: string };
   VerifyEmail: undefined;
   AcceptInvitation: { token?: string };
 };
@@ -66,6 +64,10 @@ export type RootStackParamList = {
   BusinessProfile: undefined;
   BusinessEdit: undefined;
   PaymentSettings: undefined;
+  WhatsAppNotificationSettings: undefined;
+  WhatsAppNotificationTemplates: undefined;
+  WhatsAppNotificationTemplateDetail: { code: string };
+  WhatsAppNotificationMappings: undefined;
   ProductSettings: undefined;
   ShopProducts: undefined;
   ShopProductAdd: { enrichCode?: string; productId?: string; returnTo?: 'pos' } | undefined;
@@ -132,6 +134,5 @@ export type RootStackParamList = {
   Profile: undefined;
   ProfileEdit: undefined;
   NotificationPreferences: undefined;
-  Security: undefined;
   Sessions: undefined;
 };

@@ -196,7 +196,7 @@ const TECHNICAL_AUTH_MESSAGES = new Set([
 export type AuthFormContext = 'login' | 'register' | 'forgot' | 'generic';
 
 const AUTH_FORM_FALLBACKS: Record<AuthFormContext, string> = {
-  login: "That email or password doesn't look right. Please try again.",
+  login: "We couldn't sign you in. Check your email or code and try again.",
   register: "We couldn't create your account with those details. Please review and try again.",
   forgot: "We couldn't send a reset link right now. Please check the email and try again.",
   generic: 'Something went wrong with those details. Please try again.',
@@ -211,6 +211,16 @@ function humanizeAuthMessage(message: string, context: AuthFormContext = 'generi
     return AUTH_FORM_FALLBACKS[context];
   }
   return message;
+}
+
+export function isExistingAccountError(error: unknown): boolean {
+  const haystack = [
+    error instanceof Error ? error.message : '',
+    error instanceof ApiClientError ? formatErrorDetails(error.payload.error.details) : '',
+  ]
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes('already exists') && haystack.includes('sign in');
 }
 
 export function getApiErrorMessage(

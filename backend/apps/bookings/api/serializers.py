@@ -266,6 +266,7 @@ class BookingCreateSerializer(serializers.Serializer):
     recurrence_rule = serializers.JSONField(required=False, default=dict)
     metadata = serializers.JSONField(required=False, default=dict)
     points_to_redeem = serializers.IntegerField(min_value=1, required=False)
+    whatsapp_opt_in = serializers.BooleanField(required=False)
 
     def validate(self, attrs: dict) -> dict:
         has_service = bool(attrs.get("service_id"))

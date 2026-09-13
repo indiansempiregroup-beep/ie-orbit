@@ -7,6 +7,7 @@ import { resolveMediaUrl } from '../utils/mediaUrl';
 import { RemoteImage } from './RemoteImage';
 import { colors, form, iconTones, radius, spacing, typography } from '../theme/tokens';
 import { FieldLabel } from './ui/FieldLabel';
+import { fieldStyles } from './ui/fieldStyles';
 
 type Variant = 'avatar' | 'card';
 
@@ -19,6 +20,7 @@ type Props = {
   helperText?: string;
   required?: boolean;
   optional?: boolean;
+  error?: string;
 };
 
 export function ImagePickerButton({
@@ -29,6 +31,7 @@ export function ImagePickerButton({
   helperText,
   required,
   optional,
+  error,
 }: Props) {
   const [localPreview, setLocalPreview] = useState<string | null>(null);
 
@@ -125,9 +128,11 @@ export function ImagePickerButton({
             <Pressable onPress={openPicker}>
               <Text style={styles.changeLink}>{preview ? 'Change photo' : 'Add photo'}</Text>
             </Pressable>
-            <Text style={styles.helper}>
-              {helperText || 'Square photo recommended. Use camera or gallery.'}
-            </Text>
+            {error ? <Text style={fieldStyles.error}>{error}</Text> : (
+              <Text style={styles.helper}>
+                {helperText || 'Square photo recommended. Use camera or gallery.'}
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -137,7 +142,10 @@ export function ImagePickerButton({
   return (
     <View style={styles.wrap}>
       <FieldLabel label={label} required={required} optional={optional} />
-      <Pressable style={[styles.card, preview ? styles.cardFilled : null]} onPress={openPicker}>
+      <Pressable
+        style={[styles.card, preview ? styles.cardFilled : null, error ? styles.cardError : null]}
+        onPress={openPicker}
+      >
         {preview ? (
           <>
             <RemoteImage uri={preview} style={styles.cardPreview} />
@@ -160,6 +168,7 @@ export function ImagePickerButton({
           </View>
         )}
       </Pressable>
+      {error ? <Text style={fieldStyles.error}>{error}</Text> : null}
     </View>
   );
 }
@@ -213,6 +222,9 @@ const styles = StyleSheet.create({
   },
   cardFilled: {
     borderColor: form.boxBorder,
+  },
+  cardError: {
+    borderColor: colors.destructive,
   },
   cardPreview: { ...StyleSheet.absoluteFillObject },
   cardOverlay: {

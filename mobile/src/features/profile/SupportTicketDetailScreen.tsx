@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { ProfileMenuScreen } from '../../components/ProfileMenuScreen';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatRelativeTime, getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -24,10 +25,12 @@ export function SupportTicketDetailScreen({
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
   const { branding } = useBootstrap();
+  const toast = useToast();
   const primary = branding?.primaryColor ?? colors.primary;
   const [ticket, setTicket] = useState<SupportTicketDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState('');
+  const [replyError, setReplyError] = useState('');
   const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
@@ -50,12 +53,17 @@ export function SupportTicketDetailScreen({
   );
 
   async function sendReply() {
-    if (!reply.trim()) return;
+    if (!reply.trim()) {
+      setReplyError('Please enter a reply.');
+      return;
+    }
+    setReplyError('');
     setSending(true);
     try {
       const response = await mobileClient.support.addTicketNote(route.params.ticketId, { body: reply.trim() });
       setTicket(response.data);
       setReply('');
+      toast.push('Reply sent.', 'success');
     } catch (err) {
       Alert.alert('Could not send', getApiErrorMessage(err, 'Please try again.'));
     } finally {
@@ -100,10 +108,15 @@ export function SupportTicketDetailScreen({
             <>
               <Input
                 label="Reply"
+                required
                 value={reply}
-                onChangeText={setReply}
+                onChangeText={(value) => {
+                  setReply(value);
+                  if (replyError) setReplyError('');
+                }}
                 multiline
                 placeholder="Add more detail"
+                error={replyError || undefined}
               />
               <Button
                 label="Send reply"

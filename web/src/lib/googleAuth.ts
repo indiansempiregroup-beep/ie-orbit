@@ -6,6 +6,21 @@ export type GoogleIdTokenClaims = {
   family_name?: string;
 };
 
+type GooglePromptNotification = {
+  isNotDisplayed: () => boolean;
+  isSkippedMoment: () => boolean;
+  isDismissedMoment: () => boolean;
+  getNotDisplayedReason?: () => string;
+  getSkippedReason?: () => string;
+  getDismissedReason?: () => string;
+};
+
+const GOOGLE_ORIGIN_BLOCK_REASONS = new Set([
+  'unregistered_origin',
+  'invalid_client',
+  'missing_client_id',
+]);
+
 type GoogleIdApi = {
   initialize: (config: {
     client_id: string;
@@ -17,10 +32,7 @@ type GoogleIdApi = {
     use_fedcm_for_prompt?: boolean;
   }) => void;
   prompt: (
-    cb?: (notification: {
-      isNotDisplayed: () => boolean;
-      isSkippedMoment: () => boolean;
-    }) => void,
+    cb?: (notification: GooglePromptNotification) => void,
   ) => void;
   renderButton: (
     parent: HTMLElement,
@@ -35,6 +47,8 @@ type GoogleIdApi = {
     },
   ) => void;
   cancel: () => void;
+  disableAutoSelect?: () => void;
+  revoke?: (hint: string, callback: () => void) => void;
 };
 
 let initializedForClientId: string | null = null;
@@ -69,6 +83,38 @@ export function googleOriginAllowlistHint(origin = currentGoogleOrigin()): strin
     lines.push(origin.replace('127.0.0.1', 'localhost'));
   }
   return `Add these exact values (no trailing slash) as Authorized JavaScript origins AND Authorized redirect URIs on the existing Web client: ${[...new Set(lines)].join(', ')}.`;
+}
+
+function googlePromptMomentResult(
+  notification: GooglePromptNotification,
+): 'ignore' | 'cancel' | Error {
+  if (notification.isDismissedMoment()) {
+    if (notification.getDismissedReason?.() === 'credential_returned') return 'ignore';
+    return 'cancel';
+  }
+  if (notification.isSkippedMoment()) {
+    if (notification.getSkippedReason?.() === 'issuing_failed') {
+      return new Error('Google sign-in could not continue. Please try again.');
+    }
+    return 'cancel';
+  }
+  if (!notification.isNotDisplayed()) return 'ignore';
+
+  const reason = notification.getNotDisplayedReason?.() ?? '';
+  if (GOOGLE_ORIGIN_BLOCK_REASONS.has(reason)) {
+    return new Error(
+      `Google sign-in was blocked for ${currentGoogleOrigin()}. ${googleOriginAllowlistHint()}`,
+    );
+  }
+  if (reason === 'secure_http_required') {
+    return new Error(
+      'Google sign-in requires a secure connection. Open this page over HTTPS and try again.',
+    );
+  }
+  if (reason === 'browser_not_supported') {
+    return new Error('Google sign-in is not supported in this browser. Please try another browser.');
+  }
+  return 'cancel';
 }
 
 export function isGoogleAccountNotRegistered(error: unknown): boolean {
@@ -162,10 +208,35 @@ export async function mountGoogleSignInButton(
     theme: 'outline',
     size: 'large',
     text: 'continue_with',
-    shape: 'rectangular',
+    shape: 'pill',
     logo_alignment: 'left',
     width,
   });
+}
+
+export async function suppressGoogleAutoSignIn(hint?: string | null): Promise<void> {
+  initializedForClientId = null;
+  credentialHandler = null;
+  if (!getGoogleOAuthClientId()) return;
+  try {
+    const googleId = await ensureGoogleIdInitialized();
+    try {
+      googleId.cancel();
+    } catch {
+      /* already dismissed */
+    }
+    googleId.disableAutoSelect?.();
+    const email = hint?.trim();
+    if (email && googleId.revoke) {
+      try {
+        googleId.revoke(email, () => {});
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // GIS may be blocked or unconfigured
+  }
 }
 
 export async function promptGoogleIdToken(): Promise<string | null> {
@@ -188,13 +259,10 @@ export async function promptGoogleIdToken(): Promise<string | null> {
     credentialHandler = (idToken) => finish(null, idToken);
     googleId.prompt((notification) => {
       if (settled) return;
-      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-        finish(
-          new Error(
-            `Google sign-in was blocked for ${currentGoogleOrigin()}. ${googleOriginAllowlistHint()}`,
-          ),
-        );
-      }
+      const result = googlePromptMomentResult(notification);
+      if (result === 'ignore') return;
+      if (result === 'cancel') finish(null, null);
+      else finish(result);
     });
   });
 }

@@ -7,13 +7,12 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { colors, fonts, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
-import { passwordFieldError, requiredMessage } from '../../utils/formValidation';
+import { requiredMessage } from '../../utils/formValidation';
 import type { AuthStackParamList } from '../../navigation/types';
 
 export function AcceptInvitationScreen() {
   const route = useRoute<RouteProp<AuthStackParamList, 'AcceptInvitation'>>();
   const token = route.params?.token ?? '';
-  const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
@@ -44,8 +43,7 @@ export function AcceptInvitationScreen() {
             try {
               const nextErrors: Record<string, string> = {};
               if (!firstName.trim()) nextErrors.firstName = requiredMessage('First name');
-              const passwordError = passwordFieldError(password);
-              if (passwordError) nextErrors.password = passwordError;
+              if (!lastName.trim()) nextErrors.lastName = requiredMessage('Last name');
               if (Object.keys(nextErrors).length) {
                 setFieldErrors(nextErrors);
                 setStatus('idle');
@@ -54,12 +52,11 @@ export function AcceptInvitationScreen() {
               setFieldErrors({});
               await opsClient.invitations.accept({
                 token,
-                password: password || undefined,
-                first_name: firstName || undefined,
-                last_name: lastName || undefined,
+                first_name: firstName.trim(),
+                last_name: lastName.trim(),
               });
               setStatus('success');
-              setMessage('Invitation accepted. Go back and sign in with your email.');
+              setMessage('Invitation accepted. Sign in with OTP using the email on your invitation.');
             } catch (err) {
               setStatus('error');
               setMessage(getApiErrorMessage(err, 'Unable to accept invitation.'));
@@ -68,7 +65,9 @@ export function AcceptInvitationScreen() {
         />
       }
     >
-      <Text style={styles.copy}>Set your password to join the workspace, then sign in on the login screen.</Text>
+      <Text style={styles.copy}>
+        Confirm your name to join the workspace. You will sign in with a one-time code sent to your invited email.
+      </Text>
       <Input
         label="First name"
         required
@@ -79,17 +78,15 @@ export function AcceptInvitationScreen() {
         }}
         error={fieldErrors.firstName}
       />
-      <Input label="Last name" optional value={lastName} onChangeText={setLastName} />
       <Input
-        label="Password"
+        label="Last name"
         required
-        secureTextEntry
-        value={password}
+        value={lastName}
         onChangeText={(value) => {
-          setPassword(value);
-          setFieldErrors((current) => ({ ...current, password: '' }));
+          setLastName(value);
+          setFieldErrors((current) => ({ ...current, lastName: '' }));
         }}
-        error={fieldErrors.password}
+        error={fieldErrors.lastName}
       />
       {message ? <Text style={status === 'error' ? styles.error : styles.success}>{message}</Text> : null}
     </FormScreen>

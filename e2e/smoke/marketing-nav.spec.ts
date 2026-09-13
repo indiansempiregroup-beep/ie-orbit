@@ -26,7 +26,7 @@ test.describe('Marketing navigation', () => {
   test('Sign in link opens auth page', async ({ page }) => {
     await page.getByRole('link', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(/\/auth$/);
-    await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
   });
 
   test('Create account link opens registration', async ({ page }) => {

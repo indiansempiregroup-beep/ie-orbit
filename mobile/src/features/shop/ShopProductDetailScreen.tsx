@@ -13,6 +13,7 @@ import { GroupedList } from '../../components/ui/GroupedList';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
@@ -31,6 +32,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const { addItem, itemCount, quantityFor } = useCart();
+  const toast = useToast();
   const [product, setProduct] = useState<ShopProduct | null>(null);
   const [qty, setQty] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -157,6 +159,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
       if (update) await mobileClient.mobile.updateShopProductReview(product.id, body);
       else await mobileClient.mobile.createShopProductReview(product.id, body);
       await load();
+      toast.push(update ? 'Review updated.' : 'Review submitted.', 'success');
     } catch (err) {
       Alert.alert('Unable to submit review', getApiErrorMessage(err, 'Please try again.'));
     } finally {

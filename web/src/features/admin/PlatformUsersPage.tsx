@@ -72,9 +72,9 @@ const ACTION_COPY: Record<UserAction, { title: string; description: string; conf
     tone: 'admin-btn--primary',
   },
   reset_password: {
-    title: 'Send password reset',
-    description: 'Emails a password reset link to the user’s address.',
-    confirm: 'Send reset email',
+    title: 'Send sign-in code',
+    description: 'Emails a one-time sign-in code to the user’s address.',
+    confirm: 'Send sign-in email',
     tone: 'admin-btn--primary',
   },
 };
@@ -176,7 +176,7 @@ export function PlatformUsersPage() {
     setPending({ user, action });
     setReason(
       action === 'reset_password'
-        ? 'support requested password reset'
+        ? 'support requested sign-in code'
         : `${action} account on platform admin request`,
     );
     setError(null);
@@ -195,11 +195,12 @@ export function PlatformUsersPage() {
         reason: reason.trim(),
       });
       if (pending.action === 'reset_password') {
-        const issued = Boolean((response.data as { reset_issued?: boolean }).reset_issued);
+        const data = response.data as { sign_in_code_sent?: boolean; reset_issued?: boolean };
+        const issued = Boolean(data.sign_in_code_sent ?? data.reset_issued);
         setMessage(
           issued
-            ? `Password reset email sent to ${pending.user.email}.`
-            : `Password reset requested for ${pending.user.email}.`,
+            ? `Sign-in code email sent to ${pending.user.email}.`
+            : `Sign-in code requested for ${pending.user.email}.`,
         );
       } else {
         setMessage(
@@ -246,7 +247,7 @@ export function PlatformUsersPage() {
     <AdminPage>
       <AdminPageHeader
         title="Users"
-        description="Browse every platform account. Filter by status, role, or workspace link, then disable, enable, or reset a password with an audited reason."
+        description="Browse every platform account. Filter by status, role, or workspace link, then disable, enable, or send a sign-in code with an audited reason."
         actions={
           <button
             type="button"
@@ -452,8 +453,8 @@ export function PlatformUsersPage() {
                         <button
                           type="button"
                           className="admin-icon-btn"
-                          title="Send password reset"
-                          aria-label={`Send password reset to ${user.email}`}
+                          title="Send sign-in code"
+                          aria-label={`Send sign-in code to ${user.email}`}
                           onClick={() => openAction(user, 'reset_password')}
                         >
                           <KeyRound size={16} />
@@ -558,7 +559,7 @@ export function PlatformUsersPage() {
                 className="admin-btn admin-btn--secondary"
                 onClick={() => openAction(detailUser, 'reset_password')}
               >
-                Send password reset
+                Send sign-in code
               </button>
             </div>
           </div>

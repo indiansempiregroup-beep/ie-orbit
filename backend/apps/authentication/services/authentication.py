@@ -65,7 +65,12 @@ class AuthenticationService:
         remember_me: bool,
         ip_address: str | None,
         user_agent: str,
+        tenant: Tenant | None = None,
+        business: Business | None = None,
     ) -> LoginResult:
+        raise exceptions.AuthenticationFailed(
+            "Password sign-in is disabled. Use Sign in with OTP or Google."
+        )
         user = self.user_repository.get_active_by_email(email)
         if not user or user.is_locked:
             self.audit_service.record(
@@ -91,6 +96,8 @@ class AuthenticationService:
             ip_address=ip_address,
             user_agent=user_agent,
             event_type="login_succeeded",
+            tenant=tenant,
+            business=business,
         )
 
     def issue_session(
@@ -101,6 +108,8 @@ class AuthenticationService:
         ip_address: str | None,
         user_agent: str,
         event_type: str = "login_succeeded",
+        tenant: object | None = None,
+        business: object | None = None,
     ) -> LoginResult:
         if user.status in {UserStatus.SUSPENDED, UserStatus.ARCHIVED}:
             raise exceptions.AuthenticationFailed(
@@ -133,6 +142,13 @@ class AuthenticationService:
         )
 
         refresh = RefreshToken.for_user(user)
+        tenant_id = getattr(tenant, "id", None)
+        business_id = getattr(business, "id", None)
+        if tenant_id is not None:
+            refresh["tenant_id"] = str(tenant_id)
+            refresh["client"] = "customer"
+            if business_id is not None:
+                refresh["business_id"] = str(business_id)
         if remember_me:
             refresh.set_exp(lifetime=timedelta(days=30))
         access = refresh.access_token
@@ -175,6 +191,8 @@ class AuthenticationService:
         remember_me: bool,
         ip_address: str | None,
         user_agent: str,
+        tenant: object | None = None,
+        business: object | None = None,
     ) -> LoginResult:
         identity = verify_google_id_token(id_token)
         user = self._resolve_google_user(identity)
@@ -200,6 +218,8 @@ class AuthenticationService:
             ip_address=ip_address,
             user_agent=user_agent,
             event_type="google_login_succeeded",
+            tenant=tenant,
+            business=business,
         )
 
     def register_from_google(
@@ -241,28 +261,58 @@ class AuthenticationService:
         self,
         *,
         email: str,
-        password: str,
+        password: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
         role_code: str = DEFAULT_OWNER_ROLE_CODE,
         ip_address: str | None = None,
         user_agent: str = "",
     ) -> User:
+        if password:
+            raise exceptions.ValidationError(
+                {"password": "Password registration is disabled. Sign in with OTP or Google."}
+            )
+        return self.register_passwordless(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            role_code=role_code,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    def register_passwordless(
+        self,
+        *,
+        email: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        role_code: str = DEFAULT_OWNER_ROLE_CODE,
+        ip_address: str | None = None,
+        user_agent: str = "",
+        mark_verified: bool = True,
+    ) -> User:
         existing_user = self.user_repository.get_by_email(email)
         if existing_user:
-            raise exceptions.ValidationError({"email": "A user with this email already exists."})
+            raise exceptions.ValidationError(
+                {
+                    "email": "An account with this email already exists. Sign in instead.",
+                }
+            )
 
         user = User.objects.create_user(
             email=email,
-            password=password,
+            password=None,
             first_name=first_name or "",
             last_name=last_name or "",
-            status=UserStatus.PENDING_VERIFICATION,
+            status=UserStatus.ACTIVE if mark_verified else UserStatus.PENDING_VERIFICATION,
+            email_verified_at=timezone.now() if mark_verified else None,
         )
 
         RoleService().assign_role(user=user, role_code=role_code)
 
-        EmailVerificationService().send_verification(user=user)
+        if not mark_verified:
+            EmailVerificationService().send_verification(user=user)
         self.audit_service.record(
             event_type="user_registered",
             user=user,

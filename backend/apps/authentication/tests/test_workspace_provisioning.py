@@ -22,7 +22,7 @@ def api_client() -> APIClient:
 def _payload(**overrides: object) -> dict[str, object]:
     body: dict[str, object] = {
         "email": "owner@example.com",
-        "password": "ValidPass123",
+        "otp_verified": True,
         "first_name": "Ada",
         "last_name": "Lovelace",
         "slug": "ada-salon",

@@ -12,6 +12,7 @@
     "postinstall": "node ./scripts/patch-metro-windows.cjs",
     "eas-build-pre-install": "node ./scripts/materialize-google-services.cjs",
     "typecheck": "tsc --noEmit",
+    "test:public-site": "node --test ./src/utils/publicSiteOrigin.test.cjs",
     "eas:build:preview": "eas build --profile preview --platform android",
     "eas:build:production-preview": "node ./scripts/materialize-google-services.cjs && eas build --profile production-preview --platform android",
     "eas:build:production-preview:ios-simulator": "eas build --profile production-preview-ios-simulator --platform ios",

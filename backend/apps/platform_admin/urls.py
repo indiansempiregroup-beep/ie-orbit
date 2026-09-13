@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.platform_admin.api import (
     PlatformAddonPricingView,
+    PlatformAuthSettingsView,
     PlatformAnnouncementPublicView,
     PlatformAnnouncementsView,
     PlatformAuditFeedView,
@@ -191,6 +192,11 @@ urlpatterns = [
         "platform/addon-pricing",
         PlatformAddonPricingView.as_view(),
         name="platform-addon-pricing",
+    ),
+    path(
+        "platform/auth-settings",
+        PlatformAuthSettingsView.as_view(),
+        name="platform-auth-settings",
     ),
     path("platform/audit", PlatformAuditFeedView.as_view(), name="platform-audit-feed"),
     path("platform/tickets", PlatformTicketsView.as_view(), name="platform-tickets"),

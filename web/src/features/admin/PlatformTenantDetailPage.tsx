@@ -702,16 +702,18 @@ export function PlatformTenantDetailPage() {
                         className="admin-btn admin-btn--secondary"
                         disabled={Boolean(busy)}
                         onClick={() =>
-                          run('Reset password', async () => {
+                          run('Send sign-in code', async () => {
                             const result = await client.platform.userAction(user.id, 'reset_password', {
                               reason,
                             });
-                            const issued = Boolean(
-                              (result.data as { reset_issued?: boolean }).reset_issued,
-                            );
+                            const actionData = result.data as {
+                              sign_in_code_sent?: boolean;
+                              reset_issued?: boolean;
+                            };
+                            const issued = Boolean(actionData.sign_in_code_sent ?? actionData.reset_issued);
                             return issued
-                              ? `Password reset email sent to ${user.email}`
-                              : `Reset was requested for ${user.email}`;
+                              ? `Sign-in code email sent to ${user.email}`
+                              : `Sign-in code was requested for ${user.email}`;
                           })
                         }
                       >

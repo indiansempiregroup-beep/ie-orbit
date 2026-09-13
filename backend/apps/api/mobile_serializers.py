@@ -176,16 +176,11 @@ class MobileBookingSerializer(serializers.Serializer):
 
 class MobileCustomerRegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
     phone_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
-
-    def validate_password(self, value: str) -> str:
-        from django.contrib.auth.password_validation import validate_password
-
-        validate_password(value)
-        return value
+    tenant_slug = serializers.SlugField()
+    business_code = serializers.SlugField()
 
 
 class MobileCustomerAddressSerializer(serializers.Serializer):
@@ -202,6 +197,8 @@ class MobileCustomerAddressSerializer(serializers.Serializer):
 
 class MobileCustomerProfileSerializer(serializers.Serializer):
     id = serializers.UUIDField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField(allow_blank=True)
     display_name = serializers.CharField()
     email = serializers.EmailField(allow_blank=True)
     phone_number = serializers.CharField(allow_blank=True)
@@ -210,6 +207,9 @@ class MobileCustomerProfileSerializer(serializers.Serializer):
 
 
 class MobileCustomerProfileUpdateSerializer(serializers.Serializer):
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
     full_address = serializers.CharField(required=False, allow_blank=True)
     line1 = serializers.CharField(required=False, allow_blank=True)
     city = serializers.CharField(required=False, allow_blank=True)

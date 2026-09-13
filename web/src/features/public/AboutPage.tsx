@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CalendarDays, Mail, Phone, Store, Users } from 'lucide-react';
+import { CalendarDays, Mail, Phone, Smartphone, Store, Users } from 'lucide-react';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicBackLink } from './PublicBackLink';
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, CONTACT_PHONE_TEL } from '../../seo/config';
@@ -15,9 +15,10 @@ export function AboutPage() {
               Built for <span className="public-gradient-text">Indian businesses</span>
             </h1>
             <p className="public-lead">
-              IE Orbit is the appointments-and-retail workspace from Indians Empire Technologies. Orbit Appoint runs
-              bookings and staff. Orbit Mart runs the counter, catalog, and GST books — with UPI subscription billing and
-              a 15-day full-Pro trial.
+              IE Orbit is the appointments-and-retail workspace from Indians Empire Technologies. The customer-facing
+              app is white-label — your brand, not ours. Orbit Appoint runs bookings and staff. Orbit Mart runs the
+              counter and catalog — GST books and Grow on Pro — with UPI subscription billing and a 15-day full-Pro
+              trial.
             </p>
           </div>
         </div>
@@ -42,8 +43,19 @@ export function AboutPage() {
             <p className="public-kicker">Orbit Mart</p>
             <h2>POS, catalog, and GST books</h2>
             <p style={{ marginBottom: 0 }}>
-              Run the counter, online orders, GST books, and Grow tools. Subscribe to one product or both; they share
-              the same business, team, and billing.
+              Run the counter, online orders, and returns on Starter. Pro adds Instant Delivery with Porter/Shiprocket,
+              GST books, and Grow. Subscribe to one product or both; they share the same business, team, and billing.
+            </p>
+          </article>
+          <article className="public-card">
+            <div className="public-card-icon">
+              <Smartphone size={22} />
+            </div>
+            <p className="public-kicker">White-label</p>
+            <h2>Your app on their phone</h2>
+            <p style={{ marginBottom: 0 }}>
+              Customers book and shop in an app branded to your business. Included on Starter and Pro — not a
+              marketplace listing and not an add-on.
             </p>
           </article>
           <article className="public-card">

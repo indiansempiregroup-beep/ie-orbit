@@ -5,8 +5,8 @@ import { registerStartPath } from '../onboarding/affiliateCode';
 import { trackEvent } from '../../seo/analytics';
 
 export function PublicCtaBand({
-  title = 'Run appointments and retail from one workspace',
-  body = 'Start a 15-day full-Pro trial. No credit card. Pay later with UPI when you are ready to subscribe.',
+  title = 'Your brand in their pocket',
+  body = 'Every plan includes a white-label customer app. Start a 15-day full-Pro trial. No credit card. Pay later with UPI.',
 }: {
   title?: string;
   body?: string;

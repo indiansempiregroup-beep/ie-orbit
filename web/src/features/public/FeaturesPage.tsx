@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, BookOpen, PawPrint, Sparkles } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, BookOpen, PawPrint, Smartphone, Sparkles } from 'lucide-react';
+import { createApiClient } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
+import { isProPlan, planFeatureDisplay } from '../../config/planFeatures';
+import { stripPlanProductPrefix } from '../../config/products';
+import { PlanFeatureList } from './PlanFeatureList';
 import { PublicCtaBand } from './PublicCtaBand';
-import { PublicBackLink } from './PublicBackLink';
+import { PublicProductShot } from './PublicProductShot';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 
-const TAB_IDS = ['appoint', 'mart', 'both'] as const;
+const publicClient = createApiClient({ baseUrl: '/api/v1' });
+
+const TAB_IDS = ['mart', 'appoint', 'both'] as const;
 type ProductTabId = (typeof TAB_IDS)[number];
 
 const productTabs: Array<{
@@ -19,29 +26,29 @@ const productTabs: Array<{
   features: string[];
 }> = [
   {
-    id: 'appoint',
-    label: 'Appoint',
-    kicker: 'Orbit Appoint',
-    title: 'Bookings without the back-and-forth.',
-    body: 'Give customers a beautiful way to discover availability, book instantly, and keep coming back.',
-    features: [
-      'Smart availability and staff calendars',
-      'Automated booking confirmations and reminders',
-      'Customer history and reviews in one place',
-      'Pro adds full BI and reward points',
-    ],
-  },
-  {
     id: 'mart',
     label: 'Mart',
     kicker: 'Orbit Mart',
     title: 'Your products, in their pocket.',
-    body: 'Create a storefront that makes your products easy to browse, buy, and remember — with POS and GST books in the same workspace.',
+    body: 'Create a storefront that makes your products easy to browse, buy, and remember — with POS and GST books in the same workspace. Starter is the counter plus online orders and returns; Pro unlocks Instant Delivery with Porter/Shiprocket, GST e-invoice, and Grow.',
     features: [
-      'Branded product storefront and catalog',
-      'POS / GST counter sales',
-      'Online orders with pickup and delivery',
-      'Books: GST reports, e-invoice, and e-way bill',
+      'White-label customer app so shoppers buy under your brand',
+      'POS, catalog, online orders, and returns on Starter',
+      'Instant Delivery with Porter/Shiprocket on Pro',
+      'Day-book on Starter; GST reports, e-invoice, Grow, and e-way on Pro',
+    ],
+  },
+  {
+    id: 'appoint',
+    label: 'Appoint',
+    kicker: 'Orbit Appoint',
+    title: 'Bookings without the back-and-forth.',
+    body: 'Give customers a beautiful way to discover availability, book instantly, and keep coming back. Starter is one location. Pro adds WhatsApp reminders, payments, a second office, and an ad-free app.',
+    features: [
+      'White-label customer app so clients book under your brand',
+      'Smart availability and staff calendars',
+      'Automated email reminders; WhatsApp on Pro',
+      'Pro adds a second office, payments, full BI, reward points, and an ad-free customer app',
     ],
   },
   {
@@ -51,9 +58,9 @@ const productTabs: Array<{
     title: 'One brand. Every way to buy.',
     body: 'The most complete version of IE Orbit — appointments and ecommerce sharing one customer relationship.',
     features: [
+      'One white-label app for book and shop',
       'Unified customer profiles',
       'Cross-sell bookings and products',
-      'White-label customer app for book and shop',
       'One 15-day trial, one workspace, UPI billing',
     ],
   },
@@ -61,16 +68,23 @@ const productTabs: Array<{
 
 const extraGroups = [
   {
+    kicker: 'On every plan',
+    title: 'White-label customer app',
+    lead: 'Customers install your brand on iOS and Android. Starter may show Google Ads; Pro is ad-free. This is not a generic IE Orbit store listing.',
+    icon: Smartphone,
+    tone: 'blue' as const,
+  },
+  {
     kicker: 'Orbit Mart Books',
     title: 'Accounting and GST compliance',
-    lead: 'Sales, purchases, cash, GST reports, e-invoice, and e-way bill — not a separate product.',
+    lead: 'Full books — purchases, GST reports, e-invoice, and e-way bill — ship on Orbit Mart Pro. Starter keeps the counter day-book plus online orders and returns. Not a separate product.',
     icon: BookOpen,
     tone: 'yellow' as const,
   },
   {
     kicker: 'Orbit Mart Grow',
     title: 'Marketing helpers for the shop',
-    lead: 'WhatsApp share, promo posters, Google listing helpers, and GST calculators.',
+    lead: 'GST calculators on Starter. WhatsApp share, promo posters, and Google listing helpers on Orbit Mart Pro.',
     icon: Sparkles,
     tone: 'purple' as const,
   },
@@ -83,115 +97,24 @@ const extraGroups = [
   },
 ];
 
-const bookings = [
-  { initials: 'NS', name: 'Nisha Shah', detail: 'Haircut + styling · 10:30', status: 'Confirmed', tone: 'peach' },
-  { initials: 'AK', name: 'Arjun Kapoor', detail: 'Consultation · 11:15', status: 'Pending', tone: 'blue' },
-  { initials: 'RM', name: 'Rhea Mehta', detail: 'Premium package · 12:30', status: 'Confirmed', tone: 'purple' },
-];
-
 function tabFromHash(hash: string): ProductTabId {
   const id = hash.replace('#', '') as ProductTabId;
-  return TAB_IDS.includes(id) ? id : 'appoint';
-}
-
-function AppointPreview() {
-  return (
-    <div className="public-preview" aria-hidden="true">
-      <div className="public-preview__top">
-        <span className="public-preview-brand">ie orbit</span>
-        <span className="public-preview-status">● Live</span>
-      </div>
-      <p className="public-preview-label">Appointments · Today</p>
-      {bookings.map((row) => (
-        <div key={row.initials} className="public-booking-row">
-          <span className={`public-avatar public-avatar--${row.tone}`}>{row.initials}</span>
-          <div style={{ flex: 1 }}>
-            <b>{row.name}</b>
-            <small style={{ display: 'block', color: '#8291a5' }}>{row.detail}</small>
-          </div>
-          <span className={`public-pill${row.status === 'Pending' ? ' public-pill--yellow' : ''}`}>{row.status}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MartPreview() {
-  return (
-    <div className="public-preview" aria-hidden="true">
-      <div className="public-preview__top">
-        <span className="public-preview-brand">ie orbit</span>
-        <span className="public-preview-status">● Live</span>
-      </div>
-      <p className="public-preview-label">Storefront · Today</p>
-      <div className="public-store-row">
-        <div className="public-product-art">✦</div>
-        <div>
-          <b>Curated for your day</b>
-          <small>12 products · 4 collections</small>
-        </div>
-        <button type="button" tabIndex={-1}>
-          View shop
-        </button>
-      </div>
-      <div className="public-store-row">
-        <div className="public-product-art public-product-art--blue">◒</div>
-        <div>
-          <b>Order #1048</b>
-          <small>Ready for dispatch</small>
-        </div>
-        <span className="public-pill">Paid</span>
-      </div>
-      <div className="public-store-row">
-        <div className="public-product-art">₹</div>
-        <div>
-          <b>GST counter</b>
-          <small>3 bills · e-invoice ready</small>
-        </div>
-        <span className="public-pill">Live</span>
-      </div>
-    </div>
-  );
-}
-
-function BothPreview() {
-  return (
-    <div className="public-preview" aria-hidden="true">
-      <div className="public-preview__top">
-        <span className="public-preview-brand">ie orbit</span>
-        <span className="public-preview-status">● Live</span>
-      </div>
-      <p className="public-preview-greeting">
-        Good morning, Mira <span>✦</span>
-      </p>
-      <div className="public-preview-stats">
-        <div>
-          <small>Bookings</small>
-          <b>24</b>
-          <em>+8%</em>
-        </div>
-        <div>
-          <small>Orders</small>
-          <b>18</b>
-          <em>+12%</em>
-        </div>
-      </div>
-      <div className="public-booking-row" style={{ marginTop: 8 }}>
-        <span className="public-avatar public-avatar--peach">NS</span>
-        <div style={{ flex: 1 }}>
-          <b>Nisha Shah</b>
-          <small style={{ display: 'block', color: '#8291a5' }}>Haircut + take-home kit</small>
-        </div>
-        <span className="public-pill">Both</span>
-      </div>
-    </div>
-  );
+  return TAB_IDS.includes(id) ? id : 'mart';
 }
 
 export function FeaturesPage() {
   const location = useLocation();
   const [tab, setTab] = useState<ProductTabId>(() => tabFromHash(location.hash));
   const item = productTabs.find((entry) => entry.id === tab) ?? productTabs[0];
+  const productCode = tab === 'mart' ? 'shopie' : tab === 'appoint' ? 'appointie' : null;
+  const catalogQuery = useQuery({
+    queryKey: ['public', 'plans'],
+    queryFn: async () => (await publicClient.billing.publicPlans()).data,
+    retry: false,
+  });
+  const livePlans = productCode
+    ? (catalogQuery.data?.plans ?? []).filter((plan) => plan.product_code === productCode)
+    : [];
 
   useEffect(() => {
     setTab(tabFromHash(location.hash));
@@ -207,15 +130,15 @@ export function FeaturesPage() {
       <section className="public-hero-band">
         <div className="public-hero-inner public-hero-inner--solo">
           <div>
-            <p className="public-badge">Products</p>
+            <p className="public-badge">White-label · Mart · Appoint</p>
             <h1>
-              Everything your customer
+              Your app. Their pocket.
               <br />
-              <span className="public-gradient-text">needs to come back.</span>
+              <span className="public-gradient-text">Your operations behind it.</span>
             </h1>
             <p className="public-lead">
-              IE Orbit connects the front door of your business to the work happening behind it. Orbit Appoint for
-              bookings, Orbit Mart for retail — or both in one workspace.
+              The customer-facing app is branded to your business on every plan. Orbit Appoint runs bookings. Orbit Mart
+              runs the counter. Both share one workspace.
             </p>
           </div>
         </div>
@@ -245,7 +168,6 @@ export function FeaturesPage() {
         aria-labelledby={`product-tab-${item.id}`}
       >
         <div className="public-feature-copy">
-          <PublicBackLink />
           <p className="public-kicker">{item.kicker}</p>
           <h2>{item.title}</h2>
           <p>{item.body}</p>
@@ -260,10 +182,8 @@ export function FeaturesPage() {
             </Button>
           </Link>
         </div>
-        <div className="public-feature-visual">
-          {item.id === 'appoint' ? <AppointPreview /> : null}
-          {item.id === 'mart' ? <MartPreview /> : null}
-          {item.id === 'both' ? <BothPreview /> : null}
+        <div className={`public-feature-visual public-feature-visual--${item.id}`}>
+          <PublicProductShot slot={item.id} />
         </div>
       </section>
 
@@ -271,8 +191,10 @@ export function FeaturesPage() {
         <section className="public-section" style={{ marginTop: 0 }}>
           <div className="public-section__head">
             <p className="public-kicker">Also in the workspace</p>
-            <h2>Books, Grow, and the Pets pack</h2>
-            <p className="public-lead">Orbit Mart includes accounting and shop helpers. Add Pets when you keep pet records.</p>
+            <h2>White-label, books, Grow, and Pets</h2>
+            <p className="public-lead">
+              The customer app ships with Appoint and Mart. Books and Grow sit on Orbit Mart. Pets pack is an add-on.
+            </p>
           </div>
           <div className="public-product-grid">
             {extraGroups.map((group) => {
@@ -290,8 +212,47 @@ export function FeaturesPage() {
             })}
           </div>
         </section>
+        {livePlans.length > 0 ? (
+          <section className="public-section">
+            <div className="public-section__head">
+              <p className="public-kicker">Live from the catalog</p>
+              <h2>What {item.kicker} includes</h2>
+              <p className="public-lead">
+                These lists follow the same flags platform admin edits. Starter shows every enabled function. Pro shows
+                what Starter does not include, plus a short explanation for each one.
+              </p>
+            </div>
+            <div className="public-plan-compare">
+              {livePlans.map((plan) => (
+                <article
+                  key={plan.plan_code}
+                  className={`public-card public-price-card${isProPlan(plan) ? ' is-featured' : ''}`}
+                >
+                  <p className="public-kicker">{isProPlan(plan) ? 'Growing teams' : 'Solo & micro'}</p>
+                  <h2>{stripPlanProductPrefix(plan.name)}</h2>
+                  <PlanFeatureList groups={planFeatureDisplay(plan, livePlans)} />
+                </article>
+              ))}
+            </div>
+            <p className="public-plan-features-note">
+              Prices live on <Link to={`/pricing?product=${productCode ?? 'appointie'}`}>Pricing</Link>.
+            </p>
+          </section>
+        ) : tab === 'both' ? (
+          <section className="public-section">
+            <div className="public-section__head">
+              <p className="public-kicker">Live from the catalog</p>
+              <h2>See each product’s plan functions</h2>
+              <p className="public-lead">
+                Appoint and Mart each have their own Starter and Pro flags. Open{' '}
+                <Link to="/features#appoint">Appoint</Link> or <Link to="/features#mart">Mart</Link> to read every
+                function, or compare prices on <Link to="/pricing">Pricing</Link>.
+              </p>
+            </div>
+          </section>
+        ) : null}
       </div>
-      <PublicCtaBand title="Try every Pro feature for 15 days" />
+      <PublicCtaBand title="Try the white-label app for 15 days" />
     </>
   );
 }

@@ -7,7 +7,10 @@ import {
   isImpersonating as readIsImpersonating,
   restoreAdminTokenBackup,
   writeAuthTokens,
+  clearAuthTokens,
+  rememberAuthTokens,
 } from '../lib/impersonation';
+import { suppressGoogleAutoSignIn } from '../lib/googleAuth';
 
 const STORAGE_KEY = 'ie:auth:access';
 const STORAGE_REFRESH = 'ie:auth:refresh';
@@ -19,7 +22,13 @@ type AuthState = {
   user: UserProfile | null;
   loading: boolean;
   isImpersonating: boolean;
-  login: (email: string, password: string, remember?: boolean) => Promise<string>;
+  loginWithOtp: (input: {
+    channel: 'email' | 'whatsapp';
+    identifier: string;
+    code: string;
+    remember?: boolean;
+  }) => Promise<string>;
+  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string }) => Promise<void>;
   loginWithGoogle: (idToken: string, remember?: boolean) => Promise<string>;
   bootstrapSession: (payload: WorkspaceProvisionResponse) => Promise<void>;
   logout: (allSessions?: boolean) => Promise<void>;
@@ -31,25 +40,48 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 
 const client = createApiClient({ baseUrl: '/api/v1' });
 
+function readStoredAuth(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key) ?? localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function clearStoredAuth() {
+  clearAuthTokens();
+}
+
+function writeStoredAuth(access: string, refresh: string, persist: boolean) {
+  rememberAuthTokens(access, refresh);
+  clearStoredAuth();
+  const store = persist ? localStorage : sessionStorage;
+  try {
+    store.setItem(STORAGE_KEY, access);
+    store.setItem(STORAGE_REFRESH, refresh);
+    store.setItem(STORAGE_STARTED, new Date().toISOString());
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function isPersistedSession(): boolean {
+  try {
+    return Boolean(localStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_REFRESH));
+  } catch {
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  });
+  const [token, setToken] = useState<string | null>(() => readStoredAuth(STORAGE_KEY));
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(() => {
-    try {
-      return Boolean(localStorage.getItem(STORAGE_KEY));
-    } catch {
-      return false;
-    }
-  });
+  const [loading, setLoading] = useState(() => Boolean(readStoredAuth(STORAGE_KEY)));
   const [isImpersonating, setIsImpersonating] = useState(() => readIsImpersonating());
   const refreshRef = React.useRef<number | null>(null);
   const retryRef = React.useRef<{ attempts: number; timer: number | null }>({ attempts: 0, timer: null });
+  /** Remember me: true → localStorage; false → sessionStorage only. */
+  const persistSessionRef = React.useRef(isPersistedSession());
 
   useEffect(() => {
     client.setToken(token);
@@ -71,24 +103,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return me.data;
   }
 
-  async function login(email: string, password: string, remember = false) {
+  async function applyLoginPayload(payload: LoginResponse, remember = true) {
+    setToken(payload.access);
+    setUser(payload.user);
+    persistSessionRef.current = remember;
+    writeStoredAuth(payload.access, payload.refresh, remember);
+    scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
+    return payload.access;
+  }
+
+  async function sendOtp(input: { channel: 'email' | 'whatsapp'; identifier: string }) {
+    await client.auth.sendOtp({
+      client: 'ops',
+      channel: input.channel,
+      identifier: input.identifier.trim(),
+    });
+  }
+
+  async function loginWithOtp(input: {
+    channel: 'email' | 'whatsapp';
+    identifier: string;
+    code: string;
+    remember?: boolean;
+  }) {
     setLoading(true);
     try {
       clearImpersonationMarkers();
       setIsImpersonating(false);
-      const res = await client.auth.login({ email, password, remember_me: remember });
-      const payload = res.data;
-      setToken(payload.access);
-      setUser(payload.user);
-      try {
-        localStorage.setItem(STORAGE_KEY, payload.access);
-        localStorage.setItem(STORAGE_REFRESH, payload.refresh);
-        localStorage.setItem(STORAGE_STARTED, new Date().toISOString());
-      } catch {
-        // ignore storage failures
-      }
-      scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
-      return payload.access;
+      const res = await client.auth.verifyOtp({
+        client: 'ops',
+        channel: input.channel,
+        identifier: input.identifier.trim(),
+        code: input.code.trim(),
+        remember_me: input.remember ?? true,
+      });
+      return await applyLoginPayload(res.data, input.remember ?? true);
     } finally {
       setLoading(false);
     }
@@ -104,18 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         client: 'ops',
         remember_me: remember,
       });
-      const payload = res.data;
-      setToken(payload.access);
-      setUser(payload.user);
-      try {
-        localStorage.setItem(STORAGE_KEY, payload.access);
-        localStorage.setItem(STORAGE_REFRESH, payload.refresh);
-        localStorage.setItem(STORAGE_STARTED, new Date().toISOString());
-      } catch {
-        // ignore storage failures
-      }
-      scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
-      return payload.access;
+      return await applyLoginPayload(res.data, remember);
     } finally {
       setLoading(false);
     }
@@ -133,13 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         await hydrateUser();
       }
-      try {
-        localStorage.setItem(STORAGE_KEY, payload.access);
-        localStorage.setItem(STORAGE_REFRESH, payload.refresh);
-        localStorage.setItem(STORAGE_STARTED, new Date().toISOString());
-      } catch {
-        // ignore storage failures
-      }
+      persistSessionRef.current = true;
+      writeStoredAuth(payload.access, payload.refresh, true);
       scheduleRefresh(payload.expires_in ?? DEFAULT_ACCESS_TTL_SECONDS, payload.refresh);
     } finally {
       setLoading(false);
@@ -148,8 +181,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function logout(allSessions = false) {
     setLoading(true);
+    const email = user?.email;
     try {
-      const refresh = localStorage.getItem(STORAGE_REFRESH) ?? '';
+      const refresh = readStoredAuth(STORAGE_REFRESH) ?? '';
       await client.auth.logout({ refresh, all_sessions: allSessions });
     } catch {
       // ignore
@@ -158,13 +192,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setIsImpersonating(false);
       clearImpersonationMarkers();
-      try {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(STORAGE_REFRESH);
-        localStorage.removeItem(STORAGE_STARTED);
-      } catch {
-        // ignore
-      }
+      clearStoredAuth();
+      void suppressGoogleAutoSignIn(email);
       if (refreshRef.current) {
         clearTimeout(refreshRef.current);
       }
@@ -185,6 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const result = await client.platform.endImpersonation();
         writeAuthTokens(result.data.access, result.data.refresh);
+        persistSessionRef.current = true;
         setToken(result.data.access);
         client.setToken(result.data.access);
         if (result.data.user) {
@@ -216,24 +246,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       setIsImpersonating(readIsImpersonating());
+      persistSessionRef.current = isPersistedSession();
       if (!token) return;
       try {
         await hydrateUser();
-        const refresh = localStorage.getItem(STORAGE_REFRESH) ?? undefined;
+        const refresh = readStoredAuth(STORAGE_REFRESH) ?? undefined;
         scheduleRefresh(DEFAULT_ACCESS_TTL_SECONDS, refresh);
       } catch {
-        const refresh = localStorage.getItem(STORAGE_REFRESH);
+        const refresh = readStoredAuth(STORAGE_REFRESH);
         if (refresh) {
           const ok = await attemptRefreshWithBackoff(refresh);
           if (!ok) {
             setToken(null);
             setUser(null);
-            try {
-              localStorage.removeItem(STORAGE_KEY);
-              localStorage.removeItem(STORAGE_REFRESH);
-            } catch {
-              // ignore
-            }
+            clearStoredAuth();
           }
         } else {
           setToken(null);
@@ -254,7 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const ttl = Number.isFinite(expires_in) && expires_in > 0 ? expires_in : DEFAULT_ACCESS_TTL_SECONDS;
     const when = Math.max(5, ttl - 60) * 1000;
     refreshRef.current = window.setTimeout(async () => {
-      const nextRefresh = refreshToken || localStorage.getItem(STORAGE_REFRESH) || undefined;
+      const nextRefresh = refreshToken || readStoredAuth(STORAGE_REFRESH) || undefined;
       if (!nextRefresh) return;
       const ok = await attemptRefreshWithBackoff(nextRefresh);
       if (!ok) {
@@ -280,12 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           setToken(payload.access);
           client.setToken(payload.access);
-          try {
-            localStorage.setItem(STORAGE_KEY, payload.access);
-            localStorage.setItem(STORAGE_REFRESH, nextRefresh);
-          } catch {
-            // ignore
-          }
+          writeStoredAuth(payload.access, nextRefresh, persistSessionRef.current);
 
           // /auth/refresh returns tokens only — never clear roles by assigning undefined user.
           if (payload.user?.id) {
@@ -321,7 +342,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       loading,
       isImpersonating,
-      login,
+      sendOtp,
+      loginWithOtp,
       loginWithGoogle,
       bootstrapSession,
       logout,

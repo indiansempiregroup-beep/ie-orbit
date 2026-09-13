@@ -44,6 +44,10 @@ import { SupportTicketDetailScreen } from '../features/support/SupportTicketDeta
 import { BusinessProfileScreen } from '../features/settings/BusinessProfileScreen';
 import { BusinessEditScreen } from '../features/settings/BusinessEditScreen';
 import { PaymentSettingsScreen } from '../features/settings/PaymentSettingsScreen';
+import { WhatsAppNotificationSettingsScreen } from '../features/settings/WhatsAppNotificationSettingsScreen';
+import { WhatsAppNotificationTemplatesScreen } from '../features/settings/WhatsAppNotificationTemplatesScreen';
+import { WhatsAppNotificationTemplateDetailScreen } from '../features/settings/WhatsAppNotificationTemplateDetailScreen';
+import { WhatsAppNotificationMappingsScreen } from '../features/settings/WhatsAppNotificationMappingsScreen';
 import { ShopProductsScreen } from '../features/shop/ShopProductsScreen';
 import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
 import { ShopProductsAddManyScreen } from '../features/shop/ShopProductsAddManyScreen';
@@ -87,7 +91,6 @@ import { TeamScreen } from '../features/team/TeamScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
 import { ProfileEditScreen } from '../features/profile/ProfileEditScreen';
 import { NotificationPreferencesScreen } from '../features/profile/NotificationPreferencesScreen';
-import { SecurityScreen } from '../features/profile/SecurityScreen';
 import { SessionsScreen } from '../features/profile/SessionsScreen';
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen';
 
@@ -255,6 +258,10 @@ export function RootNavigator() {
             {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
             {stackScreen('BusinessEdit', BusinessEditScreen, t('nav.editBusiness'))}
             {stackScreen('PaymentSettings', PaymentSettingsScreen, 'Payments')}
+            {stackScreen('WhatsAppNotificationSettings', WhatsAppNotificationSettingsScreen, 'WhatsApp notifications')}
+            {stackScreen('WhatsAppNotificationTemplates', WhatsAppNotificationTemplatesScreen, 'WhatsApp templates')}
+            {stackScreen('WhatsAppNotificationTemplateDetail', WhatsAppNotificationTemplateDetailScreen, 'Template')}
+            {stackScreen('WhatsAppNotificationMappings', WhatsAppNotificationMappingsScreen, 'WhatsApp mappings')}
             {stackScreen('ProductSettings', LazyProductSettings, t('settings.productsBilling'))}
             {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
             {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
@@ -304,7 +311,6 @@ export function RootNavigator() {
             {stackScreen('Profile', ProfileScreen, t('profile.title'))}
             {stackScreen('ProfileEdit', ProfileEditScreen, t('profile.editTitle'))}
             {stackScreen('NotificationPreferences', NotificationPreferencesScreen, t('profile.notificationPreferences'))}
-            {stackScreen('Security', SecurityScreen, t('profile.security'))}
             {stackScreen('Sessions', SessionsScreen, t('profile.sessions'))}
             {stackScreen('VerifyEmail', VerifyEmailScreen, t('profile.verifyEmail'))}
           </Stack.Navigator>

@@ -10,6 +10,7 @@ import { FormSection } from '../../components/ui/FormSection';
 import { FieldRow } from '../../components/ui/FieldRow';
 import { Input } from '../../components/ui/Input';
 import { ScreenState } from '../../components/ScreenState';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useCustomer } from '../../hooks/useOpsData';
 import { useCustomerMutations } from '../../hooks/useOpsExtended';
@@ -80,6 +81,7 @@ export function CustomerFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CustomerForm'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { businessId, activeBusiness } = useWorkspace();
+  const toast = useToast();
   const showGstFields = hasShopie(activeBusiness?.product_subscriptions);
   const isEdit = Boolean(route.params?.customerId);
   const { customer, loading } = useCustomer(route.params?.customerId ?? '');
@@ -122,8 +124,8 @@ export function CustomerFormScreen() {
             setError(null);
             try {
               const nextErrors: Record<string, string> = {};
-              const identity = displayName.trim() || `${firstName.trim()} ${lastName.trim()}`.trim();
-              if (!identity) nextErrors.displayName = requiredMessage('Display name or first name');
+              if (!firstName.trim()) nextErrors.firstName = requiredMessage('First name');
+              if (!lastName.trim()) nextErrors.lastName = requiredMessage('Last name');
               const emailError = emailFieldError(email, false);
               if (emailError) nextErrors.email = emailError;
               const phoneError = indianMobileError(phone, false);
@@ -148,9 +150,9 @@ export function CustomerFormScreen() {
               setFieldErrors({});
               const line1 = address.line1.trim();
               const payload = {
-                display_name: displayName || `${firstName} ${lastName}`.trim() || email,
-                first_name: firstName,
-                last_name: lastName,
+                display_name: displayName.trim() || `${firstName.trim()} ${lastName.trim()}`.trim() || email,
+                first_name: firstName.trim(),
+                last_name: lastName.trim(),
                 email,
                 phone_number: phone,
                 ...(showGstFields ? { gstin: resolvedGstin || undefined } : {}),
@@ -173,6 +175,7 @@ export function CustomerFormScreen() {
 
               if (isEdit && route.params?.customerId) {
                 await mutations.update(route.params.customerId, payload);
+                toast.push('Customer updated.', 'success');
                 if (route.params?.returnTo === 'pos') {
                   returnToPos(navigation, route.params.customerId);
                 } else if (route.params?.returnTo === 'pets') {
@@ -188,6 +191,7 @@ export function CustomerFormScreen() {
                   ...payload,
                   display_name: payload.display_name || code,
                 });
+                toast.push('Customer created.', 'success');
                 if (route.params?.returnTo === 'pos') {
                   returnToPos(navigation, created.id);
                 } else if (route.params?.returnTo === 'pets') {
@@ -214,17 +218,31 @@ export function CustomerFormScreen() {
       <FormSection title="Identity">
         <Input
           label="Display name"
-          required
+          optional
           value={displayName}
-          onChangeText={(value) => {
-            setDisplayName(value);
-            setFieldErrors((current) => ({ ...current, displayName: '' }));
-          }}
-          error={fieldErrors.displayName}
+          onChangeText={setDisplayName}
         />
         <FieldRow>
-          <Input label="First name" optional value={firstName} onChangeText={setFirstName} />
-          <Input label="Last name" optional value={lastName} onChangeText={setLastName} />
+          <Input
+            label="First name"
+            required
+            value={firstName}
+            onChangeText={(value) => {
+              setFirstName(value);
+              setFieldErrors((current) => ({ ...current, firstName: '' }));
+            }}
+            error={fieldErrors.firstName}
+          />
+          <Input
+            label="Last name"
+            required
+            value={lastName}
+            onChangeText={(value) => {
+              setLastName(value);
+              setFieldErrors((current) => ({ ...current, lastName: '' }));
+            }}
+            error={fieldErrors.lastName}
+          />
         </FieldRow>
       </FormSection>
 

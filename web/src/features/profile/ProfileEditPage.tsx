@@ -13,12 +13,14 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ensureSelectOption, languageSelectOptions, timezoneSelectOptions } from '../../config/onboarding';
 import { persistLanguagePreference } from '../../i18n';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
+import { indianMobileError } from '../../lib/phoneValidation';
 import { uploadProfilePhoto } from './uploadProfilePhoto';
 import { useProfileRoutes } from './profileRoutes';
 
 const preferenceOptions = [
   { key: 'email', label: 'Email notifications', helper: 'Booking, order, and operational updates by email.' },
   { key: 'push', label: 'Push notifications', helper: 'Mobile push alerts on devices where you are signed in.' },
+  { key: 'whatsapp', label: 'WhatsApp notifications', helper: 'Booking and order updates on WhatsApp when the shop has WhatsApp connected.' },
   { key: 'sms', label: 'SMS reminders', helper: 'Stored for future SMS delivery (SMS provider not enabled yet).' },
 ];
 
@@ -39,7 +41,7 @@ function normalizeNotificationPreferences(raw?: Record<string, unknown> | null):
       if (legacyMatch) {
         acc[option.key] = Boolean(raw?.[legacyMatch]);
       } else {
-        acc[option.key] = true;
+        acc[option.key] = option.key === 'whatsapp' ? false : true;
       }
     }
     return acc;
@@ -85,6 +87,7 @@ export function ProfileEditPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (auth.user) {
@@ -129,6 +132,16 @@ export function ProfileEditPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
+    const nextErrors: Record<string, string> = {};
+    if (!(formState.first_name ?? '').trim()) nextErrors.first_name = 'First name is required';
+    if (!(formState.last_name ?? '').trim()) nextErrors.last_name = 'Last name is required';
+    const phoneError = indianMobileError(formState.phone_number ?? '', true);
+    if (phoneError) nextErrors.phone_number = phoneError;
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+    setFieldErrors({});
     setSaving(true);
 
     try {
@@ -206,24 +219,36 @@ export function ProfileEditPage() {
             />
             <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
               <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280' }}>{t('common.firstName')}</span>
+                <span style={{ color: '#6b7280' }}>{t('common.firstName')} *</span>
                 <input
+                  required
                   value={formState.first_name ?? ''}
-                  onChange={(event) => setFormState({ ...formState, first_name: event.target.value })}
+                  onChange={(event) => {
+                    setFormState({ ...formState, first_name: event.target.value });
+                    setFieldErrors((current) => ({ ...current, first_name: '' }));
+                  }}
                   placeholder={t('common.firstName')}
                   disabled={saving}
-                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
+                  aria-invalid={Boolean(fieldErrors.first_name)}
+                  style={{ padding: 12, borderRadius: 12, border: `1px solid ${fieldErrors.first_name ? '#dc2626' : '#e5e7eb'}`, background: '#f8fafc' }}
                 />
+                {fieldErrors.first_name ? <span role="alert" className="field-error">{fieldErrors.first_name}</span> : null}
               </label>
               <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280' }}>{t('common.lastName')}</span>
+                <span style={{ color: '#6b7280' }}>{t('common.lastName')} *</span>
                 <input
+                  required
                   value={formState.last_name ?? ''}
-                  onChange={(event) => setFormState({ ...formState, last_name: event.target.value })}
+                  onChange={(event) => {
+                    setFormState({ ...formState, last_name: event.target.value });
+                    setFieldErrors((current) => ({ ...current, last_name: '' }));
+                  }}
                   placeholder={t('common.lastName')}
                   disabled={saving}
-                  style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
+                  aria-invalid={Boolean(fieldErrors.last_name)}
+                  style={{ padding: 12, borderRadius: 12, border: `1px solid ${fieldErrors.last_name ? '#dc2626' : '#e5e7eb'}`, background: '#f8fafc' }}
                 />
+                {fieldErrors.last_name ? <span role="alert" className="field-error">{fieldErrors.last_name}</span> : null}
               </label>
             </div>
             <label style={{ display: 'grid', gap: 8 }}>
@@ -236,14 +261,20 @@ export function ProfileEditPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 8 }}>
-              <span style={{ color: '#6b7280' }}>{t('common.phone')}</span>
+              <span style={{ color: '#6b7280' }}>{t('common.phone')} *</span>
               <input
+                required
                 value={formState.phone_number ?? ''}
-                onChange={(event) => setFormState({ ...formState, phone_number: event.target.value })}
+                onChange={(event) => {
+                  setFormState({ ...formState, phone_number: event.target.value });
+                  setFieldErrors((current) => ({ ...current, phone_number: '' }));
+                }}
                 placeholder={t('common.phone')}
                 disabled={saving}
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }}
+                aria-invalid={Boolean(fieldErrors.phone_number)}
+                style={{ padding: 12, borderRadius: 12, border: `1px solid ${fieldErrors.phone_number ? '#dc2626' : '#e5e7eb'}`, background: '#f8fafc' }}
               />
+              {fieldErrors.phone_number ? <span role="alert" className="field-error">{fieldErrors.phone_number}</span> : null}
             </label>
             <fieldset style={{ display: 'grid', gap: 12, border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, background: '#f8fafc' }}>
               <legend style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Notification preferences</legend>

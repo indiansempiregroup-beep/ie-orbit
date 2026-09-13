@@ -31,6 +31,7 @@ from apps.businesses.services.entitlements import EntitlementService
 from apps.platform_admin.models import (
     HelpArticle,
     PlatformAddonPricing,
+    PlatformAuthSettings,
     PlatformAnnouncement,
     PlatformAuditEvent,
     PlatformCoupon,
@@ -45,6 +46,21 @@ from apps.platform_admin.models import (
 from apps.tenancy.models import Tenant, TenantStatus
 
 logger = logging.getLogger("ie_orbit.platform_admin")
+
+
+_WHATSAPP_STATUS_LABELS = {
+    "live": "Live",
+    "paused": "Paused",
+    "verification_required": "Templates pending",
+    "not_in_plan": "Not in plan",
+    "not_configured": "Not configured",
+}
+
+
+def _whatsapp_status_label(status: str, last_error: str = "") -> str:
+    if last_error:
+        return "Needs attention"
+    return _WHATSAPP_STATUS_LABELS.get(status, status.replace("_", " ").title())
 
 
 class PlatformAdminService:
@@ -554,8 +570,12 @@ class PlatformAdminService:
         user_agent: str = "",
     ) -> dict[str, Any]:
         reason = self.require_reason(reason)
-        reset = self.passwords.issue_reset(
-            user=user,
+        from apps.authentication.services.auth_otp import AuthOtpService
+
+        sent = AuthOtpService().send(
+            client="ops",
+            channel="email",
+            identifier=user.email,
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -563,15 +583,16 @@ class PlatformAdminService:
         self.audit(
             actor=actor,
             tenant=tenant,
-            action="platform.user.reset_password",
+            action="platform.user.sign_in_code_sent",
             resource_type="user",
             resource_id=str(user.id),
             reason=reason,
-            metadata={"email": user.email, "issued": bool(reset)},
+            metadata={"email": user.email, "sent": bool(sent.get("sent"))},
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        return {"email": user.email, "reset_issued": bool(reset)}
+        issued = bool(sent.get("sent"))
+        return {"email": user.email, "sign_in_code_sent": issued, "reset_issued": issued}
 
     # --- feature flags -------------------------------------------------------------
 
@@ -979,6 +1000,8 @@ class PlatformAdminService:
                 "is_default": row.is_default,
                 "max_staff": row.max_staff,
                 "max_branches": row.max_branches,
+                "max_extra_staff": row.max_extra_staff,
+                "max_extra_offices": row.max_extra_offices,
                 "bi_features": row.bi_features,
                 "features": row.features,
                 "amount_paise": row.amount_paise,
@@ -1005,6 +1028,8 @@ class PlatformAdminService:
         is_default: bool = False,
         max_staff: int = 1,
         max_branches: int = 1,
+        max_extra_staff: int | None = None,
+        max_extra_offices: int | None = None,
         bi_features: list[str] | None = None,
         features: list[str] | None = None,
         amount_paise: int = 0,
@@ -1057,6 +1082,12 @@ class PlatformAdminService:
                 "is_default": bool(is_default),
                 "max_staff": max(1, int(max_staff)),
                 "max_branches": max(1, int(max_branches)),
+                "max_extra_staff": (
+                    None if max_extra_staff is None else max(0, int(max_extra_staff))
+                ),
+                "max_extra_offices": (
+                    None if max_extra_offices is None else max(0, int(max_extra_offices))
+                ),
                 "bi_features": list(bi_features or []),
                 "features": list(features or []),
                 "amount_paise": max(0, int(amount_paise)),
@@ -1089,7 +1120,7 @@ class PlatformAdminService:
     @transaction.atomic
     def seed_plan_packages_from_catalog(self, *, actor: User | None = None) -> int:
         from apps.billing.constants import PLAN_PRICE_PAISE, YEARLY_PRICE_MULTIPLIER
-        from apps.businesses.constants import PRODUCT_PLAN_CATALOG
+        from apps.businesses.constants import PRODUCT_PLAN_CATALOG, plan_extra_cap
 
         count = 0
         sort_order = 0
@@ -1109,6 +1140,8 @@ class PlatformAdminService:
                         "is_default": bool(plan.get("is_default", False)),
                         "max_staff": int(plan.get("max_staff", 1) or 1),
                         "max_branches": int(plan.get("max_branches", 1) or 1),
+                        "max_extra_staff": plan_extra_cap(plan, "max_extra_staff"),
+                        "max_extra_offices": plan_extra_cap(plan, "max_extra_offices"),
                         "bi_features": list(plan.get("bi_features") or []),
                         "features": list(plan.get("features") or []),
                         "amount_paise": monthly or 0,
@@ -1184,6 +1217,130 @@ class PlatformAdminService:
             actor=actor,
             action="platform.addon_pricing.update",
             resource_type="addon_pricing",
+            resource_id=str(row.id),
+            reason=reason,
+            metadata={"before": before, "after": after},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return after
+
+    def _platform_auth_settings_row(self) -> PlatformAuthSettings:
+        row, _ = PlatformAuthSettings.objects.get_or_create(key="default")
+        return row
+
+    def serialize_platform_auth_settings(self) -> dict[str, Any]:
+        row = (
+            PlatformAuthSettings.objects.select_related(
+                "ops_otp_whatsapp_business",
+                "ops_otp_whatsapp_business__tenant",
+            )
+            .filter(key="default")
+            .first()
+        )
+        from apps.notifications.services.whatsapp_catalog import UNMAPPED_EVENTS, WHATSAPP_CATALOG
+
+        business = row.ops_otp_whatsapp_business if row else None
+        catalog = {
+            "mapped": [
+                {
+                    "event_type": entry.event_type,
+                    "title": entry.title,
+                    "group": entry.group,
+                    "meta_name": entry.meta_name,
+                    "whatsapp_template_code": entry.code,
+                    "notification_template_code": entry.notification_template_code,
+                    "audience": entry.audience,
+                    "language": entry.language,
+                    "body": entry.body,
+                }
+                for entry in WHATSAPP_CATALOG
+            ],
+            "unmapped": list(UNMAPPED_EVENTS),
+        }
+        payload: dict[str, Any] = {
+            "tenant_slug": None,
+            "business_code": None,
+            "business_id": None,
+            "business_name": None,
+            "whatsapp_status": "not_configured",
+            "whatsapp_status_label": "Not configured",
+            "ops_mobile_whatsapp_otp_enabled": False,
+            "configured": False,
+            "enabled": False,
+            "display_number": "",
+            "last_error": "",
+            "last_tested_at": None,
+            "quality_rating": "",
+            "template_counts": {"total": len(WHATSAPP_CATALOG), "approved": 0, "pending": 0, "rejected": 0},
+            "catalog": catalog,
+        }
+        if business is None:
+            return payload
+
+        from apps.authentication.services.auth_otp import AuthOtpService
+        from apps.notifications.services.whatsapp_settings import WhatsAppIntegrationService
+
+        wa = WhatsAppIntegrationService()
+        public = wa.public_settings(business=business)
+        status = str(public.get("status") or "not_configured")
+        caps = AuthOtpService().capabilities(client="ops")
+        payload.update(
+            {
+                "tenant_slug": business.tenant.slug,
+                "business_code": business.business_code,
+                "business_id": str(business.id),
+                "business_name": business.display_name or business.business_name,
+                "whatsapp_status": status,
+                "whatsapp_status_label": _whatsapp_status_label(status, str(public.get("last_error") or "")),
+                "ops_mobile_whatsapp_otp_enabled": caps.mobile_otp_via_whatsapp,
+                "configured": bool(public.get("configured")),
+                "enabled": bool(public.get("enabled")),
+                "display_number": str(public.get("display_number") or ""),
+                "last_error": str(public.get("last_error") or ""),
+                "last_tested_at": public.get("last_tested_at"),
+                "quality_rating": str(public.get("quality_rating") or ""),
+                "template_counts": public.get("template_counts") or payload["template_counts"],
+            }
+        )
+        return payload
+
+    @transaction.atomic
+    def update_platform_auth_settings(
+        self,
+        *,
+        actor: User,
+        tenant_slug: str | None,
+        business_code: str | None,
+        reason: str,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> dict[str, Any]:
+        reason = self.require_reason(reason)
+        row = self._platform_auth_settings_row()
+        before = self.serialize_platform_auth_settings()
+        slug = (tenant_slug or "").strip()
+        code = (business_code or "").strip()
+        if not slug and not code:
+            row.ops_otp_whatsapp_business = None
+        elif not slug or not code:
+            raise ValidationError(
+                {"tenant_slug": "Provide both tenant slug and business code, or clear both to disable."}
+            )
+        else:
+            from apps.api.mobile_helpers import resolve_tenant_business
+
+            try:
+                _tenant, business = resolve_tenant_business(tenant_slug=slug, business_code=code)
+            except ValueError as exc:
+                raise ValidationError({"tenant_slug": str(exc)}) from exc
+            row.ops_otp_whatsapp_business = business
+        row.save(update_fields=["ops_otp_whatsapp_business", "updated_at"])
+        after = self.serialize_platform_auth_settings()
+        self.audit(
+            actor=actor,
+            action="platform.auth_settings.update",
+            resource_type="platform_auth_settings",
             resource_id=str(row.id),
             reason=reason,
             metadata={"before": before, "after": after},

@@ -15,6 +15,7 @@ import { ScreenState } from '../../components/ScreenState';
 import { uploadServiceImage } from '../../api/media';
 import { DURATION_OPTIONS } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useService, useServiceMutations } from '../../hooks/useOpsExtended';
 import { getApiErrorMessage } from '../../utils/format';
@@ -32,6 +33,7 @@ export function ServiceFormScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { token } = useAuth();
   const { businessId, tenantId, activeBusiness } = useWorkspace();
+  const toast = useToast();
   const isEdit = Boolean(route.params?.serviceId);
   const { service, loading } = useService(route.params?.serviceId ?? '');
   const mutations = useServiceMutations();
@@ -79,8 +81,13 @@ export function ServiceFormScreen() {
             setSubmitting(true);
             setError(null);
             try {
-              if (!name.trim()) {
-                setFieldErrors({ name: requiredMessage('Name') });
+              const nextErrors: Record<string, string> = {};
+              if (!name.trim()) nextErrors.name = requiredMessage('Name');
+              if (!duration.trim() || Number(duration) <= 0) nextErrors.duration = requiredMessage('Duration');
+              if (!price.trim()) nextErrors.price = requiredMessage('Price');
+              else if (!Number.isFinite(Number(price)) || Number(price) < 0) nextErrors.price = 'Enter a valid price';
+              if (Object.keys(nextErrors).length) {
+                setFieldErrors(nextErrors);
                 return;
               }
               setFieldErrors({});
@@ -103,20 +110,17 @@ export function ServiceFormScreen() {
                 description,
                 loyalty_points_earn: Math.max(0, Number(loyaltyPointsEarn) || 0),
                 default_duration: { duration_minutes: durationMinutes, is_default: true },
-                ...(price.trim()
-                  ? {
-                      default_price: {
-                        base_price: price.trim(),
-                        currency,
-                        is_default: true,
-                      },
-                    }
-                  : {}),
+                default_price: {
+                  base_price: price.trim(),
+                  currency,
+                  is_default: true,
+                },
                 ...(primaryImage ? { primary_image: primaryImage } : {}),
               };
 
               if (isEdit && route.params?.serviceId) {
                 await mutations.update(route.params.serviceId, payload);
+                toast.push('Service updated.', 'success');
                 navigation.replace('ServiceDetail', { serviceId: route.params.serviceId });
               } else {
                 const code = `svc-${Date.now().toString(36)}`;
@@ -125,6 +129,7 @@ export function ServiceFormScreen() {
                   service_code: code,
                   ...payload,
                 });
+                toast.push('Service created.', 'success');
                 navigation.replace('ServiceDetail', { serviceId: created.id });
               }
             } catch (err) {
@@ -169,13 +174,27 @@ export function ServiceFormScreen() {
 
       <FormSection title="Duration & price">
         <FieldRow>
-          <SelectField label="Duration" required value={duration} options={DURATION_OPTIONS} onChange={setDuration} />
+          <SelectField
+            label="Duration"
+            required
+            value={duration}
+            options={DURATION_OPTIONS}
+            onChange={(value) => {
+              setDuration(value);
+              setFieldErrors((current) => ({ ...current, duration: '' }));
+            }}
+            error={fieldErrors.duration}
+          />
           <Input
             label={`Price (${currency})`}
-            optional
+            required
             value={price}
-            onChangeText={setPrice}
+            onChangeText={(value) => {
+              setPrice(value);
+              setFieldErrors((current) => ({ ...current, price: '' }));
+            }}
             keyboardType="decimal-pad"
+            error={fieldErrors.price}
           />
         </FieldRow>
         <Input

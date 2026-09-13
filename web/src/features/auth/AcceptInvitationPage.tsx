@@ -12,11 +12,11 @@ export function AcceptInvitationPage() {
   const token = searchParams.get('token') ?? '';
   const client = useMemo(() => createApiClient({ baseUrl: '/api/v1' }), []);
 
-  const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ firstName?: string; lastName?: string }>({});
 
   if (!token) {
     return (
@@ -35,7 +35,7 @@ export function AcceptInvitationPage() {
       <p className="public-kicker">Team invitation</p>
       <h2 style={{ margin: '8px 0' }}>Accept your invitation</h2>
       <p style={{ color: 'var(--muted-foreground)' }}>
-        Create your account password to join the workspace. If you already have an account, leave password blank and sign in after accepting.
+        Confirm your name to join the workspace. After accepting, sign in with a one-time code sent to your invited email.
       </p>
 
       <form
@@ -45,14 +45,22 @@ export function AcceptInvitationPage() {
           setStatus('submitting');
           setErrorMessage(null);
           try {
+            const nextErrors: { firstName?: string; lastName?: string } = {};
+            if (!firstName.trim()) nextErrors.firstName = 'First name is required';
+            if (!lastName.trim()) nextErrors.lastName = 'Last name is required';
+            if (Object.keys(nextErrors).length) {
+              setFieldErrors(nextErrors);
+              setStatus('idle');
+              return;
+            }
+            setFieldErrors({});
             await client.invitations.accept({
               token,
-              password: password || undefined,
-              first_name: firstName || undefined,
-              last_name: lastName || undefined,
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
             });
             setStatus('success');
-            navigate('/auth', { replace: true, state: { message: 'Invitation accepted. Sign in to continue.' } });
+            navigate('/auth', { replace: true, state: { message: 'Invitation accepted. Sign in with OTP to continue.' } });
           } catch (error) {
             setStatus('error');
             setErrorMessage(getApiErrorMessage(error, 'Unable to accept invitation.'));
@@ -61,20 +69,26 @@ export function AcceptInvitationPage() {
       >
         <label style={{ display: 'grid', gap: 8 }}>
           <span>First name</span>
-          <Input value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+          <Input
+            required
+            value={firstName}
+            onChange={(event) => {
+              setFirstName(event.target.value);
+              setFieldErrors((current) => ({ ...current, firstName: undefined }));
+            }}
+            error={fieldErrors.firstName}
+          />
         </label>
         <label style={{ display: 'grid', gap: 8 }}>
           <span>Last name</span>
-          <Input value={lastName} onChange={(event) => setLastName(event.target.value)} />
-        </label>
-        <label style={{ display: 'grid', gap: 8 }}>
-          <span>Password</span>
           <Input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="At least 8 characters for new accounts"
-            minLength={8}
+            required
+            value={lastName}
+            onChange={(event) => {
+              setLastName(event.target.value);
+              setFieldErrors((current) => ({ ...current, lastName: undefined }));
+            }}
+            error={fieldErrors.lastName}
           />
         </label>
 

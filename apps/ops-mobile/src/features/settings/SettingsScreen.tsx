@@ -40,6 +40,12 @@ export function SettingsScreen() {
             onPress={() => navigation.navigate('PaymentSettings')}
           />
           <MenuRow
+            icon="message-circle"
+            label="WhatsApp notifications"
+            subtitle="Connect your number — owner setup guide inside"
+            onPress={() => navigation.navigate('WhatsAppNotificationSettings')}
+          />
+          <MenuRow
             icon="package"
             label={t('settings.productsPlans')}
             subtitle="Plans & pricing"

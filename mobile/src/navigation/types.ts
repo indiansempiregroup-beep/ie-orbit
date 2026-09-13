@@ -1,7 +1,6 @@
 export type AuthStackParamList = {
-  Login: undefined;
+  Login: { email?: string } | undefined;
   Register: undefined;
-  ForgotPassword: undefined;
   VerifyEmail: { email: string };
 };
 
@@ -31,7 +30,6 @@ export type RootStackParamList = {
   PetForm: { petId?: string };
   MyReturns: undefined;
   ReturnDetail: { returnId: string };
-  ChangePassword: undefined;
   NotificationPreferences: undefined;
   PrivacySecurity: undefined;
   PaymentMethods: undefined;

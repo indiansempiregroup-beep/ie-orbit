@@ -1,11 +1,13 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Menu, X } from 'lucide-react';
+import { ArrowRight, CalendarDays, ChevronDown, Menu, ShoppingBag, X } from 'lucide-react';
 import { BrandLockup } from '../../components/BrandLockup';
 import { Button } from '../../components/Button';
+import { OpsStoreBadges } from './OpsStoreBadges';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import { trackEvent } from '../../seo/analytics';
+import { IndustryShotRotationProvider } from './IndustryShotRotation';
 
 const primaryNavLinks = [
   { to: '/', label: 'Home' },
@@ -20,6 +22,23 @@ const primaryNavLinks = [
 const moreNavLinks = [
   { to: '/help', label: 'Help Center' },
   { to: '/integrations', label: 'Integrations' },
+];
+
+const footerProducts = [
+  {
+    to: '/features#appoint',
+    kicker: 'Orbit Appoint',
+    title: 'Bookings without the back-and-forth',
+    icon: CalendarDays,
+    tone: 'peach' as const,
+  },
+  {
+    to: '/features#mart',
+    kicker: 'Orbit Mart',
+    title: 'A storefront that feels like yours',
+    icon: ShoppingBag,
+    tone: 'blue' as const,
+  },
 ];
 
 const footerColumns = [
@@ -91,7 +110,8 @@ export function PublicLayout() {
   }, [moreOpen]);
 
   return (
-    <div className="public-layout">
+    <IndustryShotRotationProvider>
+      <div className="public-layout">
       <a className="public-skip" href="#public-main">
         Skip to content
       </a>
@@ -164,25 +184,60 @@ export function PublicLayout() {
       </main>
       <footer className="public-footer">
         <div className="public-footer-inner">
-          <div>
+          <div className="public-footer-brand">
             <Link to="/" className="public-brand" aria-label="IE Orbit home">
               <BrandLockup />
             </Link>
-            <p>One workspace for appointments and retail — Orbit Appoint and Orbit Mart, built for Indian businesses.</p>
+            <p>
+              White-label customer apps for Indian businesses — Orbit Mart retail and Orbit Appoint bookings, under your
+              brand.
+            </p>
           </div>
-          {footerColumns.map((column) => (
-            <nav key={column.title} aria-label={column.title}>
-              <strong>{column.title}</strong>
-              {column.links.map((link) => (
-                <Link key={link.to} to={link.to}>
-                  {link.label}
+          <div className="public-footer-spotlight" aria-label="Products and downloads">
+            <strong>Start with what you need</strong>
+            {footerProducts.map((product) => {
+              const Icon = product.icon;
+              return (
+                <Link
+                  key={product.to}
+                  to={product.to}
+                  className={`public-footer-product public-footer-product--${product.tone}`}
+                >
+                  <span className="public-footer-product-mark" aria-hidden="true">
+                    <Icon size={16} />
+                  </span>
+                  <span className="public-footer-product-copy">
+                    <b>{product.kicker}</b>
+                    <span>{product.title}</span>
+                  </span>
+                  <ArrowRight size={14} aria-hidden="true" />
                 </Link>
-              ))}
-            </nav>
-          ))}
+              );
+            })}
+            <div className="public-footer-download">
+              <div className="public-footer-download-copy">
+                <b>On iOS and Android</b>
+                <span>Owners and staff run the workspace from their phone.</span>
+              </div>
+              <OpsStoreBadges />
+            </div>
+          </div>
+          <div className="public-footer-links">
+            {footerColumns.map((column) => (
+              <nav key={column.title} aria-label={column.title}>
+                <strong>{column.title}</strong>
+                {column.links.map((link) => (
+                  <Link key={link.to} to={link.to}>
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            ))}
+          </div>
           <p className="public-footer-copy">© {new Date().getFullYear()} Indians Empire Technologies</p>
         </div>
       </footer>
-    </div>
+      </div>
+    </IndustryShotRotationProvider>
   );
 }

@@ -78,14 +78,17 @@ class NotificationService:
         notifications: list[Notification] = []
         customer_user = self._resolve_customer_user(event)
         # Customer already submitted the review; only notify business users.
-        if event.event_type != "BookingReviewed" and customer_user is not None:
-            notification = self._deliver_for_user(
-                event=event,
-                user=customer_user,
-                audience="customer",
-            )
-            if notification is not None:
-                notifications.append(notification)
+        if event.event_type != "BookingReviewed":
+            if customer_user is not None:
+                notification = self._deliver_for_user(
+                    event=event,
+                    user=customer_user,
+                    audience="customer",
+                )
+                if notification is not None:
+                    notifications.append(notification)
+            else:
+                self._send_booking_whatsapp(event=event, user=None, context=None)
 
         for admin_user in self._resolve_admin_users(event, exclude_user=customer_user):
             notification = self._deliver_for_user(
@@ -141,7 +144,8 @@ class NotificationService:
         deliver_in_app = channel_enabled(user=user, channel=NotificationChannel.IN_APP)
         deliver_push = channel_enabled(user=user, channel=NotificationChannel.FIREBASE_PUSH)
         deliver_email = channel_enabled(user=user, channel=NotificationChannel.EMAIL) and bool(user.email)
-        if not any((deliver_in_app, deliver_push, deliver_email)):
+        deliver_whatsapp = audience == "customer"
+        if not any((deliver_in_app, deliver_push, deliver_email, deliver_whatsapp)):
             return None
 
         if Notification.objects.filter(
@@ -216,6 +220,9 @@ class NotificationService:
                     response_body=push_result,
                 )
 
+        if deliver_whatsapp:
+            self._send_booking_whatsapp(event=event, user=user, context=context)
+
         if notification is None:
             return None
 
@@ -229,6 +236,37 @@ class NotificationService:
             },
         )
         return notification
+
+    def _send_booking_whatsapp(
+        self,
+        *,
+        event: BookingEvent,
+        user: User | None,
+        context: dict[str, Any] | None,
+    ) -> None:
+        from apps.notifications.services.whatsapp_send import send_whatsapp_for_event
+
+        booking = event.booking
+        customer = getattr(booking, "customer", None)
+        payload = dict(context or {})
+        if "{{customer_name}}" in payload:
+            payload.setdefault("customer_name", payload.get("customer_name") or payload.get("{{customer_name}}"))
+        try:
+            send_whatsapp_for_event(
+                tenant=event.tenant,
+                business=booking.business,
+                event_type=event.event_type,
+                audience="customer",
+                user=user,
+                customer=customer,
+                context=payload,
+                extra_metadata={"booking_id": str(booking.id), "booking_number": booking.booking_number},
+            )
+        except Exception:
+            logger.exception(
+                "WhatsApp booking notify failed",
+                extra={"booking_id": str(booking.id), "event_type": event.event_type},
+            )
 
     def _send_expo_push(
         self,

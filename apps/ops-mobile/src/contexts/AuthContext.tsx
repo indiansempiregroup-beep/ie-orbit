@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import type { LoginResponse, UserProfile, WorkspaceProvisionResponse } from '@ie-orbit/sdk';
 import { opsClient } from '../api/client';
@@ -24,7 +24,9 @@ import {
   persistImpersonationHandoff,
   persistSessionHandoff,
   redirectToAdminWeb,
+  redirectToPublicSiteSignedOut,
 } from '../utils/impersonationHandoff';
+import { suppressGoogleAutoSignIn } from '../utils/googleAuth';
 
 const ACCESS_KEY = 'ie.ops.access';
 const REFRESH_KEY = 'ie.ops.refresh';
@@ -70,7 +72,13 @@ type AuthState = {
   biometricEnabled: boolean;
   biometricAvailable: boolean;
   biometricLabel: string;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string }) => Promise<void>;
+  loginWithOtp: (input: {
+    channel: 'email' | 'whatsapp';
+    identifier: string;
+    code: string;
+    rememberMe?: boolean;
+  }) => Promise<void>;
   loginWithGoogle: (idToken: string, rememberMe?: boolean) => Promise<void>;
   loginWithBiometrics: () => Promise<void>;
   /** Enable Face ID / fingerprint using the current session (Face ID only — no password). */
@@ -120,6 +128,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
   const refreshTokenRef = useRef<string | null>(null);
   const userEmailRef = useRef<string | null>(null);
+  /** When false, tokens stay in memory only (Remember me unchecked). */
+  const persistSessionRef = useRef(true);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
   const accessIssuedAtRef = useRef<number>(0);
@@ -166,14 +176,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(access);
         refreshTokenRef.current = nextRefresh;
         accessIssuedAtRef.current = Date.now();
-        await writeToken(ACCESS_KEY, access);
-        await writeToken(REFRESH_KEY, nextRefresh);
-
-        if (await isBiometricLoginEnabled()) {
-          const biometricSession = await getStoredBiometricSession();
-          const email = biometricSession?.email;
-          if (email) {
-            await storeBiometricSession(email, nextRefresh);
+        if (persistSessionRef.current) {
+          await writeToken(ACCESS_KEY, access);
+          await writeToken(REFRESH_KEY, nextRefresh);
+          if (await isBiometricLoginEnabled()) {
+            const biometricSession = await getStoredBiometricSession();
+            const email = biometricSession?.email;
+            if (email) {
+              await storeBiometricSession(email, nextRefresh);
+            }
           }
         }
         return access;
@@ -244,6 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshTokenRef.current = handoff.refresh;
         userEmailRef.current = me.data.email?.trim() || null;
         accessIssuedAtRef.current = Date.now();
+        persistSessionRef.current = true;
         await writeToken(ACCESS_KEY, handoff.access);
         await writeToken(REFRESH_KEY, handoff.refresh);
         scheduleRefresh(remainingAccessSeconds(handoff.access) || ACCESS_TTL_SECONDS);
@@ -254,6 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const migrated = await migrateLegacyAuthKeys();
       const access = migrated.access;
       refreshTokenRef.current = migrated.refresh;
+      persistSessionRef.current = Boolean(access || migrated.refresh);
       setIsImpersonating(Boolean(storedImpersonator) || jwtIsImpersonation(access));
       if (!access && !migrated.refresh) {
         setToken(null);
@@ -334,7 +347,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [ensureFreshAccess]);
 
-  const applySession = useCallback(async (payload: LoginResponse) => {
+  const applySession = useCallback(async (payload: LoginResponse, rememberMe = true) => {
     if (!payload.access) {
       throw new Error('Sign-in did not return an access token. Please try again.');
     }
@@ -356,8 +369,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshTokenRef.current = refresh;
     userEmailRef.current = nextUser.email?.trim() || null;
     accessIssuedAtRef.current = Date.now();
-    await writeToken(ACCESS_KEY, payload.access);
-    await writeToken(REFRESH_KEY, refresh);
+    persistSessionRef.current = rememberMe;
+    if (rememberMe) {
+      await writeToken(ACCESS_KEY, payload.access);
+      await writeToken(REFRESH_KEY, refresh);
+    } else {
+      // Drop any prior persisted session so restart cannot restore this login.
+      await writeToken(ACCESS_KEY, null);
+      await writeToken(REFRESH_KEY, null);
+    }
     const jwtRemaining = remainingAccessSeconds(payload.access);
     scheduleRefresh(
       jwtRemaining > 0
@@ -367,7 +387,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : ACCESS_TTL_SECONDS,
     );
 
-    if (await isBiometricLoginEnabled()) {
+    if (rememberMe && (await isBiometricLoginEnabled())) {
       const email = nextUser.email;
       if (email) {
         await storeBiometricSession(email, refresh);
@@ -375,22 +395,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [scheduleRefresh]);
 
-  const login = useCallback(async (email: string, password: string, rememberMe = true) => {
-    setLoading(true);
-    try {
-      await clearImpersonationHandoff();
-      setIsImpersonating(false);
-      const response = await opsClient.auth.login({
-        email,
-        password,
-        remember_me: rememberMe,
-      });
-      await applySession(response.data);
-      await refreshBiometricState();
-    } finally {
-      setLoading(false);
-    }
-  }, [applySession, refreshBiometricState]);
+  const sendOtp = useCallback(async (input: { channel: 'email' | 'whatsapp'; identifier: string }) => {
+    await opsClient.auth.sendOtp({
+      client: 'ops',
+      channel: input.channel,
+      identifier: input.identifier.trim(),
+    });
+  }, []);
+
+  const loginWithOtp = useCallback(
+    async (input: {
+      channel: 'email' | 'whatsapp';
+      identifier: string;
+      code: string;
+      rememberMe?: boolean;
+    }) => {
+      setLoading(true);
+      try {
+        await clearImpersonationHandoff();
+        setIsImpersonating(false);
+        const response = await opsClient.auth.verifyOtp({
+          client: 'ops',
+          channel: input.channel,
+          identifier: input.identifier.trim(),
+          code: input.code.trim(),
+          remember_me: input.rememberMe ?? true,
+        });
+        await applySession(response.data, input.rememberMe ?? true);
+        await refreshBiometricState();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applySession, refreshBiometricState],
+  );
 
   const loginWithGoogle = useCallback(async (idToken: string, rememberMe = true) => {
     setLoading(true);
@@ -402,7 +440,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         client: 'ops',
         remember_me: rememberMe,
       });
-      await applySession(response.data);
+      await applySession(response.data, rememberMe);
       await refreshBiometricState();
     } finally {
       setLoading(false);
@@ -425,19 +463,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!session) {
         await clearBiometricLogin();
         await refreshBiometricState();
-        throw new Error('Saved sign-in was removed. Please sign in with email and password.');
+        throw new Error('Saved sign-in was removed. Please sign in with OTP.');
       }
       const response = await opsClient.auth.refresh({ refresh: session.refresh });
-      await applySession(response.data);
+      await applySession(response.data, true);
       await refreshBiometricState();
     } catch (err) {
-      // Invalid/expired biometric session — clear and ask for password login.
+      // Invalid/expired biometric session — clear and ask for OTP login.
       if (await isBiometricLoginEnabled()) {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('invalid') || message.includes('401') || message.includes('token') || message.includes('denied')) {
           await clearBiometricLogin();
           await refreshBiometricState();
-          throw new Error('Saved session expired. Sign in with email and password, then re-enable Face ID.');
+          throw new Error('Saved session expired. Sign in with OTP, then re-enable Face ID.');
         }
       }
       throw err;
@@ -462,7 +500,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!email || !refresh) {
       throw new Error(
-        'Your saved session is incomplete. Sign out, sign in with email and password once, then enable Face ID.',
+        'Your saved session is incomplete. Sign out, sign in with OTP once, then enable Face ID.',
       );
     }
 
@@ -497,6 +535,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshTokenRef.current = payload.refresh;
       userEmailRef.current = payload.user.email?.trim() || null;
       accessIssuedAtRef.current = Date.now();
+      persistSessionRef.current = true;
       await writeToken(ACCESS_KEY, payload.access);
       await writeToken(REFRESH_KEY, payload.refresh);
       scheduleRefresh(ACCESS_TTL_SECONDS);
@@ -533,17 +572,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     setLoading(true);
+    const email = user?.email?.trim() || userEmailRef.current?.trim();
+    let redirectToPublicSite = false;
     try {
       clearRefreshTimer();
       const biometricOn = await isBiometricLoginEnabled();
       const refresh = refreshTokenRef.current || (await readToken(REFRESH_KEY));
 
-      const email = user?.email?.trim() || userEmailRef.current?.trim();
       if (biometricOn && refresh && email) {
         // Soft sign-out: keep refresh for Face ID / fingerprint login.
         await storeBiometricSession(email, refresh);
         await writeToken(ACCESS_KEY, null);
-        // Keep REFRESH_KEY so a later password re-login still has a path if needed;
+        // Keep REFRESH_KEY so a later OTP re-login still has a path if needed;
         // biometric vault is the primary source after soft logout.
         setToken(null);
         setUser(null);
@@ -565,18 +605,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(null);
       setUser(null);
       await refreshBiometricState();
+      if (Platform.OS === 'web') {
+        void suppressGoogleAutoSignIn(email);
+        redirectToPublicSite = true;
+      } else {
+        await suppressGoogleAutoSignIn(email);
+      }
     } catch {
       await writeToken(ACCESS_KEY, null);
       if (!(await isBiometricLoginEnabled())) {
         await writeToken(REFRESH_KEY, null);
         refreshTokenRef.current = null;
+        redirectToPublicSite = true;
       }
       setToken(null);
       setUser(null);
       userEmailRef.current = null;
       await refreshBiometricState();
+      if (Platform.OS === 'web') {
+        void suppressGoogleAutoSignIn(email);
+      } else {
+        await suppressGoogleAutoSignIn(email);
+      }
     } finally {
       setLoading(false);
+      if (redirectToPublicSite) {
+        redirectToPublicSiteSignedOut();
+      }
     }
   }, [user?.email, refreshBiometricState, clearRefreshTimer]);
 
@@ -595,7 +650,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       biometricEnabled,
       biometricAvailable,
       biometricLabel,
-      login,
+      sendOtp,
+      loginWithOtp,
       loginWithGoogle,
       loginWithBiometrics,
       enableBiometrics,
@@ -615,7 +671,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       biometricEnabled,
       biometricAvailable,
       biometricLabel,
-      login,
+      sendOtp,
+      loginWithOtp,
       loginWithGoogle,
       loginWithBiometrics,
       enableBiometrics,

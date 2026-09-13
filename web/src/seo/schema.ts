@@ -53,14 +53,14 @@ export function softwareApplicationSchema(siteUrl: string) {
         name: 'Starter',
         price: String(STARTER_MONTHLY_INR),
         priceCurrency: 'INR',
-        description: 'Monthly Starter plan for Orbit Appoint or Orbit Mart.',
+        description: 'Monthly Starter plan for one location, including a white-label customer app for Orbit Appoint or Orbit Mart.',
       },
       {
         '@type': 'Offer',
         name: 'Pro',
         price: String(PRO_MONTHLY_INR),
         priceCurrency: 'INR',
-        description: 'Monthly Pro plan for Orbit Appoint or Orbit Mart.',
+        description: 'Monthly Pro plan with a second office, growth tools, and an ad-free white-label customer app.',
       },
     ],
   };

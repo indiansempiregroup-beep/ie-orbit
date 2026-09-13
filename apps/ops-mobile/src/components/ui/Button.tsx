@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -22,6 +24,8 @@ type Props = PressableProps & {
   loading?: boolean;
   fullWidth?: boolean;
   icon?: keyof typeof Feather.glyphMap;
+  /** Opens in a new tab on web (native `<a>`), or via Linking on native. */
+  href?: string;
 };
 
 export function Button({
@@ -33,34 +37,65 @@ export function Button({
   icon,
   disabled,
   style,
+  href,
+  onPress,
   ...rest
 }: Props) {
   const isDisabled = disabled || loading;
   const variantStyle = getVariantStyle(variant);
+  const inner = loading ? (
+    <ActivityIndicator color={variantStyle.spinner} size="small" />
+  ) : (
+    <View style={styles.content}>
+      {icon ? <Feather name={icon} size={size === 'sm' ? 14 : 16} color={variantStyle.icon} /> : null}
+      <Text style={[styles.label, variantStyle.label, sizeStyles[size]]}>{label}</Text>
+    </View>
+  );
+  const visualStyle = [
+    styles.base,
+    variantStyle.container,
+    sizes[size],
+    fullWidth && styles.fullWidth,
+    isDisabled && styles.disabled,
+    style as ViewStyle,
+  ];
+
+  if (href && Platform.OS === 'web') {
+    return (
+      <a
+        href={isDisabled ? undefined : href}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ textDecoration: 'none', display: fullWidth ? 'block' : 'inline-block' }}
+        onClick={(event) => {
+          if (isDisabled) {
+            event.preventDefault();
+            return;
+          }
+          onPress?.(event as never);
+        }}
+      >
+        <Pressable disabled pointerEvents="none" style={visualStyle}>
+          {inner}
+        </Pressable>
+      </a>
+    );
+  }
 
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={href ? 'link' : 'button'}
       disabled={isDisabled}
-      style={({ pressed }) => [
-        styles.base,
-        variantStyle.container,
-        sizes[size],
-        fullWidth && styles.fullWidth,
-        pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
-        style as ViewStyle,
-      ]}
+      style={({ pressed }) => [...visualStyle, pressed && !isDisabled && styles.pressed]}
+      onPress={(event) => {
+        if (href) {
+          void Linking.openURL(href);
+        }
+        onPress?.(event);
+      }}
       {...rest}
     >
-      {loading ? (
-        <ActivityIndicator color={variantStyle.spinner} size="small" />
-      ) : (
-        <View style={styles.content}>
-          {icon ? <Feather name={icon} size={size === 'sm' ? 14 : 16} color={variantStyle.icon} /> : null}
-          <Text style={[styles.label, variantStyle.label, sizeStyles[size]]}>{label}</Text>
-        </View>
-      )}
+      {inner}
     </Pressable>
   );
 }

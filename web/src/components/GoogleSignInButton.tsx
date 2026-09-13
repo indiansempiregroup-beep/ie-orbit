@@ -10,9 +10,10 @@ import {
 type Props = {
   onIdToken: (idToken: string) => Promise<void>;
   disabled?: boolean;
+  hideOriginHint?: boolean;
 };
 
-export function GoogleSignInButton({ onIdToken, disabled }: Props) {
+export function GoogleSignInButton({ onIdToken, disabled, hideOriginHint }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const onIdTokenRef = useRef(onIdToken);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +59,7 @@ export function GoogleSignInButton({ onIdToken, disabled }: Props) {
         aria-disabled={disabled}
       />
       {error ? <div role="alert" className="auth-error">{error}</div> : null}
-      {showOriginHint ? (
+      {showOriginHint && !hideOriginHint ? (
         <p className="google-signin-hint">
           If Google says Access blocked, edit the existing Web client and add {origin} as both a
           JavaScript origin and a redirect URI. Port 8082 is ops only; this site is port 3000.

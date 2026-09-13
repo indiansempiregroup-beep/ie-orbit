@@ -41,6 +41,7 @@ export const PlanFeature = {
   adFree: 'ad_free',
   razorpayPayments: 'razorpay_payments',
   cashfreePayments: 'cashfree_payments',
+  notificationsWhatsapp: 'notifications_whatsapp',
 } as const;
 
 export const SHOPIE_BOOKS_FEATURES = [

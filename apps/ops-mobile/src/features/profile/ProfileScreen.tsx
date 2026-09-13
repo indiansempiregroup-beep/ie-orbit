@@ -121,7 +121,6 @@ export function ProfileScreen() {
               label={t('profile.notificationPreferences')}
               onPress={() => navigation.navigate('NotificationPreferences')}
             />
-            <MenuRow icon="lock" label={t('profile.changePassword')} onPress={() => navigation.navigate('Security')} />
             <MenuRow
               icon="smartphone"
               label={t('profile.sessions')}
@@ -134,6 +133,10 @@ export function ProfileScreen() {
           </MenuSection>
 
           <MenuSection title={t('profile.security')}>
+            <Text style={styles.securityNote}>
+              Sign-in uses one-time email or WhatsApp codes (or Google). There is no account password to change on this
+              app.
+            </Text>
             <View style={styles.biometricRow}>
               <View style={styles.biometricCopy}>
                 <Text style={styles.biometricTitle}>{biometricLabel} login</Text>
@@ -183,6 +186,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   menu: { gap: spacing.xl },
+  securityNote: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    lineHeight: 20,
+  },
   biometricRow: {
     flexDirection: 'row',
     alignItems: 'center',

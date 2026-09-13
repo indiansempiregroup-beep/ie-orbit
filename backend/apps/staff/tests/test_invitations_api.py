@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from apps.authentication.models import User, UserStatus
 from apps.authentication.services.roles import RoleService
+from apps.authentication.tests.otp_helpers import otp_login_ops
 from apps.staff.models import InvitationStatus, StaffInvitation
 
 
@@ -19,20 +20,18 @@ def api_client() -> APIClient:
 def owner() -> User:
     user = User.objects.create_user(
         email="invite-owner@example.com",
-        password="ValidPass123",
+        password=None,
         status=UserStatus.ACTIVE,
     )
+    user.is_superuser = True
+    user.save(update_fields=["is_superuser", "updated_at"])
     RoleService().assign_role(user=user, role_code="business_owner")
     return user
 
 
 def authenticate(api_client: APIClient, user: User) -> str:
-    response = api_client.post(
-        reverse("auth-login"),
-        {"email": user.email, "password": "ValidPass123"},
-        format="json",
-    )
-    access = response.json()["data"]["access"]
+    payload = otp_login_ops(api_client, user)
+    access = payload["access"]
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
     return access
 
@@ -85,7 +84,6 @@ def test_staff_invitation_and_accept_flow(api_client: APIClient, owner: User) ->
         reverse("auth-accept-invitation"),
         {
             "token": str(invitation.token),
-            "password": "WelcomePass123",
             "first_name": "New",
             "last_name": "Staff",
         },

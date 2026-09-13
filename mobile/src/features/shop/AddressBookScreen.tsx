@@ -10,6 +10,7 @@ import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { GroupedList } from '../../components/ui/GroupedList';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { addressLines, addressTypeMeta, hasMapPin } from './addressUtils';
 import type { CustomerAddress } from '@ie-orbit/sdk';
@@ -23,6 +24,7 @@ export function AddressBookScreen() {
   const route = useRoute<AddressBookRoute>();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const toast = useToast();
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +72,7 @@ export function AddressBookScreen() {
         { tenant_slug: tenantSlug, business_code: businessCode },
       );
       await load();
+      toast.push('Default address updated.', 'success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update this address.');
     } finally {

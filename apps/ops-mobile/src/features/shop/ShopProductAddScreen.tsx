@@ -35,6 +35,7 @@ import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
 import { CURRENCIES } from '../../constants/options';
+import { requiredMessage } from '../../utils/formValidation';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -172,6 +173,7 @@ export function ShopProductAddScreen() {
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [previews, setPreviews] = useState<string[]>(emptyProductImageSlots());
   const touchedRef = useRef<Set<FormKey>>(new Set());
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -262,6 +264,7 @@ export function ShopProductAddScreen() {
   function setField(key: FormKey, value: string) {
     markTouched(key);
     setForm((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => (current[key] ? { ...current, [key]: '' } : current));
   }
 
   function authErrorMessage(err: unknown, fallback: string) {
@@ -503,10 +506,18 @@ export function ShopProductAddScreen() {
 
   async function save() {
     if (!client || !businessId) return;
-    if (!form.name.trim()) {
-      setMessage('Product name is required.');
+    const nextErrors: Record<string, string> = {};
+    if (!form.name.trim()) nextErrors.name = requiredMessage('Product name');
+    const priceValue = Number(form.price.trim());
+    if (!form.price.trim()) nextErrors.price = requiredMessage('Price');
+    else if (!Number.isFinite(priceValue) || priceValue < 0) nextErrors.price = 'Enter a valid price';
+    if (!form.status.trim()) nextErrors.status = requiredMessage('Status');
+    if (!form.currency.trim()) nextErrors.currency = requiredMessage('Currency');
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
       return;
     }
+    setFieldErrors({});
     setBusy(true);
     setMessage(null);
     const gallery = normalizeProductGallery(form.images.map(toStoredProductImageUrl));
@@ -697,7 +708,7 @@ export function ShopProductAddScreen() {
           value={form.name}
           onChangeText={(value) => setField('name', value)}
           placeholder="Product name"
-          error={!form.name.trim() && message === 'Product name is required.' ? message : undefined}
+          error={fieldErrors.name}
         />
         <FieldRow>
           <Input label="Brand" optional value={form.brand} onChangeText={(value) => setField('brand', value)} />
@@ -722,6 +733,7 @@ export function ShopProductAddScreen() {
           ]}
           onChange={(value) => setField('status', value)}
           searchable={false}
+          error={fieldErrors.status}
         />
         <View style={styles.chipBlock}>
           <FieldLabel label="Category" optional />
@@ -746,6 +758,7 @@ export function ShopProductAddScreen() {
             value={form.price}
             onChangeText={(value) => setField('price', value)}
             keyboardType="decimal-pad"
+            error={fieldErrors.price}
           />
           <Input
             label="GST %"
@@ -765,6 +778,7 @@ export function ShopProductAddScreen() {
               : CURRENCIES
           }
           onChange={(value) => setField('currency', value)}
+          error={fieldErrors.currency}
         />
         <View style={styles.chipBlock}>
           <FieldLabel label="GST on price" />

@@ -11,6 +11,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -28,6 +29,7 @@ import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
 import { GroupedList } from '../../components/ui/GroupedList';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
+import { useToast } from '../../contexts/ToastContext';
 import { buildUpiPayUrl } from '../../utils/upi';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { useCart } from './CartContext';
@@ -85,6 +87,7 @@ export function CartScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Cart'>>();
   const { bootstrap, branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const toast = useToast();
   const { lines, setQuantity, clear, total, itemCount } = useCart();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -116,6 +119,7 @@ export function CartScreen() {
   const [minRedeemPoints, setMinRedeemPoints] = useState(bootstrap?.loyalty?.min_redeem_points ?? 10);
   const [earnPointsPer100, setEarnPointsPer100] = useState(bootstrap?.loyalty?.earn_points_per_100 ?? 1);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const primary = branding?.primaryColor ?? colors.primary;
   const business = bootstrap?.business;
@@ -566,6 +570,7 @@ export function CartScreen() {
         payment_method: paymentMethod,
         coupon_code: appliedCoupon?.code || undefined,
         points_to_redeem: pointsToRedeem > 0 ? pointsToRedeem : undefined,
+        whatsapp_opt_in: whatsappOptIn || undefined,
         lines: lines.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
@@ -576,6 +581,7 @@ export function CartScreen() {
       });
       const response = await Promise.race([orderRequest, timeout]);
       clear();
+      toast.push('Order placed.', 'success');
       navigation.replace('ShopOrderDetail', { orderId: response.data.id, placed: true });
     } catch (err) {
       if (err instanceof ApiClientError && (err.status === 504 || err.status === 502 || err.status === 503)) {
@@ -1060,6 +1066,13 @@ export function CartScreen() {
                 </Text>
               ) : null}
             </View>
+            <View style={styles.whatsappRow}>
+              <View style={{ flex: 1, paddingRight: spacing.md }}>
+                <Text style={styles.whatsappTitle}>WhatsApp updates</Text>
+                <Text style={styles.barHint}>Order status on WhatsApp if this shop is connected</Text>
+              </View>
+              <Switch value={whatsappOptIn} onValueChange={setWhatsappOptIn} trackColor={{ true: primary }} />
+            </View>
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
 
@@ -1480,6 +1493,17 @@ const styles = StyleSheet.create({
   redeemValue: { fontWeight: '700', color: colors.foreground, minWidth: 72, textAlign: 'center' },
   totalLabel: { ...typography.title, fontSize: 16 },
   error: { color: colors.destructive, marginTop: spacing.sm },
+  whatsappRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  whatsappTitle: { ...typography.body, fontWeight: '700', color: colors.foreground },
   checkoutBar: {
     flexDirection: 'row',
     alignItems: 'center',

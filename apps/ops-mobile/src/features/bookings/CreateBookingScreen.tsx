@@ -16,6 +16,7 @@ import { FormSection } from '../../components/ui/FormSection';
 import { IconBadge } from '../../components/ui/IconBadge';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useAvailability, useBookingMutations, useBranches, useEntityMaps } from '../../hooks/useOpsExtended';
@@ -82,6 +83,7 @@ export function CreateBookingScreen() {
   const showStaffPicker = canAccessStaffDirectory(user);
   const { businessId } = useWorkspace();
   const client = useOpsClient();
+  const toast = useToast();
   const { customers, services, staff, customerMap, serviceMap, staffMap } = useEntityMaps();
   const { branches } = useBranches();
   const mutations = useBookingMutations();
@@ -314,6 +316,7 @@ export function CreateBookingScreen() {
                   source: 'operations_dashboard',
                   channel: 'mobile',
                 });
+                toast.push('Booking created.', 'success');
                 navigation.replace('BookingDetail', {
                   bookingId: booking.id,
                   initialBooking: booking,

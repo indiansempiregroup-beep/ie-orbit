@@ -32,7 +32,16 @@ export const faqSections: FaqSection[] = [
         a: {
           paragraphs: [
             'IE Orbit is a business workspace from Indians Empire Technologies. One account runs Orbit Appoint (appointments and service operations) and Orbit Mart (retail, POS, GST books, and Grow tools). You can subscribe to one product or both — they share the same business, staff, customers, and billing.',
-            'The web dashboard is for owners and staff. Customers use a white-label mobile app branded to your business for bookings, shopping, and order tracking.',
+            'The standout is the white-label customer app: customers book, shop, and track orders under your business name, not IE Orbit. Owners and staff use the web dashboard and ops app.',
+          ],
+        },
+      },
+      {
+        q: 'What is the white-label customer app?',
+        a: {
+          paragraphs: [
+            'It is the main reason to choose IE Orbit over billing-only software. Every Starter and Pro plan includes a mobile app branded to your business. Customers see your name, colours, and listings when they book or shop — not IE Orbit, and not a public marketplace.',
+            'Owners and staff keep using the ops workspace. Starter may show Google Ads in the customer app; Pro is ad-free. Install links come from your business, not a generic public store page on this site.',
           ],
         },
       },
@@ -43,13 +52,13 @@ export const faqSections: FaqSection[] = [
             'Salons, spas, clinics, trainers, and other appointment-based teams (Orbit Appoint)',
             'Shops, counters, and retail teams that need POS, catalog, and GST books (Orbit Mart)',
             'Businesses that run both service and retail from one location',
-            'Indian businesses that prefer UPI billing and INR pricing',
+            'Businesses that want a customer app under their own brand, not a generic marketplace listing',
           ],
         },
       },
       {
         q: 'Can I use Orbit Appoint and Orbit Mart together?',
-        a: 'Yes. Both products live in the same workspace. You pick one or both during onboarding and can add the second product later. Staff, customers, offices, and billing stay unified — you do not need separate logins or duplicate business profiles.',
+        a: 'Yes. Both products live in the same workspace. You pick one or both during onboarding and can add the second product later. Staff, customers, offices, billing, and the white-label customer app stay unified — you do not need separate logins or duplicate business profiles.',
       },
     ],
   },
@@ -61,10 +70,13 @@ export const faqSections: FaqSection[] = [
         q: 'What does Orbit Appoint include?',
         a: {
           bullets: [
+            'White-label customer app branded to your business',
             'Online bookings from any device',
             'Staff calendar, schedules, and availability',
             'Customer records, reminders, and reviews',
             'Services catalog and booking management',
+            'WhatsApp customer reminders on Pro',
+            'Second office, payments, and an ad-free customer app on Pro',
             'Business intelligence on Starter (Overview) and full BI on Pro',
             'Customer reward points on Pro (earn and redeem)',
           ],
@@ -84,12 +96,13 @@ export const faqSections: FaqSection[] = [
         q: 'What does Orbit Mart include?',
         a: {
           paragraphs: [
-            'Orbit Mart is one product with three operational areas — commerce, books, and Grow — not three separate subscriptions.',
+            'Orbit Mart is one product with three operational areas — commerce, books, and Grow — not three separate subscriptions. Starter is the counter, day-book, online orders, and returns; Pro unlocks Instant Delivery with Porter/Shiprocket, GST e-invoice / e-way bill, and Grow.',
           ],
           bullets: [
-            'Commerce: POS / GST counter sales, product catalog, inventory, online orders (pickup and delivery), returns, delivery zones, and shop loyalty',
-            'Books: sales, purchases, cash and bank, expenses, parties, quotations, stock, godowns, challans, GST reports, e-invoice (IRN), and e-way bill',
-            'Grow: WhatsApp default messages and share links, AI promo posters, Google Profile listing helpers, and calculators (GST, margin, discount, EMI)',
+            'White-label customer app so shoppers browse and order under your brand',
+            'Starter: POS, catalog, online orders, returns, sales bills, parties, cash, expenses, and stock — one location, two staff (add 1 extra staff)',
+            'Pro: Instant Delivery with Porter/Shiprocket, purchases, GST reports, e-invoice, e-way bill, Grow WhatsApp / Google, loyalty, payment gateways, and a second office',
+            'Pets pack remains an optional monthly add-on on Orbit Mart',
           ],
         },
       },
@@ -117,7 +130,7 @@ export const faqSections: FaqSection[] = [
         a: {
           paragraphs: [
             'Click Create account on the website or go to /auth/register/start. Complete the guided wizard: business details, owner account, preferences (currency, timezone, products and packages), optional branding, then review and submit.',
-            'You can sign up with email and password or continue with Google on the owner step. No credit card is required to start.',
+            'You verify your owner email with a one-time code during signup, or continue with Google on the owner step. No credit card is required to start.',
           ],
         },
       },
@@ -138,7 +151,7 @@ export const faqSections: FaqSection[] = [
       },
       {
         q: 'Is there a customer mobile app?',
-        a: 'Yes. IE Orbit provides a white-label customer app branded to your business. Customers can book appointments, browse the shop, place orders, and track status depending on which products you use. Starter plans may show Google Ads in customer apps; Pro includes ad-free operations and customer apps where applicable.',
+        a: 'Yes. IE Orbit provides a white-label customer app branded to your business on every paid plan and during the trial. Customers can book appointments, browse the shop, place orders, and track status depending on which products you use. Starter plans may show Google Ads in the customer app; Pro is ad-free.',
       },
       {
         q: 'Which currencies and regions are supported?',
@@ -163,10 +176,10 @@ export const faqSections: FaqSection[] = [
         q: 'What is the difference between Starter and Pro?',
         a: {
           bullets: [
-            'Starter: core operations with lower staff and office limits; BI Overview only',
-            'Pro: higher staff and office limits; full BI (Growth, Revenue, Forecast, Reports); customer reward points on Orbit Appoint where enabled',
-            'Pro may include ad-free operations and customer apps; Starter may show Google Ads in mobile apps',
-            'Pro on Orbit Mart can include connecting your Razorpay account for customer payments',
+            'Starter: core operations for one location (2 staff, add 1 extra); BI Overview only. Orbit Mart Starter includes counter, day-book, online orders, and returns (GST e-invoice stays on Pro)',
+            'Pro: 5 staff and 2 offices included; full BI; WhatsApp reminders, payments, and an ad-free app. Orbit Mart Pro adds Instant Delivery with Porter/Shiprocket, GST books, and Grow',
+            'Pro is ad-free; Starter may show Google Ads in the customer app',
+            'A second office is Pro. Starter can add 1 extra staff; extra offices are a Pro add-on',
           ],
           paragraphs: ['Exact staff and office limits depend on the plan shown on the Pricing page for each product.'],
         },
@@ -175,7 +188,7 @@ export const faqSections: FaqSection[] = [
         q: 'Can I add extra staff, offices, or the Pets pack?',
         a: {
           paragraphs: [
-            'Yes. Extra staff and extra offices are self-serve monthly add-ons on both Orbit Appoint and Orbit Mart.',
+            'Starter can add 1 extra staff (₹199/month). Extra offices (₹299/month) are available on Pro.',
             'Pets pack is a separate Orbit Mart add-on for pet records. See current add-on prices on the Pricing page.',
           ],
         },
@@ -236,7 +249,7 @@ export const faqSections: FaqSection[] = [
         a: {
           paragraphs: [
             'Workspaces are isolated per business. Access is controlled by authentication, roles, and permissions.',
-            'Read our Privacy Policy for how we handle account and business data. Use strong passwords and verify your owner email after signup.',
+            'Read our Privacy Policy for how we handle account and business data. Sign-in uses one-time email codes (and optional biometric unlock on mobile after you sign in). Verify your owner email after signup.',
           ],
         },
       },
@@ -247,8 +260,8 @@ export const faqSections: FaqSection[] = [
     description: 'Sign-in help, contact, and policies.',
     items: [
       {
-        q: 'I forgot my password. What should I do?',
-        a: 'Use Forgot password on the sign-in page. Enter your account email, follow the reset link we send, and set a new password. If you do not receive the email, check spam or contact support.',
+        q: 'How do I sign in if I lost access to my email app?',
+        a: 'Sign in uses a one-time code sent to your account email (Sign in with OTP on web or mobile). If you cannot receive email, contact support with the address on your account so we can help you regain access.',
       },
       {
         q: 'How do I verify my email?',

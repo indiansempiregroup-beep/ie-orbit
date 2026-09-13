@@ -42,6 +42,7 @@ FEATURE_REWARD_POINTS = "reward_points"
 FEATURE_AD_FREE = "ad_free"
 FEATURE_RAZORPAY_PAYMENTS = "razorpay_payments"
 FEATURE_CASHFREE_PAYMENTS = "cashfree_payments"
+FEATURE_NOTIFICATIONS_WHATSAPP = "notifications_whatsapp"
 
 FEATURE_APPOINTIE_BOOKINGS = "appointie_bookings"
 FEATURE_APPOINTIE_CALENDAR = "appointie_calendar"
@@ -141,10 +142,24 @@ SHOPIE_ALL_FUNCTION_FEATURES: tuple[str, ...] = (
     *SHOPIE_GROW_FEATURES,
     FEATURE_SHOPIE_LOYALTY,
     FEATURE_SHOPIE_CUSTOMER_REFERRAL,
+    FEATURE_NOTIFICATIONS_WHATSAPP,
 )
 
-PLAN_FEATURES_LIMITED: tuple[str, ...] = APPOINTIE_FUNCTION_FEATURES
-PLAN_FEATURES_FULL = (*APPOINTIE_FUNCTION_FEATURES, FEATURE_REWARD_POINTS)
+SHOPIE_STARTER_FEATURES: tuple[str, ...] = (
+    FEATURE_SHOPIE_POS,
+    FEATURE_SHOPIE_PRODUCTS,
+    FEATURE_SHOPIE_ORDERS,
+    FEATURE_SHOPIE_RETURNS,
+    FEATURE_SHOPIE_BOOKS_SALE,
+    FEATURE_SHOPIE_BOOKS_CASH,
+    FEATURE_SHOPIE_BOOKS_EXPENSE,
+    FEATURE_SHOPIE_BOOKS_STOCK,
+    FEATURE_SHOPIE_BOOKS_PARTIES,
+    FEATURE_SHOPIE_GROW_UTILITIES,
+)
+
+PLAN_FEATURES_LIMITED: tuple[str, ...] = (*APPOINTIE_FUNCTION_FEATURES,)
+PLAN_FEATURES_FULL = (*APPOINTIE_FUNCTION_FEATURES, FEATURE_REWARD_POINTS, FEATURE_NOTIFICATIONS_WHATSAPP)
 
 VOUCHER_TYPE_FEATURES: dict[str, tuple[str, ...]] = {
     "sale": (FEATURE_SHOPIE_BOOKS_SALE, FEATURE_SHOPIE_POS),
@@ -186,24 +201,34 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
         {
             "code": "appointie-starter",
             "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]} Starter",
-            "description": "Scheduling and bookings for a single location.",
+            "description": (
+                "Solo scheduling for one location: 2 bookable staff, BI Overview, "
+                "and a white-label customer app. Add 1 extra staff; a second office is Pro."
+            ),
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": True,
-            "max_staff": 1,
+            "max_staff": 2,
             "max_branches": 1,
+            "max_extra_staff": 1,
+            "max_extra_offices": 0,
             "bi_features": list(BI_FEATURES_LIMITED),
             "features": list(PLAN_FEATURES_LIMITED),
         },
         {
             "code": "appointie-pro",
             "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]} Pro",
-            "description": "Multi-location scheduling with full business intelligence.",
+            "description": (
+                "Everything in Starter, plus 5 staff, 2 offices, WhatsApp reminders, "
+                "payments, full BI, rewards, and an ad-free white-label app."
+            ),
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": False,
             "max_staff": 5,
-            "max_branches": 5,
+            "max_branches": 2,
+            "max_extra_staff": None,
+            "max_extra_offices": None,
             "bi_features": list(BI_FEATURES_FULL),
             "features": [
                 *PLAN_FEATURES_FULL,
@@ -217,24 +242,34 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
         {
             "code": "shopie-starter",
             "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_SHOPIE]} Starter",
-            "description": "Catalog, POS, inventory, and billing for a single location.",
+            "description": (
+                "White-label customer app plus counter, day-book, online orders, and returns "
+                "for one location. Add 1 extra staff; a second office is Pro."
+            ),
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": True,
             "max_staff": 2,
             "max_branches": 1,
+            "max_extra_staff": 1,
+            "max_extra_offices": 0,
             "bi_features": list(BI_FEATURES_LIMITED),
-            "features": list(SHOPIE_ALL_FUNCTION_FEATURES),
+            "features": list(SHOPIE_STARTER_FEATURES),
         },
         {
             "code": "shopie-pro",
             "name": f"{PRODUCT_DISPLAY_NAMES[PRODUCT_SHOPIE]} Pro",
-            "description": "Multi-location commerce with advanced inventory and billing.",
+            "description": (
+                "Everything in Starter, plus Instant Delivery with Porter/Shiprocket, "
+                "GST books, Grow, payments, 5 staff, and 2 offices — ad-free white-label app."
+            ),
             "billing_interval": BILLING_INTERVAL_MONTHLY,
             "trial_days": DEFAULT_TRIAL_DAYS,
             "is_default": False,
             "max_staff": 5,
-            "max_branches": 5,
+            "max_branches": 2,
+            "max_extra_staff": None,
+            "max_extra_offices": None,
             "bi_features": list(BI_FEATURES_FULL),
             "features": [
                 *SHOPIE_ALL_FUNCTION_FEATURES,
@@ -246,6 +281,19 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
         },
     ],
 }
+
+
+def plan_extra_cap(definition: dict[str, object] | None, key: str) -> int | None:
+    """Return the extra-addon cap for a plan. None means unlimited."""
+    if not definition or key not in definition:
+        return None
+    value = definition.get(key)
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def get_default_plan_code(product_code: str) -> str | None:

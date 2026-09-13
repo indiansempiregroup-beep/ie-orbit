@@ -17,6 +17,26 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1';
 }
 
+function originPort(url: URL): string {
+  return url.port || (url.protocol === 'https:' ? '443' : '80');
+}
+
+/**
+ * localhost and 127.0.0.1 on the same port are the same Vite app.
+ * Production hosts (ie-orbit.com vs app.ie-orbit.com) stay distinct.
+ */
+export function originsAreSameApp(left: string, right: string): boolean {
+  try {
+    const a = new URL(left);
+    const b = new URL(right);
+    if (a.protocol !== b.protocol || originPort(a) !== originPort(b)) return false;
+    if (a.hostname === b.hostname) return true;
+    return isLoopbackHost(a.hostname) && isLoopbackHost(b.hostname);
+  } catch {
+    return left === right;
+  }
+}
+
 function localPort(): string {
   if (typeof window === 'undefined') return '3000';
   return window.location.port || (window.location.protocol === 'https:' ? '443' : '80');

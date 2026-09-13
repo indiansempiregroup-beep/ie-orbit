@@ -7,6 +7,7 @@ import { FormScreen } from '../../components/FormScreen';
 import { TimeField } from '../../components/TimeField';
 import { ScreenState } from '../../components/ScreenState';
 import { TIME_OPTIONS } from '../../constants/options';
+import { useToast } from '../../contexts/ToastContext';
 import { useStaffMember, useStaffSchedule, useStaffScheduleMutations } from '../../hooks/useOpsExtended';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
@@ -56,6 +57,7 @@ export function StaffScheduleScreen() {
   const { member, loading: memberLoading } = useStaffMember(route.params.staffId);
   const { schedules, loading: scheduleLoading } = useStaffSchedule(route.params.staffId);
   const { bulkUpsert } = useStaffScheduleMutations();
+  const toast = useToast();
   const [rows, setRows] = useState<DayRow[]>(defaultRows);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +110,7 @@ export function StaffScheduleScreen() {
             try {
               await bulkUpsert(route.params.staffId, rows);
               setMessage('Schedule saved.');
+              toast.push('Schedule saved.', 'success');
             } catch (err) {
               setError(getApiErrorMessage(err, 'Unable to save schedule.'));
             } finally {

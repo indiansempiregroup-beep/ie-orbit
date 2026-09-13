@@ -48,8 +48,9 @@ export async function provisionWorkspace({
 
   const response = await publicClient.auth.registerBusiness({
     email: values.email,
-    password: values.googleIdToken ? undefined : values.password,
     google_id_token: values.googleIdToken || undefined,
+    otp_code: values.googleIdToken ? undefined : values.ownerOtpCode.trim(),
+    otp_verified: Boolean(values.googleIdToken),
     first_name: values.firstName,
     last_name: values.lastName,
     phone_number: values.mobile,

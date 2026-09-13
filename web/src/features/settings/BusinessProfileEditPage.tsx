@@ -24,6 +24,8 @@ import {
   timezoneSelectOptions,
 } from '../../config/onboarding';
 import { createAuthenticatedClient } from '../../lib/apiClient';
+import { invalidEmailMessage } from '../../lib/emailValidation';
+import { indianMobileError } from '../../lib/phoneValidation';
 import { useAuth } from '../../hooks/useAuth';
 import { useBusinessLogo } from '../../hooks/useBusinessLogo';
 import { useSnackbar } from '../../hooks/useSnackbar';
@@ -71,6 +73,7 @@ export function BusinessProfileEditPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const currentLogoUrl = useBusinessLogo(businessQuery.data?.logo);
 
   useEffect(() => {
@@ -116,6 +119,18 @@ export function BusinessProfileEditPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace.businessId || !auth.token) return;
+
+    const nextErrors: Record<string, string> = {};
+    if (!logoFile && !currentLogoUrl) nextErrors.logo = 'Business logo is required';
+    const emailError = invalidEmailMessage(formState.email);
+    if (emailError) nextErrors.email = emailError;
+    const phoneError = indianMobileError(formState.primary_contact, true);
+    if (phoneError) nextErrors.phone = phoneError;
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+    setFieldErrors({});
 
     setSaving(true);
     setErrorMessage(null);
@@ -195,8 +210,8 @@ export function BusinessProfileEditPage() {
               <Input label="Display name" value={formState.display_name} onChange={(e) => updateField('display_name', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
               <Select label="Business category" options={categoryOptions} value={formState.business_type} onChange={(e) => updateField('business_type', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
               <Select label="Industry" options={industryOptions} value={formState.industry_category} onChange={(e) => updateField('industry_category', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Business email" type="email" value={formState.email} onChange={(e) => updateField('email', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Business phone" value={formState.primary_contact} onChange={(e) => updateField('primary_contact', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label="Business email" type="email" value={formState.email} onChange={(e) => { updateField('email', e.target.value); setFieldErrors((current) => ({ ...current, email: '' })); }} required error={fieldErrors.email} disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label="Business phone" value={formState.primary_contact} onChange={(e) => { updateField('primary_contact', e.target.value); setFieldErrors((current) => ({ ...current, phone: '' })); }} required error={fieldErrors.phone} disabled={saving} style={{ marginBottom: 0 }} />
               <Input label="Website (optional)" value={formState.website} onChange={(e) => updateField('website', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
             </div>
           </Section>
@@ -287,10 +302,15 @@ export function BusinessProfileEditPage() {
               <ColorInput label="Secondary color" value={formState.secondary_color} onChange={(value) => updateField('secondary_color', value)} />
             </div>
             <LogoUploadField
+              required
               value={logoFile}
-              onChange={setLogoFile}
+              onChange={(file) => {
+                setLogoFile(file);
+                setFieldErrors((current) => ({ ...current, logo: '' }));
+              }}
               currentLogoUrl={currentLogoUrl}
               accentColor={formState.primary_color}
+              error={fieldErrors.logo}
             />
             <Input
               label="Shop UPI ID"

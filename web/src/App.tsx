@@ -122,6 +122,9 @@ const PlatformClaimsPage = lazy(() =>
 const PlatformPackagesPage = lazy(() =>
   import('./features/admin/PlatformPackagesPage').then((m) => ({ default: m.PlatformPackagesPage })),
 );
+const PlatformAuthSettingsPage = lazy(() =>
+  import('./features/admin/PlatformAuthSettingsPage').then((m) => ({ default: m.PlatformAuthSettingsPage })),
+);
 const PlatformCouponsPage = lazy(() =>
   import('./features/admin/PlatformCouponsPage').then((m) => ({ default: m.PlatformCouponsPage })),
 );
@@ -229,6 +232,7 @@ function App() {
                 <Route path="announcements" element={<PlatformAnnouncementsPage />} />
                 <Route path="help" element={<PlatformHelpCmsPage />} />
                 <Route path="branding" element={<PlatformBrandingPage />} />
+                <Route path="auth-settings" element={<PlatformAuthSettingsPage />} />
                 <Route path="monitoring" element={<PlatformMonitoringPage />} />
                 <Route path="audit" element={<PlatformAuditPage />} />
                 <Route path="profile" element={<ProfilePage />} />

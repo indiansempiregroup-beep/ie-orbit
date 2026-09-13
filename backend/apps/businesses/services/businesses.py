@@ -585,6 +585,12 @@ class BusinessService:
                 {"pets_pack_enabled": f"Pets pack is only available with {PRODUCT_DISPLAY_NAMES[PRODUCT_SHOPIE]}."}
             )
 
+        self.entitlements.ensure_addon_caps(
+            business=business,
+            product_code=normalized_code,
+            extra_staff=extra_staff,
+            extra_offices=extra_offices,
+        )
         # Reducing add-ons must still fit current usage.
         self.entitlements.ensure_can_downgrade(
             business=business,
