@@ -60,6 +60,13 @@ x-backend-environment: &backend-environment
   PLATFORM_PAYMENT_QR_URL: ${PLATFORM_PAYMENT_QR_URL:-}
   EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
   ADMIN_HOST: ${ADMIN_HOST:-}
+  FIREBASE_SERVICE_ACCOUNT_JSON: "${FIREBASE_SERVICE_ACCOUNT_JSON:-}"
+  GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+  CUSTOMER_APK_GITHUB_REPO: ${CUSTOMER_APK_GITHUB_REPO:-}
+  CUSTOMER_APK_GITHUB_TOKEN: ${CUSTOMER_APK_GITHUB_TOKEN:-}
+  CUSTOMER_APK_MACHINE_TOKEN: ${CUSTOMER_APK_MACHINE_TOKEN:-}
+  CUSTOMER_APK_GITHUB_REF: ${CUSTOMER_APK_GITHUB_REF:-}
+  CUSTOMER_APK_WORKFLOW: ${CUSTOMER_APK_WORKFLOW:-}
 
 services:
   nginx:
@@ -127,6 +134,7 @@ services:
     volumes:
       - backend-static:/app/backend/staticfiles
       - backend-logs:/app/backend/logs
+      - ./secrets/firebase-management.json:/run/secrets/firebase-management.json:ro
     depends_on:
       postgres:
         condition: service_healthy

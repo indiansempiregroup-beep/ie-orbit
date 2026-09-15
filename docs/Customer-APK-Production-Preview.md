@@ -4,7 +4,7 @@ Platform Admin drives go-live for a tenant’s white-label customer app. No per-
 
 **Ops app** stays shared. This doc is only for the **customer** APK/AAB.
 
-Hands-on entry: Platform Admin → Tenants → tenant → **Customer app** (also on ops-mobile tenant detail).
+Hands-on entry: Platform Admin → Tenants → tenant → **Brand & app** (also on ops-mobile tenant detail). Branding (name, colors, logo) lives on that same tab as the APK build.
 
 First tenant example: **Sunita Spa** (`sunita-spa`, package `com.ieorbit.sunitaspa`, business id `01a0725c-fdda-7fa1-b2cb-2892e6795740`).
 
@@ -25,15 +25,15 @@ Setup (white-label, Google client, Firebase) is shared by both tracks.
 
 ## Phase A — Setup (once)
 
-1. Open the tenant → **Customer app**. Defaults fill package / flavor / slug.
-2. Set **App name** (e.g. Sunita Spa) → paste **Google Android OAuth client ID** → **Save setup**.
+1. Open the tenant → **Brand & app**. Defaults fill package / flavor / slug. Set logo and colors here too.
+2. Set **App name** (e.g. Sunita Spa) → paste **Google Android OAuth client ID** → **Save brand & setup**.
 3. Create the Google Android OAuth client yourself in Google Cloud:
    - Package = recipe package (copy from admin)
    - SHA-1 = recipe **EAS SHA-1** (`70:D2:64:E9:…`)
    - Do **not** overwrite VPS `GOOGLE_OAUTH_CUSTOMER_ANDROID_CLIENT_ID` (Sanket’s single slot). Per-tenant client id lives on the white-label profile.
 4. Click **Create Firebase app** (API creates the Android app, stores `google-services.json`, adds EAS SHA-1).
 
-Checklist chips: White-label · Google Sign-In · Firebase → headline **Ready for preview**.
+Checklist chips: Brand · Google Sign-In · Firebase → headline **Ready for preview**.
 
 ---
 
@@ -52,7 +52,7 @@ Chip: Preview APK.
 
 Still manual in Play Console: create the Android app (same package), listing, privacy policy. Link EAS submit credentials if not already on the publisher account.
 
-Then on **Customer app**:
+Then on **Brand & app**:
 
 1. Paste **Play App Signing SHA-1** → Save → **Refresh Firebase** (adds SHA). Add the same SHA on the Google OAuth Android client (or a second client) so Sign-In works on Play builds.
 2. **Build store AAB**.
@@ -71,26 +71,26 @@ Same tab: build store AAB again (`autoIncrement` bumps `versionCode`). No new Fi
 
 ## VPS / GitHub env (ops)
 
-On production backend (`/opt/ie-orbit/.env`):
+Works on **both** prod and UAT. Each stack dispatches with its own git `ref` and `api_base`.
 
-| Variable | Purpose |
-|---|---|
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Service account JSON with Firebase Management on project `ie-orbit` |
-| `CUSTOMER_APK_GITHUB_REPO` | e.g. `indians-empire/ie-orbit` |
-| `CUSTOMER_APK_GITHUB_TOKEN` | PAT / fine-grained token with `actions:write` |
-| `CUSTOMER_APK_MACHINE_TOKEN` | Shared secret; GitHub Action uses the same value |
-| `CUSTOMER_APK_GITHUB_REF` | Optional, default `main` |
-| `CUSTOMER_APK_WORKFLOW` | Optional, default `customer-apk.yml` |
-| `EXPO_ACCESS_TOKEN` / `EXPO_TOKEN` | Optional status refresh from Expo GraphQL |
+| Variable | Prod (`/opt/ie-orbit`) | UAT (`/opt/ie-orbit-uat`) |
+|---|---|---|
+| `PUBLIC_API_ORIGIN` | `https://api.ie-orbit.com` | `https://api-uat.ie-orbit.com` |
+| `CUSTOMER_APK_GITHUB_REPO` | `indiansempiregroup-beep/ie-orbit` | same |
+| `CUSTOMER_APK_GITHUB_TOKEN` | PAT with Actions write | same value |
+| `CUSTOMER_APK_MACHINE_TOKEN` | Shared with GitHub secret | **same** value |
+| `CUSTOMER_APK_GITHUB_REF` | `prod` | `uat` |
+| `CUSTOMER_APK_WORKFLOW` | `customer-apk.yml` | same |
+| `GOOGLE_APPLICATION_CREDENTIALS` | `/run/secrets/firebase-management.json` | same path (host file under `secrets/`) |
+
+Prefer mounting `secrets/firebase-management.json` over inlining `FIREBASE_SERVICE_ACCOUNT_JSON`.
 
 GitHub repo secrets for `.github/workflows/customer-apk.yml`:
 
 - `EXPO_TOKEN`
-- `CUSTOMER_APK_MACHINE_TOKEN` (same as VPS)
+- `CUSTOMER_APK_MACHINE_TOKEN` (same as both VPS stacks)
 
-Optional repo variable: `CUSTOMER_APK_API_BASE` (default `https://api.ie-orbit.com/api/v1`).
-
-Restart backend after editing VPS `.env`.
+Do **not** set a global Actions variable `CUSTOMER_APK_API_BASE` — Django passes `api_base` per dispatch (prod vs UAT). Recreate backend after editing `.env` / compose.
 
 ---
 
@@ -99,6 +99,7 @@ Restart backend after editing VPS `.env`.
 ```
 EAS project:       d3605998-b92a-497d-a72f-8028df3ca64d
 Live API:          https://api.ie-orbit.com/api/v1
+UAT API:           https://api-uat.ie-orbit.com/api/v1
 EAS SHA-1:         70:D2:64:E9:71:3D:41:4D:CA:D6:64:EA:E5:C4:B5:CB:52:3A:7E:99
 Firebase:          ie-orbit
 Google Cloud:      still-cipher-490712-n7

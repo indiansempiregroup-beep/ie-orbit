@@ -12,7 +12,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.businesses.models import Business, WhiteLabelProfile
-from apps.businesses.services.white_label import ensure_white_label_profile, serialize_white_label_profile
+from apps.businesses.services.white_label import effective_logo, ensure_white_label_profile, serialize_white_label_profile
 
 EAS_CUSTOMER_PROJECT_ID = "d3605998-b92a-497d-a72f-8028df3ca64d"
 EAS_ANDROID_SHA1 = "70:D2:64:E9:71:3D:41:4D:CA:D6:64:EA:E5:C4:B5:CB:52:3A:7E:99"
@@ -21,7 +21,16 @@ GOOGLE_CLOUD_OAUTH_PROJECT = "still-cipher-490712-n7"
 WEB_OAUTH_CLIENT_ID = (
     "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com"
 )
-PUBLIC_API_BASE = "https://api.ie-orbit.com/api/v1"
+
+
+def _public_api_base() -> str:
+    """Prod vs UAT: derive from PUBLIC_API_ORIGIN so machine payloads and APKs hit the right API."""
+    origin = (
+        getattr(settings, "PUBLIC_API_ORIGIN", None)
+        or os.getenv("PUBLIC_API_ORIGIN")
+        or "https://api.ie-orbit.com"
+    ).rstrip("/")
+    return f"{origin}/api/v1"
 
 
 def suggested_android_package(*, tenant_slug: str) -> str:
@@ -93,9 +102,10 @@ def customer_app_recipe(profile: WhiteLabelProfile) -> dict[str, Any]:
         "app_name": profile.app_name,
         "bundle_id_android": package,
         "bundle_id_ios": profile.bundle_id_ios,
+        "logo": effective_logo(profile.logo, business.logo),
         "primary_color": profile.primary_color,
         "secondary_color": profile.secondary_color,
-        "bootstrap_url": f"{PUBLIC_API_BASE}/mobile/bootstrap?flavor_key={flavor}",
+        "bootstrap_url": f"{_public_api_base()}/mobile/bootstrap?flavor_key={flavor}",
         "eas_project_id": EAS_CUSTOMER_PROJECT_ID,
         "eas_android_sha1": EAS_ANDROID_SHA1,
         "firebase_project_id": FIREBASE_PROJECT_ID,
@@ -381,7 +391,7 @@ def machine_build_payload(*, profile: WhiteLabelProfile, track: str) -> dict[str
             "EXPO_PUBLIC_PRIMARY_COLOR": profile.primary_color,
             "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": android_client,
             "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": WEB_OAUTH_CLIENT_ID,
-            "EXPO_PUBLIC_API_BASE_URL": f"{PUBLIC_API_BASE}",
+            "EXPO_PUBLIC_API_BASE_URL": _public_api_base(),
             "EXPO_PUBLIC_EAS_PROJECT_ID": EAS_CUSTOMER_PROJECT_ID,
             "GOOGLE_SERVICES_JSON": google_json,
         },
@@ -433,6 +443,7 @@ def dispatch_customer_app_build(
             "business_id": str(profile.business_id),
             "track": track,
             "bump": bump,
+            "api_base": _public_api_base(),
         },
     }
     request = urllib.request.Request(

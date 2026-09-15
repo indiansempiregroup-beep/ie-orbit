@@ -2,7 +2,8 @@ name: Customer APK
 
 # Dispatched by Platform Admin (customer-app build).
 # Repo secrets: EXPO_TOKEN, CUSTOMER_APK_MACHINE_TOKEN
-# Optional repo variable: CUSTOMER_APK_API_BASE (default https://api.ie-orbit.com/api/v1)
+# Prefer inputs.api_base from Django (prod vs UAT). Fallback: vars.CUSTOMER_APK_API_BASE,
+# then https://api.ie-orbit.com/api/v1.
 
 on:
   workflow_dispatch:
@@ -28,6 +29,11 @@ on:
           - minor
           - major
         default: patch
+      api_base:
+        description: Platform API base (e.g. https://api.ie-orbit.com/api/v1 or https://api-uat.ie-orbit.com/api/v1)
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -58,13 +64,21 @@ jobs:
         id: payload
         env:
           CUSTOMER_APK_MACHINE_TOKEN: ${{ secrets.CUSTOMER_APK_MACHINE_TOKEN }}
-          CUSTOMER_APK_API_BASE: ${{ vars.CUSTOMER_APK_API_BASE }}
+          INPUT_API_BASE: ${{ inputs.api_base }}
+          VAR_API_BASE: ${{ vars.CUSTOMER_APK_API_BASE }}
           BUSINESS_ID: ${{ inputs.business_id }}
           TRACK: ${{ inputs.track }}
         run: |
           set -euo pipefail
-          API_BASE="${CUSTOMER_APK_API_BASE:-https://api.ie-orbit.com/api/v1}"
+          if [ -n "${INPUT_API_BASE:-}" ]; then
+            API_BASE="${INPUT_API_BASE}"
+          elif [ -n "${VAR_API_BASE:-}" ]; then
+            API_BASE="${VAR_API_BASE}"
+          else
+            API_BASE="https://api.ie-orbit.com/api/v1"
+          fi
           echo "CUSTOMER_APK_API_BASE=${API_BASE}" >> "$GITHUB_ENV"
+          echo "Using API_BASE=${API_BASE}"
           if [ -z "${CUSTOMER_APK_MACHINE_TOKEN}" ]; then
             echo "CUSTOMER_APK_MACHINE_TOKEN secret is missing"
             exit 1
