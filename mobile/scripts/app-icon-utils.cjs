@@ -98,10 +98,12 @@ function pickIconSource({
   }
   const explicit = String(envIconUrl || '').trim();
   if (explicit) {
-    return { kind: 'url', value: resolveMediaUrl(explicit, apiBaseUrl) };
+    // Dedicated app icon — bake as-is (no brand-color plate).
+    return { kind: 'app_icon', value: resolveMediaUrl(explicit, apiBaseUrl) };
   }
   if (bootstrapLogoUrl) {
-    return { kind: 'url', value: resolveMediaUrl(bootstrapLogoUrl, apiBaseUrl) };
+    // Business logo — compose onto a padded brand plate.
+    return { kind: 'logo', value: resolveMediaUrl(bootstrapLogoUrl, apiBaseUrl) };
   }
   return { kind: 'initials', value: '' };
 }

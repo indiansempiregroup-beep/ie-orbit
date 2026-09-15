@@ -36,6 +36,7 @@ from apps.businesses.services.customer_app_build import (
     refresh_build_status_from_expo,
     serialize_customer_app,
     update_customer_app_settings,
+    upload_customer_app_branding_asset,
 )
 from apps.businesses.services.white_label import (
     ensure_white_label_profile,
@@ -307,6 +308,11 @@ class PlatformCustomerAppView(APIView):
             bundle_id_ios=data.get("bundle_id_ios"),
             google_oauth_android_client_id=data.get("google_oauth_android_client_id"),
             play_signing_sha1=data.get("play_signing_sha1"),
+            app_icon_url=data.get("app_icon_url") if "app_icon_url" in data else None,
+            icon_mode=data.get("icon_mode") if "icon_mode" in data else None,
+            icon_background=data.get("icon_background") if "icon_background" in data else None,
+            icon_padding=data.get("icon_padding") if "icon_padding" in data else None,
+            splash_background=data.get("splash_background") if "splash_background" in data else None,
             mark_live=bool(data.get("mark_live")),
         )
         # Also allow classic white-label fields via existing serializer when present.
@@ -326,6 +332,38 @@ class PlatformCustomerAppView(APIView):
             serializer = WhiteLabelProfileUpsertSerializer(profile, data=wl_fields, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+        profile.refresh_from_db()
+        return success_response(
+            serialize_customer_app(profile),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class PlatformCustomerAppAssetView(APIView):
+    """Upload logo or optional app-icon override for customer APK branding."""
+
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def post(self, request: Request, business_id: str) -> Response:
+        from django.core.exceptions import ValidationError
+
+        business = get_object_or_404(Business.active_objects.select_related("tenant"), id=business_id)
+        profile = ensure_customer_app_profile(business=business)
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            return Response({"error": {"code": "missing_file", "message": "file is required"}}, status=400)
+        kind = str(request.data.get("kind") or "logo").strip().lower()
+        try:
+            upload_customer_app_branding_asset(
+                profile=profile,
+                uploaded_file=uploaded,
+                uploaded_by=request.user,
+                kind=kind,
+            )
+        except ValidationError as exc:
+            message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+            return Response({"error": {"code": "upload_failed", "message": message}}, status=400)
         profile.refresh_from_db()
         return success_response(
             serialize_customer_app(profile),

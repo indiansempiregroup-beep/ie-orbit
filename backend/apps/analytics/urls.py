@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.analytics.api.platform_views import PlatformAnalyticsView
 from apps.analytics.api.views import AnalyticsViewSet, BIViewSet, DashboardViewSet
 
 analytics_summary = AnalyticsViewSet.as_view({"get": "summary"})
@@ -24,4 +25,5 @@ urlpatterns = [
     path("bi/growth", bi_growth, name="bi-growth"),
     path("bi/operations", bi_operations, name="bi-operations"),
     path("bi/reports", bi_reports, name="bi-reports"),
+    path("platform/analytics", PlatformAnalyticsView.as_view(), name="platform-analytics"),
 ]

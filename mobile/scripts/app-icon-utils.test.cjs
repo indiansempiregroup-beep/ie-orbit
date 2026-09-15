@@ -131,8 +131,23 @@ describe('pickIconSource', () => {
       bootstrapLogoUrl: '/api/v1/media/1/file',
       apiBaseUrl: 'https://api.ie-orbit.com/api/v1',
     });
-    assert.equal(source.kind, 'url');
+    assert.equal(source.kind, 'logo');
     assert.equal(source.value, 'https://api.ie-orbit.com/api/v1/media/1/file');
+  });
+
+  it('prefers an explicit app icon URL over the business logo', () => {
+    const source = pickIconSource({
+      flavorKey: 'sanket-pet-shop-sanket-pet-shop',
+      assetsDir,
+      overrideExists: false,
+      envIconUrl: 'https://cdn.example.com/app-icon.png',
+      bootstrapLogoUrl: '/api/v1/media/1/file',
+      apiBaseUrl: 'https://api.ie-orbit.com/api/v1',
+    });
+    assert.deepEqual(source, {
+      kind: 'app_icon',
+      value: 'https://cdn.example.com/app-icon.png',
+    });
   });
 
   it('falls back to initials when no logo exists', () => {

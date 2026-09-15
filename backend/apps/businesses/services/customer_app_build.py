@@ -87,12 +87,47 @@ def _save_metadata(profile: WhiteLabelProfile, metadata: dict[str, Any]) -> None
     profile.save(update_fields=["build_metadata", "updated_at"])
 
 
+def _normalize_hex_color(value: str | None, fallback: str) -> str:
+    raw = str(value or "").strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", raw):
+        return raw.lower()
+    if re.fullmatch(r"#[0-9a-fA-F]{3}", raw):
+        return f"#{raw[1]*2}{raw[2]*2}{raw[3]*2}".lower()
+    return fallback
+
+
+def _normalize_icon_padding(value: object, fallback: float = 0.22) -> float:
+    try:
+        pad = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+    return max(0.08, min(0.36, pad))
+
+
+def icon_settings_from_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
+    meta = _metadata(profile)
+    primary = _normalize_hex_color(profile.primary_color, "#0F6CBD")
+    mode = str(meta.get("icon_mode") or "plate").strip().lower()
+    if mode not in {"plate", "as-is"}:
+        mode = "plate"
+    # Dedicated override always wins as full icon.
+    if str(meta.get("app_icon_url") or "").strip():
+        mode = "as-is"
+    return {
+        "mode": mode,
+        "background": _normalize_hex_color(meta.get("icon_background"), primary),
+        "padding": _normalize_icon_padding(meta.get("icon_padding"), 0.22),
+        "splash_background": _normalize_hex_color(meta.get("splash_background"), primary),
+    }
+
+
 def customer_app_recipe(profile: WhiteLabelProfile) -> dict[str, Any]:
     business = profile.business
     tenant = business.tenant
     package = (profile.bundle_id_android or "").strip()
     flavor = profile.flavor_key
     meta = _metadata(profile)
+    settings = icon_settings_from_profile(profile)
     return {
         "tenant_slug": tenant.slug,
         "business_id": str(business.id),
@@ -103,6 +138,8 @@ def customer_app_recipe(profile: WhiteLabelProfile) -> dict[str, Any]:
         "bundle_id_android": package,
         "bundle_id_ios": profile.bundle_id_ios,
         "logo": effective_logo(profile.logo, business.logo),
+        "app_icon_url": str(meta.get("app_icon_url") or "").strip(),
+        "icon_settings": settings,
         "primary_color": profile.primary_color,
         "secondary_color": profile.secondary_color,
         "bootstrap_url": f"{_public_api_base()}/mobile/bootstrap?flavor_key={flavor}",
@@ -177,6 +214,53 @@ def serialize_customer_app(profile: WhiteLabelProfile) -> dict[str, Any]:
     }
 
 
+def upload_customer_app_branding_asset(
+    *,
+    profile: WhiteLabelProfile,
+    uploaded_file,
+    uploaded_by,
+    kind: str = "logo",
+) -> WhiteLabelProfile:
+    """Platform-admin logo / optional app-icon upload into branding media."""
+    from django.core.exceptions import ValidationError
+
+    from apps.platform_media.models import MediaFolderType, MediaVisibility
+    from apps.platform_media.services.media import MediaService
+
+    kind_key = (kind or "logo").strip().lower()
+    if kind_key not in {"logo", "app_icon"}:
+        raise ValidationError("kind must be logo or app_icon.")
+
+    business = profile.business
+    tenant = business.tenant
+    tags = ["branding", "logo"] if kind_key == "logo" else ["branding", "app-icon"]
+    display = f"{business.display_name} {'logo' if kind_key == 'logo' else 'app icon'}"
+    result = MediaService().upload(
+        uploaded_file=uploaded_file,
+        tenant=tenant,
+        business=business,
+        uploaded_by=uploaded_by,
+        folder_type=MediaFolderType.BRANDING,
+        visibility=MediaVisibility.PUBLIC,
+        tags=tags,
+        display_name=display,
+    )
+    file_url = str((result.media.metadata or {}).get("public_url") or f"/api/v1/media/{result.media.id}/file")
+    if kind_key == "logo":
+        profile.logo = file_url
+        profile.white_label_enabled = True
+        profile.save(update_fields=["logo", "white_label_enabled", "updated_at"])
+        if business.logo != file_url:
+            business.logo = file_url
+            business.save(update_fields=["logo", "updated_at"])
+    else:
+        meta = _metadata(profile)
+        meta["app_icon_url"] = file_url
+        _save_metadata(profile, meta)
+    profile.refresh_from_db()
+    return profile
+
+
 def update_customer_app_settings(
     *,
     profile: WhiteLabelProfile,
@@ -185,6 +269,11 @@ def update_customer_app_settings(
     bundle_id_ios: str | None = None,
     google_oauth_android_client_id: str | None = None,
     play_signing_sha1: str | None = None,
+    app_icon_url: str | None = None,
+    icon_mode: str | None = None,
+    icon_background: str | None = None,
+    icon_padding: float | int | str | None = None,
+    splash_background: str | None = None,
     mark_live: bool | None = None,
 ) -> WhiteLabelProfile:
     if app_name is not None:
@@ -202,6 +291,23 @@ def update_customer_app_settings(
         meta["google_oauth_android_client_id"] = google_oauth_android_client_id.strip()
     if play_signing_sha1 is not None:
         meta["play_signing_sha1"] = play_signing_sha1.strip()
+    if app_icon_url is not None:
+        trimmed = app_icon_url.strip()
+        if trimmed:
+            meta["app_icon_url"] = trimmed
+        else:
+            meta.pop("app_icon_url", None)
+    if icon_mode is not None:
+        mode = str(icon_mode).strip().lower()
+        meta["icon_mode"] = mode if mode in {"plate", "as-is"} else "plate"
+    if icon_background is not None:
+        primary = _normalize_hex_color(profile.primary_color, "#0F6CBD")
+        meta["icon_background"] = _normalize_hex_color(icon_background, primary)
+    if icon_padding is not None:
+        meta["icon_padding"] = _normalize_icon_padding(icon_padding, 0.22)
+    if splash_background is not None:
+        primary = _normalize_hex_color(profile.primary_color, "#0F6CBD")
+        meta["splash_background"] = _normalize_hex_color(splash_background, primary)
     if mark_live:
         production = meta.get("production") if isinstance(meta.get("production"), dict) else {}
         meta["live"] = {
@@ -377,24 +483,36 @@ def machine_build_payload(*, profile: WhiteLabelProfile, track: str) -> dict[str
         raise RuntimeError("Paste the Google Android OAuth client id first.")
     business = profile.business
     tenant = business.tenant
+    env = {
+        "EXPO_PUBLIC_FLAVOR_KEY": profile.flavor_key,
+        "EXPO_PUBLIC_APP_NAME": profile.app_name,
+        "EXPO_PUBLIC_APP_SLUG": profile.app_slug,
+        "EXPO_PUBLIC_BUNDLE_ID_ANDROID": profile.bundle_id_android,
+        "EXPO_PUBLIC_BUNDLE_ID_IOS": profile.bundle_id_ios or profile.bundle_id_android,
+        "EXPO_PUBLIC_TENANT_SLUG": tenant.slug,
+        "EXPO_PUBLIC_BUSINESS_CODE": business.business_code,
+        "EXPO_PUBLIC_PRIMARY_COLOR": profile.primary_color,
+        "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": android_client,
+        "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": WEB_OAUTH_CLIENT_ID,
+        "EXPO_PUBLIC_API_BASE_URL": _public_api_base(),
+        "EXPO_PUBLIC_EAS_PROJECT_ID": EAS_CUSTOMER_PROJECT_ID,
+        "GOOGLE_SERVICES_JSON": google_json,
+    }
+    app_icon_url = str(meta.get("app_icon_url") or "").strip()
+    if app_icon_url:
+        if app_icon_url.startswith("/"):
+            app_icon_url = f"{_public_api_base().removesuffix('/api/v1')}{app_icon_url}"
+        env["EXPO_PUBLIC_APP_ICON_URL"] = app_icon_url
+    settings = icon_settings_from_profile(profile)
+    env["EXPO_PUBLIC_ICON_MODE"] = settings["mode"]
+    env["EXPO_PUBLIC_ICON_BACKGROUND"] = settings["background"]
+    env["EXPO_PUBLIC_IOS_ICON_BACKGROUND"] = settings["background"]
+    env["EXPO_PUBLIC_ICON_PADDING"] = str(settings["padding"])
+    env["EXPO_PUBLIC_SPLASH_BACKGROUND"] = settings["splash_background"]
     return {
         "track": track,
         "eas_profile": "customer-production-preview" if track == "preview" else "customer-production",
-        "env": {
-            "EXPO_PUBLIC_FLAVOR_KEY": profile.flavor_key,
-            "EXPO_PUBLIC_APP_NAME": profile.app_name,
-            "EXPO_PUBLIC_APP_SLUG": profile.app_slug,
-            "EXPO_PUBLIC_BUNDLE_ID_ANDROID": profile.bundle_id_android,
-            "EXPO_PUBLIC_BUNDLE_ID_IOS": profile.bundle_id_ios or profile.bundle_id_android,
-            "EXPO_PUBLIC_TENANT_SLUG": tenant.slug,
-            "EXPO_PUBLIC_BUSINESS_CODE": business.business_code,
-            "EXPO_PUBLIC_PRIMARY_COLOR": profile.primary_color,
-            "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": android_client,
-            "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": WEB_OAUTH_CLIENT_ID,
-            "EXPO_PUBLIC_API_BASE_URL": _public_api_base(),
-            "EXPO_PUBLIC_EAS_PROJECT_ID": EAS_CUSTOMER_PROJECT_ID,
-            "GOOGLE_SERVICES_JSON": google_json,
-        },
+        "env": env,
     }
 
 

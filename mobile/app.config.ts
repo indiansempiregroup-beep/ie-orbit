@@ -49,9 +49,14 @@ const iosBundleId =
   selectedFlavor?.bundleIdIos ||
   'com.ieorbit.mobile.dev';
 const splashBackground =
+  (process.env.EXPO_PUBLIC_SPLASH_BACKGROUND || '').trim() ||
   (process.env.EXPO_PUBLIC_PRIMARY_COLOR || '').trim() ||
   selectedFlavor?.primaryColor ||
   '#1A56DB';
+const iconBackground =
+  (process.env.EXPO_PUBLIC_ICON_BACKGROUND || '').trim() ||
+  (process.env.EXPO_PUBLIC_IOS_ICON_BACKGROUND || '').trim() ||
+  splashBackground;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { googleAuthSchemes, googleReversedClientScheme } = require('./src/utils/googleAuthRequest.cjs') as {
   googleAuthSchemes: (input: {
@@ -162,7 +167,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     adaptiveIcon: {
       foregroundImage: adaptiveIcon,
-      backgroundColor: splashBackground,
+      backgroundColor: iconBackground,
     },
   },
   web: {

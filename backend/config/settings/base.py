@@ -282,6 +282,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute=0, hour=4),
         "kwargs": {"lead_days": 5},
     },
+    "analytics-snapshot-platform-usage": {
+        "task": "analytics.snapshot_platform_usage",
+        "schedule": crontab(minute=20, hour=1),
+        "kwargs": {"days": 1},
+    },
 }
 CELERY_BEAT_SCHEDULE = {key: value for key, value in CELERY_BEAT_SCHEDULE.items() if value is not None}
 

@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Activity,
   Banknote,
+  BarChart3,
   Building2,
   CreditCard,
   HelpCircle,
@@ -11,7 +12,6 @@ import {
   LifeBuoy,
   Megaphone,
   Package,
-  Palette,
   ScrollText,
   Shield,
   TicketPercent,
@@ -33,6 +33,7 @@ const navGroups: Array<{
     label: 'Overview',
     items: [
       { to: '/admin', label: 'Dashboard', icon: <LayoutDashboard size={16} />, end: true },
+      { to: '/admin/analytics', label: 'Analytics', icon: <BarChart3 size={16} /> },
       { to: '/admin/revenue', label: 'Revenue', icon: <Banknote size={16} /> },
       { to: '/admin/claims', label: 'Claims', icon: <Inbox size={16} /> },
       { to: '/admin/tenants', label: 'Tenants', icon: <Building2 size={16} /> },
@@ -54,7 +55,6 @@ const navGroups: Array<{
   {
     label: 'Platform',
     items: [
-      { to: '/admin/branding', label: 'Branding', icon: <Palette size={16} /> },
       { to: '/admin/auth-settings', label: 'WhatsApp', icon: <Shield size={16} /> },
       { to: '/admin/monitoring', label: 'Monitoring', icon: <Activity size={16} /> },
       { to: '/admin/audit', label: 'Audit', icon: <ScrollText size={16} /> },

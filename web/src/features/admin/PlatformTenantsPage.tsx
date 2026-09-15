@@ -87,7 +87,7 @@ export function PlatformTenantsPage() {
     <AdminPage>
       <AdminPageHeader
         title="Tenants"
-        description="Search workspaces by name, slug, or plan. Filter by workspace status or billing state."
+        description="Search workspaces by name, slug, or plan. Open a tenant to brand the customer app and generate an APK."
         actions={
           <>
             <button

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import {
   Activity,
   Banknote,
+  BarChart3,
   Building2,
   CreditCard,
   Inbox,
@@ -159,6 +160,13 @@ export function PlatformDashboardPage() {
       </AdminSection>
 
       <div className="admin-shortcut-grid">
+        <Link className="admin-shortcut" to="/admin/analytics">
+          <span className="admin-shortcut__icon">
+            <BarChart3 size={16} />
+          </span>
+          <strong>Analytics</strong>
+          <span>Usage by product, tenant, business, day/week/month</span>
+        </Link>
         <Link className="admin-shortcut" to="/admin/revenue">
           <span className="admin-shortcut__icon">
             <Banknote size={16} />

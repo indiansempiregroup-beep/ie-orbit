@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
+import type { CustomerAppState } from '@ie-orbit/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 
 type PickerAssetWithFile = ImagePickerAsset & { file?: Blob };
@@ -172,4 +173,37 @@ export async function uploadProfilePhoto({
     id: String(payload.data.media_id ?? ''),
     public_url: payload.data.profile_photo,
   };
+}
+
+export async function uploadCustomerAppAsset(args: {
+  token: string;
+  businessId: string;
+  asset: ImagePickerAsset;
+  kind?: 'logo' | 'app_icon';
+}): Promise<CustomerAppState> {
+  const formData = new FormData();
+  await appendPickerFile(formData, args.asset);
+  formData.append('kind', args.kind || 'logo');
+
+  const response = await fetch(
+    `${getApiBaseUrl()}/platform/white-label/${args.businessId}/customer-app/assets`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${args.token}`,
+      },
+      body: formData,
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'Brand asset upload failed.');
+  }
+
+  const payload = (await response.json()) as { data?: CustomerAppState };
+  if (!payload.data) {
+    throw new Error('Upload did not return customer app state.');
+  }
+  return payload.data;
 }

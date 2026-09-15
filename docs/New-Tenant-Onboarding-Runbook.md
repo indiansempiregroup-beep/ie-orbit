@@ -4,7 +4,7 @@ When a business registers via the **ops app** (or website), they get a workspace
 
 This runbook is only for building their **customer** white-label app (`mobile/`) — the app their end-customers install to book / shop.
 
-Hands-on go-live (preferred): Platform Admin → Tenants → **Customer app** — see [Customer-APK-Production-Preview.md](Customer-APK-Production-Preview.md). That path uses generic EAS profiles (`customer-production-preview` / `customer-production`) and does **not** require new `manifest.json` / `eas.json` rows.
+Hands-on go-live (preferred): Platform Admin → Tenants → **Brand & app** — see [Customer-APK-Production-Preview.md](Customer-APK-Production-Preview.md). That path uses generic EAS profiles (`customer-production-preview` / `customer-production`) and does **not** require new `manifest.json` / `eas.json` rows.
 
 The steps below remain useful for older hand-built flavors and as a low-level reference.
 
@@ -22,7 +22,7 @@ The steps below remain useful for older hand-built flavors and as a low-level re
 
 ## Before you start
 
-From Platform Admin → **Tenants** / **Branding**, note:
+From Platform Admin → **Tenants** → tenant → **Brand & app**, note:
 
 | Variable | How to get it |
 |----------|----------------|
@@ -44,7 +44,7 @@ Registration does **not** set bundle IDs. Run once per new business:
 docker compose exec backend python manage.py seed_white_label_profiles --all-businesses
 ```
 
-Set bundle IDs + enable white-label (Platform Admin → **Branding**, or API):
+Set bundle IDs + enable white-label (Platform Admin → Tenants → **Brand & app**, or API):
 
 ```bash
 curl -X PATCH "https://api.ie-orbit.com/api/v1/platform/white-label/<business_id>" \
