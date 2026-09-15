@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.businesses.api.branch_views import BranchViewSet
 from apps.businesses.api.platform_views import (
+    PlatformCustomerAppAssetView,
     PlatformCustomerAppBuildView,
     PlatformCustomerAppFirebaseView,
     PlatformCustomerAppMachineView,
@@ -86,6 +87,11 @@ urlpatterns = [
         "platform/white-label/<uuid:business_id>/customer-app",
         PlatformCustomerAppView.as_view(),
         name="platform-customer-app",
+    ),
+    path(
+        "platform/white-label/<uuid:business_id>/customer-app/assets",
+        PlatformCustomerAppAssetView.as_view(),
+        name="platform-customer-app-assets",
     ),
     path(
         "platform/white-label/<uuid:business_id>/customer-app/firebase",

@@ -1164,6 +1164,14 @@ export type CustomerAppRecipe = {
   app_name: string;
   bundle_id_android?: string;
   bundle_id_ios?: string;
+  logo?: string;
+  app_icon_url?: string;
+  icon_settings?: {
+    mode: 'plate' | 'as-is';
+    background: string;
+    padding: number;
+    splash_background: string;
+  };
   primary_color?: string;
   secondary_color?: string;
   bootstrap_url: string;
@@ -1224,6 +1232,197 @@ export type PlatformAuditQuery = {
   window_days?: number;
   limit?: number;
   offset?: number;
+};
+
+export type PlatformAnalyticsQuery = {
+  start_date?: string;
+  end_date?: string;
+  grain?: 'day' | 'week' | 'month' | string;
+  product_code?: string;
+  tenant_id?: string;
+  business_id?: string;
+  catalog_limit?: number;
+};
+
+export type PlatformAnalyticsKpis = {
+  tenants: number;
+  tenants_active: number;
+  businesses: number;
+  new_tenants: number;
+  new_businesses: number;
+  customers_total: number;
+  staff_active: number;
+  catalog_services: number;
+  catalog_skus: number;
+  low_stock_skus: number;
+  pending_returns: number;
+  open_tickets: number;
+  subscriptions: number;
+  subscriptions_trialing: number;
+  subscriptions_active: number;
+  subscriptions_soft_locked: number;
+  subscriptions_canceled: number;
+  bookings: number;
+  completed_bookings: number;
+  cancelled_bookings: number;
+  no_show_bookings: number;
+  booking_revenue: number;
+  avg_booking_value: number;
+  completion_rate: number;
+  cancellation_rate: number;
+  no_show_rate: number;
+  unique_booking_customers: number;
+  orders: number;
+  cancelled_orders: number;
+  pos_orders: number;
+  online_orders: number;
+  gmv: number;
+  pos_gmv: number;
+  online_gmv: number;
+  avg_order_value: number;
+  avg_pos_order_value: number;
+  avg_online_order_value: number;
+  units_sold: number;
+  unique_shop_customers: number;
+  returns: number;
+  refund_total: number;
+  return_rate: number;
+  delivery_fee_total: number;
+  new_customers: number;
+  notifications_sent: number;
+  tickets_opened: number;
+};
+
+export type PlatformAnalyticsProductRow = {
+  product_code: string;
+  product_name: string;
+  bookings: number;
+  completed_bookings: number;
+  booking_revenue: number;
+  orders: number;
+  gmv: number;
+  pos_orders: number;
+  online_orders: number;
+  pos_gmv: number;
+  online_gmv: number;
+  units_sold: number;
+  returns: number;
+  new_customers: number;
+  tenants: number;
+  businesses_active: number;
+  subscriptions: number;
+  trialing: number;
+  paying: number;
+  soft_locked: number;
+};
+
+export type PlatformAnalyticsSeriesRow = {
+  period: string;
+  start_date: string;
+  end_date: string;
+  bookings: number;
+  completed_bookings: number;
+  cancelled_bookings: number;
+  booking_revenue: number;
+  orders: number;
+  gmv: number;
+  pos_orders: number;
+  online_orders: number;
+  pos_gmv: number;
+  online_gmv: number;
+  units_sold: number;
+  returns: number;
+  new_customers: number;
+};
+
+export type PlatformAnalyticsTenantRow = {
+  tenant_id: string;
+  tenant_slug: string;
+  tenant_name: string;
+  businesses: number;
+  bookings: number;
+  booking_revenue: number;
+  orders: number;
+  gmv: number;
+  pos_orders: number;
+  online_orders: number;
+  pos_gmv: number;
+  online_gmv: number;
+  units_sold: number;
+  returns: number;
+  new_customers: number;
+  products: string[];
+  activity_score: number;
+};
+
+export type PlatformAnalyticsBusinessRow = {
+  business_id: string;
+  business_code: string;
+  business_name: string;
+  tenant_id: string;
+  tenant_name: string;
+  currency: string;
+  bookings: number;
+  booking_revenue: number;
+  orders: number;
+  gmv: number;
+  pos_orders: number;
+  online_orders: number;
+  pos_gmv: number;
+  online_gmv: number;
+  units_sold: number;
+  returns: number;
+  new_customers: number;
+  products: string[];
+  activity_score: number;
+};
+
+export type PlatformAnalyticsCatalogItem = {
+  item_id: string;
+  item_name: string;
+  item_kind: string;
+  product_code: string;
+  tenant_id: string;
+  tenant_name: string;
+  business_id: string;
+  business_name: string;
+  currency: string;
+  activity_count: number;
+  units: number;
+  revenue: number;
+};
+
+export type PlatformAnalytics = {
+  period: { start_date: string; end_date: string; grain: string };
+  filters: { product_code?: string | null; tenant_id?: string | null; business_id?: string | null };
+  kpis: PlatformAnalyticsKpis;
+  datapoints: {
+    booking_status?: Record<string, number>;
+    order_status?: Record<string, number>;
+    booking_source?: Record<string, number>;
+    booking_channel?: Record<string, number>;
+    fulfillment_mode?: Record<string, number>;
+    subscription_status?: Record<string, number>;
+  };
+  by_currency: Array<{
+    currency: string;
+    booking_revenue: number;
+    gmv: number;
+    pos_gmv: number;
+    online_gmv: number;
+    bookings: number;
+    orders: number;
+    pos_orders: number;
+    online_orders: number;
+  }>;
+  by_product: PlatformAnalyticsProductRow[];
+  series: PlatformAnalyticsSeriesRow[];
+  by_tenant: PlatformAnalyticsTenantRow[];
+  by_business: PlatformAnalyticsBusinessRow[];
+  catalog: {
+    services: { top: PlatformAnalyticsCatalogItem[]; bottom: PlatformAnalyticsCatalogItem[]; distinct: number };
+    skus: { top: PlatformAnalyticsCatalogItem[]; bottom: PlatformAnalyticsCatalogItem[]; distinct: number };
+  };
 };
 
 export type PlatformAuditResult = {
@@ -4511,6 +4710,8 @@ class ApiClient {
 
   platform = {
     tenants: () => this.request<{ tenants: PlatformTenantSummary[] }>('/platform/tenants', { method: 'GET' }),
+    analytics: (query?: PlatformAnalyticsQuery) =>
+      this.request<PlatformAnalytics>('/platform/analytics', { method: 'GET', query }),
     tenant: (tenantId: string) =>
       this.request<PlatformTenantDetail>(`/platform/tenants/${tenantId}`, { method: 'GET' }),
     updateTenant: (tenantId: string, body: { status?: string; reason?: string }) =>
@@ -4825,6 +5026,11 @@ class ApiClient {
         flavor_key?: string;
         app_slug?: string;
         logo?: string;
+        app_icon_url?: string;
+        icon_mode?: 'plate' | 'as-is';
+        icon_background?: string;
+        icon_padding?: number;
+        splash_background?: string;
         primary_color?: string;
         secondary_color?: string;
         white_label_enabled?: boolean;
@@ -4834,6 +5040,15 @@ class ApiClient {
         method: 'PATCH',
         body,
       }),
+    uploadCustomerAppAsset: (businessId: string, file: Blob | File, kind: 'logo' | 'app_icon' = 'logo') => {
+      const body = new FormData();
+      body.append('file', file);
+      body.append('kind', kind);
+      return this.request<CustomerAppState>(`/platform/white-label/${businessId}/customer-app/assets`, {
+        method: 'POST',
+        body,
+      });
+    },
     provisionCustomerAppFirebase: (businessId: string) =>
       this.request<CustomerAppState & { ok?: boolean; error?: string }>(
         `/platform/white-label/${businessId}/customer-app/firebase`,
@@ -5408,7 +5623,11 @@ class ApiClient {
     const url = this.buildUrl(path, options.query);
     const headers = new Headers(this.defaultHeaders);
     headers.set('Accept', 'application/json');
-    headers.set('Content-Type', 'application/json');
+    const isFormData =
+      typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (!isFormData) {
+      headers.set('Content-Type', 'application/json');
+    }
     if (options.auth !== false && this.token) {
       headers.set('Authorization', `Bearer ${this.token}`);
     }
@@ -5416,9 +5635,9 @@ class ApiClient {
       new Headers(options.headers).forEach((value, key) => headers.set(key, value));
     }
 
-    let body: string | undefined;
+    let body: BodyInit | undefined;
     if (options.body !== undefined) {
-      body = JSON.stringify(options.body);
+      body = isFormData ? (options.body as FormData) : JSON.stringify(options.body);
     }
 
     const response = await this.fetchImpl(url, {

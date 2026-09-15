@@ -3,7 +3,7 @@ import type {
   PlatformPlanPackageUpsertInput,
   PlatformAuditQuery,
   PlatformUserSearchParams,
-  WhiteLabelProfile,
+  PlatformAnalyticsQuery,
 } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 
@@ -12,6 +12,20 @@ export function usePlatformTenantsQuery() {
   return useQuery({
     queryKey: ['platform', 'tenants'],
     queryFn: async () => (await client.platform.tenants()).data.tenants,
+    retry: false,
+  });
+}
+
+export function usePlatformAnalyticsQuery(params: PlatformAnalyticsQuery, enabled = true) {
+  const client = useApiClient();
+  const normalized = Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== ''),
+  ) as PlatformAnalyticsQuery;
+  return useQuery({
+    queryKey: ['platform', 'analytics', normalized],
+    queryFn: async () => (await client.platform.analytics(normalized)).data,
+    enabled,
+    placeholderData: (previous) => previous,
     retry: false,
   });
 }
@@ -228,38 +242,6 @@ export function useUpdatePlatformAuthSettingsMutation() {
     }) => (await client.platform.updateAuthSettings(body)).data,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['platform', 'auth-settings'] });
-    },
-  });
-}
-
-export function usePlatformWhiteLabelProfilesQuery() {
-  const client = useApiClient();
-  return useQuery({
-    queryKey: ['platform', 'white-label'],
-    queryFn: async () => (await client.platform.whiteLabelProfiles()).data,
-    retry: false,
-  });
-}
-
-export function usePlatformWhiteLabelProfileQuery(businessId: string | undefined) {
-  const client = useApiClient();
-  return useQuery({
-    queryKey: ['platform', 'white-label', businessId],
-    queryFn: async () => (await client.platform.whiteLabelProfile(businessId!)).data,
-    enabled: Boolean(businessId),
-    retry: false,
-  });
-}
-
-export function useUpdateWhiteLabelProfileMutation(businessId: string) {
-  const client = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: Partial<WhiteLabelProfile>) =>
-      (await client.platform.updateWhiteLabelProfile(businessId, body)).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['platform', 'white-label'] });
-      queryClient.invalidateQueries({ queryKey: ['platform', 'white-label', businessId] });
     },
   });
 }

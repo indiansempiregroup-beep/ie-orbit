@@ -35,6 +35,18 @@ const PLAY_STORE_SIZE = 512;
 const ADAPTIVE_PAD = 0.22;
 const FETCH_TIMEOUT_MS = 12_000;
 
+function iconPaddingFromEnv() {
+  const raw = Number(process.env.EXPO_PUBLIC_ICON_PADDING);
+  if (!Number.isFinite(raw)) return ADAPTIVE_PAD;
+  return Math.max(0.08, Math.min(0.36, raw));
+}
+
+function iconModeFromEnv(sourceKind) {
+  if (sourceKind === 'override' || sourceKind === 'app_icon') return 'as-is';
+  const mode = String(process.env.EXPO_PUBLIC_ICON_MODE || 'plate').trim().toLowerCase();
+  return mode === 'as-is' ? 'as-is' : 'plate';
+}
+
 function loadManifest() {
   try {
     return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
@@ -118,7 +130,7 @@ function initialsSvg(initials, color, size) {
   );
 }
 
-async function resizeLogoAsIs(sharp, logoBuffer, size) {
+async function resizeLogoMark(sharp, logoBuffer, size) {
   return sharp(logoBuffer)
     .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
@@ -135,53 +147,88 @@ async function pngHasTransparency(sharp, buffer) {
   return false;
 }
 
-async function flattenOpaqueIcon(sharp, logoBuffer, size, flattenRgb) {
-  return sharp(logoBuffer)
-    .resize(size, size, { fit: 'contain', background: { ...flattenRgb, alpha: 0 } })
-    .flatten({ background: flattenRgb })
+async function composeOpaquePlate(sharp, markBuffer, size, plateRgb) {
+  return sharp({
+    create: { width: size, height: size, channels: 3, background: plateRgb },
+  })
+    .composite([{ input: markBuffer, gravity: 'center' }])
     .removeAlpha()
     .png()
     .toBuffer();
 }
 
-async function writeIcons({ logoBuffer, primaryColor, initials, iosFlattenColor, outputDir }) {
+async function composeTransparentPlate(sharp, markBuffer, size) {
+  return sharp({
+    create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+    .composite([{ input: markBuffer, gravity: 'center' }])
+    .png()
+    .toBuffer();
+}
+
+async function resizeCover(sharp, logoBuffer, size) {
+  return sharp(logoBuffer)
+    .resize(size, size, { fit: 'cover', position: 'centre' })
+    .png()
+    .toBuffer();
+}
+
+async function writeIcons({
+  logoBuffer,
+  primaryColor,
+  initials,
+  iosFlattenColor,
+  outputDir,
+  mode = 'plate',
+  padding = ADAPTIVE_PAD,
+  splashBackground,
+}) {
   const sharp = require('sharp');
   const destDir = outputDir || GENERATED_DIR;
   fs.mkdirSync(destDir, { recursive: true });
   const paths = generatedPaths(destDir);
   const flattenHex = normalizeHexColor(iosFlattenColor, primaryColor);
   const flattenRgb = hexToRgb(flattenHex, primaryColor);
+  const splashHex = normalizeHexColor(splashBackground, primaryColor);
+  const splashRgb = hexToRgb(splashHex, primaryColor);
+  const pad = Math.max(0.08, Math.min(0.36, Number(padding) || ADAPTIVE_PAD));
+  const iconMarkSize = Math.round(ICON_SIZE * (1 - pad * 2));
+  const splashMarkSize = Math.round(ICON_SIZE * 0.4);
+  const asIs = mode === 'as-is';
 
   let icon;
   let adaptive;
-  if (logoBuffer) {
-    adaptive = await resizeLogoAsIs(sharp, logoBuffer, ICON_SIZE);
-    // Apple rejects / black-fills transparent App Icons. Flatten iOS + store icons only.
+  let splash;
+
+  if (logoBuffer && asIs) {
+    // Dedicated app icon override / flavor icon.png / admin "full icon" mode.
+    adaptive = await resizeCover(sharp, logoBuffer, ICON_SIZE);
     if (await pngHasTransparency(sharp, adaptive)) {
-      console.warn(`[customer-app] flattened iOS icon onto ${flattenHex} (source had transparency)`);
-      icon = await flattenOpaqueIcon(sharp, logoBuffer, ICON_SIZE, flattenRgb);
+      icon = await sharp(adaptive).flatten({ background: flattenRgb }).removeAlpha().png().toBuffer();
     } else {
-      icon = adaptive;
+      icon = await sharp(adaptive).removeAlpha().png().toBuffer();
     }
+    const splashMark = await resizeLogoMark(sharp, logoBuffer, splashMarkSize);
+    splash = await composeOpaquePlate(sharp, splashMark, ICON_SIZE, splashRgb);
+  } else if (logoBuffer) {
+    const iconMark = await resizeLogoMark(sharp, logoBuffer, iconMarkSize);
+    const splashMark = await resizeLogoMark(sharp, logoBuffer, splashMarkSize);
+    // Opaque launcher / Play / iOS icon: logo centered on brand plate with safe padding.
+    icon = await composeOpaquePlate(sharp, iconMark, ICON_SIZE, flattenRgb);
+    // Android adaptive foreground: padded mark on transparent; OS fills backgroundColor.
+    adaptive = await composeTransparentPlate(sharp, iconMark, ICON_SIZE);
+    splash = await composeOpaquePlate(sharp, splashMark, ICON_SIZE, splashRgb);
   } else {
-    icon = await sharp(initialsSvg(initials, primaryColor, ICON_SIZE)).png().toBuffer();
-    const adaptiveMark = initialsSvg(initials, primaryColor, Math.round(ICON_SIZE * (1 - ADAPTIVE_PAD * 2)));
-    adaptive = await sharp({
-      create: { width: ICON_SIZE, height: ICON_SIZE, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    icon = await sharp(initialsSvg(initials, flattenHex, ICON_SIZE)).png().toBuffer();
+    const adaptiveMark = initialsSvg(initials, flattenHex, iconMarkSize);
+    adaptive = await composeTransparentPlate(sharp, adaptiveMark, ICON_SIZE);
+    // Native splash never shows initials — brand-color fill only.
+    splash = await sharp({
+      create: { width: ICON_SIZE, height: ICON_SIZE, channels: 3, background: splashRgb },
     })
-      .composite([{ input: adaptiveMark, gravity: 'center' }])
       .png()
       .toBuffer();
   }
-
-  // Native splash never shows initials. Logo mark if we have one; otherwise a brand-color fill.
-  const splash = logoBuffer
-    ? adaptive
-    : await sharp({
-        create: { width: ICON_SIZE, height: ICON_SIZE, channels: 3, background: hexToRgb(primaryColor, primaryColor) },
-      })
-        .png()
-        .toBuffer();
 
   await Promise.all([
     fs.promises.writeFile(paths.icon, icon),
@@ -234,7 +281,7 @@ async function materializeAppIcon(options = {}) {
   let logoBuffer = null;
   if (source.kind === 'override') {
     logoBuffer = fs.readFileSync(source.value);
-  } else if (source.kind === 'url') {
+  } else if (source.kind === 'app_icon' || source.kind === 'logo' || source.kind === 'url') {
     try {
       logoBuffer = await fetchBuffer(source.value);
     } catch (error) {
@@ -242,15 +289,27 @@ async function materializeAppIcon(options = {}) {
     }
   }
 
-  const flattenColor = iosIconFlattenColor(process.env.EXPO_PUBLIC_IOS_ICON_BACKGROUND, primaryColor);
+  const flattenColor = iosIconFlattenColor(
+    process.env.EXPO_PUBLIC_ICON_BACKGROUND || process.env.EXPO_PUBLIC_IOS_ICON_BACKGROUND,
+    primaryColor,
+  );
+  const splashBackground = normalizeHexColor(
+    process.env.EXPO_PUBLIC_SPLASH_BACKGROUND,
+    primaryColor,
+  );
+  const bakeMode = iconModeFromEnv(source.kind);
+  const padding = iconPaddingFromEnv();
   await writeIcons({
     logoBuffer,
     primaryColor,
     initials: initialsFromAppName(flavor.appName),
     iosFlattenColor: flattenColor,
+    mode: bakeMode,
+    padding,
+    splashBackground,
   });
   // A failed URL download must not be cached, or the next start reuses a blank/initials splash.
-  if (source.kind === 'url' && !logoBuffer) {
+  if ((source.kind === 'app_icon' || source.kind === 'logo' || source.kind === 'url') && !logoBuffer) {
     try {
       fs.unlinkSync(CACHE_PATH);
     } catch {

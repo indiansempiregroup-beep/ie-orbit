@@ -24,8 +24,8 @@ export function planLabel(code?: string | null, name?: string | null) {
   return code.replace(/^(appointie|shopie)[-_]/i, '').replace(/-/g, ' ');
 }
 
-export function AdminPage({ children }: { children: ReactNode }) {
-  return <div className="admin-page">{children}</div>;
+export function AdminPage({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={['admin-page', className].filter(Boolean).join(' ')}>{children}</div>;
 }
 
 export function AdminPageHeader({

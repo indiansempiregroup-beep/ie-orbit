@@ -22,7 +22,7 @@ describe('writeIcons', () => {
     fs.rmSync(outputDir, { recursive: true, force: true });
   });
 
-  it('writes launcher, adaptive, splash, and Play Store PNGs', async () => {
+  it('writes launcher, adaptive, splash, and Play Store PNGs on a padded brand plate', async () => {
     const { writeIcons, generatedPaths } = require('./materialize-app-icon.cjs');
     const paths = generatedPaths(outputDir);
     await writeIcons({
@@ -37,12 +37,15 @@ describe('writeIcons', () => {
     }
 
     const sharp = require('sharp');
-    const { data } = await sharp(paths.icon).resize(1, 1).raw().toBuffer({ resolveWithObject: true });
-    const stampedBrandColor = data[0] > 180 && data[1] < 80 && data[2] > 150;
-    assert.equal(stampedBrandColor, false, 'uploaded logo must not be flattened onto the brand color');
+    const { data } = await sharp(paths.icon).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer({
+      resolveWithObject: true,
+    });
+    assert.equal(data[0], 217);
+    assert.equal(data[1], 54);
+    assert.equal(data[2], 187);
   });
 
-  it('flattens transparent pixels for the iOS icon only', async () => {
+  it('keeps adaptive foreground transparent while iOS icon is opaque', async () => {
     const sharp = require('sharp');
     const { writeIcons, generatedPaths, pngHasTransparency } = require('./materialize-app-icon.cjs');
     const paths = generatedPaths(outputDir);
@@ -83,12 +86,15 @@ describe('writeIcons', () => {
     assert.equal(data[1], 255);
     assert.equal(data[2], 255);
 
-    const splashMeta = await sharp(paths.splash).metadata();
-    assert.equal(splashMeta.hasAlpha, true);
-    assert.equal(await pngHasTransparency(sharp, fs.readFileSync(paths.splash)), true);
+    const splashCorner = await sharp(paths.splash).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer({
+      resolveWithObject: true,
+    });
+    assert.equal(splashCorner.data[0], 217);
+    assert.equal(splashCorner.data[1], 54);
+    assert.equal(splashCorner.data[2], 187);
   });
 
-  it('flattens transparent iOS icons onto the brand color by default', async () => {
+  it('flattens iOS plate onto the brand color by default', async () => {
     const sharp = require('sharp');
     const { writeIcons, generatedPaths } = require('./materialize-app-icon.cjs');
     const paths = generatedPaths(outputDir);
@@ -121,6 +127,61 @@ describe('writeIcons', () => {
     assert.equal(data[0], 217);
     assert.equal(data[1], 54);
     assert.equal(data[2], 187);
+  });
+
+  it('writes an as-is override without a brand-color plate', async () => {
+    const sharp = require('sharp');
+    const { writeIcons, generatedPaths } = require('./materialize-app-icon.cjs');
+    const paths = generatedPaths(outputDir);
+    const solid = await sharp({
+      create: { width: 64, height: 64, channels: 3, background: { r: 10, g: 200, b: 40 } },
+    })
+      .png()
+      .toBuffer();
+
+    await writeIcons({
+      logoBuffer: solid,
+      primaryColor: '#d936bb',
+      initials: 'SP',
+      mode: 'as-is',
+      outputDir,
+    });
+
+    const { data } = await sharp(paths.icon).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer({
+      resolveWithObject: true,
+    });
+    assert.equal(data[0], 10);
+    assert.equal(data[1], 200);
+    assert.equal(data[2], 40);
+  });
+
+  it('applies custom icon and splash backgrounds with padding', async () => {
+    const sharp = require('sharp');
+    const { writeIcons, generatedPaths } = require('./materialize-app-icon.cjs');
+    const paths = generatedPaths(outputDir);
+    await writeIcons({
+      logoBuffer: TINY_PNG,
+      primaryColor: '#d936bb',
+      initials: 'SP',
+      iosFlattenColor: '#112233',
+      splashBackground: '#00aa55',
+      padding: 0.3,
+      outputDir,
+    });
+
+    const iconCorner = await sharp(paths.icon).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer({
+      resolveWithObject: true,
+    });
+    assert.equal(iconCorner.data[0], 17);
+    assert.equal(iconCorner.data[1], 34);
+    assert.equal(iconCorner.data[2], 51);
+
+    const splashCorner = await sharp(paths.splash).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer({
+      resolveWithObject: true,
+    });
+    assert.equal(splashCorner.data[0], 0);
+    assert.equal(splashCorner.data[1], 170);
+    assert.equal(splashCorner.data[2], 85);
   });
 
   it('uses a brand-color splash with no initials when the logo is missing', async () => {

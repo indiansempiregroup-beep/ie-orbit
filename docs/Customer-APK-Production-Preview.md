@@ -4,7 +4,7 @@ Platform Admin drives go-live for a tenant’s white-label customer app. No per-
 
 **Ops app** stays shared. This doc is only for the **customer** APK/AAB.
 
-Hands-on entry: Platform Admin → Tenants → tenant → **Brand & app** (also on ops-mobile tenant detail). Branding (name, colors, logo) lives on that same tab as the APK build.
+Hands-on entry: Platform Admin → Tenants → tenant → **Brand & app** (also on ops-mobile tenant detail). Upload one logo; tune **Icon & logo background** (style, icon/splash colors, logo size). Store icons are composed from those settings.
 
 First tenant example: **Sunita Spa** (`sunita-spa`, package `com.ieorbit.sunitaspa`, business id `01a0725c-fdda-7fa1-b2cb-2892e6795740`).
 
@@ -34,7 +34,7 @@ Same Phase A–B on both stacks. Admin hosts and databases differ; Firebase proj
 
 ## Phase A — Setup (once per environment)
 
-1. Open the tenant → **Brand & app**. Defaults fill package / flavor / slug. Set logo and colors here too.
+1. Open the tenant → **Brand & app**. Defaults fill package / flavor / slug. **Upload** the business logo (square PNG/WebP) and set colors. Under **Icon & logo background**, choose logo-on-background vs full icon, set icon/splash colors, and adjust logo size. Use **Advanced · App icon override** only if that still looks wrong.
 2. Set **App name** (e.g. Sunita Spa) → paste **Google Android OAuth client ID** → **Save brand & setup**.
 3. Create the Google Android OAuth client yourself in Google Cloud (once per package; reuse on UAT and prod):
    - Package = recipe package (copy from admin)
