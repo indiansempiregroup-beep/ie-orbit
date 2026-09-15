@@ -1,10 +1,49 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CustomerAppChecklist, CustomerAppState, PlatformTenantBusiness } from '@ie-orbit/sdk';
 import { LogoUploadField } from '../../components/LogoUploadField';
 import { useApiClient } from '../../hooks/useApiClient';
+import { useSnackbar } from '../../hooks/useSnackbar';
+import { getApiErrorMessage } from '../../lib/apiClient';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { AdminEmpty, AdminField, AdminSection, AdminStatus } from './AdminChrome';
 import { usePlatformCustomerAppQuery } from './adminHooks';
+
+const ACTION_OK: Record<string, string> = {
+  'Save brand & setup': 'Brand identity saved.',
+  'Create Firebase app': 'Firebase Android app is ready. google-services.json is saved on this tenant.',
+  'Clear app icon override': 'App icon override cleared.',
+  'Build preview APK': 'Preview APK build started.',
+  'Refresh preview status': 'Preview status updated.',
+  'Build store AAB': 'Store AAB build started.',
+  'Mark live': 'Marked live on Play.',
+  'Refresh store status': 'Store status updated.',
+};
+
+type ActionNotice = {
+  tone: 'ok' | 'error' | 'busy';
+  title: string;
+  detail?: string;
+};
+
+function payloadActionError(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const row = payload as { ok?: boolean; error?: unknown };
+  if (row.ok !== false) return null;
+  return typeof row.error === 'string' && row.error.trim() ? row.error.trim() : 'The request did not complete.';
+}
+
+function ActionAlert({ notice }: { notice: ActionNotice | null }) {
+  if (!notice) return null;
+  return (
+    <div
+      className={`admin-action-alert admin-action-alert--${notice.tone}`}
+      role={notice.tone === 'error' ? 'alert' : 'status'}
+    >
+      <strong>{notice.title}</strong>
+      {notice.detail ? <p>{notice.detail}</p> : null}
+    </div>
+  );
+}
 
 const PROGRESS_STEPS: Array<{
   key: keyof Pick<
@@ -219,6 +258,7 @@ function PhonePreview({
 
 export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBusiness[] }) {
   const client = useApiClient();
+  const snackbar = useSnackbar();
   const [businessId, setBusinessId] = useState(businesses[0]?.id ?? '');
   const query = usePlatformCustomerAppQuery(businessId || undefined);
   const state = query.data as CustomerAppState | undefined;
@@ -245,7 +285,8 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
   const [playSha1, setPlaySha1] = useState('');
   const [bump, setBump] = useState<'patch' | 'minor' | 'major'>('patch');
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<ActionNotice | null>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
 
   const logoPreviewUrl = useMemo(() => {
     if (logoFile) return URL.createObjectURL(logoFile);
@@ -298,28 +339,45 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
     setPlaySha1(recipe.play_signing_sha1 || '');
   }, [recipe, branding]);
 
+  useEffect(() => {
+    if (!feedback && !busy) return;
+    feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [feedback, busy]);
+
   async function run(label: string, fn: () => Promise<{ data?: CustomerAppState & { ok?: boolean; error?: string } }>) {
-    if (!businessId) return;
+    if (!businessId) {
+      const detail = 'Select a business first.';
+      setFeedback({ tone: 'error', title: `${label} failed`, detail });
+      snackbar.push(detail, 'error', 10000);
+      return false;
+    }
     setBusy(label);
-    setMessage(null);
+    setFeedback(null);
     try {
       const result = await fn();
-      const payload = result.data;
-      if (payload && payload.ok === false && payload.error) {
-        setMessage(payload.error);
-      } else {
-        setMessage(`${label} succeeded`);
+      const failed = payloadActionError(result.data);
+      if (failed) {
+        setFeedback({ tone: 'error', title: `${label} failed`, detail: failed });
+        snackbar.push(failed, 'error', 10000);
+        return false;
       }
+      const okText = ACTION_OK[label] ?? `${label} succeeded`;
+      setFeedback({ tone: 'ok', title: okText });
+      snackbar.push(okText, 'success');
       await query.refetch();
+      return true;
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : `${label} failed`);
+      const detail = getApiErrorMessage(err, `${label} failed`);
+      setFeedback({ tone: 'error', title: `${label} failed`, detail });
+      snackbar.push(detail, 'error', 10000);
+      return false;
     } finally {
       setBusy(null);
     }
   }
 
   async function saveBrandAndSetup() {
-    await run('Save brand & setup', async () => {
+    const saved = await run('Save brand & setup', async () => {
       if (logoFile) {
         await client.platform.uploadCustomerAppAsset(businessId, logoFile, 'logo');
       }
@@ -349,8 +407,10 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
         play_signing_sha1: playSha1,
       });
     });
-    setLogoFile(null);
-    setAppIconFile(null);
+    if (saved) {
+      setLogoFile(null);
+      setAppIconFile(null);
+    }
   }
 
   if (!businesses.length) {
@@ -417,10 +477,19 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
           </div>
         ) : null}
 
-        {message ? (
-          <p className={`admin-message ${message.includes('succeeded') ? 'admin-message--ok' : ''}`}>{message}</p>
-        ) : null}
-        {busy ? <p className="admin-message">Running: {busy}…</p> : null}
+        <ActionAlert
+          notice={
+            busy
+              ? {
+                  tone: 'busy',
+                  title: `${busy}…`,
+                  detail: busy.includes('Firebase')
+                    ? 'Talking to Firebase. This can take up to a minute.'
+                    : undefined,
+                }
+              : feedback
+          }
+        />
       </AdminSection>
 
       {recipe ? (
@@ -635,6 +704,21 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
                     </button>
                   ) : null}
                 </details>
+                <div ref={feedbackRef}>
+                  <ActionAlert
+                    notice={
+                      busy
+                        ? {
+                            tone: 'busy',
+                            title: `${busy}…`,
+                            detail: busy.includes('Firebase')
+                              ? 'Talking to Firebase. This can take up to a minute.'
+                              : undefined,
+                          }
+                        : feedback
+                    }
+                  />
+                </div>
                 <div className="admin-action-bar">
                   <button
                     type="button"
@@ -642,7 +726,7 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
                     disabled={Boolean(busy)}
                     onClick={() => void saveBrandAndSetup()}
                   >
-                    Save brand & setup
+                    {busy === 'Save brand & setup' ? 'Saving…' : 'Save brand & setup'}
                   </button>
                   <button
                     type="button"
@@ -650,12 +734,23 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
                     disabled={Boolean(busy) || !packageName}
                     title={!packageName ? 'Set package first' : undefined}
                     onClick={() =>
-                      run('Create Firebase app', () => client.platform.provisionCustomerAppFirebase(businessId))
+                      void run('Create Firebase app', () => client.platform.provisionCustomerAppFirebase(businessId))
                     }
                   >
-                    {recipe.has_google_services_json ? 'Refresh Firebase app' : 'Create Firebase app'}
+                    {busy === 'Create Firebase app'
+                      ? recipe.has_google_services_json
+                        ? 'Refreshing Firebase…'
+                        : 'Creating Firebase app…'
+                      : recipe.has_google_services_json
+                        ? 'Refresh Firebase app'
+                        : 'Create Firebase app'}
                   </button>
                 </div>
+                <p className={`admin-firebase-status${recipe.has_google_services_json ? ' is-ready' : ''}`}>
+                  {recipe.has_google_services_json
+                    ? `Firebase is linked${recipe.firebase_app_id ? ` (${recipe.firebase_app_id})` : ''}. Refresh if you changed the package or Play SHA-1.`
+                    : 'Firebase app is not created yet. Save brand, then click Create Firebase app. You will see a success or error alert here.'}
+                </p>
               </div>
               <div className="admin-preview-stack">
                 <IconPlatePreview

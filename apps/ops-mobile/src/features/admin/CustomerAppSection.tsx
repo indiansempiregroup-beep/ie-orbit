@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { CustomerAppState, PlatformTenantBusiness } from '@ie-orbit/sdk';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -9,6 +9,7 @@ import { uploadCustomerAppAsset } from '../../api/media';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { Button } from '../../components/ui/Button';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { getApiErrorMessage } from '../../utils/format';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 
 function Chip({ label, done }: { label: string; done: boolean }) {
@@ -82,6 +83,7 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
   const [state, setState] = useState<CustomerAppState | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; title: string; detail?: string } | null>(null);
   const [appName, setAppName] = useState('');
   const [packageName, setPackageName] = useState('');
   const [logo, setLogo] = useState('');
@@ -144,17 +146,30 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
   async function run(label: string, fn: () => Promise<{ data: CustomerAppState & { ok?: boolean; error?: string } }>) {
     if (!client || !businessId) return;
     setBusy(label);
+    setNotice(null);
+    const successCopy: Record<string, string> = {
+      'Save brand & setup': 'Brand identity saved.',
+      'Create Firebase app': 'Firebase Android app is ready. google-services.json is saved on this tenant.',
+    };
     try {
       const response = await fn();
       if (response.data.ok === false && response.data.error) {
-        toast.push(response.data.error, 'error');
+        const detail = response.data.error;
+        setNotice({ tone: 'error', title: `${label} failed`, detail });
+        toast.push(detail, 'error');
+        Alert.alert(`${label} failed`, detail);
       } else {
-        toast.push(`${label} succeeded`, 'success');
+        const okText = successCopy[label] ?? `${label} succeeded`;
+        setNotice({ tone: 'ok', title: okText });
+        toast.push(okText, 'success');
       }
       setState(response.data);
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : `${label} failed`, 'error');
+      const detail = getApiErrorMessage(err, `${label} failed`);
+      setNotice({ tone: 'error', title: `${label} failed`, detail });
+      toast.push(detail, 'error');
+      Alert.alert(`${label} failed`, detail);
     } finally {
       setBusy(null);
     }
@@ -421,7 +436,15 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
           }
         />
         <Button
-          label={recipe?.has_google_services_json ? 'Refresh Firebase' : 'Create Firebase app'}
+          label={
+            busy === 'Create Firebase app'
+              ? recipe?.has_google_services_json
+                ? 'Refreshing Firebase…'
+                : 'Creating Firebase app…'
+              : recipe?.has_google_services_json
+                ? 'Refresh Firebase'
+                : 'Create Firebase app'
+          }
           variant="secondary"
           fullWidth
           loading={busy === 'Create Firebase app'}
@@ -430,6 +453,17 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
             void run('Create Firebase app', () => client!.platform.provisionCustomerAppFirebase(businessId))
           }
         />
+        {notice ? (
+          <View style={[styles.notice, notice.tone === 'error' ? styles.noticeError : styles.noticeOk]} accessibilityRole="alert">
+            <Text style={notice.tone === 'error' ? styles.noticeTitleError : styles.noticeTitleOk}>{notice.title}</Text>
+            {notice.detail ? <Text style={styles.noticeDetail}>{notice.detail}</Text> : null}
+          </View>
+        ) : null}
+        <Text style={recipe?.has_google_services_json ? styles.firebaseReady : styles.meta}>
+          {recipe?.has_google_services_json
+            ? 'Firebase is linked. Refresh if you changed the package or Play SHA-1.'
+            : 'Firebase app is not created yet. Save brand, then tap Create Firebase app. You will see a success or error alert.'}
+        </Text>
       </View>
 
       <View style={styles.card}>
@@ -583,4 +617,22 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 11, color: colors.mutedForeground, fontWeight: '600' },
   chipTextDone: { color: colors.primaryForeground || '#fff' },
   error: { color: colors.destructive, fontSize: 12 },
+  notice: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    gap: 4,
+  },
+  noticeOk: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  noticeError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  noticeTitleOk: { color: '#065F46', fontFamily: fonts.bodyMedium, fontSize: 13 },
+  noticeTitleError: { color: '#991B1B', fontFamily: fonts.bodyMedium, fontSize: 13 },
+  noticeDetail: { color: colors.foreground, fontSize: 13, lineHeight: 18 },
+  firebaseReady: { ...typography.body, color: '#065F46', fontSize: 13 },
 });

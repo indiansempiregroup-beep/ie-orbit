@@ -64,14 +64,28 @@ function humanizeAuthMessage(message: string, fallback: string): string {
   return message;
 }
 
+function looksLikeHtml(value: string) {
+  return /<!DOCTYPE html>/i.test(value) || /<html[\s>]/i.test(value);
+}
+
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiClientError) {
     const details = formatApiValidationDetails(error.payload.error.details);
     if (details) return details;
     const message = error.payload.error.message || error.message || fallback;
+    if (looksLikeHtml(message) || message.length > 500) {
+      if (error.status === 502 || error.status === 504) {
+        return 'The server timed out. Try again in a moment.';
+      }
+      if (error.status === 503) {
+        return fallback;
+      }
+      return fallback;
+    }
     return humanizeAuthMessage(message, fallback);
   }
   if (error instanceof Error && error.message) {
+    if (looksLikeHtml(error.message)) return fallback;
     return humanizeAuthMessage(error.message, fallback);
   }
   return fallback;

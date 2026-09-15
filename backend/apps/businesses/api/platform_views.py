@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections import defaultdict
 
@@ -22,12 +23,8 @@ from apps.businesses.models import (
     BusinessProductSubscription,
     WhiteLabelProfile,
 )
-from apps.businesses.services.entitlements import (
-    EntitlementService,
-    ordered_product_subscriptions,
-    subscription_billing_state,
-)
 from apps.businesses.services.customer_app_build import (
+    customer_app_action_error,
     dispatch_customer_app_build,
     ensure_customer_app_profile,
     machine_build_payload,
@@ -38,12 +35,19 @@ from apps.businesses.services.customer_app_build import (
     update_customer_app_settings,
     upload_customer_app_branding_asset,
 )
+from apps.businesses.services.entitlements import (
+    EntitlementService,
+    ordered_product_subscriptions,
+    subscription_billing_state,
+)
 from apps.businesses.services.white_label import (
     ensure_white_label_profile,
     serialize_white_label_profile,
 )
-from apps.common.api.responses import success_response
+from apps.common.api.responses import error_response, success_response
 from apps.tenancy.models import Tenant
+
+logger = logging.getLogger(__name__)
 
 
 def _summarize_tenant_billing(
@@ -381,9 +385,17 @@ class PlatformCustomerAppFirebaseView(APIView):
         try:
             result = provision_firebase_android_app(profile=profile)
         except RuntimeError as exc:
-            return success_response(
-                {"ok": False, "error": str(exc), **serialize_customer_app(profile)},
-                request_id=getattr(request, "request_id", None),
+            status, code, message = customer_app_action_error(exc)
+            return error_response(code=code, message=message, status_code=status)
+        except Exception:
+            logger.exception("Customer app Firebase provision failed")
+            return error_response(
+                code="firebase_failed",
+                message=(
+                    "Could not create the Firebase app. Check server logs, then confirm "
+                    "Firebase credentials on the VPS."
+                ),
+                status_code=502,
             )
         return success_response(
             {"ok": True, **result, **serialize_customer_app(profile)},
@@ -404,9 +416,14 @@ class PlatformCustomerAppBuildView(APIView):
         try:
             result = dispatch_customer_app_build(profile=profile, track=track, bump=bump)
         except RuntimeError as exc:
-            return success_response(
-                {"ok": False, "error": str(exc), **serialize_customer_app(profile)},
-                request_id=getattr(request, "request_id", None),
+            status, code, message = customer_app_action_error(exc)
+            return error_response(code=code, message=message, status_code=status)
+        except Exception:
+            logger.exception("Customer app build dispatch failed")
+            return error_response(
+                code="customer_app_build_failed",
+                message="Could not start the customer app build. Check server logs and try again.",
+                status_code=502,
             )
         return success_response(
             {"ok": True, **result, **serialize_customer_app(profile)},

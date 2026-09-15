@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import urllib.error
@@ -12,7 +13,11 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.businesses.models import Business, WhiteLabelProfile
-from apps.businesses.services.white_label import effective_logo, ensure_white_label_profile, serialize_white_label_profile
+from apps.businesses.services.white_label import (
+    effective_logo,
+    ensure_white_label_profile,
+    serialize_white_label_profile,
+)
 
 EAS_CUSTOMER_PROJECT_ID = "d3605998-b92a-497d-a72f-8028df3ca64d"
 EAS_ANDROID_SHA1 = "70:D2:64:E9:71:3D:41:4D:CA:D6:64:EA:E5:C4:B5:CB:52:3A:7E:99"
@@ -21,6 +26,8 @@ GOOGLE_CLOUD_OAUTH_PROJECT = "still-cipher-490712-n7"
 WEB_OAUTH_CLIENT_ID = (
     "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com"
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _public_api_base() -> str:
@@ -322,29 +329,112 @@ def update_customer_app_settings(
     return profile
 
 
+def _clip_error_text(text: str, limit: int = 280) -> str:
+    cleaned = " ".join((text or "").split())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1] + "…"
+
+
+def _firebase_http_error_message(code: int, detail: str) -> str:
+    parsed_msg = ""
+    try:
+        payload = json.loads(detail) if detail else {}
+        err = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(err, dict):
+            parsed_msg = str(err.get("message") or err.get("status") or "")
+        elif isinstance(err, str):
+            parsed_msg = err
+    except json.JSONDecodeError:
+        parsed_msg = ""
+    snippet = _clip_error_text(parsed_msg or detail or "unknown error")
+    if code == 403:
+        return (
+            f"Firebase denied access ({snippet}). Give the VPS service account "
+            "Firebase Management Admin on project ie-orbit."
+        )
+    if code == 404:
+        return f"Firebase project ie-orbit was not found ({snippet})."
+    if code == 409:
+        return f"A Firebase Android app already exists for this package ({snippet})."
+    return f"Firebase API returned {code}: {snippet}"
+
+
+def customer_app_action_error(exc: BaseException) -> tuple[int, str, str]:
+    """Map a customer-app action failure to (status, code, message)."""
+    message = _clip_error_text(str(exc).strip() or "The customer app action failed.", 400)
+    lowered = message.lower()
+    if any(
+        token in lowered
+        for token in (
+            "not configured",
+            "not valid json",
+            "could not sign in",
+            "client libraries are missing",
+        )
+    ):
+        return 503, "firebase_not_configured", message
+    if "android package" in lowered:
+        return 400, "firebase_package_required", message
+    if "could not reach firebase" in lowered:
+        return 503, "firebase_unreachable", message
+    if "create the firebase app first" in lowered:
+        return 400, "firebase_required", message
+    if "oauth" in lowered and "client" in lowered:
+        return 400, "google_oauth_required", message
+    if "firebase" in lowered:
+        return 502, "firebase_failed", message
+    return 400, "customer_app_action_failed", message
+
+
 def _firebase_access_token() -> str:
     raw = (os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
     if not raw:
-        path = (os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "").strip()
-        if path and os.path.isfile(path):
-            raw = open(path, encoding="utf-8").read()
+        candidates = [
+            (os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "").strip(),
+            "/run/secrets/firebase-management.json",
+        ]
+        for path in candidates:
+            if path and os.path.isfile(path):
+                file_raw = open(path, encoding="utf-8").read().strip()
+                if file_raw:
+                    raw = file_raw
+                    break
     if not raw:
         raise RuntimeError(
             "Firebase is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON on the VPS "
+            "or mount secrets/firebase-management.json and set "
+            "GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/firebase-management.json "
             "(Firebase Management Admin for project ie-orbit)."
         )
-    info = json.loads(raw)
-    from google.auth.transport.requests import Request
-    from google.oauth2 import service_account
-
-    credentials = service_account.Credentials.from_service_account_info(
-        info,
-        scopes=[
-            "https://www.googleapis.com/auth/firebase",
-            "https://www.googleapis.com/auth/cloud-platform",
-        ],
-    )
-    credentials.refresh(Request())
+    try:
+        info = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "Firebase credentials on the VPS are not valid JSON. Check "
+            "FIREBASE_SERVICE_ACCOUNT_JSON or the mounted service-account file."
+        ) from exc
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2 import service_account
+    except ImportError as exc:
+        raise RuntimeError(
+            "Firebase client libraries are missing on the server. Rebuild the backend image."
+        ) from exc
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            info,
+            scopes=[
+                "https://www.googleapis.com/auth/firebase",
+                "https://www.googleapis.com/auth/cloud-platform",
+            ],
+        )
+        credentials.refresh(Request())
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not sign in to Firebase with the VPS service account: "
+            f"{_clip_error_text(str(exc), 180)}"
+        ) from exc
     return credentials.token
 
 
@@ -371,7 +461,14 @@ def _http_json(
             return json.loads(payload) if payload else {}
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Firebase API {exc.code}: {detail}") from exc
+        logger.warning("Firebase API %s %s: %s", method, url, detail[:1000])
+        raise RuntimeError(_firebase_http_error_message(exc.code, detail)) from exc
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        raise RuntimeError(
+            f"Could not reach Firebase ({reason}). "
+            "Check that the VPS can make outbound HTTPS calls."
+        ) from exc
 
 
 def provision_firebase_android_app(*, profile: WhiteLabelProfile) -> dict[str, Any]:
@@ -413,7 +510,13 @@ def provision_firebase_android_app(*, profile: WhiteLabelProfile) -> dict[str, A
                 break
         existing = app_resource
     app_id = existing.get("appId") or ""
-    app_name = existing.get("name") or f"projects/{project}/androidApps/{app_id}"
+    app_name = existing.get("name") or ""
+    if not app_id and not app_name:
+        raise RuntimeError(
+            "Firebase did not return an Android app id. "
+            "Wait a few seconds and click Refresh Firebase app."
+        )
+    app_name = app_name or f"projects/{project}/androidApps/{app_id}"
     # Add EAS SHA-1 (ignore if already present).
     try:
         _http_json(

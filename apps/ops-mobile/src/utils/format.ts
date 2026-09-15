@@ -203,7 +203,7 @@ export function getApiErrorMessage(
   if (isNetworkFailure(error)) {
     return `Cannot reach API at ${getApiBaseUrl()}. Check that the device is on the same Wi‑Fi, the backend is running, and EXPO_PUBLIC_API_BASE_URL uses your computer’s LAN IP (not localhost) when testing on a phone.`;
   }
-  if (error instanceof ApiClientError) {
+    if (error instanceof ApiClientError) {
     const details = formatErrorDetails(error.payload.error.details);
     const message = error.payload.error.message || error.message || fallback;
     if (error.status === 429) {
@@ -211,6 +211,12 @@ export function getApiErrorMessage(
     }
     if (details) {
       return details;
+    }
+    if (/<!DOCTYPE html>/i.test(message) || /<html[\s>]/i.test(message) || message.length > 500) {
+      if (error.status === 502 || error.status === 504) {
+        return 'The server timed out. Try again in a moment.';
+      }
+      return fallback;
     }
     if (error.payload.error.code === 'AUTHENTICATION_FAILED' || isTechnicalAuthMessage(message)) {
       return humanizeAuthMessage(message, context);

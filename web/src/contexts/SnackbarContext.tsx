@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 type Snackbar = { id: string; message: string; severity: 'info' | 'success' | 'warning' | 'error' };
 
 type SnackbarContextState = {
-  push: (message: string, severity?: Snackbar['severity']) => void;
+  push: (message: string, severity?: Snackbar['severity'], durationMs?: number) => void;
   dismiss: (id: string) => void;
   items: Snackbar[];
 };
@@ -15,7 +15,11 @@ function SnackbarHost({ items, dismiss }: { items: Snackbar[]; dismiss: (id: str
   return createPortal(
     <div className="snackbar-host" aria-live="polite" aria-atomic="true">
       {items.map((item) => (
-        <div key={item.id} className={`snackbar snackbar-${item.severity}`} role="status">
+        <div
+          key={item.id}
+          className={`snackbar snackbar-${item.severity}`}
+          role={item.severity === 'error' ? 'alert' : 'status'}
+        >
           <div>{item.message}</div>
           <button
             type="button"
@@ -40,10 +44,10 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const push = useCallback(
-    (message: string, severity: Snackbar['severity'] = 'info') => {
+    (message: string, severity: Snackbar['severity'] = 'info', durationMs = 6000) => {
       const id = String(Date.now()) + Math.random().toString(16).slice(2);
       setItems((s) => [...s, { id, message, severity }]);
-      window.setTimeout(() => dismiss(id), 6000);
+      window.setTimeout(() => dismiss(id), durationMs);
     },
     [dismiss],
   );

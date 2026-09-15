@@ -919,7 +919,7 @@ h6 {
   display: grid;
   gap: 12px;
   z-index: 99999;
-  width: min(100%, 360px);
+  width: min(calc(100% - 24px), 420px);
 }
 
 .snackbar {
@@ -5731,6 +5731,61 @@ h6 {
 
 .admin-message--error {
   color: #be123c;
+}
+
+.admin-action-alert {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 40%, var(--card));
+}
+
+.admin-action-alert strong {
+  display: block;
+  font-size: 13px;
+}
+
+.admin-action-alert p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-action-alert--ok {
+  border-color: rgba(20, 184, 166, 0.35);
+  background: rgba(20, 184, 166, 0.1);
+}
+
+.admin-action-alert--ok strong {
+  color: #0f766e;
+}
+
+.admin-action-alert--error {
+  border-color: rgba(190, 18, 60, 0.28);
+  background: rgba(190, 18, 60, 0.08);
+}
+
+.admin-action-alert--error strong {
+  color: #be123c;
+}
+
+.admin-action-alert--busy {
+  border-color: rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.admin-firebase-status {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.admin-firebase-status.is-ready {
+  color: #0f766e;
 }
 
 .admin-code-block {
