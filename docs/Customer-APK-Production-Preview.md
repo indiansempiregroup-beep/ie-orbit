@@ -23,15 +23,26 @@ Setup (white-label, Google client, Firebase) is shared by both tracks.
 
 ---
 
-## Phase A — Setup (once)
+## UAT first, then prod
+
+Same Phase A–B on both stacks. Admin hosts and databases differ; Firebase project `ie-orbit` is shared.
+
+1. **UAT** — `https://app-uat.ie-orbit.com` → Tenants → tenant → **Brand & app** → complete Phase A → **Build preview APK** → sideload and QA against `api-uat`.
+2. **Prod** — `https://app.ie-orbit.com` → same tenant steps on the **prod** record (separate DB). Reuse the same Android package, Google OAuth Android client, and Firebase Android app. Still click **Create/Refresh Firebase** once on prod so *that* profile stores `google_services_json`, then **Build preview APK** against live API.
+
+---
+
+## Phase A — Setup (once per environment)
 
 1. Open the tenant → **Brand & app**. Defaults fill package / flavor / slug. Set logo and colors here too.
 2. Set **App name** (e.g. Sunita Spa) → paste **Google Android OAuth client ID** → **Save brand & setup**.
-3. Create the Google Android OAuth client yourself in Google Cloud:
+3. Create the Google Android OAuth client yourself in Google Cloud (once per package; reuse on UAT and prod):
    - Package = recipe package (copy from admin)
    - SHA-1 = recipe **EAS SHA-1** (`70:D2:64:E9:…`)
    - Do **not** overwrite VPS `GOOGLE_OAUTH_CUSTOMER_ANDROID_CLIENT_ID` (Sanket’s single slot). Per-tenant client id lives on the white-label profile.
-4. Click **Create Firebase app** (API creates the Android app, stores `google-services.json`, adds EAS SHA-1).
+4. Click **Create Firebase app** (button becomes **Refresh Firebase app** after success).
+   - If the Android app **already exists** in Firebase for that package, the API **reuses** it (no duplicate), adds EAS SHA-1 if missing, and downloads `google-services.json` onto **this** env’s white-label profile.
+   - Package in admin must match the Firebase Android package exactly.
 
 Checklist chips: Brand · Google Sign-In · Firebase → headline **Ready for preview**.
 
