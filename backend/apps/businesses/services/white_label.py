@@ -217,9 +217,20 @@ def _otp_auth_capabilities(business: Business) -> dict[str, object]:
 def ensure_white_label_profile(*, business: Business) -> WhiteLabelProfile:
     existing = getattr(business, "white_label_profile", None)
     if existing is not None:
-        return existing
+        from apps.businesses.services.customer_app_build import fill_white_label_defaults
+
+        return fill_white_label_defaults(existing)
     flavor_key = f"{business.tenant.slug}-{business.business_code}".replace("_", "-")
-    app_slug = flavor_key
+    from apps.businesses.services.customer_app_build import (
+        suggested_android_package,
+        suggested_app_slug,
+    )
+
+    package = suggested_android_package(tenant_slug=business.tenant.slug)
+    app_slug = suggested_app_slug(
+        tenant_slug=business.tenant.slug,
+        business_code=business.business_code,
+    )
     return WhiteLabelProfile.objects.create(
         tenant=business.tenant,
         business=business,
@@ -229,4 +240,7 @@ def ensure_white_label_profile(*, business: Business) -> WhiteLabelProfile:
         logo=business.logo,
         primary_color=business.tenant.primary_color,
         secondary_color=business.tenant.secondary_color,
+        bundle_id_android=package,
+        bundle_id_ios=package,
+        white_label_enabled=True,
     )

@@ -1,0 +1,264 @@
+name: Customer APK
+
+# Dispatched by Platform Admin (customer-app build).
+# Repo secrets: EXPO_TOKEN, CUSTOMER_APK_MACHINE_TOKEN
+# Optional repo variable: CUSTOMER_APK_API_BASE (default https://api.ie-orbit.com/api/v1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      business_id:
+        description: Business UUID
+        required: true
+        type: string
+      track:
+        description: preview (APK) or production (AAB)
+        required: true
+        type: choice
+        options:
+          - preview
+          - production
+        default: preview
+      bump:
+        description: Semver bump hint (versionCode still auto-increments via EAS)
+        required: false
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable corepack
+        run: corepack enable
+        working-directory: .
+
+      - name: Install monorepo deps
+        run: corepack pnpm install --frozen-lockfile
+        working-directory: .
+
+      - name: Fetch machine build payload
+        id: payload
+        env:
+          CUSTOMER_APK_MACHINE_TOKEN: ${{ secrets.CUSTOMER_APK_MACHINE_TOKEN }}
+          CUSTOMER_APK_API_BASE: ${{ vars.CUSTOMER_APK_API_BASE }}
+          BUSINESS_ID: ${{ inputs.business_id }}
+          TRACK: ${{ inputs.track }}
+        run: |
+          set -euo pipefail
+          API_BASE="${CUSTOMER_APK_API_BASE:-https://api.ie-orbit.com/api/v1}"
+          echo "CUSTOMER_APK_API_BASE=${API_BASE}" >> "$GITHUB_ENV"
+          if [ -z "${CUSTOMER_APK_MACHINE_TOKEN}" ]; then
+            echo "CUSTOMER_APK_MACHINE_TOKEN secret is missing"
+            exit 1
+          fi
+          URL="${API_BASE}/platform/white-label/${BUSINESS_ID}/customer-app/machine?track=${TRACK}"
+          curl -fsSL -H "Authorization: Bearer ${CUSTOMER_APK_MACHINE_TOKEN}" "$URL" -o /tmp/machine.json
+          python3 <<'PY'
+          import json
+          import os
+
+          raw = json.load(open("/tmp/machine.json"))
+          data = raw.get("data") or raw
+          env = data.get("env") or {}
+          profile = data.get("eas_profile") or ""
+          if not profile or not env:
+              raise SystemExit(f"Invalid machine payload: {raw}")
+
+          # Merge tenant env into eas.json so the remote EAS worker receives it.
+          eas = json.load(open("eas.json"))
+          block = eas.setdefault("build", {}).setdefault(profile, {})
+          block["env"] = {**(block.get("env") or {}), **{k: str(v) for k, v in env.items()}}
+          with open("eas.json", "w", encoding="utf-8") as fh:
+              json.dump(eas, fh, indent=2)
+              fh.write("\n")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write(f"EAS_PROFILE={profile}\n")
+              gs = env.get("GOOGLE_SERVICES_JSON") or ""
+              if gs:
+                  fh.write(f"GOOGLE_SERVICES_JSON<<EOF_CUSTOMER_APK\n{gs}\nEOF_CUSTOMER_APK\n")
+              for key, value in env.items():
+                  if key == "GOOGLE_SERVICES_JSON":
+                      continue
+                  text = str(value).replace("%", "%25")
+                  fh.write(f"{key}={text}\n")
+
+          print(f"eas_profile={profile}")
+          print(f"package={env.get('EXPO_PUBLIC_BUNDLE_ID_ANDROID')}")
+          PY
+
+      - name: Materialize google-services.json
+        run: node ./scripts/materialize-google-services.cjs
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Report build started
+        env:
+          CUSTOMER_APK_MACHINE_TOKEN: ${{ secrets.CUSTOMER_APK_MACHINE_TOKEN }}
+          BUSINESS_ID: ${{ inputs.business_id }}
+          TRACK: ${{ inputs.track }}
+        run: |
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer ${CUSTOMER_APK_MACHINE_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${CUSTOMER_APK_API_BASE}/platform/white-label/${BUSINESS_ID}/customer-app/machine" \
+            -d "{\"track\":\"${TRACK}\",\"status\":\"in_progress\"}" || true
+        working-directory: .
+
+      - name: EAS build
+        id: eas
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx eas-cli build \
+            --platform android \
+            --profile "$EAS_PROFILE" \
+            --non-interactive \
+            --json \
+            --no-wait > /tmp/eas-build.json
+          python3 <<'PY'
+          import json
+          import os
+
+          raw = json.load(open("/tmp/eas-build.json"))
+          build = raw[0] if isinstance(raw, list) else raw
+          build_id = build.get("id") or ""
+          status = (build.get("status") or "in_progress").lower()
+          url = build.get("permalink") or (
+              f"https://expo.dev/accounts/indians-empire/projects/ie-orbit-customer/builds/{build_id}"
+              if build_id
+              else ""
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"build_id={build_id}\n")
+              fh.write(f"status={status}\n")
+              fh.write(f"url={url}\n")
+          print(build_id, status, url)
+          PY
+
+      - name: Wait for EAS build
+        id: wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          BUILD_ID="${{ steps.eas.outputs.build_id }}"
+          if [ -z "$BUILD_ID" ]; then
+            echo "No EAS build id"
+            exit 1
+          fi
+          npx eas-cli build:view "$BUILD_ID" --json > /tmp/eas-view.json
+          for i in $(seq 1 90); do
+            STATUS=$(python3 -c 'import json; print((json.load(open("/tmp/eas-view.json")).get("status") or "").upper())')
+            echo "poll $i status=$STATUS"
+            case "$STATUS" in
+              FINISHED|ERRORED|CANCELED) break ;;
+            esac
+            sleep 60
+            npx eas-cli build:view "$BUILD_ID" --json > /tmp/eas-view.json
+          done
+          python3 <<'PY'
+          import json
+          import os
+
+          build = json.load(open("/tmp/eas-view.json"))
+          status = (build.get("status") or "").upper()
+          mapped = {
+              "FINISHED": "finished",
+              "ERRORED": "errored",
+              "CANCELED": "errored",
+              "IN_PROGRESS": "in_progress",
+              "IN_QUEUE": "queued",
+              "NEW": "queued",
+          }.get(status, status.lower() or "in_progress")
+          artifacts = build.get("artifacts") or {}
+          apk_url = artifacts.get("buildUrl") or artifacts.get("applicationArchiveUrl") or ""
+          build_id = build.get("id") or ""
+          url = build.get("permalink") or (
+              f"https://expo.dev/accounts/indians-empire/projects/ie-orbit-customer/builds/{build_id}"
+              if build_id
+              else ""
+          )
+          err = build.get("error") or {}
+          message = err.get("message") if isinstance(err, dict) else (err or "")
+          message = str(message).replace("\n", " ").replace("%", "%25")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"status={mapped}\n")
+              fh.write(f"apk_url={apk_url}\n")
+              fh.write(f"url={url}\n")
+              fh.write(f"version_name={build.get('appVersion') or ''}\n")
+              fh.write(f"version_code={build.get('appBuildVersion') or ''}\n")
+              fh.write(f"error={message}\n")
+          if mapped == "errored":
+              raise SystemExit(f"EAS build failed: {message}")
+          PY
+
+      - name: Callback to Platform Admin
+        if: always()
+        env:
+          CUSTOMER_APK_MACHINE_TOKEN: ${{ secrets.CUSTOMER_APK_MACHINE_TOKEN }}
+          BUSINESS_ID: ${{ inputs.business_id }}
+          TRACK: ${{ inputs.track }}
+          BUILD_ID: ${{ steps.eas.outputs.build_id }}
+          STATUS: ${{ steps.wait.outputs.status }}
+          URL: ${{ steps.wait.outputs.url }}
+          FALLBACK_URL: ${{ steps.eas.outputs.url }}
+          APK_URL: ${{ steps.wait.outputs.apk_url }}
+          VERSION_NAME: ${{ steps.wait.outputs.version_name }}
+          VERSION_CODE: ${{ steps.wait.outputs.version_code }}
+          ERROR: ${{ steps.wait.outputs.error }}
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          status = os.environ.get("STATUS") or "errored"
+          body = {
+              "track": os.environ["TRACK"],
+              "status": status,
+              "build_id": os.environ.get("BUILD_ID") or None,
+              "url": os.environ.get("URL") or os.environ.get("FALLBACK_URL") or None,
+              "apk_url": os.environ.get("APK_URL") or None,
+              "version_name": os.environ.get("VERSION_NAME") or None,
+              "version_code": os.environ.get("VERSION_CODE") or None,
+              "error": os.environ.get("ERROR") or None,
+          }
+          body = {k: v for k, v in body.items() if v not in (None, "")}
+          data = json.dumps(body).encode()
+          req = urllib.request.Request(
+              f"{os.environ['CUSTOMER_APK_API_BASE']}/platform/white-label/{os.environ['BUSINESS_ID']}/customer-app/machine",
+              data=data,
+              method="POST",
+              headers={
+                  "Authorization": f"Bearer {os.environ['CUSTOMER_APK_MACHINE_TOKEN']}",
+                  "Content-Type": "application/json",
+              },
+          )
+          with urllib.request.urlopen(req, timeout=60) as resp:
+              print(resp.status, resp.read()[:200])
+          PY
+        working-directory: .

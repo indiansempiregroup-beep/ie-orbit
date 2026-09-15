@@ -1,4 +1,5 @@
 export const IE_ORBIT_LOGO_SRC = '/brand/ie-orbit-logo.png';
+export const IE_ORBIT_ICON_SRC = '/favicon-512.png';
 
 type BrandLockupProps = {
   className?: string;

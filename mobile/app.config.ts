@@ -39,7 +39,19 @@ try {
 }
 
 const FACE_ID_USAGE = 'Allow $(PRODUCT_NAME) to use Face ID for quick sign-in.';
-const androidPackage = selectedFlavor?.bundleIdAndroid ?? 'com.ieorbit.mobile.dev';
+// Prefer CI/admin-injected bundle IDs so new tenants need no manifest.json row.
+const androidPackage =
+  (process.env.EXPO_PUBLIC_BUNDLE_ID_ANDROID || '').trim() ||
+  selectedFlavor?.bundleIdAndroid ||
+  'com.ieorbit.mobile.dev';
+const iosBundleId =
+  (process.env.EXPO_PUBLIC_BUNDLE_ID_IOS || '').trim() ||
+  selectedFlavor?.bundleIdIos ||
+  'com.ieorbit.mobile.dev';
+const splashBackground =
+  (process.env.EXPO_PUBLIC_PRIMARY_COLOR || '').trim() ||
+  selectedFlavor?.primaryColor ||
+  '#1A56DB';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { googleAuthSchemes, googleReversedClientScheme } = require('./src/utils/googleAuthRequest.cjs') as {
   googleAuthSchemes: (input: {
@@ -98,7 +110,6 @@ const adaptiveIcon = fs.existsSync(generatedAdaptive)
   ? './assets/generated/adaptive-icon.png'
   : './assets/icon.png';
 const splashIcon = fs.existsSync(generatedSplash) ? './assets/generated/splash.png' : './assets/icon.png';
-const splashBackground = selectedFlavor?.primaryColor ?? '#1A56DB';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -117,7 +128,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     backgroundColor: splashBackground,
   },
   ios: {
-    bundleIdentifier: selectedFlavor?.bundleIdIos ?? 'com.ieorbit.mobile.dev',
+    bundleIdentifier: iosBundleId,
     // Flattened opaque icon — Apple does not allow transparent App Icons.
     icon,
     associatedDomains: referralHost ? [`applinks:${referralHost}`] : undefined,
@@ -159,8 +170,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     flavorKey,
-    tenantSlug: selectedFlavor?.tenantSlug,
-    businessCode: selectedFlavor?.businessCode,
+    tenantSlug: process.env.EXPO_PUBLIC_TENANT_SLUG || selectedFlavor?.tenantSlug,
+    businessCode: process.env.EXPO_PUBLIC_BUSINESS_CODE || selectedFlavor?.businessCode,
     googleOAuth: {
       // Only explicit Expo public IDs — never the server/web .env key.
       clientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || '',

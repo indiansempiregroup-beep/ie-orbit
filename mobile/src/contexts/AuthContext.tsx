@@ -59,7 +59,7 @@ type AuthState = {
   biometricEnabled: boolean;
   biometricAvailable: boolean;
   biometricLabel: string;
-  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string }) => Promise<void>;
+  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string; purpose?: 'login' | 'signup' }) => Promise<void>;
   loginWithOtp: (input: {
     channel: 'email' | 'whatsapp';
     identifier: string;
@@ -358,7 +358,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [ensureFreshAccess]);
 
   const sendOtp = useCallback(
-    async (input: { channel: 'email' | 'whatsapp'; identifier: string }) => {
+    async (input: {
+      channel: 'email' | 'whatsapp';
+      identifier: string;
+      purpose?: 'login' | 'signup';
+    }) => {
       if (!tenantSlug || !businessCode) {
         throw new Error('This app is not linked to a shop yet. Try again in a moment.');
       }
@@ -366,6 +370,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         client: 'customer',
         channel: input.channel,
         identifier: input.identifier.trim(),
+        purpose: input.purpose ?? 'login',
         tenant_slug: tenantSlug,
         business_code: businessCode,
       });

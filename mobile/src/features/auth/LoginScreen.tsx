@@ -32,6 +32,8 @@ import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
+const RESEND_COOLDOWN_SECONDS = 30;
+
 export function LoginScreen({ navigation, route }: Props) {
   const { t } = useTranslation();
   const {
@@ -72,11 +74,20 @@ export function LoginScreen({ navigation, route }: Props) {
   );
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; code?: string }>({});
   const [submitting, setSubmitting] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [biometricBusy, setBiometricBusy] = useState(false);
 
   useEffect(() => {
     void refreshBiometricState();
   }, [refreshBiometricState]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = setInterval(() => {
+      setResendCooldown((value) => (value <= 1 ? 0 : value - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const offerBiometricEnrollment = useCallback(async () => {
     if (!biometricAvailable || biometricEnabled) return;
@@ -109,10 +120,11 @@ export function LoginScreen({ navigation, route }: Props) {
         },
       ],
     );
-  }, [biometricAvailable, biometricEnabled, biometricLabel, enableBiometrics]);
+  }, [biometricAvailable, biometricEnabled, biometricLabel, enableBiometrics, email]);
 
-  async function onSendCode() {
+  async function onSendCode(options?: { resend?: boolean }) {
     setError('');
+    if (options?.resend && resendCooldown > 0) return;
     if (loginChannel === 'email') {
       const emailError = emailFieldError(email);
       if (emailError) {
@@ -129,8 +141,10 @@ export function LoginScreen({ navigation, route }: Props) {
       await sendOtp({
         channel: loginChannel === 'whatsapp' ? 'whatsapp' : 'email',
         identifier: loginChannel === 'whatsapp' ? phone.trim() : email.trim(),
+        purpose: 'login',
       });
       setOtpStep('code');
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Unable to send sign-in code.', 'login'));
     } finally {
@@ -288,15 +302,25 @@ export function LoginScreen({ navigation, route }: Props) {
             onPress={() => void (otpStep === 'code' ? onVerifyCode() : onSendCode())}
           />
           {otpStep === 'code' ? (
-            <Button
-              label="Use a different email"
-              variant="ghost"
-              fullWidth
-              onPress={() => {
-                setOtpStep('idle');
-                setCode('');
-              }}
-            />
+            <>
+              <Button
+                label={resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+                variant="ghost"
+                fullWidth
+                disabled={submitting || resendCooldown > 0}
+                onPress={() => void onSendCode({ resend: true })}
+              />
+              <Button
+                label={loginChannel === 'whatsapp' ? 'Use a different number' : 'Use a different email'}
+                variant="ghost"
+                fullWidth
+                onPress={() => {
+                  setOtpStep('idle');
+                  setCode('');
+                  setResendCooldown(0);
+                }}
+              />
+            </>
           ) : null}
           <GoogleSignInButton
             disabled={loading || submitting || biometricBusy}

@@ -25,6 +25,9 @@ export function PlatformBrandingPage() {
   const [form, setForm] = useState({
     app_name: '',
     flavor_key: '',
+    app_slug: '',
+    bundle_id_android: '',
+    bundle_id_ios: '',
     primary_color: '#0F6CBD',
     secondary_color: '#111827',
     logo: '',
@@ -50,6 +53,9 @@ export function PlatformBrandingPage() {
     setForm({
       app_name: selectedProfile.app_name,
       flavor_key: selectedProfile.flavor_key,
+      app_slug: selectedProfile.app_slug || '',
+      bundle_id_android: selectedProfile.bundle_id_android || '',
+      bundle_id_ios: selectedProfile.bundle_id_ios || '',
       primary_color: selectedProfile.branding.primary_color,
       secondary_color: selectedProfile.branding.secondary_color,
       logo: selectedProfile.branding.logo ?? '',
@@ -99,6 +105,24 @@ export function PlatformBrandingPage() {
                 <input
                   value={form.flavor_key}
                   onChange={(event) => setForm((prev) => ({ ...prev, flavor_key: event.target.value }))}
+                />
+              </AdminField>
+              <AdminField label="Android package">
+                <input
+                  value={form.bundle_id_android}
+                  onChange={(event) => setForm((prev) => ({ ...prev, bundle_id_android: event.target.value }))}
+                />
+              </AdminField>
+              <AdminField label="iOS bundle ID">
+                <input
+                  value={form.bundle_id_ios}
+                  onChange={(event) => setForm((prev) => ({ ...prev, bundle_id_ios: event.target.value }))}
+                />
+              </AdminField>
+              <AdminField label="App slug">
+                <input
+                  value={form.app_slug}
+                  onChange={(event) => setForm((prev) => ({ ...prev, app_slug: event.target.value }))}
                 />
               </AdminField>
               <AdminField label="Logo URL" hint="HTTPS URL to a PNG or SVG. Host the file, then paste the link.">
@@ -155,6 +179,9 @@ export function PlatformBrandingPage() {
                   updateMutation.mutate({
                     app_name: form.app_name,
                     flavor_key: form.flavor_key,
+                    app_slug: form.app_slug,
+                    bundle_id_android: form.bundle_id_android,
+                    bundle_id_ios: form.bundle_id_ios,
                     logo: form.logo,
                     primary_color: form.primary_color,
                     secondary_color: form.secondary_color,

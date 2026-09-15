@@ -68,6 +68,8 @@ export type OtpSendRequest = {
   client: 'customer' | 'ops';
   channel: 'email' | 'whatsapp' | 'sms';
   identifier: string;
+  /** login (default): reject unregistered identifiers before sending. signup: allow pre-account OTP. */
+  purpose?: 'login' | 'signup';
   tenant_slug?: string;
   business_code?: string;
 };
@@ -1134,8 +1136,60 @@ export type PlatformTenantBusiness = {
   selected_product?: string;
   has_white_label_profile: boolean;
   flavor_key?: string | null;
+  bundle_id_android?: string | null;
+  app_name?: string | null;
   billing?: BusinessBillingSnapshot;
   billings?: BusinessBillingSnapshot[];
+};
+
+export type CustomerAppChecklist = {
+  headline: string;
+  white_label: boolean;
+  google_sign_in: boolean;
+  firebase: boolean;
+  preview_apk: boolean;
+  store_aab: boolean;
+  submitted: boolean;
+  live: boolean;
+  ready_for_preview: boolean;
+  ready_for_store: boolean;
+};
+
+export type CustomerAppRecipe = {
+  tenant_slug: string;
+  business_id: string;
+  business_code: string;
+  flavor_key: string;
+  app_slug: string;
+  app_name: string;
+  bundle_id_android?: string;
+  bundle_id_ios?: string;
+  primary_color?: string;
+  secondary_color?: string;
+  bootstrap_url: string;
+  eas_project_id: string;
+  eas_android_sha1: string;
+  firebase_project_id: string;
+  google_cloud_oauth_project: string;
+  web_oauth_client_id: string;
+  google_oauth_android_client_id?: string;
+  play_signing_sha1?: string;
+  suggested_eas_profile_preview: string;
+  suggested_eas_profile_production: string;
+  has_google_services_json: boolean;
+  firebase_app_id?: string | null;
+  preview?: Record<string, unknown>;
+  production?: Record<string, unknown>;
+  live?: Record<string, unknown>;
+  builds?: Record<string, unknown>[];
+};
+
+export type CustomerAppState = {
+  profile: MobileBootstrapResponse;
+  recipe: CustomerAppRecipe;
+  checklist: CustomerAppChecklist;
+  ok?: boolean;
+  error?: string;
 };
 
 export type PlatformTenantDetail = {
@@ -4757,6 +4811,47 @@ class ApiClient {
       this.request<MobileBootstrapResponse>(`/platform/white-label/${businessId}`, { method: 'GET' }),
     updateWhiteLabelProfile: (businessId: string, body: Partial<WhiteLabelProfile>) =>
       this.request<MobileBootstrapResponse>(`/platform/white-label/${businessId}`, { method: 'PATCH', body }),
+    customerApp: (businessId: string) =>
+      this.request<CustomerAppState>(`/platform/white-label/${businessId}/customer-app`, { method: 'GET' }),
+    updateCustomerApp: (
+      businessId: string,
+      body: {
+        app_name?: string;
+        bundle_id_android?: string;
+        bundle_id_ios?: string;
+        google_oauth_android_client_id?: string;
+        play_signing_sha1?: string;
+        mark_live?: boolean;
+        flavor_key?: string;
+        app_slug?: string;
+        logo?: string;
+        primary_color?: string;
+        secondary_color?: string;
+        white_label_enabled?: boolean;
+      },
+    ) =>
+      this.request<CustomerAppState>(`/platform/white-label/${businessId}/customer-app`, {
+        method: 'PATCH',
+        body,
+      }),
+    provisionCustomerAppFirebase: (businessId: string) =>
+      this.request<CustomerAppState & { ok?: boolean; error?: string }>(
+        `/platform/white-label/${businessId}/customer-app/firebase`,
+        { method: 'POST', body: {} },
+      ),
+    startCustomerAppBuild: (
+      businessId: string,
+      body: { track: 'preview' | 'production'; bump?: 'patch' | 'minor' | 'major' },
+    ) =>
+      this.request<CustomerAppState & { ok?: boolean; error?: string }>(
+        `/platform/white-label/${businessId}/customer-app/builds`,
+        { method: 'POST', body },
+      ),
+    customerAppBuildStatus: (businessId: string, track: 'preview' | 'production' = 'preview') =>
+      this.request<CustomerAppState>(`/platform/white-label/${businessId}/customer-app/builds`, {
+        method: 'GET',
+        query: { track },
+      }),
   };
 
   help = {

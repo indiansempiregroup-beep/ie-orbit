@@ -16,6 +16,7 @@ type OtpStep = 'idle' | 'code';
 type LoginChannel = 'email' | 'whatsapp';
 
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
+const RESEND_COOLDOWN_SECONDS = 30;
 
 function AuthField({
   label,
@@ -68,6 +69,7 @@ export function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; code?: string }>({});
   const [sending, setSending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [googleSignup, setGoogleSignup] = useState<{
     googleIdToken: string;
     email?: string;
@@ -86,6 +88,14 @@ export function AuthPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setResendCooldown((value) => (value <= 1 ? 0 : value - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
   if (auth.loading) {
     return <p role="status">{t('common.loading')}</p>;
   }
@@ -94,8 +104,13 @@ export function AuthPage() {
     return <PostAuthRedirect />;
   }
 
-  async function handleSendCode() {
+  function startResendCooldown() {
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+  }
+
+  async function handleSendCode(options?: { resend?: boolean }) {
     setError(null);
+    if (options?.resend && resendCooldown > 0) return;
     if (loginChannel === 'email') {
       const emailErr = invalidEmailMessage(email);
       if (emailErr) {
@@ -112,8 +127,10 @@ export function AuthPage() {
       await auth.sendOtp({
         channel: loginChannel,
         identifier: loginChannel === 'whatsapp' ? phone.trim() : email.trim(),
+        purpose: 'login',
       });
       setOtpStep('code');
+      startResendCooldown();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Unable to send sign-in code. Please try again.'));
     } finally {
@@ -254,16 +271,27 @@ export function AuthPage() {
           {otpStep === 'code' ? 'Verify and sign in' : 'Sign in with OTP'}
         </button>
         {otpStep === 'code' ? (
-          <button
-            type="button"
-            className="ops-login-ghost"
-            onClick={() => {
-              setOtpStep('idle');
-              setCode('');
-            }}
-          >
-            {loginChannel === 'whatsapp' ? 'Use a different number' : 'Use a different email'}
-          </button>
+          <>
+            <button
+              type="button"
+              className="ops-login-ghost"
+              disabled={sending || resendCooldown > 0}
+              onClick={() => void handleSendCode({ resend: true })}
+            >
+              {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+            </button>
+            <button
+              type="button"
+              className="ops-login-ghost"
+              onClick={() => {
+                setOtpStep('idle');
+                setCode('');
+                setResendCooldown(0);
+              }}
+            >
+              {loginChannel === 'whatsapp' ? 'Use a different number' : 'Use a different email'}
+            </button>
+          </>
         ) : null}
 
         <GoogleSignInButton

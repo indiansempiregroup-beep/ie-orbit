@@ -72,7 +72,7 @@ type AuthState = {
   biometricEnabled: boolean;
   biometricAvailable: boolean;
   biometricLabel: string;
-  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string }) => Promise<void>;
+  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string; purpose?: 'login' | 'signup' }) => Promise<void>;
   loginWithOtp: (input: {
     channel: 'email' | 'whatsapp';
     identifier: string;
@@ -395,13 +395,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [scheduleRefresh]);
 
-  const sendOtp = useCallback(async (input: { channel: 'email' | 'whatsapp'; identifier: string }) => {
-    await opsClient.auth.sendOtp({
-      client: 'ops',
-      channel: input.channel,
-      identifier: input.identifier.trim(),
-    });
-  }, []);
+  const sendOtp = useCallback(
+    async (input: {
+      channel: 'email' | 'whatsapp';
+      identifier: string;
+      purpose?: 'login' | 'signup';
+    }) => {
+      await opsClient.auth.sendOtp({
+        client: 'ops',
+        channel: input.channel,
+        identifier: input.identifier.trim(),
+        purpose: input.purpose ?? 'login',
+      });
+    },
+    [],
+  );
 
   const loginWithOtp = useCallback(
     async (input: {

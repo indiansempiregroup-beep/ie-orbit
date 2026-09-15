@@ -81,7 +81,7 @@ export function RegisterScreen({ navigation }: Props) {
       setFieldErrors({});
       setSubmitting(true);
       try {
-        await sendOtp({ channel: 'email', identifier: email.trim() });
+        await sendOtp({ channel: 'email', identifier: email.trim(), purpose: 'signup' });
         setCodeSent(true);
       } catch (err) {
         setError(getApiErrorMessage(err, 'Unable to send verification code.', 'register'));

@@ -28,7 +28,7 @@ type AuthState = {
     code: string;
     remember?: boolean;
   }) => Promise<string>;
-  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string }) => Promise<void>;
+  sendOtp: (input: { channel: 'email' | 'whatsapp'; identifier: string; purpose?: 'login' | 'signup' }) => Promise<void>;
   loginWithGoogle: (idToken: string, remember?: boolean) => Promise<string>;
   bootstrapSession: (payload: WorkspaceProvisionResponse) => Promise<void>;
   logout: (allSessions?: boolean) => Promise<void>;
@@ -112,11 +112,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return payload.access;
   }
 
-  async function sendOtp(input: { channel: 'email' | 'whatsapp'; identifier: string }) {
+  async function sendOtp(input: {
+    channel: 'email' | 'whatsapp';
+    identifier: string;
+    purpose?: 'login' | 'signup';
+  }) {
     await client.auth.sendOtp({
       client: 'ops',
       channel: input.channel,
       identifier: input.identifier.trim(),
+      purpose: input.purpose ?? 'login',
     });
   }
 

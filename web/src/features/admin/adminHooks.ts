@@ -264,6 +264,25 @@ export function useUpdateWhiteLabelProfileMutation(businessId: string) {
   });
 }
 
+export function usePlatformCustomerAppQuery(businessId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'customer-app', businessId],
+    queryFn: async () => (await client.platform.customerApp(businessId!)).data,
+    enabled: Boolean(businessId),
+    retry: false,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const preview = data?.recipe?.preview as { status?: string } | undefined;
+      const production = data?.recipe?.production as { status?: string } | undefined;
+      const active = [preview?.status, production?.status].some(
+        (status) => status === 'queued' || status === 'in_progress',
+      );
+      return active ? 15_000 : false;
+    },
+  });
+}
+
 export function useInvalidatePlatform() {
   const queryClient = useQueryClient();
   return () => {

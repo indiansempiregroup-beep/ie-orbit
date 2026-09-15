@@ -15,6 +15,7 @@ import type { BusinessBillingSnapshot, PlatformTenantBusiness, PlatformTenantDet
 import { voucherStatusStyle } from '../shop/shopBooksHelpers';
 import { formatPlanDisplayName, getProductName } from '../../utils/products';
 import { formatDate } from '../../utils/format';
+import { CustomerAppSection } from './CustomerAppSection';
 
 function businessBillings(business: PlatformTenantBusiness): BusinessBillingSnapshot[] {
   if (business.billings?.length) return business.billings;
@@ -179,6 +180,8 @@ export function PlatformAdminTenantDetailScreen() {
         ) : (
           <Text style={styles.meta}>No businesses on this tenant.</Text>
         )}
+
+        <CustomerAppSection businesses={tenant.businesses ?? []} />
 
         {pendingAction ? (
           <View style={styles.actionCard}>

@@ -4,6 +4,10 @@ When a business registers via the **ops app** (or website), they get a workspace
 
 This runbook is only for building their **customer** white-label app (`mobile/`) — the app their end-customers install to book / shop.
 
+Hands-on go-live (preferred): Platform Admin → Tenants → **Customer app** — see [Customer-APK-Production-Preview.md](Customer-APK-Production-Preview.md). That path uses generic EAS profiles (`customer-production-preview` / `customer-production`) and does **not** require new `manifest.json` / `eas.json` rows.
+
+The steps below remain useful for older hand-built flavors and as a low-level reference.
+
 ---
 
 ## Ops app vs customer app

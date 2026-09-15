@@ -1,6 +1,6 @@
 /**
  * Write mobile/credentials/google-services/<androidPackage>.json for EAS prebuild.
- * Package comes from EXPO_PUBLIC_FLAVOR_KEY + flavors/manifest.json.
+ * Package: EXPO_PUBLIC_BUNDLE_ID_ANDROID, else EXPO_PUBLIC_FLAVOR_KEY + manifest.json.
  * Source (first match): existing file, GOOGLE_SERVICES_JSON (raw JSON or path),
  * or GOOGLE_SERVICES_JSON_BASE64.
  */
@@ -11,6 +11,8 @@ const path = require('path');
 const manifest = require('../flavors/manifest.json');
 
 function resolveAndroidPackage() {
+  const fromEnv = (process.env.EXPO_PUBLIC_BUNDLE_ID_ANDROID || '').trim();
+  if (fromEnv) return fromEnv;
   const flavorKey = (process.env.EXPO_PUBLIC_FLAVOR_KEY || 'dev').trim();
   const entry = manifest.flavors.find((item) => item.key === flavorKey);
   return entry?.bundleIdAndroid || 'com.ieorbit.mobile.dev';

@@ -179,7 +179,12 @@ export function RegisterWizard() {
     if (!email) return;
     setOwnerOtpSending(true);
     try {
-      await publicClient.auth.sendOtp({ client: 'ops', channel: 'email', identifier: email });
+      await publicClient.auth.sendOtp({
+        client: 'ops',
+        channel: 'email',
+        identifier: email,
+        purpose: 'signup',
+      });
       setOwnerOtpSent(true);
     } catch (err) {
       setProvisionError(getApiErrorMessage(err, 'Unable to send verification code.'));

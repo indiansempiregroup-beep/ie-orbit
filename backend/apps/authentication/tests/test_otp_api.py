@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from django.core import mail
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -60,6 +61,42 @@ def test_otp_email_login_ops(api_client: APIClient) -> None:
     payload = otp_login_ops(api_client, user)
     assert payload["access"]
     assert payload["user"]["email"] == user.email
+
+
+@pytest.mark.django_db
+def test_otp_send_login_rejects_unregistered_email(api_client: APIClient) -> None:
+    mail.outbox.clear()
+    response = api_client.post(
+        reverse("auth-otp-send"),
+        {
+            "client": "ops",
+            "channel": "email",
+            "identifier": "missing@example.com",
+            "purpose": "login",
+        },
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "No account found" in str(response.json())
+    assert len(mail.outbox) == 0
+
+
+@pytest.mark.django_db
+def test_otp_send_signup_allows_unregistered_email(api_client: APIClient) -> None:
+    mail.outbox.clear()
+    response = api_client.post(
+        reverse("auth-otp-send"),
+        {
+            "client": "ops",
+            "channel": "email",
+            "identifier": "new-owner@example.com",
+            "purpose": "signup",
+        },
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["sent"] is True
+    assert len(mail.outbox) == 1
 
 
 @pytest.mark.django_db

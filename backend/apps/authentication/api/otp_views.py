@@ -45,6 +45,7 @@ class OtpSendView(APIView):
             client=data["client"],
             channel=data["channel"],
             identifier=data["identifier"],
+            purpose=data.get("purpose", "login"),
             tenant_slug=data.get("tenant_slug"),
             business_code=data.get("business_code"),
             ip_address=client_ip(request),

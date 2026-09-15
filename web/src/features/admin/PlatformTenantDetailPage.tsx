@@ -31,6 +31,7 @@ import {
 } from '../settings/subscriptionUx';
 import { Dialog } from '../../components/Dialog';
 import { ProofImage } from '../../components/ProofImage';
+import { CustomerAppPanel } from './CustomerAppPanel';
 import {
   useInvalidatePlatform,
   usePlatformPlanPackagesQuery,
@@ -41,7 +42,7 @@ import {
   usePlatformTenantUsersQuery,
 } from './adminHooks';
 
-type TabKey = 'overview' | 'billing' | 'users' | 'payments';
+type TabKey = 'overview' | 'customer-app' | 'billing' | 'users' | 'payments';
 
 const FEATURE_FLAG_LABELS: Record<string, string> = {
   google_ads: 'Google Ads in mobile apps',
@@ -272,6 +273,7 @@ export function PlatformTenantDetailPage() {
         {(
           [
             ['overview', 'Overview'],
+            ['customer-app', 'Customer app'],
             ['billing', 'Billing'],
             ['users', 'Users'],
             ['payments', 'Payments'],
@@ -427,6 +429,8 @@ export function PlatformTenantDetailPage() {
           </AdminSection>
         </>
       ) : null}
+
+      {tab === 'customer-app' ? <CustomerAppPanel businesses={tenant?.businesses ?? []} /> : null}
 
       {tab === 'billing' ? (
         <AdminSection

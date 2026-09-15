@@ -235,12 +235,51 @@
         "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
         "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
       }
+    },
+    "customer-production-preview": {
+      "distribution": "internal",
+      "autoIncrement": true,
+      "android": {
+        "image": "sdk-54",
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "d3605998-b92a-497d-a72f-8028df3ca64d",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBAPlSIcXzgy26Lv0n64wAC2A_dzXMYiO0",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyBAPlSIcXzgy26Lv0n64wAC2A_dzXMYiO0",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928",
+        "EXPO_PUBLIC_ADMOB_USE_TEST_ADS": "true"
+      }
+    },
+    "customer-production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": {
+        "image": "sdk-54"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "d3605998-b92a-497d-a72f-8028df3ca64d",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBAPlSIcXzgy26Lv0n64wAC2A_dzXMYiO0",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyBAPlSIcXzgy26Lv0n64wAC2A_dzXMYiO0",
+        "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": "373269001775-493p9n4iglmilp2i0990q3n19sfjpr6k.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-1258778965386332~2750313610",
+        "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-1258778965386332~4831505872",
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/9124150278",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1258778965386332/8686105928"
+      }
     }
   },
   "submit": {
     "demo-main-production": {},
     "empire-salon-production": {},
     "rupali-sirsat-production": {},
-    "sanket-pet-shop-production": {}
+    "sanket-pet-shop-production": {},
+    "customer-production": {}
   }
 }

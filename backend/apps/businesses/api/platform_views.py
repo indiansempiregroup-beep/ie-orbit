@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,6 +26,16 @@ from apps.businesses.services.entitlements import (
     EntitlementService,
     ordered_product_subscriptions,
     subscription_billing_state,
+)
+from apps.businesses.services.customer_app_build import (
+    dispatch_customer_app_build,
+    ensure_customer_app_profile,
+    machine_build_payload,
+    provision_firebase_android_app,
+    record_build_callback,
+    refresh_build_status_from_expo,
+    serialize_customer_app,
+    update_customer_app_settings,
 )
 from apps.businesses.services.white_label import (
     ensure_white_label_profile,
@@ -225,6 +236,8 @@ class PlatformTenantAdminDetailView(APIView):
                     "selected_product": business.selected_product,
                     "has_white_label_profile": profile is not None,
                     "flavor_key": profile.flavor_key if profile else None,
+                    "bundle_id_android": profile.bundle_id_android if profile else None,
+                    "app_name": profile.app_name if profile else None,
                     "billing": billing,
                     "billings": billings,
                 }
@@ -261,5 +274,172 @@ class PlatformTenantAdminDetailView(APIView):
                 "display_name": tenant.display_name,
                 "status": tenant.status,
             },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class PlatformCustomerAppView(APIView):
+    """Customer white-label recipe + checklist for Platform Admin."""
+
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    def _get_business(self, business_id: str) -> Business:
+        return get_object_or_404(Business.active_objects.select_related("tenant"), id=business_id)
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request, business_id: str) -> Response:
+        business = self._get_business(business_id)
+        profile = ensure_customer_app_profile(business=business)
+        return success_response(
+            serialize_customer_app(profile),
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Platform Admin"])
+    def patch(self, request: Request, business_id: str) -> Response:
+        business = self._get_business(business_id)
+        profile = ensure_customer_app_profile(business=business)
+        data = request.data if isinstance(request.data, dict) else {}
+        update_customer_app_settings(
+            profile=profile,
+            app_name=data.get("app_name"),
+            bundle_id_android=data.get("bundle_id_android"),
+            bundle_id_ios=data.get("bundle_id_ios"),
+            google_oauth_android_client_id=data.get("google_oauth_android_client_id"),
+            play_signing_sha1=data.get("play_signing_sha1"),
+            mark_live=bool(data.get("mark_live")),
+        )
+        # Also allow classic white-label fields via existing serializer when present.
+        wl_fields = {
+            key: data[key]
+            for key in (
+                "flavor_key",
+                "app_slug",
+                "logo",
+                "primary_color",
+                "secondary_color",
+                "white_label_enabled",
+            )
+            if key in data
+        }
+        if wl_fields:
+            serializer = WhiteLabelProfileUpsertSerializer(profile, data=wl_fields, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+        profile.refresh_from_db()
+        return success_response(
+            serialize_customer_app(profile),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class PlatformCustomerAppFirebaseView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def post(self, request: Request, business_id: str) -> Response:
+        business = get_object_or_404(Business.active_objects.select_related("tenant"), id=business_id)
+        profile = ensure_customer_app_profile(business=business)
+        try:
+            result = provision_firebase_android_app(profile=profile)
+        except RuntimeError as exc:
+            return success_response(
+                {"ok": False, "error": str(exc), **serialize_customer_app(profile)},
+                request_id=getattr(request, "request_id", None),
+            )
+        return success_response(
+            {"ok": True, **result, **serialize_customer_app(profile)},
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class PlatformCustomerAppBuildView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def post(self, request: Request, business_id: str) -> Response:
+        business = get_object_or_404(Business.active_objects.select_related("tenant"), id=business_id)
+        profile = ensure_customer_app_profile(business=business)
+        data = request.data if isinstance(request.data, dict) else {}
+        track = str(data.get("track") or "preview").strip().lower()
+        bump = str(data.get("bump") or "patch").strip().lower()
+        try:
+            result = dispatch_customer_app_build(profile=profile, track=track, bump=bump)
+        except RuntimeError as exc:
+            return success_response(
+                {"ok": False, "error": str(exc), **serialize_customer_app(profile)},
+                request_id=getattr(request, "request_id", None),
+            )
+        return success_response(
+            {"ok": True, **result, **serialize_customer_app(profile)},
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request, business_id: str) -> Response:
+        business = get_object_or_404(Business.active_objects.select_related("tenant"), id=business_id)
+        profile = ensure_customer_app_profile(business=business)
+        track = str(request.query_params.get("track") or "preview").strip().lower()
+        refresh_build_status_from_expo(profile=profile, track=track)
+        profile.refresh_from_db()
+        return success_response(
+            serialize_customer_app(profile),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class PlatformCustomerAppMachineView(APIView):
+    """CI machine endpoint: fetch env for EAS or report build results."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def _authorize(self, request: Request) -> bool:
+        expected = (os.getenv("CUSTOMER_APK_MACHINE_TOKEN") or "").strip()
+        if not expected:
+            return False
+        header = request.headers.get("Authorization") or ""
+        token = header.removeprefix("Bearer ").strip()
+        return token == expected
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request, business_id: str) -> Response:
+        if not self._authorize(request):
+            return Response({"error": "Unauthorized"}, status=401)
+        business = get_object_or_404(Business.active_objects.select_related("tenant"), id=business_id)
+        profile = ensure_customer_app_profile(business=business)
+        track = str(request.query_params.get("track") or "preview").strip().lower()
+        try:
+            payload = machine_build_payload(profile=profile, track=track)
+        except RuntimeError as exc:
+            return Response({"error": str(exc)}, status=400)
+        return success_response(payload, request_id=getattr(request, "request_id", None))
+
+    @extend_schema(tags=["Platform Admin"])
+    def post(self, request: Request, business_id: str) -> Response:
+        if not self._authorize(request):
+            return Response({"error": "Unauthorized"}, status=401)
+        business = get_object_or_404(Business.active_objects.select_related("tenant"), id=business_id)
+        profile = ensure_customer_app_profile(business=business)
+        data = request.data if isinstance(request.data, dict) else {}
+        track = str(data.get("track") or "preview").strip().lower()
+        version_code = data.get("version_code")
+        try:
+            version_code_int = int(version_code) if version_code is not None else None
+        except (TypeError, ValueError):
+            version_code_int = None
+        record_build_callback(
+            profile=profile,
+            track=track,
+            status=str(data.get("status") or "in_progress"),
+            build_id=data.get("build_id"),
+            url=data.get("url"),
+            apk_url=data.get("apk_url"),
+            version_name=data.get("version_name"),
+            version_code=version_code_int,
+            error=data.get("error"),
+        )
+        return success_response(
+            serialize_customer_app(profile),
             request_id=getattr(request, "request_id", None),
         )

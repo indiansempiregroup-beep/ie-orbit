@@ -423,6 +423,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
                         client: 'ops',
                         channel: 'email',
                         identifier: values.email.trim(),
+                        purpose: 'signup',
                       });
                       setOwnerOtpSent(true);
                       setError(null);

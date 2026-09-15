@@ -154,6 +154,7 @@ class AuthOtpService:
         client: str,
         channel: str,
         identifier: str,
+        purpose: str = "login",
         tenant_slug: str | None = None,
         business_code: str | None = None,
         ip_address: str | None = None,
@@ -174,6 +175,34 @@ class AuthOtpService:
                 )
         else:
             raise exceptions.ValidationError({"channel": "Unsupported channel."})
+
+        if purpose == "login":
+            user = self._resolve_user(channel=channel, identifier=identifier)
+            if user is None:
+                if channel == "whatsapp":
+                    raise exceptions.ValidationError(
+                        {
+                            "identifier": (
+                                "No account found. Create an account or use a different number."
+                            )
+                        }
+                    )
+                raise exceptions.ValidationError(
+                    {"identifier": "No account found. Create an account or use a different email."}
+                )
+            if user.status in {UserStatus.SUSPENDED, UserStatus.ARCHIVED}:
+                raise exceptions.AuthenticationFailed(
+                    "This account is disabled. Contact support if you need access."
+                )
+            if client == "ops" and not self.auth_service._user_has_ops_workspace(user):
+                raise exceptions.ValidationError(
+                    {
+                        "identifier": (
+                            "This account is not set up for OPS. "
+                            "Accept your invitation or create a business."
+                        )
+                    }
+                )
 
         otp_id = _otp_identifier(channel=channel, value=identifier)
         delivery = self.otp_service.create_challenge(identifier=otp_id, purpose=OtpPurpose.LOGIN)

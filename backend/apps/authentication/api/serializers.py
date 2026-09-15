@@ -20,6 +20,9 @@ class OtpSendSerializer(serializers.Serializer):
     client = serializers.ChoiceField(choices=("customer", "ops"))
     channel = serializers.ChoiceField(choices=("email", "whatsapp", "sms"))
     identifier = serializers.CharField(max_length=255)
+    # login: only send if an account already exists (default for sign-in).
+    # signup: allow OTP before the user row exists (register / onboard).
+    purpose = serializers.ChoiceField(choices=("login", "signup"), default="login")
     tenant_slug = serializers.SlugField(required=False)
     business_code = serializers.SlugField(required=False)
 
