@@ -44,6 +44,7 @@ ARG GOOGLE_PLACES_API_KEY=
 ARG EXPO_PUBLIC_GOOGLE_PLACES_API_KEY=
 ARG EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=
 ARG EXPO_PUBLIC_API_BASE_URL=https://api.ie-orbit.com/api/v1
+ARG EXPO_PUBLIC_OPS_WEB_URL=https://ops.ie-orbit.com
 ARG EXPO_PUBLIC_REFERRAL_LINK_BASE_URL=https://ie-orbit.com
 ARG EXPO_PUBLIC_APP_DOWNLOAD_URL=https://ie-orbit.com/download
 
@@ -60,6 +61,7 @@ ENV GOOGLE_PLACES_API_KEY=${GOOGLE_PLACES_API_KEY}
 ENV EXPO_PUBLIC_GOOGLE_PLACES_API_KEY=${EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}
 ENV EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}
 ENV EXPO_PUBLIC_API_BASE_URL=${EXPO_PUBLIC_API_BASE_URL}
+ENV EXPO_PUBLIC_OPS_WEB_URL=${EXPO_PUBLIC_OPS_WEB_URL}
 ENV EXPO_PUBLIC_REFERRAL_LINK_BASE_URL=${EXPO_PUBLIC_REFERRAL_LINK_BASE_URL}
 ENV EXPO_PUBLIC_APP_DOWNLOAD_URL=${EXPO_PUBLIC_APP_DOWNLOAD_URL}
 
@@ -79,6 +81,8 @@ COPY ${NGINX_TEMPLATES_DIR} /etc/nginx/templates
 COPY docker/nginx/docker-entrypoint.d/40-generate-self-signed.sh /docker-entrypoint.d/40-generate-self-signed.sh
 COPY --from=web-build /app/web/dist /usr/share/nginx/html
 COPY --from=web-build /app/apps/ops-mobile/dist /usr/share/nginx/ops
+COPY docker/nginx/well-known/customer-assetlinks.json /usr/share/nginx/html/.well-known/assetlinks.json
+COPY docker/nginx/well-known/ops-assetlinks.json /usr/share/nginx/ops/.well-known/assetlinks.json
 
 RUN chmod +x /docker-entrypoint.d/40-generate-self-signed.sh \
     && mkdir -p /etc/nginx/certs /var/www/static \

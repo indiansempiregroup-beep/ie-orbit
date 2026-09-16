@@ -133,6 +133,33 @@ Prefer the admin button so versions and Expo URLs stay on the tenant profile.
 
 ---
 
+## Android notification links
+
+Customer notification emails use `https://ie-orbit.com/open/...`. Android opens
+those links directly in an installed white-label app only when both sides match:
+
+- the APK was built with `EXPO_PUBLIC_REFERRAL_LINK_BASE_URL`;
+- `docker/nginx/well-known/customer-assetlinks.json` contains that APK package
+  and its SHA-256 signing certificate fingerprint.
+
+The machine build payload supplies the link origin automatically. When a new
+customer package is introduced, extract its EAS/Play signing SHA-256 fingerprint,
+add another entry to `customer-assetlinks.json`, and redeploy nginx. If Google
+Play App Signing is enabled, include the Play signing fingerprint as well as the
+EAS/internal APK fingerprint.
+
+Verify production after deployment:
+
+```bash
+curl -fsS https://ie-orbit.com/.well-known/assetlinks.json | python3 -m json.tool
+```
+
+iOS Universal Links additionally require an Apple Developer Team ID and a valid
+`/.well-known/apple-app-site-association` file. Do not publish a placeholder Team
+ID; keep the web trampoline fallback until Apple signing is configured.
+
+---
+
 ## Related
 
 - [New-Tenant-Onboarding-Runbook.md](New-Tenant-Onboarding-Runbook.md) — tenant creation; then use this lifecycle for the customer app.

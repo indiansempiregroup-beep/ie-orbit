@@ -101,6 +101,12 @@ server {
         proxy_set_header X-Forwarded-Proto $forwarded_proto;
     }
 
+    location = /.well-known/assetlinks.json {
+        try_files $uri =404;
+        default_type application/json;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
@@ -163,6 +169,12 @@ server {
 
     root /usr/share/nginx/ops;
     index index.html;
+
+    location = /.well-known/assetlinks.json {
+        try_files $uri =404;
+        default_type application/json;
+        add_header Cache-Control "public, max-age=3600";
+    }
 
     location /_expo/ {
         expires 7d;
