@@ -12,7 +12,7 @@ export function productLabel(code?: string | null) {
   return ADMIN_PRODUCT_LABELS[code] ?? code.replace(/-/g, ' ');
 }
 
-/** Public plan slug. Billing still uses appointie-*/shopie-* internally. */
+/** Public plan slug. Billing still uses appointie-* and shopie-* internally. */
 const PLAN_CODE_DISPLAY: Record<string, string> = {
   'appointie-starter': 'orbit-appoint-starter',
   'appointie-pro': 'orbit-appoint-pro',
