@@ -37,6 +37,7 @@ import { SupportTicketDetailScreen } from '../features/profile/SupportTicketDeta
 import { ReferralScreen } from '../features/profile/ReferralScreen';
 import { usePushRegistration } from '../hooks/usePushRegistration';
 import { ReferralLinkHandler } from '../components/ReferralLinkHandler';
+import { OpenRecordHandler } from '../components/OpenRecordHandler';
 import {
   NotificationNavigationHandler,
   navigationRef,
@@ -83,6 +84,7 @@ export function RootNavigator() {
   return (
     <BootstrapGate>
       <ReferralLinkHandler />
+      <OpenRecordHandler />
       <NotificationNavigationHandler />
       <NavigationContainer ref={navigationRef}>
         {user && !needsVerification ? (

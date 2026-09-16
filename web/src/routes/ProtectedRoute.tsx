@@ -1,13 +1,15 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
+import { safeNextPath } from '../lib/authRedirect';
 import { hasTenantOpsRole, needsEmailVerification, VERIFY_EMAIL_PATH } from '../utils/roles';
 import { OpsMobileRedirect } from '../components/OpsMobileRedirect';
 
 export function ProtectedRoute() {
   const auth = useAuthContext();
   const workspace = useWorkspace();
+  const location = useLocation();
 
   if (auth.loading) {
     return (
@@ -20,7 +22,8 @@ export function ProtectedRoute() {
   }
 
   if (!auth.token) {
-    return <Navigate to="/auth" replace />;
+    const next = safeNextPath(`${location.pathname}${location.search}`);
+    return <Navigate to={next ? `/auth?next=${encodeURIComponent(next)}` : '/auth'} replace />;
   }
 
   if (needsEmailVerification(auth.user)) {

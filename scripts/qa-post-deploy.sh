@@ -34,7 +34,7 @@ if [[ ! -f e2e/.env ]]; then
   exit 1
 fi
 
-echo "==> Playwright (web + ops web) against production URLs"
+echo "==> Playwright (web + ops web + admin) against QA_*_URL (see e2e/.env)"
 corepack pnpm install
 corepack pnpm exec playwright install chromium
 corepack pnpm test:e2e

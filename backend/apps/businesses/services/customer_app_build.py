@@ -368,6 +368,7 @@ def customer_app_action_error(exc: BaseException) -> tuple[int, str, str]:
         token in lowered
         for token in (
             "not configured",
+            "not readable",
             "not valid json",
             "could not sign in",
             "client libraries are missing",
@@ -396,7 +397,14 @@ def _firebase_access_token() -> str:
         ]
         for path in candidates:
             if path and os.path.isfile(path):
-                file_raw = open(path, encoding="utf-8").read().strip()
+                try:
+                    file_raw = open(path, encoding="utf-8").read().strip()
+                except OSError as exc:
+                    raise RuntimeError(
+                        "Firebase credentials file is not readable. On the VPS run "
+                        "chmod 644 secrets/firebase-management.json so the backend "
+                        f"app user can read it ({exc})."
+                    ) from exc
                 if file_raw:
                     raw = file_raw
                     break

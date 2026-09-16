@@ -154,7 +154,14 @@ class PetsService:
     ) -> dict[str, Any]:
         self.require_pets_pack(tenant=pet.tenant, business=pet.business)
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
+        from apps.notifications.services.record_links import record_cta
 
+        cta = record_cta(
+            audience="customer",
+            kind="pet",
+            record_id=pet.id,
+            business=pet.business,
+        )
         return CustomerDirectNotifier().notify_customer(
             tenant=pet.tenant,
             business=pet.business,
@@ -166,6 +173,8 @@ class PetsService:
             metadata={"pet_id": str(pet.id), "pet_name": pet.name},
             headline=headline,
             extra_html=extra_html,
+            cta_label=cta["cta_label"],
+            cta_url=cta["cta_url"],
         )
 
     def notify_managers(
@@ -179,8 +188,10 @@ class PetsService:
         extra_html: str = "",
     ) -> dict[str, Any]:
         self.require_pets_pack(tenant=pet.tenant, business=pet.business)
+        from apps.notifications.services.record_links import record_cta
         from apps.notifications.services.staff_direct import StaffDirectNotifier
 
+        cta = record_cta(audience="admin", kind="pet", record_id=pet.id)
         return StaffDirectNotifier().notify_managers(
             tenant=pet.tenant,
             business=pet.business,
@@ -191,11 +202,13 @@ class PetsService:
                 "pet_id": str(pet.id),
                 "pet_name": pet.name,
                 "customer_id": str(pet.customer_id),
-                "deep_link": f"shop/pets/{pet.id}",
+                "deep_link": cta["cta_url"] or f"shop/pets/{pet.id}",
             },
             channels=["in_app", "email"],
             headline=headline,
             extra_html=extra_html,
+            cta_label=cta["cta_label"],
+            cta_url=cta["cta_url"],
         )
 
     def send_birthday_reminders(self, *, lead_days: int = BIRTHDAY_REMINDER_LEAD_DAYS) -> dict[str, int]:

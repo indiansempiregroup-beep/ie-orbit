@@ -71,6 +71,11 @@ export function Input({
             style,
           ]}
           {...rest}
+          accessibilityLabel={rest.accessibilityLabel ?? label}
+          testID={
+            rest.testID ??
+            (label ? `field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}` : undefined)
+          }
         />
         {isPassword ? (
           <Pressable
@@ -83,7 +88,11 @@ export function Input({
           </Pressable>
         ) : null}
       </View>
-      {error ? <Text style={fieldStyles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={fieldStyles.error} accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
       {hint && !error ? <Text style={fieldStyles.hint}>{hint}</Text> : null}
     </View>
   );

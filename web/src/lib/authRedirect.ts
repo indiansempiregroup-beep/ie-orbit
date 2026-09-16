@@ -14,6 +14,24 @@ import {
 const ACCESS_KEY = 'ie:auth:access';
 const REFRESH_KEY = 'ie:auth:refresh';
 
+export function safeNextPath(raw: string | null | undefined): string | null {
+  const value = String(raw || '').trim();
+  if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return null;
+  if (value.toLowerCase().startsWith('/auth')) return null;
+  try {
+    const parsed = new URL(value, 'https://ie-orbit.local');
+    if (parsed.username || parsed.password) return null;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function nextFromWindow(): string | null {
+  if (typeof window === 'undefined') return null;
+  return safeNextPath(new URLSearchParams(window.location.search).get('next'));
+}
+
 export function redirectToAdminApp(pathAndQuery = '/admin') {
   if (typeof window === 'undefined') return;
   const path = pathAndQuery.startsWith('/') ? pathAndQuery : `/${pathAndQuery}`;
@@ -54,6 +72,8 @@ export function continueAfterAuth(
 ) {
   if (typeof window === 'undefined') return;
 
+  const next = nextFromWindow();
+
   if (needsEmailVerification(user)) {
     navigate(VERIFY_EMAIL_PATH);
     return;
@@ -63,7 +83,7 @@ export function continueAfterAuth(
     isPlatformAdmin(user) &&
     (isAdminAppHost() || originsAreSameApp(window.location.origin, getAdminAppOrigin()))
   ) {
-    navigate(getPostLoginPath(user));
+    navigate(next && next.startsWith('/admin') ? next : getPostLoginPath(user));
     return;
   }
 
@@ -73,9 +93,9 @@ export function continueAfterAuth(
   }
 
   if (isPlatformAdminOnly(user)) {
-    redirectToAdminApp(getPostLoginPath(user));
+    redirectToAdminApp(next && next.startsWith('/admin') ? next : getPostLoginPath(user));
     return;
   }
 
-  navigate(getPostLoginPath(user));
+  navigate(next || getPostLoginPath(user));
 }

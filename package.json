@@ -9,6 +9,7 @@
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "test:e2e:web": "playwright test --config e2e/playwright.config.ts --project web",
     "test:e2e:ops": "playwright test --config e2e/playwright.config.ts --project ops",
+    "test:e2e:admin": "playwright test --config e2e/playwright.config.ts --project admin",
     "test:e2e:report": "playwright show-report",
     "test:maestro:ops": "maestro test apps/ops-mobile/.maestro/smoke/",
     "test:maestro:customer": "maestro test mobile/.maestro/smoke/",

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
@@ -28,7 +29,8 @@ export function SupportTicketsPage() {
     queryKey: ['support', 'tickets'],
     queryFn: async () => (await client.support.tickets()).data.tickets,
   });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get('ticket');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -156,7 +158,9 @@ export function SupportTicketsPage() {
                     key={row.id}
                     type="button"
                     onClick={() => {
-                      setSelectedId(row.id);
+                      const next = new URLSearchParams(searchParams);
+                      next.set('ticket', row.id);
+                      setSearchParams(next, { replace: true });
                       setMessage(null);
                     }}
                     style={{

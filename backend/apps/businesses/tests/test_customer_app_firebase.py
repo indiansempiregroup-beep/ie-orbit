@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 from apps.authentication.models import Role, User, UserRole, UserStatus
 from apps.businesses.models import Business
 from apps.businesses.services.customer_app_build import (
+    _firebase_access_token,
     _firebase_http_error_message,
     customer_app_action_error,
 )
@@ -78,6 +79,23 @@ def test_customer_app_action_error_maps_missing_credentials() -> None:
     assert status == 503
     assert code == "firebase_not_configured"
     assert "FIREBASE_SERVICE_ACCOUNT_JSON" in message
+
+
+def test_firebase_access_token_permission_denied(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    path = tmp_path / "firebase-management.json"
+    path.write_text("{}", encoding="utf-8")
+    monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(path))
+    original_open = open
+
+    def guarded(file, *args, **kwargs):
+        if str(file) == str(path):
+            raise PermissionError(13, "Permission denied", str(path))
+        return original_open(file, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", guarded)
+    with pytest.raises(RuntimeError, match="not readable"):
+        _firebase_access_token()
 
 
 @pytest.mark.django_db

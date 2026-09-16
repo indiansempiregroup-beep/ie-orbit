@@ -208,6 +208,7 @@ export function CustomerDetailScreen() {
       ) : null}
 
       <Button
+        testID="customer-edit"
         label="Edit customer"
         fullWidth
         onPress={() => navigation.navigate('CustomerForm', { customerId: customer.id })}

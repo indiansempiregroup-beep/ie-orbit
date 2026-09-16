@@ -31,6 +31,18 @@ EMAIL_IDENTIFIER_PREFIX = "email:"
 PHONE_IDENTIFIER_PREFIX = "phone:"
 
 
+def should_include_otp_debug_code(identifier: str) -> bool:
+    """Return the OTP in API responses for DEBUG or an explicit UAT email allowlist."""
+    if settings.DEBUG:
+        return True
+    allowlist = {
+        str(item).strip().lower()
+        for item in (settings.IAM_SETTINGS.get("OTP_DEBUG_EMAILS") or ())
+        if str(item).strip()
+    }
+    return identifier.strip().lower() in allowlist
+
+
 def _otp_identifier(*, channel: str, value: str) -> str:
     normalized = value.strip().lower()
     if channel == "email":
@@ -256,7 +268,7 @@ class AuthOtpService:
             except WhatsAppGraphError as exc:
                 raise exceptions.ValidationError({"identifier": str(exc)}) from exc
 
-        if settings.DEBUG:
+        if should_include_otp_debug_code(identifier):
             debug["debug_code"] = code
 
         return {"sent": True, "channel": channel, **debug}

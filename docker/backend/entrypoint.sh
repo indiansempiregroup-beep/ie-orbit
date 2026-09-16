@@ -29,6 +29,10 @@ PY
 role="${1:-web}"
 
 if [ "$(id -u)" = "0" ]; then
+  # Bind-mounted secret is often 600/root; gunicorn runs as appuser.
+  if [ -f /run/secrets/firebase-management.json ]; then
+    chmod 644 /run/secrets/firebase-management.json || true
+  fi
   exec gosu appuser "$0" "$role"
 fi
 

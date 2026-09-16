@@ -16,8 +16,8 @@ import { AuthProvider } from './src/contexts/AuthContext';
 import { NotificationsProvider } from './src/contexts/NotificationsContext';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { WorkspaceProvider } from './src/contexts/WorkspaceContext';
-import { SubscriptionPushHandler } from './src/components/SubscriptionPushHandler';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { NotificationOpenHandler } from './src/components/NotificationOpenHandler';
 import { captureImpersonationHandoff, redirectOpsWebAdminPathToVite } from './src/utils/impersonationHandoff';
 import { i18n } from './src/i18n';
 
@@ -69,7 +69,7 @@ export default function App() {
                       <View style={{ flex: 1 }}>
                         <ImpersonationBanner />
                         <View style={{ flex: 1 }}>
-                          <SubscriptionPushHandler />
+                          <NotificationOpenHandler />
                           <RootNavigator />
                         </View>
                       </View>

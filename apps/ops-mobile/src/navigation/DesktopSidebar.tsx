@@ -434,6 +434,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               return (
                 <Pressable
                   key={item.key}
+                  testID={`nav-${item.key}`}
                   accessibilityRole="button"
                   accessibilityState={focused ? { selected: true } : {}}
                   accessibilityLabel={item.label}

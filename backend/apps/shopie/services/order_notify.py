@@ -264,7 +264,14 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
     subject, body, kicker = _copy_for_status(order, status=status_value)
     try:
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
+        from apps.notifications.services.record_links import record_cta
 
+        cta = record_cta(
+            audience="customer",
+            kind="order",
+            record_id=order.id,
+            business=order.business,
+        )
         CustomerDirectNotifier().notify_customer(
             tenant=order.tenant,
             business=order.business,
@@ -281,6 +288,8 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
             },
             extra_html=_order_extra_html(order, kicker=kicker, status=status_value),
             headline=kicker,
+            cta_label=cta["cta_label"],
+            cta_url=cta["cta_url"],
         )
     except Exception:
         logger.exception("Online order notify failed", extra={"order_id": str(order.id), "status": status_value})
@@ -290,8 +299,10 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
 
     mode = "Delivery" if str(order.fulfillment_mode).lower() == "delivery" else "Pickup"
     try:
+        from apps.notifications.services.record_links import record_cta
         from apps.notifications.services.staff_direct import StaffDirectNotifier
 
+        cta = record_cta(audience="admin", kind="order", record_id=order.id)
         StaffDirectNotifier().notify_managers(
             tenant=order.tenant,
             business=order.business,
@@ -310,6 +321,8 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
             channels=["in_app", "email"],
             headline="New online order",
             extra_html=_order_extra_html(order, kicker="New order", status=status_value),
+            cta_label=cta["cta_label"],
+            cta_url=cta["cta_url"],
         )
     except Exception:
         logger.exception(
@@ -328,7 +341,19 @@ def notify_shipment_milestone(*, order: ShopOrder, shipment: ShopShipment, statu
     subject, body, kicker = _copy_for_shipment(order, shipment=shipment, status=status_value)
     try:
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
+        from apps.notifications.services.record_links import record_cta
 
+        tracking_url = str(shipment.tracking_url or "").strip()
+        if tracking_url:
+            cta_label, cta_url = "Track shipment", tracking_url
+        else:
+            cta = record_cta(
+                audience="customer",
+                kind="order",
+                record_id=order.id,
+                business=order.business,
+            )
+            cta_label, cta_url = cta["cta_label"], cta["cta_url"]
         CustomerDirectNotifier().notify_customer(
             tenant=order.tenant,
             business=order.business,
@@ -349,8 +374,8 @@ def notify_shipment_milestone(*, order: ShopOrder, shipment: ShopShipment, statu
             extra_html=_order_extra_html(
                 order, kicker=kicker, shipment=shipment, status=status_value
             ),
-            cta_label="Track shipment" if shipment.tracking_url else "",
-            cta_url=shipment.tracking_url or "",
+            cta_label=cta_label,
+            cta_url=cta_url,
             headline=kicker,
         )
     except Exception:
@@ -411,7 +436,15 @@ def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
     )
     try:
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
+        from apps.notifications.services.record_links import record_cta
 
+        cta = record_cta(
+            audience="customer",
+            kind="return",
+            record_id=shop_return.id,
+            extra={"order_id": str(order.id)},
+            business=shop_return.business or order.business,
+        )
         CustomerDirectNotifier().notify_customer(
             tenant=shop_return.tenant,
             business=shop_return.business,
@@ -427,6 +460,8 @@ def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
             },
             extra_html=extra,
             headline=kicker,
+            cta_label=cta["cta_label"],
+            cta_url=cta["cta_url"],
         )
     except Exception:
         logger.exception("Online return notify failed", extra={"return_id": str(shop_return.id)})

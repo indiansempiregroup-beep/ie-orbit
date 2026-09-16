@@ -27,7 +27,7 @@ function openTrackingUrl(data: Record<string, unknown>) {
   return true;
 }
 
-function navigateFromNotificationData(data: Record<string, unknown>, actionId?: string) {
+export function navigateFromNotificationData(data: Record<string, unknown>, actionId?: string) {
   if (!navigationRef.isReady()) return false;
 
   if (actionId === 'track') {

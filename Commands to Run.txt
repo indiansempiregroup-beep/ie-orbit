@@ -345,8 +345,13 @@ exit
 #     -d uat.ie-orbit.com -d app-uat.ie-orbit.com -d ops-uat.ie-orbit.com -d api-uat.ie-orbit.com
 #   /opt/ie-orbit/scripts/install-letsencrypt-certs.sh
 
-# Post-deploy QA (after VPS is up — see docs/qa/automation.md):
-# cd /path/to/ie-orbit && cp e2e/.env.example e2e/.env && ./scripts/qa-post-deploy.sh
+# Post-deploy QA (after VPS is up — see docs/qa/automation.md). Prefer UAT URLs in e2e/.env:
+# cd /path/to/ie-orbit && cp e2e/.env.example e2e/.env && ./scripts/qa-post-deploy.sh --playwright-only
+# GitHub → E2E Post-Deploy with UAT inputs:
+#   https://uat.ie-orbit.com
+#   https://ops-uat.ie-orbit.com
+#   https://app-uat.ie-orbit.com
+#   https://api-uat.ie-orbit.com/api/v1
 
 # Create new apk (Build new apk)
 # For OPS

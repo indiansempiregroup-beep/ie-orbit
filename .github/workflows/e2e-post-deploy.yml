@@ -11,6 +11,10 @@ on:
         description: Ops web base URL
         required: false
         default: https://ops.ie-orbit.com
+      admin_url:
+        description: Platform Admin base URL
+        required: false
+        default: https://app.ie-orbit.com
       api_url:
         description: API base URL
         required: false
@@ -37,15 +41,18 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium --with-deps
 
-      - name: Run Playwright smoke tests
+      - name: Run Playwright tests
         env:
           QA_BASE_URL: ${{ inputs.base_url }}
           QA_OPS_URL: ${{ inputs.ops_url }}
+          QA_ADMIN_URL: ${{ inputs.admin_url }}
           QA_API_URL: ${{ inputs.api_url }}
           QA_OWNER_EMAIL: ${{ secrets.QA_OWNER_EMAIL }}
           QA_OWNER_PASSWORD: ${{ secrets.QA_OWNER_PASSWORD }}
           QA_CUSTOMER_EMAIL: ${{ secrets.QA_CUSTOMER_EMAIL }}
           QA_CUSTOMER_PASSWORD: ${{ secrets.QA_CUSTOMER_PASSWORD }}
+          QA_PLATFORM_ADMIN_EMAIL: ${{ secrets.QA_PLATFORM_ADMIN_EMAIL }}
+          QA_PLATFORM_ADMIN_PASSWORD: ${{ secrets.QA_PLATFORM_ADMIN_PASSWORD }}
         run: pnpm test:e2e
 
       - name: Upload Playwright report

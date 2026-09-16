@@ -453,6 +453,14 @@ class NotificationService:
         for prefix in ("⏰ ", "📋 ", "✨ "):
             if headline.startswith(prefix):
                 headline = headline[len(prefix):].strip()
+        from apps.notifications.services.record_links import record_cta
+
+        cta = record_cta(
+            audience=audience,
+            kind="booking",
+            record_id=booking.id,
+            business=business,
+        )
         return {
             "subject": subject,
             "body": body,
@@ -467,6 +475,8 @@ class NotificationService:
             "business_logo": absolute_public_url(business.logo or ""),
             "accent_color": "#1A56DB",
             "extra_html": extra_html,
+            "cta_label": cta["cta_label"],
+            "cta_url": cta["cta_url"],
             "customer_name": replacements["{{customer_name}}"],
             "service_name": replacements["{{service_name}}"],
             "assigned_service_name": replacements["{{assigned_service_name}}"],

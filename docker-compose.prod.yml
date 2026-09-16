@@ -12,6 +12,7 @@ x-backend-environment: &backend-environment
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://ie-orbit.com,https://www.ie-orbit.com,https://app.ie-orbit.com,https://ops.ie-orbit.com}
   CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api.ie-orbit.com,https://ie-orbit.com,https://www.ie-orbit.com,https://app.ie-orbit.com,https://ops.ie-orbit.com}
   FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://ie-orbit.com}
+  OPS_WEB_BASE_URL: ${OPS_WEB_BASE_URL:-https://ops.ie-orbit.com}
   PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-https://api.ie-orbit.com}
   EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
   EMAIL_HOST: ${EMAIL_HOST:-}

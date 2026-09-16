@@ -1,12 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { fillOtpSignIn, requestOtpDebugCode } from '../helpers/auth';
 import { qaEnv } from '../helpers/env';
-
-async function signInWithOtp(page: import('@playwright/test').Page, email: string, code: string) {
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByRole('button', { name: /sign in with otp/i }).click();
-  await page.getByLabel(/sign-in code/i).fill(code);
-  await page.getByRole('button', { name: /verify and sign in/i }).click();
-}
 
 test.describe('Sign in', () => {
   test.beforeEach(async ({ page }) => {
@@ -14,7 +8,11 @@ test.describe('Sign in', () => {
   });
 
   test('invalid OTP shows error', async ({ page }) => {
-    await page.getByLabel(/email/i).fill('invalid-user@example.com');
+    const { ownerEmail } = qaEnv();
+    if (!ownerEmail) {
+      test.skip(true, 'Set QA_OWNER_EMAIL in e2e/.env');
+    }
+    await page.getByLabel(/email/i).fill(ownerEmail);
     await page.getByRole('button', { name: /sign in with otp/i }).click();
     await page.getByLabel(/sign-in code/i).fill('000000');
     await page.getByRole('button', { name: /verify and sign in/i }).click();
@@ -27,17 +25,12 @@ test.describe('Sign in', () => {
       test.skip(true, 'Set QA_OWNER_EMAIL in e2e/.env');
     }
 
-    const sendRes = await request.post('/api/v1/auth/otp/send', {
-      data: { client: 'ops', channel: 'email', identifier: ownerEmail },
-    });
-    expect(sendRes.ok()).toBeTruthy();
-    const sendBody = await sendRes.json();
-    const code = sendBody.data?.debug_code as string | undefined;
+    const code = await requestOtpDebugCode(request, ownerEmail, 'ops');
     if (!code) {
-      test.skip(true, 'OTP debug_code not returned (enable DEBUG or use mail capture in CI)');
+      test.skip(true, 'OTP debug_code not returned (set AUTH_OTP_DEBUG_EMAILS on UAT)');
     }
 
-    await signInWithOtp(page, ownerEmail, code);
+    await fillOtpSignIn(page, ownerEmail, code!);
     await expect(page).not.toHaveURL(/\/auth$/);
     await expect(page.getByRole('alert')).toHaveCount(0);
   });

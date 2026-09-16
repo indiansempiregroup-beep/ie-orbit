@@ -47,6 +47,14 @@ function openRelatedItem(
   navigation: NativeStackNavigationProp<RootStackParamList>,
   notification: Notification,
 ) {
+  if (notification.order_id) {
+    navigation.navigate('ShopOrderDetail', { orderId: notification.order_id });
+    return;
+  }
+  if (notification.return_id) {
+    navigation.navigate('ShopOrderDetail', { orderId: notification.return_id });
+    return;
+  }
   if (notification.pet_id) {
     navigation.navigate('ShopPetDetail', { petId: notification.pet_id, openNotify: true });
     return;

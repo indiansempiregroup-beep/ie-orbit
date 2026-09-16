@@ -116,6 +116,7 @@ export function CustomerFormScreen() {
       footer={
         <Button
           label={isEdit ? 'Save changes' : 'Create customer'}
+          testID="customer-form-submit"
           loading={submitting}
           fullWidth
           size="lg"

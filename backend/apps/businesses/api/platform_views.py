@@ -387,14 +387,11 @@ class PlatformCustomerAppFirebaseView(APIView):
         except RuntimeError as exc:
             status, code, message = customer_app_action_error(exc)
             return error_response(code=code, message=message, status_code=status)
-        except Exception:
+        except Exception as exc:
             logger.exception("Customer app Firebase provision failed")
             return error_response(
                 code="firebase_failed",
-                message=(
-                    "Could not create the Firebase app. Check server logs, then confirm "
-                    "Firebase credentials on the VPS."
-                ),
+                message=f"Could not create the Firebase app: {exc}",
                 status_code=502,
             )
         return success_response(

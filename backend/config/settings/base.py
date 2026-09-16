@@ -230,6 +230,13 @@ IAM_SETTINGS = {
     # Platform business used to send WhatsApp OTP for ops-mobile pre-login sign-in.
     "OPS_OTP_WHATSAPP_TENANT_SLUG": os.getenv("OPS_OTP_WHATSAPP_TENANT_SLUG", "").strip(),
     "OPS_OTP_WHATSAPP_BUSINESS_CODE": os.getenv("OPS_OTP_WHATSAPP_BUSINESS_CODE", "").strip(),
+    # UAT-only: comma-separated emails that receive debug_code in OTP send even when DEBUG is false.
+    # Never set this in production.
+    "OTP_DEBUG_EMAILS": tuple(
+        item.strip().lower()
+        for item in os.getenv("AUTH_OTP_DEBUG_EMAILS", "").split(",")
+        if item.strip()
+    ),
 }
 
 REDIS_URL = ENV.redis_url
@@ -323,6 +330,10 @@ PLATFORM_UPI_VPA = os.getenv("PLATFORM_UPI_VPA", "")
 PLATFORM_UPI_NAME = os.getenv("PLATFORM_UPI_NAME", "IE Orbit")
 PLATFORM_PAYMENT_QR_URL = os.getenv("PLATFORM_PAYMENT_QR_URL", "")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+OPS_WEB_BASE_URL = os.getenv(
+    "OPS_WEB_BASE_URL",
+    os.getenv("VITE_OPS_MOBILE_WEB_URL", "http://localhost:8082"),
+)
 PUBLIC_API_ORIGIN = os.getenv("PUBLIC_API_ORIGIN", "http://localhost:8000")
 WHATSAPP_GRAPH_API_VERSION = os.getenv("WHATSAPP_GRAPH_API_VERSION", "v21.0").strip() or "v21.0"
 WHATSAPP_WEBHOOK_VERIFY_TOKEN = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "").strip()

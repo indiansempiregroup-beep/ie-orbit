@@ -151,7 +151,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           {
             action: 'VIEW',
             autoVerify: true,
-            data: [{ scheme: 'https', host: referralHost, pathPrefix: '/invite' }],
+            data: [
+              { scheme: 'https', host: referralHost, pathPrefix: '/invite' },
+              { scheme: 'https', host: referralHost, pathPrefix: '/open' },
+            ],
             category: ['BROWSABLE', 'DEFAULT'],
           },
         ]

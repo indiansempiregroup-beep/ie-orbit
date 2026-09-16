@@ -57,7 +57,7 @@ Reference this backlog in Agent chat:
 
 ## Automated QA (post-deploy)
 
-See [`automation.md`](automation.md) for Playwright + Maestro setup and `./scripts/qa-post-deploy.sh` after VPS deploy.
+See [`automation.md`](automation.md) for Playwright + Maestro setup, UAT dispatch, and `./scripts/qa-post-deploy.sh` after VPS deploy. Credential template: [`ie-orbit-qa-credentials.example.md`](ie-orbit-qa-credentials.example.md).
 
 Opening any file under `docs/qa/` also loads the project’s QA Cursor rule for context.
 

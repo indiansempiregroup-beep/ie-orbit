@@ -10,6 +10,7 @@ import {
   AdminPageHeader,
   AdminSection,
   AdminStatus,
+  displayPlanCode,
   productLabel,
 } from './AdminChrome';
 import { adminFeatureGroups, BI_FEATURE_OPTIONS } from '../../config/planFeatures';
@@ -411,7 +412,7 @@ export function PlatformPackagesPage() {
                     <span className="admin-package-card__meta"> /mo</span>
                   </div>
                   <div className="admin-package-card__meta">
-                    {pkg.code} · {pkg.trial_days} day trial · staff {pkg.max_staff} · offices {pkg.max_branches}
+                    {displayPlanCode(pkg.code)} · {pkg.trial_days} day trial · staff {pkg.max_staff} · offices {pkg.max_branches}
                   </div>
                 </button>
               ))}
@@ -492,10 +493,13 @@ export function PlatformPackagesPage() {
                       ))}
                     </select>
                   </AdminField>
-                  <AdminField label="Code" hint={form.id ? 'Code cannot change after create.' : 'Unique slug, e.g. shopie-pro'}>
+                  <AdminField
+                    label="Code"
+                    hint={form.id ? 'Code cannot change after create.' : 'Unique slug, e.g. orbit-mart-pro'}
+                  >
                     <input
-                      value={form.code}
-                      placeholder="shopie-pro"
+                      value={form.id ? displayPlanCode(form.code) : form.code}
+                      placeholder={form.product_code === 'shopie' ? 'orbit-mart-pro' : 'orbit-appoint-pro'}
                       onChange={(e) => setForm({ ...form, code: e.target.value })}
                       disabled={Boolean(form.id)}
                     />

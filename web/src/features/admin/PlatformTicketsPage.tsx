@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatTimestamp } from '../../lib/datetime';
@@ -27,7 +27,8 @@ export function PlatformTicketsPage() {
   const auth = useAuth();
   const ticketsQuery = usePlatformTicketsQuery();
   const invalidate = useInvalidatePlatform();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get('ticket');
   const [note, setNote] = useState('');
   const [internal, setInternal] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -145,7 +146,9 @@ export function PlatformTicketsPage() {
                   meta={`${row.tenant_name || 'No tenant'} · ${row.requester_email || 'unknown'} · ${formatTimestamp(row.created_at)}${row.preview ? ` · ${row.preview}` : ''}`}
                   trailing={<AdminStatus status={row.status} />}
                   onClick={() => {
-                    setSelectedId(row.id);
+                    const next = new URLSearchParams(searchParams);
+                    next.set('ticket', row.id);
+                    setSearchParams(next, { replace: true });
                     setMessage(null);
                   }}
                   style={selectedId === row.id ? { borderColor: 'var(--primary)' } : undefined}

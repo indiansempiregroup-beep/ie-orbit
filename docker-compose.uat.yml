@@ -4,6 +4,7 @@ x-backend-environment: &backend-environment
   DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
   DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+  AUTH_OTP_DEBUG_EMAILS: ${AUTH_OTP_DEBUG_EMAILS:-}
   DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api-uat.ie-orbit.com,app-uat.ie-orbit.com,uat.ie-orbit.com,ops-uat.ie-orbit.com,127.0.0.1,localhost,backend}
   DJANGO_LOG_LEVEL: ${DJANGO_LOG_LEVEL:-INFO}
   DATABASE_URL: ${DATABASE_URL:-postgresql://ie_orbit:change-me-in-production@postgres:5432/ie_orbit}
@@ -12,6 +13,7 @@ x-backend-environment: &backend-environment
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://uat.ie-orbit.com,https://app-uat.ie-orbit.com,https://ops-uat.ie-orbit.com}
   CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api-uat.ie-orbit.com,https://uat.ie-orbit.com,https://app-uat.ie-orbit.com,https://ops-uat.ie-orbit.com}
   FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://uat.ie-orbit.com}
+  OPS_WEB_BASE_URL: ${OPS_WEB_BASE_URL:-https://ops-uat.ie-orbit.com}
   PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-https://api-uat.ie-orbit.com}
   EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
   EMAIL_HOST: ${EMAIL_HOST:-}

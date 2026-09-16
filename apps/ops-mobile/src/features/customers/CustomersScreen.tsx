@@ -68,7 +68,7 @@ export function CustomersScreen() {
       <View style={styles.toolbar}>
         <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search customers" />
         <FilterButton count={activeFilterCount} onPress={() => setFiltersOpen(true)} />
-        <Button label="Add" onPress={() => navigation.navigate('CustomerForm', {})} />
+        <Button label="Add" testID="customers-add" onPress={() => navigation.navigate('CustomerForm', {})} />
       </View>
       <FilterSheet
         visible={filtersOpen}

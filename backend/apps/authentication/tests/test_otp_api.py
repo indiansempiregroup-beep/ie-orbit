@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import pytest
 from django.core import mail
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.authentication.emails.otp_email import build_login_otp_email
 from apps.authentication.models import User, UserStatus
-from apps.authentication.tests.otp_helpers import otp_login_ops
+from apps.authentication.services.auth_otp import should_include_otp_debug_code
+from apps.authentication.tests.otp_helpers import (
+    ensure_ops_otp_login_eligible,
+    otp_login_ops,
+)
 
 
 @pytest.fixture
@@ -97,6 +102,58 @@ def test_otp_send_signup_allows_unregistered_email(api_client: APIClient) -> Non
     assert response.status_code == 200
     assert response.json()["data"]["sent"] is True
     assert len(mail.outbox) == 1
+
+
+def test_otp_debug_code_follows_debug_or_allowlist() -> None:
+    with override_settings(DEBUG=True, IAM_SETTINGS={"OTP_DEBUG_EMAILS": ()}):
+        assert should_include_otp_debug_code("anyone@example.com") is True
+    with override_settings(
+        DEBUG=False,
+        IAM_SETTINGS={"OTP_DEBUG_EMAILS": ("qa-owner@example.com", "QA-Admin@example.com")},
+    ):
+        assert should_include_otp_debug_code("qa-owner@example.com") is True
+        assert should_include_otp_debug_code("QA-ADMIN@example.com") is True
+        assert should_include_otp_debug_code("other@example.com") is False
+
+
+@pytest.mark.django_db
+def test_otp_send_returns_debug_code_for_allowlisted_email_when_debug_is_off(
+    api_client: APIClient, settings
+) -> None:
+    user = User.objects.create_user(
+        email="qa-owner@example.com",
+        password=None,
+        status=UserStatus.ACTIVE,
+    )
+    ensure_ops_otp_login_eligible(user)
+    mail.outbox.clear()
+    settings.DEBUG = False
+    settings.IAM_SETTINGS = {
+        **settings.IAM_SETTINGS,
+        "OTP_DEBUG_EMAILS": ("qa-owner@example.com",),
+    }
+
+    allowed = api_client.post(
+        reverse("auth-otp-send"),
+        {"client": "ops", "channel": "email", "identifier": user.email},
+        format="json",
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["data"].get("debug_code")
+
+    outsider = User.objects.create_user(
+        email="not-qa@example.com",
+        password=None,
+        status=UserStatus.ACTIVE,
+    )
+    ensure_ops_otp_login_eligible(outsider)
+    denied = api_client.post(
+        reverse("auth-otp-send"),
+        {"client": "ops", "channel": "email", "identifier": outsider.email},
+        format="json",
+    )
+    assert denied.status_code == 200
+    assert "debug_code" not in denied.json()["data"]
 
 
 @pytest.mark.django_db

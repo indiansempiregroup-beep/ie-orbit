@@ -53,6 +53,17 @@ const urlSchemes = googleAuthSchemes({
   androidClientId: androidGoogleClientId,
 });
 const googleSignInIosScheme = googleReversedClientScheme(androidGoogleClientId);
+const opsWebUrl = (
+  process.env.EXPO_PUBLIC_OPS_WEB_URL ||
+  process.env.VITE_OPS_MOBILE_WEB_URL ||
+  ''
+).trim();
+let opsHost = '';
+try {
+  opsHost = opsWebUrl ? new URL(opsWebUrl).host : '';
+} catch {
+  opsHost = '';
+}
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -115,6 +126,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     ...config.ios,
     bundleIdentifier: 'com.ieorbit.ops',
+    associatedDomains: opsHost ? [`applinks:${opsHost}`] : undefined,
     infoPlist: {
       ...config.ios?.infoPlist,
       NSFaceIDUsageDescription: FACE_ID_USAGE,
@@ -145,6 +157,20 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#F4F7F8',
     },
+    intentFilters: opsHost
+      ? [
+          {
+            action: 'VIEW',
+            autoVerify: true,
+            data: [
+              { scheme: 'https', host: opsHost, pathPrefix: '/bookings' },
+              { scheme: 'https', host: opsHost, pathPrefix: '/shop' },
+              { scheme: 'https', host: opsHost, pathPrefix: '/settings' },
+            ],
+            category: ['BROWSABLE', 'DEFAULT'],
+          },
+        ]
+      : undefined,
     // Allow http:// LAN API calls from Android builds / Expo Go.
     ...({ usesCleartextTraffic: true } as object),
   },

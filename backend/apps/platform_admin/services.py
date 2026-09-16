@@ -1497,7 +1497,7 @@ def notify_support_ticket_created(ticket_id: Any, *, body: str = "") -> None:
             intro=f"{requester} asked for help at {tenant_name}.",
             message=message,
             cta_label="Open ticket inbox",
-            cta_url=_frontend_url("/admin/tickets"),
+            cta_url=_frontend_url(f"/admin/tickets?ticket={ticket.id}"),
             accent="#0f766e",
         )
         admin_keys = {email.lower() for email in admin_emails}
@@ -1515,7 +1515,7 @@ def notify_support_ticket_created(ticket_id: Any, *, body: str = "") -> None:
             intro=f"{requester} sent a support request for {tenant_name}.",
             message=message,
             cta_label="View in workspace",
-            cta_url=_frontend_url("/settings/support"),
+            cta_url=_ticket_workspace_url(ticket),
             accent="#1A56DB",
         )
         if ticket.requester and ticket.requester.email:
@@ -1557,7 +1557,7 @@ def notify_support_ticket_public_note(ticket: SupportTicket, *, actor: User, bod
                 intro=f"{actor.email or 'A customer'} added a note on “{ticket.subject}”.",
                 message=message,
                 cta_label="Open ticket inbox",
-                cta_url=_frontend_url("/admin/tickets"),
+                cta_url=_frontend_url(f"/admin/tickets?ticket={ticket.id}"),
                 accent="#0f766e",
             )
             manager_emails = [
@@ -1570,7 +1570,7 @@ def notify_support_ticket_public_note(ticket: SupportTicket, *, actor: User, bod
                 intro=f"{actor.email or 'A customer'} replied on “{ticket.subject}”.",
                 message=message,
                 cta_label="View conversation",
-                cta_url=_frontend_url("/settings/support"),
+                cta_url=_ticket_workspace_url(ticket),
                 accent="#1A56DB",
             )
         else:
@@ -1598,7 +1598,7 @@ def notify_support_ticket_public_note(ticket: SupportTicket, *, actor: User, bod
                 intro=f"{actor.email or 'Support'} replied on “{ticket.subject}”.",
                 message=message,
                 cta_label="View conversation",
-                cta_url=_frontend_url("/settings/support"),
+                cta_url=_ticket_workspace_url(ticket),
                 accent="#1A56DB",
             )
     except Exception:
@@ -1610,6 +1610,12 @@ def _frontend_url(path: str) -> str:
 
     base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
     return f"{base}{path}"
+
+
+def _ticket_workspace_url(ticket: SupportTicket) -> str:
+    from apps.notifications.services.record_links import record_cta
+
+    return record_cta(audience="admin", kind="ticket", record_id=ticket.id)["cta_url"]
 
 
 def _platform_admin_emails() -> list[str]:

@@ -14,6 +14,7 @@ import { AuthStack } from './AuthStack';
 import { MainTabs } from './MainTabs';
 import { DesktopShell } from './DesktopShell';
 import { rootNavigationRef } from './rootNavigationRef';
+import { opsRecordLinking } from './recordLinks';
 import { WorkspacePickerScreen } from '../features/workspace/WorkspacePickerScreen';
 import { NoAccessScreen } from '../features/auth/NoAccessScreen';
 import { PlatformAdminHomeScreen } from '../features/admin/PlatformAdminHomeScreen';
@@ -208,6 +209,7 @@ export function RootNavigator() {
   return (
     <NavigationContainer
       ref={rootNavigationRef}
+      linking={isAuthenticated && ((opsAccess && ready) || platformAdminOnly) ? opsRecordLinking : undefined}
       onStateChange={(state) => setActiveRoute(getActiveRouteName(state))}
       onReady={() => setActiveRoute(getActiveRouteName(rootNavigationRef.getRootState()))}
     >

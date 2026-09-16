@@ -3880,6 +3880,8 @@ export type Notification = {
   updated_at?: string;
   booking_id?: string | null;
   pet_id?: string | null;
+  order_id?: string | null;
+  return_id?: string | null;
   notification_type?: string;
 };
 

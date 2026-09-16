@@ -94,7 +94,7 @@ Works on **both** prod and UAT. Each stack dispatches with its own git `ref` and
 | `CUSTOMER_APK_WORKFLOW` | `customer-apk.yml` | same |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/run/secrets/firebase-management.json` | same path (host file under `secrets/`) |
 
-Prefer mounting `secrets/firebase-management.json` over inlining `FIREBASE_SERVICE_ACCOUNT_JSON`.
+Prefer mounting `secrets/firebase-management.json` over inlining `FIREBASE_SERVICE_ACCOUNT_JSON`. The backend process runs as `appuser`, so the host file must be readable (`chmod 644 secrets/firebase-management.json`). Mode `600` owned by root causes `Permission denied` on Create Firebase app.
 
 GitHub repo secrets for `.github/workflows/customer-apk.yml`:
 

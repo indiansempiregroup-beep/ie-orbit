@@ -11,10 +11,25 @@ export function NotificationsPage() {
   const markRead = useMarkNotificationAsRead();
   const markAll = useMarkAllNotificationsAsRead();
 
-  function openRelated(note: { id: string; is_read?: boolean; pet_id?: string | null; booking_id?: string | null }) {
+  function openRelated(note: {
+    id: string;
+    is_read?: boolean;
+    pet_id?: string | null;
+    booking_id?: string | null;
+    order_id?: string | null;
+    return_id?: string | null;
+  }) {
     if (!note.is_read) markRead.mutate(note.id);
     if (note.pet_id) {
       navigate(`/shop/pets?petId=${encodeURIComponent(note.pet_id)}&notify=1`);
+      return;
+    }
+    if (note.order_id) {
+      navigate(`/shop/orders/${note.order_id}`);
+      return;
+    }
+    if (note.return_id) {
+      navigate(`/shop/orders/${note.return_id}`);
       return;
     }
     if (note.booking_id) {
@@ -54,7 +69,7 @@ export function NotificationsPage() {
             </Card>
           ) : (
             notifications.data.map((note) => {
-              const clickable = Boolean(note.pet_id || note.booking_id);
+              const clickable = Boolean(note.pet_id || note.booking_id || note.order_id || note.return_id);
               return (
                 <div
                   key={note.id}
@@ -92,7 +107,27 @@ export function NotificationsPage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                         <span style={{ color: '#6b7280', fontSize: 13 }}>{note.created_at ? formatTimestamp(note.created_at) : 'Unknown time'}</span>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {note.pet_id ? (
+                          {note.order_id || note.return_id ? (
+                            <Button
+                              variant="primary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openRelated(note);
+                              }}
+                            >
+                              Open order
+                            </Button>
+                          ) : note.booking_id ? (
+                            <Button
+                              variant="primary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openRelated(note);
+                              }}
+                            >
+                              Open appointment
+                            </Button>
+                          ) : note.pet_id ? (
                             <Button
                               variant="primary"
                               onClick={(event) => {

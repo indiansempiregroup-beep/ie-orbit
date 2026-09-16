@@ -12,6 +12,21 @@ export function productLabel(code?: string | null) {
   return ADMIN_PRODUCT_LABELS[code] ?? code.replace(/-/g, ' ');
 }
 
+/** Public plan slug. Billing still uses appointie-*/shopie-* internally. */
+const PLAN_CODE_DISPLAY: Record<string, string> = {
+  'appointie-starter': 'orbit-appoint-starter',
+  'appointie-pro': 'orbit-appoint-pro',
+  'shopie-starter': 'orbit-mart-starter',
+  'shopie-pro': 'orbit-mart-pro',
+};
+
+export function displayPlanCode(code?: string | null) {
+  if (!code) return '—';
+  const mapped = PLAN_CODE_DISPLAY[code];
+  if (mapped) return mapped;
+  return code.replace(/^appointie[-_]/i, 'orbit-appoint-').replace(/^shopie[-_]/i, 'orbit-mart-');
+}
+
 export function planLabel(code?: string | null, name?: string | null) {
   if (name) {
     const stripped = name.replace(/^(Orbit Appoint|Orbit Mart|AppointIE|ShopIE)\s+/i, '').trim();

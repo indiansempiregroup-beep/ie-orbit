@@ -28,6 +28,16 @@ const optionalWebsiteSchema = z
     message: 'Enter a valid website URL (for example, https://yoursalon.com)',
   });
 
+const businessEmailSchema = z.string().trim().superRefine((value, ctx) => {
+  if (!value) {
+    ctx.addIssue({ code: 'custom', message: 'Business email is required' });
+    return;
+  }
+  if (!z.string().email().safeParse(value).success) {
+    ctx.addIssue({ code: 'custom', message: `Invalid email address: ${value}` });
+  }
+});
+
 const dayHoursSchema = z.object({
   open: z.boolean(),
   start: z.string().min(1),
@@ -41,7 +51,7 @@ export const registerWizardSchema = z
     businessCategoryOther: z.string(),
     industry: z.string().min(1, 'Select an industry'),
     industryOther: z.string(),
-    businessEmail: z.string().email('Enter a valid business email'),
+    businessEmail: businessEmailSchema,
     businessPhone: phoneSchema,
     website: optionalWebsiteSchema,
     country: z.string().min(1, 'Country is required'),

@@ -188,6 +188,9 @@ def test_booking_admin_email_sent_when_enabled(workspace: dict) -> None:
         NotificationService().process_booking_event(event)
 
     assert email_mock.called
+    context = email_mock.call_args.kwargs["context"]
+    assert str(booking.id) in str(context.get("cta_url") or "")
+    assert context.get("cta_label")
     assert Notification.objects.filter(
         tenant=workspace["tenant"],
         booking=booking,

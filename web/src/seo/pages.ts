@@ -303,6 +303,12 @@ export const NOINDEX_PAGES: SeoPage[] = [
   },
   { path: '/403', title: 'Access denied — IE Orbit', description: 'You do not have access to this page.', index: false },
   { path: '/404', title: 'Page not found — IE Orbit', description: 'This IE Orbit page could not be found.', index: false },
+  {
+    path: '/open',
+    title: 'Open in app — IE Orbit',
+    description: 'Open this notification in the customer app or ops workspace.',
+    index: false,
+  },
 ];
 
 export const ROBOTS_DISALLOW = [
@@ -318,6 +324,7 @@ export const ROBOTS_DISALLOW = [
   '/bi',
   '/profile',
   '/notifications',
+  '/open',
   '/staff',
   '/services',
   '/reports',
@@ -359,6 +366,7 @@ export function isPublicMarketingPathname(pathname: string): boolean {
   if (PUBLIC_MARKETING_PATHS.has(path)) return true;
   if (path.startsWith('/industries/')) return true;
   if (path.startsWith('/help/')) return true;
+  if (path.startsWith('/open/')) return true;
   if (path.startsWith('/auth/register')) return true;
   if (path.startsWith('/onboarding')) return true;
   return false;

@@ -30,6 +30,7 @@ const IntegrationsPage = lazy(() =>
 );
 const CookiesPage = lazy(() => import('./features/public/CookiesPage').then((m) => ({ default: m.CookiesPage })));
 const DownloadPage = lazy(() => import('./features/public/DownloadPage').then((m) => ({ default: m.DownloadPage })));
+const OpenRecordPage = lazy(() => import('./features/public/OpenRecordPage').then((m) => ({ default: m.OpenRecordPage })));
 const AuthPage = lazy(() => import('./features/auth/AuthPage').then((m) => ({ default: m.AuthPage })));
 const ForgotPasswordPage = lazy(() => import('./features/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
@@ -201,6 +202,7 @@ function App() {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/cookies" element={<CookiesPage />} />
             <Route path="/download" element={<DownloadPage />} />
+            <Route path="/open/:kind/:id" element={<OpenRecordPage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/help" element={<HelpCenterPage />} />
             <Route path="/help/:slug" element={<HelpCenterPage />} />
