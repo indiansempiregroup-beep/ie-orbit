@@ -5,11 +5,12 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.authentication.models import Role, User, UserRole, UserStatus
-from apps.businesses.models import Business
+from apps.businesses.models import Business, WhiteLabelProfile
 from apps.businesses.services.customer_app_build import (
     _firebase_access_token,
     _firebase_http_error_message,
     customer_app_action_error,
+    machine_build_payload,
 )
 from apps.tenancy.models import Organization, Tenant
 
@@ -79,6 +80,32 @@ def test_customer_app_action_error_maps_missing_credentials() -> None:
     assert status == 503
     assert code == "firebase_not_configured"
     assert "FIREBASE_SERVICE_ACCOUNT_JSON" in message
+
+
+@pytest.mark.django_db
+def test_machine_build_payload_includes_direct_link_origins(
+    tenant_business: Business,
+    settings,
+) -> None:
+    settings.FRONTEND_BASE_URL = "https://ie-orbit.com"
+    profile = WhiteLabelProfile.objects.create(
+        tenant=tenant_business.tenant,
+        business=tenant_business,
+        flavor_key="firebase-tenant-spa-main",
+        app_slug="firebase-tenant",
+        app_name="Firebase Tenant",
+        bundle_id_android="com.ieorbit.firebasetenant",
+        bundle_id_ios="com.ieorbit.firebasetenant",
+        build_metadata={
+            "google_services_json": "{}",
+            "google_oauth_android_client_id": "android-client-id",
+        },
+    )
+
+    payload = machine_build_payload(profile=profile, track="preview")
+
+    assert payload["env"]["EXPO_PUBLIC_REFERRAL_LINK_BASE_URL"] == "https://ie-orbit.com"
+    assert payload["env"]["EXPO_PUBLIC_APP_DOWNLOAD_URL"] == "https://ie-orbit.com/download"
 
 
 def test_firebase_access_token_permission_denied(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

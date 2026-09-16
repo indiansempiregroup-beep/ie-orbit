@@ -594,6 +594,9 @@ def machine_build_payload(*, profile: WhiteLabelProfile, track: str) -> dict[str
         raise RuntimeError("Paste the Google Android OAuth client id first.")
     business = profile.business
     tenant = business.tenant
+    frontend_base = str(
+        getattr(settings, "FRONTEND_BASE_URL", "https://ie-orbit.com") or "https://ie-orbit.com"
+    ).rstrip("/")
     env = {
         "EXPO_PUBLIC_FLAVOR_KEY": profile.flavor_key,
         "EXPO_PUBLIC_APP_NAME": profile.app_name,
@@ -606,6 +609,8 @@ def machine_build_payload(*, profile: WhiteLabelProfile, track: str) -> dict[str
         "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID": android_client,
         "EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID": WEB_OAUTH_CLIENT_ID,
         "EXPO_PUBLIC_API_BASE_URL": _public_api_base(),
+        "EXPO_PUBLIC_REFERRAL_LINK_BASE_URL": frontend_base,
+        "EXPO_PUBLIC_APP_DOWNLOAD_URL": f"{frontend_base}/download",
         "EXPO_PUBLIC_EAS_PROJECT_ID": EAS_CUSTOMER_PROJECT_ID,
         "GOOGLE_SERVICES_JSON": google_json,
     }
@@ -614,12 +619,12 @@ def machine_build_payload(*, profile: WhiteLabelProfile, track: str) -> dict[str
         if app_icon_url.startswith("/"):
             app_icon_url = f"{_public_api_base().removesuffix('/api/v1')}{app_icon_url}"
         env["EXPO_PUBLIC_APP_ICON_URL"] = app_icon_url
-    settings = icon_settings_from_profile(profile)
-    env["EXPO_PUBLIC_ICON_MODE"] = settings["mode"]
-    env["EXPO_PUBLIC_ICON_BACKGROUND"] = settings["background"]
-    env["EXPO_PUBLIC_IOS_ICON_BACKGROUND"] = settings["background"]
-    env["EXPO_PUBLIC_ICON_PADDING"] = str(settings["padding"])
-    env["EXPO_PUBLIC_SPLASH_BACKGROUND"] = settings["splash_background"]
+    icon_config = icon_settings_from_profile(profile)
+    env["EXPO_PUBLIC_ICON_MODE"] = icon_config["mode"]
+    env["EXPO_PUBLIC_ICON_BACKGROUND"] = icon_config["background"]
+    env["EXPO_PUBLIC_IOS_ICON_BACKGROUND"] = icon_config["background"]
+    env["EXPO_PUBLIC_ICON_PADDING"] = str(icon_config["padding"])
+    env["EXPO_PUBLIC_SPLASH_BACKGROUND"] = icon_config["splash_background"]
     return {
         "track": track,
         "eas_profile": "customer-production-preview" if track == "preview" else "customer-production",

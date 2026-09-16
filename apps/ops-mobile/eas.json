@@ -9,6 +9,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_OPS_WEB_URL": "http://localhost:8082",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_OPS_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID": "ca-app-pub-1258778965386332~9504363579",
@@ -21,6 +22,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://api.ieorbit.local/api/v1",
+        "EXPO_PUBLIC_OPS_WEB_URL": "https://ops.ieorbit.local",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_OPS_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID": "ca-app-pub-1258778965386332~9504363579",
@@ -37,6 +39,7 @@
       },
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
+        "EXPO_PUBLIC_OPS_WEB_URL": "https://ops.ie-orbit.com",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_OPS_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBAPlSIcXzgy26Lv0n64wAC2A_dzXMYiO0",
@@ -59,6 +62,7 @@
       },
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
+        "EXPO_PUBLIC_OPS_WEB_URL": "https://ops.ie-orbit.com",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_OPS_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID": "ca-app-pub-1258778965386332~9504363579",
@@ -72,6 +76,7 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://api.ie-orbit.com/api/v1",
+        "EXPO_PUBLIC_OPS_WEB_URL": "https://ops.ie-orbit.com",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_OPS_EAS_PROJECT_ID": "b897b310-e21b-49ab-b58f-56b8da1867f3",
         "EXPO_PUBLIC_ADMOB_OPS_ANDROID_APP_ID": "ca-app-pub-1258778965386332~9504363579",

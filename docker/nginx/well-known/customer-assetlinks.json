@@ -1,0 +1,26 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ieorbit.sunitaspa",
+      "sha256_cert_fingerprints": [
+        "9B:C2:C9:C1:7C:16:58:DF:38:8D:8F:3A:E4:6F:1D:F6:33:92:4C:13:75:46:17:A2:F9:AC:0B:E1:B1:68:F5:CE"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ieorbit.sanketpetshop",
+      "sha256_cert_fingerprints": [
+        "6F:1C:45:DE:B6:92:76:70:16:AF:29:77:A7:AA:EB:12:1A:3E:88:73:EA:92:21:E8:F4:0C:3E:06:88:AB:C8:B1"
+      ]
+    }
+  }
+]
