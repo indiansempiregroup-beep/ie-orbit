@@ -317,9 +317,22 @@ export function useShopProductMutations() {
   });
 
   const enrich = useMutation({
-    mutationFn: async (payload: { code?: string; query?: string; image_url?: string; hint?: string } | string) => {
+    mutationFn: async (
+      payload:
+        | {
+            code?: string;
+            query?: string;
+            image_url?: string;
+            hint?: string;
+            use_smart_lookup?: boolean;
+          }
+        | string,
+    ) => {
       const body = typeof payload === 'string' ? { code: payload } : payload;
-      const response = await client.shop.enrichBarcode(body);
+      const response = await client.shop.enrichBarcode({
+        business_id: businessId,
+        ...body,
+      });
       return response.data;
     },
   });

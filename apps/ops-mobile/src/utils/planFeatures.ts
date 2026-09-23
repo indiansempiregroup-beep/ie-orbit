@@ -13,6 +13,7 @@ export const PlanFeature = {
   shopieInstantDelivery: 'shopie_instant_delivery',
   shopieCoupons: 'shopie_coupons',
   shopieLoyalty: 'shopie_loyalty',
+  shopieSmartLookup: 'shopie_smart_lookup',
   shopieBooksSale: 'shopie_books_sale',
   shopieBooksPurchase: 'shopie_books_purchase',
   shopieBooksCash: 'shopie_books_cash',

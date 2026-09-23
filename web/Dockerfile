@@ -14,13 +14,14 @@ COPY web/package.json ./web/package.json
 COPY mobile/package.json ./mobile/package.json
 COPY packages/sdk/package.json ./packages/sdk/package.json
 COPY packages/sdk/tsconfig.json ./packages/sdk/tsconfig.json
-COPY packages/sdk/src ./packages/sdk/src
 COPY packages/i18n/package.json ./packages/i18n/package.json
 COPY packages/i18n/tsconfig.json ./packages/i18n/tsconfig.json
-COPY packages/i18n/src ./packages/i18n/src
-COPY web ./web
 
 RUN pnpm install --frozen-lockfile --filter @ie-orbit/web...
+
+COPY packages/sdk/src ./packages/sdk/src
+COPY packages/i18n/src ./packages/i18n/src
+COPY web ./web
 
 ARG APP_ENV=development
 ENV APP_ENV=${APP_ENV}

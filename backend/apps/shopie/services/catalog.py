@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
@@ -11,7 +12,6 @@ from django.db.models import Avg, Count, Q, QuerySet
 from apps.businesses.models import Business
 from apps.shopie.models import (
     BarcodeType,
-    ProductCategory,
     ProductStatus,
     ShopProduct,
     ShopProductBarcode,
@@ -24,6 +24,7 @@ from apps.tenancy.models import Tenant
 
 
 BULK_PRODUCT_LIMIT = 200
+logger = logging.getLogger(__name__)
 
 
 class CatalogService:
@@ -170,7 +171,9 @@ class CatalogService:
                 reason="Initial stock",
                 godown_id=data.get("godown_id"),
             )
-        return self.get_product(tenant=tenant, business=business, product_id=product.id)
+        product = self.get_product(tenant=tenant, business=business, product_id=product.id)
+        self._contribute_gtin(product)
+        return product
 
     @transaction.atomic
     def update_product(
@@ -236,7 +239,15 @@ class CatalogService:
             product.barcodes.all().delete()
             for row in barcodes:
                 self._attach_barcode(tenant=tenant, business=business, product=product, row=row)
-        return self.get_product(tenant=tenant, business=business, product_id=product.id)
+        product = self.get_product(tenant=tenant, business=business, product_id=product.id)
+        self._contribute_gtin(product)
+        return product
+
+    def _contribute_gtin(self, product: ShopProduct) -> None:
+        try:
+            self.enrichment.contribute_from_shop_product(product)
+        except Exception:  # noqa: BLE001 — never fail shop save because of catalog share
+            logger.exception("Failed to contribute shop product %s to platform GTIN catalog", product.id)
 
     @transaction.atomic
     def adjust_stock(
@@ -314,50 +325,13 @@ class CatalogService:
 
     @staticmethod
     def _normalize_category(value: Any) -> str:
-        raw = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+        from apps.shopie.services.categories import CategoryService
+
+        raw = str(value or "").strip()
         if not raw:
             return ""
-        if raw in ProductCategory.values:
-            return raw
-        # Map free-text / enrichment labels onto catalog choices.
-        aliases = {
-            "food": ProductCategory.FOOD_GROCERY,
-            "grocery": ProductCategory.FOOD_GROCERY,
-            "food_grocery": ProductCategory.FOOD_GROCERY,
-            "pet": ProductCategory.PET_FOOD,
-            "petfood": ProductCategory.PET_FOOD,
-            "pet_food": ProductCategory.PET_FOOD,
-            "pets": ProductCategory.PET_SUPPLIES,
-            "drink": ProductCategory.BEVERAGES,
-            "drinks": ProductCategory.BEVERAGES,
-            "beverage": ProductCategory.BEVERAGES,
-            "snack": ProductCategory.SNACKS,
-            "confectionery": ProductCategory.SNACKS,
-            "personalcare": ProductCategory.PERSONAL_CARE,
-            "household_goods": ProductCategory.HOUSEHOLD,
-            "baby": ProductCategory.BABY_CARE,
-            "health_wellness": ProductCategory.HEALTH,
-            "wellness": ProductCategory.HEALTH,
-            "electronics_accessories": ProductCategory.ELECTRONICS,
-            "clothing": ProductCategory.APPAREL,
-            "fashion": ProductCategory.APPAREL,
-        }
-        if raw in aliases:
-            return aliases[raw]
-        for choice in ProductCategory.values:
-            if choice in raw or raw in choice:
-                return choice
-        for label, code in (
-            ("pet food", ProductCategory.PET_FOOD),
-            ("pet supplies", ProductCategory.PET_SUPPLIES),
-            ("personal care", ProductCategory.PERSONAL_CARE),
-            ("baby care", ProductCategory.BABY_CARE),
-            ("food & grocery", ProductCategory.FOOD_GROCERY),
-            ("health", ProductCategory.HEALTH),
-        ):
-            if label in raw.replace("_", " "):
-                return code
-        return ProductCategory.OTHER
+        row = CategoryService().ensure_category(label=raw, slug=raw)
+        return row.slug if row else ""
 
     def _attach_barcode(
         self,

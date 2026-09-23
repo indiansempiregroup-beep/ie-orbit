@@ -226,9 +226,9 @@ class ShopProduct(TenantModel):
     low_stock_threshold = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0"))
     pack_size = models.CharField(max_length=80, blank=True)
     image_url = models.CharField(max_length=1024, blank=True)
+    # Slug from ShopProductCategory (builtins + auto-created). Not a closed ChoiceField.
     category = models.CharField(
         max_length=64,
-        choices=ProductCategory.choices,
         blank=True,
         default="",
         db_index=True,
@@ -628,6 +628,8 @@ class ShopBusinessSettings(TenantModel):
     einvoice_enabled = models.BooleanField(default=False)
     eway_enabled = models.BooleanField(default=False)
     gst_compliance = models.JSONField(default=_default_gst_compliance, blank=True)
+    # Opt-in Gemini pack-photo fill when Open*Facts / platform GTIN miss.
+    smart_lookup_enabled = models.BooleanField(default=False)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):
@@ -1865,3 +1867,107 @@ class ShopCouponRedemption(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.coupon_id}@{self.order_id}"
+
+
+class ShopProductCategory(BaseModel):
+    """Platform-wide product categories (builtins seeded + auto-created from enrich/Other)."""
+
+    slug = models.SlugField(max_length=64, unique=True)
+    label = models.CharField(max_length=120)
+    is_builtin = models.BooleanField(default=False, db_index=True)
+    sort_order = models.PositiveSmallIntegerField(default=100)
+
+    class Meta:
+        db_table = "shop_product_categories"
+        ordering = ["sort_order", "label"]
+
+    def __str__(self) -> str:
+        return self.label
+
+
+class PlatformGtinCatalog(BaseModel):
+    """Cross-business public pack identity keyed by GTIN. Never stores shop price/stock."""
+
+    code = models.CharField(max_length=64, unique=True, db_index=True)
+    name = models.CharField(max_length=200, blank=True)
+    brand = models.CharField(max_length=120, blank=True)
+    pack_size = models.CharField(max_length=80, blank=True)
+    serving_size = models.CharField(max_length=80, blank=True)
+    description = models.TextField(blank=True)
+    details_html = models.TextField(blank=True)
+    categories = models.CharField(max_length=500, blank=True, help_text="Raw catalog category string")
+    category = models.CharField(max_length=64, blank=True, help_text="Resolved ShopProductCategory slug")
+    category_label = models.CharField(max_length=120, blank=True)
+    hsn_sac = models.CharField(max_length=16, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
+    mrp = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    image_url = models.CharField(max_length=1024, blank=True)
+    images = models.JSONField(default=dict, blank=True)
+    source = models.CharField(max_length=64, blank=True)
+    confidence = models.CharField(max_length=16, blank=True, default="none")
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_gtin_catalog"
+        ordering = ["code"]
+
+    def __str__(self) -> str:
+        return f"{self.code} {self.name}".strip()
+
+
+class SmartLookupWallet(TenantModel):
+    """Prepaid INR wallet for Gemini vision Smart lookup (pass-through AI cost)."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.OneToOneField(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="smart_lookup_wallet",
+    )
+    balance_paise = models.IntegerField(default=0)
+
+    class Meta(TenantModel.Meta):
+        db_table = "smart_lookup_wallets"
+
+    def __str__(self) -> str:
+        return f"{self.business_id} {self.balance_paise}p"
+
+
+class SmartLookupUsage(TenantModel):
+    """Per-lookup ledger: free catalog hits and paid Gemini vision debits."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="smart_lookup_usages",
+    )
+    code = models.CharField(max_length=64, blank=True, db_index=True)
+    source = models.CharField(max_length=64, blank=True)
+    found = models.BooleanField(default=False)
+    charged_paise = models.IntegerField(default=0)
+    balance_after_paise = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Wallet balance after this row (null for free lookups that did not touch the wallet).",
+    )
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    usd_micros = models.PositiveIntegerField(default=0, help_text="USD cost × 1_000_000")
+    model = models.CharField(max_length=64, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "smart_lookup_usage"
+        ordering = ["-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.code} {self.source} {self.charged_paise}p"

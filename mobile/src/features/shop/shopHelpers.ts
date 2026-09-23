@@ -11,7 +11,11 @@ export function shopCategoryKey(category?: ShopProduct['category'] | null): stri
   return typeof category === 'string' ? category : String(category);
 }
 
-export function shopCategoryLabel(category?: ShopProduct['category'] | null): string {
+export function shopCategoryLabel(
+  category?: ShopProduct['category'] | null,
+  categoryLabel?: string | null,
+): string {
+  if (categoryLabel) return String(categoryLabel);
   const raw = shopCategoryKey(category);
   if (!raw) return 'Uncategorized';
   return SHOP_PRODUCT_CATEGORIES.find((item) => item.value === raw)?.label ?? raw.replace(/_/g, ' ');

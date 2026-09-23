@@ -46,8 +46,10 @@ GET /api/schema/
 ## Docker quick start
 
 ```bash
-docker compose up --build
+docker compose up -d
 ```
+
+Source is bind-mounted, so day-to-day Python and web edits do not need an image rebuild. Add `--build` only when Dockerfiles, Python dependencies, or JS lockfiles changed.
 
 This starts the complete local development environment for:
 

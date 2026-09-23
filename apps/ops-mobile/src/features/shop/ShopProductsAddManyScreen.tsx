@@ -163,10 +163,10 @@ export function ShopProductsAddManyScreen() {
   useEffect(() => {
     const code = route.params?.enrichCode;
     const rowId = route.params?.enrichRowId;
-    if (!code || !client) return;
+    if (!code || !client || !businessId) return;
     void (async () => {
       try {
-        const response = await client.shop.enrichBarcode({ code });
+        const response = await client.shop.enrichBarcode({ business_id: businessId, code });
         const enriched = applyEnrichmentToRow(
           emptyBulkRow(rowId || 'scan', defaults),
           { ...response.data, code: response.data.code || code },
@@ -193,7 +193,7 @@ export function ShopProductsAddManyScreen() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, route.params?.enrichCode, route.params?.enrichRowId]);
+  }, [client, businessId, route.params?.enrichCode, route.params?.enrichRowId]);
 
   function updateRow(id: string, patch: Partial<BulkProductRow>) {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch, error: patch.error ?? '' } : row)));
@@ -270,7 +270,7 @@ export function ShopProductsAddManyScreen() {
     if (!trimmed || !client) return;
     updateRow(id, { lookingUp: true, error: '' });
     try {
-      const response = await client.shop.enrichBarcode({ code: trimmed });
+      const response = await client.shop.enrichBarcode({ business_id: businessId, code: trimmed });
       setRows((current) =>
         current.map((row) =>
           row.id === id ? applyEnrichmentToRow({ ...row, barcode: trimmed }, response.data, defaults) : row,
@@ -286,7 +286,7 @@ export function ShopProductsAddManyScreen() {
 
   async function handleScan() {
     const code = scanCode.trim();
-    if (!code || !client) return;
+    if (!code || !client || !businessId) return;
     if (rows.some((row) => row.barcode.trim() === code)) {
       toast.push('That barcode is already in the list.', 'info');
       setScanCode('');
@@ -294,11 +294,16 @@ export function ShopProductsAddManyScreen() {
     }
     setScanning(true);
     try {
-      const response = await client.shop.enrichBarcode({ code });
+      const response = await client.shop.enrichBarcode({ business_id: businessId, code });
       appendPartials([
         applyEnrichmentToRow(emptyBulkRow('scan', defaults), { ...response.data, code: response.data.code || code }, defaults),
       ]);
-      toast.push(response.data.name ? `Added ${response.data.name}.` : 'Added barcode. Fill the name if needed.', 'success');
+      toast.push(
+        response.data.name
+          ? `Added ${response.data.name}.`
+          : response.data.message || 'Added barcode. Fill the name if needed.',
+        response.data.found ? 'success' : 'info',
+      );
       setScanCode('');
     } catch (error) {
       toast.push(error instanceof Error ? error.message : 'Lookup failed.', 'error');

@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from apps.businesses.constants import plan_display_name, product_display_name
 from apps.businesses.models import BusinessProductSubscription, BusinessProductSubscriptionStatus
 from apps.businesses.services.entitlements import EntitlementService
 from apps.businesses.services.product_billing import ProductBillingService
@@ -114,11 +115,12 @@ class SubscriptionLifecycleService:
             subscription.canceled_at = subscription.canceled_at or now
             self.clear_pending(subscription=subscription)
             subscription.save()
+            product_label = product_display_name(subscription.product_code)
             self._notify_operators(
                 subscription=subscription,
                 subject=f"{business.display_name}: subscription ended",
                 body=(
-                    f"Your {subscription.product_code} access ended on "
+                    f"Your {product_label} access ended on "
                     f"{subscription.current_period_ends_at}. Renew from Settings → Billing to continue."
                 ),
                 event_type="billing.subscription_ended",
@@ -141,11 +143,16 @@ class SubscriptionLifecycleService:
                 detail = "; ".join(
                     f"{key}: {value}" for key, value in getattr(exc, "detail", {}).items()
                 ) or str(exc)
+                pending_label = plan_display_name(
+                    plan_code=target_code,
+                    plan_name=getattr(subscription.pending_plan, "name", None),
+                    product_code=subscription.product_code,
+                )
                 self._notify_operators(
                     subscription=subscription,
                     subject=f"{business.display_name}: pending plan could not be applied",
                     body=(
-                        f"We could not switch to {target_code} at period end because usage is still too high "
+                        f"We could not switch to {pending_label} at period end because usage is still too high "
                         f"({detail}). Your workspace is soft-locked until you reduce usage, cancel the pending "
                         "change, or renew a higher plan."
                     ),
@@ -181,11 +188,17 @@ class SubscriptionLifecycleService:
                 subscription=subscription,
                 previous_plan_code=previous,
             )
+            product_label = product_display_name(subscription.product_code)
+            plan_label = plan_display_name(
+                plan_code=plan.code,
+                plan_name=getattr(plan, "name", None),
+                product_code=subscription.product_code,
+            )
             self._notify_operators(
                 subscription=subscription,
                 subject=f"{business.display_name}: plan updated for new period",
                 body=(
-                    f"Your {subscription.product_code} plan is now {plan.code}. "
+                    f"Your {product_label} plan is now {plan_label}. "
                     f"New period ends {subscription.current_period_ends_at}."
                 ),
                 event_type="billing.plan_updated",
@@ -196,11 +209,12 @@ class SubscriptionLifecycleService:
         if subscription.status != BusinessProductSubscriptionStatus.SOFT_LOCKED:
             subscription.status = BusinessProductSubscriptionStatus.SOFT_LOCKED
             subscription.save(update_fields=["status", "updated_at"])
+            product_label = product_display_name(subscription.product_code)
             self._notify_operators(
                 subscription=subscription,
                 subject=f"{business.display_name}: renewal required",
                 body=(
-                    f"Your {subscription.product_code} period ended. "
+                    f"Your {product_label} period ended. "
                     "Renew or change your plan from Settings → Billing to restore full access. "
                     "There is no automatic charge until you renew."
                 ),
@@ -244,21 +258,27 @@ class SubscriptionLifecycleService:
 
     def _send_reminder(self, *, subscription: BusinessProductSubscription, days_left: int) -> None:
         business = subscription.business
-        plan_code = subscription.plan.code if subscription.plan else "unknown"
-        pending = (
-            "canceled at period end"
-            if subscription.pending_cancel
-            else (
-                subscription.pending_plan.code
-                if subscription.pending_plan_id
-                else "same plan (renew to continue)"
-            )
+        product_label = product_display_name(subscription.product_code)
+        plan_label = plan_display_name(
+            plan_code=subscription.plan.code if subscription.plan else None,
+            plan_name=getattr(subscription.plan, "name", None),
+            product_code=subscription.product_code,
         )
+        if subscription.pending_cancel:
+            pending = "canceled at period end"
+        elif subscription.pending_plan_id:
+            pending = plan_display_name(
+                plan_code=subscription.pending_plan.code,
+                plan_name=getattr(subscription.pending_plan, "name", None),
+                product_code=subscription.product_code,
+            )
+        else:
+            pending = "same plan (renew to continue)"
         renews = subscription.current_period_ends_at
         frontend = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
         subject = f"{business.display_name}: {days_left} day{'s' if days_left != 1 else ''} left to renew"
         body = (
-            f"Your {subscription.product_code} plan ({plan_code}) access ends on {renews}.\n"
+            f"Your {product_label} plan ({plan_label}) access ends on {renews}.\n"
             f"Next period plan: {pending}.\n"
             f"Renew or change your subscription here: {frontend}/settings/products\n\n"
             "There is no automatic charge — renew before the date above to avoid a soft lock."

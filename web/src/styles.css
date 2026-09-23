@@ -4681,7 +4681,10 @@ h6 {
 .admin-drawer-backdrop--sheet {
   justify-content: center;
   align-items: center;
+  align-items: safe center;
   padding: 24px;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .admin-drawer {
@@ -4702,8 +4705,13 @@ h6 {
 
 .admin-drawer--sheet {
   width: min(1080px, 100%);
-  height: min(880px, 100%);
-  max-height: calc(100vh - 48px);
+  /* Definite height + min-height:0 so flex body can shrink and scroll */
+  min-height: 0;
+  height: min(880px, calc(100vh - 48px));
+  height: min(880px, calc(100dvh - 48px));
+  max-height: min(880px, calc(100vh - 48px));
+  max-height: min(880px, calc(100dvh - 48px));
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 20px;
   box-shadow: 0 24px 64px rgba(15, 22, 35, 0.22);
@@ -4734,8 +4742,9 @@ h6 {
 
 .admin-drawer__body {
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 20px 24px 24px;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -4749,6 +4758,8 @@ h6 {
   border-top: 1px solid var(--border);
   background: color-mix(in srgb, var(--card) 92%, var(--muted));
   flex-shrink: 0;
+  max-height: 40%;
+  overflow: auto;
 }
 
 .admin-drawer__footer .admin-field {
@@ -5035,6 +5046,188 @@ h6 {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.admin-smart-lookup {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, #ecfdf5), var(--card));
+  display: grid;
+  gap: 16px;
+}
+
+.admin-smart-lookup__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-smart-lookup__kicker {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #047857;
+}
+
+.admin-smart-lookup__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.admin-smart-lookup__lead {
+  margin: 6px 0 0;
+  max-width: 58ch;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-smart-lookup__kpis {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-smart-lookup__kpi {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 88%, white);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-smart-lookup__kpi span,
+.admin-smart-lookup__kpi em {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.admin-smart-lookup__kpi strong {
+  font-size: 1.05rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.admin-smart-lookup__kpi--preview {
+  border-color: color-mix(in srgb, #10b981 28%, var(--border));
+  background: color-mix(in srgb, #ecfdf5 70%, white);
+}
+
+.admin-smart-lookup__grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-smart-lookup__card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  display: grid;
+  gap: 12px;
+}
+
+.admin-smart-lookup__card--wide {
+  grid-column: 1 / -1;
+}
+
+.admin-smart-lookup__card header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-smart-lookup__card header p {
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.admin-smart-lookup__card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-smart-lookup__fields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-smart-lookup__fields--wide {
+  grid-template-columns: 1.4fr 1fr;
+}
+
+.admin-smart-lookup__formula {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.admin-smart-lookup__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-smart-lookup__chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #10b981 12%, white);
+  color: #047857;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.admin-smart-lookup__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.admin-smart-lookup__footer p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .admin-smart-lookup__kpis,
+  .admin-smart-lookup__grid,
+  .admin-smart-lookup__fields,
+  .admin-smart-lookup__fields--wide {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-smart-lookup__hero,
+  .admin-smart-lookup__card-head,
+  .admin-smart-lookup__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .admin-editor-tabs {
@@ -5503,18 +5696,23 @@ h6 {
   .admin-editor-grid {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 720px) {
   .admin-drawer-backdrop--sheet {
     padding: 0;
     align-items: stretch;
+    overflow: hidden;
   }
 
   .admin-drawer--sheet {
     height: 100%;
     max-height: none;
+    min-height: 0;
     border-radius: 0;
+    overflow: hidden;
+  }
+
+  .admin-drawer__footer {
+    max-height: none;
   }
 }
 

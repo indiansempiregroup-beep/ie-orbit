@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Camera, CopyPlus, Plus, Trash2 } from 'lucide-react';
+import { SHOP_PRODUCT_CATEGORIES, type ShopProductCategoryItem } from '@ie-orbit/sdk';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
-import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { currencySelectOptions, ensureSelectOption } from '../../config/onboarding';
 import { useShopGodowns, useShopProductMutations } from './shopHooks';
@@ -60,12 +62,24 @@ function nextRowId(seed: number) {
 export function ShopProductsAddManyPage() {
   const snackbar = useSnackbar();
   const workspace = useWorkspace();
+  const client = useApiClient();
   const godownsQuery = useShopGodowns();
   const { createBulk, enrich } = useShopProductMutations();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const idRef = useRef(8);
   const godowns = godownsQuery.data ?? [];
   const defaultGodownId = godowns.find((godown) => godown.is_default)?.id || godowns[0]?.id || '';
+
+  const categoriesQuery = useQuery({
+    queryKey: ['shop-product-categories'],
+    queryFn: async () => {
+      const response = await client.shop.listProductCategories();
+      return response.data.items;
+    },
+  });
+  const categoryOptions: ShopProductCategoryItem[] = categoriesQuery.data?.length
+    ? categoriesQuery.data
+    : SHOP_PRODUCT_CATEGORIES.map((item) => ({ slug: item.value, label: item.label, is_builtin: true }));
 
   const [defaults, setDefaults] = useState<BulkProductDefaults>({
     ...emptyBulkDefaults(),
@@ -193,13 +207,35 @@ export function ShopProductsAddManyPage() {
   async function lookupRow(id: string, code: string) {
     const trimmed = code.trim();
     if (!trimmed) return;
-    updateRow(id, { lookingUp: true, error: '' });
+    setRows((current) =>
+      current.map((row) => {
+        if (row.id !== id) return row;
+        const previous = row.barcode.trim();
+        if (previous && previous !== trimmed) {
+          return {
+            ...row,
+            barcode: trimmed,
+            sku: '',
+            name: '',
+            brand: '',
+            pack_size: '',
+            category: '',
+            image_url: '',
+            lookingUp: true,
+            error: '',
+          };
+        }
+        return { ...row, barcode: trimmed, lookingUp: true, error: '' };
+      }),
+    );
     try {
       const data = await enrich.mutateAsync({ code: trimmed });
       setRows((current) =>
         current.map((row) => (row.id === id ? applyEnrichmentToRow({ ...row, barcode: trimmed }, data, defaults) : row)),
       );
-      if (!data.found && !data.name) {
+      if (data.found && data.name) {
+        snackbar.push(`Filled ${data.name}.`, 'success');
+      } else if (!data.found && !data.name) {
         snackbar.push(data.message || 'No catalog match. Fill the name and save.', 'info');
       }
     } catch (error) {
@@ -352,8 +388,8 @@ export function ShopProductsAddManyPage() {
             <span style={{ fontSize: 12, opacity: 0.7 }}>Default category</span>
             <select value={defaults.category} onChange={(event) => patchDefaults({ category: event.target.value })} style={inputStyle}>
               <option value="">None</option>
-              {SHOP_PRODUCT_CATEGORIES.map((item) => (
-                <option key={item.value} value={item.value}>
+              {categoryOptions.map((item) => (
+                <option key={item.slug} value={item.slug}>
                   {item.label}
                 </option>
               ))}
@@ -510,11 +546,14 @@ export function ShopProductsAddManyPage() {
                           aria-label="Category"
                         >
                           <option value="">—</option>
-                          {SHOP_PRODUCT_CATEGORIES.map((item) => (
-                            <option key={item.value} value={item.value}>
+                          {categoryOptions.map((item) => (
+                            <option key={item.slug} value={item.slug}>
                               {item.label}
                             </option>
                           ))}
+                          {row.category && !categoryOptions.some((item) => item.slug === row.category) ? (
+                            <option value={row.category}>{row.category}</option>
+                          ) : null}
                         </select>
                       ) : column === 'status' ? (
                         <select

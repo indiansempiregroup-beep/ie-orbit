@@ -1,3 +1,13 @@
+# Local Orbit Mart Smart lookup (pack-photo AI) — after pulling:
+#   podman compose exec -T backend python manage.py migrate --noinput
+# Set GEMINI_API_KEY in root .env (see .env.example) and restart backend.
+# Enable + UPI top-up: Product settings → Smart product lookup.
+# PLATFORM_UPI_VPA must be set for wallet top-up QR.
+
+
+
+
+
 To run the docker:
 
 

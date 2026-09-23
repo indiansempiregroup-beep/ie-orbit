@@ -3,7 +3,13 @@
 ## One-command start
 
 ```bash
-docker compose up --build
+docker compose up -d
+```
+
+Source is bind-mounted, so day-to-day Python and web edits do not need an image rebuild. Use `--build` only when Dockerfiles, `backend/pyproject.toml`, or JS lockfiles/`package.json` files changed:
+
+```bash
+docker compose up --build -d
 ```
 
 ## Default services
@@ -25,6 +31,7 @@ docker compose up --build
 - The compose stack uses Redis for cache and Celery broker state.
 - The backend uses mounted source code for live reload in development.
 - The web app uses Vite with host binding for Docker compatibility.
+- `docker compose up -d` reuses existing images. Rebuild with `--build` after Dockerfile or dependency changes.
 
 ## Switch database
 

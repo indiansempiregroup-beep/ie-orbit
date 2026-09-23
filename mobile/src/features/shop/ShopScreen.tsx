@@ -95,16 +95,16 @@ export function ShopScreen() {
   );
 
   const categories = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Map<string, string>();
     let hasUncategorized = false;
     items.forEach((item) => {
       const key = shopCategoryKey(item.category);
-      if (key) set.add(key);
+      if (key) set.set(key, shopCategoryLabel(key, item.category_label));
       else hasUncategorized = true;
     });
-    const rows = Array.from(set)
-      .sort()
-      .map((id) => ({ id, label: shopCategoryLabel(id) }));
+    const rows = Array.from(set.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, label]) => ({ id, label }));
     if (hasUncategorized) rows.push({ id: UNCATEGORIZED_ID, label: 'Uncategorized' });
     return rows;
   }, [items]);
@@ -120,7 +120,7 @@ export function ShopScreen() {
         item.name,
         item.brand,
         item.sku,
-        shopCategoryLabel(item.category),
+        shopCategoryLabel(item.category, item.category_label),
       ]
         .filter(Boolean)
         .join(' ')

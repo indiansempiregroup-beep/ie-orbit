@@ -134,6 +134,14 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
     detail: 'Set how shoppers earn and redeem store loyalty on orders.',
   },
   {
+    code: 'shopie_smart_lookup',
+    group: 'Commerce',
+    products: ['shopie'],
+    label: 'Smart product lookup',
+    adminLabel: 'Smart product lookup (pack-photo AI)',
+    detail: 'When barcodes miss the free catalog, read a pack photo with AI and fill the product form from a prepaid wallet.',
+  },
+  {
     code: 'shopie_books_sale',
     group: 'Books',
     products: ['shopie'],

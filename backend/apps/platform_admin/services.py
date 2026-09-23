@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -24,7 +25,7 @@ from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.roles import RoleService
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.razorpay_client import RazorpayClient
-from apps.businesses.constants import VALID_PRODUCT_CODES
+from apps.businesses.constants import VALID_PRODUCT_CODES, plan_display_name, product_display_name
 from apps.businesses.models import Business, BusinessProductSubscription, BusinessProductSubscriptionStatus
 from apps.businesses.services.businesses import BusinessService
 from apps.businesses.services.entitlements import EntitlementService
@@ -40,6 +41,7 @@ from apps.platform_admin.models import (
     PlatformFeatureFlag,
     PlatformLedgerInvoice,
     PlatformPlanPackage,
+    PlatformSmartLookupSettings,
     SupportTicket,
     SupportTicketNote,
 )
@@ -605,6 +607,7 @@ class PlatformAdminService:
             "google_ads",
             "razorpay",
             "cashfree",
+            "shopie_smart_lookup",
         ]
         existing = {f.key: f for f in PlatformFeatureFlag.objects.filter(tenant=tenant)}
         rows = []
@@ -795,7 +798,10 @@ class PlatformAdminService:
                 "razorpay_payment_id": payment_id,
                 "line_items": [
                     {
-                        "description": f"{session.product_code} / {session.plan_code}",
+                        "description": (
+                            f"{product_display_name(session.product_code)} / "
+                            f"{plan_display_name(plan_code=session.plan_code, product_code=session.product_code)}"
+                        ),
                         "amount_paise": session.amount_paise,
                     }
                 ],
@@ -1208,6 +1214,138 @@ class PlatformAdminService:
             user_agent=user_agent,
         )
         return after
+
+    def get_smart_lookup_settings(self) -> dict[str, Any]:
+        from apps.shopie.services.smart_lookup import serialize_platform_smart_lookup_settings
+
+        return serialize_platform_smart_lookup_settings()
+
+    @transaction.atomic
+    def update_smart_lookup_settings(
+        self,
+        *,
+        actor: User,
+        enabled: bool,
+        usd_to_inr: Decimal | float | str,
+        gst_percent: Decimal | float | str,
+        markup_bps: int,
+        min_charge_paise: int,
+        input_usd_per_million: Decimal | float | str,
+        output_usd_per_million: Decimal | float | str,
+        suggested_top_up_paise: list[int] | None,
+        reason: str,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> dict[str, Any]:
+        from apps.shopie.services.smart_lookup import serialize_platform_smart_lookup_settings
+
+        reason = self.require_reason(reason)
+        markup = max(0, int(markup_bps or 0))
+        min_charge = max(0, int(min_charge_paise or 0))
+        fx = Decimal(str(usd_to_inr or "0"))
+        gst = Decimal(str(gst_percent if gst_percent is not None else "18"))
+        input_rate = Decimal(str(input_usd_per_million or "0"))
+        output_rate = Decimal(str(output_usd_per_million or "0"))
+        if fx <= 0:
+            raise ValidationError({"usd_to_inr": "FX rate must be greater than zero."})
+        if gst < 0 or gst > 100:
+            raise ValidationError({"gst_percent": "GST % must be between 0 and 100."})
+        if input_rate < 0 or output_rate < 0:
+            raise ValidationError({"rates": "Token rates cannot be negative."})
+        if markup > 100_000:
+            raise ValidationError({"markup_bps": "Markup is too high."})
+
+        tops: list[int] = []
+        for raw in suggested_top_up_paise or []:
+            value = int(raw)
+            if value < 100:
+                raise ValidationError({"suggested_top_up_paise": "Each top-up must be at least ₹1."})
+            if value > 100_000_00:
+                raise ValidationError({"suggested_top_up_paise": "Each top-up must be at most ₹1,00,000."})
+            tops.append(value)
+        tops = sorted(set(tops))[:8]
+
+        row, _created = PlatformSmartLookupSettings.objects.get_or_create(
+            key="default",
+            defaults={
+                "enabled": True,
+                "usd_to_inr": Decimal("85"),
+                "gst_percent": Decimal("18"),
+                "markup_bps": 0,
+                "min_charge_paise": 1,
+                "input_usd_per_million": Decimal("0.10"),
+                "output_usd_per_million": Decimal("0.40"),
+                "suggested_top_up_paise": [5000, 10000, 25000, 50000],
+            },
+        )
+        before = serialize_platform_smart_lookup_settings(row)
+        previous_fx = Decimal(str(row.usd_to_inr))
+        row.enabled = bool(enabled)
+        row.usd_to_inr = fx
+        row.gst_percent = gst
+        row.markup_bps = markup
+        row.min_charge_paise = min_charge
+        row.input_usd_per_million = input_rate
+        row.output_usd_per_million = output_rate
+        row.suggested_top_up_paise = tops
+        update_fields = [
+            "enabled",
+            "usd_to_inr",
+            "gst_percent",
+            "markup_bps",
+            "min_charge_paise",
+            "input_usd_per_million",
+            "output_usd_per_million",
+            "suggested_top_up_paise",
+            "updated_at",
+            "version",
+        ]
+        if previous_fx != fx:
+            row.usd_to_inr_source = "manual"
+            update_fields.append("usd_to_inr_source")
+        row.save(update_fields=update_fields)
+        after = serialize_platform_smart_lookup_settings(row)
+        self.audit(
+            actor=actor,
+            action="platform.smart_lookup_settings.update",
+            resource_type="smart_lookup_settings",
+            resource_id=str(row.id),
+            reason=reason,
+            metadata={"before": before, "after": after},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return after
+
+    def refresh_smart_lookup_fx(
+        self,
+        *,
+        actor: User,
+        reason: str,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> dict[str, Any]:
+        from apps.platform_admin.fx import refresh_platform_usd_inr
+        from apps.shopie.services.smart_lookup import serialize_platform_smart_lookup_settings
+
+        reason = self.require_reason(reason)
+        before = serialize_platform_smart_lookup_settings()
+        try:
+            result = refresh_platform_usd_inr()
+        except Exception as exc:  # noqa: BLE001 — surface fetch failures to admin UI
+            raise ValidationError({"fx": f"Unable to refresh USD→INR: {exc}"}) from exc
+        after = serialize_platform_smart_lookup_settings()
+        self.audit(
+            actor=actor,
+            action="platform.smart_lookup_fx.refresh",
+            resource_type="smart_lookup_settings",
+            resource_id="default",
+            reason=reason,
+            metadata={"before": before, "after": after, "result": result},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return {**after, "refresh": result}
 
     def _platform_auth_settings_row(self) -> PlatformAuthSettings:
         row, _ = PlatformAuthSettings.objects.get_or_create(key="default")

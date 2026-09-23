@@ -128,7 +128,9 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   const breakdown = product.rating_breakdown ?? {};
   const facts = [
     product.brand ? { label: 'Brand', value: product.brand } : null,
-    shopCategoryKey(product.category) ? { label: 'Category', value: shopCategoryLabel(product.category) } : null,
+    shopCategoryKey(product.category)
+      ? { label: 'Category', value: shopCategoryLabel(product.category, product.category_label) }
+      : null,
     product.pack_size ? { label: 'Pack size', value: product.pack_size } : null,
     product.sku ? { label: 'SKU', value: product.sku } : null,
   ].filter(Boolean) as Array<{ label: string; value: string }>;

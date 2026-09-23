@@ -25,14 +25,20 @@ export function normalizeProductGallery(urls: Array<string | null | undefined>):
   return out;
 }
 
-/** Prefer relative /media paths so images reload reliably across clients. */
+/** Prefer relative /media paths for our uploads; keep absolute third-party URLs intact. */
 export function toStoredProductImageUrl(url: string | null | undefined): string {
   const trimmed = String(url || '').trim();
   if (!trimmed) return '';
   if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
   try {
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return new URL(trimmed).pathname || trimmed;
+      const parsed = new URL(trimmed);
+      // Only collapse our own media host URLs to a path; keep Open*Facts/CDN links absolute.
+      const path = parsed.pathname || '';
+      if (path.startsWith('/media/') || path.includes('/media/')) {
+        return path + (parsed.search || '');
+      }
+      return trimmed;
     }
   } catch {
     // keep original

@@ -17,6 +17,9 @@ from apps.platform_admin.api import (
     PlatformPaymentRefundView,
     PlatformPlanPackagesView,
     PlatformPurgeTenantView,
+    PlatformSmartLookupFxRefreshView,
+    PlatformSmartLookupHistoryView,
+    PlatformSmartLookupSettingsView,
     PlatformUpiClaimActionView,
     PlatformUpiClaimsView,
     PlatformTenantActionView,
@@ -192,6 +195,21 @@ urlpatterns = [
         "platform/addon-pricing",
         PlatformAddonPricingView.as_view(),
         name="platform-addon-pricing",
+    ),
+    path(
+        "platform/smart-lookup-settings",
+        PlatformSmartLookupSettingsView.as_view(),
+        name="platform-smart-lookup-settings",
+    ),
+    path(
+        "platform/smart-lookup-settings/refresh-fx",
+        PlatformSmartLookupFxRefreshView.as_view(),
+        name="platform-smart-lookup-refresh-fx",
+    ),
+    path(
+        "platform/smart-lookup-history",
+        PlatformSmartLookupHistoryView.as_view(),
+        name="platform-smart-lookup-history",
     ),
     path(
         "platform/auth-settings",

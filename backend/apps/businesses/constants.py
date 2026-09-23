@@ -18,6 +18,55 @@ PRODUCT_DISPLAY_NAMES: dict[str, str] = {
 }
 DEFAULT_PRODUCT_DISPLAY_NAME = PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]
 
+_LEGACY_PRODUCT_BRANDS: tuple[tuple[str, str], ...] = (
+    ("AppointIE", "Orbit Appoint"),
+    ("ShopIE", "Orbit Mart"),
+)
+
+
+def product_display_name(product_code: str | None) -> str:
+    """User-facing product label (never expose appointie/shopie codes)."""
+    code = str(product_code or "").strip().lower()
+    if code in PRODUCT_DISPLAY_NAMES:
+        return PRODUCT_DISPLAY_NAMES[code]
+    if not code:
+        return DEFAULT_PRODUCT_DISPLAY_NAME
+    return code.replace("_", " ").replace("-", " ").title()
+
+
+def rewrite_legacy_product_brands(text: str | None) -> str:
+    """Rewrite AppointIE/ShopIE branding that may still live in stored plan names."""
+    value = str(text or "")
+    for old, new in _LEGACY_PRODUCT_BRANDS:
+        value = value.replace(old, new)
+    return value
+
+
+def plan_display_name(
+    *,
+    plan_code: str | None = None,
+    plan_name: str | None = None,
+    product_code: str | None = None,
+) -> str:
+    """User-facing plan label for emails and notifications."""
+    named = rewrite_legacy_product_brands(plan_name).strip()
+    if named:
+        return named
+    code = str(plan_code or "").strip().lower()
+    if not code or code == "unknown":
+        return "plan"
+    matched_product: str | None = None
+    tier = code
+    for product in VALID_PRODUCT_CODES:
+        prefix = f"{product}-"
+        if code.startswith(prefix):
+            matched_product = product
+            tier = code[len(prefix) :]
+            break
+    product_label = product_display_name(matched_product or product_code)
+    tier_label = tier.replace("-", " ").replace("_", " ").title()
+    return f"{product_label} {tier_label}".strip()
+
 BILLING_INTERVAL_MONTHLY = "monthly"
 BILLING_INTERVAL_YEARLY = "yearly"
 
@@ -59,6 +108,7 @@ FEATURE_SHOPIE_DELIVERY_ZONES = "shopie_delivery_zones"
 FEATURE_SHOPIE_INSTANT_DELIVERY = "shopie_instant_delivery"
 FEATURE_SHOPIE_COUPONS = "shopie_coupons"
 FEATURE_SHOPIE_LOYALTY = "shopie_loyalty"
+FEATURE_SHOPIE_SMART_LOOKUP = "shopie_smart_lookup"
 
 FEATURE_SHOPIE_BOOKS_SALE = "shopie_books_sale"
 FEATURE_SHOPIE_BOOKS_PURCHASE = "shopie_books_purchase"
@@ -105,6 +155,7 @@ SHOPIE_COMMERCE_FEATURES: tuple[str, ...] = (
     FEATURE_SHOPIE_DELIVERY_ZONES,
     FEATURE_SHOPIE_INSTANT_DELIVERY,
     FEATURE_SHOPIE_COUPONS,
+    FEATURE_SHOPIE_SMART_LOOKUP,
 )
 
 SHOPIE_BOOKS_FEATURES: tuple[str, ...] = (
@@ -150,6 +201,7 @@ SHOPIE_STARTER_FEATURES: tuple[str, ...] = (
     FEATURE_SHOPIE_PRODUCTS,
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_RETURNS,
+    FEATURE_SHOPIE_SMART_LOOKUP,
     FEATURE_SHOPIE_BOOKS_SALE,
     FEATURE_SHOPIE_BOOKS_CASH,
     FEATURE_SHOPIE_BOOKS_EXPENSE,

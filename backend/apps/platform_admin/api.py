@@ -579,6 +579,86 @@ class PlatformAddonPricingView(APIView):
         return success_response(pricing, request_id=getattr(request, "request_id", None))
 
 
+class PlatformSmartLookupSettingsView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request) -> Response:
+        return success_response(
+            _svc().get_smart_lookup_settings(),
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Platform Admin"])
+    def put(self, request: Request) -> Response:
+        data = request.data
+        raw_tops = data.get("suggested_top_up_paise")
+        tops = raw_tops if isinstance(raw_tops, list) else None
+        settings = _svc().update_smart_lookup_settings(
+            actor=request.user,
+            enabled=bool(data.get("enabled", True)),
+            usd_to_inr=data.get("usd_to_inr") or "85",
+            gst_percent=data.get("gst_percent") if data.get("gst_percent") is not None else "18",
+            markup_bps=int(data.get("markup_bps") or 0),
+            min_charge_paise=int(data.get("min_charge_paise") or 1),
+            input_usd_per_million=data.get("input_usd_per_million") or "0.10",
+            output_usd_per_million=data.get("output_usd_per_million") or "0.40",
+            suggested_top_up_paise=tops,
+            reason=data.get("reason", "smart lookup settings update"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(settings, request_id=getattr(request, "request_id", None))
+
+
+class PlatformSmartLookupFxRefreshView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"], description="Fetch live USD→INR and update Smart lookup FX.")
+    def post(self, request: Request) -> Response:
+        settings = _svc().refresh_smart_lookup_fx(
+            actor=request.user,
+            reason=request.data.get("reason", "daily FX refresh"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(settings, request_id=getattr(request, "request_id", None))
+
+
+class PlatformSmartLookupHistoryView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"], description="Paginated Smart lookup wallet ledger across tenants.")
+    def get(self, request: Request) -> Response:
+        from apps.shopie.services.smart_lookup import SmartLookupService
+
+        params = request.query_params
+        kind = (params.get("kind") or "money").strip().lower()
+        if kind not in {"money", "all", "lookups", "credits", "debits"}:
+            return Response(
+                {"error": {"message": "kind must be money, all, lookups, credits, or debits"}},
+                status=400,
+            )
+        page = max(1, _int_param(params.get("page")) or 1)
+        page_size = max(1, min(_int_param(params.get("page_size")) or 25, 100))
+        window_days = _int_param(params.get("window_days"))
+        payload = SmartLookupService.platform_wallet_history(
+            page=page,
+            page_size=page_size,
+            kind=kind,
+            source=(params.get("source") or "").strip(),
+            code=(params.get("code") or "").strip(),
+            q=(params.get("q") or "").strip(),
+            date_from=(params.get("date_from") or "").strip(),
+            date_to=(params.get("date_to") or "").strip(),
+            found=params.get("found"),
+            tenant_id=(params.get("tenant_id") or "").strip(),
+            business_id=(params.get("business_id") or "").strip(),
+            window_days=window_days,
+        )
+        return success_response(payload, request_id=getattr(request, "request_id", None))
+
+
 class PlatformAuthSettingsView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 

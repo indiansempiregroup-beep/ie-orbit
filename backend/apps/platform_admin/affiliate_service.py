@@ -13,6 +13,7 @@ from django.utils.text import slugify
 from rest_framework.exceptions import ValidationError
 
 from apps.authentication.models import User
+from apps.businesses.constants import plan_display_name, product_display_name
 from apps.platform_admin.models import (
     PlatformAccrualBenefitType,
     PlatformAccrualStatus,
@@ -874,7 +875,8 @@ class AffiliateService:
             referred_name = referral.referred_tenant.display_name or referral.referred_tenant.slug
         notes = (
             f"Commission for {referred_name or 'referred business'} "
-            f"({session.product_code} / {session.plan_code})"
+            f"({product_display_name(session.product_code)} / "
+            f"{plan_display_name(plan_code=session.plan_code, product_code=session.product_code)})"
         )
         return self.add_ledger_entry(
             actor=None,

@@ -222,6 +222,83 @@ export function useUpdateAddonPricingMutation() {
   });
 }
 
+export function usePlatformSmartLookupSettingsQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'smart-lookup-settings'],
+    queryFn: async () => (await client.platform.smartLookupSettings()).data,
+    retry: false,
+  });
+}
+
+export function useUpdateSmartLookupSettingsMutation() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      enabled: boolean;
+      usd_to_inr: number | string;
+      gst_percent: number | string;
+      markup_bps: number;
+      min_charge_paise: number;
+      input_usd_per_million: number | string;
+      output_usd_per_million: number | string;
+      suggested_top_up_paise: number[];
+      reason: string;
+    }) => (await client.platform.updateSmartLookupSettings(body)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'smart-lookup-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['shop-smart-lookup'] });
+    },
+  });
+}
+
+export function useRefreshSmartLookupFxMutation() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body?: { reason?: string }) => (await client.platform.refreshSmartLookupFx(body)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'smart-lookup-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['shop-smart-lookup'] });
+    },
+  });
+}
+
+export function usePlatformSmartLookupHistoryQuery(filters: {
+  page: number;
+  page_size?: number;
+  kind: string;
+  source?: string;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+  window_days?: number | '';
+  tenant_id?: string;
+  business_id?: string;
+}) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'smart-lookup-history', filters],
+    queryFn: async () =>
+      (
+        await client.platform.smartLookupHistory({
+          page: filters.page,
+          page_size: filters.page_size ?? 25,
+          kind: filters.kind,
+          source: filters.source || undefined,
+          q: filters.q || undefined,
+          date_from: filters.date_from || undefined,
+          date_to: filters.date_to || undefined,
+          window_days: filters.window_days === '' || filters.window_days == null ? undefined : Number(filters.window_days),
+          tenant_id: filters.tenant_id || undefined,
+          business_id: filters.business_id || undefined,
+        })
+      ).data,
+    retry: false,
+  });
+}
+
 export function usePlatformAuthSettingsQuery() {
   const client = useApiClient();
   return useQuery({

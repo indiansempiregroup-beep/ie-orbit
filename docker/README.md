@@ -5,7 +5,13 @@ This repository now includes a Docker-based local development platform for the f
 ## Quick start
 
 ```bash
-docker compose up --build
+docker compose up -d
+```
+
+Source is bind-mounted, so day-to-day Python and web edits do not need an image rebuild. Use `--build` only when Dockerfiles, `backend/pyproject.toml`, or JS lockfiles/`package.json` files changed:
+
+```bash
+docker compose up --build -d
 ```
 
 The stack includes:

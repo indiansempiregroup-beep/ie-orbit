@@ -28,6 +28,7 @@ import {
 import { useBillingOrdersQuery, useBusinessBillingSnapshotQuery, usePublicBillingPlansQuery } from './billingHooks';
 import { RewardPointsSettingsPanel } from './RewardPointsSettingsPanel';
 import { SeatsAddonsPanel } from './SeatsAddonsPanel';
+import { SmartLookupSettingsPanel } from './SmartLookupSettingsPanel';
 import { SubscriptionUpiPaySheet, type SubscriptionUpiPayRequest } from './SubscriptionUpiPaySheet';
 import {
   daysUntil,
@@ -865,6 +866,8 @@ export function ProductSettingsPage() {
       ) : null}
 
       <RewardPointsSettingsPanel />
+
+      <SmartLookupSettingsPanel />
 
       <Dialog
         open={Boolean(proofPreviewUrl)}

@@ -55,6 +55,12 @@ services:
       R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
       R2_SIGNED_URL_TTL_PUBLIC: ${R2_SIGNED_URL_TTL_PUBLIC:-86400}
       R2_SIGNED_URL_TTL_PRIVATE: ${R2_SIGNED_URL_TTL_PRIVATE:-900}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_TEXT_USE_SEARCH: ${GEMINI_TEXT_USE_SEARCH:-true}
+      BARCODE_API_PROVIDER: ${BARCODE_API_PROVIDER:-upcitemdb}
+      BARCODE_API_KEY: ${BARCODE_API_KEY:-trial}
+      OCR_SPACE_API_KEY: ${OCR_SPACE_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:
@@ -188,6 +194,12 @@ services:
       PLATFORM_UPI_VPA: ${PLATFORM_UPI_VPA:-}
       PLATFORM_UPI_NAME: ${PLATFORM_UPI_NAME:-IE Orbit}
       PLATFORM_PAYMENT_QR_URL: ${PLATFORM_PAYMENT_QR_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_TEXT_USE_SEARCH: ${GEMINI_TEXT_USE_SEARCH:-true}
+      BARCODE_API_PROVIDER: ${BARCODE_API_PROVIDER:-upcitemdb}
+      BARCODE_API_KEY: ${BARCODE_API_KEY:-trial}
+      OCR_SPACE_API_KEY: ${OCR_SPACE_API_KEY:-}
     volumes:
       - .:/app
       - backend-python-cache:/root/.cache/pip
@@ -244,6 +256,12 @@ services:
       PLATFORM_UPI_VPA: ${PLATFORM_UPI_VPA:-}
       PLATFORM_UPI_NAME: ${PLATFORM_UPI_NAME:-IE Orbit}
       PLATFORM_PAYMENT_QR_URL: ${PLATFORM_PAYMENT_QR_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_TEXT_USE_SEARCH: ${GEMINI_TEXT_USE_SEARCH:-true}
+      BARCODE_API_PROVIDER: ${BARCODE_API_PROVIDER:-upcitemdb}
+      BARCODE_API_KEY: ${BARCODE_API_KEY:-trial}
+      OCR_SPACE_API_KEY: ${OCR_SPACE_API_KEY:-}
     volumes:
       - .:/app
       - backend-python-cache:/root/.cache/pip

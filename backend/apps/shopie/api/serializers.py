@@ -15,7 +15,6 @@ from apps.shopie.models import (
     FulfillmentMode,
     OrderStatus,
     PartyKind,
-    ProductCategory,
     ProductStatus,
     ShopBooksDocument,
     ShopBooksVoucher,
@@ -58,6 +57,7 @@ class ShopProductSerializer(serializers.ModelSerializer):
     tax_inclusive = serializers.SerializerMethodField()
     rating_avg = serializers.SerializerMethodField()
     rating_count = serializers.SerializerMethodField()
+    category_label = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopProduct
@@ -82,6 +82,7 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "pack_size",
             "image_url",
             "category",
+            "category_label",
             "metadata",
             "barcodes",
             "rating_avg",
@@ -89,7 +90,12 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "rating_avg", "rating_count"]
+        read_only_fields = ["id", "created_at", "updated_at", "rating_avg", "rating_count", "category_label"]
+
+    def get_category_label(self, obj: ShopProduct) -> str:
+        from apps.shopie.services.categories import CategoryService
+
+        return CategoryService().label_for(obj.category)
 
     def get_tax_inclusive(self, obj: ShopProduct) -> bool:
         meta = obj.metadata if isinstance(obj.metadata, dict) else {}
@@ -137,13 +143,8 @@ class ShopProductWriteSerializer(serializers.Serializer):
     godown_id = serializers.UUIDField(required=False, allow_null=True)
     low_stock_threshold = serializers.DecimalField(max_digits=12, decimal_places=3, required=False)
     pack_size = serializers.CharField(required=False, allow_blank=True, max_length=80)
-    # Relative /media/... paths from local uploads are valid product images.
     image_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)
-    category = serializers.ChoiceField(
-        choices=ProductCategory.choices,
-        required=False,
-        allow_blank=True,
-    )
+    category = serializers.CharField(required=False, allow_blank=True, max_length=64)
     metadata = serializers.DictField(required=False)
     barcodes = serializers.ListField(child=serializers.DictField(), required=False)
 
@@ -220,10 +221,12 @@ class BarcodeLookupSerializer(serializers.Serializer):
 
 
 class EnrichBarcodeSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField(required=False)
     code = serializers.CharField(required=False, allow_blank=True, max_length=128)
     query = serializers.CharField(required=False, allow_blank=True, max_length=200)
-    image_url = serializers.URLField(required=False, allow_blank=True)
+    image_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)
     hint = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    use_smart_lookup = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         code = (attrs.get("code") or "").strip()
@@ -233,6 +236,21 @@ class EnrichBarcodeSerializer(serializers.Serializer):
         if not code and not query and not image_url and not hint:
             raise serializers.ValidationError("Provide a barcode, search query, or product image.")
         return attrs
+
+
+class EnsureCategorySerializer(serializers.Serializer):
+    label = serializers.CharField(max_length=120)
+    slug = serializers.CharField(required=False, allow_blank=True, max_length=64)
+
+
+class SmartLookupSettingsSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    enabled = serializers.BooleanField(required=False)
+
+
+class SmartLookupTopUpSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    amount_paise = serializers.IntegerField(min_value=100, max_value=100_000_00)
 
 
 class PackagingAnalyzeSerializer(serializers.Serializer):

@@ -363,6 +363,8 @@ class CheckoutService:
         return session
 
     def _record_affiliate_commission(self, session: BillingCheckoutSession) -> None:
+        if str((session.metadata or {}).get("kind") or "") == "smart_lookup_top_up":
+            return
         try:
             from apps.platform_admin.affiliate_service import AffiliateService
 
@@ -618,7 +620,10 @@ class CheckoutService:
             meta["confirmed_at"] = timezone.now().isoformat()
             session.metadata = meta
             session.save(update_fields=["metadata", "updated_at"])
-            self._activate_subscription_for_session(session)
+            if str(meta.get("kind") or "") == "smart_lookup_top_up":
+                self._credit_smart_lookup_wallet(session)
+            else:
+                self._activate_subscription_for_session(session)
             try:
                 notify_upi_claim_resolved(session, action="confirm", note=str(note or ""))
             except Exception:
@@ -652,6 +657,115 @@ class CheckoutService:
                 "pets_pack_enabled": bool(meta.get("pets_pack_enabled")),
             }
         ]
+
+    def create_smart_lookup_upi_session(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        amount_paise: int,
+        actor_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Prepaid Smart lookup wallet top-up via the same UPI claim flow as subscriptions."""
+        from apps.common.upi import build_upi_pay_url
+        from apps.shopie.services.smart_lookup import SmartLookupService
+
+        total = int(amount_paise or 0)
+        if total < 100:
+            raise ValidationError({"amount_paise": "Minimum top-up is ₹1."})
+        if total > 100_000_00:
+            raise ValidationError({"amount_paise": "Maximum top-up is ₹1,00,000."})
+
+        smart = SmartLookupService()
+        if not smart.platform_allows(tenant=tenant):
+            raise ValidationError({"smart_lookup": "Smart lookup is disabled by the platform."})
+        if not smart.plan_allows(business=business):
+            raise ValidationError(
+                {
+                    "smart_lookup": (
+                        "Smart product lookup is not included in the current plan. "
+                        "Ask your platform admin to enable it on the package Features tab."
+                    )
+                }
+            )
+
+        vpa = str(getattr(settings, "PLATFORM_UPI_VPA", "") or "").strip()
+        if not vpa:
+            raise ValidationError({"upi": "Platform UPI ID is not configured."})
+
+        order_id = f"upi_sl_{uuid.uuid4().hex}"
+        expires_at = timezone.now() + timedelta(hours=CHECKOUT_SESSION_TTL_HOURS)
+        amount_rupees = total / 100
+        pay_url = build_upi_pay_url(
+            vpa=vpa,
+            payee_name=str(getattr(settings, "PLATFORM_UPI_NAME", "") or "IE Orbit"),
+            amount=amount_rupees,
+            note="Smart lookup wallet",
+            currency=DEFAULT_CHECKOUT_CURRENCY,
+        )
+        session = BillingCheckoutSession.objects.create(
+            tenant=tenant,
+            business=business,
+            product_code="shopie",
+            plan_code="smart_lookup_wallet",
+            razorpay_order_id=order_id,
+            amount_paise=total,
+            currency=DEFAULT_CHECKOUT_CURRENCY,
+            status=CheckoutSessionStatus.CREATED,
+            expires_at=expires_at,
+            metadata={
+                "payment_channel": "upi_claim",
+                "payment_status": "due",
+                "kind": "smart_lookup_top_up",
+                "created_by": actor_id,
+                "upi_pay_url": pay_url,
+                "upi_vpa": vpa,
+                "claim_intent": "smart_lookup_top_up",
+                "line_items": [
+                    {
+                        "product_code": "shopie",
+                        "plan_code": "smart_lookup_wallet",
+                        "amount_paise": total,
+                        "intent": "smart_lookup_top_up",
+                        "extra_staff": 0,
+                        "extra_offices": 0,
+                        "pets_pack_enabled": False,
+                    }
+                ],
+            },
+        )
+        return {
+            "session_id": str(session.id),
+            "order_id": session.razorpay_order_id,
+            "amount": session.amount_paise,
+            "currency": session.currency,
+            "product_code": session.product_code,
+            "plan_code": session.plan_code,
+            "upi_vpa": vpa,
+            "upi_pay_url": pay_url,
+            "payment_qr_url": str(getattr(settings, "PLATFORM_PAYMENT_QR_URL", "") or ""),
+            "payment_status": "due",
+            "claim_intent": "smart_lookup_top_up",
+            "kind": "smart_lookup_top_up",
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def _credit_smart_lookup_wallet(self, session: BillingCheckoutSession) -> None:
+        from apps.shopie.services.smart_lookup import SmartLookupService
+
+        meta = dict(session.metadata or {})
+        if meta.get("wallet_credited"):
+            return
+        SmartLookupService().credit_wallet(
+            tenant=session.tenant,
+            business=session.business,
+            amount_paise=int(session.amount_paise),
+            reason=f"upi_top_up:{session.razorpay_order_id}",
+        )
+        meta["wallet_credited"] = True
+        meta["wallet_credited_at"] = timezone.now().isoformat()
+        session.metadata = meta
+        session.save(update_fields=["metadata", "updated_at"])
 
     def _activate_subscription_for_session(self, session: BillingCheckoutSession) -> None:
         from apps.billing.services.webhooks import default_product_billing_service

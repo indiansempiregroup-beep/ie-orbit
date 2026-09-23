@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '../../components/Button';
-import { getProductName } from '../../config/products';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useAuth } from '../../hooks/useAuth';
@@ -8,20 +7,6 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 
 const PROOF_REQUIRED_MESSAGE = 'Enter a UTR / UPI reference or upload a payment screenshot.';
 const SCREENSHOT_REQUIRED_MESSAGE = 'Upload a payment screenshot or enter a UTR / UPI reference.';
-
-export type SubscriptionUpiPayItem = {
-  productCode: string;
-  planCode: string;
-  extraStaff?: number;
-  extraOffices?: number;
-  petsPackEnabled?: boolean;
-};
-
-export type SubscriptionUpiPayRequest = {
-  items: SubscriptionUpiPayItem[];
-  title?: string;
-  autoStart?: boolean;
-};
 
 type SessionPayload = {
   session_id: string;
@@ -34,21 +19,21 @@ type SessionPayload = {
 };
 
 type Props = {
-  request: SubscriptionUpiPayRequest;
+  amountPaise: number;
   onClose: () => void;
   onClaimed: () => Promise<void> | void;
   onError: (message: string) => void;
 };
 
 function paiseToInr(paise: number) {
-  return `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
+  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
 function qrImageSrc(upiPayUrl: string) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=188x188&margin=8&data=${encodeURIComponent(upiPayUrl)}`;
 }
 
-export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }: Props) {
+export function SmartLookupUpiPaySheet({ amountPaise, onClose, onClaimed, onError }: Props) {
   const client = useApiClient();
   const auth = useAuth();
   const workspace = useWorkspace();
@@ -68,42 +53,24 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
     setFieldErrors({});
   }
 
-  const title = useMemo(() => {
-    if (request.title) return request.title;
-    const names = request.items.map((item) => getProductName(item.productCode));
-    if (names.length > 1) return `Pay selected · ${names.join(' + ')}`;
-    return `Renew ${names[0] || 'subscription'}`;
-  }, [request.title, request.items]);
-
   async function startCheckout() {
+    if (!workspace.businessId) {
+      const message = 'Select a business before topping up.';
+      setFormError(message);
+      onError(message);
+      return;
+    }
     setLoading(true);
     setFormError(null);
     try {
-      const body =
-        request.items.length === 1
-          ? {
-              product_code: request.items[0].productCode,
-              plan_code: request.items[0].planCode,
-              business_id: workspace.businessId ?? undefined,
-              extra_staff: request.items[0].extraStaff ?? 0,
-              extra_offices: request.items[0].extraOffices ?? 0,
-              pets_pack_enabled: Boolean(request.items[0].petsPackEnabled),
-            }
-          : {
-              business_id: workspace.businessId ?? undefined,
-              items: request.items.map((item) => ({
-                product_code: item.productCode,
-                plan_code: item.planCode,
-                extra_staff: item.extraStaff ?? 0,
-                extra_offices: item.extraOffices ?? 0,
-                pets_pack_enabled: Boolean(item.petsPackEnabled),
-              })),
-            };
-      const res = await client.billing.createUpiCheckout(body);
+      const res = await client.shop.createSmartLookupTopUp({
+        business_id: workspace.businessId,
+        amount_paise: amountPaise,
+      });
       setSession(res.data);
       setStatus('ready');
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to start UPI checkout. Set PLATFORM_UPI_VPA on the server.');
+      const message = getApiErrorMessage(err, 'Unable to start UPI top-up. Set PLATFORM_UPI_VPA on the server.');
       setFormError(message);
       onError(message);
     } finally {
@@ -112,11 +79,11 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
   }
 
   useEffect(() => {
-    if (request.autoStart && status === 'idle' && !loading && !session) {
+    if (status === 'idle' && !loading && !session) {
       void startCheckout();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request.autoStart]);
+  }, []);
 
   async function uploadProof(file: File) {
     if (!auth.token || !workspace.tenantId || !workspace.businessId) {
@@ -135,7 +102,8 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
       form.set('visibility', 'public');
       form.append('tags', 'billing');
       form.append('tags', 'upi_proof');
-      form.set('display_name', `UPI proof ${request.items.map((item) => item.productCode).join(' ')}`);
+      form.append('tags', 'smart_lookup');
+      form.set('display_name', `Smart lookup top-up ${paiseToInr(amountPaise)}`);
       const response = await fetch('/api/v1/media/upload', {
         method: 'POST',
         headers: {
@@ -202,23 +170,19 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
       className="admin-drawer-backdrop admin-drawer-backdrop--sheet"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="upi-pay-title"
+      aria-labelledby="smart-lookup-upi-title"
       onClick={onClose}
     >
       <div className="admin-drawer admin-drawer--sheet" style={{ maxWidth: 480 }} onClick={(event) => event.stopPropagation()}>
-        <p className="product-settings-kicker">Pay with UPI</p>
-        <h2 id="upi-pay-title" className="product-settings-title">
-          {title}
+        <p className="product-settings-kicker">Smart lookup wallet</p>
+        <h2 id="smart-lookup-upi-title" className="product-settings-title">
+          Top up {paiseToInr(amountPaise)}
         </h2>
         <ol className="product-settings-lead" style={{ paddingLeft: 18 }}>
           <li>Pay the exact amount with UPI</li>
           <li>Submit your UTR or screenshot</li>
-          <li>IE confirms — access restores until the next due date</li>
+          <li>IE confirms — wallet credits at actual AI cost, no markup</li>
         </ol>
-
-        {status === 'idle' ? (
-          <p className="product-settings-lead">Generate a QR for this period. We do not charge automatically.</p>
-        ) : null}
 
         {session && (status === 'ready' || status === 'awaiting') ? (
           <div style={{ display: 'grid', gap: 12 }}>
@@ -307,7 +271,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
               <div className="product-settings-pending">
                 <strong>Payment received — waiting for IE to confirm (usually same day).</strong>
                 <p>
-                  Your claim was submitted{utr ? ` · UTR ${utr}` : ''}. The product stays as-is until we confirm.
+                  Your claim was submitted{utr ? ` · UTR ${utr}` : ''}. Wallet credits after confirmation.
                 </p>
               </div>
             )}

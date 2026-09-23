@@ -22,6 +22,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadProductImage } from '../../api/media';
+import { enrichSuccessMessage } from './enrichMessages';
 import { FormScreen } from '../../components/FormScreen';
 import { FormHero } from '../../components/FormHero';
 import { HtmlEditorField } from '../../components/HtmlEditorField';
@@ -80,41 +81,119 @@ type FormKey = keyof FormState;
 
 const DEFAULTS = new Set(['0', 'INR', 'active', 'manufacturer', '']);
 
+const IDENTITY_KEYS: FormKey[] = [
+  'sku',
+  'name',
+  'brand',
+  'description',
+  'details_html',
+  'pack_size',
+  'category',
+  'images',
+  'barcode',
+  'barcode_type',
+  'price',
+  'tax_rate',
+  'tax_inclusive',
+];
+
+/** Clear catalog identity when the barcode changes so a new lookup can refill everything. */
+function wipeIdentity(
+  current: FormState,
+  code: string,
+  options?: { keepPriceStock?: boolean },
+): FormState {
+  return {
+    ...current,
+    sku: code,
+    name: '',
+    brand: '',
+    description: '',
+    details_html: '',
+    pack_size: '',
+    category: '',
+    images: emptyProductImageSlots(),
+    barcode: code,
+    barcode_type: 'manufacturer',
+    ...(options?.keepPriceStock
+      ? {}
+      : { price: '0', tax_rate: '0', tax_inclusive: 'excluded' as const }),
+  };
+}
+
+function clearIdentityTouched(touched: Set<FormKey>, options?: { keepPriceStock?: boolean }) {
+  for (const key of IDENTITY_KEYS) {
+    if (options?.keepPriceStock && (key === 'price' || key === 'tax_rate' || key === 'tax_inclusive')) {
+      continue;
+    }
+    touched.delete(key);
+  }
+}
+
 function applyEnrichment(
   current: FormState,
   data: ShopBarcodeEnrichment,
   touched: Set<FormKey>,
+  options?: { replaceIdentity?: boolean },
 ): FormState {
+  const replace = Boolean(options?.replaceIdentity);
   const fill = (key: FormKey, value?: string | null) => {
     if (!value) return current[key];
-    if (touched.has(key)) return current[key];
+    if (!replace && touched.has(key)) return current[key];
     const existing = String(current[key] ?? '');
-    if (existing && !DEFAULTS.has(existing)) return existing;
+    if (!replace && existing && !DEFAULTS.has(existing)) return existing;
     return value;
   };
+
+  const mrp = String(data.mrp || '').trim();
+  const gst = String(data.gst_rate || '').trim();
+  const usableMrp = mrp && mrp !== '0' && mrp !== '0.00' ? mrp : '';
+  const usableGst = gst && gst !== '0' && gst !== '0.00' ? gst : '';
+  const detailsHtml =
+    (data.details_html || '').trim() ||
+    (data.description
+      ? `<p>${String(data.description)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')}</p>`
+      : '');
 
   const nextImages = ensureProductImageSlots(
     normalizeProductGallery([
       data.front_image_url || current.images[0],
       data.back_image_url || current.images[1],
+      ...(data.images?.gallery ?? []),
       ...current.images.slice(2),
       data.local_image_url,
       data.image_url,
     ]),
   );
 
-  return {
+  const next: FormState = {
     ...current,
     sku: fill('sku', data.sku || data.code),
     name: fill('name', data.name),
     brand: fill('brand', data.brand),
     description: fill('description', data.description),
+    details_html: fill('details_html', detailsHtml),
     pack_size: fill('pack_size', data.pack_size || data.serving_size),
+    price: fill('price', usableMrp),
+    tax_rate: fill('tax_rate', usableGst),
     images: nextImages,
     barcode: fill('barcode', data.code),
     barcode_type: data.code && !touched.has('barcode_type') ? 'manufacturer' : current.barcode_type,
-    category: fill('category', guessShopProductCategory(data.categories) || undefined),
+    category: fill(
+      'category',
+      data.category || guessShopProductCategory(data.categories) || undefined,
+    ),
   };
+
+  // Indian MRP is tax-inclusive; apply that when we fill from catalog MRP.
+  if (usableMrp && !touched.has('tax_inclusive')) {
+    next.tax_inclusive = 'included';
+  }
+
+  return next;
 }
 
 function pickGodownId(godowns: ShopGodown[], productId?: string) {
@@ -173,6 +252,7 @@ export function ShopProductAddScreen() {
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [needsPackPhoto, setNeedsPackPhoto] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [previews, setPreviews] = useState<string[]>(emptyProductImageSlots());
   const touchedRef = useRef<Set<FormKey>>(new Set());
@@ -229,23 +309,45 @@ export function ShopProductAddScreen() {
 
   useEffect(() => {
     const code = route.params?.enrichCode;
-    if (!code || !client) return;
+    if (!code || !client || !businessId) return;
     void (async () => {
       setBusy(true);
       setMessage(null);
+      setNeedsPackPhoto(false);
       try {
-        const response = await client.shop.enrichBarcode({ code });
-        // Always apply the scanned barcode; keep other fields via enrichment rules.
-        setForm((current) => ({
-          ...applyEnrichment(current, response.data, touchedRef.current),
-          barcode: code,
-        }));
+        const response = await client.shop.enrichBarcode({
+          business_id: businessId,
+          code,
+          use_smart_lookup: true,
+        });
+        setForm((current) => {
+          const codeChanged = Boolean(current.barcode.trim() && current.barcode.trim() !== code);
+          if (codeChanged) {
+            clearIdentityTouched(touchedRef.current, { keepPriceStock: isEditing });
+            setPreviews(emptyProductImageSlots());
+          }
+          const base = codeChanged
+            ? wipeIdentity(current, code, { keepPriceStock: isEditing })
+            : { ...current, barcode: code };
+          return applyEnrichment(base, response.data, touchedRef.current, {
+            replaceIdentity: codeChanged,
+          });
+        });
         touchedRef.current.add('barcode');
-        setMessage(
-          response.data.found
-            ? `Barcode updated from ${response.data.source ?? 'catalog'}.`
-            : 'Barcode updated — no online match for extra details.',
-        );
+        if (response.data.found) {
+          setNeedsPackPhoto(false);
+          setMessage(enrichSuccessMessage(response.data, { editing: isEditing }));
+        } else {
+          setNeedsPackPhoto(Boolean(response.data.needs_pack_photo));
+          setMessage(
+            enrichMissMessage(
+              response.data,
+              response.data.needs_pack_photo
+                ? 'No match yet. Capture a clear primary pack photo for Smart lookup.'
+                : 'Barcode updated — no online match for extra details.',
+            ),
+          );
+        }
       } catch (err) {
         setForm((current) => ({ ...current, barcode: code }));
         touchedRef.current.add('barcode');
@@ -255,7 +357,7 @@ export function ShopProductAddScreen() {
         navigation.setParams({ enrichCode: undefined });
       }
     })();
-  }, [client, navigation, route.params?.enrichCode]);
+  }, [client, navigation, route.params?.enrichCode, businessId, isEditing]);
 
   function markTouched(key: FormKey) {
     touchedRef.current.add(key);
@@ -265,6 +367,20 @@ export function ShopProductAddScreen() {
     markTouched(key);
     setForm((current) => ({ ...current, [key]: value }));
     setFieldErrors((current) => (current[key] ? { ...current, [key]: '' } : current));
+  }
+
+  function enrichMissMessage(
+    data: {
+      message?: string;
+      needs_pack_photo?: boolean;
+    },
+    fallback: string,
+  ) {
+    const base = (data.message || fallback).trim();
+    if (data.needs_pack_photo && !/pack photo|photo/i.test(base)) {
+      return `${base} Capture a clear primary pack photo to try Smart lookup again.`;
+    }
+    return base;
   }
 
   function authErrorMessage(err: unknown, fallback: string) {
@@ -357,7 +473,11 @@ export function ShopProductAddScreen() {
         next[index] = stored;
         return { ...current, images: next };
       });
-      setMessage(`${productImageSlotLabel(index)} uploaded.`);
+      setMessage(
+        index === 0
+          ? 'Primary photo uploaded. Tap Smart fill when you want to read the pack.'
+          : `${productImageSlotLabel(index)} uploaded.`,
+      );
     } catch (err) {
       setMessage(authErrorMessage(err, 'Unable to upload photo'));
     } finally {
@@ -447,6 +567,47 @@ export function ShopProductAddScreen() {
     }, 1500);
   }
 
+  async function runSmartLookupFromPhoto() {
+    if (!businessId) return;
+    const front = form.images[0] || '';
+    if (!front) {
+      setMessage('Capture the primary pack photo first, then tap Smart fill.');
+      return;
+    }
+    setBusy(true);
+    setMessage('Reading pack photo with Smart lookup…');
+    try {
+      const freshClient = await getFreshClient();
+      const response = await freshClient.shop.enrichBarcode({
+        business_id: businessId,
+        code: form.barcode || undefined,
+        image_url: front,
+        hint: nameLookup || form.name || form.brand,
+        use_smart_lookup: true,
+      });
+      if (!response.data.found) {
+        setNeedsPackPhoto(Boolean(response.data.needs_pack_photo));
+        setMessage(
+          enrichMissMessage(response.data, 'Could not read the pack photo. Try again or fill manually.'),
+        );
+        return;
+      }
+      setNeedsPackPhoto(false);
+      setForm((current) => applyEnrichment(current, response.data, touchedRef.current));
+      const charged = response.data.charged_paise;
+      setMessage(
+        response.data.message ||
+          (charged
+            ? `Filled from pack photo (₹${(charged / 100).toFixed(2)}). Review and save.`
+            : 'Filled from pack photo. Review and save.'),
+      );
+    } catch (err) {
+      setMessage(authErrorMessage(err, 'Unable to run Smart lookup'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function analyzePackaging() {
     if (!businessId) return;
     const front = form.images[0] || undefined;
@@ -486,17 +647,46 @@ export function ShopProductAddScreen() {
   }
 
   async function lookupByName() {
-    if (!client || !nameLookup.trim()) return;
+    if (!client || !businessId || !nameLookup.trim()) return;
     setBusy(true);
     setMessage(null);
+    setNeedsPackPhoto(false);
+    const trimmed = nameLookup.trim();
+    const looksLikeBarcode = /^\d{8}$|^\d{12,14}$/.test(trimmed);
     try {
-      const response = await client.shop.enrichBarcode({ query: nameLookup.trim() });
+      const response = await client.shop.enrichBarcode({
+        business_id: businessId,
+        ...(looksLikeBarcode ? { code: trimmed } : { query: trimmed }),
+        use_smart_lookup: true,
+      });
       if (!response.data.found) {
-        setMessage(response.data.message || 'No online match for that name.');
+        setNeedsPackPhoto(Boolean(response.data.needs_pack_photo));
+        if (looksLikeBarcode) {
+          setForm((current) => ({ ...current, barcode: trimmed }));
+          touchedRef.current.add('barcode');
+        }
+        setMessage(enrichMissMessage(response.data, 'No online match for that search.'));
         return;
       }
-      setForm((current) => applyEnrichment(current, response.data, touchedRef.current));
-      setMessage(`Prefill from ${response.data.source ?? 'catalog'}.`);
+      setNeedsPackPhoto(false);
+      setForm((current) => {
+        if (!looksLikeBarcode) {
+          return applyEnrichment(current, response.data, touchedRef.current);
+        }
+        const codeChanged = Boolean(current.barcode.trim() && current.barcode.trim() !== trimmed);
+        if (codeChanged) {
+          clearIdentityTouched(touchedRef.current, { keepPriceStock: isEditing });
+          setPreviews(emptyProductImageSlots());
+        }
+        const base = codeChanged
+          ? wipeIdentity(current, trimmed, { keepPriceStock: isEditing })
+          : { ...current, barcode: trimmed };
+        return applyEnrichment(base, response.data, touchedRef.current, {
+          replaceIdentity: codeChanged || !current.name.trim(),
+        });
+      });
+      if (looksLikeBarcode) touchedRef.current.add('barcode');
+      setMessage(enrichSuccessMessage(response.data));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Search failed');
     } finally {
@@ -618,7 +808,9 @@ export function ShopProductAddScreen() {
         <FormAlert
           message={message}
           tone={
-            /unable|failed|error|expired|permission/i.test(message) ? 'error' : 'success'
+            /unable|failed|error|expired|permission|no match|could not|no online/i.test(message)
+              ? 'error'
+              : 'success'
           }
         />
       ) : null}
@@ -673,16 +865,27 @@ export function ShopProductAddScreen() {
           disabled={busy || analyzing || (!form.images[0] && !form.images[1])}
           onPress={() => void analyzePackaging()}
         />
+        {form.images[0] ? (
+          <Button
+            label={busy ? 'Reading pack…' : 'Smart fill (wallet)'}
+            variant="primary"
+            icon="camera"
+            disabled={busy || analyzing}
+            onPress={() => void runSmartLookupFromPhoto()}
+          />
+        ) : needsPackPhoto ? (
+          <Text style={styles.hint}>Add a primary pack photo above to retry Smart lookup.</Text>
+        ) : null}
       </FormSection>
 
-      <FormSection title="Lookup" subtitle="Scan a barcode or search the catalog to prefill fields">
+      <FormSection title="Lookup" subtitle="Scan or type a barcode / name — Smart lookup fills when free catalogs miss">
         <View style={styles.lookupRow}>
           <View style={styles.lookupField}>
             <Input
-              label="Search by name"
+              label="Search by name or barcode"
               value={nameLookup}
               onChangeText={setNameLookup}
-              placeholder="e.g. Pedigree Adult 3kg"
+              placeholder="e.g. 8906002483785 or Pedigree Adult 3kg"
               returnKeyType="search"
               onSubmitEditing={() => void lookupByName()}
             />

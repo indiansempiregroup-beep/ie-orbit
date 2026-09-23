@@ -206,6 +206,8 @@ export function applyEnrichmentToRow(
   data: ShopBarcodeEnrichment,
   defaults: BulkProductDefaults,
 ): BulkProductRow {
+  const mrp = String(data.mrp || '').trim();
+  const gst = String(data.gst_rate || '').trim();
   const next: BulkProductRow = {
     ...row,
     sku: data.sku || data.code || row.sku,
@@ -213,8 +215,11 @@ export function applyEnrichmentToRow(
     brand: data.brand || row.brand,
     pack_size: data.pack_size || data.serving_size || row.pack_size,
     barcode: data.code || row.barcode,
-    category: guessShopProductCategory(data.categories) || row.category,
+    category: data.category || guessShopProductCategory(data.categories) || row.category,
     image_url: data.front_image_url || data.local_image_url || data.image_url || row.image_url,
+    hsn_sac: data.hsn_sac || row.hsn_sac,
+    gst_rate: gst && gst !== '0' && gst !== '0.00' ? gst : row.gst_rate,
+    price: mrp && mrp !== '0' && mrp !== '0.00' ? mrp : row.price,
     error: '',
     lookingUp: false,
   };

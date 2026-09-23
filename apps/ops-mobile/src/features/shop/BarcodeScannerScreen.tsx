@@ -113,7 +113,7 @@ export function BarcodeScannerScreen() {
             setMessage('Already in this batch. Point at the next product.');
             return;
           }
-          const response = await client.shop.enrichBarcode({ code });
+          const response = await client.shop.enrichBarcode({ business_id: businessId, code });
           const result = addBulkScanItem({
             code,
             enrichment: { ...response.data, code: response.data.code || code },

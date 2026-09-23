@@ -1,4 +1,5 @@
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 
@@ -304,7 +305,7 @@ export function AdminDrawer({
 
   if (!open) return null;
   const sheet = variant === 'sheet';
-  return (
+  return createPortal(
     <div
       className={`admin-drawer-backdrop${sheet ? ' admin-drawer-backdrop--sheet' : ''}`}
       role="presentation"
@@ -329,7 +330,8 @@ export function AdminDrawer({
         <div className="admin-drawer__body">{children}</div>
         {footer ? <footer className="admin-drawer__footer">{footer}</footer> : null}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

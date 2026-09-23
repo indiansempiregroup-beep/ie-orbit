@@ -14,7 +14,8 @@ import {
   productLabel,
 } from './AdminChrome';
 import { adminFeatureGroups, BI_FEATURE_OPTIONS } from '../../config/planFeatures';
-import { usePlatformAddonPricingQuery, usePlatformPlanPackagesQuery, useUpdateAddonPricingMutation, useUpsertPlanPackageMutation } from './adminHooks';
+import { usePlatformAddonPricingQuery, usePlatformPlanPackagesQuery, usePlatformSmartLookupHistoryQuery, usePlatformSmartLookupSettingsQuery, useRefreshSmartLookupFxMutation, useUpdateAddonPricingMutation, useUpdateSmartLookupSettingsMutation, useUpsertPlanPackageMutation } from './adminHooks';
+import { enrichLedgerSourceLabel } from '../shop/enrichMessages';
 
 const PRODUCT_LABELS: Record<string, string> = {
   appointie: 'Orbit Appoint',
@@ -191,6 +192,9 @@ export function PlatformPackagesPage() {
   const upsertMutation = useUpsertPlanPackageMutation();
   const addonQuery = usePlatformAddonPricingQuery();
   const addonMutation = useUpdateAddonPricingMutation();
+  const smartLookupQuery = usePlatformSmartLookupSettingsQuery();
+  const smartLookupMutation = useUpdateSmartLookupSettingsMutation();
+  const smartFxRefreshMutation = useRefreshSmartLookupFxMutation();
 
   const [form, setForm] = useState<FormState | null>(null);
   const [editorTab, setEditorTab] = useState<'details' | 'features'>('details');
@@ -200,6 +204,33 @@ export function PlatformPackagesPage() {
   const [addonOfficeInr, setAddonOfficeInr] = useState('');
   const [addonPetsInr, setAddonPetsInr] = useState('');
   const [addonReason, setAddonReason] = useState('Update add-on prices');
+  const [smartEnabled, setSmartEnabled] = useState(true);
+  const [smartFx, setSmartFx] = useState('85');
+  const [smartGstPercent, setSmartGstPercent] = useState('18');
+  const [smartMarkupBps, setSmartMarkupBps] = useState('0');
+  const [smartMinPaise, setSmartMinPaise] = useState('1');
+  const [smartInputUsd, setSmartInputUsd] = useState('0.10');
+  const [smartOutputUsd, setSmartOutputUsd] = useState('0.40');
+  const [smartTopUpsInr, setSmartTopUpsInr] = useState('50, 100, 250, 500');
+  const [smartReason, setSmartReason] = useState('Update Smart lookup pricing');
+  const [ledgerKind, setLedgerKind] = useState('money');
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerQ, setLedgerQ] = useState('');
+  const [ledgerSource, setLedgerSource] = useState('');
+  const [ledgerDateFrom, setLedgerDateFrom] = useState('');
+  const [ledgerDateTo, setLedgerDateTo] = useState('');
+  const [ledgerWindow, setLedgerWindow] = useState<number | ''>(30);
+
+  const smartHistoryQuery = usePlatformSmartLookupHistoryQuery({
+    page: ledgerPage,
+    page_size: 25,
+    kind: ledgerKind,
+    q: ledgerQ.trim() || undefined,
+    source: ledgerSource || undefined,
+    date_from: ledgerDateFrom || undefined,
+    date_to: ledgerDateTo || undefined,
+    window_days: ledgerDateFrom || ledgerDateTo ? '' : ledgerWindow,
+  });
 
   useEffect(() => {
     const pricing = addonQuery.data;
@@ -208,6 +239,452 @@ export function PlatformPackagesPage() {
     setAddonOfficeInr(paiseToInr(pricing.office_price_paise));
     setAddonPetsInr(paiseToInr(pricing.pets_price_paise));
   }, [addonQuery.data]);
+
+  useEffect(() => {
+    const settings = smartLookupQuery.data;
+    if (!settings) return;
+    setSmartEnabled(Boolean(settings.enabled));
+    setSmartFx(String(settings.usd_to_inr));
+    setSmartGstPercent(String(settings.gst_percent ?? 18));
+    setSmartMarkupBps(String(Number(((settings.markup_bps ?? 0) / 100).toFixed(2))));
+    setSmartMinPaise(String(Number((((settings.min_charge_paise ?? 0) / 100)).toFixed(2))));
+    setSmartInputUsd(String(settings.input_usd_per_million));
+    setSmartOutputUsd(String(settings.output_usd_per_million));
+    setSmartTopUpsInr((settings.suggested_top_up_paise ?? []).map((paise) => String(paise / 100)).join(', '));
+  }, [smartLookupQuery.data]);
+
+  function saveSmartLookupSettings() {
+    setMessage(null);
+    const tops = smartTopUpsInr
+      .split(/[,\s]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => Math.round(Number(part) * 100))
+      .filter((paise) => Number.isFinite(paise) && paise >= 100);
+    const markupPercent = Number(smartMarkupBps);
+    const markupBps = Number.isFinite(markupPercent) ? Math.round(markupPercent * 100) : 0;
+    const minRupees = Number(smartMinPaise);
+    const minPaise = Number.isFinite(minRupees) ? Math.max(0, Math.round(minRupees * 100)) : 0;
+    smartLookupMutation.mutate(
+      {
+        enabled: smartEnabled,
+        usd_to_inr: smartFx,
+        gst_percent: smartGstPercent,
+        markup_bps: markupBps,
+        min_charge_paise: minPaise,
+        input_usd_per_million: smartInputUsd,
+        output_usd_per_million: smartOutputUsd,
+        suggested_top_up_paise: tops,
+        reason: smartReason,
+      },
+      {
+        onSuccess: () => setMessage('Orbit Mart Smart lookup settings saved.'),
+        onError: (err) =>
+          setMessage(err instanceof Error ? err.message : 'Failed to save Smart lookup settings.'),
+      },
+    );
+  }
+
+  function renderSmartLookupControls() {
+    const settings = smartLookupQuery.data;
+    const fetchedAt = settings?.usd_to_inr_fetched_at
+      ? new Date(settings.usd_to_inr_fetched_at).toLocaleString()
+      : null;
+    const fx = Number(smartFx) || 0;
+    const gst = Number(smartGstPercent) || 0;
+    const markupPct = Number(smartMarkupBps) || 0;
+    const exampleUsd = 0.001;
+    const exampleInr = exampleUsd * fx * (1 + markupPct / 100) * (1 + gst / 100);
+    const examplePaise = Math.max(1, Math.round(exampleInr * 100));
+    const busy = smartLookupMutation.isPending || smartFxRefreshMutation.isPending || smartLookupQuery.isLoading;
+
+    return (
+      <div className="admin-smart-lookup">
+        <div className="admin-smart-lookup__hero">
+          <div>
+            <p className="admin-smart-lookup__kicker">Orbit Mart add-on</p>
+            <h3 className="admin-smart-lookup__title">Smart product lookup</h3>
+            <p className="admin-smart-lookup__lead">
+              Pack-photo AI fill when barcodes miss the free catalog. Enable{' '}
+              <strong>Smart product lookup</strong> on each Orbit Mart package&apos;s Features tab, then control
+              pass-through pricing here. Shops opt in and top up a prepaid wallet.
+            </p>
+          </div>
+          <AdminStatus status={smartEnabled ? 'active' : 'inactive'} />
+        </div>
+
+        <div className="admin-smart-lookup__kpis">
+          <div className="admin-smart-lookup__kpi">
+            <span>USD → INR</span>
+            <strong>{fx ? fx.toFixed(2) : '—'}</strong>
+            <em>{settings?.usd_to_inr_source || 'manual'}{fetchedAt ? ` · ${fetchedAt}` : ''}</em>
+          </div>
+          <div className="admin-smart-lookup__kpi">
+            <span>GST</span>
+            <strong>{gst.toFixed(gst % 1 ? 2 : 0)}%</strong>
+            <em>After FX conversion</em>
+          </div>
+          <div className="admin-smart-lookup__kpi">
+            <span>Model</span>
+            <strong>{settings?.model ?? 'gemini-2.5-flash-lite'}</strong>
+            <em>Flash-Lite list prices</em>
+          </div>
+          <div className="admin-smart-lookup__kpi admin-smart-lookup__kpi--preview">
+            <span>Sample debit</span>
+            <strong>₹{(examplePaise / 100).toFixed(2)}</strong>
+            <em>$0.001 × FX × markup × GST</em>
+          </div>
+        </div>
+
+        <div className="admin-smart-lookup__grid">
+          <section className="admin-smart-lookup__card">
+            <header>
+              <h4>Availability</h4>
+              <p>Master switch for all Orbit Mart businesses. Per-tenant override uses feature flag <code>shopie_smart_lookup</code>.</p>
+            </header>
+            <FlagToggle
+              on={smartEnabled}
+              title={smartEnabled ? 'Smart lookup is on' : 'Smart lookup is off'}
+              hint={smartEnabled ? 'Businesses can enable pack-photo fill and debit wallets.' : 'Pack-photo AI is blocked platform-wide.'}
+              onClick={() => setSmartEnabled((current) => !current)}
+            />
+          </section>
+
+          <section className="admin-smart-lookup__card">
+            <header>
+              <div className="admin-smart-lookup__card-head">
+                <div>
+                  <h4>Exchange rate</h4>
+                  <p>Auto-refreshed daily at 00:05 IST. You can override or refresh now.</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setMessage(null);
+                    smartFxRefreshMutation.mutate(
+                      { reason: 'manual FX refresh from packages UI' },
+                      {
+                        onSuccess: (data) => {
+                          setSmartFx(String(data.usd_to_inr));
+                          setMessage(`USD→INR refreshed to ${data.usd_to_inr} (${data.usd_to_inr_source || 'frankfurter'}).`);
+                        },
+                        onError: (err) =>
+                          setMessage(err instanceof Error ? err.message : 'Failed to refresh USD→INR.'),
+                      },
+                    );
+                  }}
+                >
+                  {smartFxRefreshMutation.isPending ? 'Refreshing…' : 'Refresh rate'}
+                </button>
+              </div>
+            </header>
+            <div className="admin-smart-lookup__fields">
+              <AdminField label="USD → INR" hint="1 USD × this rate = INR before GST">
+                <input type="number" min={1} step="0.01" value={smartFx} onChange={(e) => setSmartFx(e.target.value)} />
+              </AdminField>
+              <AdminField label="GST %" hint="Typical Cloud Billing GST is 18%">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={smartGstPercent}
+                  onChange={(e) => setSmartGstPercent(e.target.value)}
+                />
+              </AdminField>
+            </div>
+          </section>
+
+          <section className="admin-smart-lookup__card">
+            <header>
+              <h4>Wallet debit rules</h4>
+              <p>Applied on every paid pack-photo lookup after Gemini returns token usage.</p>
+            </header>
+            <div className="admin-smart-lookup__fields">
+              <AdminField label="Markup %" hint="0 = pass-through AI cost">
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={smartMarkupBps}
+                  onChange={(e) => setSmartMarkupBps(e.target.value)}
+                />
+              </AdminField>
+              <AdminField label="Minimum charge (₹)" hint="Floor when tokens > 0">
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={smartMinPaise}
+                  onChange={(e) => setSmartMinPaise(e.target.value)}
+                />
+              </AdminField>
+            </div>
+            <p className="admin-smart-lookup__formula">
+              Debit = tokens × Gemini USD rates × <strong>{fx || 'FX'}</strong> ×{' '}
+              <strong>{(1 + markupPct / 100).toFixed(2)}</strong> markup ×{' '}
+              <strong>{(1 + gst / 100).toFixed(2)}</strong> GST
+            </p>
+          </section>
+
+          <section className="admin-smart-lookup__card">
+            <header>
+              <h4>Gemini list prices</h4>
+              <p>USD per 1 million tokens. Keep aligned with Google’s published Flash-Lite rates.</p>
+            </header>
+            <div className="admin-smart-lookup__fields">
+              <AdminField label="Input USD / 1M">
+                <input type="number" min={0} step="0.01" value={smartInputUsd} onChange={(e) => setSmartInputUsd(e.target.value)} />
+              </AdminField>
+              <AdminField label="Output USD / 1M">
+                <input type="number" min={0} step="0.01" value={smartOutputUsd} onChange={(e) => setSmartOutputUsd(e.target.value)} />
+              </AdminField>
+            </div>
+          </section>
+
+          <section className="admin-smart-lookup__card admin-smart-lookup__card--wide">
+            <header>
+              <h4>Owner wallet top-ups</h4>
+              <p>Suggested UPI amounts shown in business Products & billing. Comma-separated rupees.</p>
+            </header>
+            <div className="admin-smart-lookup__fields admin-smart-lookup__fields--wide">
+              <AdminField label="Suggested top-ups (₹)">
+                <input
+                  value={smartTopUpsInr}
+                  onChange={(e) => setSmartTopUpsInr(e.target.value)}
+                  placeholder="50, 100, 250, 500"
+                />
+              </AdminField>
+              <AdminField label="Audit reason">
+                <input value={smartReason} onChange={(e) => setSmartReason(e.target.value)} />
+              </AdminField>
+            </div>
+            <div className="admin-smart-lookup__chips">
+              {smartTopUpsInr
+                .split(/[,\s]+/)
+                .map((part) => part.trim())
+                .filter(Boolean)
+                .map((rupees) => (
+                  <span key={rupees} className="admin-smart-lookup__chip">
+                    ₹{rupees}
+                  </span>
+                ))}
+            </div>
+          </section>
+        </div>
+
+        <div className="admin-smart-lookup__footer">
+          <p>
+            Also toggle <strong>Smart product lookup</strong> on each package&apos;s Features tab. Businesses still
+            enable the feature themselves. Tenant kill switch: <code>shopie_smart_lookup</code>
+          </p>
+          <button
+            type="button"
+            className="admin-btn admin-btn--primary"
+            disabled={busy}
+            onClick={saveSmartLookupSettings}
+          >
+            {smartLookupMutation.isPending ? 'Saving…' : 'Save Smart lookup'}
+          </button>
+        </div>
+
+        <section className="admin-smart-lookup__card admin-smart-lookup__card--wide" style={{ marginTop: 16 }}>
+          <h4>Wallet ledger</h4>
+          <p>All tenant credits and Smart fill debits. Filter by workspace, source, and date.</p>
+          <div className="admin-filter-row" style={{ marginTop: 12 }}>
+            <AdminField label="Search">
+              <input
+                value={ledgerQ}
+                onChange={(event) => {
+                  setLedgerPage(1);
+                  setLedgerQ(event.target.value);
+                }}
+                placeholder="Workspace, business, barcode…"
+              />
+            </AdminField>
+            <AdminField label="Source">
+              <select
+                value={ledgerSource}
+                onChange={(event) => {
+                  setLedgerPage(1);
+                  setLedgerSource(event.target.value);
+                }}
+              >
+                <option value="">All sources</option>
+                  {(smartHistoryQuery.data?.sources ?? ['wallet_top_up', 'gemini_vision']).map((source) => (
+                    <option key={source} value={source}>
+                      {enrichLedgerSourceLabel(source)}
+                    </option>
+                  ))}
+              </select>
+            </AdminField>
+            <AdminField label="From">
+              <input
+                type="date"
+                value={ledgerDateFrom}
+                onChange={(event) => {
+                  setLedgerPage(1);
+                  setLedgerDateFrom(event.target.value);
+                }}
+              />
+            </AdminField>
+            <AdminField label="To">
+              <input
+                type="date"
+                value={ledgerDateTo}
+                onChange={(event) => {
+                  setLedgerPage(1);
+                  setLedgerDateTo(event.target.value);
+                }}
+              />
+            </AdminField>
+          </div>
+          <div className="admin-chip-row" style={{ margin: '12px 0' }}>
+            {(
+              [
+                ['money', 'Money'],
+                ['credits', 'Credits'],
+                ['debits', 'Debits'],
+                ['all', 'All'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`admin-chip${ledgerKind === value ? ' is-active' : ''}`}
+                onClick={() => {
+                  setLedgerPage(1);
+                  setLedgerKind(value);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            {(
+              [
+                [7, '7d'],
+                [30, '30d'],
+                [90, '90d'],
+                ['', 'All time'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={String(value)}
+                type="button"
+                className={`admin-chip${ledgerWindow === value && !ledgerDateFrom && !ledgerDateTo ? ' is-active' : ''}`}
+                onClick={() => {
+                  setLedgerPage(1);
+                  setLedgerDateFrom('');
+                  setLedgerDateTo('');
+                  setLedgerWindow(value);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {smartHistoryQuery.data?.summary ? (
+            <div className="admin-smart-lookup__kpis" style={{ marginBottom: 12 }}>
+              <div className="admin-smart-lookup__kpi">
+                <span>Credits</span>
+                <strong>₹{smartHistoryQuery.data.summary.credits_inr.toFixed(2)}</strong>
+                <em>{smartHistoryQuery.data.summary.credit_count} entries</em>
+              </div>
+              <div className="admin-smart-lookup__kpi">
+                <span>Debits</span>
+                <strong>₹{smartHistoryQuery.data.summary.debits_inr.toFixed(2)}</strong>
+                <em>{smartHistoryQuery.data.summary.debit_count} entries</em>
+              </div>
+              <div className="admin-smart-lookup__kpi">
+                <span>Net</span>
+                <strong>₹{smartHistoryQuery.data.summary.net_inr.toFixed(2)}</strong>
+                <em>{smartHistoryQuery.data.total} matching</em>
+              </div>
+            </div>
+          ) : null}
+          {smartHistoryQuery.isLoading ? (
+            <p>Loading ledger…</p>
+          ) : smartHistoryQuery.data?.items?.length ? (
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Workspace</th>
+                      <th>Business</th>
+                      <th>Entry</th>
+                      <th>Amount</th>
+                      <th>Balance after</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {smartHistoryQuery.data.items.map((row) => {
+                      const paise = row.charged_paise ?? 0;
+                      const amount =
+                        paise > 0
+                          ? `−₹${(paise / 100).toFixed(2)}`
+                          : paise < 0
+                            ? `+₹${(Math.abs(paise) / 100).toFixed(2)}`
+                            : 'Free';
+                      const entry =
+                        row.source === 'wallet_top_up'
+                          ? 'Top-up'
+                          : row.code
+                            ? `Smart fill · ${row.code}`
+                            : enrichLedgerSourceLabel(row.source);
+                      return (
+                        <tr key={row.id}>
+                          <td>{new Date(row.created_at).toLocaleString()}</td>
+                          <td>{row.tenant_name || row.tenant_slug || '—'}</td>
+                          <td>{row.business_name || '—'}</td>
+                          <td>{entry}</td>
+                          <td>{amount}</td>
+                          <td>
+                            {row.balance_after_paise == null
+                              ? '—'
+                              : `₹${(Number(row.balance_after_paise) / 100).toFixed(2)}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+                <span>
+                  Page {smartHistoryQuery.data.page} of {smartHistoryQuery.data.total_pages ?? 1} ·{' '}
+                  {smartHistoryQuery.data.total} entries
+                </span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--ghost"
+                    disabled={ledgerPage <= 1 || smartHistoryQuery.isFetching}
+                    onClick={() => setLedgerPage((page) => Math.max(1, page - 1))}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--ghost"
+                    disabled={!smartHistoryQuery.data.has_more || smartHistoryQuery.isFetching}
+                    onClick={() => setLedgerPage((page) => page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p>No matching wallet movements.</p>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   const grouped = useMemo(() => {
     const rows = packagesQuery.data ?? [];
@@ -391,7 +868,11 @@ export function PlatformPackagesPage() {
           <AdminSection
             key={productCode}
             title={PRODUCT_LABELS[productCode] ?? productLabel(productCode)}
-            description={`${grouped.get(productCode)?.length ?? 0} plan${(grouped.get(productCode)?.length ?? 0) === 1 ? '' : 's'}`}
+            description={
+              productCode === 'shopie'
+                ? `${grouped.get(productCode)?.length ?? 0} plan${(grouped.get(productCode)?.length ?? 0) === 1 ? '' : 's'} · includes Smart product lookup`
+                : `${grouped.get(productCode)?.length ?? 0} plan${(grouped.get(productCode)?.length ?? 0) === 1 ? '' : 's'}`
+            }
           >
             <div className="admin-package-grid">
               {(grouped.get(productCode) ?? []).map((pkg) => (
@@ -417,9 +898,17 @@ export function PlatformPackagesPage() {
                 </button>
               ))}
             </div>
+
+            {productCode === 'shopie' ? renderSmartLookupControls() : null}
           </AdminSection>
         ))
       )}
+
+      {!packagesQuery.isLoading && !productCodes.includes('shopie') ? (
+        <AdminSection title="Orbit Mart" description="Smart product lookup (no Orbit Mart plans seeded yet)">
+          {renderSmartLookupControls()}
+        </AdminSection>
+      ) : null}
 
       <AdminDrawer
         variant="sheet"

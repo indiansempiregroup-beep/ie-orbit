@@ -263,6 +263,9 @@ BILLING_OPS_DIGEST_ENABLED = os.getenv("BILLING_OPS_DIGEST_ENABLED", "false").lo
     "on",
 }
 BILLING_OPS_DIGEST_HOUR_UTC = int(os.getenv("BILLING_OPS_DIGEST_HOUR_UTC", "2"))
+# 00:05 Asia/Kolkata = 18:35 UTC (IST is UTC+5:30).
+SMART_LOOKUP_FX_REFRESH_MINUTE_UTC = int(os.getenv("SMART_LOOKUP_FX_REFRESH_MINUTE_UTC", "35"))
+SMART_LOOKUP_FX_REFRESH_HOUR_UTC = int(os.getenv("SMART_LOOKUP_FX_REFRESH_HOUR_UTC", "18"))
 CELERY_BEAT_SCHEDULE = {
     "billing-send-ops-digest-daily": {
         "task": "billing.send_ops_digest",
@@ -293,6 +296,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "analytics.snapshot_platform_usage",
         "schedule": crontab(minute=20, hour=1),
         "kwargs": {"days": 1},
+    },
+    "platform-refresh-smart-lookup-fx-daily": {
+        "task": "platform_admin.refresh_smart_lookup_fx",
+        "schedule": crontab(
+            minute=SMART_LOOKUP_FX_REFRESH_MINUTE_UTC,
+            hour=SMART_LOOKUP_FX_REFRESH_HOUR_UTC,
+        ),
     },
 }
 CELERY_BEAT_SCHEDULE = {key: value for key, value in CELERY_BEAT_SCHEDULE.items() if value is not None}

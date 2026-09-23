@@ -1651,6 +1651,28 @@ export type PlatformAddonPricing = {
   pets_price_inr: number;
 };
 
+export type PlatformSmartLookupSettings = {
+  enabled: boolean;
+  usd_to_inr: number;
+  usd_to_inr_source?: string;
+  usd_to_inr_fetched_at?: string | null;
+  gst_percent: number;
+  markup_bps: number;
+  markup_percent: number;
+  min_charge_paise: number;
+  input_usd_per_million: number;
+  output_usd_per_million: number;
+  suggested_top_up_paise: number[];
+  suggested_top_up_inr: number[];
+  model: string;
+  refresh?: {
+    usd_to_inr: number;
+    previous_usd_to_inr: number;
+    source: string;
+    fetched_at?: string | null;
+  };
+};
+
 export type PlatformWhatsAppCatalogEntry = {
   event_type: string;
   title: string;
@@ -2181,6 +2203,7 @@ export type ShopProduct = {
   pack_size?: string;
   image_url?: string;
   category?: ShopProductCategory | string;
+  category_label?: string;
   metadata?: Record<string, unknown>;
   barcodes?: ShopProductBarcode[];
   rating_avg?: number | null;
@@ -2268,16 +2291,118 @@ export type ShopBarcodeEnrichment = {
   local_image_url?: string;
   front_image_url?: string;
   back_image_url?: string;
+  images?: { front?: string; back?: string; gallery?: string[] };
   description?: string;
+  details_html?: string;
   categories?: string;
+  category?: string;
+  category_label?: string;
+  hsn_sac?: string;
+  gst_rate?: string;
+  mrp?: string;
   query?: string;
   message?: string;
   barcode_candidates?: string[];
   tools?: string[];
   confidence?: 'high' | 'medium' | 'low' | 'none' | string;
   match_method?: 'barcode' | 'search' | 'none' | string;
+  needs_pack_photo?: boolean;
+  smart_lookup_enabled?: boolean;
+  plan_enabled?: boolean;
+  platform_enabled?: boolean;
+  existing_product_id?: string;
+  existing_product_name?: string;
+  charged_paise?: number;
   metadata?: Record<string, unknown>;
   error?: string;
+};
+
+export type ShopProductCategoryItem = {
+  slug: string;
+  label: string;
+  is_builtin: boolean;
+};
+
+export type ShopSmartLookupLedgerEntry = {
+  id: string;
+  created_at: string;
+  code: string;
+  source: string;
+  found: boolean;
+  charged_paise: number;
+  charged_inr?: number;
+  balance_after_paise?: number | null;
+  balance_after_inr?: number | null;
+  entry_type?: 'credit' | 'debit' | 'lookup' | string;
+  model?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  usd_micros?: number;
+  metadata?: Record<string, unknown>;
+  tenant_id?: string | null;
+  tenant_slug?: string;
+  tenant_name?: string;
+  business_id?: string | null;
+  business_name?: string;
+};
+
+export type ShopSmartLookupHistorySummary = {
+  credit_count: number;
+  debit_count: number;
+  credits_paise: number;
+  credits_inr: number;
+  debits_paise: number;
+  debits_inr: number;
+  net_paise: number;
+  net_inr: number;
+};
+
+export type ShopSmartLookupHistory = {
+  balance_paise?: number;
+  balance_inr?: number;
+  business_id?: string;
+  kind: string;
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages?: number;
+  has_more: boolean;
+  summary?: ShopSmartLookupHistorySummary;
+  filters?: Record<string, unknown>;
+  sources?: string[];
+  items: ShopSmartLookupLedgerEntry[];
+};
+
+export type ShopSmartLookupHistoryQuery = {
+  business_id?: string;
+  page?: number;
+  page_size?: number;
+  kind?: 'money' | 'all' | 'lookups' | 'credits' | 'debits' | string;
+  source?: string;
+  code?: string;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+  found?: string | boolean;
+  window_days?: number;
+  tenant_id?: string;
+};
+
+export type ShopSmartLookupDashboard = {
+  smart_lookup_enabled: boolean;
+  business_enabled?: boolean;
+  platform_enabled?: boolean;
+  plan_enabled?: boolean;
+  platform?: PlatformSmartLookupSettings;
+  balance_paise: number;
+  balance_inr: number;
+  month: {
+    free_lookups: number;
+    paid_lookups: number;
+    spent_paise: number;
+    spent_inr: number;
+  };
+  recent: ShopSmartLookupLedgerEntry[];
 };
 
 export type ShopPackagingAnalyzeJob = {
@@ -4096,8 +4221,38 @@ class ApiClient {
       this.request<ShopProduct>('/shop/barcodes/lookup', { method: 'POST', body }),
     lookupBarcodesBulk: (body: { business_id: string; codes: string[] }) =>
       this.request<ShopBarcodeBulkLookupResult>('/shop/barcodes/lookup-bulk', { method: 'POST', body }),
-    enrichBarcode: (body: { code?: string; query?: string; image_url?: string; hint?: string }) =>
-      this.request<ShopBarcodeEnrichment>('/shop/barcodes/enrich', { method: 'POST', body }),
+    enrichBarcode: (body: {
+      business_id?: string;
+      code?: string;
+      query?: string;
+      image_url?: string;
+      hint?: string;
+      use_smart_lookup?: boolean;
+    }) => this.request<ShopBarcodeEnrichment>('/shop/barcodes/enrich', { method: 'POST', body }),
+    listProductCategories: () =>
+      this.request<{ items: ShopProductCategoryItem[] }>('/shop/categories', { method: 'GET' }),
+    ensureProductCategory: (body: { label: string; slug?: string }) =>
+      this.request<ShopProductCategoryItem>('/shop/categories', { method: 'POST', body }),
+    getSmartLookup: (query: { business_id: string }) =>
+      this.request<ShopSmartLookupDashboard>('/shop/smart-lookup', { method: 'GET', query }),
+    updateSmartLookup: (body: { business_id: string; enabled?: boolean }) =>
+      this.request<ShopSmartLookupDashboard>('/shop/smart-lookup', { method: 'POST', body }),
+    getSmartLookupHistory: (query: ShopSmartLookupHistoryQuery & { business_id: string }) =>
+      this.request<ShopSmartLookupHistory>('/shop/smart-lookup/history', { method: 'GET', query }),
+    createSmartLookupTopUp: (body: { business_id: string; amount_paise: number }) =>
+      this.request<{
+        session_id: string;
+        order_id: string;
+        amount: number;
+        currency: string;
+        upi_vpa: string;
+        upi_pay_url: string;
+        payment_qr_url?: string;
+        payment_status: string;
+        claim_intent?: string;
+        kind?: string;
+        expires_at?: string;
+      }>('/shop/smart-lookup/top-up', { method: 'POST', body }),
     analyzePackaging: (body: {
       business_id: string;
       front_image_url?: string;
@@ -4972,6 +5127,26 @@ class ApiClient {
       pets_price_paise: number;
       reason: string;
     }) => this.request<PlatformAddonPricing>('/platform/addon-pricing', { method: 'PUT', body }),
+    smartLookupSettings: () =>
+      this.request<PlatformSmartLookupSettings>('/platform/smart-lookup-settings', { method: 'GET' }),
+    updateSmartLookupSettings: (body: {
+      enabled: boolean;
+      usd_to_inr: number | string;
+      gst_percent: number | string;
+      markup_bps: number;
+      min_charge_paise: number;
+      input_usd_per_million: number | string;
+      output_usd_per_million: number | string;
+      suggested_top_up_paise: number[];
+      reason: string;
+    }) => this.request<PlatformSmartLookupSettings>('/platform/smart-lookup-settings', { method: 'PUT', body }),
+    refreshSmartLookupFx: (body?: { reason?: string }) =>
+      this.request<PlatformSmartLookupSettings>('/platform/smart-lookup-settings/refresh-fx', {
+        method: 'POST',
+        body: body ?? { reason: 'manual FX refresh' },
+      }),
+    smartLookupHistory: (query?: ShopSmartLookupHistoryQuery) =>
+      this.request<ShopSmartLookupHistory>('/platform/smart-lookup-history', { method: 'GET', query }),
     authSettings: () =>
       this.request<PlatformAuthSettings>('/platform/auth-settings', { method: 'GET' }),
     updateAuthSettings: (body: {

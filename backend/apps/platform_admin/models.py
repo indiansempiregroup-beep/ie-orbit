@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 
@@ -118,6 +120,70 @@ class PlatformAddonPricing(BaseModel):
 
     class Meta:
         db_table = "platform_addon_pricing"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return self.key
+
+
+class PlatformSmartLookupSettings(BaseModel):
+    """Singleton platform controls for ShopIE Smart lookup (AI pack-photo fill)."""
+
+    key = models.SlugField(max_length=20, unique=True, default="default")
+    enabled = models.BooleanField(
+        default=True,
+        help_text="Master switch. When off, businesses cannot use Smart lookup pack-photo fill.",
+    )
+    usd_to_inr = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=Decimal("85.0000"),
+        help_text="FX used to convert Gemini USD usage into INR wallet debit.",
+    )
+    usd_to_inr_fetched_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When usd_to_inr was last auto-fetched.",
+    )
+    usd_to_inr_source = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text="manual | frankfurter | …",
+    )
+    gst_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("18.00"),
+        help_text="GST % applied after USD→INR conversion to approximate Cloud Billing tax.",
+    )
+    markup_bps = models.PositiveIntegerField(
+        default=0,
+        help_text="Extra charge in basis points on top of model cost (100 = 1%). 0 = pass-through.",
+    )
+    min_charge_paise = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum wallet debit when a paid lookup runs (paise).",
+    )
+    input_usd_per_million = models.DecimalField(
+        max_digits=12,
+        decimal_places=6,
+        default=Decimal("0.100000"),
+        help_text="Gemini input token price USD per 1M tokens.",
+    )
+    output_usd_per_million = models.DecimalField(
+        max_digits=12,
+        decimal_places=6,
+        default=Decimal("0.400000"),
+        help_text="Gemini output token price USD per 1M tokens.",
+    )
+    suggested_top_up_paise = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Suggested wallet top-up amounts in paise shown to business owners.",
+    )
+
+    class Meta:
+        db_table = "platform_smart_lookup_settings"
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return self.key

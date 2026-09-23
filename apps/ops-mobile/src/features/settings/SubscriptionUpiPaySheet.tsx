@@ -1,15 +1,21 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import QRCodeSvg from 'react-native-qrcode-svg';
 import type { ApiClient } from '@ie-orbit/sdk';
 import { Button } from '../../components/ui/Button';
+import { FieldLabel } from '../../components/ui/FieldLabel';
+import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
+import { fieldStyles } from '../../components/ui/fieldStyles';
 import { uploadMedia } from '../../api/media';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { getApiBaseUrl } from '../../config/apiBaseUrl';
 import { getProductName } from '../../utils/products';
 import { getApiErrorMessage } from '../../utils/format';
+
+const PROOF_REQUIRED_MESSAGE = 'Enter a UTR / UPI reference or upload a payment screenshot.';
+const SCREENSHOT_REQUIRED_MESSAGE = 'Upload a payment screenshot or enter a UTR / UPI reference.';
 
 /** Metro/babel interop sometimes leaves the default export nested under `.default`. */
 function PaymentQrCode({ value, size }: { value: string; size: number }) {
@@ -88,6 +94,14 @@ export function SubscriptionUpiPaySheet({
   const [proofMediaId, setProofMediaId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'ready' | 'awaiting' | 'done'>('idle');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ utr?: string; proof?: string }>({});
+  const scrollRef = useRef<ScrollView>(null);
+
+  function clearProofErrors() {
+    setFormError(null);
+    setFieldErrors({});
+  }
 
   const payItems = useMemo(() => {
     if (request.items?.length) return request.items;
@@ -116,10 +130,13 @@ export function SubscriptionUpiPaySheet({
 
   async function startCheckout() {
     if (payItems.length === 0) {
-      onError('Choose a plan first.');
+      const message = 'Choose a plan first.';
+      setFormError(message);
+      onError(message);
       return;
     }
     setLoading(true);
+    setFormError(null);
     try {
       const body =
         payItems.length === 1
@@ -145,7 +162,9 @@ export function SubscriptionUpiPaySheet({
       setSession(res.data);
       setStatus('ready');
     } catch (err) {
-      onError(getApiErrorMessage(err, 'Unable to start UPI checkout. Set PLATFORM_UPI_VPA on the server.'));
+      const message = getApiErrorMessage(err, 'Unable to start UPI checkout. Set PLATFORM_UPI_VPA on the server.');
+      setFormError(message);
+      onError(message);
     } finally {
       setLoading(false);
     }
@@ -161,7 +180,10 @@ export function SubscriptionUpiPaySheet({
   async function pickProof() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      onError('Allow photo library access to upload a payment screenshot.');
+      const message = 'Allow photo library access to upload a payment screenshot.';
+      setFormError(message);
+      setFieldErrors((current) => ({ ...current, proof: message }));
+      onError(message);
       return;
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -187,8 +209,12 @@ export function SubscriptionUpiPaySheet({
         : `${origin}${relative.startsWith('/') ? relative : `/${relative}`}`;
       setProofMediaId(uploaded.id);
       setProofUrl(absolute);
+      clearProofErrors();
     } catch (err) {
-      onError(getApiErrorMessage(err, 'Unable to upload screenshot.'));
+      const message = getApiErrorMessage(err, 'Unable to upload screenshot.');
+      setFormError(message);
+      setFieldErrors((current) => ({ ...current, proof: message }));
+      onError(message);
     } finally {
       setUploading(false);
     }
@@ -197,10 +223,16 @@ export function SubscriptionUpiPaySheet({
   async function submitClaim() {
     if (!session) return;
     if (utr.trim().length < 6 && !proofUrl && !proofMediaId) {
-      onError('Enter a UTR / UPI reference or upload a payment screenshot.');
+      setFieldErrors({
+        utr: PROOF_REQUIRED_MESSAGE,
+        proof: SCREENSHOT_REQUIRED_MESSAGE,
+      });
+      setFormError(PROOF_REQUIRED_MESSAGE);
+      requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
       return;
     }
     setClaiming(true);
+    clearProofErrors();
     try {
       await client.billing.claimUpiCheckout(session.session_id, {
         upi_utr: utr.trim(),
@@ -211,7 +243,9 @@ export function SubscriptionUpiPaySheet({
       setStatus('awaiting');
       await onClaimed();
     } catch (err) {
-      onError(getApiErrorMessage(err, 'Unable to submit payment claim.'));
+      const message = getApiErrorMessage(err, 'Unable to submit payment claim.');
+      setFormError(message);
+      onError(message);
     } finally {
       setClaiming(false);
     }
@@ -232,6 +266,7 @@ export function SubscriptionUpiPaySheet({
           </Text>
 
           <ScrollView
+            ref={scrollRef}
             style={styles.scroll}
             contentContainerStyle={styles.stack}
             keyboardShouldPersistTaps="handled"
@@ -270,23 +305,37 @@ export function SubscriptionUpiPaySheet({
                       label="UTR / UPI reference"
                       optional
                       value={utr}
-                      onChangeText={setUtr}
+                      onChangeText={(value) => {
+                        setUtr(value);
+                        if (fieldErrors.utr || formError) clearProofErrors();
+                      }}
                       autoCapitalize="characters"
                       placeholder="From your UPI app — optional if you upload a screenshot"
+                      error={fieldErrors.utr}
                     />
-                    <Button
-                      label={
-                        uploading
-                          ? 'Uploading…'
-                          : proofUrl
-                            ? 'Change payment screenshot'
-                            : 'Upload payment screenshot'
-                      }
-                      variant="outline"
-                      fullWidth
-                      disabled={uploading}
-                      onPress={() => void pickProof()}
-                    />
+                    <View style={fieldStyles.wrap}>
+                      <FieldLabel label="Payment screenshot" optional />
+                      <Button
+                        label={
+                          uploading
+                            ? 'Uploading…'
+                            : proofUrl
+                              ? 'Change payment screenshot'
+                              : 'Upload payment screenshot'
+                        }
+                        variant="outline"
+                        fullWidth
+                        disabled={uploading}
+                        onPress={() => void pickProof()}
+                        style={fieldErrors.proof ? styles.proofButtonError : undefined}
+                        accessibilityHint="Upload a payment screenshot if you do not have a UTR"
+                      />
+                      {fieldErrors.proof ? (
+                        <Text style={fieldStyles.error} accessibilityRole="alert">
+                          {fieldErrors.proof}
+                        </Text>
+                      ) : null}
+                    </View>
                     {proofUrl ? (
                       <Image source={{ uri: proofUrl }} style={styles.proof} resizeMode="cover" />
                     ) : null}
@@ -305,6 +354,7 @@ export function SubscriptionUpiPaySheet({
           </ScrollView>
 
           <View style={styles.footer}>
+            {formError ? <FormAlert message={formError} /> : null}
             {status === 'idle' ? (
               <>
                 <Button label="Generate payment QR" loading={loading} fullWidth onPress={() => void startCheckout()} />
@@ -381,6 +431,7 @@ const styles = StyleSheet.create({
   },
   staticQr: { width: 188, height: 188, alignSelf: 'center', borderRadius: radius.md },
   proof: { width: '100%', height: 140, borderRadius: radius.md },
+  proofButtonError: { borderColor: colors.destructive },
   awaiting: {
     gap: 6,
     padding: spacing.md,

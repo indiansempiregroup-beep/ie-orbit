@@ -7,7 +7,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.billing.models import BillingCheckoutSession
-from apps.businesses.constants import PRODUCT_DISPLAY_NAMES
+from apps.businesses.constants import product_display_name
 from apps.notifications.constants import AUDIENCE_ADMIN
 from apps.notifications.services.subscription_direct import (
     SubscriptionEmailStyle,
@@ -31,7 +31,7 @@ def _product_labels(session: BillingCheckoutSession) -> str:
             codes.append(code)
     if session.product_code and session.product_code not in codes:
         codes.insert(0, session.product_code)
-    names = [PRODUCT_DISPLAY_NAMES.get(code, code) for code in codes]
+    names = [product_display_name(code) for code in codes]
     if not names:
         return "IE Orbit"
     if len(names) == 1:

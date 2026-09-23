@@ -5,4 +5,4 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir = Resolve-Path (Join-Path $scriptDir '..')
 Set-Location $rootDir
 
-docker compose up --build -d
+docker compose up -d

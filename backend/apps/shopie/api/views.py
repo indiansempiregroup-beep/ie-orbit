@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.billing.services.cashfree_client import CashfreeClient
+from apps.billing.services.checkout import CheckoutService
 from apps.billing.services.razorpay_client import RazorpayClient
 from apps.businesses.constants import (
     FEATURE_SHOPIE_BOOKS_QUOTATIONS,
@@ -38,6 +39,7 @@ from apps.shopie.api.permissions import ShopAccessPermission
 from apps.shopie.api.serializers import (
     BarcodeLookupSerializer,
     EnrichBarcodeSerializer,
+    EnsureCategorySerializer,
     CashfreePaymentVerifySerializer,
     MerchantPaymentSettingsSerializer,
     PackagingAnalyzeSerializer,
@@ -56,13 +58,18 @@ from apps.shopie.api.serializers import (
     ShopQuotationCreateSerializer,
     ShopQuotationSerializer,
     ShopStockMovementSerializer,
+    SmartLookupSettingsSerializer,
+    SmartLookupTopUpSerializer,
     StockAdjustSerializer,
 )
 from apps.shopie.models import ShopInvoice, ShopOrder, ShopProduct, ShopQuotation, ShopStockMovement
 from apps.shopie.services import CatalogService, OrderService
+from apps.shopie.services.categories import CategoryService
+from apps.shopie.services.enrichment import ProductEnrichmentService
 from apps.shopie.services.fulfillment import FulfillmentService
 from apps.shopie.services.merchant_payments import MerchantPaymentService
 from apps.shopie.services.packaging_analysis import PackagingAnalysisService
+from apps.shopie.services.smart_lookup import SmartLookupService
 from apps.shopie.tasks import analyze_packaging_images_task
 
 
@@ -218,6 +225,7 @@ class ShopBarcodeLookupView(APIView):
 class ShopBarcodeEnrichView(APIView):
     permission_classes = [ShopAccessPermission]
     catalog = CatalogService()
+    smart = SmartLookupService()
 
     @extend_schema(request=EnrichBarcodeSerializer)
     def post(self, request: Request) -> Response:
@@ -228,11 +236,257 @@ class ShopBarcodeEnrichView(APIView):
         query = (data.get("query") or "").strip()
         image_url = (data.get("image_url") or "").strip()
         hint = (data.get("hint") or "").strip()
+        use_smart = bool(data.get("use_smart_lookup"))
+        business_id = data.get("business_id")
+        business = None
+        if business_id:
+            business = _business(request, business_id, features=CATALOG_FEATURES)
+
+        # If this shop already has the barcode, return a pointer so the client can open edit.
+        if code and business is not None:
+            existing = self.catalog.lookup_by_barcode(
+                tenant=request.current_tenant, business=business, code=code
+            )
+            if existing:
+                existing = self.catalog.get_product(
+                    tenant=request.current_tenant, business=business, product_id=existing.id
+                )
+                return success_response(
+                    ProductEnrichmentService.with_user_message(
+                        {
+                            "found": True,
+                            "code": code,
+                            "source": "shop_catalog",
+                            "existing_product_id": str(existing.id),
+                            "existing_product_name": existing.name,
+                            "sku": existing.sku or code,
+                            "name": existing.name,
+                            "brand": existing.brand,
+                            "pack_size": existing.pack_size,
+                            "description": existing.description,
+                            "category": existing.category,
+                            "category_label": CategoryService().label_for(existing.category),
+                            "image_url": existing.image_url,
+                            "confidence": "high",
+                            "needs_pack_photo": False,
+                            "message": f"Already in your catalog as {existing.name}.",
+                        }
+                    )
+                )
+
+        if image_url and use_smart and business is not None:
+            result = self.smart.smart_enrich(
+                tenant=request.current_tenant,
+                business=business,
+                code=code,
+                image_url=image_url,
+                hint=hint or query,
+            )
+            return success_response(ProductEnrichmentService.with_user_message(result))
+
         if image_url or (hint and not code):
             result = self.catalog.enrich_from_image(image_url=image_url, hint=hint or query)
         else:
             result = self.catalog.enrich_barcode(code=code, query=query)
-        return success_response(result)
+
+        if business is not None:
+            self.smart.record_free_lookup(
+                tenant=request.current_tenant,
+                business=business,
+                code=code or str(result.get("code") or ""),
+                source=str(result.get("source") or "catalog"),
+                found=bool(result.get("found")),
+            )
+
+        # Free catalogs missed → Smart lookup (text or photo) when enabled.
+        smart_on = bool(
+            business is not None
+            and self.smart.is_enabled(tenant=request.current_tenant, business=business)
+        )
+        if not result.get("found") and business is not None and (use_smart or smart_on):
+            result = self.smart.smart_enrich(
+                tenant=request.current_tenant,
+                business=business,
+                code=code or str(result.get("code") or ""),
+                image_url=image_url,
+                hint=hint or query,
+            )
+            return success_response(ProductEnrichmentService.with_user_message(result))
+
+        # Offer pack photo when Smart is available but not currently runnable / still missed.
+        if (
+            not result.get("found")
+            and code
+            and business is not None
+            and smart_on
+        ):
+            result = {
+                **result,
+                "needs_pack_photo": True,
+                "smart_lookup_enabled": True,
+                "plan_enabled": True,
+                "platform_enabled": True,
+                "message": result.get("message")
+                or "No online match. Take a pack photo to auto-fill from your Smart lookup wallet, or enter details manually.",
+            }
+        elif not result.get("found"):
+            plan_ok = bool(
+                business and self.smart.plan_allows(business=business)
+            )
+            platform_ok = bool(
+                business and self.smart.platform_allows(tenant=request.current_tenant)
+            )
+            business_on = False
+            if business is not None:
+                settings = self.smart.ensure_settings(
+                    tenant=request.current_tenant, business=business
+                )
+                business_on = bool(settings.smart_lookup_enabled)
+            if business is None:
+                miss_message = (
+                    result.get("message")
+                    or "No online match for this barcode — fill details manually and save."
+                )
+            elif not platform_ok:
+                miss_message = "No online match. Smart lookup is disabled by the platform."
+            elif not plan_ok:
+                miss_message = (
+                    "No online match. Smart product lookup is not on this plan — ask your "
+                    "platform admin to enable it on the package Features tab."
+                )
+            elif not business_on:
+                miss_message = (
+                    "No online match. Enable Smart lookup under Products & billing, then search "
+                    "again or take a pack photo."
+                )
+            else:
+                miss_message = (
+                    result.get("message")
+                    or "No online match for this barcode — fill details manually and save."
+                )
+            result = {
+                **result,
+                "needs_pack_photo": False,
+                "smart_lookup_enabled": bool(business and business_on and platform_ok and plan_ok),
+                "plan_enabled": plan_ok,
+                "platform_enabled": platform_ok,
+                "message": miss_message,
+            }
+
+        return success_response(ProductEnrichmentService.with_user_message(result))
+
+
+class ShopProductCategoryListView(APIView):
+    permission_classes = [ShopAccessPermission]
+    categories = CategoryService()
+
+    def get(self, request: Request) -> Response:
+        return success_response({"items": self.categories.list_categories()})
+
+    @extend_schema(request=EnsureCategorySerializer)
+    def post(self, request: Request) -> Response:
+        serializer = EnsureCategorySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        row = self.categories.ensure_category(
+            label=serializer.validated_data["label"],
+            slug=serializer.validated_data.get("slug") or "",
+        )
+        if not row:
+            raise ValidationError({"label": "Provide a category name."})
+        return success_response({"slug": row.slug, "label": row.label, "is_builtin": row.is_builtin})
+
+
+class ShopSmartLookupView(APIView):
+    permission_classes = [ShopAccessPermission]
+    smart = SmartLookupService()
+
+    def get(self, request: Request) -> Response:
+        business_id = request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "This field is required."})
+        business = _business(request, business_id, features=CATALOG_FEATURES)
+        return success_response(self.smart.dashboard(tenant=request.current_tenant, business=business))
+
+    @extend_schema(request=SmartLookupSettingsSerializer)
+    def post(self, request: Request) -> Response:
+        serializer = SmartLookupSettingsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = _business(request, data["business_id"], features=CATALOG_FEATURES)
+        if "enabled" in data:
+            try:
+                self.smart.set_enabled(
+                    tenant=request.current_tenant, business=business, enabled=bool(data["enabled"])
+                )
+            except ValueError as exc:
+                raise ValidationError({"enabled": str(exc)}) from exc
+        return success_response(self.smart.dashboard(tenant=request.current_tenant, business=business))
+
+
+class ShopSmartLookupTopUpView(APIView):
+    """Start a UPI claim session to prepaid-credit the Smart lookup wallet."""
+
+    permission_classes = [ShopAccessPermission]
+    checkout = CheckoutService()
+
+    @extend_schema(request=SmartLookupTopUpSerializer)
+    def post(self, request: Request) -> Response:
+        serializer = SmartLookupTopUpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = _business(request, data["business_id"], features=CATALOG_FEATURES)
+        session = self.checkout.create_smart_lookup_upi_session(
+            tenant=request.current_tenant,
+            business=business,
+            amount_paise=int(data["amount_paise"]),
+            actor_id=str(getattr(request.user, "id", "") or ""),
+        )
+        return success_response(session, status_code=status.HTTP_201_CREATED)
+
+
+class ShopSmartLookupHistoryView(APIView):
+    """Paginated Smart lookup wallet ledger (credits, debits, optional free lookups)."""
+
+    permission_classes = [ShopAccessPermission]
+    smart = SmartLookupService()
+
+    def get(self, request: Request) -> Response:
+        business_id = request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "This field is required."})
+        business = _business(request, business_id, features=CATALOG_FEATURES)
+        try:
+            page = int(request.query_params.get("page") or 1)
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(request.query_params.get("page_size") or 25)
+        except (TypeError, ValueError):
+            page_size = 25
+        kind = (request.query_params.get("kind") or "money").strip().lower()
+        if kind not in {"money", "all", "lookups", "credits", "debits"}:
+            raise ValidationError({"kind": "Must be money, all, lookups, credits, or debits."})
+        window_raw = request.query_params.get("window_days")
+        try:
+            window_days = int(window_raw) if window_raw not in (None, "") else None
+        except (TypeError, ValueError):
+            window_days = None
+        return success_response(
+            self.smart.wallet_history(
+                tenant=request.current_tenant,
+                business=business,
+                page=page,
+                page_size=page_size,
+                kind=kind,
+                source=(request.query_params.get("source") or "").strip(),
+                code=(request.query_params.get("code") or "").strip(),
+                q=(request.query_params.get("q") or "").strip(),
+                date_from=(request.query_params.get("date_from") or "").strip(),
+                date_to=(request.query_params.get("date_to") or "").strip(),
+                found=request.query_params.get("found"),
+                window_days=window_days,
+            )
+        )
 
 
 class ShopPackagingAnalyzeView(APIView):

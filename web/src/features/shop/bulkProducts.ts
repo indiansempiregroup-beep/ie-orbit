@@ -164,15 +164,26 @@ export function applyEnrichmentToRow(
   data: ShopBarcodeEnrichment,
   defaults: BulkProductDefaults,
 ): BulkProductRow {
+  const code = data.code || row.barcode;
+  const wipe = Boolean(row.barcode.trim() && code && row.barcode.trim() !== code.trim());
+  const category =
+    data.category ||
+    (data.category_label ? normalizeBulkCategory(data.category_label) : '') ||
+    guessShopProductCategory(data.categories) ||
+    (wipe ? '' : row.category);
   const next: BulkProductRow = {
     ...row,
-    sku: data.sku || data.code || row.sku,
-    name: data.name || row.name,
-    brand: data.brand || row.brand,
-    pack_size: data.pack_size || data.serving_size || row.pack_size,
-    barcode: data.code || row.barcode,
-    category: guessShopProductCategory(data.categories) || row.category,
-    image_url: data.front_image_url || data.local_image_url || data.image_url || row.image_url,
+    sku: data.sku || data.code || (wipe ? '' : row.sku),
+    name: data.name || (wipe ? '' : row.name),
+    brand: data.brand || (wipe ? '' : row.brand),
+    pack_size: data.pack_size || data.serving_size || (wipe ? '' : row.pack_size),
+    barcode: code,
+    category,
+    image_url:
+      data.front_image_url || data.local_image_url || data.image_url || (wipe ? '' : row.image_url),
+    hsn_sac: data.hsn_sac || (wipe ? defaults.hsn_sac : row.hsn_sac),
+    gst_rate: data.gst_rate || (wipe ? defaults.gst_rate : row.gst_rate),
+    price: data.mrp && data.mrp !== '0' && data.mrp !== '0.00' ? String(data.mrp) : wipe ? defaults.price : row.price,
     error: '',
     lookingUp: false,
   };

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import type { BillingOrder, BillingPlanCatalogItem, BusinessProductSubscription } from '@ie-orbit/sdk';
+import type { BillingOrder, BillingPlanCatalogItem, BusinessProductSubscription, ShopSmartLookupDashboard, ShopSmartLookupLedgerEntry } from '@ie-orbit/sdk';
+import { DateField } from '../../components/DateField';
 import { FormHero } from '../../components/FormHero';
 import { FormScreen } from '../../components/FormScreen';
 import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
@@ -14,6 +15,8 @@ import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { FormSection } from '../../components/ui/FormSection';
 import { IconBadge } from '../../components/ui/IconBadge';
+import { Input } from '../../components/ui/Input';
+import { FieldLabel } from '../../components/ui/FieldLabel';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -22,6 +25,7 @@ import {
   SubscriptionUpiPaySheet,
   type SubscriptionUpiPayRequest,
 } from './SubscriptionUpiPaySheet';
+import { SmartLookupUpiPaySheet } from './SmartLookupUpiPaySheet';
 import {
   useBillingOrders,
   useBusinessBillingSnapshot,
@@ -312,6 +316,25 @@ export function ProductSettingsScreen() {
   const [earnPointsPer100, setEarnPointsPer100] = useState('1');
   const [loyaltyBusy, setLoyaltyBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [smartDashboard, setSmartDashboard] = useState<ShopSmartLookupDashboard | null>(null);
+  const [smartBusy, setSmartBusy] = useState(false);
+  const [smartTopUpPaise, setSmartTopUpPaise] = useState<number | null>(null);
+  const [smartCustomRupees, setSmartCustomRupees] = useState('');
+  const [smartHistory, setSmartHistory] = useState<ShopSmartLookupLedgerEntry[]>([]);
+  const [smartHistoryPage, setSmartHistoryPage] = useState(1);
+  const [smartHistoryTotal, setSmartHistoryTotal] = useState(0);
+  const [smartHistoryHasMore, setSmartHistoryHasMore] = useState(false);
+  const [smartHistoryLoading, setSmartHistoryLoading] = useState(false);
+  const [smartHistoryKind, setSmartHistoryKind] = useState<'money' | 'credits' | 'debits' | 'all'>('money');
+  const [smartHistoryQ, setSmartHistoryQ] = useState('');
+  const [smartHistoryDateFrom, setSmartHistoryDateFrom] = useState('');
+  const [smartHistoryDateTo, setSmartHistoryDateTo] = useState('');
+  const [smartHistoryWindow, setSmartHistoryWindow] = useState<number | ''>(30);
+  const [smartHistorySummary, setSmartHistorySummary] = useState<{
+    credits_inr: number;
+    debits_inr: number;
+    net_inr: number;
+  } | null>(null);
 
   const subscribedProducts = useMemo(
     () => getSubscribedProducts(activeBusiness?.product_subscriptions),
@@ -426,6 +449,110 @@ export function ProductSettingsScreen() {
     ...((snapshot?.features as string[] | undefined) ?? []),
   ]);
   const canConfigureLoyalty = rewardPointsEntitled && !snapshot?.soft_locked;
+  const hasShopie = (activeBusiness?.product_subscriptions ?? []).some(
+    (row) =>
+      row.product_code === 'shopie' &&
+      ['trialing', 'active', 'past_due', 'soft_locked'].includes(row.status),
+  );
+  const shopieSoftLocked = (activeBusiness?.product_subscriptions ?? []).some(
+    (row) => row.product_code === 'shopie' && (row.status === 'soft_locked' || Boolean(snapshot?.soft_locked)),
+  );
+  const smartPlatformOk = smartDashboard?.platform_enabled !== false;
+  const smartPlanOk = smartDashboard?.plan_enabled !== false;
+  const smartEnabled = Boolean(smartDashboard?.business_enabled ?? smartDashboard?.smart_lookup_enabled);
+  const canConfigureSmart = hasShopie && !shopieSoftLocked && smartPlatformOk && smartPlanOk;
+  const smartTopUps =
+    smartDashboard?.platform?.suggested_top_up_paise?.length
+      ? smartDashboard.platform.suggested_top_up_paise
+      : [5000, 10000, 25000, 50000];
+
+  useEffect(() => {
+    if (!token || !tenantId || !businessId || !hasShopie) {
+      setSmartDashboard(null);
+      setSmartHistory([]);
+      setSmartHistoryTotal(0);
+      setSmartHistoryHasMore(false);
+      return;
+    }
+    let cancelled = false;
+    const client = createScopedClient(token, tenantId, businessId);
+    client.shop
+      .getSmartLookup({ business_id: businessId })
+      .then((response) => {
+        if (!cancelled) setSmartDashboard(response.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSmartDashboard(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, tenantId, businessId, hasShopie, refreshing]);
+
+  useEffect(() => {
+    if (!token || !tenantId || !businessId || !hasShopie) return;
+    let cancelled = false;
+    setSmartHistoryLoading(true);
+    const client = createScopedClient(token, tenantId, businessId);
+    client.shop
+      .getSmartLookupHistory({
+        business_id: businessId,
+        kind: smartHistoryKind,
+        page: smartHistoryPage,
+        page_size: 20,
+        q: smartHistoryQ.trim() || undefined,
+        date_from: smartHistoryDateFrom || undefined,
+        date_to: smartHistoryDateTo || undefined,
+        window_days:
+          smartHistoryDateFrom || smartHistoryDateTo
+            ? undefined
+            : smartHistoryWindow === ''
+              ? undefined
+              : smartHistoryWindow,
+      })
+      .then((response) => {
+        if (cancelled) return;
+        setSmartHistory(response.data.items ?? []);
+        setSmartHistoryTotal(response.data.total ?? 0);
+        setSmartHistoryHasMore(Boolean(response.data.has_more));
+        setSmartHistorySummary(
+          response.data.summary
+            ? {
+                credits_inr: response.data.summary.credits_inr,
+                debits_inr: response.data.summary.debits_inr,
+                net_inr: response.data.summary.net_inr,
+              }
+            : null,
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSmartHistory([]);
+        setSmartHistoryTotal(0);
+        setSmartHistoryHasMore(false);
+        setSmartHistorySummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSmartHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    token,
+    tenantId,
+    businessId,
+    hasShopie,
+    smartHistoryPage,
+    smartHistoryKind,
+    smartHistoryQ,
+    smartHistoryDateFrom,
+    smartHistoryDateTo,
+    smartHistoryWindow,
+    refreshing,
+    smartTopUpPaise,
+  ]);
+
   const filteredOrders = useMemo(
     () =>
       filterBillingOrders(orders, {
@@ -1313,8 +1440,277 @@ export function ProductSettingsScreen() {
               </View>
             )}
           </FormSection>
+
+          <FormSection
+            title="Smart product lookup"
+            subtitle="Pack-photo AI fill when barcodes miss the free catalog. Wallet debits at configured Gemini cost."
+          >
+            {!hasShopie ? (
+              <View style={styles.notice}>
+                <Text style={[styles.noticeTitle, styles.checkCopy]}>
+                  Start or renew Orbit Mart above to unlock Smart lookup and the prepaid wallet.
+                </Text>
+              </View>
+            ) : !smartPlatformOk ? (
+              <View style={styles.notice}>
+                <Text style={[styles.noticeTitle, styles.checkCopy]}>
+                  Smart lookup is disabled by the platform. Contact IE support if you need pack-photo fill.
+                </Text>
+              </View>
+            ) : !smartPlanOk ? (
+              <View style={styles.notice}>
+                <Text style={[styles.noticeTitle, styles.checkCopy]}>
+                  Smart product lookup is not on your current plan. Ask your platform admin to enable it on the
+                  package Features tab, or upgrade to a plan that includes it.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.stackTight}>
+                <View style={styles.loyaltyToggleRow}>
+                  <View style={styles.checkCopy}>
+                    <Text style={styles.label}>Enable pack-photo auto-fill</Text>
+                    <Text style={styles.meta}>
+                      Wallet ₹{(smartDashboard?.balance_inr ?? 0).toFixed(2)} · free this month{' '}
+                      {smartDashboard?.month.free_lookups ?? 0} · paid {smartDashboard?.month.paid_lookups ?? 0}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={smartEnabled}
+                    disabled={!canConfigureSmart || smartBusy}
+                    onValueChange={(next) => {
+                      if (!token || !tenantId || !businessId) return;
+                      setSmartBusy(true);
+                      const client = createScopedClient(token, tenantId, businessId);
+                      client.shop
+                        .updateSmartLookup({ business_id: businessId, enabled: next })
+                        .then((response) => {
+                          setSmartDashboard(response.data);
+                          toast.push(next ? 'Smart lookup enabled.' : 'Smart lookup disabled.', 'success');
+                        })
+                        .catch((err) => showError(err, 'Unable to update Smart lookup.'))
+                        .finally(() => setSmartBusy(false));
+                    }}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                  />
+                </View>
+                <Text style={styles.kicker}>Top up with UPI</Text>
+                <View style={styles.chipRow}>
+                  {smartTopUps.map((paise) => (
+                    <Chip
+                      key={paise}
+                      label={`₹${(paise / 100).toFixed(0)}`}
+                      onPress={canConfigureSmart ? () => setSmartTopUpPaise(paise) : undefined}
+                    />
+                  ))}
+                </View>
+                <View style={styles.loyaltyMetrics}>
+                  <LoyaltyMetricRow
+                    label="Custom amount"
+                    hint="Minimum ₹1"
+                    value={smartCustomRupees}
+                    onChangeText={setSmartCustomRupees}
+                    unit="₹"
+                    editable={canConfigureSmart && !smartBusy}
+                  />
+                </View>
+                <Button
+                  label="Pay custom amount"
+                  variant="outline"
+                  disabled={!canConfigureSmart || !smartCustomRupees.trim()}
+                  onPress={() => {
+                    const rupees = Number(smartCustomRupees);
+                    if (!Number.isFinite(rupees) || rupees < 1) {
+                      toast.push('Enter at least ₹1.', 'error');
+                      return;
+                    }
+                    setSmartTopUpPaise(Math.round(rupees * 100));
+                  }}
+                />
+                <Text style={styles.kicker}>Wallet history</Text>
+                <View style={styles.chipRow}>
+                  {(
+                    [
+                      ['money', 'Money'],
+                      ['credits', 'Credits'],
+                      ['debits', 'Debits'],
+                      ['all', 'All'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <Chip
+                      key={value}
+                      label={label}
+                      active={smartHistoryKind === value}
+                      onPress={() => {
+                        setSmartHistoryPage(1);
+                        setSmartHistoryKind(value);
+                      }}
+                    />
+                  ))}
+                </View>
+                <Input
+                  label="Search"
+                  optional
+                  placeholder="Barcode, source…"
+                  value={smartHistoryQ}
+                  onChangeText={(value) => {
+                    setSmartHistoryPage(1);
+                    setSmartHistoryQ(value);
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <View style={styles.walletHistoryDates}>
+                  <View style={styles.walletHistoryDateField}>
+                    <DateField
+                      label="From"
+                      optional
+                      value={smartHistoryDateFrom}
+                      allowFuture={false}
+                      onChange={(value) => {
+                        setSmartHistoryPage(1);
+                        setSmartHistoryDateFrom(value);
+                        if (value) setSmartHistoryWindow('');
+                      }}
+                    />
+                  </View>
+                  <View style={styles.walletHistoryDateField}>
+                    <DateField
+                      label="To"
+                      optional
+                      value={smartHistoryDateTo}
+                      allowFuture={false}
+                      onChange={(value) => {
+                        setSmartHistoryPage(1);
+                        setSmartHistoryDateTo(value);
+                        if (value) setSmartHistoryWindow('');
+                      }}
+                    />
+                  </View>
+                </View>
+                <View style={styles.chipRow}>
+                  {(
+                    [
+                      [7, '7d'],
+                      [30, '30d'],
+                      [90, '90d'],
+                      ['', 'All time'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <Chip
+                      key={String(value)}
+                      label={label}
+                      active={
+                        smartHistoryWindow === value && !smartHistoryDateFrom && !smartHistoryDateTo
+                      }
+                      onPress={() => {
+                        setSmartHistoryPage(1);
+                        setSmartHistoryDateFrom('');
+                        setSmartHistoryDateTo('');
+                        setSmartHistoryWindow(value);
+                      }}
+                    />
+                  ))}
+                </View>
+                {smartHistorySummary ? (
+                  <Text style={styles.meta}>
+                    Credits ₹{smartHistorySummary.credits_inr.toFixed(2)} · Debits ₹
+                    {smartHistorySummary.debits_inr.toFixed(2)} · Net ₹{smartHistorySummary.net_inr.toFixed(2)}
+                  </Text>
+                ) : null}
+                {smartHistoryLoading ? (
+                  <Text style={styles.meta}>Loading history…</Text>
+                ) : smartHistory.length ? (
+                  <View style={styles.stackTight}>
+                    {smartHistory.map((row) => {
+                      const paise = row.charged_paise ?? 0;
+                      const amount =
+                        paise > 0
+                          ? `−₹${(paise / 100).toFixed(2)}`
+                          : paise < 0
+                            ? `+₹${(Math.abs(paise) / 100).toFixed(2)}`
+                            : 'Free';
+                      const title =
+                        row.source === 'wallet_top_up'
+                          ? 'Wallet top-up'
+                          : row.code
+                            ? `Smart fill · ${row.code}`
+                            : 'Smart fill';
+                      const balanceAfter =
+                        row.balance_after_paise == null
+                          ? '—'
+                          : `₹${(Number(row.balance_after_paise) / 100).toFixed(2)}`;
+                      return (
+                        <View key={row.id} style={styles.loyaltyToggleRow}>
+                          <View style={styles.checkCopy}>
+                            <Text style={styles.label}>{title}</Text>
+                            <Text style={styles.meta}>
+                              {new Date(row.created_at).toLocaleString()} · bal {balanceAfter}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.label,
+                              { color: paise > 0 ? '#B91C1C' : paise < 0 ? colors.success : colors.mutedForeground },
+                            ]}
+                          >
+                            {amount}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                    <View style={styles.chipRow}>
+                      <Chip
+                        label="Previous"
+                        onPress={
+                          smartHistoryPage > 1 && !smartHistoryLoading
+                            ? () => setSmartHistoryPage((page) => Math.max(1, page - 1))
+                            : undefined
+                        }
+                      />
+                      <Text style={styles.meta}>
+                        Page {smartHistoryPage} · {smartHistoryTotal}
+                      </Text>
+                      <Chip
+                        label="Next"
+                        onPress={
+                          smartHistoryHasMore && !smartHistoryLoading
+                            ? () => setSmartHistoryPage((page) => page + 1)
+                            : undefined
+                        }
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={styles.meta}>No wallet movements yet.</Text>
+                )}
+              </View>
+            )}
+          </FormSection>
         </View>
       )}
+
+      {smartTopUpPaise != null && token && tenantId && businessId ? (
+        <SmartLookupUpiPaySheet
+          client={createScopedClient(token, tenantId, businessId)}
+          token={token}
+          tenantId={tenantId}
+          businessId={businessId}
+          amountPaise={smartTopUpPaise}
+          onClose={() => setSmartTopUpPaise(null)}
+          onClaimed={async () => {
+            toast.push('Top-up submitted. Wallet credits after IE confirms payment.', 'success');
+            setSmartHistoryPage(1);
+            const client = createScopedClient(token, tenantId, businessId);
+            try {
+              const response = await client.shop.getSmartLookup({ business_id: businessId });
+              setSmartDashboard(response.data);
+            } catch {
+              /* ignore refresh errors */
+            }
+          }}
+          onError={(message) => toast.push(message, 'error')}
+        />
+      ) : null}
 
       <FilterSheet
         visible={filtersOpen}
@@ -1827,6 +2223,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.muted,
   },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   loyaltyExample: {
     padding: spacing.md,
     borderRadius: radius.lg,
@@ -1881,5 +2282,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemi,
     color: colors.mutedForeground,
     textTransform: 'lowercase',
+  },
+  walletHistoryDates: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  walletHistoryDateField: {
+    flex: 1,
+    minWidth: 0,
   },
 });

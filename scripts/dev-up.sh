@@ -6,4 +6,4 @@ ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 cd "$ROOT_DIR"
 
-docker compose up --build -d
+docker compose up -d

@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Camera, Pencil, Plus, Rows3 } from 'lucide-react';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
-import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-orbit/sdk';
-import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-orbit/sdk';
+import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct, ShopProductCategoryItem } from '@ie-orbit/sdk';
+import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -13,6 +13,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useShopGodowns, useShopProductMutations, useShopProducts } from './shopHooks';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useApiClient } from '../../hooks/useApiClient';
 import { ShopFilterBar } from './ShopFilterBar';
 import { uploadProductImage } from './uploadProductImage';
 import { currencySelectOptions, ensureSelectOption } from '../../config/onboarding';
@@ -27,6 +29,7 @@ import {
   productImageSlotLabel,
   toStoredProductImageUrl,
 } from './productImages';
+import { enrichSuccessMessage } from './enrichMessages';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 
 const emptyForm = {
@@ -49,37 +52,109 @@ const emptyForm = {
   barcode_type: 'manufacturer',
   status: 'active',
   category: '',
+  category_other: '',
 };
 
 type FormState = typeof emptyForm;
 
+const IDENTITY_DEFAULTS: Pick<
+  FormState,
+  | 'sku'
+  | 'name'
+  | 'brand'
+  | 'description'
+  | 'details_html'
+  | 'pack_size'
+  | 'images'
+  | 'barcode'
+  | 'barcode_type'
+  | 'category'
+  | 'category_other'
+  | 'hsn_sac'
+  | 'gst_rate'
+  | 'tax_rate'
+  | 'price'
+> = {
+  sku: '',
+  name: '',
+  brand: '',
+  description: '',
+  details_html: '',
+  pack_size: '',
+  images: emptyProductImageSlots(),
+  barcode: '',
+  barcode_type: 'manufacturer',
+  category: '',
+  category_other: '',
+  hsn_sac: '',
+  gst_rate: '0',
+  tax_rate: '0',
+  price: '0',
+};
+
+function wipeIdentity(current: FormState, code: string): FormState {
+  return {
+    ...current,
+    ...IDENTITY_DEFAULTS,
+    images: emptyProductImageSlots(),
+    barcode: code,
+    sku: code,
+    barcode_type: 'manufacturer',
+  };
+}
+
 function applyEnrichment(current: FormState, data: ShopBarcodeEnrichment): FormState {
-  const guessed = guessShopProductCategory(data.categories);
-  const nextImages = ensureProductImageSlots(
+  const gallery = ensureProductImageSlots(
     normalizeProductGallery([
-      data.front_image_url || current.images[0],
-      data.back_image_url || current.images[1],
-      ...current.images.slice(2),
+      data.front_image_url,
+      data.back_image_url,
+      ...(data.images?.gallery ?? []),
       data.local_image_url,
       data.image_url,
+      ...current.images,
     ]),
   );
+  const mrp = String(data.mrp || '').trim();
+  const gst = String(data.gst_rate || '').trim();
+  const usableMrp = mrp && mrp !== '0' && mrp !== '0.00' ? mrp : '';
+  const usableGst = gst && gst !== '0' && gst !== '0.00' ? gst : '';
+  const categorySlug = (data.category || '').trim();
+  const isOther = categorySlug === 'other';
+  const detailsHtml =
+    (data.details_html || '').trim() ||
+    (data.description
+      ? `<p>${String(data.description)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')}</p>`
+      : current.details_html);
   return {
     ...current,
     sku: data.sku || data.code || current.sku,
-    name: data.name || current.name,
-    brand: data.brand || current.brand,
-    description: data.description || current.description,
-    pack_size: data.pack_size || data.serving_size || current.pack_size,
-    images: nextImages,
+    name: data.name || '',
+    brand: data.brand || '',
+    description: data.description || '',
+    details_html: detailsHtml,
+    pack_size: data.pack_size || data.serving_size || '',
+    images: gallery,
     barcode: data.code || current.barcode,
     barcode_type: data.code ? 'manufacturer' : current.barcode_type,
-    category: guessed || current.category,
+    category: categorySlug || '',
+    category_other: isOther
+      ? data.category_label || data.categories || ''
+      : data.category_label && !categorySlug
+        ? data.category_label
+        : '',
+    hsn_sac: data.hsn_sac || '',
+    gst_rate: usableGst || current.gst_rate,
+    tax_rate: usableGst || current.tax_rate,
+    price: usableMrp || current.price,
   };
 }
 
 function formFromProduct(product: ShopProduct): FormState {
   const primaryBarcode = product.barcodes?.find((row) => row.is_primary) || product.barcodes?.[0];
+  const categorySlug = product.category || '';
   return {
     sku: product.sku || '',
     name: product.name || '',
@@ -99,7 +174,8 @@ function formFromProduct(product: ShopProduct): FormState {
     barcode: primaryBarcode?.code || '',
     barcode_type: primaryBarcode?.barcode_type || 'manufacturer',
     status: product.status || 'active',
-    category: product.category || '',
+    category: categorySlug,
+    category_other: categorySlug === 'other' ? product.category_label || '' : '',
   };
 }
 
@@ -137,15 +213,30 @@ export function ShopProductsPage() {
   const auth = useAuth();
   const snackbar = useSnackbar();
   const workspace = useWorkspace();
+  const client = useApiClient();
+  const queryClient = useQueryClient();
   const scanInputRef = useRef<HTMLInputElement | null>(null);
+  const packPhotoRef = useRef<HTMLInputElement | null>(null);
   const products = useShopProducts(search, status, category);
   const godownsQuery = useShopGodowns();
   const godowns = godownsQuery.data ?? [];
+  const categoriesQuery = useQuery({
+    queryKey: ['shop-product-categories'],
+    queryFn: async () => {
+      const response = await client.shop.listProductCategories();
+      return response.data.items;
+    },
+  });
+  const categoryOptions: ShopProductCategoryItem[] = categoriesQuery.data?.length
+    ? categoriesQuery.data
+    : SHOP_PRODUCT_CATEGORIES.map((item) => ({ slug: item.value, label: item.label, is_builtin: true }));
   const { create, update, patchBulk, enrich, analyzePackaging, getPackagingAnalysis, businessId } =
     useShopProductMutations();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [needsPackPhoto, setNeedsPackPhoto] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -256,28 +347,130 @@ export function ShopProductsPage() {
     dialog.show();
   }
 
-  async function runEnrich(payload: { code?: string; query?: string }) {
+  async function runEnrich(payload: { code?: string; query?: string; image_url?: string; use_smart_lookup?: boolean }) {
+    const code = (payload.code || '').trim();
     setMessage(null);
+    setNeedsPackPhoto(false);
+
+    if (code) {
+      // Instant barcode on the form; wipe previous catalog identity when code changes (add mode).
+      setBarcodeLookup(code);
+      setForm((current) => {
+        if (editingId) {
+          const currentCode = current.barcode.trim();
+          if (currentCode && currentCode !== code) {
+            return {
+              ...wipeIdentity(current, code),
+              price: current.price,
+              stock_on_hand: current.stock_on_hand,
+              low_stock_threshold: current.low_stock_threshold,
+              godown_id: current.godown_id,
+              status: current.status,
+              currency: current.currency,
+            };
+          }
+          return { ...current, barcode: code, sku: current.sku || code };
+        }
+        if (current.barcode.trim() && current.barcode.trim() !== code) {
+          return wipeIdentity(current, code);
+        }
+        return { ...current, barcode: code, sku: current.sku || code };
+      });
+    }
+
+    setLookingUp(true);
     try {
-      const data = await enrich.mutateAsync(payload.code ? { code: payload.code } : { query: payload.query || '' });
+      const data = await enrich.mutateAsync(
+        payload.code
+          ? {
+              code,
+              image_url: payload.image_url,
+              use_smart_lookup: payload.use_smart_lookup ?? true,
+            }
+          : { query: payload.query || '', image_url: payload.image_url, use_smart_lookup: payload.use_smart_lookup ?? true },
+      );
+
+      if (data.existing_product_id && data.existing_product_id !== editingId) {
+        setMessage(data.message || `Already in catalog as ${data.existing_product_name}.`);
+        snackbar.push(data.message || `Already in catalog as ${data.existing_product_name}.`, 'info');
+        if (!editingId) {
+          const existing = (products.data ?? []).find((row) => row.id === data.existing_product_id);
+          if (existing) openEditDialog(existing);
+        }
+        return;
+      }
+
       if (!data.found) {
-        if (payload.code) {
-          setForm((current) => ({
-            ...current,
-            barcode: payload.code || current.barcode,
-            sku: payload.code || current.sku,
-          }));
-          setMessage('No online match for this barcode — fill details manually and save.');
+        if (code) {
+          setNeedsPackPhoto(Boolean(data.needs_pack_photo));
+          setMessage(
+            data.message ||
+              (data.needs_pack_photo
+                ? 'No online match — take a pack photo to auto-fill, or enter the name.'
+                : 'No online match for this barcode — fill details manually and save.'),
+          );
         } else {
           setMessage(data.message || 'No online match — try another name or scan the barcode.');
         }
         return;
       }
-      setForm((current) => applyEnrichment(current, data));
-      setBarcodeLookup(data.code || payload.code || '');
-      setMessage(`Prefill from ${data.source ?? 'catalog'}. Review price/stock, then save.`);
+
+      setForm((current) => {
+        const next = applyEnrichment(
+          editingId
+            ? {
+                ...wipeIdentity(current, data.code || code || current.barcode),
+                price: current.price,
+                stock_on_hand: current.stock_on_hand,
+                low_stock_threshold: current.low_stock_threshold,
+                godown_id: current.godown_id,
+                status: current.status,
+                currency: current.currency,
+              }
+            : current.barcode && data.code && current.barcode !== data.code
+              ? wipeIdentity(current, data.code)
+              : { ...current, barcode: data.code || current.barcode },
+          data,
+        );
+        return next;
+      });
+      setBarcodeLookup(data.code || code || '');
+      void queryClient.invalidateQueries({ queryKey: ['shop-product-categories'] });
+      const filled = data.name || 'Product';
+      const successText = enrichSuccessMessage(data, {
+        editing: Boolean(editingId),
+        filledName: filled,
+      });
+      snackbar.push(successText, 'success');
+      setMessage(successText);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Lookup failed.');
+    } finally {
+      setLookingUp(false);
+    }
+  }
+
+  async function runSmartPackPhoto(file: File | null) {
+    if (!file || !auth.token || !workspace.tenantId || !businessId) return;
+    setLookingUp(true);
+    setMessage('Reading pack photo…');
+    try {
+      const url = await uploadProductImage({
+        accessToken: auth.token,
+        tenantId: workspace.tenantId,
+        businessId,
+        imageFile: file,
+        label: 'Pack photo',
+      });
+      const stored = toStoredProductImageUrl(url) || url;
+      await runEnrich({
+        code: form.barcode || barcodeLookup,
+        image_url: stored,
+        use_smart_lookup: true,
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to read pack photo.');
+      setLookingUp(false);
     }
   }
 
@@ -300,7 +493,11 @@ export function ShopProductsPage() {
         next[index] = stored;
         return { ...current, images: next };
       });
-      setMessage(`${productImageSlotLabel(index)} uploaded.`);
+      setMessage(
+        index === 0
+          ? 'Primary photo uploaded. Use Smart fill when you want to read the pack.'
+          : `${productImageSlotLabel(index)} uploaded.`,
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Image upload failed.');
     } finally {
@@ -374,7 +571,22 @@ export function ShopProductsPage() {
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     if (!businessId || !form.name.trim()) return;
+    if (form.category === 'other' && !form.category_other.trim()) {
+      setMessage('Enter a category name for Other.');
+      return;
+    }
     setMessage(null);
+    let categorySlug = form.category;
+    if (form.category === 'other' || (form.category_other.trim() && !categorySlug)) {
+      try {
+        const created = await client.shop.ensureProductCategory({ label: form.category_other.trim() });
+        categorySlug = created.data.slug;
+        void queryClient.invalidateQueries({ queryKey: ['shop-product-categories'] });
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Unable to create category.');
+        return;
+      }
+    }
     const gallery = normalizeProductGallery(form.images.map(toStoredProductImageUrl));
     const payload = {
       sku: form.sku,
@@ -393,7 +605,7 @@ export function ShopProductsPage() {
       pack_size: form.pack_size,
       ...(gallery[0] ? { image_url: gallery[0] } : { image_url: '' }),
       status: form.status,
-      ...(form.category ? { category: form.category } : { category: '' }),
+      ...(categorySlug ? { category: categorySlug } : { category: '' }),
       metadata: {
         images: buildProductImageMetadata(gallery),
       },
@@ -415,6 +627,7 @@ export function ShopProductsPage() {
       setEditingId(null);
       setBarcodeLookup('');
       setNameLookup('');
+      setNeedsPackPhoto(false);
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Unable to save product.';
       setMessage(text);
@@ -458,8 +671,8 @@ export function ShopProductsPage() {
               onChange: setCategory,
               options: [
                 { value: '', label: 'All categories' },
-                ...SHOP_PRODUCT_CATEGORIES.map((item) => ({
-                  value: item.value,
+                ...categoryOptions.map((item) => ({
+                  value: item.slug,
                   label: item.label,
                 })),
               ],
@@ -607,10 +820,7 @@ export function ShopProductsPage() {
                   <div style={{ opacity: 0.8 }}>
                     {product.status}
                     {product.category
-                      ? ` · ${
-                          SHOP_PRODUCT_CATEGORIES.find((item) => item.value === product.category)?.label ||
-                          product.category
-                        }`
+                      ? ` · ${product.category_label || categoryOptions.find((item) => item.slug === product.category)?.label || product.category}`
                       : ''}{' '}
                     · {product.brand || 'No brand'} · Stock {product.stock_on_hand} ·{' '}
                     {product.currency || ''} {product.price}
@@ -714,8 +924,8 @@ export function ShopProductsPage() {
               style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
             >
               <option value="">Keep</option>
-              {SHOP_PRODUCT_CATEGORIES.map((item) => (
-                <option key={item.value} value={item.value}>
+              {categoryOptions.map((item) => (
+                <option key={item.slug} value={item.slug}>
                   {item.label}
                 </option>
               ))}
@@ -776,7 +986,7 @@ export function ShopProductsPage() {
         onClose={dialog.hide}
         title={editingId ? 'Edit product' : 'Add product'}
         labelledBy="product-dialog"
-        busy={saving || enrich.isPending || analyzing || uploadingIndex !== null}
+        busy={saving || lookingUp || enrich.isPending || analyzing || uploadingIndex !== null}
       >
         <form onSubmit={handleSave} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
@@ -841,15 +1051,23 @@ export function ShopProductsPage() {
                 }}
                 placeholder="Scan barcode / RFID with scanner gun…"
                 autoComplete="off"
-                style={{ flex: 1, minWidth: 220, padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                style={{
+                  flex: 1,
+                  minWidth: 220,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: lookingUp ? '1px solid #6ee7b7' : '1px solid #e5e7eb',
+                  boxShadow: lookingUp ? '0 0 0 3px rgba(16, 185, 129, 0.15)' : undefined,
+                  transition: 'border-color 120ms ease, box-shadow 120ms ease',
+                }}
               />
               <Button
                 type="button"
                 variant="neutral"
                 onClick={() => void runEnrich({ code: barcodeLookup.trim() })}
-                disabled={enrich.isPending || !barcodeLookup.trim()}
+                disabled={lookingUp || enrich.isPending || !barcodeLookup.trim()}
               >
-                {enrich.isPending ? 'Looking up…' : 'Lookup barcode'}
+                {lookingUp || enrich.isPending ? 'Looking up…' : 'Lookup barcode'}
               </Button>
               <Button type="button" variant="neutral" onClick={() => setCameraOpen((open) => !open)}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -858,6 +1076,67 @@ export function ShopProductsPage() {
                 </span>
               </Button>
             </div>
+            {lookingUp ? (
+              <div
+                role="status"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 13,
+                  color: '#047857',
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: '#10b981',
+                    animation: 'pulse 1s ease-in-out infinite',
+                  }}
+                />
+                Looking up barcode… form stays editable.
+              </div>
+            ) : null}
+            {needsPackPhoto ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid #fed7aa',
+                  background: 'linear-gradient(180deg, #fffbeb, #fff7ed)',
+                }}
+              >
+                <div style={{ fontSize: 13, color: '#9a3412', lineHeight: 1.4 }}>
+                  No catalog match. Take a clear pack photo for Smart lookup, or type the name below.
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    ref={packPhotoRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      void runSmartPackPhoto(event.target.files?.[0] ?? null);
+                      event.target.value = '';
+                    }}
+                  />
+                  <Button type="button" variant="primary" onClick={() => packPhotoRef.current?.click()} disabled={lookingUp}>
+                    Take pack photo
+                  </Button>
+                  <span style={{ fontSize: 12, color: '#b45309' }}>Uses prepaid Smart lookup wallet when enabled</span>
+                </div>
+              </div>
+            ) : null}
             <BarcodeCameraPanel
               active={cameraOpen}
               onClose={() => setCameraOpen(false)}
@@ -994,17 +1273,41 @@ export function ShopProductsPage() {
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Category</span>
               <select
                 value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                onChange={(e) => setForm({ ...form, category: e.target.value, category_other: e.target.value === 'other' ? form.category_other : '' })}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               >
                 <option value="">Select category</option>
-                {SHOP_PRODUCT_CATEGORIES.map((item) => (
-                  <option key={item.value} value={item.value}>
+                {categoryOptions.map((item) => (
+                  <option key={item.slug} value={item.slug}>
                     {item.label}
                   </option>
                 ))}
+                {!categoryOptions.some((item) => item.slug === 'other') ? (
+                  <option value="other">Other</option>
+                ) : null}
               </select>
             </label>
+            {form.category === 'other' ? (
+              <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>New category name</span>
+                <input
+                  value={form.category_other}
+                  onChange={(e) => setForm({ ...form, category_other: e.target.value })}
+                  required
+                  placeholder="e.g. Dry dog food"
+                  autoFocus
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    border: '1px solid #93c5fd',
+                    boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.12)',
+                  }}
+                />
+                <span style={{ fontSize: 12, color: '#6b7280' }}>
+                  Saved as a real shop category and available in filters everywhere.
+                </span>
+              </label>
+            ) : null}
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Description / ingredients</span>
               <textarea
