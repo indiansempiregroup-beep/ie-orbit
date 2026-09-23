@@ -183,7 +183,7 @@ export function applyEnrichmentToRow(
       data.front_image_url || data.local_image_url || data.image_url || (wipe ? '' : row.image_url),
     hsn_sac: data.hsn_sac || (wipe ? defaults.hsn_sac : row.hsn_sac),
     gst_rate: data.gst_rate || (wipe ? defaults.gst_rate : row.gst_rate),
-    price: data.mrp && data.mrp !== '0' && data.mrp !== '0.00' ? String(data.mrp) : wipe ? defaults.price : row.price,
+    price: data.mrp && data.mrp !== '0' && data.mrp !== '0.00' ? String(data.mrp) : wipe ? '' : row.price,
     error: '',
     lookingUp: false,
   };

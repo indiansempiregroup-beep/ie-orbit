@@ -136,7 +136,7 @@ export function SmartLookupSettingsPanel() {
 
   function clearHistoryFilters() {
     setHistorySource('');
-    setHistoryCode('');
+    setHistoryQ('');
     setHistoryDateFrom('');
     setHistoryDateTo('');
     setHistoryWindow(30);
@@ -269,7 +269,9 @@ export function SmartLookupSettingsPanel() {
                       'success',
                     ),
                   )
-                  .catch((error) => snackbar.push(getApiErrorMessage(error), 'error'));
+                  .catch((error) =>
+                    snackbar.push(getApiErrorMessage(error, 'Unable to update smart lookup.'), 'error'),
+                  );
               }}
             />
             <span style={{ fontSize: 14, fontWeight: 600 }}>Enable pack-photo auto-fill</span>
