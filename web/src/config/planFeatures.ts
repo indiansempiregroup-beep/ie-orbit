@@ -29,7 +29,7 @@ export const PLAN_FEATURE_GROUP_ORDER = [
   'Grow',
   'Marketing',
   'Loyalty',
-  'Assistant',
+  'AI Assistant',
 ] as const;
 
 const BOTH: PlanProductCode[] = ['appointie', 'shopie'];
@@ -79,11 +79,12 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
   },
   {
     code: 'appointie_ai_assistant',
-    group: 'Assistant',
+    group: 'AI Assistant',
     products: ['appointie'],
     label: 'Business Assistant',
-    adminLabel: 'Business Assistant (Orbit Appoint)',
-    detail: 'Chat Q&A plus confirm-to-run actions for bookings and customers.',
+    adminLabel: 'AI Business Assistant (Orbit Appoint)',
+    detail:
+      'Ask in plain language — check bookings and customers, then confirm status changes without digging through screens.',
   },
   {
     code: 'shopie_pos',
@@ -152,11 +153,12 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
   },
   {
     code: 'shopie_ai_assistant',
-    group: 'Assistant',
+    group: 'AI Assistant',
     products: ['shopie'],
     label: 'Business Assistant',
-    adminLabel: 'Business Assistant (Orbit Mart)',
-    detail: 'Chat Q&A plus confirm-to-run actions for orders, stock, and customers.',
+    adminLabel: 'AI Business Assistant (Orbit Mart)',
+    detail:
+      'Ask in plain language — check orders, stock, and customers, then confirm actions without digging through screens.',
   },
   {
     code: 'shopie_books_sale',

@@ -1136,6 +1136,110 @@
   line-height: 1.45;
 }
 
+.public-plan-features__group.is-ai {
+  padding: 12px 12px 10px;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(28, 113, 143, 0.08), rgba(245, 158, 11, 0.1)),
+    #fff;
+  border: 1px solid color-mix(in srgb, var(--pub-blue) 18%, var(--pub-line));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.public-plan-features__title-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pub-blue);
+  letter-spacing: 0.08em;
+}
+
+.public-plan-features__title-ai svg {
+  color: var(--pub-amber);
+  animation: public-ai-sparkle 2.4s ease-in-out infinite;
+}
+
+.public-plan-features__item.is-ai {
+  align-items: center;
+  padding: 8px 10px 8px 8px;
+  margin-left: -4px;
+  margin-right: -4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.public-plan-features__item.is-ai::before {
+  display: none;
+}
+
+.public-plan-features__item.is-ai .public-plan-features__label {
+  color: var(--pub-ink);
+  font-weight: 700;
+}
+
+.public-plan-features__ai-badge {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: linear-gradient(145deg, #1c718f, #0f4f66);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(28, 113, 143, 0.28);
+}
+
+.public-plan-features__ai-orb {
+  position: absolute;
+  inset: -40% -20%;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.45) 48%,
+    transparent 62%
+  );
+  animation: public-ai-sheen 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.public-plan-features__ai-text {
+  position: relative;
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+@keyframes public-ai-sparkle {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.85;
+  }
+  40% {
+    transform: rotate(12deg) scale(1.12);
+    opacity: 1;
+  }
+  70% {
+    transform: rotate(-6deg) scale(0.96);
+    opacity: 0.9;
+  }
+}
+
+@keyframes public-ai-sheen {
+  0%,
+  20% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
 .public-plan-features__hint {
   position: relative;
   flex-shrink: 0;
@@ -2052,5 +2156,10 @@ button.public-back-link {
   .public-card-link:hover .public-card,
   .public-path-card:hover {
     transform: none;
+  }
+
+  .public-plan-features__title-ai svg,
+  .public-plan-features__ai-orb {
+    animation: none;
   }
 }

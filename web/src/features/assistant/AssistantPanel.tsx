@@ -92,7 +92,10 @@ function previewQueryForLink(link: AssistantEntityLink): string {
     return String(link.select_text || link.label || '').trim();
   }
   const kind = String(link.kind || '').trim().toLowerCase();
-  const id = String(link.id || '').trim();
+  // Orders/bookings/returns use human-readable numbers as the label; keep UUID for navigation.
+  const preferLabel = kind === 'order' || kind === 'booking' || kind === 'return';
+  const raw = preferLabel ? String(link.label || link.id || '') : String(link.id || '');
+  const id = raw.trim().replace(/^Open\s+/i, '');
   return `preview ${kind} ${id}`.trim();
 }
 
