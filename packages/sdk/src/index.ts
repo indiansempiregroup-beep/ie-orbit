@@ -4257,6 +4257,7 @@ export type RegisterBusinessInput = RegisterRequest & {
   city?: string;
   postal_code?: string;
   address_line1?: string;
+  address_line2?: string;
   latitude?: number | null;
   longitude?: number | null;
   timezone?: string;
