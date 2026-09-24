@@ -48,6 +48,7 @@ export function MoreScreen() {
   const showShop = hasShopie(activeBusiness?.product_subscriptions);
   const { has, hasAny } = usePlanFeatures();
   const showBooks = showShop && hasAny(SHOPIE_BOOKS_FEATURES);
+  const showAssistant = has(PlanFeature.shopieAiAssistant) || has(PlanFeature.appointieAiAssistant);
   const workspaceLabel = activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace');
 
   async function onSignOut() {
@@ -100,6 +101,16 @@ export function MoreScreen() {
         </View>
 
         <View style={styles.menu}>
+        {showAssistant ? (
+          <MenuSection title="Assistant">
+            <MenuRow
+              icon="message-circle"
+              label="Business Assistant"
+              subtitle="Ask questions or confirm changes"
+              onPress={() => navigation.navigate('Assistant')}
+            />
+          </MenuSection>
+        ) : null}
         {showShop ? (
           <MenuSection title="Sale">
             {has(PlanFeature.shopiePos) ? (

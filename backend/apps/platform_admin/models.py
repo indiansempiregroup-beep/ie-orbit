@@ -125,6 +125,35 @@ class PlatformAddonPricing(BaseModel):
         return self.key
 
 
+class PlatformAssistantSettings(BaseModel):
+    """Singleton platform pricing for Business Assistant prepaid overage."""
+
+    key = models.SlugField(max_length=20, unique=True, default="default")
+    enabled = models.BooleanField(
+        default=True,
+        help_text="When off, free daily limits still apply but prepaid overage is disabled.",
+    )
+    message_price_paise = models.PositiveIntegerField(
+        default=50,
+        help_text="Wallet debit per assistant message after free daily messages are used (paise).",
+    )
+    confirm_price_paise = models.PositiveIntegerField(
+        default=100,
+        help_text="Wallet debit per confirm after free daily confirms are used (paise).",
+    )
+    suggested_top_up_paise = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Suggested wallet top-up amounts in paise shown to business owners.",
+    )
+
+    class Meta:
+        db_table = "platform_assistant_settings"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return self.key
+
+
 class PlatformSmartLookupSettings(BaseModel):
     """Singleton platform controls for ShopIE Smart lookup (AI pack-photo fill)."""
 

@@ -42,6 +42,7 @@ from apps.platform_admin.models import (
     PlatformLedgerInvoice,
     PlatformPlanPackage,
     PlatformSmartLookupSettings,
+    PlatformAssistantSettings,
     SupportTicket,
     SupportTicketNote,
 )
@@ -1219,6 +1220,88 @@ class PlatformAdminService:
         from apps.shopie.services.smart_lookup import serialize_platform_smart_lookup_settings
 
         return serialize_platform_smart_lookup_settings()
+
+    def get_assistant_settings(self) -> dict[str, Any]:
+        from apps.assistant.services.wallet import serialize_platform_assistant_settings
+
+        return serialize_platform_assistant_settings()
+
+    @transaction.atomic
+    def update_assistant_settings(
+        self,
+        *,
+        actor: User,
+        enabled: bool,
+        message_price_paise: int,
+        confirm_price_paise: int,
+        suggested_top_up_paise: list[int] | None,
+        reason: str,
+        ip_address: str | None = None,
+        user_agent: str = "",
+    ) -> dict[str, Any]:
+        from apps.assistant.services.wallet import (
+            DEFAULT_CONFIRM_PRICE_PAISE,
+            DEFAULT_MESSAGE_PRICE_PAISE,
+            DEFAULT_SUGGESTED_TOP_UPS,
+            serialize_platform_assistant_settings,
+        )
+
+        reason = self.require_reason(reason)
+        message_price = max(1, int(message_price_paise or DEFAULT_MESSAGE_PRICE_PAISE))
+        confirm_price = max(1, int(confirm_price_paise or DEFAULT_CONFIRM_PRICE_PAISE))
+        if message_price > 100_000_00:
+            raise ValidationError({"message_price_paise": "Price is too high."})
+        if confirm_price > 100_000_00:
+            raise ValidationError({"confirm_price_paise": "Price is too high."})
+
+        tops: list[int] = []
+        for raw in suggested_top_up_paise or []:
+            value = int(raw)
+            if value < 100:
+                raise ValidationError({"suggested_top_up_paise": "Each top-up must be at least ₹1."})
+            if value > 100_000_00:
+                raise ValidationError(
+                    {"suggested_top_up_paise": "Each top-up must be at most ₹1,00,000."}
+                )
+            tops.append(value)
+        tops = sorted(set(tops))[:8] or list(DEFAULT_SUGGESTED_TOP_UPS)
+
+        row, _created = PlatformAssistantSettings.objects.get_or_create(
+            key="default",
+            defaults={
+                "enabled": True,
+                "message_price_paise": DEFAULT_MESSAGE_PRICE_PAISE,
+                "confirm_price_paise": DEFAULT_CONFIRM_PRICE_PAISE,
+                "suggested_top_up_paise": list(DEFAULT_SUGGESTED_TOP_UPS),
+            },
+        )
+        before = serialize_platform_assistant_settings(row)
+        row.enabled = bool(enabled)
+        row.message_price_paise = message_price
+        row.confirm_price_paise = confirm_price
+        row.suggested_top_up_paise = tops
+        row.save(
+            update_fields=[
+                "enabled",
+                "message_price_paise",
+                "confirm_price_paise",
+                "suggested_top_up_paise",
+                "updated_at",
+                "version",
+            ]
+        )
+        after = serialize_platform_assistant_settings(row)
+        self.audit(
+            actor=actor,
+            action="platform.assistant_settings.update",
+            resource_type="assistant_settings",
+            resource_id=str(row.id),
+            reason=reason,
+            metadata={"before": before, "after": after},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return after
 
     @transaction.atomic
     def update_smart_lookup_settings(

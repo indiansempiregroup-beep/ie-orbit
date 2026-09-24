@@ -355,6 +355,7 @@ class MobileShopOrderListCreateView(APIView):
                 delivery_method=str(request.data.get("delivery_method") or ""),
                 delivery_quote_id=str(request.data.get("delivery_quote_id") or ""),
                 displayed_delivery_fee=request.data.get("displayed_delivery_fee"),
+                delivery_address_line2=str(request.data.get("delivery_address_line2") or ""),
                 payment_method=payment_method,
                 coupon_code=str(request.data.get("coupon_code") or ""),
                 points_to_redeem=points_to_redeem,

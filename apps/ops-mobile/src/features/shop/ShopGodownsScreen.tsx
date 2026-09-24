@@ -20,6 +20,7 @@ import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Button } from '../../components/ui/Button';
+import { FieldRow } from '../../components/ui/FieldRow';
 import { Input } from '../../components/ui/Input';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -169,6 +170,7 @@ export function ShopGodownsScreen() {
   const [isDefault, setIsDefault] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [country, setCountry] = useState('');
@@ -189,6 +191,7 @@ export function ShopGodownsScreen() {
     setIsDefault(false);
     setPhoneNumber('');
     setAddressLine1('');
+    setAddressLine2('');
     setCity('');
     setState('');
     setCountry('');
@@ -208,6 +211,7 @@ export function ShopGodownsScreen() {
     setIsDefault(Boolean(godown.is_default));
     setPhoneNumber(godown.phone_number ?? '');
     setAddressLine1(godown.address_line1 ?? '');
+    setAddressLine2(godown.address_line2 ?? '');
     setCity(godown.city ?? '');
     setState(godown.state ?? '');
     setCountry(godown.country ?? '');
@@ -333,6 +337,7 @@ export function ShopGodownsScreen() {
         is_default: isDefault,
         phone_number: phoneNumber.trim(),
         address_line1: addressLine1.trim(),
+        address_line2: addressLine2.trim(),
         city: city.trim(),
         state: state.trim(),
         country: country.trim(),
@@ -419,7 +424,13 @@ export function ShopGodownsScreen() {
           longitude={longitude}
           onChangeText={setAddressLine1}
           onPlaceSelected={(place) => {
+            const cleared =
+              !place.line1 &&
+              !place.formattedAddress &&
+              place.latitude == null &&
+              place.longitude == null;
             setAddressLine1(place.line1 || place.formattedAddress);
+            setAddressLine2((current) => (cleared ? '' : current));
             setCity(place.city || '');
             setState(place.state || '');
             setCountry(place.country || '');
@@ -429,6 +440,45 @@ export function ShopGodownsScreen() {
           }}
         />
         <Input
+          label="Flat, floor, building or landmark"
+          optional
+          placeholder="Bay 3, near loading dock"
+          value={addressLine2}
+          onChangeText={setAddressLine2}
+        />
+        <FieldRow>
+          <Input
+            label="City"
+            optional
+            value={city}
+            onChangeText={setCity}
+            editable={!(latitude != null && longitude != null)}
+          />
+          <Input
+            label="State"
+            optional
+            value={state}
+            onChangeText={setState}
+            editable={!(latitude != null && longitude != null)}
+          />
+        </FieldRow>
+        <FieldRow>
+          <Input
+            label="Country"
+            optional
+            value={country}
+            onChangeText={setCountry}
+            editable={!(latitude != null && longitude != null)}
+          />
+          <Input
+            label="Postal code"
+            optional
+            value={postalCode}
+            onChangeText={setPostalCode}
+            editable={!(latitude != null && longitude != null)}
+          />
+        </FieldRow>
+        <Input
           label="Pickup phone"
           optional
           value={phoneNumber}
@@ -436,12 +486,6 @@ export function ShopGodownsScreen() {
           placeholder="Optional"
           keyboardType="phone-pad"
         />
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>City / State / Country / Postal code</Text>
-          <Text style={styles.hint}>
-            {[city, state, country, postalCode].filter(Boolean).join(', ') || 'Select an address above'}
-          </Text>
-        </View>
         <Input
           label="Code"
           optional
@@ -457,6 +501,7 @@ export function ShopGodownsScreen() {
             onValueChange={setIsDefault}
             disabled={lockedDefault}
             trackColor={{ false: colors.border, true: colors.tintStrong }}
+
             thumbColor={isDefault ? colors.primary : colors.mutedForeground}
           />
         </View>

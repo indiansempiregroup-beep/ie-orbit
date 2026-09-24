@@ -279,7 +279,7 @@ export function StaffFormScreen() {
 
       <FormSection
         title="Booking availability"
-        subtitle="Turn off if this person should never appear as a bookable stylist or count as a staff seat."
+        subtitle="Changing employment status can block all bookings for this person. For time off on specific dates, add Leave instead — that only blocks those slots."
       >
         <Pressable style={styles.inviteToggle} onPress={() => setIsBookable((value) => !value)}>
           <View style={[styles.checkbox, isBookable && styles.checkboxOn]}>

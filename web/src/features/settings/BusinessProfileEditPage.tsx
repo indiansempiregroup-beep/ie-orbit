@@ -224,9 +224,15 @@ export function BusinessProfileEditPage() {
               longitude={formState.longitude}
               onChangeText={(value) => updateField('address_line1', value)}
               onPlaceSelected={(place) => {
+                const cleared =
+                  !place.line1 &&
+                  !place.formattedAddress &&
+                  place.latitude == null &&
+                  place.longitude == null;
                 setFormState((current) => ({
                   ...current,
                   address_line1: place.line1 || place.formattedAddress,
+                  address_line2: cleared ? '' : current.address_line2,
                   city: place.city || '',
                   state: place.state || '',
                   country: place.country || '',
@@ -235,6 +241,14 @@ export function BusinessProfileEditPage() {
                   longitude: place.longitude ?? null,
                 }));
               }}
+            />
+            <Input
+              label="Flat, floor, building or landmark"
+              value={formState.address_line2}
+              onChange={(e) => updateField('address_line2', e.target.value)}
+              disabled={saving}
+              placeholder="Shop 12, Ground floor, near City Mall"
+              style={{ marginBottom: 0 }}
             />
             <div style={fieldGridStyle}>
               <Input label="Country" value={formState.country} onChange={(e) => updateField('country', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />

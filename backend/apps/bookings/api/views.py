@@ -197,6 +197,10 @@ class BookingListCreateView(APIView):
         )
 
     def _business(self, request: Request, business_id: object | None) -> Business:
+        if isinstance(business_id, Business):
+            if business_id.tenant_id != request.current_tenant.id:
+                raise NotFound("No business exists for the current tenant.")
+            return business_id
         if business_id:
             return get_object_or_404(
                 Business.objects.require_tenant(request.current_tenant), id=business_id
@@ -553,6 +557,10 @@ class AvailabilityView(APIView):
         )
 
     def _business(self, request: Request, business_id: object | None) -> Business:
+        if isinstance(business_id, Business):
+            if business_id.tenant_id != request.current_tenant.id:
+                raise NotFound("No business exists for the current tenant.")
+            return business_id
         if business_id:
             return get_object_or_404(
                 Business.objects.require_tenant(request.current_tenant), id=business_id

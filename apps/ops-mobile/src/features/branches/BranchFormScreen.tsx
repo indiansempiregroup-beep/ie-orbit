@@ -24,6 +24,7 @@ const emptyForm = {
   name: '',
   address: '',
   addressLine1: '',
+  addressLine2: '',
   city: '',
   state: '',
   country: '',
@@ -40,6 +41,7 @@ function formFromBranch(branch: Branch): FormState {
       .filter(Boolean)
       .join(', '),
     addressLine1: branch.address_line1 ?? '',
+    addressLine2: branch.address_line2 ?? '',
     city: branch.city ?? '',
     state: branch.state ?? '',
     country: branch.country ?? '',
@@ -113,6 +115,7 @@ export function BranchFormScreen() {
       branch_name: form.name.trim(),
       display_name: form.name.trim(),
       address_line1: form.addressLine1.trim(),
+      address_line2: form.addressLine2.trim() || undefined,
       city: form.city.trim(),
       state: form.state.trim() || undefined,
       country: form.country.trim(),
@@ -237,10 +240,16 @@ export function BranchFormScreen() {
             setFieldErrors((current) => ({ ...current, address: '' }));
           }}
           onPlaceSelected={(place) => {
+            const cleared =
+              !place.line1 &&
+              !place.formattedAddress &&
+              place.latitude == null &&
+              place.longitude == null;
             setForm((current) => ({
               ...current,
               address: place.formattedAddress,
               addressLine1: place.line1 || place.formattedAddress,
+              addressLine2: cleared ? '' : current.addressLine2,
               city: place.city || '',
               state: place.state || '',
               country: place.country || '',
@@ -250,6 +259,15 @@ export function BranchFormScreen() {
             setLongitude(place.longitude ?? null);
             setFieldErrors((current) => ({ ...current, address: '' }));
           }}
+        />
+
+        <Input
+          label="Flat, floor, building or landmark"
+          optional
+          hint="Add door-level detail here — Google search only fills the street / area."
+          placeholder="Shop 12, Ground floor, near City Mall"
+          value={form.addressLine2}
+          onChangeText={(value) => setField('addressLine2', value)}
         />
 
         <FieldRow>

@@ -543,6 +543,7 @@ class ShopOrderCreateSerializer(serializers.Serializer):
     fulfillment_mode = serializers.ChoiceField(choices=FulfillmentMode.choices, required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
     delivery_address = serializers.CharField(required=False, allow_blank=True)
+    delivery_address_line2 = serializers.CharField(required=False, allow_blank=True)
     delivery_city = serializers.CharField(required=False, allow_blank=True)
     delivery_state = serializers.CharField(required=False, allow_blank=True)
     delivery_postal_code = serializers.CharField(required=False, allow_blank=True)

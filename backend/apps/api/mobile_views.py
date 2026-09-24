@@ -780,6 +780,7 @@ class MobileCustomerProfileView(APIView):
             for key in (
                 "full_address",
                 "line1",
+                "line2",
                 "city",
                 "state",
                 "country",

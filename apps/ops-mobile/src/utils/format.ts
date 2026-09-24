@@ -39,6 +39,21 @@ function withZone(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptio
   return timeZone ? { ...options, timeZone } : options;
 }
 
+/** Hour 0–23 in the same zone used by formatTime (business → user → device). */
+export function getDisplayHour(isoDate: string): number {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return 0;
+  const timeZone = resolveDisplayTimeZone();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    hourCycle: 'h23',
+    ...(timeZone ? { timeZone } : {}),
+  }).formatToParts(date);
+  const hourPart = parts.find((part) => part.type === 'hour');
+  const hour = Number(hourPart?.value);
+  return Number.isFinite(hour) ? hour % 24 : date.getHours();
+}
+
 export function formatRelativeTime(isoDate?: string | null) {
   if (!isoDate) return '';
   const date = new Date(isoDate);

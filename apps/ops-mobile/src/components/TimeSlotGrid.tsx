@@ -3,7 +3,7 @@ import { ActivityIndicator, LayoutChangeEvent, Pressable, StyleSheet, Text, View
 import { Feather } from '@expo/vector-icons';
 import { FieldLabel } from './ui/FieldLabel';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
-import { filterFutureSlots, formatTime } from '../utils/format';
+import { filterFutureSlots, formatTime, getDisplayHour } from '../utils/format';
 
 type Slot = { start_at: string };
 
@@ -29,7 +29,8 @@ const PERIODS: Array<{ key: PeriodKey; label: string }> = [
 ];
 
 function periodFor(iso: string): PeriodKey {
-  const hour = new Date(iso).getHours();
+  // Use display-zone hour so buckets match formatTime labels (not device local).
+  const hour = getDisplayHour(iso);
   if (hour < 12) return 'morning';
   if (hour < 17) return 'afternoon';
   return 'evening';

@@ -42,6 +42,7 @@ export type RegisterWizardValues = {
   country: string;
   state: string;
   address: string;
+  addressLine2: string;
   postalCode: string;
   latitude: number | null;
   longitude: number | null;
@@ -122,6 +123,7 @@ export async function provisionWorkspace(values: RegisterWizardValues): Promise<
     city: values.city,
     postal_code: values.postalCode,
     address_line1: values.address,
+    address_line2: values.addressLine2 || undefined,
     latitude: values.latitude,
     longitude: values.longitude,
     timezone: values.timezone,

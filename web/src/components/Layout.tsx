@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
-import { useMemo } from 'react';
+import { LogOut, Zap } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppShellHeader } from './AppShellHeader';
 import { EmailVerificationBanner } from './EmailVerificationBanner';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { SoftLockBanner } from './SoftLockBanner';
+import { AssistantPanel } from '../features/assistant/AssistantPanel';
 import { useAuth } from '../hooks/useAuth';
 import { useProductNavigation } from '../hooks/useProductNavigation';
 import { formatUserRole } from '../utils/roles';
@@ -13,6 +14,9 @@ import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useWorkspaceLogo } from '../hooks/useWorkspaceLogo';
 import { useNotificationStream } from '../hooks/useNotificationStream';
 import { buildWorkspaceSnapshot } from '../lib/workspaceModel';
+import { useBusinessBillingSnapshotQuery } from '../features/settings/billingHooks';
+
+const ASSISTANT_FEATURES = ['shopie_ai_assistant', 'appointie_ai_assistant'] as const;
 
 export function Layout() {
   const { t } = useTranslation();
@@ -21,7 +25,17 @@ export function Layout() {
   const workspace = useWorkspace();
   const { primaryNav } = useProductNavigation();
   const workspaceLogo = useWorkspaceLogo();
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
   useNotificationStream();
+
+  const assistantEnabled = useMemo(() => {
+    const features = [
+      ...((billingQuery.data?.entitled_features as string[] | undefined) ?? []),
+      ...((billingQuery.data?.features as string[] | undefined) ?? []),
+    ];
+    return ASSISTANT_FEATURES.some((code) => features.includes(code));
+  }, [billingQuery.data?.entitled_features, billingQuery.data?.features]);
 
   const workspaceSnapshot = useMemo(
     () =>
@@ -116,6 +130,24 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {assistantEnabled && !assistantOpen ? (
+        <button
+          type="button"
+          className="assistant-fab"
+          aria-label="Business Assistant"
+          title="Assistant"
+          onClick={() => setAssistantOpen(true)}
+        >
+          <span className="assistant-fab-ring" aria-hidden />
+          <span className="assistant-fab-core">
+            <Zap size={20} strokeWidth={2.4} />
+            <span className="assistant-fab-label">AI</span>
+          </span>
+        </button>
+      ) : null}
+
+      <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   );
 }

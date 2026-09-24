@@ -27,7 +27,7 @@ import {
   AdminSection,
   AdminStatus,
   AdminTable,
-  planLabel,
+  paymentOrderLabel,
   productLabel,
 } from './AdminChrome';
 import { ProofImage } from '../../components/ProofImage';
@@ -51,6 +51,7 @@ function productsFor(payment: PlatformPaymentRow) {
 function intentLabel(intent?: string | null) {
   if (intent === 'renew') return 'Renewal';
   if (intent === 'subscribe') return 'New subscription';
+  if (intent === 'assistant_top_up' || intent === 'smart_lookup_top_up') return 'Wallet top-up';
   if (!intent) return null;
   return intent.replace(/[_-]+/g, ' ');
 }
@@ -90,6 +91,7 @@ function matchesQuery(payment: PlatformPaymentRow, needle: string) {
     payment.plan_code,
     payment.note,
     payment.claim_intent,
+    paymentOrderLabel(payment),
     productsFor(payment),
   ]
     .filter(Boolean)
@@ -144,9 +146,7 @@ function ClaimReview({
       <div className="admin-claim-review__hero">
         <div>
           <p className="admin-claim-review__amount">{formatInr(payment.amount_paise)}</p>
-          <p className="admin-claim-review__products">
-            {productsFor(payment)} · {planLabel(payment.plan_code)}
-          </p>
+          <p className="admin-claim-review__products">{paymentOrderLabel(payment)}</p>
           <div className="admin-tag-row" style={{ marginTop: 10 }}>
             <AdminStatus status={orderStatusLabel(payment.payment_status, payment.status)} />
             {intent ? <span className="admin-tag">{intent}</span> : null}
@@ -501,7 +501,7 @@ export function PlatformClaimsPage() {
                     key={payment.id}
                     selected={selected?.id === payment.id}
                     title={`${formatInr(payment.amount_paise)} · ${payment.tenant_name || 'Workspace'}`}
-                    meta={`#${orderNumber(payment)} · ${productsFor(payment)} · UTR ${payment.upi_utr || '—'} · ${waitingLabel(payment.claimed_at || payment.created_at)}`}
+                    meta={`#${orderNumber(payment)} · ${paymentOrderLabel(payment)} · UTR ${payment.upi_utr || '—'} · ${waitingLabel(payment.claimed_at || payment.created_at)}`}
                     trailing={<AdminStatus status="awaiting confirmation" />}
                     onClick={() => {
                       setSelectedId(payment.id);
@@ -625,7 +625,7 @@ export function PlatformClaimsPage() {
             </AdminEmpty>
           ) : (
             <div className={historyQuery.isFetching ? 'admin-table-loading' : undefined}>
-              <AdminTable columns={['Order', 'Workspace', 'Products', 'Amount', 'Status', 'When', '']}>
+              <AdminTable columns={['Order', 'Workspace', 'For', 'Amount', 'Status', 'When', '']}>
                 {filteredHistory.map((payment) => (
                   <tr key={payment.id} className={highlightId === payment.id || inspectedId === payment.id ? 'is-highlight' : undefined}>
                     <td>
@@ -642,9 +642,7 @@ export function PlatformClaimsPage() {
                       )}
                       <div className="admin-table__muted">{payment.business_name || 'Business'}</div>
                     </td>
-                    <td className="admin-table__muted">
-                      {productsFor(payment)} · {planLabel(payment.plan_code)}
-                    </td>
+                    <td className="admin-table__muted">{paymentOrderLabel(payment)}</td>
                     <td>
                       <strong>{formatInr(payment.amount_paise)}</strong>
                     </td>

@@ -208,7 +208,8 @@ export function StaffDetailPage() {
               <option value="terminated">Terminated</option>
             </select>
             <span style={{ color: '#6b7280', fontSize: 13 }}>
-              Status gates booking eligibility. Use the Leave section below for dated time-off that only blocks overlapping slots.
+              Changing employment status can block all bookings for this person. For time off on specific dates, add
+              Leave instead — that only blocks those slots.
             </span>
           </label>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14 }}>

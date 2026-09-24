@@ -12,6 +12,8 @@ import {
   getProductName,
   getRecommendedPlanCode,
   isRecommendedPlanCode,
+  paymentActionLabel,
+  paymentOrderLabel,
   planSeatLine,
 } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
@@ -112,10 +114,16 @@ function PaymentTracker({ status, dueLabel }: { status: SubscriptionUxStatus; du
 }
 
 function orderProducts(order: BillingOrder) {
-  const codes = order.product_codes?.length
-    ? order.product_codes
-    : order.line_items?.map((item) => item.product_code) ?? [order.product_code];
-  return (codes.filter(Boolean) as string[]).map((code) => getProductName(code)).join(' + ');
+  return paymentOrderLabel(order);
+}
+
+function orderIntentChip(order: BillingOrder) {
+  const action = paymentActionLabel(order);
+  if (action) return 'Wallet top-up';
+  if (order.claim_intent === 'renew') return 'Renewal';
+  if (order.claim_intent === 'subscribe') return 'New subscription';
+  if (!order.claim_intent) return null;
+  return order.claim_intent.replace(/[_-]+/g, ' ');
 }
 
 export function ProductSettingsPage() {
@@ -488,7 +496,10 @@ export function ProductSettingsPage() {
                           >
                             {orderStatusLabel(order.payment_status, order.status)}
                           </span>
-                          {order.claim_intent ? <span className="product-settings-chip">{order.claim_intent}</span> : null}
+                          {(() => {
+                            const intent = orderIntentChip(order);
+                            return intent ? <span className="product-settings-chip">{intent}</span> : null;
+                          })()}
                         </div>
                       </div>
                       <strong>{formatInrFromPaise(order.amount_paise)}</strong>

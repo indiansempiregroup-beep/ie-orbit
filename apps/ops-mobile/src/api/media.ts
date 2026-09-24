@@ -115,6 +115,17 @@ export async function uploadServiceImage(args: Omit<UploadMediaArgs, 'folderType
   });
 }
 
+export async function uploadStaffPhoto(
+  args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { staffName: string },
+) {
+  return uploadMedia({
+    ...args,
+    folderType: 'staff',
+    tags: ['staff', 'photo'],
+    displayName: `${args.staffName} photo`,
+  });
+}
+
 export async function uploadProductImage(
   args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { productName?: string },
 ) {

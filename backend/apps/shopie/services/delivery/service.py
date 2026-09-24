@@ -218,6 +218,7 @@ class DeliveryService:
         latitude: object,
         longitude: object,
         address: str = "",
+        address_2: str = "",
         city: str = "",
         state: str = "",
         postal_code: str = "",
@@ -226,7 +227,7 @@ class DeliveryService:
     ) -> dict[str, Any]:
         if latitude in (None, "") or longitude in (None, ""):
             raise ValidationError({"delivery_address": "A mapped address is required."})
-        return {
+        payload = {
             "latitude": float(latitude),
             "longitude": float(longitude),
             "address": address,
@@ -238,6 +239,10 @@ class DeliveryService:
                 "phone": format_contact_phone(contact_phone),
             },
         }
+        door = str(address_2 or "").strip()
+        if door:
+            payload["address_2"] = door
+        return payload
 
     @staticmethod
     def _branch_source(branch: Branch, business: Business) -> dict[str, Any]:
@@ -361,6 +366,7 @@ class DeliveryService:
             latitude=drop.get("latitude"),
             longitude=drop.get("longitude"),
             address=str(drop.get("address") or ""),
+            address_2=str(drop.get("address_2") or drop.get("address_line2") or ""),
             city=str(drop.get("city") or ""),
             state=str(drop.get("state") or ""),
             postal_code=str(drop.get("postal_code") or ""),

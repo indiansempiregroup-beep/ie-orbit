@@ -20,9 +20,15 @@ export function normalizeCustomer(raw: RawRecord): Customer {
   const defaultAddress = addresses.find((row) => row.is_default) ?? addresses[0];
   const latitude = defaultAddress?.latitude != null ? Number(defaultAddress.latitude) : null;
   const longitude = defaultAddress?.longitude != null ? Number(defaultAddress.longitude) : null;
+  const line1 = String(defaultAddress?.line1 || '').trim();
+  const line2 = String(defaultAddress?.line2 || '').trim();
+  const composedStreet = [line2, line1].filter(Boolean).join(', ');
   const fullAddress = defaultAddress
-    ? String(defaultAddress.full_address || defaultAddress.line1 || '').trim() || null
+    ? String(defaultAddress.full_address || composedStreet || '').trim() || null
     : null;
+  // Prefer door-first composition when API full_address is line1-only.
+  const displayAddress =
+    line2 && fullAddress && !fullAddress.includes(line2) ? [line2, fullAddress].join(', ') : fullAddress;
 
   return {
     id: String(raw.id),
@@ -30,14 +36,15 @@ export function normalizeCustomer(raw: RawRecord): Customer {
     email: (raw.email as string | undefined) ?? null,
     phone_number: (raw.phone_number as string | undefined) ?? null,
     status: (raw.status as string | undefined) ?? 'active',
-    full_address: fullAddress,
+    full_address: displayAddress,
     latitude,
     longitude,
     address: defaultAddress
       ? {
           id: defaultAddress.id ? String(defaultAddress.id) : undefined,
-          line1: (defaultAddress.line1 as string | undefined) ?? undefined,
-          full_address: fullAddress,
+          line1: line1 || undefined,
+          line2: line2 || undefined,
+          full_address: displayAddress,
           city: (defaultAddress.city as string | undefined) ?? null,
           state: (defaultAddress.state as string | undefined) ?? null,
           country: (defaultAddress.country as string | undefined) ?? null,

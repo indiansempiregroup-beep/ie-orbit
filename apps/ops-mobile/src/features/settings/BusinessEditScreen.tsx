@@ -36,6 +36,7 @@ export function BusinessEditScreen() {
   const [primaryContact, setPrimaryContact] = useState('');
   const [website, setWebsite] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
@@ -61,6 +62,7 @@ export function BusinessEditScreen() {
     setPrimaryContact(activeBusiness.primary_contact ?? '');
     setWebsite(activeBusiness.website ?? '');
     setAddressLine1(activeBusiness.address_line1 ?? '');
+    setAddressLine2(activeBusiness.address_line2 ?? '');
     setCity(activeBusiness.city ?? '');
     setState(activeBusiness.state ?? '');
     setPostalCode(activeBusiness.postal_code ?? '');
@@ -157,6 +159,7 @@ export function BusinessEditScreen() {
                 primary_contact: primaryContact || undefined,
                 website: website || undefined,
                 address_line1: addressLine1 || undefined,
+                address_line2: addressLine2 || undefined,
                 city: city || undefined,
                 state: state || undefined,
                 postal_code: postalCode || undefined,
@@ -255,7 +258,13 @@ export function BusinessEditScreen() {
           longitude={longitude}
           onChangeText={setAddressLine1}
           onPlaceSelected={(place) => {
+            const cleared =
+              !place.line1 &&
+              !place.formattedAddress &&
+              place.latitude == null &&
+              place.longitude == null;
             setAddressLine1(place.line1 || place.formattedAddress);
+            setAddressLine2((current) => (cleared ? '' : current));
             setCity(place.city || '');
             setState(place.state || '');
             setCountry(place.country || '');
@@ -263,6 +272,14 @@ export function BusinessEditScreen() {
             setLatitude(place.latitude ?? null);
             setLongitude(place.longitude ?? null);
           }}
+        />
+        <Input
+          label="Flat, floor, building or landmark"
+          optional
+          hint="Add door-level detail here — Google search only fills the street / area."
+          placeholder="Shop 12, Ground floor, near City Mall"
+          value={addressLine2}
+          onChangeText={setAddressLine2}
         />
         <Input label="City" optional value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
         <Input label="State" optional value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />

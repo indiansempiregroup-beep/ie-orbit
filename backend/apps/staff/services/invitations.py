@@ -46,13 +46,30 @@ class StaffInvitationService:
         if role_code not in INVITABLE_PLATFORM_ROLES:
             raise ValidationError({"platform_role_code": "Only manager or staff roles can be invited."})
 
-        if StaffInvitation.objects.filter(
+        existing = StaffInvitation.objects.filter(
             tenant=tenant,
             business=business,
             email=normalized_email,
             status=InvitationStatus.PENDING,
-        ).exists():
-            raise ValidationError({"email": "A pending invitation already exists for this email."})
+        ).first()
+        if existing:
+            existing.token = uuid.uuid4()
+            existing.platform_role_code = role_code
+            existing.invited_by = invited_by
+            existing.expires_at = timezone.now() + timedelta(days=INVITATION_TTL_DAYS)
+            existing.save(
+                update_fields=["token", "platform_role_code", "invited_by", "expires_at", "updated_at"]
+            )
+            self._send_invitation_email(invitation=existing)
+            record_audit(
+                tenant=tenant,
+                action="staff.invitation.resent",
+                resource_type="staff_invitation",
+                resource_id=str(existing.id),
+                actor_id=str(invited_by.id),
+                metadata={"email": normalized_email, "role": role_code},
+            )
+            return existing
 
         invitation = StaffInvitation.objects.create(
             tenant=tenant,
@@ -182,7 +199,22 @@ class StaffInvitationService:
         if existing:
             return existing
 
-        local_part = email.split("@")[0]
+        normalized_email = email.strip().lower()
+        by_email = (
+            Staff.objects.filter(tenant=tenant, business=business, email__iexact=normalized_email)
+            .exclude(email="")
+            .first()
+            if normalized_email
+            else None
+        )
+        if by_email:
+            if by_email.user_id is None:
+                by_email.user = user
+                by_email.email = normalized_email
+                by_email.save(update_fields=["user", "email", "updated_at"])
+            return by_email
+
+        local_part = normalized_email.split("@")[0] if normalized_email else "staff"
         staff_code = local_part.replace(".", "-")[:40]
         suffix = 1
         candidate = staff_code
@@ -198,7 +230,7 @@ class StaffInvitationService:
             first_name=user.first_name or local_part,
             last_name=user.last_name,
             display_name=user.full_name or local_part,
-            email=email,
+            email=normalized_email,
         )
 
     def _send_invitation_email(self, *, invitation: StaffInvitation) -> None:

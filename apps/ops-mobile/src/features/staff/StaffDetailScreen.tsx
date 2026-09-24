@@ -94,7 +94,8 @@ export function StaffDetailScreen() {
         onPress={() => navigation.navigate('StaffAvailability', { staffId: member.id })}
       />
       <Text style={styles.help}>
-        Employment status gates booking. Use leave records for dated time-off that only blocks overlapping slots.
+        Changing employment status can block all bookings for this person. For time off on specific dates, add Leave
+        instead — that only blocks those slots.
       </Text>
       {!hasLogin && member.email ? (
         <Button

@@ -60,22 +60,27 @@ def porter_location_payload(location: dict[str, Any]) -> dict[str, Any]:
     contact = location.get("contact") if isinstance(location.get("contact"), dict) else {}
     name = str(contact.get("name") or "Contact")
     phone = format_contact_phone(contact.get("phone"), e164=True)
+    street1 = str(location.get("address") or "Address")
+    street2 = str(location.get("address_2") or location.get("address_line2") or "").strip()
+    address: dict[str, Any] = {
+        "street_address1": street1,
+        "city": str(location.get("city") or ""),
+        "state": str(location.get("state") or ""),
+        "pincode": str(location.get("postal_code") or ""),
+        "country": "India",
+        "lat": location.get("latitude"),
+        "lng": location.get("longitude"),
+        "contact_details": {
+            "name": name,
+            "phone_number": phone,
+        },
+    }
+    if street2:
+        address["street_address2"] = street2
     return {
         "lat": location.get("latitude"),
         "lng": location.get("longitude"),
-        "address": {
-            "street_address1": str(location.get("address") or "Address"),
-            "city": str(location.get("city") or ""),
-            "state": str(location.get("state") or ""),
-            "pincode": str(location.get("postal_code") or ""),
-            "country": "India",
-            "lat": location.get("latitude"),
-            "lng": location.get("longitude"),
-            "contact_details": {
-                "name": name,
-                "phone_number": phone,
-            },
-        },
+        "address": address,
     }
 
 

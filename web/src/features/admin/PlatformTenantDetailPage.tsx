@@ -31,6 +31,8 @@ import {
   AdminSection,
   AdminStatus,
   AdminTable,
+  paymentActionLabel,
+  paymentOrderLabel,
   planLabel,
   productLabel,
 } from './AdminChrome';
@@ -995,8 +997,14 @@ export function PlatformTenantDetailPage() {
                       </div>
                       <div className="tenant-claim__meta">
                         <div className="tenant-hero__chips">
-                          <ProductChip code={payment.product_code} />
-                          <span className="tenant-pill">{planLabel(payment.plan_code)}</span>
+                          {paymentActionLabel(payment) ? (
+                            <span className="tenant-pill">{paymentOrderLabel(payment)}</span>
+                          ) : (
+                            <>
+                              <ProductChip code={payment.product_code} />
+                              <span className="tenant-pill">{planLabel(payment.plan_code)}</span>
+                            </>
+                          )}
                         </div>
                         <p>{payment.business_name || 'Business'}</p>
                         <p>Submitted {formatTimestamp(payment.claimed_at || payment.created_at)}</p>
@@ -1111,7 +1119,7 @@ export function PlatformTenantDetailPage() {
                 Try another order number, UTR, product, or date range.
               </AdminEmpty>
             ) : (
-              <AdminTable columns={['Order', 'Products', 'Amount', 'Status', 'UTR', 'When', '']}>
+              <AdminTable columns={['Order', 'For', 'Amount', 'Status', 'UTR', 'When', '']}>
                 {filteredHistory.map((payment) => {
                   const proofUrl = resolveBillingProofUrl(payment);
                   return (
@@ -1124,12 +1132,18 @@ export function PlatformTenantDetailPage() {
                       </td>
                       <td>
                         <div className="tenant-hero__chips">
-                          {(payment.product_codes?.length ? payment.product_codes : [payment.product_code])
-                            .filter(Boolean)
-                            .map((code) => (
-                              <ProductChip key={code} code={code} />
-                            ))}
-                          <span className="tenant-pill">{planLabel(payment.plan_code)}</span>
+                          {paymentActionLabel(payment) ? (
+                            <span className="tenant-pill">{paymentOrderLabel(payment)}</span>
+                          ) : (
+                            <>
+                              {(payment.product_codes?.length ? payment.product_codes : [payment.product_code])
+                                .filter(Boolean)
+                                .map((code) => (
+                                  <ProductChip key={code} code={code} />
+                                ))}
+                              <span className="tenant-pill">{planLabel(payment.plan_code)}</span>
+                            </>
+                          )}
                         </div>
                       </td>
                       <td>

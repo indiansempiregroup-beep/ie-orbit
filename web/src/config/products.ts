@@ -48,6 +48,42 @@ export function getProductName(productId: string | null | undefined): string {
   return productId.replace(/-/g, ' ');
 }
 
+const PAYMENT_ACTION_LABELS: Record<string, string> = {
+  assistant_wallet: 'Chat Assistant',
+  assistant_top_up: 'Chat Assistant',
+  smart_lookup_wallet: 'Smart Fill Wallet',
+  smart_lookup_top_up: 'Smart Fill Wallet',
+};
+
+export function paymentActionLabel(payment: {
+  plan_code?: string | null;
+  claim_intent?: string | null;
+}): string | null {
+  const intent = String(payment.claim_intent || '')
+    .trim()
+    .toLowerCase();
+  const plan = String(payment.plan_code || '')
+    .trim()
+    .toLowerCase();
+  return PAYMENT_ACTION_LABELS[intent] || PAYMENT_ACTION_LABELS[plan] || null;
+}
+
+/** Product names for subscriptions; Chat Assistant / Smart Fill Wallet for prepaid top-ups. */
+export function paymentOrderLabel(payment: {
+  plan_code?: string | null;
+  claim_intent?: string | null;
+  product_code?: string | null;
+  product_codes?: Array<string | null | undefined> | null;
+  line_items?: Array<{ product_code?: string | null }> | null;
+}): string {
+  const action = paymentActionLabel(payment);
+  if (action) return action;
+  const codes = payment.product_codes?.length
+    ? payment.product_codes
+    : payment.line_items?.map((item) => item.product_code) ?? [payment.product_code];
+  return (codes.filter(Boolean) as string[]).map((code) => getProductName(code)).join(' + ') || 'Payment';
+}
+
 /** Strip the product prefix from plan names. Legacy AppointIE/ShopIE prefixes remain for stored rows. */
 export function stripPlanProductPrefix(name: string): string {
   return name.replace(/^(Orbit Appoint|Orbit Mart|AppointIE|ShopIE)\s+/i, '') || name;
@@ -69,6 +105,8 @@ export function formatPlanDisplayName(name?: string | null, code?: string | null
     if (stripped && !/appointie|shopie/i.test(stripped)) return stripped;
   }
   const value = (code ?? '').toLowerCase();
+  if (value === 'assistant_wallet' || value === 'assistant_top_up') return 'Chat Assistant';
+  if (value === 'smart_lookup_wallet' || value === 'smart_lookup_top_up') return 'Smart Fill Wallet';
   if (value.includes('pro')) return 'Pro';
   if (value.includes('starter')) return 'Starter';
   if (value === 'canceled') return 'Canceled';

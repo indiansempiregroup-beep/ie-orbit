@@ -64,6 +64,7 @@ import {
   getSubscribedProducts,
   isRecommendedPlanCode,
   allowedExtraCount,
+  paymentOrderLabel,
   starterAddonCapHint,
   PETS_PACK_PRICE_INR,
   PRODUCT_CATALOG,
@@ -194,10 +195,7 @@ function PaymentTracker({ status, dueLabel }: { status: SubscriptionUxStatus; du
 }
 
 function orderProducts(order: BillingOrder) {
-  const codes = order.product_codes?.length
-    ? order.product_codes
-    : order.line_items?.map((item) => item.product_code) ?? [order.product_code];
-  return (codes.filter(Boolean) as string[]).map((code) => getProductName(code)).join(' + ');
+  return paymentOrderLabel(order);
 }
 
 function billingHistoryIcon(bucket: ReturnType<typeof orderHistoryBucket>): keyof typeof Feather.glyphMap {

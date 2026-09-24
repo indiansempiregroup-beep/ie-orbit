@@ -559,6 +559,7 @@ export function CartScreen() {
         preferred_time: fulfillment === 'pickup' ? preferredTime : undefined,
         fulfillment_note: fulfillmentNote.trim(),
         delivery_address: fulfillment === 'delivery' ? deliveryAddressLine(selectedAddress) : '',
+        delivery_address_line2: fulfillment === 'delivery' ? selectedAddress?.line2 || '' : '',
         delivery_city: fulfillment === 'delivery' ? selectedAddress?.city || '' : '',
         delivery_state: fulfillment === 'delivery' ? selectedAddress?.state || '' : '',
         delivery_postal_code: fulfillment === 'delivery' ? selectedAddress?.postal_code || '' : '',

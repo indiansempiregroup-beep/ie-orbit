@@ -140,7 +140,7 @@ export function RegisterWizard() {
     lastName?: string;
     freshStart?: boolean;
   } | null;
-  const { hydrated, loadDraft, saveDraft, clearDraft } = useOnboardingDraft();
+  const { hydrated, loadDraft, loadDraftStep, saveDraft, clearDraft } = useOnboardingDraft();
   const [stepIndex, setStepIndex] = useState(0);
   const [provisionError, setProvisionError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
@@ -150,6 +150,7 @@ export function RegisterWizard() {
   const [ownerOtpSending, setOwnerOtpSending] = useState(false);
   const [ownerOtpSent, setOwnerOtpSent] = useState(false);
   const draftLoadedRef = useRef(false);
+  const skipNextDraftSaveRef = useRef(false);
 
   const currentStep = REGISTER_WIZARD_STEPS[stepIndex]?.id ?? 'business';
 
@@ -215,21 +216,28 @@ export function RegisterWizard() {
     if (googlePrefill?.freshStart) {
       clearDraft();
       form.reset(getDefaultRegisterValues());
+      setStepIndex(0);
       navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: {} });
       return;
     }
 
     const draft = loadDraft();
+    const savedStep = loadDraftStep();
     const detectedTz = detectDefaultTimezone();
-    const timezone = TIMEZONES.includes(detectedTz as (typeof TIMEZONES)[number])
-      ? detectedTz
-      : draft.timezone && TIMEZONES.includes(draft.timezone as (typeof TIMEZONES)[number])
+    const detectedCurrency = detectDefaultCurrency();
+    const timezone = (
+      draft.timezone && TIMEZONES.includes(draft.timezone as (typeof TIMEZONES)[number])
         ? draft.timezone
-        : 'UTC';
+        : TIMEZONES.includes(detectedTz as (typeof TIMEZONES)[number])
+          ? detectedTz
+          : 'UTC'
+    ) as RegisterWizardFormValues['timezone'];
+
+    skipNextDraftSaveRef.current = true;
     form.reset({
       ...draft,
-      currency: draft.currency || detectDefaultCurrency(),
-      timezone: timezone as RegisterWizardFormValues['timezone'],
+      currency: draft.currency || detectedCurrency,
+      timezone,
       ...(googlePrefill?.googleIdToken
         ? {
             googleIdToken: googlePrefill.googleIdToken,
@@ -239,10 +247,15 @@ export function RegisterWizard() {
           }
         : {}),
     });
+    if (savedStep) {
+      const index = REGISTER_WIZARD_STEPS.findIndex((step) => step.id === savedStep);
+      if (index >= 0 && savedStep !== 'provision') setStepIndex(index);
+    }
   }, [
     hydrated,
     form,
     loadDraft,
+    loadDraftStep,
     googlePrefill?.googleIdToken,
     googlePrefill?.email,
     googlePrefill?.firstName,
@@ -254,11 +267,41 @@ export function RegisterWizard() {
     navigate,
   ]);
 
+  function snapshotForDraft(stepId: RegisterWizardStepId = currentStep): RegisterWizardFormValues {
+    const stored = loadDraft();
+    const live = getValues();
+    const fields = [...(stepFieldMap[stepId as keyof typeof stepFieldMap] ?? [])] as Array<
+      keyof RegisterWizardFormValues
+    >;
+    const next: RegisterWizardFormValues = {
+      ...stored,
+      googleIdToken: live.googleIdToken || stored.googleIdToken || '',
+    };
+    for (const field of fields) {
+      next[field] = live[field] as never;
+    }
+    if (stepId === 'business') {
+      next.latitude = live.latitude;
+      next.longitude = live.longitude;
+    }
+    return next;
+  }
+
+  function persistDraft(stepId: RegisterWizardStepId = currentStep) {
+    saveDraft(snapshotForDraft(stepId), { stepId: stepId === 'provision' ? 'review' : stepId });
+  }
+
   useEffect(() => {
-    if (!hydrated) return;
-    const timer = window.setTimeout(() => saveDraft(getValues()), 400);
+    if (!hydrated || !draftLoadedRef.current) return;
+    if (skipNextDraftSaveRef.current) {
+      skipNextDraftSaveRef.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      persistDraft(currentStep === 'provision' ? 'review' : currentStep);
+    }, 400);
     return () => window.clearTimeout(timer);
-  }, [values, hydrated, saveDraft, getValues]);
+  }, [values, hydrated, currentStep]);
 
   useEffect(() => {
     const next = { ...values.planCodes };
@@ -284,15 +327,30 @@ export function RegisterWizard() {
     ) as (keyof RegisterWizardFormValues)[];
     const valid = fields.length === 0 ? true : await trigger(fields);
     if (!valid) return;
+    persistDraft(currentStep);
     if (currentStep === 'review') {
       await handleProvision();
       return;
     }
+    const restored: RegisterWizardFormValues = {
+      ...loadDraft(),
+      googleIdToken: getValues('googleIdToken') || '',
+    };
+    skipNextDraftSaveRef.current = true;
+    form.reset(restored, { keepDefaultValues: true });
     setStepIndex((index) => Math.min(index + 1, REGISTER_WIZARD_STEPS.length - 1));
   }
 
   function goBack() {
-    setStepIndex((index) => Math.max(index - 1, 0));
+    persistDraft(currentStep);
+    const previous = Math.max(stepIndex - 1, 0);
+    const restored: RegisterWizardFormValues = {
+      ...loadDraft(),
+      googleIdToken: getValues('googleIdToken') || '',
+    };
+    skipNextDraftSaveRef.current = true;
+    form.reset(restored, { keepDefaultValues: true });
+    setStepIndex(previous);
   }
 
   function jumpToStep(stepId: RegisterWizardStepId) {
@@ -302,7 +360,12 @@ export function RegisterWizard() {
 
   function applyPlace(place: Parameters<typeof preferHumanAddress>[0]) {
     const resolved = placeToAddressFields(preferHumanAddress(place, getValues('address')));
+    const cleared =
+      !resolved.address && resolved.latitude == null && resolved.longitude == null;
     setValue('address', resolved.address, { shouldDirty: true, shouldValidate: true });
+    if (cleared) {
+      setValue('addressLine2', '', { shouldDirty: true });
+    }
     setValue('city', resolved.city, { shouldDirty: true, shouldValidate: true });
     setValue('state', resolved.state, { shouldDirty: true, shouldValidate: true });
     setValue('country', resolved.country, { shouldDirty: true, shouldValidate: true });
@@ -317,21 +380,31 @@ export function RegisterWizard() {
     const fields = [...(stepFieldMap[currentStep as keyof typeof stepFieldMap] ?? [])] as Array<
       keyof RegisterWizardFormValues
     >;
+    // Rebuild from the saved draft so unmounted steps (e.g. Business while on Owner)
+    // are not wiped from react-hook-form's in-memory values.
+    const next: RegisterWizardFormValues = {
+      ...loadDraft(),
+      googleIdToken: getValues('googleIdToken') || '',
+    };
     for (const field of fields) {
-      setValue(field, defaults[field], { shouldDirty: true, shouldValidate: false });
+      next[field] = defaults[field] as never;
     }
     if (currentStep === 'business') {
-      setValue('latitude', null, { shouldDirty: true });
-      setValue('longitude', null, { shouldDirty: true });
+      next.latitude = null;
+      next.longitude = null;
     }
     if (currentStep === 'owner') {
       setAffiliateCode('');
       persistAffiliateCode('');
+      setOwnerOtpSent(false);
     }
     if (currentStep === 'branding') {
       setBrandingLogoFile(null);
     }
+    skipNextDraftSaveRef.current = true;
+    form.reset(next, { keepDefaultValues: true });
     if (fields.length) clearErrors(fields);
+    saveDraft(next, { stepId: currentStep });
   }
 
   function handleCancel() {
@@ -365,238 +438,283 @@ export function RegisterWizard() {
 
   function renderBusinessStep() {
     const addressLocked = values.latitude != null && values.longitude != null;
-    const readOnlyFieldStyle = addressLocked ? { background: '#f9fafb' } : undefined;
+    const readOnlyFieldStyle = addressLocked ? { background: '#f8fafc' } : undefined;
 
     return (
-      <div className="wizard-form-grid">
-        <Input
-          label="Business name"
-          required
-          autoComplete="organization"
-          {...register('businessName')}
-          error={errors.businessName?.message}
-          aria-invalid={Boolean(errors.businessName)}
-        />
-        <Select
-          label="Business category"
-          required
-          options={[{ value: '', label: 'Select category' }, ...BUSINESS_CATEGORIES.map((c) => ({ value: c, label: c }))]}
-          {...register('businessCategory')}
-          error={errors.businessCategory?.message}
-        />
-        {values.businessCategory === 'Other' ? (
-          <Input
-            label="Describe your category"
-            required
-            {...register('businessCategoryOther')}
-            error={errors.businessCategoryOther?.message}
-          />
-        ) : null}
-        <Select
-          label="Industry"
-          required
-          options={[{ value: '', label: 'Select industry' }, ...INDUSTRIES.map((c) => ({ value: c, label: c }))]}
-          {...register('industry')}
-          error={errors.industry?.message}
-        />
-        {values.industry === 'Other' ? (
-          <Input
-            label="Describe your industry"
-            required
-            {...register('industryOther')}
-            error={errors.industryOther?.message}
-          />
-        ) : null}
-        <Input
-          label="Business email"
-          required
-          type="email"
-          autoComplete="off"
-          {...register('businessEmail')}
-          error={errors.businessEmail?.message}
-        />
-        <Input
-          label="Business phone"
-          required
-          type="tel"
-          inputMode="numeric"
-          autoComplete="tel"
-          {...register('businessPhone')}
-          error={errors.businessPhone?.message}
-        />
-        <Input label="Website (optional)" {...register('website')} error={errors.website?.message} />
-        <div style={{ gridColumn: '1 / -1' }}>
-          <AddressLocationPicker
-            label="Business address"
-            value={values.address}
-            latitude={values.latitude}
-            longitude={values.longitude}
-            onChangeText={(value) => setValue('address', value, { shouldDirty: true, shouldValidate: true })}
-            onPlaceSelected={applyPlace}
-          />
-          {errors.address ? <span className="field-error">{errors.address.message}</span> : null}
-        </div>
-        <Input
-          label="Country"
-          required
-          readOnly={addressLocked}
-          style={readOnlyFieldStyle}
-          {...register('country')}
-          error={errors.country?.message}
-        />
-        <Input
-          label="State"
-          required
-          readOnly={addressLocked}
-          style={readOnlyFieldStyle}
-          {...register('state')}
-          error={errors.state?.message}
-        />
-        <Input
-          label="City"
-          required
-          readOnly={addressLocked}
-          style={readOnlyFieldStyle}
-          {...register('city')}
-          error={errors.city?.message}
-        />
-        <Input
-          label="Postal code"
-          required
-          readOnly={addressLocked}
-          style={readOnlyFieldStyle}
-          {...register('postalCode')}
-          error={errors.postalCode?.message}
-        />
+      <div className="wizard-form">
+        <section className="wizard-form-section">
+          <div className="wizard-form-section-head">
+            <h2>Business profile</h2>
+            <p>Tell customers who you are. You can edit this later in Settings.</p>
+          </div>
+          <div className="wizard-form-grid">
+            <Input
+              label="Business name"
+              required
+              autoComplete="organization"
+              {...register('businessName')}
+              error={errors.businessName?.message}
+              aria-invalid={Boolean(errors.businessName)}
+            />
+            <Select
+              label="Business category"
+              required
+              options={[{ value: '', label: 'Select category' }, ...BUSINESS_CATEGORIES.map((c) => ({ value: c, label: c }))]}
+              {...register('businessCategory')}
+              error={errors.businessCategory?.message}
+            />
+            {values.businessCategory === 'Other' ? (
+              <Input
+                label="Describe your category"
+                required
+                {...register('businessCategoryOther')}
+                error={errors.businessCategoryOther?.message}
+              />
+            ) : null}
+            <Select
+              label="Industry"
+              required
+              options={[{ value: '', label: 'Select industry' }, ...INDUSTRIES.map((c) => ({ value: c, label: c }))]}
+              {...register('industry')}
+              error={errors.industry?.message}
+            />
+            {values.industry === 'Other' ? (
+              <Input
+                label="Describe your industry"
+                required
+                {...register('industryOther')}
+                error={errors.industryOther?.message}
+              />
+            ) : null}
+            <Input
+              label="Business email"
+              required
+              type="email"
+              autoComplete="off"
+              {...register('businessEmail')}
+              error={errors.businessEmail?.message}
+            />
+            <Input
+              label="Business phone"
+              required
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              {...register('businessPhone')}
+              error={errors.businessPhone?.message}
+            />
+            <Input label="Website (optional)" {...register('website')} error={errors.website?.message} />
+          </div>
+        </section>
+
+        <section className="wizard-form-section">
+          <div className="wizard-form-section-head">
+            <h2>Location</h2>
+            <p>Search or pin your address so customers and staff share the same place.</p>
+          </div>
+          <div className="wizard-form-grid">
+            <div className="wizard-form-span">
+              <AddressLocationPicker
+                label="Business address"
+                value={values.address}
+                latitude={values.latitude}
+                longitude={values.longitude}
+                onChangeText={(value) => setValue('address', value, { shouldDirty: true, shouldValidate: true })}
+                onPlaceSelected={applyPlace}
+              />
+              {errors.address ? <span className="field-error">{errors.address.message}</span> : null}
+            </div>
+            <Input
+              label="Flat, floor, building or landmark"
+              placeholder="Shop 12, Ground floor, near City Mall"
+              {...register('addressLine2')}
+            />
+            <Input
+              label="Country"
+              required
+              readOnly={addressLocked}
+              style={readOnlyFieldStyle}
+              {...register('country')}
+              error={errors.country?.message}
+            />
+            <Input
+              label="State"
+              required
+              readOnly={addressLocked}
+              style={readOnlyFieldStyle}
+              {...register('state')}
+              error={errors.state?.message}
+            />
+            <Input
+              label="City"
+              required
+              readOnly={addressLocked}
+              style={readOnlyFieldStyle}
+              {...register('city')}
+              error={errors.city?.message}
+            />
+            <Input
+              label="Postal code"
+              required
+              readOnly={addressLocked}
+              style={readOnlyFieldStyle}
+              {...register('postalCode')}
+              error={errors.postalCode?.message}
+            />
+          </div>
+        </section>
       </div>
     );
   }
 
   function renderOwnerStep() {
     return (
-      <div className="wizard-form-grid">
-        <Input
-          label="First name"
-          required
-          {...register('firstName')}
-          autoComplete="given-name"
-          error={errors.firstName?.message}
-        />
-        <Input
-          label="Last name"
-          required
-          {...register('lastName')}
-          autoComplete="family-name"
-          error={errors.lastName?.message}
-        />
-        <Input
-          label="Display name"
-          required
-          {...register('displayName')}
-          autoComplete="nickname"
-          error={errors.displayName?.message}
-        />
-        <Input
-          label="Email"
-          required
-          type="email"
-          {...register('email')}
-          autoComplete="email"
-          readOnly={Boolean(values.googleIdToken)}
-          error={errors.email?.message}
-        />
-        <Input
-          label="Mobile"
-          required
-          type="tel"
-          inputMode="numeric"
-          {...register('mobile')}
-          autoComplete="tel"
-          error={errors.mobile?.message}
-        />
-        {values.googleIdToken ? (
-          <p className="wizard-google-note">Continuing with Google. Email verification is not required.</p>
-        ) : (
-          <>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <Button
-                type="button"
-                variant="neutral"
-                disabled={!values.email || ownerOtpSending}
-                onClick={() => void sendOwnerOtp()}
-              >
-                {ownerOtpSending ? 'Sending…' : 'Send email code'}
-              </Button>
-              {ownerOtpSent ? <span style={{ color: '#6b7280', fontSize: 14 }}>Code sent to {values.email}</span> : null}
-            </div>
+      <div className="wizard-form">
+        <section className="wizard-form-section">
+          <div className="wizard-form-section-head">
+            <h2>Owner account</h2>
+            <p>This person will manage the workspace and receive billing emails.</p>
+          </div>
+          <div className="wizard-form-grid">
             <Input
-              label="Email verification code"
+              label="First name"
               required
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              {...register('ownerOtpCode')}
-              error={errors.ownerOtpCode?.message}
+              {...register('firstName')}
+              autoComplete="given-name"
+              error={errors.firstName?.message}
             />
-            <div style={{ gridColumn: '1 / -1' }}>
-              <GoogleSignInButton
-                disabled={auth.loading}
-                onIdToken={async (idToken) => {
-                  try {
-                    await auth.loginWithGoogle(idToken);
-                    navigate('/auth', { replace: true });
-                  } catch (err) {
-                    if (!isGoogleAccountNotRegistered(err)) throw err;
-                    const claims = decodeGoogleIdToken(idToken);
-                    setValue('googleIdToken', idToken, { shouldDirty: true });
-                    if (claims.email) {
-                      setValue('email', claims.email, { shouldDirty: true, shouldValidate: true });
-                    }
-                    if (claims.given_name) {
-                      setValue('firstName', claims.given_name, { shouldDirty: true, shouldValidate: true });
-                    }
-                    if (claims.family_name) {
-                      setValue('lastName', claims.family_name, { shouldDirty: true, shouldValidate: true });
-                    }
-                    if (!values.displayName && (claims.given_name || claims.family_name)) {
-                      setValue(
-                        'displayName',
-                        [claims.given_name, claims.family_name].filter(Boolean).join(' '),
-                        { shouldDirty: true, shouldValidate: true },
-                      );
-                    }
-                  }
+            <Input
+              label="Last name"
+              required
+              {...register('lastName')}
+              autoComplete="family-name"
+              error={errors.lastName?.message}
+            />
+            <Input
+              label="Display name"
+              required
+              {...register('displayName')}
+              autoComplete="nickname"
+              error={errors.displayName?.message}
+            />
+            <Input
+              label="Email"
+              required
+              type="email"
+              {...register('email')}
+              autoComplete="email"
+              readOnly={Boolean(values.googleIdToken)}
+              error={errors.email?.message}
+            />
+            <Input
+              label="Mobile"
+              required
+              type="tel"
+              inputMode="numeric"
+              {...register('mobile')}
+              autoComplete="tel"
+              error={errors.mobile?.message}
+            />
+            {values.googleIdToken ? (
+              <p className="wizard-google-note wizard-form-span">
+                Continuing with Google. Email verification is not required.
+              </p>
+            ) : (
+              <>
+                <div className="wizard-otp-row wizard-form-span">
+                  <Button
+                    type="button"
+                    variant="neutral"
+                    disabled={!values.email || ownerOtpSending}
+                    onClick={() => void sendOwnerOtp()}
+                  >
+                    {ownerOtpSending ? 'Sending…' : 'Send email code'}
+                  </Button>
+                  {ownerOtpSent ? (
+                    <span className="wizard-otp-sent">Code sent to {values.email}</span>
+                  ) : null}
+                </div>
+                <Input
+                  label="Email verification code"
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  {...register('ownerOtpCode')}
+                  error={errors.ownerOtpCode?.message}
+                />
+                <div className="wizard-form-span">
+                  <GoogleSignInButton
+                    disabled={auth.loading}
+                    onIdToken={async (idToken) => {
+                      try {
+                        await auth.loginWithGoogle(idToken);
+                        navigate('/auth', { replace: true });
+                      } catch (err) {
+                        if (!isGoogleAccountNotRegistered(err)) throw err;
+                        const claims = decodeGoogleIdToken(idToken);
+                        setValue('googleIdToken', idToken, { shouldDirty: true });
+                        if (claims.email) {
+                          setValue('email', claims.email, { shouldDirty: true, shouldValidate: true });
+                        }
+                        if (claims.given_name) {
+                          setValue('firstName', claims.given_name, { shouldDirty: true, shouldValidate: true });
+                        }
+                        if (claims.family_name) {
+                          setValue('lastName', claims.family_name, { shouldDirty: true, shouldValidate: true });
+                        }
+                        if (!values.displayName && (claims.given_name || claims.family_name)) {
+                          setValue(
+                            'displayName',
+                            [claims.given_name, claims.family_name].filter(Boolean).join(' '),
+                            { shouldDirty: true, shouldValidate: true },
+                          );
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className="wizard-form-section">
+          <div className="wizard-form-section-head">
+            <h2>Agreements</h2>
+            <p>Optional partner code can be added if someone referred you.</p>
+          </div>
+          <div className="wizard-form-grid">
+            <label className="auth-checkbox wizard-form-span">
+              <input type="checkbox" {...register('acceptTerms')} />
+              <span>
+                I accept the <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link>
+              </span>
+            </label>
+            {errors.acceptTerms ? <span className="field-error wizard-form-span">{errors.acceptTerms.message}</span> : null}
+            <label className="auth-checkbox wizard-form-span">
+              <input type="checkbox" {...register('acceptPrivacy')} />
+              <span>
+                I accept the <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link>
+              </span>
+            </label>
+            {errors.acceptPrivacy ? (
+              <span className="field-error wizard-form-span">{errors.acceptPrivacy.message}</span>
+            ) : null}
+            <div className="wizard-form-span">
+              <Input
+                label="Affiliate code (optional)"
+                value={affiliateCode}
+                onChange={(event) => {
+                  const next = event.target.value.toUpperCase();
+                  setAffiliateCode(next);
+                  persistAffiliateCode(next);
                 }}
+                autoComplete="off"
               />
+              <p className="wizard-hint">If a partner referred you, enter their code. You can leave this blank.</p>
             </div>
-          </>
-        )}
-        <label className="auth-checkbox">
-          <input type="checkbox" {...register('acceptTerms')} />
-          <span>
-            I accept the <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link>
-          </span>
-        </label>
-        {errors.acceptTerms ? <span className="field-error">{errors.acceptTerms.message}</span> : null}
-        <label className="auth-checkbox">
-          <input type="checkbox" {...register('acceptPrivacy')} />
-          <span>
-            I accept the <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link>
-          </span>
-        </label>
-        {errors.acceptPrivacy ? <span className="field-error">{errors.acceptPrivacy.message}</span> : null}
-        <div style={{ gridColumn: '1 / -1' }}>
-          <Input
-            label="Affiliate code (optional)"
-            value={affiliateCode}
-            onChange={(event) => {
-              const next = event.target.value.toUpperCase();
-              setAffiliateCode(next);
-              persistAffiliateCode(next);
-            }}
-            autoComplete="off"
-          />
-          <p className="wizard-hint">If a partner referred you, enter their code. You can leave this blank.</p>
-        </div>
+          </div>
+        </section>
       </div>
     );
   }
@@ -612,164 +730,176 @@ export function RegisterWizard() {
 
   function renderPreferencesStep() {
     return (
-      <div className="wizard-form-grid">
-        <Select
-          label="Currency"
-          options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
-          {...register('currency')}
-          error={errors.currency?.message}
-        />
-        <Select
-          label="Timezone"
-          options={TIMEZONES.map((tz) => ({ value: tz, label: tz }))}
-          {...register('timezone')}
-          error={errors.timezone?.message}
-        />
-        <Select
-          label="Language"
-          options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
-          {...register('language')}
-          error={errors.language?.message}
-        />
-        <Select
-          label="Week starts on"
-          options={WEEK_START_DAYS.map((d) => ({ value: d.value, label: d.label }))}
-          {...register('weekStartDay')}
-        />
-        <Select
-          label="Date format"
-          options={DATE_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
-          {...register('dateFormat')}
-        />
-        <Select
-          label="Time format"
-          options={TIME_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
-          {...register('timeFormat')}
-        />
-        <div className="wizard-hours">
-          <span className="wizard-section-label">Business hours</span>
-          <p className="wizard-hours-hint">
-            Set hours for each day now, or skip and complete this later in Settings.
-          </p>
-          <label className="auth-checkbox">
-            <input type="checkbox" {...register('skipHours')} />
-            <span>Skip business hours for now</span>
-          </label>
-          {values.skipHours ? (
-            <p className="wizard-hours-hint">You can add weekly hours after your account is created.</p>
-          ) : (
-            <>
-              <BusinessHoursEditor
-                value={values.businessHours}
-                onChange={(next) => setValue('businessHours', next, { shouldValidate: true, shouldDirty: true })}
-              />
-              {typeof errors.businessHours?.message === 'string' ? (
-                <span className="field-error">{errors.businessHours.message}</span>
-              ) : null}
-            </>
-          )}
-        </div>
-        <div className="wizard-choice-block">
-          <div className="wizard-choice-header">
-            <span className="wizard-section-label">Products</span>
-            <p className="wizard-section-hint">
-              Select one or both. Packages for that product stay in the same card.
-            </p>
+      <div className="wizard-form">
+        <section className="wizard-form-section">
+          <div className="wizard-form-section-head">
+            <h2>Workspace preferences</h2>
+            <p>Currency, time, and language for invoices and schedules.</p>
           </div>
-          <div className="wizard-product-stack">
-            {PRODUCT_CATALOG.map((product) => {
-              const productId = product.id as RegisterWizardFormValues['selectedProducts'][number];
-              const selected = values.selectedProducts.includes(productId);
-              const selectedPlan = values.planCodes[productId];
-              const Icon = product.id === 'shopie' ? ShoppingBag : CalendarDays;
-              return (
-                <article
-                  key={product.id}
-                  className={`wizard-product-card${selected ? ' is-selected' : ''}`}
-                >
-                  <button
-                    type="button"
-                    className="wizard-product-card-header"
-                    onClick={() => toggleProduct(productId)}
-                    aria-pressed={selected}
+          <div className="wizard-form-grid">
+            <Select
+              label="Currency"
+              options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
+              {...register('currency')}
+              error={errors.currency?.message}
+            />
+            <Select
+              label="Timezone"
+              options={TIMEZONES.map((tz) => ({ value: tz, label: tz }))}
+              {...register('timezone')}
+              error={errors.timezone?.message}
+            />
+            <Select
+              label="Language"
+              options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+              {...register('language')}
+              error={errors.language?.message}
+            />
+            <Select
+              label="Week starts on"
+              options={WEEK_START_DAYS.map((d) => ({ value: d.value, label: d.label }))}
+              {...register('weekStartDay')}
+            />
+            <Select
+              label="Date format"
+              options={DATE_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
+              {...register('dateFormat')}
+            />
+            <Select
+              label="Time format"
+              options={TIME_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
+              {...register('timeFormat')}
+            />
+          </div>
+        </section>
+
+        <section className="wizard-form-section">
+          <div className="wizard-form-section-head">
+            <h2>Business hours</h2>
+            <p>Set hours for each day now, or skip and finish this in Settings later.</p>
+          </div>
+          <div className="wizard-hours">
+            <label className="auth-checkbox">
+              <input type="checkbox" {...register('skipHours')} />
+              <span>Skip business hours for now</span>
+            </label>
+            {values.skipHours ? (
+              <p className="wizard-hours-hint">You can add weekly hours after your account is created.</p>
+            ) : (
+              <>
+                <BusinessHoursEditor
+                  value={values.businessHours}
+                  onChange={(next) => setValue('businessHours', next, { shouldValidate: true, shouldDirty: true })}
+                />
+                {typeof errors.businessHours?.message === 'string' ? (
+                  <span className="field-error">{errors.businessHours.message}</span>
+                ) : null}
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className="wizard-form-section">
+          <div className="wizard-form-section-head">
+            <h2>Products</h2>
+            <p>Select one or both. Packages for that product stay in the same card.</p>
+          </div>
+          <div className="wizard-choice-block">
+            <div className="wizard-product-stack">
+              {PRODUCT_CATALOG.map((product) => {
+                const productId = product.id as RegisterWizardFormValues['selectedProducts'][number];
+                const selected = values.selectedProducts.includes(productId);
+                const selectedPlan = values.planCodes[productId];
+                const Icon = product.id === 'shopie' ? ShoppingBag : CalendarDays;
+                return (
+                  <article
+                    key={product.id}
+                    className={`wizard-product-card${selected ? ' is-selected' : ''}`}
                   >
-                    <span className="wizard-choice-icon" aria-hidden="true">
-                      <Icon size={20} />
-                    </span>
-                    <div className="wizard-product-card-copy">
-                      <strong className="wizard-choice-name">{product.name}</strong>
-                      <p>{product.description}</p>
+                    <button
+                      type="button"
+                      className="wizard-product-card-header"
+                      onClick={() => toggleProduct(productId)}
+                      aria-pressed={selected}
+                    >
+                      <span className="wizard-choice-icon" aria-hidden="true">
+                        <Icon size={20} />
+                      </span>
+                      <div className="wizard-product-card-copy">
+                        <strong className="wizard-choice-name">{product.name}</strong>
+                        <p>{product.description}</p>
+                      </div>
+                      <span className={`wizard-choice-check${selected ? ' is-on' : ''}`} aria-hidden="true">
+                        <Check size={14} strokeWidth={3} />
+                      </span>
+                    </button>
+                    {product.highlights?.length ? (
+                      <ul className="wizard-choice-features">
+                        {product.highlights.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <div className="wizard-product-card-packages">
+                      <p className="wizard-package-label">Choose a package</p>
+                      <div className="wizard-package-grid">
+                        {plansForProduct(productId).map((plan) => {
+                          const price = formatInr(plan.amount_paise);
+                          const isSelected = selected && selectedPlan === plan.plan_code;
+                          return (
+                            <button
+                              key={plan.plan_code}
+                              type="button"
+                              className={`wizard-package-option${isSelected ? ' is-selected' : ''}`}
+                              onClick={() => {
+                                const nextProducts = selected
+                                  ? values.selectedProducts
+                                  : [...values.selectedProducts, productId];
+                                setValue('selectedProducts', nextProducts, { shouldValidate: true, shouldDirty: true });
+                                setValue(
+                                  'planCodes',
+                                  { ...values.planCodes, [productId]: plan.plan_code },
+                                  { shouldValidate: true, shouldDirty: true },
+                                );
+                              }}
+                              aria-pressed={isSelected}
+                            >
+                              <div className="wizard-choice-card-top">
+                                <span className="wizard-recommended">{isRecommendedPlanCode(plan.plan_code) ? 'Recommended' : 'Starter'}</span>
+                                <span className={`wizard-choice-check${isSelected ? ' is-on' : ''}`} aria-hidden="true">
+                                  <Check size={14} strokeWidth={3} />
+                                </span>
+                              </div>
+                              <strong className="wizard-choice-name">{planTitle(plan)}</strong>
+                              {price ? (
+                                <p className="wizard-package-price">
+                                  {price}
+                                  <span>/month</span>
+                                </p>
+                              ) : (
+                                <p className="wizard-package-price">Trial first</p>
+                              )}
+                              <p>{plan.description}</p>
+                              <div className="wizard-package-meta">
+                                <span>{planSeatLine(plan)}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <span className={`wizard-choice-check${selected ? ' is-on' : ''}`} aria-hidden="true">
-                      <Check size={14} strokeWidth={3} />
-                    </span>
-                  </button>
-                  {product.highlights?.length ? (
-                    <ul className="wizard-choice-features">
-                      {product.highlights.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <div className="wizard-product-card-packages">
-                    <p className="wizard-package-label">Choose a package</p>
-                    <div className="wizard-package-grid">
-                      {plansForProduct(productId).map((plan) => {
-                        const price = formatInr(plan.amount_paise);
-                        const isSelected = selected && selectedPlan === plan.plan_code;
-                        return (
-                          <button
-                            key={plan.plan_code}
-                            type="button"
-                            className={`wizard-package-option${isSelected ? ' is-selected' : ''}`}
-                            onClick={() => {
-                              const nextProducts = selected
-                                ? values.selectedProducts
-                                : [...values.selectedProducts, productId];
-                              setValue('selectedProducts', nextProducts, { shouldValidate: true, shouldDirty: true });
-                              setValue(
-                                'planCodes',
-                                { ...values.planCodes, [productId]: plan.plan_code },
-                                { shouldValidate: true, shouldDirty: true },
-                              );
-                            }}
-                            aria-pressed={isSelected}
-                          >
-                            <div className="wizard-choice-card-top">
-                              <span className="wizard-recommended">{isRecommendedPlanCode(plan.plan_code) ? 'Recommended' : 'Starter'}</span>
-                              <span className={`wizard-choice-check${isSelected ? ' is-on' : ''}`} aria-hidden="true">
-                                <Check size={14} strokeWidth={3} />
-                              </span>
-                            </div>
-                            <strong className="wizard-choice-name">{planTitle(plan)}</strong>
-                            {price ? (
-                              <p className="wizard-package-price">
-                                {price}
-                                <span>/month</span>
-                              </p>
-                            ) : (
-                              <p className="wizard-package-price">Trial first</p>
-                            )}
-                            <p>{plan.description}</p>
-                            <div className="wizard-package-meta">
-                              <span>{planSeatLine(plan)}</span>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                  </article>
+                );
+              })}
+            </div>
+            {typeof errors.selectedProducts?.message === 'string' ? (
+              <span className="field-error">{errors.selectedProducts.message}</span>
+            ) : null}
+            {typeof errors.planCodes?.message === 'string' ? (
+              <span className="field-error">{errors.planCodes.message}</span>
+            ) : null}
           </div>
-          {typeof errors.selectedProducts?.message === 'string' ? (
-            <span className="field-error">{errors.selectedProducts.message}</span>
-          ) : null}
-          {typeof errors.planCodes?.message === 'string' ? (
-            <span className="field-error">{errors.planCodes.message}</span>
-          ) : null}
-        </div>
+        </section>
       </div>
     );
   }
@@ -813,7 +943,11 @@ export function RegisterWizard() {
             {values.industry === 'Other' && values.industryOther ? ` (${values.industryOther})` : ''}
           </p>
           <p>{values.businessEmail} · {values.businessPhone}</p>
-          <p>{values.address}, {values.city}, {values.state}, {values.country} {values.postalCode}</p>
+          <p>
+            {[values.addressLine2, values.address, values.city, values.state, values.country, values.postalCode]
+              .filter(Boolean)
+              .join(', ')}
+          </p>
         </section>
         <section>
           <div className="wizard-review-header">
@@ -879,8 +1013,8 @@ export function RegisterWizard() {
 
   return (
     <WizardShell
-      title="Create your account"
-      subtitle="Complete each step to set up IE Orbit."
+      title="Create your workspace"
+      subtitle="A few steps to put your brand in customers' pockets."
       currentStep={currentStep}
     >
       {stepContent[currentStep]()}
@@ -898,7 +1032,7 @@ export function RegisterWizard() {
             )}
             {currentStep !== 'review' ? (
               <Button type="button" variant="ghost" onClick={clearCurrentStep}>
-                Clear
+                Clear this step
               </Button>
             ) : null}
           </div>

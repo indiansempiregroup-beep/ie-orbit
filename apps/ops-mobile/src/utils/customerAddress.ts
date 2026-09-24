@@ -26,6 +26,7 @@ export type CustomerAddressLike = {
 
 export type ParsedCustomerAddress = {
   line1: string;
+  line2?: string;
   city?: string;
   state?: string;
   country?: string;
@@ -40,6 +41,7 @@ export function parseCustomerAddress(customer: CustomerAddressLike): ParsedCusto
   const line1 = defaultAddress?.full_address || defaultAddress?.line1 || customer.full_address || '';
   return {
     line1,
+    line2: defaultAddress?.line2 ?? undefined,
     city: defaultAddress?.city ?? undefined,
     state: defaultAddress?.state ?? undefined,
     country: defaultAddress?.country ?? undefined,
@@ -52,7 +54,8 @@ export function parseCustomerAddress(customer: CustomerAddressLike): ParsedCusto
 export function formatCustomerAddressLabel(customer: CustomerAddressLike): string {
   const address = parseCustomerAddress(customer);
   return (
-    [address.line1, address.city, address.state, address.postalCode, address.country].filter(Boolean).join(', ') ||
-    '—'
+    [address.line2, address.line1, address.city, address.state, address.postalCode, address.country]
+      .filter(Boolean)
+      .join(', ') || '—'
   );
 }

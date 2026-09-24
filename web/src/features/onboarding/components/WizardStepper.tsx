@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { RegisterWizardStepId } from '../../../config/onboarding';
 import { REGISTER_WIZARD_STEPS } from '../../../config/onboarding';
 
@@ -35,8 +36,13 @@ export function WizardStepper({ currentStep }: WizardStepperProps) {
         aria-valuemax={REGISTER_WIZARD_STEPS.length}
         aria-valuenow={currentIndex + 1}
         aria-label={`Step ${currentIndex + 1} of ${REGISTER_WIZARD_STEPS.length}`}
+        style={
+          {
+            '--wizard-progress': `${((currentIndex + 1) / REGISTER_WIZARD_STEPS.length) * 100}%`,
+          } as CSSProperties
+        }
       >
-        <span style={{ width: `${((currentIndex + 1) / REGISTER_WIZARD_STEPS.length) * 100}%` }} />
+        <span />
       </div>
     </nav>
   );

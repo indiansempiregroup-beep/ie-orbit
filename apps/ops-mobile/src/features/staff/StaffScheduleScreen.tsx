@@ -52,6 +52,18 @@ function nearestTimeOption(value: string) {
   return `${String(nextHours % 24).padStart(2, '0')}:${String(nextMinutes).padStart(2, '0')}`;
 }
 
+function isEndAfterStart(start: string, end: string) {
+  return Boolean(start) && Boolean(end) && start < end;
+}
+
+function scheduleValidationError(rows: DayRow[]): string | null {
+  const invalidDays = rows
+    .filter((row) => row.is_available && !isEndAfterStart(row.shift_start, row.shift_end))
+    .map((row) => row.label);
+  if (!invalidDays.length) return null;
+  return `End time must be after start time on ${invalidDays.join(', ')}.`;
+}
+
 export function StaffScheduleScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'StaffSchedule'>>();
   const { member, loading: memberLoading } = useStaffMember(route.params.staffId);
@@ -104,6 +116,12 @@ export function StaffScheduleScreen() {
           fullWidth
           size="lg"
           onPress={async () => {
+            const validationError = scheduleValidationError(rows);
+            if (validationError) {
+              setError(validationError);
+              setMessage(null);
+              return;
+            }
             setSaving(true);
             setError(null);
             setMessage(null);
@@ -141,6 +159,7 @@ export function StaffScheduleScreen() {
                 label="Start"
                 value={row.shift_start}
                 onChange={(shift_start) => {
+                  setError(null);
                   setRows((current) => current.map((item, i) => (i === index ? { ...item, shift_start } : item)));
                 }}
               />
@@ -148,8 +167,12 @@ export function StaffScheduleScreen() {
                 label="End"
                 value={row.shift_end}
                 onChange={(shift_end) => {
+                  setError(null);
                   setRows((current) => current.map((item, i) => (i === index ? { ...item, shift_end } : item)));
                 }}
+                error={
+                  !isEndAfterStart(row.shift_start, row.shift_end) ? 'End time must be after start time.' : undefined
+                }
               />
             </View>
           ) : null}

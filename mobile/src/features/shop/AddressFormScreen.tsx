@@ -189,7 +189,13 @@ export function AddressFormScreen() {
               if (lineError) setLineError(null);
             }}
             onPlaceSelected={(place) => {
+              const cleared =
+                !place.line1 &&
+                !place.formattedAddress &&
+                place.latitude == null &&
+                place.longitude == null;
               setLine1(place.line1 || place.formattedAddress);
+              setLine2((current) => (cleared ? '' : current));
               setCity(place.city || '');
               setState(place.state || '');
               setCountry(place.country || '');

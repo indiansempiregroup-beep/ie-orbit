@@ -42,6 +42,7 @@ class StaffManagementService:
         if getattr(actor, "is_authenticated", False):
             staff.mark_created(actor_id=actor.id)
         self._validate_business_tenant(staff)
+        self._validate_identity_uniqueness(staff)
         staff.full_clean()
         staff.save()
         self.ensure_foundation_records(staff)
@@ -64,6 +65,7 @@ class StaffManagementService:
         if getattr(actor, "is_authenticated", False):
             staff.mark_updated(actor_id=actor.id)
         self._validate_business_tenant(staff)
+        self._validate_identity_uniqueness(staff)
         staff.full_clean()
         staff.save()
         if isinstance(profile_data, dict):
@@ -138,6 +140,24 @@ class StaffManagementService:
     def _validate_business_tenant(self, obj: Any) -> None:
         if obj.business.tenant_id != obj.tenant_id:
             raise ValidationError("Business does not belong to the current tenant.")
+
+    def _validate_identity_uniqueness(self, staff: Staff) -> None:
+        qs = Staff.objects.filter(tenant=staff.tenant, business=staff.business)
+        if staff.pk:
+            qs = qs.exclude(pk=staff.pk)
+
+        email = (staff.email or "").strip()
+        if email and qs.filter(email__iexact=email).exclude(email="").exists():
+            raise ValidationError({"email": "A staff member with this email already exists for this business."})
+
+        phone = (staff.phone_number or "").strip()
+        if phone and qs.filter(phone_number=phone).exclude(phone_number="").exists():
+            raise ValidationError(
+                {"phone_number": "A staff member with this phone number already exists for this business."}
+            )
+
+        if staff.user_id and qs.filter(user_id=staff.user_id).exists():
+            raise ValidationError({"user": "This user is already linked to another staff member in this business."})
 
     def _validate_staff_service(self, staff: Staff, service: Any) -> None:
         if staff.tenant_id != service.tenant_id or staff.business_id != service.business_id:

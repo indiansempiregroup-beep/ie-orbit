@@ -611,6 +611,34 @@ class PlatformSmartLookupSettingsView(APIView):
         return success_response(settings, request_id=getattr(request, "request_id", None))
 
 
+class PlatformAssistantSettingsView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request) -> Response:
+        return success_response(
+            _svc().get_assistant_settings(),
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(tags=["Platform Admin"])
+    def put(self, request: Request) -> Response:
+        data = request.data
+        raw_tops = data.get("suggested_top_up_paise")
+        tops = raw_tops if isinstance(raw_tops, list) else None
+        settings = _svc().update_assistant_settings(
+            actor=request.user,
+            enabled=bool(data.get("enabled", True)),
+            message_price_paise=int(data.get("message_price_paise") or 50),
+            confirm_price_paise=int(data.get("confirm_price_paise") or 100),
+            suggested_top_up_paise=tops,
+            reason=data.get("reason", "assistant settings update"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(settings, request_id=getattr(request, "request_id", None))
+
+
 class PlatformSmartLookupFxRefreshView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 

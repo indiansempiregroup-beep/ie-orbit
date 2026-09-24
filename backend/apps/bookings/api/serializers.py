@@ -336,6 +336,13 @@ class StaffWeeklyScheduleSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
+    def validate(self, attrs: dict) -> dict:
+        shift_start = attrs.get("shift_start", getattr(self.instance, "shift_start", None))
+        shift_end = attrs.get("shift_end", getattr(self.instance, "shift_end", None))
+        if shift_start is not None and shift_end is not None and shift_end <= shift_start:
+            raise serializers.ValidationError({"shift_end": "End time must be after start time."})
+        return attrs
+
 
 class StaffWeeklyScheduleInputSerializer(serializers.Serializer):
     weekday = serializers.IntegerField(min_value=0, max_value=6)
@@ -345,6 +352,11 @@ class StaffWeeklyScheduleInputSerializer(serializers.Serializer):
     capacity = serializers.IntegerField(min_value=1, default=1)
     break_periods = serializers.JSONField(required=False, default=list)
     overtime_allowed = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs["shift_end"] <= attrs["shift_start"]:
+            raise serializers.ValidationError({"shift_end": "End time must be after start time."})
+        return attrs
 
 
 class StaffWeeklyScheduleBulkSerializer(serializers.Serializer):

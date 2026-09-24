@@ -363,7 +363,8 @@ class CheckoutService:
         return session
 
     def _record_affiliate_commission(self, session: BillingCheckoutSession) -> None:
-        if str((session.metadata or {}).get("kind") or "") == "smart_lookup_top_up":
+        kind = str((session.metadata or {}).get("kind") or "")
+        if kind in {"smart_lookup_top_up", "assistant_top_up"}:
             return
         try:
             from apps.platform_admin.affiliate_service import AffiliateService
@@ -622,6 +623,8 @@ class CheckoutService:
             session.save(update_fields=["metadata", "updated_at"])
             if str(meta.get("kind") or "") == "smart_lookup_top_up":
                 self._credit_smart_lookup_wallet(session)
+            elif str(meta.get("kind") or "") == "assistant_top_up":
+                self._credit_assistant_wallet(session)
             else:
                 self._activate_subscription_for_session(session)
             try:
@@ -757,6 +760,110 @@ class CheckoutService:
         if meta.get("wallet_credited"):
             return
         SmartLookupService().credit_wallet(
+            tenant=session.tenant,
+            business=session.business,
+            amount_paise=int(session.amount_paise),
+            reason=f"upi_top_up:{session.razorpay_order_id}",
+        )
+        meta["wallet_credited"] = True
+        meta["wallet_credited_at"] = timezone.now().isoformat()
+        session.metadata = meta
+        session.save(update_fields=["metadata", "updated_at"])
+
+    def create_assistant_upi_session(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        amount_paise: int,
+        actor_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Prepaid Business Assistant wallet top-up via the same UPI claim flow."""
+        from apps.assistant.services.access import ensure_assistant_access
+        from apps.assistant.services.wallet import AssistantWalletService
+        from apps.common.upi import build_upi_pay_url
+
+        total = int(amount_paise or 0)
+        if total < 100:
+            raise ValidationError({"amount_paise": "Minimum top-up is ₹1."})
+        if total > 100_000_00:
+            raise ValidationError({"amount_paise": "Maximum top-up is ₹1,00,000."})
+
+        ensure_assistant_access(business=business)
+        wallet = AssistantWalletService()
+        if not wallet.platform_overage_enabled():
+            raise ValidationError(
+                {"assistant": "Assistant prepaid top-ups are disabled by the platform."}
+            )
+
+        vpa = str(getattr(settings, "PLATFORM_UPI_VPA", "") or "").strip()
+        if not vpa:
+            raise ValidationError({"upi": "Platform UPI ID is not configured."})
+
+        order_id = f"upi_as_{uuid.uuid4().hex}"
+        expires_at = timezone.now() + timedelta(hours=CHECKOUT_SESSION_TTL_HOURS)
+        amount_rupees = total / 100
+        pay_url = build_upi_pay_url(
+            vpa=vpa,
+            payee_name=str(getattr(settings, "PLATFORM_UPI_NAME", "") or "IE Orbit"),
+            amount=amount_rupees,
+            note="Assistant wallet",
+            currency=DEFAULT_CHECKOUT_CURRENCY,
+        )
+        session = BillingCheckoutSession.objects.create(
+            tenant=tenant,
+            business=business,
+            product_code="shopie",
+            plan_code="assistant_wallet",
+            razorpay_order_id=order_id,
+            amount_paise=total,
+            currency=DEFAULT_CHECKOUT_CURRENCY,
+            status=CheckoutSessionStatus.CREATED,
+            expires_at=expires_at,
+            metadata={
+                "payment_channel": "upi_claim",
+                "payment_status": "due",
+                "kind": "assistant_top_up",
+                "created_by": actor_id,
+                "upi_pay_url": pay_url,
+                "upi_vpa": vpa,
+                "claim_intent": "assistant_top_up",
+                "line_items": [
+                    {
+                        "product_code": "shopie",
+                        "plan_code": "assistant_wallet",
+                        "amount_paise": total,
+                        "intent": "assistant_top_up",
+                        "extra_staff": 0,
+                        "extra_offices": 0,
+                        "pets_pack_enabled": False,
+                    }
+                ],
+            },
+        )
+        return {
+            "session_id": str(session.id),
+            "order_id": session.razorpay_order_id,
+            "amount": session.amount_paise,
+            "currency": session.currency,
+            "product_code": session.product_code,
+            "plan_code": session.plan_code,
+            "upi_vpa": vpa,
+            "upi_pay_url": pay_url,
+            "payment_qr_url": str(getattr(settings, "PLATFORM_PAYMENT_QR_URL", "") or ""),
+            "payment_status": "due",
+            "claim_intent": "assistant_top_up",
+            "kind": "assistant_top_up",
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def _credit_assistant_wallet(self, session: BillingCheckoutSession) -> None:
+        from apps.assistant.services.wallet import AssistantWalletService
+
+        meta = dict(session.metadata or {})
+        if meta.get("wallet_credited"):
+            return
+        AssistantWalletService().credit_wallet(
             tenant=session.tenant,
             business=session.business,
             amount_paise=int(session.amount_paise),

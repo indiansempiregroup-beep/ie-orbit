@@ -231,6 +231,33 @@ export function usePlatformSmartLookupSettingsQuery() {
   });
 }
 
+export function usePlatformAssistantSettingsQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'assistant-settings'],
+    queryFn: async () => (await client.platform.assistantSettings()).data,
+    retry: false,
+  });
+}
+
+export function useUpdateAssistantSettingsMutation() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      enabled: boolean;
+      message_price_paise: number;
+      confirm_price_paise: number;
+      suggested_top_up_paise: number[];
+      reason: string;
+    }) => (await client.platform.updateAssistantSettings(body)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'assistant-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['assistant'] });
+    },
+  });
+}
+
 export function useUpdateSmartLookupSettingsMutation() {
   const client = useApiClient();
   const queryClient = useQueryClient();

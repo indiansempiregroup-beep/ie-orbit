@@ -692,6 +692,7 @@ class ShopOrderListCreateView(APIView):
                 delivery_method=data.get("delivery_method") or "",
                 delivery_quote_id=data.get("delivery_quote_id") or "",
                 displayed_delivery_fee=data.get("displayed_delivery_fee"),
+                delivery_address_line2=data.get("delivery_address_line2") or "",
                 confirm=bool(data.get("confirm")),
                 bill_discount_type=data.get("bill_discount_type") or "",
                 bill_discount_value=data.get("bill_discount_value") or 0,

@@ -1,8 +1,21 @@
+# Local demo businesses (Paws & Whiskers + Heritage Antiques)
+#   docker compose exec -T backend python manage.py seed_demo_retail_pair
+# Logins:
+#   Pet (Appoint + Mart):  demo-pet-owner@ieorbit.local / DemoPetPass123!
+#   Antique (Mart only):   demo-antique-owner@ieorbit.local / DemoAntiquePass123!
+
+platform-admin@ieplatform.local
+
 # Local Orbit Mart Smart lookup (pack-photo AI) — after pulling:
 #   podman compose exec -T backend python manage.py migrate --noinput
 # Set GEMINI_API_KEY in root .env (see .env.example) and restart backend.
 # Enable + UPI top-up: Product settings → Smart product lookup.
 # PLATFORM_UPI_VPA must be set for wallet top-up QR.
+
+# Business Assistant prepaid wallet (after free daily limits):
+#   Same migrate as above (assistant.0002 + platform_admin.0028).
+# Platform Admin → Plan Packages → Assistant wallet (message/confirm ₹ prices + suggested top-ups).
+# In chat header: free remaining + wallet balance; Top up chips open UPI claim sheet.
 
 
 

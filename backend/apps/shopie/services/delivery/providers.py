@@ -503,7 +503,7 @@ class ShiprocketQuickProvider(JsonHttpProvider):
                 "billing_customer_name": first_name,
                 "billing_last_name": last_name,
                 "billing_address": str(drop.get("address") or pickup.get("address") or "Address"),
-                "billing_address_2": "",
+                "billing_address_2": str(drop.get("address_2") or drop.get("address_line2") or ""),
                 "billing_city": str(drop.get("city") or ""),
                 "billing_pincode": str(drop.get("postal_code") or ""),
                 "billing_state": str(drop.get("state") or ""),

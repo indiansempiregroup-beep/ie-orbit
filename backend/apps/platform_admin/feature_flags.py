@@ -6,6 +6,7 @@ from apps.tenancy.models import Tenant
 GOOGLE_ADS_FLAG = "google_ads"
 RAZORPAY_FLAG = "razorpay"
 CASHFREE_FLAG = "cashfree"
+AI_ASSISTANT_FLAG = "ai_assistant"
 
 
 def tenant_feature_enabled(*, tenant: Tenant, key: str, default: bool = True) -> bool:

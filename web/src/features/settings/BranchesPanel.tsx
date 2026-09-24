@@ -36,6 +36,7 @@ export function BranchesPanel() {
   const [branchName, setBranchName] = useState('');
   const [address, setAddress] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [country, setCountry] = useState('');
@@ -80,6 +81,7 @@ export function BranchesPanel() {
     setBranchName('');
     setAddress('');
     setAddressLine1('');
+    setAddressLine2('');
     setCity('');
     setState('');
     setCountry('');
@@ -107,6 +109,7 @@ export function BranchesPanel() {
       .join(', ');
     setAddress(composed);
     setAddressLine1(branch.address_line1 ?? '');
+    setAddressLine2(branch.address_line2 ?? '');
     setCity(branch.city ?? '');
     setState(branch.state ?? '');
     setCountry(branch.country ?? '');
@@ -136,6 +139,7 @@ export function BranchesPanel() {
       branch_name: branchName.trim(),
       display_name: branchName.trim(),
       address_line1: addressLine1.trim(),
+      address_line2: addressLine2.trim() || undefined,
       city: city.trim(),
       state: state.trim() || undefined,
       country: country.trim(),
@@ -372,8 +376,14 @@ export function BranchesPanel() {
             longitude={longitude}
             onChangeText={setAddress}
             onPlaceSelected={(place) => {
+              const cleared =
+                !place.line1 &&
+                !place.formattedAddress &&
+                place.latitude == null &&
+                place.longitude == null;
               setAddress(place.formattedAddress);
               setAddressLine1(place.line1 || place.formattedAddress);
+              setAddressLine2((current) => (cleared ? '' : current));
               setCity(place.city || '');
               setState(place.state || '');
               setCountry(place.country || '');
@@ -382,6 +392,18 @@ export function BranchesPanel() {
               setLongitude(place.longitude ?? null);
             }}
           />
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+              Flat, floor, building or landmark
+            </span>
+            <input
+              value={addressLine2}
+              onChange={(event) => setAddressLine2(event.target.value)}
+              placeholder="Shop 12, Ground floor, near City Mall"
+              style={INPUT_STYLE}
+            />
+          </label>
 
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             {(

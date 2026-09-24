@@ -45,6 +45,7 @@ export function ProfileEditScreen() {
   const [photoAsset, setPhotoAsset] = useState<ImagePickerAsset | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [fullAddress, setFullAddress] = useState('');
+  const [line2, setLine2] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [country, setCountry] = useState('');
@@ -74,6 +75,7 @@ export function ProfileEditScreen() {
     const address = profile?.address;
     if (!address) return;
     setFullAddress(address.full_address || address.line1 || '');
+    setLine2(address.line2 || '');
     setCity(address.city || '');
     setState(address.state || '');
     setCountry(address.country || '');
@@ -116,6 +118,7 @@ export function ProfileEditScreen() {
             phone_number: phone.trim() || undefined,
             full_address: fullAddress.trim(),
             line1: fullAddress.trim(),
+            line2: line2.trim(),
             city,
             state,
             country,
@@ -208,7 +211,13 @@ export function ProfileEditScreen() {
           latitude={latitude}
           longitude={longitude}
           onPlaceSelected={(place) => {
+            const cleared =
+              !place.line1 &&
+              !place.formattedAddress &&
+              place.latitude == null &&
+              place.longitude == null;
             setFullAddress(place.line1 || place.formattedAddress);
+            setLine2((current) => (cleared ? '' : current));
             setCity(place.city || '');
             setState(place.state || '');
             setCountry(place.country || '');
@@ -217,6 +226,14 @@ export function ProfileEditScreen() {
             setLongitude(place.longitude ?? null);
           }}
           primaryColor={primary}
+        />
+        <Input
+          label="Flat, floor, building or landmark"
+          optional
+          hint="Add door-level detail here — Google search only fills the street / area."
+          placeholder="Flat 302, B wing, near City Mall"
+          value={line2}
+          onChangeText={setLine2}
         />
         <Input label="City" value={city} onChangeText={setCity} editable={!(latitude != null && longitude != null)} />
         <Input label="State" value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />

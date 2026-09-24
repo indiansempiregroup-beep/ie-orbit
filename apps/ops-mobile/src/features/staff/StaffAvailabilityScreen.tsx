@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import type {
   StaffLeave,
@@ -17,7 +17,6 @@ import { TimeField } from '../../components/TimeField';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
-import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -25,10 +24,17 @@ import { useServices } from '../../hooks/useOpsData';
 import { useStaffSchedule } from '../../hooks/useOpsExtended';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
-import { formatLeaveKind, leaveWindowForDay, type LeaveDayKind } from '../../utils/leaveWindows';
+import {
+  formatLeaveKind,
+  halfDayWindowLabel,
+  leaveWindowForDay,
+  type HalfDayPart,
+  type LeaveDayKind,
+} from '../../utils/leaveWindows';
 import type { RootStackParamList } from '../../navigation/types';
 
 type TabKey = 'leave' | 'extra' | 'block' | 'emergency' | 'services';
+type ListFilter = 'upcoming' | 'past' | 'all';
 
 function hoursFromNow(hours: number) {
   const next = new Date();
@@ -68,11 +74,63 @@ function leavePhase(startsAt: string, endsAt: string): 'active' | 'upcoming' | '
   return 'past';
 }
 
+function datePhase(dateIso: string, endTime?: string): 'upcoming' | 'past' {
+  const end = endTime ? new Date(`${dateIso}T${endTime}`) : new Date(`${dateIso}T23:59:59`);
+  return end.getTime() >= Date.now() ? 'upcoming' : 'past';
+}
+
 const PHASE_STYLE = {
   active: { bg: '#DCFCE7', text: '#166534', label: 'Active now' },
   upcoming: { bg: '#DBEAFE', text: '#1D4ED8', label: 'Upcoming' },
   past: { bg: '#F1F5F9', text: '#64748B', label: 'Past' },
 } as const;
+
+function FilterRow({
+  value,
+  onChange,
+}: {
+  value: ListFilter;
+  onChange: (next: ListFilter) => void;
+}) {
+  return (
+    <View style={styles.kindRow}>
+      <Chip label="Upcoming" active={value === 'upcoming'} onPress={() => onChange('upcoming')} />
+      <Chip label="Past" active={value === 'past'} onPress={() => onChange('past')} />
+      <Chip label="All" active={value === 'all'} onPress={() => onChange('all')} />
+    </View>
+  );
+}
+
+function AddModal({
+  visible,
+  title,
+  onClose,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <Pressable style={styles.modalBackdrop} onPress={onClose} />
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Text style={styles.linkDanger}>Close</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 export function StaffAvailabilityScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'StaffAvailability'>>();
@@ -82,6 +140,7 @@ export function StaffAvailabilityScreen() {
   const { services } = useServices();
   const { schedules } = useStaffSchedule(staffId);
   const [tab, setTab] = useState<TabKey>('leave');
+  const [listFilter, setListFilter] = useState<ListFilter>('upcoming');
   const [leaves, setLeaves] = useState<StaffLeave[]>([]);
   const [special, setSpecial] = useState<StaffSpecialAvailability[]>([]);
   const [blocks, setBlocks] = useState<StaffSlotBlock[]>([]);
@@ -95,6 +154,7 @@ export function StaffAvailabilityScreen() {
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [leaveDays, setLeaveDays] = useState<string[]>(() => [todayIso()]);
   const [leaveKind, setLeaveKind] = useState<LeaveDayKind>('full_day');
+  const [halfDayPart, setHalfDayPart] = useState<HalfDayPart>('first');
   const [leaveReason, setLeaveReason] = useState('');
   const [specialStart, setSpecialStart] = useState(() => hoursFromNow(1));
   const [specialEnd, setSpecialEnd] = useState(() => hoursFromNow(4));
@@ -132,14 +192,51 @@ export function StaffAvailabilityScreen() {
     void reload().catch((err) => setError(getApiErrorMessage(err, 'Unable to load availability.')));
   }, [reload]);
 
-  const sortedLeaves = useMemo(() => {
-    return [...leaves].sort(
+  useEffect(() => {
+    setListFilter('upcoming');
+  }, [tab]);
+
+  const filteredLeaves = useMemo(() => {
+    const sorted = [...leaves].sort(
       (a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime(),
     );
-  }, [leaves]);
+    if (listFilter === 'all') return sorted;
+    return sorted.filter((leave) => {
+      const phase = leavePhase(leave.starts_at, leave.ends_at);
+      if (listFilter === 'past') return phase === 'past';
+      return phase !== 'past';
+    });
+  }, [leaves, listFilter]);
 
-  const upcomingLeaves = sortedLeaves.filter((leave) => leavePhase(leave.starts_at, leave.ends_at) !== 'past');
-  const pastLeaves = sortedLeaves.filter((leave) => leavePhase(leave.starts_at, leave.ends_at) === 'past');
+  const filteredSpecial = useMemo(() => {
+    const sorted = [...special].sort(
+      (a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime(),
+    );
+    if (listFilter === 'all') return sorted;
+    return sorted.filter((row) => {
+      const phase = leavePhase(row.starts_at, row.ends_at);
+      if (listFilter === 'past') return phase === 'past';
+      return phase !== 'past';
+    });
+  }, [special, listFilter]);
+
+  const filteredBlocks = useMemo(() => {
+    const sorted = [...blocks].sort((a, b) => b.date.localeCompare(a.date));
+    if (listFilter === 'all') return sorted;
+    return sorted.filter((block) => {
+      const phase = datePhase(block.date, block.end_time);
+      return listFilter === 'past' ? phase === 'past' : phase === 'upcoming';
+    });
+  }, [blocks, listFilter]);
+
+  const filteredEmergencies = useMemo(() => {
+    const sorted = [...emergencies].sort((a, b) => b.date.localeCompare(a.date));
+    if (listFilter === 'all') return sorted;
+    return sorted.filter((slot) => {
+      const phase = datePhase(slot.date, slot.end_time);
+      return listFilter === 'past' ? phase === 'past' : phase === 'upcoming';
+    });
+  }, [emergencies, listFilter]);
 
   const assignedIds = new Set(assignments.map((row) => row.service));
   const serviceOptions = services
@@ -157,6 +254,11 @@ export function StaffAvailabilityScreen() {
       setServiceId(serviceOptions[0]?.value ?? '');
     }
   }, [serviceId, serviceOptions]);
+
+  const halfPreview =
+    leaveKind === 'half_day' && leaveDays[0]
+      ? halfDayWindowLabel(leaveDays[0], halfDayPart, schedules)
+      : null;
 
   function deleteLeave(leave: StaffLeave) {
     Alert.alert('Remove leave', 'This will free those timeslots for booking again.', [
@@ -189,7 +291,7 @@ export function StaffAvailabilityScreen() {
           Bookings only succeed when the staff is on schedule, not on leave, and assigned to the service.
         </Text>
         <View style={styles.tabs}>
-          <Chip label={`Leave (${upcomingLeaves.length})`} active={tab === 'leave'} onPress={() => setTab('leave')} />
+          <Chip label={`Leave (${leaves.length})`} active={tab === 'leave'} onPress={() => setTab('leave')} />
           <Chip label={`Extra hours (${special.length})`} active={tab === 'extra'} onPress={() => setTab('extra')} />
           <Chip label={`Blocked (${blocks.length})`} active={tab === 'block'} onPress={() => setTab('block')} />
           <Chip
@@ -206,411 +308,181 @@ export function StaffAvailabilityScreen() {
       </Card>
 
       {tab === 'leave' ? (
-        <>
-          <Card elevated>
-            <View style={styles.sectionHeader}>
-              <View style={styles.flex}>
-                <Text style={styles.section}>Applied leave</Text>
-                <Text style={styles.help}>Active and upcoming leave blocks overlapping slots.</Text>
-              </View>
-              <Button
-                label={showLeaveForm ? 'Close' : 'Add'}
-                variant="outline"
-                onPress={() => setShowLeaveForm((value) => !value)}
-              />
+        <Card elevated>
+          <View style={styles.sectionHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.section}>Leave</Text>
+              <Text style={styles.help}>Active and upcoming leave blocks overlapping slots.</Text>
             </View>
-
-            {upcomingLeaves.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No leave applied</Text>
-                <Text style={styles.help}>This staff member is bookable within their weekly schedule.</Text>
-              </View>
-            ) : (
-              upcomingLeaves.map((leave) => {
-                const phase = leavePhase(leave.starts_at, leave.ends_at);
-                const tone = PHASE_STYLE[phase];
-                return (
-                  <View key={leave.id} style={styles.leaveCard}>
-                    <View style={styles.leaveTop}>
-                      <View style={[styles.phasePill, { backgroundColor: tone.bg }]}>
-                        <Text style={[styles.phaseText, { color: tone.text }]}>{tone.label}</Text>
-                      </View>
-                      <Text style={styles.leaveType}>{formatLeaveKind(leave.leave_type)}</Text>
+            <Button label="Add" variant="outline" onPress={() => setShowLeaveForm(true)} />
+          </View>
+          <FilterRow value={listFilter} onChange={setListFilter} />
+          {filteredLeaves.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>No leave in this filter</Text>
+              <Text style={styles.help}>Add leave or switch the filter above.</Text>
+            </View>
+          ) : (
+            filteredLeaves.map((leave) => {
+              const phase = leavePhase(leave.starts_at, leave.ends_at);
+              const tone = PHASE_STYLE[phase];
+              return (
+                <View key={leave.id} style={styles.leaveCard}>
+                  <View style={styles.leaveTop}>
+                    <View style={[styles.phasePill, { backgroundColor: tone.bg }]}>
+                      <Text style={[styles.phaseText, { color: tone.text }]}>{tone.label}</Text>
                     </View>
-                    <Text style={styles.leaveRange}>{formatRange(leave.starts_at, leave.ends_at)}</Text>
-                    {leave.reason ? <Text style={styles.leaveReason}>{leave.reason}</Text> : null}
-                    <View style={styles.leaveActions}>
-                      <Text style={styles.meta}>{leave.approved === false ? 'Pending approval' : 'Approved'}</Text>
-                      <Button label="Remove" variant="outline" onPress={() => deleteLeave(leave)} />
-                    </View>
+                    <Text style={styles.leaveType}>{formatLeaveKind(leave.leave_type)}</Text>
                   </View>
-                );
-              })
-            )}
-
-            {pastLeaves.length > 0 ? (
-              <View style={styles.pastBlock}>
-                <Text style={styles.pastHeading}>Past leave ({pastLeaves.length})</Text>
-                {pastLeaves.slice(0, 8).map((leave) => (
-                  <View key={leave.id} style={styles.pastRow}>
-                    <Text style={styles.pastText}>{formatRange(leave.starts_at, leave.ends_at)}</Text>
-                    <Pressable onPress={() => deleteLeave(leave)} hitSlop={8}>
-                      <Text style={styles.linkDanger}>Delete</Text>
-                    </Pressable>
+                  <Text style={styles.leaveRange}>{formatRange(leave.starts_at, leave.ends_at)}</Text>
+                  {leave.reason ? <Text style={styles.leaveReason}>{leave.reason}</Text> : null}
+                  <View style={styles.leaveActions}>
+                    <Text style={styles.meta}>{leave.approved === false ? 'Pending approval' : 'Approved'}</Text>
+                    <Button label="Remove" variant="outline" onPress={() => deleteLeave(leave)} />
                   </View>
-                ))}
-              </View>
-            ) : null}
-          </Card>
-
-          {showLeaveForm ? (
-            <FormSection
-              title="Add leave"
-              subtitle="Tap one or more days, then choose Half day or Full day."
-            >
-              <CalendarPicker
-                mode="multiple"
-                values={leaveDays}
-                onChangeValues={setLeaveDays}
-                allowPast={false}
-              />
-              <Text style={styles.selectedDays}>
-                {leaveDays.length === 0
-                  ? 'No days selected'
-                  : `${leaveDays.length} day${leaveDays.length === 1 ? '' : 's'} selected`}
-              </Text>
-              <View style={styles.kindRow}>
-                <Chip
-                  label="Half day"
-                  active={leaveKind === 'half_day'}
-                  onPress={() => setLeaveKind('half_day')}
-                />
-                <Chip
-                  label="Full day"
-                  active={leaveKind === 'full_day'}
-                  onPress={() => setLeaveKind('full_day')}
-                />
-              </View>
-              <Text style={styles.help}>
-                {leaveKind === 'half_day'
-                  ? 'Blocks the first half of the staff schedule for each selected day.'
-                  : 'Blocks the full scheduled shift for each selected day.'}
-              </Text>
-              <Input
-                label="Reason"
-                optional
-                value={leaveReason}
-                onChangeText={setLeaveReason}
-                placeholder="e.g. Family event"
-              />
-              <Button
-                label={leaveDays.length ? `Save leave (${leaveDays.length})` : 'Save leave'}
-                fullWidth
-                loading={busy}
-                disabled={leaveDays.length === 0}
-                onPress={() => {
-                  void (async () => {
-                    if (!client) return;
-                    if (leaveDays.length === 0) {
-                      setError('Select at least one day on the calendar.');
-                      return;
-                    }
-                    setBusy(true);
-                    setError(null);
-                    try {
-                      await Promise.all(
-                        leaveDays.map((day) => {
-                          const window = leaveWindowForDay(day, leaveKind, schedules);
-                          return client.bookings.staffLeaves.create({
-                            business: businessId ?? undefined,
-                            staff_id: staffId,
-                            starts_at: window.starts_at,
-                            ends_at: window.ends_at,
-                            leave_type: window.leave_type,
-                            reason: leaveReason.trim(),
-                            approved: true,
-                          });
-                        }),
-                      );
-                      setLeaveReason('');
-                      setLeaveDays([todayIso()]);
-                      setLeaveKind('full_day');
-                      setShowLeaveForm(false);
-                      await reload();
-                    } catch (err) {
-                      setError(getApiErrorMessage(err, 'Unable to add leave.'));
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              />
-            </FormSection>
-          ) : null}
-        </>
+                </View>
+              );
+            })
+          )}
+        </Card>
       ) : null}
 
       {tab === 'extra' ? (
-        <>
-          <Card elevated>
-            <View style={styles.sectionHeader}>
-              <View style={styles.flex}>
-                <Text style={styles.section}>Extra open hours</Text>
-                <Text style={styles.help}>One-off windows that override the weekly schedule for that day.</Text>
-              </View>
-              <Button
-                label={showSpecialForm ? 'Close' : 'Add'}
-                variant="outline"
-                onPress={() => setShowSpecialForm((value) => !value)}
-              />
+        <Card elevated>
+          <View style={styles.sectionHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.section}>Extra open hours</Text>
+              <Text style={styles.help}>One-off windows that override the weekly schedule for that day.</Text>
             </View>
-            {special.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No extra hours</Text>
-                <Text style={styles.help}>Add a window when staff can take bookings outside the normal week.</Text>
-              </View>
-            ) : (
-              special.map((row) => (
-                <View key={row.id} style={styles.leaveCard}>
-                  <Text style={styles.leaveRange}>{formatRange(row.starts_at, row.ends_at)}</Text>
-                  {row.reason ? <Text style={styles.leaveReason}>{row.reason}</Text> : null}
-                  <View style={styles.leaveActions}>
-                    <Text style={styles.meta}>Capacity {row.capacity ?? 1}</Text>
-                    <Button
-                      label="Remove"
-                      variant="outline"
-                      onPress={() => {
-                        void (async () => {
-                          if (!client) return;
-                          await client.bookings.staffSpecialAvailability.delete(row.id);
-                          await reload();
-                        })();
-                      }}
-                    />
-                  </View>
+            <Button label="Add" variant="outline" onPress={() => setShowSpecialForm(true)} />
+          </View>
+          <FilterRow value={listFilter} onChange={setListFilter} />
+          {filteredSpecial.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>No extra hours in this filter</Text>
+              <Text style={styles.help}>Add a window when staff can take bookings outside the normal week.</Text>
+            </View>
+          ) : (
+            filteredSpecial.map((row) => (
+              <View key={row.id} style={styles.leaveCard}>
+                <Text style={styles.leaveRange}>{formatRange(row.starts_at, row.ends_at)}</Text>
+                {row.reason ? <Text style={styles.leaveReason}>{row.reason}</Text> : null}
+                <View style={styles.leaveActions}>
+                  <Text style={styles.meta}>Capacity {row.capacity ?? 1}</Text>
+                  <Button
+                    label="Remove"
+                    variant="outline"
+                    onPress={() => {
+                      void (async () => {
+                        if (!client) return;
+                        await client.bookings.staffSpecialAvailability.delete(row.id);
+                        await reload();
+                      })();
+                    }}
+                  />
                 </View>
-              ))
-            )}
-          </Card>
-          {showSpecialForm ? (
-            <FormSection title="Add extra hours" subtitle="Choose a one-off window outside the weekly schedule.">
-              <DateTimeField label="Starts" required value={specialStart} onChange={setSpecialStart} />
-              <DateTimeField label="Ends" required value={specialEnd} onChange={setSpecialEnd} />
-              <Button
-                label="Save window"
-                fullWidth
-                loading={busy}
-                onPress={() => {
-                  void (async () => {
-                    if (!client) return;
-                    if (specialEnd <= specialStart) {
-                      setError('End must be after start.');
-                      return;
-                    }
-                    setBusy(true);
-                    setError(null);
-                    try {
-                      await client.bookings.staffSpecialAvailability.create({
-                        business: businessId ?? undefined,
-                        staff_id: staffId,
-                        starts_at: specialStart.toISOString(),
-                        ends_at: specialEnd.toISOString(),
-                        capacity: 1,
-                      });
-                      setShowSpecialForm(false);
-                      await reload();
-                    } catch (err) {
-                      setError(getApiErrorMessage(err, 'Unable to add special availability.'));
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              />
-            </FormSection>
-          ) : null}
-        </>
+              </View>
+            ))
+          )}
+        </Card>
       ) : null}
 
       {tab === 'block' ? (
-        <>
-          <Card elevated>
-            <View style={styles.sectionHeader}>
-              <View style={styles.flex}>
-                <Text style={styles.section}>Blocked slots</Text>
-                <Text style={styles.help}>Remove a specific available window so customers cannot book it.</Text>
-              </View>
-              <Button
-                label={showBlockForm ? 'Close' : 'Block'}
-                variant="outline"
-                onPress={() => setShowBlockForm((value) => !value)}
-              />
+        <Card elevated>
+          <View style={styles.sectionHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.section}>Blocked slots</Text>
+              <Text style={styles.help}>Remove a specific available window so customers cannot book it.</Text>
             </View>
-            {blocks.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No blocked slots</Text>
-                <Text style={styles.help}>Weekly schedule slots remain bookable unless blocked here.</Text>
-              </View>
-            ) : (
-              blocks.map((block) => (
-                <View key={block.id} style={styles.leaveCard}>
-                  <Text style={styles.leaveRange}>
-                    {block.date} · {block.start_time} – {block.end_time}
-                  </Text>
-                  {block.reason ? <Text style={styles.leaveReason}>{block.reason}</Text> : null}
-                  <View style={styles.leaveActions}>
-                    <Text style={styles.meta}>Blocked</Text>
-                    <Button
-                      label="Remove"
-                      variant="outline"
-                      onPress={() => {
-                        void (async () => {
-                          if (!client) return;
-                          setBusy(true);
-                          try {
-                            await client.bookings.staffSlotBlocks.delete(block.id);
-                            await reload();
-                          } catch (err) {
-                            setError(getApiErrorMessage(err, 'Unable to remove block.'));
-                          } finally {
-                            setBusy(false);
-                          }
-                        })();
-                      }}
-                    />
-                  </View>
+            <Button label="Block" variant="outline" onPress={() => setShowBlockForm(true)} />
+          </View>
+          <FilterRow value={listFilter} onChange={setListFilter} />
+          {filteredBlocks.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>No blocked slots in this filter</Text>
+              <Text style={styles.help}>Weekly schedule slots remain bookable unless blocked here.</Text>
+            </View>
+          ) : (
+            filteredBlocks.map((block) => (
+              <View key={block.id} style={styles.leaveCard}>
+                <Text style={styles.leaveRange}>
+                  {block.date} · {block.start_time} – {block.end_time}
+                </Text>
+                {block.reason ? <Text style={styles.leaveReason}>{block.reason}</Text> : null}
+                <View style={styles.leaveActions}>
+                  <Text style={styles.meta}>Blocked</Text>
+                  <Button
+                    label="Remove"
+                    variant="outline"
+                    onPress={() => {
+                      void (async () => {
+                        if (!client) return;
+                        setBusy(true);
+                        try {
+                          await client.bookings.staffSlotBlocks.delete(block.id);
+                          await reload();
+                        } catch (err) {
+                          setError(getApiErrorMessage(err, 'Unable to remove block.'));
+                        } finally {
+                          setBusy(false);
+                        }
+                      })();
+                    }}
+                  />
                 </View>
-              ))
-            )}
-          </Card>
-          {showBlockForm ? (
-            <FormSection title="Block a slot" subtitle="Customers cannot book this exact window.">
-              <DateField label="Date" required value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
-              <TimeField label="Start" required value={slotStart} onChange={setSlotStart} />
-              <TimeField label="End" required value={slotEnd} onChange={setSlotEnd} />
-              <Input label="Reason" optional value={slotReason} onChangeText={setSlotReason} />
-              <Button
-                label="Save block"
-                fullWidth
-                loading={busy}
-                onPress={() => {
-                  void (async () => {
-                    if (!client || !businessId) return;
-                    setBusy(true);
-                    try {
-                      await client.bookings.staffSlotBlocks.create({
-                        business: businessId,
-                        staff_id: staffId,
-                        date: slotDate,
-                        start_time: slotStart,
-                        end_time: slotEnd,
-                        reason: slotReason || undefined,
-                      });
-                      setShowBlockForm(false);
-                      setSlotReason('');
-                      await reload();
-                    } catch (err) {
-                      setError(getApiErrorMessage(err, 'Unable to block slot.'));
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              />
-            </FormSection>
-          ) : null}
-        </>
+              </View>
+            ))
+          )}
+        </Card>
       ) : null}
 
       {tab === 'emergency' ? (
-        <>
-          <Card elevated>
-            <View style={styles.sectionHeader}>
-              <View style={styles.flex}>
-                <Text style={styles.section}>Emergency open slots</Text>
-                <Text style={styles.help}>Add a one-off open window on top of the weekly schedule.</Text>
-              </View>
-              <Button
-                label={showEmergencyForm ? 'Close' : 'Add'}
-                variant="outline"
-                onPress={() => setShowEmergencyForm((value) => !value)}
-              />
+        <Card elevated>
+          <View style={styles.sectionHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.section}>Emergency open slots</Text>
+              <Text style={styles.help}>Add a one-off open window on top of the weekly schedule.</Text>
             </View>
-            {emergencies.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No emergency slots</Text>
-                <Text style={styles.help}>Use this when you need an extra open window without replacing the day.</Text>
-              </View>
-            ) : (
-              emergencies.map((slot) => (
-                <View key={slot.id} style={styles.leaveCard}>
-                  <Text style={styles.leaveRange}>
-                    {slot.date} · {slot.start_time} – {slot.end_time}
-                  </Text>
-                  {slot.reason ? <Text style={styles.leaveReason}>{slot.reason}</Text> : null}
-                  <View style={styles.leaveActions}>
-                    <Text style={styles.meta}>Open</Text>
-                    <Button
-                      label="Remove"
-                      variant="outline"
-                      onPress={() => {
-                        void (async () => {
-                          if (!client) return;
-                          setBusy(true);
-                          try {
-                            await client.bookings.staffEmergencySlots.delete(slot.id);
-                            await reload();
-                          } catch (err) {
-                            setError(getApiErrorMessage(err, 'Unable to remove emergency slot.'));
-                          } finally {
-                            setBusy(false);
-                          }
-                        })();
-                      }}
-                    />
-                  </View>
+            <Button label="Add" variant="outline" onPress={() => setShowEmergencyForm(true)} />
+          </View>
+          <FilterRow value={listFilter} onChange={setListFilter} />
+          {filteredEmergencies.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>No emergency slots in this filter</Text>
+              <Text style={styles.help}>Use this when you need an extra open window without replacing the day.</Text>
+            </View>
+          ) : (
+            filteredEmergencies.map((slot) => (
+              <View key={slot.id} style={styles.leaveCard}>
+                <Text style={styles.leaveRange}>
+                  {slot.date} · {slot.start_time} – {slot.end_time}
+                </Text>
+                {slot.reason ? <Text style={styles.leaveReason}>{slot.reason}</Text> : null}
+                <View style={styles.leaveActions}>
+                  <Text style={styles.meta}>Open</Text>
+                  <Button
+                    label="Remove"
+                    variant="outline"
+                    onPress={() => {
+                      void (async () => {
+                        if (!client) return;
+                        setBusy(true);
+                        try {
+                          await client.bookings.staffEmergencySlots.delete(slot.id);
+                          await reload();
+                        } catch (err) {
+                          setError(getApiErrorMessage(err, 'Unable to remove emergency slot.'));
+                        } finally {
+                          setBusy(false);
+                        }
+                      })();
+                    }}
+                  />
                 </View>
-              ))
-            )}
-          </Card>
-          {showEmergencyForm ? (
-            <FormSection title="Add emergency open" subtitle="Adds bookable time without replacing the weekly day.">
-              <DateField label="Date" required value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
-              <TimeField label="Start" required value={slotStart} onChange={setSlotStart} />
-              <TimeField label="End" required value={slotEnd} onChange={setSlotEnd} />
-              <Input label="Reason" optional value={slotReason} onChangeText={setSlotReason} />
-              <Button
-                label="Save emergency slot"
-                fullWidth
-                loading={busy}
-                onPress={() => {
-                  void (async () => {
-                    if (!client || !businessId) return;
-                    setBusy(true);
-                    try {
-                      await client.bookings.staffEmergencySlots.create({
-                        business: businessId,
-                        staff_id: staffId,
-                        date: slotDate,
-                        start_time: slotStart,
-                        end_time: slotEnd,
-                        capacity: 1,
-                        reason: slotReason || undefined,
-                      });
-                      setShowEmergencyForm(false);
-                      setSlotReason('');
-                      await reload();
-                    } catch (err) {
-                      setError(getApiErrorMessage(err, 'Unable to add emergency slot.'));
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              />
-            </FormSection>
-          ) : null}
-        </>
+              </View>
+            ))
+          )}
+        </Card>
       ) : null}
 
       {tab === 'services' ? (
@@ -693,6 +565,204 @@ export function StaffAvailabilityScreen() {
         </Card>
       ) : null}
 
+      <AddModal visible={showLeaveForm} title="Add leave" onClose={() => setShowLeaveForm(false)}>
+        <Text style={styles.help}>Tap one or more days, then choose Half day or Full day.</Text>
+        <CalendarPicker mode="multiple" values={leaveDays} onChangeValues={setLeaveDays} allowPast={false} />
+        <Text style={styles.selectedDays}>
+          {leaveDays.length === 0
+            ? 'No days selected'
+            : `${leaveDays.length} day${leaveDays.length === 1 ? '' : 's'} selected`}
+        </Text>
+        <View style={styles.kindRow}>
+          <Chip label="Half day" active={leaveKind === 'half_day'} onPress={() => setLeaveKind('half_day')} />
+          <Chip label="Full day" active={leaveKind === 'full_day'} onPress={() => setLeaveKind('full_day')} />
+        </View>
+        {leaveKind === 'half_day' ? (
+          <>
+            <View style={styles.kindRow}>
+              <Chip
+                label="First half"
+                active={halfDayPart === 'first'}
+                onPress={() => setHalfDayPart('first')}
+              />
+              <Chip
+                label="Second half"
+                active={halfDayPart === 'second'}
+                onPress={() => setHalfDayPart('second')}
+              />
+            </View>
+            <Text style={styles.help}>
+              {halfPreview
+                ? `Blocks ${halfPreview} for each selected day (from the staff schedule).`
+                : 'Blocks half of the staff schedule for each selected day.'}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.help}>Blocks the full scheduled shift for each selected day.</Text>
+        )}
+        <Input
+          label="Reason"
+          optional
+          value={leaveReason}
+          onChangeText={setLeaveReason}
+          placeholder="e.g. Family event"
+        />
+        <Button
+          label={leaveDays.length ? `Save leave (${leaveDays.length})` : 'Save leave'}
+          fullWidth
+          loading={busy}
+          disabled={leaveDays.length === 0}
+          onPress={() => {
+            void (async () => {
+              if (!client) return;
+              if (leaveDays.length === 0) {
+                setError('Select at least one day on the calendar.');
+                return;
+              }
+              setBusy(true);
+              setError(null);
+              try {
+                await Promise.all(
+                  leaveDays.map((day) => {
+                    const window = leaveWindowForDay(day, leaveKind, schedules, halfDayPart);
+                    return client.bookings.staffLeaves.create({
+                      business: businessId ?? undefined,
+                      staff_id: staffId,
+                      starts_at: window.starts_at,
+                      ends_at: window.ends_at,
+                      leave_type: window.leave_type,
+                      reason: leaveReason.trim(),
+                      approved: true,
+                    });
+                  }),
+                );
+                setLeaveReason('');
+                setLeaveDays([todayIso()]);
+                setLeaveKind('full_day');
+                setHalfDayPart('first');
+                setShowLeaveForm(false);
+                await reload();
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to add leave.'));
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        />
+      </AddModal>
+
+      <AddModal visible={showSpecialForm} title="Add extra hours" onClose={() => setShowSpecialForm(false)}>
+        <DateTimeField label="Starts" required value={specialStart} onChange={setSpecialStart} />
+        <DateTimeField label="Ends" required value={specialEnd} onChange={setSpecialEnd} />
+        <Button
+          label="Save window"
+          fullWidth
+          loading={busy}
+          onPress={() => {
+            void (async () => {
+              if (!client) return;
+              if (specialEnd <= specialStart) {
+                setError('End must be after start.');
+                return;
+              }
+              setBusy(true);
+              setError(null);
+              try {
+                await client.bookings.staffSpecialAvailability.create({
+                  business: businessId ?? undefined,
+                  staff_id: staffId,
+                  starts_at: specialStart.toISOString(),
+                  ends_at: specialEnd.toISOString(),
+                  capacity: 1,
+                });
+                setShowSpecialForm(false);
+                await reload();
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to add special availability.'));
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        />
+      </AddModal>
+
+      <AddModal visible={showBlockForm} title="Block a slot" onClose={() => setShowBlockForm(false)}>
+        <DateField label="Date" required value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
+        <TimeField label="Start" required value={slotStart} onChange={setSlotStart} />
+        <TimeField label="End" required value={slotEnd} onChange={setSlotEnd} />
+        <Input label="Reason" optional value={slotReason} onChangeText={setSlotReason} />
+        <Button
+          label="Save block"
+          fullWidth
+          loading={busy}
+          onPress={() => {
+            void (async () => {
+              if (!client || !businessId) return;
+              setBusy(true);
+              try {
+                await client.bookings.staffSlotBlocks.create({
+                  business: businessId,
+                  staff_id: staffId,
+                  date: slotDate,
+                  start_time: slotStart,
+                  end_time: slotEnd,
+                  reason: slotReason || undefined,
+                });
+                setShowBlockForm(false);
+                setSlotReason('');
+                await reload();
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to block slot.'));
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        />
+      </AddModal>
+
+      <AddModal
+        visible={showEmergencyForm}
+        title="Add emergency open"
+        onClose={() => setShowEmergencyForm(false)}
+      >
+        <DateField label="Date" required value={slotDate} onChange={setSlotDate} allowClear={false} allowPast={false} />
+        <TimeField label="Start" required value={slotStart} onChange={setSlotStart} />
+        <TimeField label="End" required value={slotEnd} onChange={setSlotEnd} />
+        <Input label="Reason" optional value={slotReason} onChangeText={setSlotReason} />
+        <Button
+          label="Save emergency slot"
+          fullWidth
+          loading={busy}
+          onPress={() => {
+            void (async () => {
+              if (!client || !businessId) return;
+              setBusy(true);
+              try {
+                await client.bookings.staffEmergencySlots.create({
+                  business: businessId,
+                  staff_id: staffId,
+                  date: slotDate,
+                  start_time: slotStart,
+                  end_time: slotEnd,
+                  capacity: 1,
+                  reason: slotReason || undefined,
+                });
+                setShowEmergencyForm(false);
+                setSlotReason('');
+                await reload();
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to add emergency slot.'));
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        />
+      </AddModal>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </FormScreen>
   );
@@ -735,18 +805,25 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   meta: { ...typography.caption, color: colors.mutedForeground },
-  pastBlock: { marginTop: spacing.lg, gap: spacing.sm },
-  pastHeading: { ...typography.label, color: colors.mutedForeground, fontWeight: '700' },
-  pastRow: {
+  linkDanger: { ...typography.caption, color: colors.destructive, fontWeight: '600' },
+  error: { ...typography.caption, color: colors.destructive, marginTop: spacing.sm },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.45)' },
+  modalSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '88%',
+    paddingBottom: spacing.xl,
+  },
+  modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
   },
-  pastText: { ...typography.caption, color: colors.mutedForeground, flex: 1 },
-  linkDanger: { ...typography.caption, color: colors.destructive, fontWeight: '600' },
-  error: { ...typography.caption, color: colors.destructive, marginTop: spacing.sm },
+  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.foreground },
+  modalBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.sm },
 });

@@ -7,34 +7,31 @@ type Props = React.InputHTMLAttributes<HTMLInputElement> & {
 };
 
 export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
-  { label, required, error, style, id, ...rest },
+  { label, required, error, style, id, className, ...rest },
   ref,
 ) {
   const inputId = id ?? rest.name;
   return (
-    <label style={{ display: 'block', marginBottom: 12, minWidth: 0 }} htmlFor={inputId}>
-      {label && (
-        <div style={{ marginBottom: 6, fontSize: 13, color: 'var(--foreground)' }}>
+    <label className="ui-field" htmlFor={inputId}>
+      {label ? (
+        <span className="ui-field-label">
           {label}
-          {required ? <span aria-hidden="true" style={{ color: '#dc2626' }}> *</span> : null}
-        </div>
-      )}
+          {required ? (
+            <span className="ui-field-required" aria-hidden="true">
+              {' '}
+              *
+            </span>
+          ) : null}
+        </span>
+      ) : null}
       <input
         id={inputId}
         ref={ref}
+        className={['ui-control', error ? 'is-error' : '', className].filter(Boolean).join(' ')}
         {...rest}
         required={required}
         aria-invalid={Boolean(error) || rest['aria-invalid']}
-        style={{
-          width: '100%',
-          padding: '10px 12px',
-          borderRadius: 6,
-          border: `1px solid ${error ? '#dc2626' : 'var(--border)'}`,
-          fontSize: 14,
-          outline: 'none',
-          boxSizing: 'border-box',
-          ...(style as React.CSSProperties),
-        }}
+        style={style}
       />
       {error ? (
         <span role="alert" className="field-error">

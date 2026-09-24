@@ -20,6 +20,7 @@ import { CustomerBorrowPanel } from './CustomerBorrowPanel';
 
 type AddressFormState = {
   full_address: string;
+  line2: string;
   city: string;
   state: string;
   country: string;
@@ -47,6 +48,7 @@ export function CustomerDetailPage() {
   });
   const [addressForm, setAddressForm] = useState<AddressFormState>({
     full_address: '',
+    line2: '',
     city: '',
     state: '',
     country: '',
@@ -66,6 +68,7 @@ export function CustomerDetailPage() {
     });
     setAddressForm({
       full_address: customer.full_address ?? customer.address?.full_address ?? customer.address?.line1 ?? '',
+      line2: customer.address?.line2 ?? '',
       city: customer.address?.city ?? '',
       state: customer.address?.state ?? '',
       country: customer.address?.country ?? '',
@@ -158,7 +161,19 @@ export function CustomerDetailPage() {
 
               <div style={{ display: 'grid', gap: 12 }}>
                 <p style={{ margin: 0, color: '#6b7280' }}>Address</p>
-                <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{customerQuery.data.full_address ?? '—'}</p>
+                <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {[
+                    customerQuery.data.full_address,
+                    [customerQuery.data.address?.city, customerQuery.data.address?.state]
+                      .filter(Boolean)
+                      .join(', '),
+                    customerQuery.data.address?.postal_code,
+                    customerQuery.data.address?.country,
+                  ]
+                    .map((part) => String(part || '').trim())
+                    .filter(Boolean)
+                    .join('\n') || '—'}
+                </p>
                 <AddressMapPreview latitude={customerQuery.data.latitude} longitude={customerQuery.data.longitude} />
               </div>
 
@@ -210,6 +225,7 @@ export function CustomerDetailPage() {
                   ...(showGstFields ? { gstin: resolvedGstin || undefined } : {}),
                   default_address: {
                     full_address: addressForm.full_address,
+                    line2: addressForm.line2,
                     city: addressForm.city,
                     state: addressForm.state,
                     country: addressForm.country,
@@ -279,16 +295,29 @@ export function CustomerDetailPage() {
               longitude={addressForm.longitude}
               onChangeText={(full_address) => setAddressForm((current) => ({ ...current, full_address }))}
               onPlaceSelected={(place) => {
-                setAddressForm({
+                const cleared =
+                  !place.line1 &&
+                  !place.formattedAddress &&
+                  place.latitude == null &&
+                  place.longitude == null;
+                setAddressForm((current) => ({
+                  ...current,
                   full_address: place.formattedAddress,
+                  line2: cleared ? '' : current.line2,
                   city: place.city || '',
                   state: place.state || '',
                   country: place.country || '',
                   postal_code: place.postalCode || '',
                   latitude: place.latitude ?? null,
                   longitude: place.longitude ?? null,
-                });
+                }));
               }}
+            />
+            <input
+              value={addressForm.line2}
+              onChange={(event) => setAddressForm((current) => ({ ...current, line2: event.target.value }))}
+              placeholder="Flat, floor, building or landmark"
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
             />
             <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
               {(['city', 'state', 'country', 'postal_code'] as const).map((field) => (

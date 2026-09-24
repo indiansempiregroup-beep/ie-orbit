@@ -11,6 +11,7 @@ import { OpsHeader, OpsHeaderIconButton } from '../../components/OpsHeader';
 import { SoftLockBanner } from '../../components/SoftLockBanner';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { DesktopContent } from '../../components/DesktopContent';
+import { AssistantFab } from '../../components/AssistantFab';
 import { StatTile } from '../../components/ui/StatTile';
 import { TileGrid } from '../../components/ui/TileGrid';
 import { Button } from '../../components/ui/Button';
@@ -78,6 +79,7 @@ export function DashboardScreen() {
   const showBooksHub = shopieEnabled && hasAny(SHOPIE_BOOKS_FEATURES);
   const showOrders = shopieEnabled && has(PlanFeature.shopieOrders);
   const showReturns = shopieEnabled && has(PlanFeature.shopieReturns);
+  const showAssistant = has(PlanFeature.shopieAiAssistant) || has(PlanFeature.appointieAiAssistant);
   const showCashTiles = shopieEnabled && has(PlanFeature.shopieBooksCash);
   const showPartyTiles = shopieEnabled && has(PlanFeature.shopieBooksParties);
   const { orders: shopOrders, loading: ordersLoading, reload: reloadOrders } = useShopOrders(showOrders);
@@ -423,6 +425,9 @@ export function DashboardScreen() {
                     {has(PlanFeature.appointieCustomers) || shopieEnabled ? (
                       <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
                     ) : null}
+                    {showAssistant ? (
+                      <QuickAction icon="message-circle" label="Assistant" onPress={() => navigation.navigate('Assistant')} />
+                    ) : null}
                     {hasAppointie && has(PlanFeature.appointieServices) ? (
                       <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
                     ) : null}
@@ -478,9 +483,24 @@ export function DashboardScreen() {
         </View>
       </RefreshableScrollView>
 
-      {showFab ? (
+      {showAssistant ? (
+        <AssistantFab
+          onPress={() => navigation.navigate('Assistant')}
+          style={[
+            styles.assistantFab,
+            {
+              bottom: isDesktop
+                ? spacing.xxl
+                : contentInset + (showFab ? 68 : 0),
+              right: isDesktop ? spacing.xxl : spacing.xl,
+            },
+          ]}
+        />
+      ) : null}
+
+      {showFab && !isDesktop ? (
         <Pressable
-          style={[styles.fab, { bottom: contentInset }, isDesktop && styles.fabDesktop]}
+          style={[styles.fab, { bottom: contentInset, right: spacing.xl }]}
           onPress={onFabPress}
           accessibilityLabel={fabNeedsMenu ? 'Create booking or sale' : hasAppointie ? 'New booking' : 'New sale'}
         >
@@ -659,10 +679,12 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.92 },
   quickLabel: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.foreground },
+  assistantFab: {
+    position: 'absolute',
+    zIndex: 20,
+  },
   fab: {
     position: 'absolute',
-    right: spacing.xl,
-    bottom: spacing.xl,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -674,9 +696,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
-  },
-  fabDesktop: {
-    display: 'none',
+    zIndex: 19,
   },
   fabBackdrop: {
     flex: 1,

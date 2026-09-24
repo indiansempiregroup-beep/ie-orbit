@@ -113,6 +113,7 @@ class OrderService:
         coupon_code: str = "",
         points_to_redeem: int = 0,
         metadata_extra: dict[str, Any] | None = None,
+        delivery_address_line2: str = "",
     ) -> ShopOrder:
         if not lines:
             raise ValidationError({"lines": "At least one line item is required."})
@@ -141,6 +142,19 @@ class OrderService:
                     {"delivery_method": "Choose standard or instant delivery."}
                 )
             metadata["delivery_method"] = selected_delivery_method
+            if delivery_city:
+                metadata["delivery_city"] = str(delivery_city).strip()
+            if delivery_state:
+                metadata["delivery_state"] = str(delivery_state).strip()
+            if delivery_postal_code:
+                metadata["delivery_postal_code"] = str(delivery_postal_code).strip()
+            door_detail = str(delivery_address_line2 or "").strip()
+            if door_detail:
+                metadata["delivery_address_line2"] = door_detail
+            if delivery_latitude not in (None, ""):
+                metadata["delivery_latitude"] = str(delivery_latitude)
+            if delivery_longitude not in (None, ""):
+                metadata["delivery_longitude"] = str(delivery_longitude)
             if selected_delivery_method == DELIVERY_METHOD_INSTANT:
                 if not live_delivery_enabled:
                     raise ValidationError(
@@ -507,6 +521,7 @@ class OrderService:
                     "latitude": delivery_latitude,
                     "longitude": delivery_longitude,
                     "address": delivery_address,
+                    "address_2": str(delivery_address_line2 or "").strip(),
                     "city": delivery_city,
                     "state": delivery_state,
                     "postal_code": delivery_postal_code,

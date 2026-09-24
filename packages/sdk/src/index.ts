@@ -1673,6 +1673,14 @@ export type PlatformSmartLookupSettings = {
   };
 };
 
+export type PlatformAssistantSettings = {
+  enabled: boolean;
+  message_price_paise: number;
+  confirm_price_paise: number;
+  suggested_top_up_paise: number[];
+  suggested_top_up_inr: number[];
+};
+
 export type PlatformWhatsAppCatalogEntry = {
   event_type: string;
   title: string;
@@ -2066,6 +2074,7 @@ export type Business = {
   primary_contact?: string | null;
   website?: string | null;
   address_line1?: string | null;
+  address_line2?: string | null;
   city?: string | null;
   state?: string | null;
   postal_code?: string | null;
@@ -2094,6 +2103,7 @@ export type BusinessCreateInput = {
   city?: string;
   postal_code?: string;
   address_line1?: string;
+  address_line2?: string;
   latitude?: number | null;
   longitude?: number | null;
   primary_contact?: string;
@@ -3559,6 +3569,7 @@ export type BusinessUpdateInput = Partial<
   city?: string;
   postal_code?: string;
   address_line1?: string;
+  address_line2?: string;
   latitude?: number | null;
   longitude?: number | null;
   primary_contact?: string;
@@ -3720,6 +3731,7 @@ export type CustomerCreateInput = {
   referral_code?: string;
   default_address?: {
     line1?: string;
+    line2?: string;
     full_address?: string;
     city?: string;
     state?: string;
@@ -3993,6 +4005,136 @@ export type StaffCreateInput = {
 };
 
 export type StaffUpdateInput = Partial<StaffCreateInput>;
+
+export type AssistantEntityLink = {
+  kind: string;
+  id: string;
+  label: string;
+  subtitle?: string;
+  order_id?: string;
+  action?: 'preview' | 'open' | 'select' | string;
+  select_text?: string;
+  badge?: string;
+};
+
+export type AssistantUsage = {
+  usage_date: string;
+  message_count: number;
+  confirm_count: number;
+  message_limit: number;
+  confirm_limit: number;
+  messages_remaining: number;
+  confirms_remaining: number;
+  balance_paise?: number;
+  balance_inr?: number;
+  overage_enabled?: boolean;
+  message_price_paise?: number;
+  confirm_price_paise?: number;
+  suggested_top_up_paise?: number[];
+  suggested_top_up_inr?: number[];
+  can_send?: boolean;
+  can_confirm?: boolean;
+  using_prepaid_messages?: boolean;
+  using_prepaid_confirms?: boolean;
+};
+
+export type AssistantWallet = {
+  balance_paise: number;
+  balance_inr: number;
+  overage_enabled: boolean;
+  message_price_paise: number;
+  confirm_price_paise: number;
+  suggested_top_up_paise: number[];
+  suggested_top_up_inr: number[];
+};
+
+export type AssistantWalletLedgerEntry = {
+  id: string;
+  source: string;
+  entry_type: 'credit' | 'debit' | 'other' | string;
+  charged_paise: number;
+  charged_inr: number;
+  balance_after_paise?: number | null;
+  balance_after_inr?: number | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AssistantWalletHistory = {
+  page: number;
+  page_size: number;
+  total: number;
+  results: AssistantWalletLedgerEntry[];
+};
+
+export type AssistantTopUpSession = {
+  session_id: string;
+  order_id: string;
+  amount: number;
+  currency: string;
+  product_code: string;
+  plan_code: string;
+  upi_vpa: string;
+  upi_pay_url: string;
+  payment_qr_url?: string;
+  payment_status: string;
+  claim_intent: string;
+  kind: string;
+  expires_at: string;
+};
+
+export type AssistantProposedAction = {
+  id: string;
+  action_type: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  status: string;
+  result?: Record<string, unknown>;
+};
+
+export type AssistantMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | string;
+  content: string;
+  metadata?: {
+    links?: AssistantEntityLink[];
+    suggestions?: string[];
+    brain?: string;
+    [key: string]: unknown;
+  };
+  created_at: string;
+  proposed_action?: AssistantProposedAction | null;
+};
+
+export type AssistantThread = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages?: AssistantMessage[];
+};
+
+export type AssistantAccess = {
+  enabled: boolean;
+  mart_enabled: boolean;
+  appoint_enabled: boolean;
+  suggestions: string[];
+  usage?: AssistantUsage | null;
+};
+
+export type AssistantPostMessageResult = {
+  user_message: AssistantMessage;
+  assistant_message: AssistantMessage;
+  proposed_action?: AssistantProposedAction | null;
+  suggestions: string[];
+  usage: AssistantUsage;
+};
+
+export type AssistantActionResult = {
+  proposed_action: AssistantProposedAction;
+  assistant_message: AssistantMessage;
+  usage: AssistantUsage;
+};
 
 export type Notification = {
   id: string;
@@ -4837,6 +4979,33 @@ class ApiClient {
     delete: (notificationId: string) => this.request<null>(`/notifications/${notificationId}`, { method: 'DELETE' }),
   };
 
+  assistant = {
+    access: () => this.request<AssistantAccess>('/assistant/access', { method: 'GET' }),
+    usage: () => this.request<AssistantUsage>('/assistant/usage', { method: 'GET' }),
+    wallet: () => this.request<AssistantWallet>('/assistant/wallet', { method: 'GET' }),
+    createWalletTopUp: (body: { amount_paise: number }) =>
+      this.request<AssistantTopUpSession>('/assistant/wallet/top-up', { method: 'POST', body }),
+    walletHistory: (query?: { page?: number; page_size?: number }) =>
+      this.request<AssistantWalletHistory>('/assistant/wallet/history', { method: 'GET', query }),
+    listThreads: () => this.request<{ threads: AssistantThread[] }>('/assistant/threads', { method: 'GET' }),
+    createThread: () => this.request<AssistantThread>('/assistant/threads', { method: 'POST' }),
+    getThread: (threadId: string) =>
+      this.request<AssistantThread>(`/assistant/threads/${threadId}`, { method: 'GET' }),
+    postMessage: (threadId: string, body: { text: string }) =>
+      this.request<AssistantPostMessageResult>(`/assistant/threads/${threadId}/messages`, {
+        method: 'POST',
+        body,
+      }),
+    confirmAction: (actionId: string) =>
+      this.request<AssistantActionResult>(`/assistant/proposed-actions/${actionId}/confirm`, {
+        method: 'POST',
+      }),
+    cancelAction: (actionId: string) =>
+      this.request<AssistantActionResult>(`/assistant/proposed-actions/${actionId}/cancel`, {
+        method: 'POST',
+      }),
+  };
+
   analytics = {
     summary: (query?: Record<string, string | number | boolean | undefined | null>) =>
       this.request<AnalyticsSummary>('/analytics/summary', { method: 'GET', query }),
@@ -5140,6 +5309,15 @@ class ApiClient {
       suggested_top_up_paise: number[];
       reason: string;
     }) => this.request<PlatformSmartLookupSettings>('/platform/smart-lookup-settings', { method: 'PUT', body }),
+    assistantSettings: () =>
+      this.request<PlatformAssistantSettings>('/platform/assistant-settings', { method: 'GET' }),
+    updateAssistantSettings: (body: {
+      enabled: boolean;
+      message_price_paise: number;
+      confirm_price_paise: number;
+      suggested_top_up_paise: number[];
+      reason: string;
+    }) => this.request<PlatformAssistantSettings>('/platform/assistant-settings', { method: 'PUT', body }),
     refreshSmartLookupFx: (body?: { reason?: string }) =>
       this.request<PlatformSmartLookupSettings>('/platform/smart-lookup-settings/refresh-fx', {
         method: 'POST',
@@ -5474,6 +5652,7 @@ class ApiClient {
         phone_number?: string;
         full_address?: string;
         line1?: string;
+        line2?: string;
         city?: string;
         state?: string;
         country?: string;
@@ -5570,6 +5749,7 @@ class ApiClient {
       preferred_time?: string;
       fulfillment_note?: string;
       delivery_address?: string;
+      delivery_address_line2?: string;
       delivery_city?: string;
       delivery_state?: string;
       delivery_postal_code?: string;

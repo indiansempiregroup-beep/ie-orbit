@@ -227,9 +227,22 @@ class ShiprocketStandardService:
             },
             "drop": {
                 "address": order.delivery_address,
-                "city": str(metadata.get("delivery_city") or ""),
-                "state": str(metadata.get("delivery_state") or ""),
-                "postal_code": str(metadata.get("delivery_postal_code") or ""),
+                "address_2": str(metadata.get("delivery_address_line2") or ""),
+                "city": str(
+                    metadata.get("delivery_city")
+                    or (metadata.get("delivery") or {}).get("drop", {}).get("city")
+                    or ""
+                ),
+                "state": str(
+                    metadata.get("delivery_state")
+                    or (metadata.get("delivery") or {}).get("drop", {}).get("state")
+                    or ""
+                ),
+                "postal_code": str(
+                    metadata.get("delivery_postal_code")
+                    or (metadata.get("delivery") or {}).get("drop", {}).get("postal_code")
+                    or ""
+                ),
                 "contact": {
                     "name": getattr(customer, "display_name", "") if customer else "",
                     "phone": resolve_customer_phone(customer) if customer else "",

@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.billing",
     "apps.audit",
+    "apps.assistant",
     "apps.platform_admin",
     "apps.api",
 ]

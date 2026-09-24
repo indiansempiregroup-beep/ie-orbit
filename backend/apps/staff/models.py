@@ -108,7 +108,17 @@ class Staff(TenantModel):
             models.UniqueConstraint(
                 fields=["tenant", "business", "staff_code"],
                 name="uq_staff_tenant_business_code",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "business", "email"],
+                condition=~models.Q(email=""),
+                name="uq_staff_tenant_business_email",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "business", "user"],
+                condition=models.Q(user__isnull=False),
+                name="uq_staff_tenant_business_user",
+            ),
         ]
 
     def __str__(self) -> str:

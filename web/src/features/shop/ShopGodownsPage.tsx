@@ -22,6 +22,7 @@ const emptyForm = {
   code: '',
   phone: '',
   address: '',
+  addressLine2: '',
   city: '',
   state: '',
   country: '',
@@ -60,6 +61,7 @@ function formFromGodown(godown: ShopGodown): FormState {
     code: godown.code ?? '',
     phone: godown.phone_number ?? '',
     address: godown.address_line1 ?? '',
+    addressLine2: godown.address_line2 ?? '',
     city: godown.city ?? '',
     state: godown.state ?? '',
     country: godown.country ?? '',
@@ -158,6 +160,7 @@ export function ShopGodownsPage() {
       is_default: form.isDefault,
       phone_number: form.phone.trim(),
       address_line1: form.address.trim(),
+      address_line2: form.addressLine2.trim(),
       city: form.city.trim(),
       state: form.state.trim(),
       country: form.country.trim(),
@@ -417,20 +420,83 @@ export function ShopGodownsPage() {
                 latitude={form.latitude}
                 longitude={form.longitude}
                 onChangeText={(value) => setForm({ ...form, address: value })}
-                onPlaceSelected={(place) =>
-                  setForm({
-                    ...form,
+                onPlaceSelected={(place) => {
+                  const cleared =
+                    !place.line1 &&
+                    !place.formattedAddress &&
+                    place.latitude == null &&
+                    place.longitude == null;
+                  setForm((current) => ({
+                    ...current,
                     address: place.line1 || place.formattedAddress,
+                    addressLine2: cleared ? '' : current.addressLine2,
                     city: place.city || '',
                     state: place.state || '',
                     country: place.country || '',
                     postalCode: place.postalCode || '',
                     latitude: place.latitude ?? null,
                     longitude: place.longitude ?? null,
-                  })
-                }
+                  }));
+                }}
               />
             </div>
+            <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
+              <span style={fieldLabel}>Flat, floor, building or landmark</span>
+              <input
+                value={form.addressLine2}
+                onChange={(event) => setForm({ ...form, addressLine2: event.target.value })}
+                placeholder="Bay 3, near loading dock"
+                style={fieldInput}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>City</span>
+              <input
+                value={form.city}
+                readOnly={form.latitude != null && form.longitude != null}
+                onChange={(event) => setForm({ ...form, city: event.target.value })}
+                style={{
+                  ...fieldInput,
+                  background: form.latitude != null && form.longitude != null ? '#f9fafb' : '#fff',
+                }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>State</span>
+              <input
+                value={form.state}
+                readOnly={form.latitude != null && form.longitude != null}
+                onChange={(event) => setForm({ ...form, state: event.target.value })}
+                style={{
+                  ...fieldInput,
+                  background: form.latitude != null && form.longitude != null ? '#f9fafb' : '#fff',
+                }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Country</span>
+              <input
+                value={form.country}
+                readOnly={form.latitude != null && form.longitude != null}
+                onChange={(event) => setForm({ ...form, country: event.target.value })}
+                style={{
+                  ...fieldInput,
+                  background: form.latitude != null && form.longitude != null ? '#f9fafb' : '#fff',
+                }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={fieldLabel}>Postal code</span>
+              <input
+                value={form.postalCode}
+                readOnly={form.latitude != null && form.longitude != null}
+                onChange={(event) => setForm({ ...form, postalCode: event.target.value })}
+                style={{
+                  ...fieldInput,
+                  background: form.latitude != null && form.longitude != null ? '#f9fafb' : '#fff',
+                }}
+              />
+            </label>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={fieldLabel}>Pickup phone</span>
               <input
@@ -449,10 +515,6 @@ export function ShopGodownsPage() {
                 style={fieldInput}
               />
             </label>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: 13, gridColumn: '1 / -1' }}>
-              {[form.city, form.state, form.country, form.postalCode].filter(Boolean).join(', ') ||
-                'Select an address above to fill city, state, country, and postal code.'}
-            </p>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
                 type="checkbox"

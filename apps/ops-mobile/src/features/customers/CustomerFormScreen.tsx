@@ -144,12 +144,18 @@ export function CustomerFormScreen() {
                   resolvedGstin = gstinResult.gstin;
                 }
               }
+              const line1 = address.line1.trim();
+              if (line1) {
+                if (!String(address.city || '').trim()) nextErrors.city = requiredMessage('City');
+                if (!String(address.state || '').trim()) nextErrors.state = requiredMessage('State');
+                if (!String(address.country || '').trim()) nextErrors.country = requiredMessage('Country');
+                if (!String(address.postalCode || '').trim()) nextErrors.postalCode = requiredMessage('Postal code');
+              }
               if (Object.keys(nextErrors).length) {
                 setFieldErrors(nextErrors);
                 return;
               }
               setFieldErrors({});
-              const line1 = address.line1.trim();
               const payload = {
                 display_name: displayName.trim() || `${firstName.trim()} ${lastName.trim()}`.trim() || email,
                 first_name: firstName.trim(),
@@ -161,11 +167,12 @@ export function CustomerFormScreen() {
                   ? {
                       default_address: {
                         line1,
+                        line2: address.line2?.trim() || '',
                         full_address: line1,
-                        city: address.city,
-                        state: address.state,
-                        country: address.country,
-                        postal_code: address.postalCode,
+                        city: address.city?.trim() || '',
+                        state: address.state?.trim() || '',
+                        country: address.country?.trim() || '',
+                        postal_code: address.postalCode?.trim() || '',
                         latitude: address.latitude ?? undefined,
                         longitude: address.longitude ?? undefined,
                         is_default: true,
@@ -292,25 +299,104 @@ export function CustomerFormScreen() {
         </FormSection>
       ) : null}
 
-      <FormSection title="Address" subtitle="Optional — helps with location-aware booking.">
+      <FormSection
+        title="Address"
+        subtitle="Optional — map pick fills city, state, country, and pin for shipping."
+      >
         <AddressLocationPicker
           optional
           value={address.line1}
           latitude={address.latitude ?? null}
           longitude={address.longitude ?? null}
           onChangeText={(line1) => setAddress((current) => ({ ...current, line1 }))}
-          onPlaceSelected={(place) =>
-            setAddress({
+          onPlaceSelected={(place) => {
+            const cleared =
+              !place.line1 &&
+              !place.formattedAddress &&
+              place.latitude == null &&
+              place.longitude == null;
+            setAddress((current) => ({
+              ...current,
               line1: place.line1 || place.formattedAddress,
-              city: place.city,
-              state: place.state,
-              country: place.country,
-              postalCode: place.postalCode,
+              // Keep building / flat details when remapping; clear only when search is wiped.
+              line2: cleared ? '' : current.line2,
+              city: place.city || '',
+              state: place.state || '',
+              country: place.country || '',
+              postalCode: place.postalCode || '',
               latitude: place.latitude ?? null,
               longitude: place.longitude ?? null,
-            })
-          }
+            }));
+            setFieldErrors((current) => ({
+              ...current,
+              city: '',
+              state: '',
+              country: '',
+              postalCode: '',
+            }));
+          }}
         />
+        <Input
+          label="Flat, floor, building or landmark"
+          optional
+          hint="Add door-level detail here — Google search only fills the street / area."
+          placeholder="Flat 302, B wing, near City Mall"
+          value={address.line2 || ''}
+          onChangeText={(line2) => setAddress((current) => ({ ...current, line2 }))}
+        />
+        <FieldRow>
+          <Input
+            label="City"
+            optional={!address.line1.trim()}
+            required={Boolean(address.line1.trim())}
+            value={address.city || ''}
+            onChangeText={(city) => {
+              setAddress((current) => ({ ...current, city }));
+              setFieldErrors((current) => ({ ...current, city: '' }));
+            }}
+            error={fieldErrors.city}
+            editable={!(address.latitude != null && address.longitude != null)}
+          />
+          <Input
+            label="State"
+            optional={!address.line1.trim()}
+            required={Boolean(address.line1.trim())}
+            value={address.state || ''}
+            onChangeText={(state) => {
+              setAddress((current) => ({ ...current, state }));
+              setFieldErrors((current) => ({ ...current, state: '' }));
+            }}
+            error={fieldErrors.state}
+            editable={!(address.latitude != null && address.longitude != null)}
+          />
+        </FieldRow>
+        <FieldRow>
+          <Input
+            label="Country"
+            optional={!address.line1.trim()}
+            required={Boolean(address.line1.trim())}
+            value={address.country || ''}
+            onChangeText={(country) => {
+              setAddress((current) => ({ ...current, country }));
+              setFieldErrors((current) => ({ ...current, country: '' }));
+            }}
+            error={fieldErrors.country}
+            editable={!(address.latitude != null && address.longitude != null)}
+          />
+          <Input
+            label="Postal code"
+            optional={!address.line1.trim()}
+            required={Boolean(address.line1.trim())}
+            value={address.postalCode || ''}
+            onChangeText={(postalCode) => {
+              setAddress((current) => ({ ...current, postalCode }));
+              setFieldErrors((current) => ({ ...current, postalCode: '' }));
+            }}
+            error={fieldErrors.postalCode}
+            keyboardType="number-pad"
+            editable={!(address.latitude != null && address.longitude != null)}
+          />
+        </FieldRow>
       </FormSection>
 
       {error ? <FormAlert message={error} /> : null}

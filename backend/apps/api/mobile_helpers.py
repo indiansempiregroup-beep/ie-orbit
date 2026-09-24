@@ -59,10 +59,15 @@ def serialize_customer_address(customer: Customer) -> dict | None:
     address = customer.addresses.filter(is_default=True).first() or customer.addresses.order_by("created_at").first()
     if address is None:
         return None
+    line1 = str(address.line1 or "").strip()
+    line2 = str(address.line2 or "").strip()
+    # Door-first: flat/building before street, matching order delivery_address.
+    full_address = ", ".join(part for part in (line2, line1) if part)
     return {
         "id": str(address.id),
-        "line1": address.line1,
-        "full_address": address.line1,
+        "line1": line1,
+        "line2": line2,
+        "full_address": full_address,
         "city": address.city,
         "state": address.state,
         "country": address.country,

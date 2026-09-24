@@ -20,6 +20,7 @@ import { useBooking } from '../../hooks/useOpsData';
 import { useAvailability, useBookingMutations, useEntityMaps, useReassignableStaff } from '../../hooks/useOpsExtended';
 import { canWriteBookings } from '../../utils/roles';
 import { entityLabel } from '../../utils/entities';
+import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatServicePrice } from '../../utils/services';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, formatTime, getApiErrorMessage, mapBookingStatus } from '../../utils/format';
@@ -100,20 +101,8 @@ export function BookingDetailScreen() {
 
   const customerAddress = useMemo(() => {
     if (!customer) return '';
-    return (
-      customer.full_address?.trim() ||
-      customer.address?.full_address?.trim() ||
-      [
-        customer.address?.line1,
-        customer.address?.line2,
-        customer.address?.city,
-        customer.address?.state,
-        customer.address?.postal_code,
-      ]
-        .map((part) => String(part || '').trim())
-        .filter(Boolean)
-        .join(', ')
-    );
+    const label = formatCustomerAddressLabel(customer);
+    return label === '—' ? '' : label;
   }, [customer]);
 
   const staffName = useMemo(() => {

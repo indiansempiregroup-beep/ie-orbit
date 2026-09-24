@@ -128,6 +128,7 @@ function defaultValues(): RegisterWizardValues {
     country: 'IN',
     state: '',
     address: '',
+    addressLine2: '',
     postalCode: '',
     latitude: null,
     longitude: null,
@@ -297,6 +298,7 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
         businessEmail: '',
         businessPhone: '',
         address: '',
+        addressLine2: '',
         city: '',
         state: '',
         country: defaults.country,
@@ -497,18 +499,32 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
             latitude={values.latitude}
             longitude={values.longitude}
             onChangeText={(address) => patch({ address })}
-            onPlaceSelected={(place) =>
+            onPlaceSelected={(place) => {
+              const cleared =
+                !place.line1 &&
+                !place.formattedAddress &&
+                place.latitude == null &&
+                place.longitude == null;
               patch({
                 address: place.line1 || place.formattedAddress,
+                ...(cleared ? { addressLine2: '' } : {}),
                 city: place.city || '',
                 state: place.state || '',
                 country: place.country || '',
                 postalCode: place.postalCode || '',
                 latitude: place.latitude ?? null,
                 longitude: place.longitude ?? null,
-              })
-            }
+              });
+            }}
           />
+        <Input
+          label="Flat, floor, building or landmark"
+          optional
+          hint="Add door-level detail here — Google search only fills the street / area."
+          placeholder="Shop 12, Ground floor, near City Mall"
+          value={values.addressLine2}
+          onChangeText={(v) => patch({ addressLine2: v })}
+        />
         <Input
           label="City"
           required

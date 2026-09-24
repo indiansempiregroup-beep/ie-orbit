@@ -14,7 +14,7 @@ import {
   productLabel,
 } from './AdminChrome';
 import { adminFeatureGroups, BI_FEATURE_OPTIONS } from '../../config/planFeatures';
-import { usePlatformAddonPricingQuery, usePlatformPlanPackagesQuery, usePlatformSmartLookupHistoryQuery, usePlatformSmartLookupSettingsQuery, useRefreshSmartLookupFxMutation, useUpdateAddonPricingMutation, useUpdateSmartLookupSettingsMutation, useUpsertPlanPackageMutation } from './adminHooks';
+import { usePlatformAddonPricingQuery, usePlatformPlanPackagesQuery, usePlatformSmartLookupHistoryQuery, usePlatformSmartLookupSettingsQuery, usePlatformAssistantSettingsQuery, useRefreshSmartLookupFxMutation, useUpdateAddonPricingMutation, useUpdateAssistantSettingsMutation, useUpdateSmartLookupSettingsMutation, useUpsertPlanPackageMutation } from './adminHooks';
 import { enrichLedgerSourceLabel } from '../shop/enrichMessages';
 
 const PRODUCT_LABELS: Record<string, string> = {
@@ -195,6 +195,8 @@ export function PlatformPackagesPage() {
   const smartLookupQuery = usePlatformSmartLookupSettingsQuery();
   const smartLookupMutation = useUpdateSmartLookupSettingsMutation();
   const smartFxRefreshMutation = useRefreshSmartLookupFxMutation();
+  const assistantSettingsQuery = usePlatformAssistantSettingsQuery();
+  const assistantSettingsMutation = useUpdateAssistantSettingsMutation();
 
   const [form, setForm] = useState<FormState | null>(null);
   const [editorTab, setEditorTab] = useState<'details' | 'features'>('details');
@@ -204,6 +206,11 @@ export function PlatformPackagesPage() {
   const [addonOfficeInr, setAddonOfficeInr] = useState('');
   const [addonPetsInr, setAddonPetsInr] = useState('');
   const [addonReason, setAddonReason] = useState('Update add-on prices');
+  const [assistantEnabled, setAssistantEnabled] = useState(true);
+  const [assistantMsgPriceInr, setAssistantMsgPriceInr] = useState('0.50');
+  const [assistantConfirmPriceInr, setAssistantConfirmPriceInr] = useState('1');
+  const [assistantTopUpsInr, setAssistantTopUpsInr] = useState('50, 100, 250, 500');
+  const [assistantReason, setAssistantReason] = useState('Update Assistant wallet pricing');
   const [smartEnabled, setSmartEnabled] = useState(true);
   const [smartFx, setSmartFx] = useState('85');
   const [smartGstPercent, setSmartGstPercent] = useState('18');
@@ -252,6 +259,43 @@ export function PlatformPackagesPage() {
     setSmartOutputUsd(String(settings.output_usd_per_million));
     setSmartTopUpsInr((settings.suggested_top_up_paise ?? []).map((paise) => String(paise / 100)).join(', '));
   }, [smartLookupQuery.data]);
+
+  useEffect(() => {
+    const settings = assistantSettingsQuery.data;
+    if (!settings) return;
+    setAssistantEnabled(Boolean(settings.enabled));
+    setAssistantMsgPriceInr(String(Number((settings.message_price_paise / 100).toFixed(2))));
+    setAssistantConfirmPriceInr(String(Number((settings.confirm_price_paise / 100).toFixed(2))));
+    setAssistantTopUpsInr(
+      (settings.suggested_top_up_paise ?? []).map((paise) => String(paise / 100)).join(', '),
+    );
+  }, [assistantSettingsQuery.data]);
+
+  function saveAssistantSettings() {
+    setMessage(null);
+    const tops = assistantTopUpsInr
+      .split(/[,\s]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => Math.round(Number(part) * 100))
+      .filter((paise) => Number.isFinite(paise) && paise >= 100);
+    const msgPaise = Math.max(1, Math.round(Number(assistantMsgPriceInr) * 100) || 50);
+    const confirmPaise = Math.max(1, Math.round(Number(assistantConfirmPriceInr) * 100) || 100);
+    assistantSettingsMutation.mutate(
+      {
+        enabled: assistantEnabled,
+        message_price_paise: msgPaise,
+        confirm_price_paise: confirmPaise,
+        suggested_top_up_paise: tops,
+        reason: assistantReason,
+      },
+      {
+        onSuccess: () => setMessage('Assistant wallet settings saved.'),
+        onError: (err) =>
+          setMessage(err instanceof Error ? err.message : 'Failed to save Assistant settings.'),
+      },
+    );
+  }
 
   function saveSmartLookupSettings() {
     setMessage(null);
@@ -842,6 +886,60 @@ export function PlatformPackagesPage() {
             }}
           >
             {addonMutation.isPending ? 'Saving…' : 'Save add-on prices'}
+          </button>
+        </div>
+      </AdminSection>
+
+      <AdminSection
+        title="Assistant wallet"
+        description="After free daily message/confirm limits, businesses can top up a prepaid wallet. Messages and confirms debit separate unit prices."
+      >
+        <div className="admin-action-bar" style={{ alignItems: 'end', flexWrap: 'wrap' }}>
+          <FlagToggle
+            on={assistantEnabled}
+            title={assistantEnabled ? 'Prepaid overage on' : 'Prepaid overage off'}
+            hint={
+              assistantEnabled
+                ? 'Wallet top-ups and auto-debit after free limits are allowed.'
+                : 'Free daily limits still apply; prepaid overage is blocked.'
+            }
+            onClick={() => setAssistantEnabled((current) => !current)}
+          />
+          <AdminField label="Message price (₹)">
+            <input
+              type="number"
+              min={0.01}
+              step="0.01"
+              value={assistantMsgPriceInr}
+              onChange={(e) => setAssistantMsgPriceInr(e.target.value)}
+            />
+          </AdminField>
+          <AdminField label="Confirm price (₹)">
+            <input
+              type="number"
+              min={0.01}
+              step="0.01"
+              value={assistantConfirmPriceInr}
+              onChange={(e) => setAssistantConfirmPriceInr(e.target.value)}
+            />
+          </AdminField>
+          <AdminField label="Suggested top-ups (₹, comma-separated)">
+            <input
+              value={assistantTopUpsInr}
+              onChange={(e) => setAssistantTopUpsInr(e.target.value)}
+              placeholder="50, 100, 250, 500"
+            />
+          </AdminField>
+          <AdminField label="Reason">
+            <input value={assistantReason} onChange={(e) => setAssistantReason(e.target.value)} />
+          </AdminField>
+          <button
+            type="button"
+            className="admin-btn admin-btn--primary"
+            disabled={assistantSettingsMutation.isPending || assistantSettingsQuery.isLoading}
+            onClick={saveAssistantSettings}
+          >
+            {assistantSettingsMutation.isPending ? 'Saving…' : 'Save Assistant wallet'}
           </button>
         </div>
       </AdminSection>

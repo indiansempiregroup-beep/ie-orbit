@@ -23,6 +23,7 @@ import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
+import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { confirmAction } from '../../utils/confirmAction';
 import { DesktopPage } from '../../components/DesktopPage';
@@ -512,19 +513,7 @@ export function ShopOrderDetailScreen() {
     customer?.alternate_phone?.trim() ||
     '';
   const deliveryAddress =
-    String(order.delivery_address || '').trim() ||
-    customer?.full_address?.trim() ||
-    customer?.address?.full_address?.trim() ||
-    [
-      customer?.address?.line1,
-      customer?.address?.line2,
-      customer?.address?.city,
-      customer?.address?.state,
-      customer?.address?.postal_code,
-    ]
-      .map((part) => String(part || '').trim())
-      .filter(Boolean)
-      .join(', ');
+    String(order.delivery_address || '').trim() || formatCustomerAddressLabel(customer || {});
   const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
   const cashPaymentDue =
     isOnlineOrder &&

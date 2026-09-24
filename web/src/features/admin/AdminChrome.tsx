@@ -13,6 +13,14 @@ export function productLabel(code?: string | null) {
   return ADMIN_PRODUCT_LABELS[code] ?? code.replace(/-/g, ' ');
 }
 
+/** Prepaid wallet / add-on payments that are not subscription plans. */
+const PAYMENT_ACTION_LABELS: Record<string, string> = {
+  assistant_wallet: 'Chat Assistant',
+  assistant_top_up: 'Chat Assistant',
+  smart_lookup_wallet: 'Smart Fill Wallet',
+  smart_lookup_top_up: 'Smart Fill Wallet',
+};
+
 /** Public plan slug. Billing still uses appointie-* and shopie-* internally. */
 const PLAN_CODE_DISPLAY: Record<string, string> = {
   'appointie-starter': 'orbit-appoint-starter',
@@ -28,12 +36,43 @@ export function displayPlanCode(code?: string | null) {
   return code.replace(/^appointie[-_]/i, 'orbit-appoint-').replace(/^shopie[-_]/i, 'orbit-mart-');
 }
 
+export function paymentActionLabel(payment: {
+  plan_code?: string | null;
+  claim_intent?: string | null;
+}): string | null {
+  const intent = String(payment.claim_intent || '')
+    .trim()
+    .toLowerCase();
+  const plan = String(payment.plan_code || '')
+    .trim()
+    .toLowerCase();
+  return PAYMENT_ACTION_LABELS[intent] || PAYMENT_ACTION_LABELS[plan] || null;
+}
+
+/** Products · plan for subscriptions; action name for wallet top-ups. */
+export function paymentOrderLabel(payment: {
+  plan_code?: string | null;
+  claim_intent?: string | null;
+  product_code?: string | null;
+  product_codes?: Array<string | null | undefined> | null;
+  line_items?: Array<{ product_code?: string | null }> | null;
+}): string {
+  const action = paymentActionLabel(payment);
+  if (action) return action;
+  const codes = payment.product_codes?.length
+    ? payment.product_codes
+    : payment.line_items?.map((item) => item.product_code) ?? [payment.product_code];
+  const products = (codes.filter(Boolean) as string[]).map((code) => productLabel(code)).join(' + ') || '—';
+  return `${products} · ${planLabel(payment.plan_code)}`;
+}
+
 export function planLabel(code?: string | null, name?: string | null) {
   if (name) {
     const stripped = name.replace(/^(Orbit Appoint|Orbit Mart|AppointIE|ShopIE)\s+/i, '').trim();
     if (stripped && !/appointie|shopie/i.test(stripped)) return stripped;
   }
   const value = (code ?? '').toLowerCase();
+  if (PAYMENT_ACTION_LABELS[value]) return PAYMENT_ACTION_LABELS[value];
   if (value.includes('pro')) return 'Pro';
   if (value.includes('starter')) return 'Starter';
   if (!code) return '—';

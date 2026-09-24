@@ -17,6 +17,7 @@ import { colors, fonts, radius, shadows, spacing, typography } from '../../theme
 import type { Customer, ShopOrder } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
+import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatRelativeTime } from '../../utils/format';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { IconBadge } from '../../components/ui/IconBadge';
@@ -52,19 +53,8 @@ const PAYMENT_OPTIONS = [
 
 function formatCustomerAddress(customer?: Customer | null): string {
   if (!customer) return '';
-  if (customer.full_address?.trim()) return customer.full_address.trim();
-  const nested = customer.address;
-  if (nested?.full_address?.trim()) return nested.full_address.trim();
-  const parts = [nested?.line1, nested?.line2, nested?.city, nested?.state, nested?.postal_code]
-    .map((part) => String(part || '').trim())
-    .filter(Boolean);
-  if (parts.length) return parts.join(', ');
-  const fallback = customer.addresses?.find((row) => row.is_default) ?? customer.addresses?.[0];
-  if (fallback?.full_address?.trim()) return fallback.full_address.trim();
-  return [fallback?.line1, fallback?.line2, fallback?.city, fallback?.state, fallback?.postal_code]
-    .map((part) => String(part || '').trim())
-    .filter(Boolean)
-    .join(', ');
+  const label = formatCustomerAddressLabel(customer);
+  return label === '—' ? '' : label;
 }
 
 function orderDeliveryAddress(order: ShopOrder, customer?: Customer | null): string {

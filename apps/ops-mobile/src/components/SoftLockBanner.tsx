@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBusinessBillingSnapshot } from '../hooks/useOpsExtended';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { getProductName } from '../utils/products';
+import { getProductName, paymentActionLabel } from '../utils/products';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -28,8 +28,14 @@ export function SoftLockBanner() {
 
   if (pending.length > 0) {
     const names = [
-      ...new Set(pending.flatMap((row) => row.product_codes ?? [row.product_code]).filter(Boolean)),
-    ].map((code) => getProductName(String(code)));
+      ...new Set(
+        pending.flatMap((row) => {
+          const action = paymentActionLabel(row);
+          if (action) return [action];
+          return (row.product_codes ?? [row.product_code]).filter(Boolean).map((code) => getProductName(String(code)));
+        }),
+      ),
+    ];
     return (
       <View style={[styles.banner, styles.bannerPending]}>
         <View style={styles.copy}>

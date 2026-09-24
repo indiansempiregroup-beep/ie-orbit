@@ -49,6 +49,32 @@ function firstBreak(breakPeriods: unknown[] | undefined): { start: string; end: 
   };
 }
 
+function isEndAfterStart(start: string, end: string) {
+  return Boolean(start) && Boolean(end) && start < end;
+}
+
+function scheduleValidationError(rows: DayRow[]): string | null {
+  const invalidShiftDays = rows
+    .filter((row) => row.is_available && !isEndAfterStart(row.shift_start, row.shift_end))
+    .map((row) => row.label);
+  if (invalidShiftDays.length) {
+    return `End time must be after start time on ${invalidShiftDays.join(', ')}.`;
+  }
+  const invalidBreakDays = rows
+    .filter(
+      (row) =>
+        row.is_available &&
+        row.break_start &&
+        row.break_end &&
+        !isEndAfterStart(row.break_start, row.break_end),
+    )
+    .map((row) => row.label);
+  if (invalidBreakDays.length) {
+    return `Break end must be after break start on ${invalidBreakDays.join(', ')}.`;
+  }
+  return null;
+}
+
 type StaffWeeklyScheduleSectionProps = {
   staffId: string;
 };
@@ -162,53 +188,97 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
                 type="time"
                 value={row.shift_start}
                 disabled={!row.is_available}
-                onChange={(event) =>
+                max={row.shift_end || undefined}
+                onChange={(event) => {
+                  setSaveError(null);
                   setRows((current) =>
                     current.map((item) =>
                       item.weekday === row.weekday ? { ...item, shift_start: event.target.value } : item,
                     ),
-                  )
-                }
-                style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  );
+                }}
+                style={{
+                  padding: 8,
+                  borderRadius: 8,
+                  border: `1px solid ${
+                    row.is_available && !isEndAfterStart(row.shift_start, row.shift_end) ? '#dc2626' : '#e5e7eb'
+                  }`,
+                }}
+                aria-invalid={row.is_available && !isEndAfterStart(row.shift_start, row.shift_end)}
               />
               <input
                 type="time"
                 value={row.shift_end}
                 disabled={!row.is_available}
-                onChange={(event) =>
+                min={row.shift_start || undefined}
+                onChange={(event) => {
+                  setSaveError(null);
                   setRows((current) =>
                     current.map((item) =>
                       item.weekday === row.weekday ? { ...item, shift_end: event.target.value } : item,
                     ),
-                  )
-                }
-                style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  );
+                }}
+                style={{
+                  padding: 8,
+                  borderRadius: 8,
+                  border: `1px solid ${
+                    row.is_available && !isEndAfterStart(row.shift_start, row.shift_end) ? '#dc2626' : '#e5e7eb'
+                  }`,
+                }}
+                aria-invalid={row.is_available && !isEndAfterStart(row.shift_start, row.shift_end)}
               />
               <input
                 type="time"
                 value={row.break_start}
                 disabled={!row.is_available}
-                onChange={(event) =>
+                max={row.break_end || undefined}
+                onChange={(event) => {
+                  setSaveError(null);
                   setRows((current) =>
                     current.map((item) =>
                       item.weekday === row.weekday ? { ...item, break_start: event.target.value } : item,
                     ),
-                  )
-                }
-                style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  );
+                }}
+                style={{
+                  padding: 8,
+                  borderRadius: 8,
+                  border: `1px solid ${
+                    row.is_available &&
+                    row.break_start &&
+                    row.break_end &&
+                    !isEndAfterStart(row.break_start, row.break_end)
+                      ? '#dc2626'
+                      : '#e5e7eb'
+                  }`,
+                }}
               />
               <input
                 type="time"
                 value={row.break_end}
                 disabled={!row.is_available}
-                onChange={(event) =>
+                min={row.break_start || undefined}
+                onChange={(event) => {
+                  setSaveError(null);
                   setRows((current) =>
                     current.map((item) =>
                       item.weekday === row.weekday ? { ...item, break_end: event.target.value } : item,
                     ),
-                  )
-                }
-                style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  );
+                }}
+                style={{
+                  padding: 8,
+                  borderRadius: 8,
+                  border: `1px solid ${
+                    row.is_available &&
+                    row.break_start &&
+                    row.break_end &&
+                    !isEndAfterStart(row.break_start, row.break_end)
+                      ? '#dc2626'
+                      : '#e5e7eb'
+                  }`,
+                }}
               />
               <input
                 type="number"
@@ -236,6 +306,11 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
           variant="primary"
           disabled={bulkUpsert.isPending || schedulesQuery.isLoading || !businessId}
           onClick={() => {
+            const validationError = scheduleValidationError(rows);
+            if (validationError) {
+              setSaveError(validationError);
+              return;
+            }
             setSaveError(null);
             bulkUpsert.mutate(
               {

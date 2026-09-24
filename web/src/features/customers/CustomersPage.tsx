@@ -43,6 +43,7 @@ export function CustomersPage() {
     status: 'active',
     send_registration_invite: true,
     full_address: '',
+    line2: '',
     city: '',
     state: '',
     country: '',
@@ -83,6 +84,7 @@ export function CustomersPage() {
       status: 'active',
       send_registration_invite: true,
       full_address: '',
+      line2: '',
       city: '',
       state: '',
       country: '',
@@ -311,6 +313,7 @@ export function CustomersPage() {
                 default_address: formState.full_address.trim()
                   ? {
                       full_address: formState.full_address,
+                      line2: formState.line2,
                       city: formState.city,
                       state: formState.state,
                       country: formState.country,
@@ -393,9 +396,15 @@ export function CustomersPage() {
               longitude={formState.longitude}
               onChangeText={(full_address) => setFormState((current) => ({ ...current, full_address }))}
               onPlaceSelected={(place) => {
+                const cleared =
+                  !place.line1 &&
+                  !place.formattedAddress &&
+                  place.latitude == null &&
+                  place.longitude == null;
                 setFormState((current) => ({
                   ...current,
                   full_address: place.formattedAddress,
+                  line2: cleared ? '' : current.line2,
                   city: place.city || '',
                   state: place.state || '',
                   country: place.country || '',
@@ -404,6 +413,12 @@ export function CustomersPage() {
                   longitude: place.longitude ?? null,
                 }));
               }}
+            />
+            <input
+              value={formState.line2}
+              onChange={(event) => setFormState((current) => ({ ...current, line2: event.target.value }))}
+              placeholder="Flat, floor, building or landmark"
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
             />
             <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
               {(['city', 'state', 'country', 'postal_code'] as const).map((field) => (

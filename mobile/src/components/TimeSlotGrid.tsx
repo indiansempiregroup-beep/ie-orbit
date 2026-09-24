@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '../theme/tokens';
-import { filterFutureSlots, formatTime } from '../utils/format';
+import { filterFutureSlots, formatTime, getDisplayHour } from '../utils/format';
 
 type Slot = { start_at: string };
 
@@ -28,7 +28,8 @@ const PERIODS: Array<{ key: PeriodKey; label: string; icon: keyof typeof Feather
 ];
 
 function periodFor(iso: string): PeriodKey {
-  const hour = new Date(iso).getHours();
+  // Use display-zone hour so buckets match formatTime labels (not device local).
+  const hour = getDisplayHour(iso);
   if (hour < 12) return 'morning';
   if (hour < 17) return 'afternoon';
   return 'evening';

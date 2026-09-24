@@ -112,6 +112,17 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
           badge: unreadCount > 0 ? unreadCount : undefined,
           onPress: () => go('Alerts'),
         },
+        ...(has(PlanFeature.shopieAiAssistant) || has(PlanFeature.appointieAiAssistant)
+          ? [
+              {
+                key: 'assistant',
+                label: 'Assistant',
+                icon: 'message-circle' as IconName,
+                match: ['Assistant'],
+                onPress: () => go('Assistant'),
+              },
+            ]
+          : []),
       ],
     };
 

@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 from apps.authentication.models import User, UserStatus
 from apps.authentication.services.roles import RoleService
 from apps.authentication.tests.otp_helpers import otp_login_ops
-from apps.staff.models import InvitationStatus, StaffInvitation
+from apps.staff.models import InvitationStatus, Staff, StaffInvitation
 
 
 @pytest.fixture
@@ -47,7 +47,6 @@ def bootstrap_workspace(api_client: APIClient, user: User) -> tuple[str, str]:
             "currency": "INR",
             "language": "en-IN",
         },
-        format="json",
     )
     tenant_id = tenant_response.json()["data"]["id"]
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
@@ -95,6 +94,107 @@ def test_staff_invitation_and_accept_flow(api_client: APIClient, owner: User) ->
     invitation.refresh_from_db()
     assert invitation.status == InvitationStatus.ACCEPTED
     assert invitation.staff_id is not None
+
+
+@pytest.mark.django_db
+def test_invite_accept_links_existing_directory_staff(api_client: APIClient, owner: User) -> None:
+    _tenant_id, business_id = bootstrap_workspace(api_client, owner)
+    email = "precreated@example.com"
+    create_response = api_client.post(
+        reverse("staff-list-create"),
+        {
+            "business": business_id,
+            "staff_code": "staff-pre",
+            "first_name": "Pre",
+            "last_name": "Created",
+            "display_name": "Pre Created",
+            "email": email,
+            "is_bookable": True,
+        },
+        format="json",
+    )
+    assert create_response.status_code == 201
+    staff_id = create_response.json()["data"]["id"]
+
+    invite_response = api_client.post(
+        reverse("business-invitation-list-create", kwargs={"pk": business_id}),
+        {"email": email, "platform_role_code": "staff"},
+        format="json",
+    )
+    assert invite_response.status_code == 201
+    invitation = StaffInvitation.objects.get(id=invite_response.json()["data"]["id"])
+    api_client.credentials()
+
+    accept_response = api_client.post(
+        reverse("auth-accept-invitation"),
+        {"token": str(invitation.token), "first_name": "Pre", "last_name": "Created"},
+        format="json",
+    )
+    assert accept_response.status_code == 200
+    assert accept_response.json()["data"]["staff_id"] == staff_id
+    assert Staff.objects.filter(business_id=business_id, email__iexact=email).count() == 1
+    staff = Staff.objects.get(id=staff_id)
+    assert staff.user_id is not None
+
+
+@pytest.mark.django_db
+def test_staff_create_rejects_duplicate_email(api_client: APIClient, owner: User) -> None:
+    _tenant_id, business_id = bootstrap_workspace(api_client, owner)
+    payload = {
+        "business": business_id,
+        "staff_code": "staff-one",
+        "first_name": "One",
+        "display_name": "One",
+        "email": "dup@example.com",
+        "is_bookable": True,
+    }
+    first = api_client.post(reverse("staff-list-create"), payload, format="json")
+    assert first.status_code == 201
+    second = api_client.post(
+        reverse("staff-list-create"),
+        {**payload, "staff_code": "staff-two", "display_name": "Two"},
+        format="json",
+    )
+    assert second.status_code == 400
+    assert "email" in str(second.json()).lower()
+
+
+@pytest.mark.django_db
+def test_staff_invitation_resend_pending(api_client: APIClient, owner: User) -> None:
+    _tenant_id, business_id = bootstrap_workspace(api_client, owner)
+
+    first = api_client.post(
+        reverse("business-invitation-list-create", kwargs={"pk": business_id}),
+        {"email": "resend-staff@example.com", "platform_role_code": "staff"},
+        format="json",
+    )
+    assert first.status_code == 201
+    first_data = first.json()["data"]
+    first_token = StaffInvitation.objects.get(id=first_data["id"]).token
+    assert len(mail.outbox) == 1
+
+    second = api_client.post(
+        reverse("business-invitation-list-create", kwargs={"pk": business_id}),
+        {"email": "resend-staff@example.com", "platform_role_code": "manager"},
+        format="json",
+    )
+    assert second.status_code == 201
+    second_data = second.json()["data"]
+    assert second_data["id"] == first_data["id"]
+    assert second_data["platform_role_code"] == "manager"
+    assert len(mail.outbox) == 2
+
+    invitation = StaffInvitation.objects.get(id=first_data["id"])
+    assert invitation.status == InvitationStatus.PENDING
+    assert invitation.token != first_token
+    assert (
+        StaffInvitation.objects.filter(
+            business_id=business_id,
+            email="resend-staff@example.com",
+            status=InvitationStatus.PENDING,
+        ).count()
+        == 1
+    )
 
 
 @pytest.mark.django_db

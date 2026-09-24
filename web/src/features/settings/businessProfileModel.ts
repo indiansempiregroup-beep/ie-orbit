@@ -20,6 +20,7 @@ export type BusinessProfileFormState = {
   state: string;
   city: string;
   address_line1: string;
+  address_line2: string;
   postal_code: string;
   latitude: number | null;
   longitude: number | null;
@@ -50,6 +51,7 @@ type BusinessRecord = Business & {
   state?: string | null;
   city?: string | null;
   address_line1?: string | null;
+  address_line2?: string | null;
   postal_code?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
@@ -87,6 +89,7 @@ export function createEmptyBusinessProfileFormState(): BusinessProfileFormState 
     state: '',
     city: '',
     address_line1: '',
+    address_line2: '',
     postal_code: '',
     latitude: null,
     longitude: null,
@@ -141,6 +144,7 @@ export function businessToFormState(
     state: business.state ?? '',
     city: business.city ?? '',
     address_line1: business.address_line1 ?? '',
+    address_line2: business.address_line2 ?? '',
     postal_code: business.postal_code ?? '',
     latitude: business.latitude != null ? Number(business.latitude) : null,
     longitude: business.longitude != null ? Number(business.longitude) : null,
@@ -203,6 +207,7 @@ export function formStateToBusinessUpdate(
     state: formState.state,
     city: formState.city,
     address_line1: formState.address_line1,
+    address_line2: formState.address_line2,
     postal_code: formState.postal_code,
     latitude: formState.latitude,
     longitude: formState.longitude,
@@ -222,7 +227,14 @@ export type BusinessProfileSection = {
 };
 
 export function buildBusinessProfileSections(formState: BusinessProfileFormState): BusinessProfileSection[] {
-  const address = [formState.address_line1, formState.city, formState.state, formState.country, formState.postal_code]
+  const address = [
+    formState.address_line2,
+    formState.address_line1,
+    formState.city,
+    formState.state,
+    formState.country,
+    formState.postal_code,
+  ]
     .filter(Boolean)
     .join(', ');
 

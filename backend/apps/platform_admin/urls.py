@@ -20,6 +20,7 @@ from apps.platform_admin.api import (
     PlatformSmartLookupFxRefreshView,
     PlatformSmartLookupHistoryView,
     PlatformSmartLookupSettingsView,
+    PlatformAssistantSettingsView,
     PlatformUpiClaimActionView,
     PlatformUpiClaimsView,
     PlatformTenantActionView,
@@ -200,6 +201,11 @@ urlpatterns = [
         "platform/smart-lookup-settings",
         PlatformSmartLookupSettingsView.as_view(),
         name="platform-smart-lookup-settings",
+    ),
+    path(
+        "platform/assistant-settings",
+        PlatformAssistantSettingsView.as_view(),
+        name="platform-assistant-settings",
     ),
     path(
         "platform/smart-lookup-settings/refresh-fx",

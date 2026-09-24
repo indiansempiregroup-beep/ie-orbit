@@ -186,6 +186,7 @@ class MobileCustomerRegisterSerializer(serializers.Serializer):
 class MobileCustomerAddressSerializer(serializers.Serializer):
     id = serializers.UUIDField(required=False)
     line1 = serializers.CharField(required=False, allow_blank=True)
+    line2 = serializers.CharField(required=False, allow_blank=True)
     full_address = serializers.CharField(required=False, allow_blank=True)
     city = serializers.CharField(required=False, allow_blank=True)
     state = serializers.CharField(required=False, allow_blank=True)
@@ -212,6 +213,7 @@ class MobileCustomerProfileUpdateSerializer(serializers.Serializer):
     phone_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
     full_address = serializers.CharField(required=False, allow_blank=True)
     line1 = serializers.CharField(required=False, allow_blank=True)
+    line2 = serializers.CharField(required=False, allow_blank=True)
     city = serializers.CharField(required=False, allow_blank=True)
     state = serializers.CharField(required=False, allow_blank=True)
     country = serializers.CharField(required=False, allow_blank=True)

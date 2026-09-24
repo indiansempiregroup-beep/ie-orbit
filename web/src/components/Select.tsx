@@ -9,33 +9,31 @@ type Props = React.SelectHTMLAttributes<HTMLSelectElement> & {
 };
 
 export const Select = React.forwardRef<HTMLSelectElement, Props>(function Select(
-  { label, error, compact = false, required, options, style, id, ...rest },
+  { label, error, compact = false, required, options, style, id, className, ...rest },
   ref,
 ) {
   const selectId = id ?? rest.name;
   return (
-    <label style={{ display: 'block', marginBottom: compact ? 0 : 12 }} htmlFor={selectId}>
+    <label className={`ui-field${compact ? ' ui-field--compact' : ''}`} htmlFor={selectId}>
       {label ? (
-        <div style={{ marginBottom: 6, fontSize: 13, color: '#374151' }}>
+        <span className="ui-field-label">
           {label}
-          {required ? <span aria-hidden="true" style={{ color: '#dc2626' }}> *</span> : null}
-        </div>
+          {required ? (
+            <span className="ui-field-required" aria-hidden="true">
+              {' '}
+              *
+            </span>
+          ) : null}
+        </span>
       ) : null}
       <select
         id={selectId}
         ref={ref}
+        className={['ui-control', 'ui-control--select', error ? 'is-error' : '', className]
+          .filter(Boolean)
+          .join(' ')}
         {...rest}
-        style={{
-          width: '100%',
-          padding: '10px 12px',
-          borderRadius: 8,
-          border: `1px solid ${error ? '#dc2626' : '#e5e7eb'}`,
-          fontSize: 14,
-          outline: 'none',
-          boxSizing: 'border-box',
-          background: '#fff',
-          ...(style as React.CSSProperties),
-        }}
+        style={style}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -44,7 +42,7 @@ export const Select = React.forwardRef<HTMLSelectElement, Props>(function Select
         ))}
       </select>
       {error ? (
-        <span role="alert" style={{ display: 'block', marginTop: 4, fontSize: 12, color: '#dc2626' }}>
+        <span role="alert" className="field-error">
           {error}
         </span>
       ) : null}

@@ -55,6 +55,11 @@ def plan_display_name(
     code = str(plan_code or "").strip().lower()
     if not code or code == "unknown":
         return "plan"
+    # Prepaid wallet top-ups (not subscription tiers).
+    if code in {"assistant_wallet", "assistant_top_up"}:
+        return "Chat Assistant"
+    if code in {"smart_lookup_wallet", "smart_lookup_top_up"}:
+        return "Smart Fill Wallet"
     matched_product: str | None = None
     tier = code
     for product in VALID_PRODUCT_CODES:
@@ -99,6 +104,7 @@ FEATURE_APPOINTIE_CUSTOMERS = "appointie_customers"
 FEATURE_APPOINTIE_REVIEWS = "appointie_reviews"
 FEATURE_APPOINTIE_SERVICES = "appointie_services"
 FEATURE_APPOINTIE_STAFF = "appointie_staff"
+FEATURE_APPOINTIE_AI_ASSISTANT = "appointie_ai_assistant"
 
 FEATURE_SHOPIE_POS = "shopie_pos"
 FEATURE_SHOPIE_PRODUCTS = "shopie_products"
@@ -109,6 +115,7 @@ FEATURE_SHOPIE_INSTANT_DELIVERY = "shopie_instant_delivery"
 FEATURE_SHOPIE_COUPONS = "shopie_coupons"
 FEATURE_SHOPIE_LOYALTY = "shopie_loyalty"
 FEATURE_SHOPIE_SMART_LOOKUP = "shopie_smart_lookup"
+FEATURE_SHOPIE_AI_ASSISTANT = "shopie_ai_assistant"
 
 FEATURE_SHOPIE_BOOKS_SALE = "shopie_books_sale"
 FEATURE_SHOPIE_BOOKS_PURCHASE = "shopie_books_purchase"

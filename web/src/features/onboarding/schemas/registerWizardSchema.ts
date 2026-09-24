@@ -58,6 +58,7 @@ export const registerWizardSchema = z
     state: z.string().min(1, 'State is required'),
     city: z.string().min(1, 'City is required'),
     address: z.string().min(1, 'Address is required'),
+    addressLine2: z.string(),
     postalCode: z.string().min(1, 'Postal code is required'),
     latitude: z.number().nullable(),
     longitude: z.number().nullable(),
@@ -148,6 +149,7 @@ export const stepFieldMap = {
     'state',
     'city',
     'address',
+    'addressLine2',
     'postalCode',
   ],
   owner: [
@@ -191,6 +193,7 @@ export function getDefaultRegisterValues(): RegisterWizardFormValues {
     state: '',
     city: '',
     address: '',
+    addressLine2: '',
     postalCode: '',
     latitude: null,
     longitude: null,

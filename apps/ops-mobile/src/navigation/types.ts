@@ -135,4 +135,5 @@ export type RootStackParamList = {
   ProfileEdit: undefined;
   NotificationPreferences: undefined;
   Sessions: undefined;
+  Assistant: undefined;
 };
