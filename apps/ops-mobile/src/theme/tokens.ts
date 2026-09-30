@@ -2,14 +2,14 @@
 export const brand = {
   appName: 'IE Orbit',
   tagline: 'Manage your business on the go',
-  primary: '#19576b',
-  primaryHover: '#19576b',
-  primaryDark: '#19576b',
-  accent: '#19576b',
-  gradientStart: '#19576b',
-  gradientEnd: '#19576b',
+  primary: '#163a47',
+  primaryHover: '#13333e',
+  primaryDark: '#112d37',
+  accent: '#163a47',
+  gradientStart: '#163a47',
+  gradientEnd: '#112d37',
   /** One shade darker than primary — web desktop sidebar only. */
-  sidebarWeb: '#134353',
+  sidebarWeb: '#12313c',
 };
 
 export const fonts = {
@@ -56,8 +56,8 @@ export const colors = {
   destructiveSoft: '#FFE5E8',
   sidebar: brand.primary,
   sidebarText: '#FFFFFF',
-  sidebarMuted: 'rgba(255,255,255,0.65)',
-  sidebarActive: 'rgba(255,255,255,0.12)',
+  sidebarMuted: '#FFFFFF',
+  sidebarActive: 'rgba(255, 255, 255, 0.14)',
 };
 
 export const spacing = {
@@ -128,7 +128,7 @@ export const typography = {
   },
 };
 
-export const avatarColors = ['#19576b', '#3a7a8c', '#059669', '#D97706', '#0e2f3a', '#8B5A2B'];
+export const avatarColors = ['#163a47', '#3a7a8c', '#059669', '#D97706', '#112d37', '#8B5A2B'];
 
 export const iconTones = {
   blue: { foreground: '#2563EB', background: '#EAF1FF' },

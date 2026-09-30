@@ -20,6 +20,25 @@ def _cod_enabled_for_business(business: Business) -> bool:
     return True
 
 
+def _customer_payment_gateways(business: Business) -> dict[str, dict[str, bool]]:
+    """Public customer-safe flags only (no secrets / key ids)."""
+    try:
+        from apps.shopie.services.merchant_payments import MerchantPaymentService
+
+        payments = MerchantPaymentService()
+        razorpay = payments.public_settings(business=business)
+        cashfree = payments.cashfree_public_settings(business=business)
+        return {
+            "razorpay": {"can_accept_payments": bool(razorpay.get("can_accept_payments"))},
+            "cashfree": {"can_accept_payments": bool(cashfree.get("can_accept_payments"))},
+        }
+    except Exception:
+        return {
+            "razorpay": {"can_accept_payments": False},
+            "cashfree": {"can_accept_payments": False},
+        }
+
+
 PRODUCT_FEATURES: dict[str, list[str]] = {
     "appointie": ["mobile_booking", "mobile_discover", "mobile_availability"],
     "shopie": ["mobile_shop", "mobile_cart", "mobile_orders"],
@@ -180,6 +199,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
             "upi_vpa": getattr(business, "upi_vpa", "") or "",
             "payment_qr_url": getattr(business, "payment_qr_url", "") or "",
             "cod_enabled": _cod_enabled_for_business(business),
+            **_customer_payment_gateways(business),
         },
         "branding": {
             "app_name": profile.app_name,

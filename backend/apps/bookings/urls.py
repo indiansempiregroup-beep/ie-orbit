@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.bookings.api.eligible_offers import BookingEligibleOffersView
 from apps.bookings.api.views import (
     AvailabilityView,
     BookingCancelView,
@@ -27,6 +28,11 @@ from apps.bookings.api.views import (
 
 urlpatterns = [
     path("bookings", BookingListCreateView.as_view(), name="booking-list-create"),
+    path(
+        "bookings/eligible-offers",
+        BookingEligibleOffersView.as_view(),
+        name="booking-eligible-offers",
+    ),
     path("booking-reviews", BookingReviewListView.as_view(), name="booking-review-list"),
     path("bookings/<uuid:booking_id>", BookingDetailView.as_view(), name="booking-detail"),
     path(

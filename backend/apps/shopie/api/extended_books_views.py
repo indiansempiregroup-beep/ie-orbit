@@ -130,6 +130,7 @@ class ShopBooksDocumentConvertView(APIView):
                 document=document,
                 cash_account_id=data.get("cash_account_id"),
                 amount_paid=data.get("amount_paid") or 0,
+                action=data.get("action") or None,
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc

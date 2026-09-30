@@ -62,7 +62,7 @@ export function FaqPage() {
         ))}
         <p className="public-lead" style={{ marginTop: 8 }}>
           Still have questions? <Link to="/contact">Contact us</Link> or{' '}
-          <Link to="/auth/register/start">create an account</Link> to explore with a 15-day full-Pro trial.
+          <Link to="/auth/register/start">create an account</Link> to explore with a 45-day full-Pro trial.
         </p>
       </div>
       <PublicCtaBand

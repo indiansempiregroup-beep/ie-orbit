@@ -9,22 +9,30 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
 import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { openShopDocumentView } from './shopDocumentActions';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { useShopBooksDocumentMutations, useShopBooksDocuments } from './shopHooks';
 
 export function ShopDeliveryChallansPage() {
   const workspace = useWorkspace();
+  const auth = useAuthContext();
   const currency = workspace.activeBusiness?.currency;
   const challans = useShopBooksDocuments('delivery_challan');
   const { convert } = useShopBooksDocumentMutations();
   const snackbar = useSnackbar();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const rows = challans.data ?? [];
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rows.filter((row) => {
-      if (status && row.status.toLowerCase() !== status) return false;
+      const rowStatus = row.status.toLowerCase();
+      if (status === 'open' && !['draft', 'confirmed'].includes(rowStatus)) return false;
+      if (status === 'converted' && rowStatus !== 'converted' && !row.converted_voucher) return false;
+      if (status && status !== 'open' && status !== 'converted' && rowStatus !== status) return false;
       if (!term) return true;
       return [row.document_number, row.customer_name, row.notes]
         .filter(Boolean)
@@ -34,20 +42,47 @@ export function ShopDeliveryChallansPage() {
     });
   }, [rows, search, status]);
 
-  const dispatchedCount = rows.filter((row) => ['dispatched', 'converted'].includes(row.status.toLowerCase())).length;
-  const draftCount = rows.length - dispatchedCount;
+  const openCount = rows.filter((row) => ['draft', 'confirmed'].includes(row.status.toLowerCase())).length;
+  const dispatchedCount = rows.filter((row) => row.status.toLowerCase() === 'dispatched').length;
+  const invoicedCount = rows.filter(
+    (row) => row.converted_voucher || row.status.toLowerCase() === 'converted',
+  ).length;
 
   async function dispatch(documentId: string, documentNumber: string) {
     try {
-      await convert.mutateAsync(documentId);
+      await convert.mutateAsync({ documentId, action: 'dispatch' });
       snackbar.push(`${documentNumber} marked as dispatched.`, 'success');
     } catch (error) {
       snackbar.push(getApiErrorMessage(error, 'Unable to dispatch challan.'), 'error');
     }
   }
 
+  async function invoice(documentId: string, documentNumber: string) {
+    try {
+      const result = await convert.mutateAsync({ documentId, action: 'to_invoice' });
+      const voucherNumber =
+        result && typeof result === 'object' && 'voucher_number' in result
+          ? String((result as { voucher_number?: string }).voucher_number || '')
+          : '';
+      snackbar.push(
+        voucherNumber
+          ? `${documentNumber} invoiced as ${voucherNumber}.`
+          : `${documentNumber} converted to invoice.`,
+        'success',
+      );
+    } catch (error) {
+      snackbar.push(getApiErrorMessage(error, 'Unable to create invoice from challan.'), 'error');
+    }
+  }
+
   return (
     <div className="page-stack">
+      <DocumentActionsSheet
+        open={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Challan ${docActions.number || ''}` : 'Delivery challan'}
+      />
       <div className="invoice-page-header">
         <h1 className="invoice-page-title">Delivery challans</h1>
         <Link to="/shop/pos?mode=delivery_challan" style={{ textDecoration: 'none' }}>
@@ -64,11 +99,15 @@ export function ShopDeliveryChallansPage() {
         </div>
         <div className="invoice-strip__cell">
           <span>Open</span>
-          <strong>{draftCount}</strong>
+          <strong>{openCount}</strong>
         </div>
         <div className="invoice-strip__cell">
           <span>Dispatched</span>
           <strong>{dispatchedCount}</strong>
+        </div>
+        <div className="invoice-strip__cell">
+          <span>Invoiced</span>
+          <strong>{invoicedCount}</strong>
         </div>
       </div>
 
@@ -91,9 +130,9 @@ export function ShopDeliveryChallansPage() {
             onChange={(event) => setStatus(event.target.value)}
             options={[
               { value: '', label: 'All statuses' },
-              { value: 'draft', label: 'Draft' },
+              { value: 'open', label: 'Open' },
               { value: 'dispatched', label: 'Dispatched' },
-              { value: 'converted', label: 'Converted' },
+              { value: 'converted', label: 'Invoiced' },
             ]}
             style={{ minWidth: 180 }}
           />
@@ -123,10 +162,14 @@ export function ShopDeliveryChallansPage() {
         ) : null}
         <div className="invoice-list">
           {filteredRows.map((row) => {
+            const status = row.status.toLowerCase();
             const canDispatch =
-              !row.converted_voucher && !['dispatched', 'converted', 'cancelled', 'void'].includes(row.status.toLowerCase());
-            const isVoid = ['cancelled', 'void'].includes(row.status.toLowerCase());
-            const dispatched = ['dispatched', 'converted'].includes(row.status.toLowerCase());
+              !row.converted_voucher && !['dispatched', 'converted', 'cancelled', 'void'].includes(status);
+            const canInvoice =
+              !row.converted_voucher && !['converted', 'cancelled', 'void'].includes(status);
+            const isVoid = ['cancelled', 'void'].includes(status);
+            const invoiced = Boolean(row.converted_voucher || status === 'converted');
+            const dispatched = status === 'dispatched';
             return (
               <div key={row.id} className={`invoice-row${isVoid ? ' invoice-row--void' : ''}`}>
                 <div className="invoice-row__main">
@@ -140,10 +183,55 @@ export function ShopDeliveryChallansPage() {
                 </div>
                 <div className="invoice-row__side">
                   <strong>{formatMoney(Number(row.total ?? 0), currency)}</strong>
-                  <span className={`invoice-pill ${isVoid ? 'is-void' : dispatched ? 'is-paid' : 'is-due'}`}>
-                    {row.status}
+                  <span
+                    className={`invoice-pill ${isVoid ? 'is-void' : invoiced ? 'is-paid' : dispatched ? 'is-paid' : 'is-due'}`}
+                  >
+                    {invoiced ? 'invoiced' : row.status}
                   </span>
                 </div>
+                {workspace.businessId ? (
+                  <div className="invoice-row__actions" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="invoice-row__action"
+                      title="View challan"
+                      aria-label={`View ${row.document_number}`}
+                      onClick={() => {
+                        const target = {
+                          kind: 'delivery_challan' as const,
+                          id: row.id,
+                          number: row.document_number,
+                          businessId: workspace.businessId!,
+                          phone: row.customer_phone || '',
+                          email: row.customer_email || '',
+                        };
+                        void openShopDocumentView(target, auth.token, 'a4', workspace.tenantId).catch((error) =>
+                          snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
+                        );
+                      }}
+                    >
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      className="invoice-row__action"
+                      title="Share challan"
+                      aria-label={`Share ${row.document_number}`}
+                      onClick={() =>
+                        setDocActions({
+                          kind: 'delivery_challan',
+                          id: row.id,
+                          number: row.document_number,
+                          businessId: workspace.businessId!,
+                          phone: row.customer_phone || '',
+                          email: row.customer_email || '',
+                        })
+                      }
+                    >
+                      Share
+                    </button>
+                  </div>
+                ) : null}
                 {canDispatch ? (
                   <Button
                     type="button"
@@ -152,6 +240,16 @@ export function ShopDeliveryChallansPage() {
                     onClick={() => void dispatch(row.id, row.document_number)}
                   >
                     Dispatch
+                  </Button>
+                ) : null}
+                {canInvoice ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={convert.isPending}
+                    onClick={() => void invoice(row.id, row.document_number)}
+                  >
+                    Create invoice
                   </Button>
                 ) : null}
               </div>

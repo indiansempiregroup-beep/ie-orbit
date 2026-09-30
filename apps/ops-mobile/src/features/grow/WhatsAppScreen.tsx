@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
@@ -77,6 +78,7 @@ export function WhatsAppScreen() {
   const [attachmentId, setAttachmentId] = useState<string | undefined>();
   const [attachmentUrl, setAttachmentUrl] = useState<string | undefined>();
   const [pendingAsset, setPendingAsset] = useState<ImagePickerAsset | null>(null);
+  const [attachLightboxOpen, setAttachLightboxOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<ShopSupplier[]>([]);
 
@@ -402,7 +404,9 @@ export function WhatsAppScreen() {
         <FieldLabel label="Attachment" optional />
         {attachmentUrl ? (
           <View style={styles.attachPreview}>
-            <Image source={{ uri: attachmentUrl }} style={styles.attachImage} />
+            <Pressable onPress={() => setAttachLightboxOpen(true)} accessibilityLabel="View attachment">
+              <Image source={{ uri: attachmentUrl }} style={styles.attachImage} />
+            </Pressable>
             <Pressable onPress={clearAttachment} style={styles.removeAttach} hitSlop={8}>
               <Feather name="x" size={16} color={colors.destructive} />
               <Text style={styles.removeAttachText}>Remove</Text>
@@ -418,6 +422,17 @@ export function WhatsAppScreen() {
           <Button label="Replace image" variant="outline" fullWidth onPress={() => void pickAttachment()} />
         ) : null}
       </View>
+      <ImageLightbox
+        uri={attachmentUrl || null}
+        visible={attachLightboxOpen}
+        title="Attachment"
+        onClose={() => setAttachLightboxOpen(false)}
+        replaceLabel="Replace image"
+        onReplace={() => {
+          setAttachLightboxOpen(false);
+          void pickAttachment();
+        }}
+      />
     </FormScreen>
   );
 }

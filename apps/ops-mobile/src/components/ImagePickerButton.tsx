@@ -5,6 +5,7 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 import { RemoteImage } from './RemoteImage';
+import { ImageLightbox } from './ImageLightbox';
 import { colors, form, iconTones, radius, spacing, typography } from '../theme/tokens';
 import { FieldLabel } from './ui/FieldLabel';
 import { fieldStyles } from './ui/fieldStyles';
@@ -34,6 +35,7 @@ export function ImagePickerButton({
   error,
 }: Props) {
   const [localPreview, setLocalPreview] = useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     // Parent URL changed (initial load / saved remote URL) — prefer that over a stale local pick.
@@ -107,27 +109,60 @@ export function ImagePickerButton({
     ]);
   }
 
+  function openPreview() {
+    if (!preview) return;
+    setLightboxOpen(true);
+  }
+
+  const lightbox = (
+    <ImageLightbox
+      uri={preview}
+      visible={lightboxOpen}
+      title={label || 'Photo'}
+      onClose={() => setLightboxOpen(false)}
+      replaceLabel="Change photo"
+      onReplace={() => {
+        setLightboxOpen(false);
+        openPicker();
+      }}
+    />
+  );
+
   if (variant === 'avatar') {
     return (
       <View style={styles.wrap}>
         <FieldLabel label={label} required={required} optional={optional} />
         <View style={styles.avatarRow}>
-          <Pressable style={styles.avatarHit} onPress={openPicker}>
+          <Pressable
+            style={styles.avatarHit}
+            onPress={preview ? openPreview : openPicker}
+            accessibilityLabel={preview ? 'View photo' : 'Add photo'}
+          >
             {preview ? (
               <RemoteImage uri={preview} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatarFallback}>
-              <Feather name="user" size={28} color={iconTones.cyan.foreground} />
+                <Feather name="user" size={28} color={iconTones.cyan.foreground} />
               </View>
             )}
-            <View style={styles.cameraBadge}>
+            <Pressable
+              style={styles.cameraBadge}
+              onPress={openPicker}
+              hitSlop={8}
+              accessibilityLabel="Change photo"
+            >
               <Feather name="camera" size={12} color="#fff" />
-            </View>
+            </Pressable>
           </Pressable>
           <View style={styles.avatarCopy}>
             <Pressable onPress={openPicker}>
               <Text style={styles.changeLink}>{preview ? 'Change photo' : 'Add photo'}</Text>
             </Pressable>
+            {preview ? (
+              <Pressable onPress={openPreview}>
+                <Text style={styles.previewLink}>View photo</Text>
+              </Pressable>
+            ) : null}
             {error ? <Text style={fieldStyles.error}>{error}</Text> : (
               <Text style={styles.helper}>
                 {helperText || 'Square photo recommended. Use camera or gallery.'}
@@ -135,6 +170,7 @@ export function ImagePickerButton({
             )}
           </View>
         </View>
+        {lightbox}
       </View>
     );
   }
@@ -142,21 +178,23 @@ export function ImagePickerButton({
   return (
     <View style={styles.wrap}>
       <FieldLabel label={label} required={required} optional={optional} />
-      <Pressable
-        style={[styles.card, preview ? styles.cardFilled : null, error ? styles.cardError : null]}
-        onPress={openPicker}
-      >
-        {preview ? (
-          <>
+      {preview ? (
+        <View style={[styles.card, styles.cardFilled, error ? styles.cardError : null]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={openPreview} accessibilityLabel="View photo">
             <RemoteImage uri={preview} style={styles.cardPreview} />
-            <View style={styles.cardOverlay}>
-              <View style={styles.cardAction}>
-                <Feather name="camera" size={14} color="#fff" />
-                <Text style={styles.cardActionText}>Change image</Text>
-              </View>
-            </View>
-          </>
-        ) : (
+          </Pressable>
+          <View style={styles.cardOverlay} pointerEvents="box-none">
+            <Pressable style={styles.cardAction} onPress={openPicker} accessibilityLabel="Change image">
+              <Feather name="camera" size={14} color="#fff" />
+              <Text style={styles.cardActionText}>Change image</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          style={[styles.card, error ? styles.cardError : null]}
+          onPress={openPicker}
+        >
           <View style={styles.cardEmpty}>
             <View style={styles.cardIcon}>
               <Feather name="image" size={22} color={iconTones.rose.foreground} />
@@ -166,9 +204,10 @@ export function ImagePickerButton({
               {helperText || 'Use camera or gallery. JPG or PNG works best.'}
             </Text>
           </View>
-        )}
-      </Pressable>
+        </Pressable>
+      )}
       {error ? <Text style={fieldStyles.error}>{error}</Text> : null}
+      {lightbox}
     </View>
   );
 }
@@ -212,6 +251,7 @@ const styles = StyleSheet.create({
   },
   avatarCopy: { flex: 1, gap: 4 },
   changeLink: { ...typography.label, color: colors.primary, fontWeight: '700' },
+  previewLink: { ...typography.caption, color: colors.mutedForeground, fontWeight: '600' },
   card: {
     height: 148,
     borderRadius: form.fieldRadius,

@@ -43,3 +43,31 @@ def resolve_customer_phone(customer: Any | None, *, fallback: str = "") -> str:
         if formatted:
             return formatted
     return ""
+
+
+def resolve_order_contact_phone(order: Any | None, *, customer: Any | None = None, preferred: str = "") -> str:
+    """Prefer the delivery-address phone (Amazon-style), then customer profile phone."""
+    candidates: list[object] = [preferred]
+    if order is not None:
+        metadata = getattr(order, "metadata", None)
+        if isinstance(metadata, dict):
+            candidates.append(metadata.get("delivery_contact_phone"))
+            delivery = metadata.get("delivery") if isinstance(metadata.get("delivery"), dict) else {}
+            drop = delivery.get("drop") if isinstance(delivery.get("drop"), dict) else {}
+            contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
+            candidates.append(contact.get("phone"))
+        if customer is None:
+            customer = getattr(order, "customer", None)
+    for value in candidates:
+        formatted = format_contact_phone(value)
+        if formatted:
+            return formatted
+    return resolve_customer_phone(customer)
+
+
+def require_address_phone(value: object) -> str:
+    """Normalize and require a valid India mobile for a saved address."""
+    phone = format_contact_phone(value)
+    if not phone:
+        raise ValueError("A valid 10-digit Indian mobile number is required for this address.")
+    return phone

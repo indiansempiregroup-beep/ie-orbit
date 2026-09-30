@@ -282,15 +282,21 @@ class BusinessService:
         actor: Any,
         set_active: bool = True,
         plan_code: str | None = None,
+        billing_interval: str | None = None,
     ) -> BusinessProductSubscription:
         normalized_code = product_code.strip().lower()
         if normalized_code not in VALID_PRODUCT_CODES:
             raise ValidationError({"product_code": "Unknown product code."})
+        normalized_interval = (billing_interval or "").strip().lower() or None
+        if normalized_interval and normalized_interval not in {"monthly", "yearly"}:
+            raise ValidationError({"billing_interval": "Use monthly or yearly."})
 
         plan, plan_definition = self.billing_service.resolve_subscription_plan(
             product_code=normalized_code,
             plan_code=plan_code,
         )
+        if normalized_interval:
+            plan_definition = {**(plan_definition or {}), "billing_interval": normalized_interval}
 
         subscription, created = BusinessProductSubscription.objects.get_or_create(
             tenant=business.tenant,

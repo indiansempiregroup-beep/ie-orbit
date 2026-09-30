@@ -35,8 +35,46 @@ def resolve_customers_for_user(*, tenant: Tenant, business: Business, user: User
     return qs.filter(filters)
 
 
+def find_customer_for_user(*, tenant: Tenant, business: Business, user: User) -> Customer | None:
+    return resolve_customers_for_user(tenant=tenant, business=business, user=user).first()
+
+
+def find_customer_for_login_identifier(
+    *,
+    tenant: Tenant,
+    business: Business,
+    channel: str,
+    identifier: str,
+) -> Customer | None:
+    """Login gate: match Customer by the sign-in identifier only (not email OR phone)."""
+    from apps.customers.services.contact import format_contact_phone
+
+    qs = Customer.objects.require_tenant(tenant).filter(business=business)
+    if channel == "email":
+        email = identifier.strip().lower()
+        if not email:
+            return None
+        return qs.filter(email__iexact=email).first()
+    phone = format_contact_phone(identifier, e164=True)
+    raw = identifier.strip()
+    filters = Q()
+    if phone:
+        filters |= Q(phone_number=phone)
+    if raw:
+        filters |= Q(phone_number=raw)
+    if not filters:
+        return None
+    return qs.filter(filters).first()
+
+
+def customer_login_missing_message(*, channel: str = "email") -> str:
+    if channel == "whatsapp":
+        return "No account found for this shop. Create an account or use a different number."
+    return "No account found for this shop. Create an account or use a different email."
+
+
 def ensure_customer_for_user(*, tenant: Tenant, business: Business, user: User) -> Customer:
-    existing = resolve_customers_for_user(tenant=tenant, business=business, user=user).first()
+    existing = find_customer_for_user(tenant=tenant, business=business, user=user)
     if existing is not None:
         return existing
     display_name = user.full_name or f"{user.first_name} {user.last_name}".strip() or user.email
@@ -72,6 +110,7 @@ def serialize_customer_address(customer: Customer) -> dict | None:
         "state": address.state,
         "country": address.country,
         "postal_code": address.postal_code,
+        "phone_number": address.phone_number or "",
         "latitude": float(address.latitude) if address.latitude is not None else None,
         "longitude": float(address.longitude) if address.longitude is not None else None,
     }

@@ -1,7 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import type { BillingOrder, BillingPlanCatalogItem, BusinessProductSubscription, ShopSmartLookupDashboard, ShopSmartLookupLedgerEntry } from '@ie-orbit/sdk';
+import type {
+  BillingOrder,
+  BillingPlanCatalogItem,
+  BusinessProductSubscription,
+  PlatformTaxInvoice,
+  ShopSmartLookupDashboard,
+  ShopSmartLookupLedgerEntry,
+} from '@ie-orbit/sdk';
 import { DateField } from '../../components/DateField';
 import { FormHero } from '../../components/FormHero';
 import { FormScreen } from '../../components/FormScreen';
@@ -37,21 +44,25 @@ import {
 import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 import { formatDate, formatRelativeTime, getApiErrorMessage } from '../../utils/format';
 import { resolveBillingProofUrl } from '../../utils/mediaUrl';
+import { downloadTaxInvoicePdf } from '../../utils/downloadTaxInvoicePdf';
 import { isLoyaltyEntitled, readLoyaltyPrefs as parseLoyaltyPrefs } from '../../utils/loyalty';
 import {
   daysUntil,
-  filterBillingOrders,
+  expandBillingHistoryEntries,
+  filterBillingHistoryEntries,
   ORDER_RANGE_FILTERS,
   ORDER_STATUS_FILTERS,
-  orderHistoryBucket,
   orderHistoryCounts,
-  orderStatusLabel,
+  planPricePaise,
   renewCtaLabel,
   subscriptionDueAt,
   subscriptionStatusLabel,
   subscriptionUxStatus,
   trackerStepIndex,
   trackerSteps,
+  yearlySavingsCopy,
+  type BillingHistoryEntry,
+  type BillingInterval,
   type OrderHistoryRange,
   type OrderHistoryStatusFilter,
   type SubscriptionUxStatus,
@@ -121,17 +132,61 @@ function estimateProductTotalPaise(
   subscription: BusinessProductSubscription,
   catalog: BillingPlanCatalogItem | undefined,
   addons: { staff: number; office: number; pets: number },
+  intervalOverride?: BillingInterval,
 ) {
-  const yearly = subscription.billing_interval === 'yearly';
-  const base = yearly
-    ? catalog?.yearly_amount_paise ?? (catalog?.amount_paise ?? 0) * 10
-    : catalog?.amount_paise ?? 0;
+  const interval: BillingInterval =
+    intervalOverride || (subscription.billing_interval === 'yearly' ? 'yearly' : 'monthly');
+  const yearly = interval === 'yearly';
+  const base = planPricePaise(catalog, interval);
   const multiplier = yearly ? 10 : 1;
   return (
-    (base ?? 0) +
+    base +
     (subscription.extra_staff ?? 0) * addons.staff * multiplier +
     (subscription.extra_offices ?? 0) * addons.office * multiplier +
     (subscription.product_code === 'shopie' && subscription.pets_pack_enabled ? addons.pets * multiplier : 0)
+  );
+}
+
+function BillingIntervalChips({
+  value,
+  onChange,
+  savingsLabel,
+  savingsDetail,
+}: {
+  value: BillingInterval;
+  onChange: (next: BillingInterval) => void;
+  savingsLabel?: string | null;
+  savingsDetail?: string | null;
+}) {
+  return (
+    <View style={styles.intervalBlock}>
+      <View style={styles.intervalSegment}>
+        {(['monthly', 'yearly'] as const).map((option) => {
+          const on = value === option;
+          return (
+            <Pressable
+              key={option}
+              onPress={() => onChange(option)}
+              style={[styles.intervalChip, on && styles.intervalChipOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+            >
+              <Text style={[styles.intervalChipText, on && styles.intervalChipTextOn]}>
+                {option === 'monthly' ? 'Monthly' : 'Yearly'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {value === 'yearly' && savingsLabel ? (
+        <View style={styles.savingsBadge}>
+          <Text style={styles.savingsBadgeText}>{savingsLabel}</Text>
+        </View>
+      ) : null}
+      {value === 'yearly' && savingsDetail ? (
+        <Text style={styles.savingsDetail}>{savingsDetail}</Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -198,10 +253,193 @@ function orderProducts(order: BillingOrder) {
   return paymentOrderLabel(order);
 }
 
-function billingHistoryIcon(bucket: ReturnType<typeof orderHistoryBucket>): keyof typeof Feather.glyphMap {
+function TaxInvoicesPanel({
+  token,
+  tenantId,
+  businessId,
+  onToast,
+}: {
+  token: string | null;
+  tenantId?: string | null;
+  businessId?: string | null;
+  onToast: (message: string, tone: 'success' | 'error') => void;
+}) {
+  const client = useMemo(
+    () => (token ? createScopedClient(token, tenantId, businessId) : null),
+    [token, tenantId, businessId],
+  );
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [invoices, setInvoices] = useState<PlatformTaxInvoice[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!client || !businessId) return;
+    setLoading(true);
+    try {
+      const response = await client.billing.taxInvoices({
+        business_id: businessId,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      });
+      setInvoices(response.data.invoices ?? []);
+    } catch (err) {
+      setInvoices([]);
+      onToast(getApiErrorMessage(err) || 'Could not load tax invoices', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [client, businessId, dateFrom, dateTo, onToast]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  async function downloadCsv(kind: 'invoices' | 'statement') {
+    if (!token || !businessId || !tenantId) {
+      onToast('Sign in again to download', 'error');
+      return;
+    }
+    const path =
+      kind === 'invoices'
+        ? `billing/tax-invoices?format=csv&business_id=${encodeURIComponent(businessId)}&date_from=${encodeURIComponent(dateFrom || '')}&date_to=${encodeURIComponent(dateTo || '')}`
+        : `billing/account-statement?format=csv&business_id=${encodeURIComponent(businessId)}&date_from=${encodeURIComponent(dateFrom || '')}&date_to=${encodeURIComponent(dateTo || '')}`;
+    try {
+      const { getApiBaseUrl } = await import('../../config/apiBaseUrl');
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-ID': tenantId,
+        'X-Business-ID': businessId,
+        Accept: '*/*',
+      };
+      const response = await fetch(`${getApiBaseUrl()}/${path}`, { headers });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 404
+            ? 'Download not found — check workspace selection and try again'
+            : `Download failed (${response.status})`,
+        );
+      }
+      const text = await response.text();
+      const filename = kind === 'invoices' ? 'ie-orbit-tax-invoices.csv' : 'ie-orbit-account-statement.csv';
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        onToast('CSV downloaded', 'success');
+        return;
+      }
+      const Sharing = await import('expo-sharing');
+      const { File, Paths } = await import('expo-file-system');
+      if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing unavailable');
+      const file = new File(Paths.cache, filename);
+      file.create({ overwrite: true, intermediates: true });
+      file.write(text);
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'text/csv',
+        UTI: 'public.comma-separated-values-text',
+        dialogTitle: `Share ${filename}`,
+      });
+    } catch (err) {
+      onToast(getApiErrorMessage(err) || 'Could not download CSV', 'error');
+    }
+  }
+
+  return (
+    <View style={styles.stack}>
+      <Text style={styles.meta}>
+        GST tax invoices and credit notes for IE Orbit SaaS charges. Share CSV with your CA.
+      </Text>
+      <View style={styles.toolbar}>
+        <View style={{ flex: 1 }}>
+          <DateField label="From" value={dateFrom} onChange={setDateFrom} allowPast allowFuture />
+        </View>
+        <View style={{ flex: 1 }}>
+          <DateField label="To" value={dateTo} onChange={setDateTo} allowPast allowFuture />
+        </View>
+      </View>
+      <View style={styles.historyActions}>
+        <Pressable onPress={() => void downloadCsv('invoices')} hitSlop={8}>
+          <Text style={styles.historyAction}>Tax invoices CSV</Text>
+        </Pressable>
+        <Pressable onPress={() => void downloadCsv('statement')} hitSlop={8}>
+          <Text style={styles.historyAction}>Account statement CSV</Text>
+        </Pressable>
+      </View>
+      {loading ? <Text style={styles.meta}>Loading invoices…</Text> : null}
+      {!loading && invoices.length === 0 ? (
+        <EmptyState
+          icon="file-text"
+          tone="navy"
+          title="No tax invoices yet"
+          message="Invoices appear after IE confirms a paid subscription or wallet top-up."
+        />
+      ) : (
+        <View style={styles.historyGroup}>
+          {invoices.map((invoice, index) => (
+            <View key={invoice.id} style={[styles.historyRow, index > 0 && styles.historyRowDivider]}>
+              <IconBadge
+                icon={invoice.document_type === 'credit_note' ? 'rotate-ccw' : 'file-text'}
+                tone={invoice.document_type === 'credit_note' ? 'amber' : 'green'}
+              />
+              <View style={styles.historyCopy}>
+                <View style={styles.historyMetaRow}>
+                  <Text style={styles.historyType}>
+                    {invoice.document_type === 'credit_note' ? 'Credit note' : 'Tax invoice'}
+                  </Text>
+                  <Text style={styles.historyTime}>
+                    {formatDate(invoice.issued_at || invoice.created_at)}
+                  </Text>
+                </View>
+                <View style={styles.historyTitleRow}>
+                  <Text style={styles.historySubject} numberOfLines={1}>
+                    {invoice.invoice_number}
+                  </Text>
+                  <Text style={styles.historyAmount}>{formatInrFromPaise(invoice.amount_paise) ?? '—'}</Text>
+                </View>
+                <Pressable
+                  onPress={() => {
+                    if (!token) {
+                      onToast('Sign in again to download', 'error');
+                      return;
+                    }
+                    setBusyId(invoice.id);
+                    void downloadTaxInvoicePdf({
+                      invoiceId: invoice.id,
+                      invoiceNumber: invoice.invoice_number,
+                      token,
+                      tenantId,
+                      businessId,
+                    })
+                      .then(() => onToast(Platform.OS === 'web' ? 'PDF downloaded' : 'Share PDF', 'success'))
+                      .catch((err) => onToast(getApiErrorMessage(err) || 'Could not download PDF', 'error'))
+                      .finally(() => setBusyId(null));
+                  }}
+                  disabled={busyId === invoice.id}
+                  hitSlop={8}
+                >
+                  <Text style={[styles.historyAction, busyId === invoice.id && styles.historyActionDisabled]}>
+                    Download PDF
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function billingHistoryIcon(bucket: Exclude<OrderHistoryStatusFilter, 'all'>): keyof typeof Feather.glyphMap {
   if (bucket === 'paid') return 'check-circle';
   if (bucket === 'rejected') return 'x-circle';
   if (bucket === 'review') return 'clock';
+  if (bucket === 'refunds') return 'rotate-ccw';
   return 'credit-card';
 }
 
@@ -220,56 +458,91 @@ function fitProofSize(
   };
 }
 
-function billingHistoryTone(bucket: ReturnType<typeof orderHistoryBucket>): IconTone {
+function billingHistoryTone(bucket: Exclude<OrderHistoryStatusFilter, 'all'>): IconTone {
   if (bucket === 'paid') return 'green';
   if (bucket === 'rejected') return 'rose';
   if (bucket === 'review') return 'amber';
+  if (bucket === 'refunds') return 'amber';
   return 'navy';
 }
 
-function BillingOrderRow({
-  order,
+function BillingHistoryRow({
+  entry,
   divider,
   onViewProof,
+  busy,
+  onRequestRefund,
+  onWithdrawRefund,
+  onDownloadTaxDoc,
 }: {
-  order: BillingOrder;
+  entry: BillingHistoryEntry<BillingOrder>;
   divider?: boolean;
   onViewProof?: (url: string) => void;
+  busy?: boolean;
+  onRequestRefund?: (order: BillingOrder) => void;
+  onWithdrawRefund?: (order: BillingOrder) => void;
+  onDownloadTaxDoc?: (doc: { id: string; invoice_number?: string | null; label: string }) => void;
 }) {
-  const bucket = orderHistoryBucket(order);
-  const proofUrl = resolveBillingProofUrl(order);
+  const order = entry.order;
+  const bucket = entry.bucket;
+  const proofUrl = entry.kind === 'payment' ? resolveBillingProofUrl(order) : null;
   const orderNo = String(order.order_number || order.id.slice(0, 8).toUpperCase()).replace(/^#/, '');
-  const meta = [
-    `#${orderNo}`,
-    `UTR ${order.upi_utr || 'not provided'}`,
-    order.claimed_at ? `Submitted ${formatDate(order.claimed_at)}` : null,
-    order.paid_at ? `Confirmed ${formatDate(order.paid_at)}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const refund = String(order.refund_status || '').toLowerCase();
+  const isPaid = String(order.payment_status || order.status || '').toLowerCase() === 'paid';
+  const isPayment = entry.kind === 'payment';
+  const canRequest =
+    isPayment &&
+    isPaid &&
+    (!refund || refund === 'none' || refund === 'rejected') &&
+    (order.available_refund_paise == null || order.available_refund_paise > 0);
+  const canWithdraw = entry.kind === 'refund_request';
+  const title =
+    entry.kind === 'payment'
+      ? orderProducts(order)
+      : entry.kind === 'refund_request'
+        ? `Refund request · ${orderProducts(order)}`
+        : entry.kind === 'refund_paid'
+          ? `Refund · ${orderProducts(order)}`
+          : `Refund declined · ${orderProducts(order)}`;
+  const meta =
+    entry.kind === 'payment'
+      ? [
+          `#${orderNo}`,
+          `UTR ${order.upi_utr || 'not provided'}`,
+          order.claimed_at ? `Submitted ${formatDate(order.claimed_at)}` : null,
+          order.paid_at ? `Confirmed ${formatDate(order.paid_at)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : [`Order #${orderNo}`, entry.note].filter(Boolean).join(' · ');
 
   return (
     <View style={[styles.historyRow, divider && styles.historyRowDivider]}>
       <IconBadge icon={billingHistoryIcon(bucket)} tone={billingHistoryTone(bucket)} />
       <View style={styles.historyCopy}>
         <View style={styles.historyMetaRow}>
-          <Text style={styles.historyType}>{orderStatusLabel(order.payment_status, order.status)}</Text>
-          <Text style={styles.historyTime}>{formatRelativeTime(order.claimed_at || order.created_at)}</Text>
+          <Text style={styles.historyType}>{entry.statusLabel}</Text>
+          <Text style={styles.historyTime}>{formatRelativeTime(entry.sortAt)}</Text>
         </View>
         <View style={styles.historyTitleRow}>
           <Text style={styles.historySubject} numberOfLines={1}>
-            {orderProducts(order)}
+            {title}
           </Text>
           <Text style={styles.historyAmount} numberOfLines={1}>
-            {formatInrFromPaise(order.amount_paise) ?? '—'}
+            {formatInrFromPaise(entry.amountPaise) ?? '—'}
           </Text>
         </View>
         <Text style={styles.historyBody} numberOfLines={2}>
           {meta}
         </Text>
-        {order.note ? (
+        {entry.kind === 'payment' && order.note ? (
           <Text style={styles.historyBody} numberOfLines={1}>
             {order.note}
+          </Text>
+        ) : null}
+        {entry.kind === 'refund_request' && order.refund_request?.reason ? (
+          <Text style={styles.historyBody} numberOfLines={2}>
+            {order.refund_request.reason}
           </Text>
         ) : null}
         {proofUrl ? (
@@ -277,6 +550,60 @@ function BillingOrderRow({
             <Text style={styles.historyAction}>View screenshot</Text>
           </Pressable>
         ) : null}
+        <View style={styles.historyActions}>
+          {isPayment && order.tax_invoice_id ? (
+            <Pressable
+              onPress={() =>
+                onDownloadTaxDoc?.({
+                  id: order.tax_invoice_id!,
+                  invoice_number: order.tax_invoice_number,
+                  label: 'invoice',
+                })
+              }
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.historyAction, busy && styles.historyActionDisabled]}>Download invoice</Text>
+            </Pressable>
+          ) : null}
+          {entry.kind === 'refund_paid' && entry.creditNoteId ? (
+            <Pressable
+              onPress={() =>
+                onDownloadTaxDoc?.({
+                  id: entry.creditNoteId!,
+                  invoice_number: entry.creditNoteNumber,
+                  label: 'credit note',
+                })
+              }
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.historyAction, busy && styles.historyActionDisabled]}>Download credit note</Text>
+            </Pressable>
+          ) : null}
+          {canRequest ? (
+            <Pressable
+              onPress={() => onRequestRefund?.(order)}
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.historyAction, busy && styles.historyActionDisabled]}>Request refund</Text>
+            </Pressable>
+          ) : null}
+          {canWithdraw ? (
+            <Pressable
+              onPress={() => onWithdrawRefund?.(order)}
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.historyAction, busy && styles.historyActionDisabled]}>Withdraw request</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -362,6 +689,7 @@ export function ProductSettingsScreen() {
   }, [plans]);
 
   const [pendingPlanByProduct, setPendingPlanByProduct] = useState<Record<string, string>>({});
+  const [intervalByProduct, setIntervalByProduct] = useState<Record<string, BillingInterval>>({});
   const [catalogPlans, setCatalogPlans] = useState<BillingPlanCatalogItem[]>([]);
   const [catalogAddons, setCatalogAddons] = useState({
     staff: 19900,
@@ -371,7 +699,7 @@ export function ProductSettingsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [upiPayRequest, setUpiPayRequest] = useState<SubscriptionUpiPayRequest | null>(null);
   const [selectedPay, setSelectedPay] = useState<string[]>([]);
-  const [hubTab, setHubTab] = useState<'subscriptions' | 'orders'>('subscriptions');
+  const [hubTab, setHubTab] = useState<'subscriptions' | 'orders' | 'tax'>('subscriptions');
   const [hubFilter, setHubFilter] = useState<'all' | 'due' | 'review' | 'locked'>('all');
   const [planOpen, setPlanOpen] = useState<Record<string, boolean>>({});
   const [orderQuery, setOrderQuery] = useState('');
@@ -382,6 +710,8 @@ export function ProductSettingsScreen() {
   const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
   const [proofFailed, setProofFailed] = useState(false);
   const [proofNatural, setProofNatural] = useState<{ width: number; height: number } | null>(null);
+  const [refundOrder, setRefundOrder] = useState<BillingOrder | null>(null);
+  const [refundReason, setRefundReason] = useState('');
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const proofMaxWidth = Math.max(240, windowWidth - spacing.xl * 2 - spacing.md * 2);
   const proofMaxHeight = Math.max(180, Math.round(windowHeight * 0.65));
@@ -551,9 +881,9 @@ export function ProductSettingsScreen() {
     smartTopUpPaise,
   ]);
 
-  const filteredOrders = useMemo(
+  const filteredHistory = useMemo(
     () =>
-      filterBillingOrders(orders, {
+      filterBillingHistoryEntries(expandBillingHistoryEntries(orders), {
         query: orderQuery,
         status: orderStatus,
         range: orderRange,
@@ -578,7 +908,38 @@ export function ProductSettingsScreen() {
       });
       return next;
     });
+    setIntervalByProduct((current) => {
+      const next = { ...current };
+      PRODUCT_CATALOG.forEach((product) => {
+        if (next[product.id]) return;
+        const subscription = subscriptionByProduct.get(product.id);
+        next[product.id] =
+          subscription?.billing_interval === 'monthly' || subscription?.billing_interval === 'yearly'
+            ? subscription.billing_interval
+            : 'yearly';
+      });
+      return next;
+    });
   }, [subscriptionByProduct, plansByProduct]);
+
+  function intervalFor(productId: string): BillingInterval {
+    const selected = intervalByProduct[productId];
+    if (selected) return selected;
+    const subscription = subscriptionByProduct.get(productId);
+    if (subscription?.billing_interval === 'monthly' || subscription?.billing_interval === 'yearly') {
+      return subscription.billing_interval;
+    }
+    return 'yearly';
+  }
+
+  function savingsForCatalog(catalog: BillingPlanCatalogItem | undefined) {
+    if (!catalog) return null;
+    return yearlySavingsCopy(
+      Number(catalog.amount_paise ?? 0) || 0,
+      planPricePaise(catalog, 'yearly'),
+      catalog.yearly_months_charged,
+    );
+  }
 
   useEffect(() => {
     if (!snapshot) return;
@@ -610,6 +971,60 @@ export function ProductSettingsScreen() {
     setOrderStatus('all');
     setOrderRange('all');
     setOrderProduct('');
+  }
+
+  async function submitRefundRequest() {
+    if (!refundOrder) return;
+    const reason = refundReason.trim();
+    if (reason.length < 3) {
+      showError(new Error('Add a short reason.'), 'Add a short reason for the refund.');
+      return;
+    }
+    const available =
+      refundOrder.available_refund_paise ??
+      refundOrder.suggested_refund_paise ??
+      refundOrder.amount_paise;
+    if (!available || available < 1) {
+      showError(
+        new Error('Nothing left to refund.'),
+        refundOrder.is_wallet_top_up
+          ? 'Nothing left to refund — this top-up balance was already used.'
+          : 'Nothing left to refund on this order.',
+      );
+      return;
+    }
+    setBusy(`refund-${refundOrder.id}`);
+    try {
+      await mutations.requestOrderRefund(refundOrder.id, { reason, amount_paise: available });
+      setRefundOrder(null);
+      setRefundReason('');
+      await afterMutation('Refund requested. IE will review and email you.');
+    } catch (err) {
+      showError(err, 'Unable to request refund.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function withdrawRefund(order: BillingOrder) {
+    Alert.alert('Withdraw refund request?', 'You can request again later if needed.', [
+      { text: 'Keep request', style: 'cancel' },
+      {
+        text: 'Withdraw',
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(`refund-${order.id}`);
+          try {
+            await mutations.withdrawOrderRefund(order.id);
+            await afterMutation('Refund request withdrawn.');
+          } catch (err) {
+            showError(err, 'Unable to withdraw refund request.');
+          } finally {
+            setBusy(null);
+          }
+        },
+      },
+    ]);
   }
 
   const checkoutProductCode = billingFocus || subscribedProducts[0]?.id || 'appointie';
@@ -678,17 +1093,32 @@ export function ProductSettingsScreen() {
           accessibilityState={{ selected: hubTab === 'orders' }}
         >
           <Text style={[styles.segmentText, hubTab === 'orders' && styles.segmentTextOn]}>History</Text>
-          {orders.length ? (
+          {orderCounts.all ? (
             <View style={[styles.segmentBadge, hubTab === 'orders' && styles.segmentBadgeOn]}>
               <Text style={[styles.segmentBadgeText, hubTab === 'orders' && styles.segmentBadgeTextOn]}>
-                {orders.length}
+                {orderCounts.all}
               </Text>
             </View>
           ) : null}
         </Pressable>
+        <Pressable
+          onPress={() => setHubTab('tax')}
+          style={[styles.segmentBtn, hubTab === 'tax' && styles.segmentBtnOn]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: hubTab === 'tax' }}
+        >
+          <Text style={[styles.segmentText, hubTab === 'tax' && styles.segmentTextOn]}>Invoices</Text>
+        </Pressable>
       </View>
 
-      {hubTab === 'orders' ? (
+      {hubTab === 'tax' ? (
+        <TaxInvoicesPanel
+          token={token}
+          tenantId={tenantId}
+          businessId={businessId}
+          onToast={(message, tone) => toast.push(message, tone)}
+        />
+      ) : hubTab === 'orders' ? (
         <View style={styles.stack}>
           <View style={styles.toolbar}>
             <SearchBar
@@ -711,8 +1141,8 @@ export function ProductSettingsScreen() {
           </ScrollView>
           <View style={styles.historyCountRow}>
             <Text style={styles.historyCount}>
-              {filteredOrders.length} order{filteredOrders.length === 1 ? '' : 's'}
-              {orders.length !== filteredOrders.length ? ` of ${orders.length}` : ''}
+              {filteredHistory.length} item{filteredHistory.length === 1 ? '' : 's'}
+              {orderCounts.all !== filteredHistory.length ? ` of ${orderCounts.all}` : ''}
               {orderRange !== 'all' ? ` · ${ORDER_RANGE_FILTERS.find((item) => item.id === orderRange)?.label}` : ''}
               {orderProduct ? ` · ${getProductName(orderProduct)}` : ''}
             </Text>
@@ -728,9 +1158,9 @@ export function ProductSettingsScreen() {
               icon="file-text"
               tone="navy"
               title="No orders yet"
-              message="When you pay with UPI, the order appears here with UTR, screenshot, and status."
+              message="Orders appear here after you submit a payment claim or a payment completes — with UTR, screenshot, and status."
             />
-          ) : filteredOrders.length === 0 ? (
+          ) : filteredHistory.length === 0 ? (
             <EmptyState
               icon="search"
               tone="navy"
@@ -741,12 +1171,42 @@ export function ProductSettingsScreen() {
             />
           ) : (
             <View style={styles.historyGroup}>
-              {filteredOrders.map((order, index) => (
-                <BillingOrderRow
-                  key={order.id}
-                  order={order}
+              {filteredHistory.map((entry, index) => (
+                <BillingHistoryRow
+                  key={entry.key}
+                  entry={entry}
                   divider={index > 0}
                   onViewProof={setProofPreviewUrl}
+                  busy={busy === `refund-${entry.order.id}` || busy === `tax-pdf-${entry.key}`}
+                  onRequestRefund={(row) => {
+                    setRefundOrder(row);
+                    setRefundReason('');
+                  }}
+                  onWithdrawRefund={withdrawRefund}
+                  onDownloadTaxDoc={async (doc) => {
+                    if (!token) {
+                      toast.push('Sign in again to download', 'error');
+                      return;
+                    }
+                    setBusy(`tax-pdf-${entry.key}`);
+                    try {
+                      await downloadTaxInvoicePdf({
+                        invoiceId: doc.id,
+                        invoiceNumber: doc.invoice_number,
+                        token,
+                        tenantId,
+                        businessId,
+                      });
+                      toast.push(
+                        Platform.OS === 'web' ? `${doc.label} downloaded` : `Share ${doc.label}`,
+                        'success',
+                      );
+                    } catch (err) {
+                      toast.push(getApiErrorMessage(err) || `Could not download ${doc.label}`, 'error');
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
                 />
               ))}
             </View>
@@ -787,6 +1247,7 @@ export function ProductSettingsScreen() {
                 pendingPlanByProduct[product.id] ||
                 subscription.plan_code ||
                 getRecommendedPlanCode(productPlans);
+              const selectedInterval = intervalFor(product.id);
               const paymentPending = pendingClaims.some((row) =>
                 (row.product_codes ?? [row.product_code]).includes(product.id),
               );
@@ -798,18 +1259,23 @@ export function ProductSettingsScreen() {
                 selectedPlanCode,
               );
               const dueDays = daysUntil(subscriptionDueAt(subscription));
+              const catalogForSub = catalogPlans.find((item) => item.plan_code === subscription.plan_code);
               const amountLabel = `${formatInrFromPaise(
-                estimateProductTotalPaise(
-                  subscription,
-                  catalogPlans.find((item) => item.plan_code === subscription.plan_code),
-                  catalogAddons,
-                ),
-              ) ?? '—'}/${subscription.billing_interval === 'yearly' ? 'year' : 'month'}`;
+                estimateProductTotalPaise(subscription, catalogForSub, catalogAddons, selectedInterval),
+              ) ?? '—'}/${selectedInterval === 'yearly' ? 'year' : 'month'}`;
               const dueLabel = formatDate(subscriptionDueAt(subscription));
               const latestOrder = orders.find((order) =>
                 (order.product_codes ?? [order.product_code]).includes(product.id),
               );
               const showPlans = Boolean(planOpen[product.id]);
+              const selectedCatalog = catalogPlans.find((item) => item.plan_code === selectedPlanCode);
+              const savings = savingsForCatalog(selectedCatalog || catalogForSub);
+              const periodEndsAt = subscription.current_period_ends_at;
+              const canScheduleCancel =
+                subscription.status === 'active' &&
+                Boolean(periodEndsAt) &&
+                new Date(periodEndsAt!).getTime() > Date.now() &&
+                !subscription.pending_cancel;
               return (
                 <Card
                   key={product.id}
@@ -827,6 +1293,14 @@ export function ProductSettingsScreen() {
                     </View>
                     <StatusChip label={subscriptionStatusLabel(uxStatus, dueDays)} tone={statusTone(uxStatus)} />
                   </View>
+                  <BillingIntervalChips
+                    value={selectedInterval}
+                    savingsLabel={savings?.label}
+                    savingsDetail={savings?.detail}
+                    onChange={(next) =>
+                      setIntervalByProduct((current) => ({ ...current, [product.id]: next }))
+                    }
+                  />
                   <Text style={styles.amountHero}>{amountLabel}</Text>
                   <Text style={styles.meta}>
                     Next payment due {dueLabel} · {amountLabel}. We do not charge automatically.
@@ -847,7 +1321,7 @@ export function ProductSettingsScreen() {
                     <View style={styles.notice}>
                       <Text style={styles.noticeTitle}>
                         {pendingPlanCode === 'canceled'
-                          ? 'Cancellation scheduled'
+                          ? `Cancellation scheduled — access through ${formatDate(subscription.current_period_ends_at)}`
                           : `${formatPlanDisplayName(subscription.plan_name, subscription.plan_code)} until ${formatDate(
                               subscription.current_period_ends_at,
                             )}, then ${formatPlanDisplayName(subscription.pending_plan_name, pendingPlanCode)}`}
@@ -890,7 +1364,9 @@ export function ProductSettingsScreen() {
                         const catalog = catalogPlans.find((item) => item.plan_code === plan.code);
                         const selected = selectedPlanCode === plan.code;
                         const recommended = isRecommendedPlanCode(plan.code);
-                        const price = formatInrFromPaise(catalog?.amount_paise);
+                        const pricePaise = planPricePaise(catalog, selectedInterval);
+                        const price = formatInrFromPaise(pricePaise);
+                        const period = selectedInterval === 'yearly' ? 'year' : 'month';
                         return (
                           <Pressable
                             key={plan.code}
@@ -904,7 +1380,7 @@ export function ProductSettingsScreen() {
                             <Text style={styles.planName}>
                               {formatPlanDisplayName(catalog?.name ?? plan.name, plan.code)}
                             </Text>
-                            <Text style={styles.planPrice}>{price ? `${price}/month` : 'Trial first'}</Text>
+                            <Text style={styles.planPrice}>{price ? `${price}/${period}` : 'Trial first'}</Text>
                           </Pressable>
                         );
                       })}
@@ -932,6 +1408,7 @@ export function ProductSettingsScreen() {
                                 ? petsPackEnabled
                                 : Boolean(subscription.pets_pack_enabled)
                               : false,
+                          billingInterval: selectedInterval,
                           mode: 'renew',
                           autoStart: true,
                         });
@@ -943,7 +1420,8 @@ export function ProductSettingsScreen() {
                           label={
                             !showPlans
                               ? 'Change plan'
-                              : selectedPlanCode === subscription.plan_code
+                              : selectedPlanCode === subscription.plan_code &&
+                                  selectedInterval === (subscription.billing_interval || 'monthly')
                                 ? 'Current plan'
                                 : `Switch to ${selectedTitle}`
                           }
@@ -951,7 +1429,8 @@ export function ProductSettingsScreen() {
                           loading={busy === `plan-${product.id}`}
                           disabled={
                             showPlans &&
-                            (selectedPlanCode === subscription.plan_code || selectedPlanCode === pendingPlanCode)
+                            selectedPlanCode === subscription.plan_code &&
+                            selectedInterval === (subscription.billing_interval || 'monthly')
                           }
                           style={styles.flexBtn}
                           onPress={() => {
@@ -962,7 +1441,7 @@ export function ProductSettingsScreen() {
                             const runChange = async () => {
                               setBusy(`plan-${product.id}`);
                               try {
-                                await mutations.changePlan(product.id, selectedPlanCode);
+                                await mutations.changePlan(product.id, selectedPlanCode, selectedInterval);
                                 await afterMutation(
                                   selectedPlanCode.includes('starter') && (subscription.plan_code ?? '').includes('pro')
                                     ? `${product.name} will switch to ${selectedTitle} at period end.`
@@ -990,11 +1469,42 @@ export function ProductSettingsScreen() {
                           }}
                         />
                         <Button
-                          label="Unsubscribe"
+                          label={canScheduleCancel ? 'Cancel at period end' : 'Unsubscribe'}
                           variant="ghost"
                           loading={busy === `unsub-${product.id}`}
                           style={styles.flexBtn}
                           onPress={() => {
+                            if (canScheduleCancel) {
+                              const paidThrough = formatDate(periodEndsAt);
+                              const yearly = subscription.billing_interval === 'yearly';
+                              Alert.alert(
+                                `Cancel ${product.name}?`,
+                                yearly
+                                  ? `You stay paid through ${paidThrough}. Access continues until then; no further yearly renewals.`
+                                  : `You'll keep access through ${paidThrough}. Billing stops after that.`,
+                                [
+                                  { text: 'Keep', style: 'cancel' },
+                                  {
+                                    text: 'Schedule cancel',
+                                    style: 'destructive',
+                                    onPress: async () => {
+                                      setBusy(`unsub-${product.id}`);
+                                      try {
+                                        await mutations.scheduleCancel(product.id);
+                                        await afterMutation(
+                                          `Cancellation scheduled for ${product.name}. Access through ${paidThrough}.`,
+                                        );
+                                      } catch (err) {
+                                        showError(err, 'Unable to schedule cancellation.');
+                                      } finally {
+                                        setBusy(null);
+                                      }
+                                    },
+                                  },
+                                ],
+                              );
+                              return;
+                            }
                             Alert.alert(`Unsubscribe ${product.name}?`, 'Billing for this product stops immediately.', [
                               { text: 'Keep', style: 'cancel' },
                               {
@@ -1100,6 +1610,7 @@ export function ProductSettingsScreen() {
                               ? petsPackEnabled
                               : Boolean(subscription?.pets_pack_enabled)
                             : false,
+                        billingInterval: intervalFor(productId),
                       },
                     ];
                   });
@@ -1118,19 +1629,32 @@ export function ProductSettingsScreen() {
               {unsubscribedProducts.map((product, index) => {
                 const productPlans = plansByProduct.get(product.id) ?? [];
                 const selectedPlanCode = pendingPlanByProduct[product.id] || getRecommendedPlanCode(productPlans);
+                const selectedInterval = intervalFor(product.id);
                 const selectedTitle = formatPlanDisplayName(
                   productPlans.find((plan) => plan.code === selectedPlanCode)?.name,
                   selectedPlanCode,
                 );
+                const selectedCatalog = catalogPlans.find((item) => item.plan_code === selectedPlanCode);
+                const savings = savingsForCatalog(selectedCatalog);
                 return (
                   <View key={product.id} style={[styles.addProduct, index > 0 && styles.addProductDivider]}>
                     <Text style={styles.productName}>{product.name}</Text>
                     <Text style={styles.meta}>{product.description}</Text>
+                    <BillingIntervalChips
+                      value={selectedInterval}
+                      savingsLabel={savings?.label}
+                      savingsDetail={savings?.detail}
+                      onChange={(next) =>
+                        setIntervalByProduct((current) => ({ ...current, [product.id]: next }))
+                      }
+                    />
                     <View style={styles.planGrid}>
                       {productPlans.map((plan) => {
                         const catalog = catalogPlans.find((item) => item.plan_code === plan.code);
                         const selected = selectedPlanCode === plan.code;
-                        const price = formatInrFromPaise(catalog?.amount_paise);
+                        const pricePaise = planPricePaise(catalog, selectedInterval);
+                        const price = formatInrFromPaise(pricePaise);
+                        const period = selectedInterval === 'yearly' ? 'year' : 'month';
                         return (
                           <Pressable
                             key={plan.code}
@@ -1140,7 +1664,7 @@ export function ProductSettingsScreen() {
                             <Text style={styles.planName}>
                               {formatPlanDisplayName(catalog?.name ?? plan.name, plan.code)}
                             </Text>
-                            <Text style={styles.planPrice}>{price ? `${price}/month` : 'Trial first'}</Text>
+                            <Text style={styles.planPrice}>{price ? `${price}/${period}` : 'Trial first'}</Text>
                           </Pressable>
                         );
                       })}
@@ -1156,7 +1680,12 @@ export function ProductSettingsScreen() {
                         }
                         setBusy(`sub-${product.id}`);
                         try {
-                          await mutations.subscribe(product.id, selectedPlanCode, subscribedProducts.length === 0);
+                          await mutations.subscribe(
+                            product.id,
+                            selectedPlanCode,
+                            subscribedProducts.length === 0,
+                            selectedInterval,
+                          );
                           await afterMutation(`Subscribed to ${product.name}.`);
                         } catch (err) {
                           showError(err, 'Unable to subscribe to product.');
@@ -1184,6 +1713,7 @@ export function ProductSettingsScreen() {
                           extraStaff: 0,
                           extraOffices: 0,
                           petsPackEnabled: false,
+                          billingInterval: selectedInterval,
                           mode: 'subscribe',
                         });
                       }}
@@ -1790,6 +2320,53 @@ export function ProductSettingsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={Boolean(refundOrder)}
+        transparent
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setRefundOrder(null)}
+      >
+        <Pressable style={styles.proofOverlay} onPress={() => setRefundOrder(null)}>
+          <Pressable style={styles.proofSheet} onPress={(event) => event.stopPropagation?.()}>
+            <View style={styles.proofHeader}>
+              <Text style={styles.proofTitle}>Request refund</Text>
+              <Pressable onPress={() => setRefundOrder(null)} hitSlop={8} accessibilityLabel="Close">
+                <Feather name="x" size={20} color={colors.foreground} />
+              </Pressable>
+            </View>
+            <Text style={styles.meta}>
+              {refundOrder
+                ? `Order #${String(refundOrder.order_number || refundOrder.id.slice(0, 8).toUpperCase()).replace(/^#/, '')} · paid ${formatInrFromPaise(refundOrder.amount_paise) ?? '—'}`
+                : ''}
+            </Text>
+            {refundOrder?.is_wallet_top_up ? (
+              <Text style={styles.meta}>
+                Available to refund {formatInrFromPaise(refundOrder.available_refund_paise ?? refundOrder.suggested_refund_paise) ?? '₹0'}{' '}
+                (unused {refundOrder.refund_kind === 'assistant_top_up' ? 'Assistant' : 'Smart Lookup'} wallet only).
+              </Text>
+            ) : refundOrder?.available_refund_paise != null ? (
+              <Text style={styles.meta}>
+                Available to refund {formatInrFromPaise(refundOrder.available_refund_paise) ?? '—'}
+              </Text>
+            ) : null}
+            <Input
+              label="Reason"
+              value={refundReason}
+              onChangeText={setRefundReason}
+              placeholder="Why are you requesting a refund?"
+              multiline
+            />
+            <Button
+              label="Submit request"
+              loading={Boolean(refundOrder && busy === `refund-${refundOrder.id}`)}
+              fullWidth
+              onPress={() => void submitRefundRequest()}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </FormScreen>
   );
 }
@@ -2006,6 +2583,51 @@ const styles = StyleSheet.create({
   historyAmount: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
   historyBody: { ...typography.caption, color: colors.mutedForeground, marginTop: 4, lineHeight: 18 },
   historyAction: { color: colors.primary, fontSize: 13, fontFamily: fonts.bodySemi, marginTop: 8 },
+  historyActionDisabled: { opacity: 0.5 },
+  historyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: 4 },
+  intervalBlock: { gap: spacing.sm },
+  intervalSegment: {
+    flexDirection: 'row',
+    backgroundColor: colors.muted,
+    borderRadius: radius.full,
+    padding: 3,
+    gap: 2,
+    alignSelf: 'flex-start',
+  },
+  intervalChip: {
+    minWidth: 88,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    alignItems: 'center',
+  },
+  intervalChipOn: {
+    backgroundColor: colors.primary,
+    ...shadows.soft,
+  },
+  intervalChipText: {
+    ...typography.caption,
+    fontFamily: fonts.bodySemi,
+    color: colors.mutedForeground,
+  },
+  intervalChipTextOn: { color: colors.primaryForeground },
+  savingsBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.secondary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  savingsBadgeText: {
+    ...typography.tiny,
+    fontFamily: fonts.bodySemi,
+    color: colors.primary,
+  },
+  savingsDetail: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    lineHeight: 18,
+  },
   proofOverlay: {
     flex: 1,
     backgroundColor: colors.overlay,

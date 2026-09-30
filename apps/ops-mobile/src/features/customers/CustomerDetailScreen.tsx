@@ -20,6 +20,7 @@ import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatRelativeTime, getApiErrorMessage } from '../../utils/format';
 import { hasShopie } from '../../utils/products';
+import { formatMoney } from '../shop/posPayment';
 import type { RootStackParamList } from '../../navigation/types';
 
 type PayMethod = 'cash' | 'upi' | 'card';
@@ -66,7 +67,8 @@ export function CustomerDetailScreen() {
     customer.email ||
     'Customer';
   const balanceDue = Number(customer.borrow_balance_due ?? 0);
-  const currency = customer.borrow_currency || 'INR';
+  const currency = customer.borrow_currency || activeBusiness?.currency || 'INR';
+  const money = (value: number) => formatMoney(value, currency);
 
   async function recordPayment() {
     if (!client || balanceDue <= 0) return;
@@ -76,7 +78,7 @@ export function CustomerDetailScreen() {
       return;
     }
     if (amount > balanceDue) {
-      toast.push(`Amount cannot exceed outstanding ${balanceDue.toFixed(2)}.`, 'error');
+      toast.push(`Amount cannot exceed outstanding ${money(balanceDue)}.`, 'error');
       return;
     }
     setPaying(true);
@@ -86,7 +88,7 @@ export function CustomerDetailScreen() {
         payment_method: payMethod,
         notes: payNotes.trim(),
       });
-      toast.push(`Payment of ${amount.toFixed(2)} recorded.`, 'success');
+      toast.push(`Payment of ${money(amount)} recorded.`, 'success');
       setPayAmount('');
       setPayNotes('');
       await reload();
@@ -120,7 +122,7 @@ export function CustomerDetailScreen() {
         <SectionHeader title="Borrow / credit" />
         <Text style={styles.balanceLabel}>Outstanding</Text>
         <Text style={[styles.balanceValue, balanceDue > 0 && styles.balanceDue]}>
-          {currency} {balanceDue.toFixed(2)}
+          {money(balanceDue)}
         </Text>
         {balanceDue > 0 ? (
           <View style={styles.payBox}>
@@ -130,7 +132,7 @@ export function CustomerDetailScreen() {
               value={payAmount}
               onChangeText={setPayAmount}
               keyboardType="decimal-pad"
-              placeholder={`Amount (max ${balanceDue.toFixed(2)})`}
+              placeholder={`Amount (max ${money(balanceDue)})`}
               placeholderTextColor={colors.mutedForeground}
             />
             <View style={styles.methodRow}>
@@ -170,11 +172,11 @@ export function CustomerDetailScreen() {
                   <Text style={styles.ledgerMain}>
                     {entry.entry_type === 'payment' ? 'Payment' : entry.entry_type === 'charge' ? 'Borrow' : entry.entry_type}
                     {' · '}
-                    {Number(entry.amount).toFixed(2)}
+                    {money(Number(entry.amount))}
                     {entry.order_number ? ` · ${entry.order_number}` : ''}
                   </Text>
                   <Text style={styles.ledgerMeta}>
-                    Balance {Number(entry.balance_after).toFixed(2)}
+                    Balance {money(Number(entry.balance_after))}
                     {entry.created_at ? ` · ${formatRelativeTime(entry.created_at)}` : ''}
                   </Text>
                 </View>

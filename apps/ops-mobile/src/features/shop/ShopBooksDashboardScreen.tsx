@@ -332,7 +332,7 @@ export function ShopBooksDashboardScreen() {
                     <MenuRow
                       icon="truck"
                       label="Delivery Challan"
-                      subtitle="Goods movement & dispatch"
+                      subtitle="Create → share → dispatch → invoice"
                       onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'delivery_challan' })}
                     />
                   ) : null}

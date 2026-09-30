@@ -27,6 +27,7 @@ export const PLAN_FEATURE_GROUP_ORDER = [
   'Commerce',
   'Books',
   'Grow',
+  'Automations',
   'Marketing',
   'Loyalty',
   'AI Assistant',
@@ -85,6 +86,14 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
     adminLabel: 'AI Business Assistant (Orbit Appoint)',
     detail:
       'Ask in plain language — check bookings and customers, then confirm status changes without digging through screens.',
+  },
+  {
+    code: 'appointie_service_bg_remove',
+    group: 'Orbit Appoint',
+    products: ['appointie'],
+    label: 'Service photo background remove',
+    adminLabel: 'Auto-remove background on service photos',
+    detail: 'Strip the background from service photos so they sit on a clean transparent canvas.',
   },
   {
     code: 'shopie_pos',
@@ -150,6 +159,14 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
     label: 'Smart product lookup',
     adminLabel: 'Smart product lookup (pack-photo AI)',
     detail: 'When barcodes miss the free catalog, read a pack photo with AI and fill the product form from a prepaid wallet.',
+  },
+  {
+    code: 'shopie_product_bg_remove',
+    group: 'Commerce',
+    products: ['shopie'],
+    label: 'Product photo background remove',
+    adminLabel: 'Auto-remove background on product photos',
+    detail: 'Strip the background from pack photos so products sit on a clean transparent canvas.',
   },
   {
     code: 'shopie_ai_assistant',
@@ -322,6 +339,15 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
     label: 'Your ads in the customer app',
     adminLabel: 'Customer app ads (max 5)',
     detail: 'Show up to 5 of your own promotions in the customer app.',
+  },
+  {
+    code: 'automations',
+    group: 'Automations',
+    products: BOTH,
+    label: 'Automation Creator',
+    adminLabel: 'Automations (AI creator + rules)',
+    detail:
+      'Create occasion, birthday, and VIP rules with AI — discounts for Orbit Mart, reminders and staff offer hints for Orbit Appoint.',
   },
   {
     code: 'ad_free',

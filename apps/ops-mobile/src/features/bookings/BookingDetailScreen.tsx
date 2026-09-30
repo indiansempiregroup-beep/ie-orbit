@@ -24,23 +24,23 @@ import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatServicePrice } from '../../utils/services';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, formatTime, getApiErrorMessage, mapBookingStatus } from '../../utils/format';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { formatMoney } from '../shop/posPayment';
 import type { RootStackParamList } from '../../navigation/types';
 
-function formatLineItemPrice(value?: string | number | null): string | null {
+function formatLineItemPrice(value?: string | number | null, currency?: string | null): string | null {
   if (value == null || value === '') return null;
   const amount = Number(value);
   if (!Number.isFinite(amount)) return null;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'INR' }).format(amount);
-  } catch {
-    return `INR ${amount.toFixed(2)}`;
-  }
+  return formatMoney(amount, currency);
 }
 
 export function BookingDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BookingDetail'>>();
   const { user } = useAuth();
   const toast = useToast();
+  const { activeBusiness } = useWorkspace();
+  const currency = activeBusiness?.currency;
   const { booking, loading, error, reload } = useBooking(
     route.params.bookingId,
     route.params.initialBooking,
@@ -114,12 +114,12 @@ export function BookingDetailScreen() {
     if (booking?.line_items?.length) {
       const total = booking.line_items.reduce((sum, item) => sum + (Number(item.price_snapshot) || 0), 0);
       if (total > 0) {
-        return formatLineItemPrice(total) ?? '—';
+        return formatLineItemPrice(total, currency) ?? '—';
       }
     }
     const service = services.find((item) => String(item.id) === String(booking?.service_id));
     return formatServicePrice(service) || '—';
-  }, [booking?.line_items, booking?.service_id, services]);
+  }, [booking?.line_items, booking?.service_id, currency, services]);
 
   const usePerLineReassign = (booking?.line_items?.length ?? 0) > 1;
   const {

@@ -12,8 +12,10 @@ import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
 import { useShopCashAccounts, useShopSuppliers, useShopVoucherMutations, useShopVouchers } from './shopHooks';
+import { useQuery } from '@tanstack/react-query';
+import { useApiClient } from '../../hooks/useApiClient';
 
-const EXPENSE_CATEGORIES = [
+const FALLBACK_EXPENSE_CATEGORIES = [
   'Rent',
   'Electricity',
   'Salaries',
@@ -26,8 +28,21 @@ const EXPENSE_CATEGORIES = [
 
 export function ShopExpensePage() {
   const workspace = useWorkspace();
+  const client = useApiClient();
   const currency = workspace.activeBusiness?.currency;
   const snackbar = useSnackbar();
+  const businessId = workspace.activeBusiness?.id || '';
+  const expenseCatsQuery = useQuery({
+    queryKey: ['shop-master', 'expense_category', businessId],
+    enabled: Boolean(businessId),
+    queryFn: async () => {
+      const response = await client.shop.listMasterRecords('expense_category', { business_id: businessId });
+      return (response.data.items ?? []).map((row) => row.label);
+    },
+  });
+  const EXPENSE_CATEGORIES = expenseCatsQuery.data?.length
+    ? expenseCatsQuery.data
+    : FALLBACK_EXPENSE_CATEGORIES;
   const [searchParams, setSearchParams] = useSearchParams();
   const dialog = useDialog();
 

@@ -8,7 +8,7 @@ from django.db.models import Count, IntegerField, Q, Sum, Value
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
-from apps.billing.constants import PLAN_PRICE_PAISE, YEARLY_PRICE_MULTIPLIER
+from apps.billing.constants import PLAN_PRICE_PAISE, yearly_months_from_definition
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.addon_pricing import get_addon_prices
 from apps.businesses.models import BusinessProductSubscription, BusinessProductSubscriptionStatus
@@ -36,15 +36,16 @@ def _subscription_monthly_paise(
     plan_code = subscription.plan.code if subscription.plan_id else ""
     definition = plan_map.get(plan_code) or {}
     monthly = int(definition.get("amount_paise") or PLAN_PRICE_PAISE.get(plan_code, 0) or 0)
+    months = yearly_months_from_definition(definition)
     yearly_raw = definition.get("yearly_amount_paise")
-    yearly = int(yearly_raw) if yearly_raw is not None else monthly * YEARLY_PRICE_MULTIPLIER
+    yearly = int(yearly_raw) if yearly_raw is not None else monthly * months
     addon_monthly = (
         int(subscription.extra_staff or 0) * addon_prices["staff_price_paise"]
         + int(subscription.extra_offices or 0) * addon_prices["office_price_paise"]
         + (addon_prices["pets_price_paise"] if subscription.pets_pack_enabled else 0)
     )
     if (subscription.billing_interval or "monthly") == "yearly":
-        return (yearly + addon_monthly * YEARLY_PRICE_MULTIPLIER) // 12
+        return (yearly + addon_monthly * months) // 12
     return monthly + addon_monthly
 
 

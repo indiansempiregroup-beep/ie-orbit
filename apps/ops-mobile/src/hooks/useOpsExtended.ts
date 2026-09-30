@@ -625,13 +625,19 @@ export function useProductMutations() {
       const client = await scopedClient();
       return (await client.businesses.patch(businessId!, { selected_product: productId })).data;
     },
-    subscribe: async (productCode: string, planCode?: string, setActive = false) => {
+    subscribe: async (
+      productCode: string,
+      planCode?: string,
+      setActive = false,
+      billingInterval?: 'monthly' | 'yearly',
+    ) => {
       const client = await scopedClient();
       return (
         await client.businesses.subscribeProduct(businessId!, {
           product_code: productCode,
           plan_code: planCode,
           set_active: setActive,
+          billing_interval: billingInterval,
         })
       ).data;
     },
@@ -639,13 +645,35 @@ export function useProductMutations() {
       const client = await scopedClient();
       return (await client.businesses.unsubscribeProduct(businessId!, productCode)).data;
     },
-    changePlan: async (productCode: string, planCode: string) => {
+    scheduleCancel: async (productCode: string) => {
       const client = await scopedClient();
-      return (await client.businesses.changeProductPlan(businessId!, productCode, { plan_code: planCode })).data;
+      return (await client.businesses.scheduleCancelProduct(businessId!, productCode)).data;
+    },
+    changePlan: async (productCode: string, planCode: string, billingInterval?: 'monthly' | 'yearly') => {
+      const client = await scopedClient();
+      return (
+        await client.businesses.changeProductPlan(businessId!, productCode, {
+          plan_code: planCode,
+          billing_interval: billingInterval,
+        })
+      ).data;
     },
     cancelPendingPlan: async (productCode: string) => {
       const client = await scopedClient();
       return (await client.businesses.cancelPendingPlanChange(businessId!, productCode)).data;
+    },
+    requestOrderRefund: async (sessionId: string, body: { reason: string; amount_paise?: number }) => {
+      const client = await scopedClient();
+      return (
+        await client.billing.requestOrderRefund(sessionId, {
+          ...body,
+          business_id: businessId!,
+        })
+      ).data;
+    },
+    withdrawOrderRefund: async (sessionId: string) => {
+      const client = await scopedClient();
+      return (await client.billing.withdrawOrderRefund(sessionId, { business_id: businessId! })).data;
     },
   };
 }

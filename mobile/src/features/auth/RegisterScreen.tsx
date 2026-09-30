@@ -228,7 +228,7 @@ export function RegisterScreen({ navigation }: Props) {
             onIdToken={async (idToken) => {
               setSubmitting(true);
               try {
-                await loginWithGoogle(idToken);
+                await loginWithGoogle(idToken, true, 'signup');
                 await applyReferralIfNeeded();
               } finally {
                 setSubmitting(false);

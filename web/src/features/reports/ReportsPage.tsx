@@ -2,13 +2,14 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { formatMoney } from '../../lib/currency';
 import { useDashboardSummary } from '../dashboard/dashboardHooks';
 import { StatCard } from '../bi/components/StatCard';
 import { useBIReportsQuery } from '../bi/biHooks';
 
 function money(amount?: number | null, currency?: string | null) {
   if (amount == null) return '—';
-  return `${currency ?? ''} ${Number(amount).toFixed(2)}`.trim();
+  return formatMoney(Number(amount), currency);
 }
 
 function pct(value?: number | null) {

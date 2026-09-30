@@ -42,7 +42,7 @@ export function PaymentSettingsScreen() {
   const [connected, setConnected] = useState(false);
   const [providerStatus, setProviderStatus] = useState<MerchantPaymentSettings['status']>('not_configured');
   const [available, setAvailable] = useState(false);
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
   const [blockedReason, setBlockedReason] = useState('');
   const [keyId, setKeyId] = useState('');
   const [keySecret, setKeySecret] = useState('');
@@ -54,7 +54,7 @@ export function PaymentSettingsScreen() {
   const [cashfreeStatus, setCashfreeStatus] =
     useState<MerchantPaymentSettings['status']>('not_configured');
   const [cashfreeAvailable, setCashfreeAvailable] = useState(false);
-  const [cashfreeEnabled, setCashfreeEnabled] = useState(true);
+  const [cashfreeEnabled, setCashfreeEnabled] = useState(false);
   const [cashfreeBlockedReason, setCashfreeBlockedReason] = useState('');
   const [cashfreeAppId, setCashfreeAppId] = useState('');
   const [cashfreeSecret, setCashfreeSecret] = useState('');
@@ -74,7 +74,7 @@ export function PaymentSettingsScreen() {
       setConnected(data.connected);
       setProviderStatus(data.status);
       setAvailable(data.available);
-      setEnabled(data.enabled);
+      setEnabled(Boolean(data.enabled && data.connected));
       setBlockedReason(
         !data.platform_enabled
           ? 'Online payments are disabled for this workspace by the platform administrator.'
@@ -93,7 +93,7 @@ export function PaymentSettingsScreen() {
         setCashfreeConnected(cashfree.connected);
         setCashfreeStatus(cashfree.status);
         setCashfreeAvailable(cashfree.available);
-        setCashfreeEnabled(cashfree.enabled);
+        setCashfreeEnabled(Boolean(cashfree.enabled && cashfree.connected));
         setCashfreeBlockedReason(
           !cashfree.platform_enabled
             ? 'Cashfree is disabled for this workspace by the platform administrator.'
@@ -122,9 +122,37 @@ export function PaymentSettingsScreen() {
       .catch((err) => setError(getApiErrorMessage(err, 'Unable to load payment settings.')));
   }, [applySettings, businessId, client]);
 
-  const save = async (testConnection: boolean) => {
+  const save = async (
+    testConnection: boolean,
+    overrides?: { enabled?: boolean; cashfreeEnabled?: boolean },
+  ) => {
     if (!client || !businessId || !token || !tenantId) return;
-    if (testConnection) setTesting(true);
+
+    const nextEnabled = overrides?.enabled ?? enabled;
+    const nextCashfreeEnabled = overrides?.cashfreeEnabled ?? cashfreeEnabled;
+    const enablingRazorpay = available && nextEnabled && (keyId.trim() || configured);
+    const enablingCashfree =
+      cashfreeAvailable && nextCashfreeEnabled && (cashfreeAppId.trim() || cashfreeConfigured);
+    const mustTestRazorpay = enablingRazorpay && !connected;
+    const mustTestCashfree = enablingCashfree && !cashfreeConnected;
+    const runTest = testConnection || mustTestRazorpay || mustTestCashfree;
+
+    if (enablingRazorpay && !keyId.trim() && !configured) {
+      const msg = 'Add your Razorpay Key ID and Key Secret, then tap Save & test.';
+      setError(msg);
+      toast.push(msg, 'error');
+      setEnabled(false);
+      return;
+    }
+    if (enablingCashfree && !cashfreeAppId.trim() && !cashfreeConfigured) {
+      const msg = 'Add your Cashfree App ID and Secret Key, then tap Save & test.';
+      setError(msg);
+      toast.push(msg, 'error');
+      setCashfreeEnabled(false);
+      return;
+    }
+
+    if (runTest) setTesting(true);
     else setLoading(true);
     setError(null);
     setMessage(null);
@@ -150,47 +178,123 @@ export function PaymentSettingsScreen() {
         upi_vpa: upiVpa.trim(),
       });
       applySettings(codResponse.data);
-      if (available && (keyId.trim() || connected)) {
+      if (available && (keyId.trim() || configured || connected || nextEnabled)) {
         const response = await client.shop.updateMerchantPaymentSettings({
           business_id: businessId,
-          enabled,
+          enabled: nextEnabled,
           key_id: keyId.trim(),
           key_secret: keySecret.trim() || undefined,
           webhook_secret: webhookSecret.trim() || undefined,
           upi_vpa: upiVpa.trim(),
-          test_connection: testConnection && enabled,
+          test_connection: runTest && (nextEnabled || Boolean(keyId.trim())),
         });
         applySettings(response.data);
         setKeySecret('');
         setWebhookSecret('');
+        if (nextEnabled && !response.data.connected) {
+          throw new Error('Test your Razorpay credentials successfully before enabling payments.');
+        }
       }
-      if (cashfreeAvailable && (cashfreeAppId.trim() || cashfreeConnected)) {
+      if (
+        cashfreeAvailable &&
+        (cashfreeAppId.trim() || cashfreeConfigured || cashfreeConnected || nextCashfreeEnabled)
+      ) {
         const response = await client.shop.updateMerchantPaymentSettings({
           business_id: businessId,
           upi_vpa: upiVpa.trim(),
           cashfree: {
             app_id: cashfreeAppId.trim(),
             secret_key: cashfreeSecret.trim() || undefined,
-            enabled: cashfreeEnabled,
-            test_connection: testConnection && cashfreeEnabled,
+            enabled: nextCashfreeEnabled,
+            test_connection: runTest && (nextCashfreeEnabled || Boolean(cashfreeAppId.trim())),
           },
         });
         applySettings(response.data);
         setCashfreeSecret('');
+        if (nextCashfreeEnabled && !response.data.cashfree?.connected) {
+          throw new Error('Test your Cashfree credentials successfully before enabling payments.');
+        }
       }
       await refreshWorkspace();
-      const successMessage = testConnection
+      const successMessage = runTest
         ? 'Saved and verified with the payment providers.'
         : 'Payment settings saved.';
       setMessage(successMessage);
       toast.push(successMessage, 'success');
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to save payment settings.'));
+      const msg = getApiErrorMessage(err, 'Unable to save payment settings.');
+      setError(msg);
+      toast.push(msg, 'error');
+      if (client && businessId) {
+        try {
+          const refreshed = await client.shop.getMerchantPaymentSettings({ business_id: businessId });
+          applySettings(refreshed.data);
+        } catch {
+          /* keep local state */
+        }
+      }
     } finally {
       setLoading(false);
       setTesting(false);
     }
   };
+
+  function onRazorpayEnabledChange(next: boolean) {
+    if (!next) {
+      setEnabled(false);
+      return;
+    }
+    if (!available) {
+      const msg = blockedReason || 'Razorpay is not available for this workspace.';
+      setEnabled(false);
+      setError(msg);
+      toast.push(msg, 'error');
+      return;
+    }
+    if (!keyId.trim() && !configured) {
+      const msg = 'Add your Razorpay Key ID and Key Secret, then tap Save & test.';
+      setEnabled(false);
+      setError(msg);
+      toast.push(msg, 'error');
+      return;
+    }
+    if (connected) {
+      setEnabled(true);
+      setError(null);
+      return;
+    }
+    // Credentials present but untested — verify then enable in one step.
+    setEnabled(true);
+    void save(true, { enabled: true });
+  }
+
+  function onCashfreeEnabledChange(next: boolean) {
+    if (!next) {
+      setCashfreeEnabled(false);
+      return;
+    }
+    if (!cashfreeAvailable) {
+      const msg = cashfreeBlockedReason || 'Cashfree is not available for this workspace.';
+      setCashfreeEnabled(false);
+      setError(msg);
+      toast.push(msg, 'error');
+      return;
+    }
+    if (!cashfreeAppId.trim() && !cashfreeConfigured) {
+      const msg = 'Add your Cashfree App ID and Secret Key, then tap Save & test.';
+      setCashfreeEnabled(false);
+      setError(msg);
+      toast.push(msg, 'error');
+      return;
+    }
+    if (cashfreeConnected) {
+      setCashfreeEnabled(true);
+      setError(null);
+      return;
+    }
+    setCashfreeEnabled(true);
+    void save(true, { cashfreeEnabled: true });
+  }
 
   const copyWebhookUrl = () => {
     if (Platform.OS !== 'web' || !webhookUrl) return;
@@ -199,6 +303,24 @@ export function PaymentSettingsScreen() {
 
   const statusLabel = providerStatusLabel(providerStatus);
   const cashfreeStatusLabel = providerStatusLabel(cashfreeStatus);
+  const razorpayHint =
+    blockedReason ||
+    (!configured
+      ? 'Add credentials and tap Save & test before enabling.'
+      : !connected
+        ? 'Credentials saved — tap Save & test before enabling.'
+        : enabled
+          ? 'Customers can pay online with Razorpay.'
+          : 'Connected. Turn on to accept Razorpay at checkout.');
+  const cashfreeHint =
+    cashfreeBlockedReason ||
+    (!cashfreeConfigured
+      ? 'Add credentials and tap Save & test before enabling.'
+      : !cashfreeConnected
+        ? 'Credentials saved — tap Save & test before enabling.'
+        : cashfreeEnabled
+          ? 'Customers can pay online with Cashfree.'
+          : 'Connected. Turn on to accept Cashfree at checkout.');
 
   return (
     <FormScreen
@@ -237,11 +359,9 @@ export function PaymentSettingsScreen() {
         <View style={styles.statusRow}>
           <View style={styles.statusCopy}>
             <Text style={styles.statusTitle}>Razorpay · {statusLabel}</Text>
-            <Text style={styles.statusHint}>
-              {blockedReason || 'Pause online payments without deleting your credentials.'}
-            </Text>
+            <Text style={styles.statusHint}>{razorpayHint}</Text>
           </View>
-          <Switch value={enabled} disabled={!available} onValueChange={setEnabled} />
+          <Switch value={enabled} disabled={!available} onValueChange={onRazorpayEnabledChange} />
         </View>
         <Input
           label="Key ID"
@@ -302,17 +422,14 @@ export function PaymentSettingsScreen() {
         <View style={styles.statusRow}>
           <View style={styles.statusCopy}>
             <Text style={styles.statusTitle}>
-              Cashfree ·{' '}
-              {cashfreeStatusLabel}
+              Cashfree · {cashfreeStatusLabel}
             </Text>
-            <Text style={styles.statusHint}>
-              {cashfreeBlockedReason || 'Pause Cashfree without deleting your credentials.'}
-            </Text>
+            <Text style={styles.statusHint}>{cashfreeHint}</Text>
           </View>
           <Switch
             value={cashfreeEnabled}
             disabled={!cashfreeAvailable}
-            onValueChange={setCashfreeEnabled}
+            onValueChange={onCashfreeEnabledChange}
           />
         </View>
         <Input
@@ -370,7 +487,7 @@ export function PaymentSettingsScreen() {
           <View style={styles.statusCopy}>
             <Text style={styles.statusTitle}>Allow cash payments</Text>
             <Text style={styles.statusHint}>
-              When off, customers must pay with UPI before or after placing the order.
+              When off, customers must pay with UPI or online checkout before or after placing the order.
             </Text>
           </View>
           <Switch value={codEnabled} onValueChange={setCodEnabled} />

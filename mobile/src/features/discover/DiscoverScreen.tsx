@@ -14,6 +14,7 @@ import { Input } from '../../components/ui/Input';
 import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { formatMoney } from '../../utils/format';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 export function DiscoverScreen() {
@@ -109,7 +110,7 @@ export function DiscoverScreen() {
               <View style={styles.cardTop}>
                 <Text style={styles.cardTitle}>{service.name}</Text>
                 <Text style={styles.price}>
-                  {service.currency} {service.price}
+                  {formatMoney(Number(service.price), service.currency)}
                 </Text>
               </View>
               <Text style={styles.category}>{service.category_name || 'Service'}</Text>

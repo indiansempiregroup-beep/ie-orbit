@@ -215,6 +215,13 @@ class AuthOtpService:
                         )
                     }
                 )
+            if client == "customer":
+                self._require_customer_for_login(
+                    channel=channel,
+                    identifier=identifier,
+                    tenant_slug=tenant_slug,
+                    business_code=business_code,
+                )
 
         otp_id = _otp_identifier(channel=channel, value=identifier)
         delivery = self.otp_service.create_challenge(identifier=otp_id, purpose=OtpPurpose.LOGIN)
@@ -337,6 +344,28 @@ class AuthOtpService:
                 {"identifier": "This account is not set up for OPS. Accept your invitation or create a business."}
             )
 
+        if client == "customer" and tenant is not None and business is not None:
+            from apps.api.mobile_helpers import (
+                customer_login_missing_message,
+                ensure_customer_for_user,
+                find_customer_for_login_identifier,
+            )
+
+            if create_if_missing:
+                ensure_customer_for_user(tenant=tenant, business=business, user=user)
+            elif (
+                find_customer_for_login_identifier(
+                    tenant=tenant,
+                    business=business,
+                    channel=channel,
+                    identifier=identifier,
+                )
+                is None
+            ):
+                raise exceptions.ValidationError(
+                    {"identifier": customer_login_missing_message(channel=channel)}
+                )
+
         if channel == "email" and not user.email_verified_at:
             user.mark_email_verified()
 
@@ -350,13 +379,46 @@ class AuthOtpService:
             business=business,
         )
 
-        if tenant is not None and business is not None:
-            from apps.api.mobile_helpers import ensure_customer_for_user
-
-            ensure_customer_for_user(tenant=tenant, business=business, user=user)
-
         result_user = RoleService().ensure_superuser_platform_role(user=result.user)
         return LoginResult(user=result_user, tokens=result.tokens, session=result.session)
+
+    def _require_customer_for_login(
+        self,
+        *,
+        channel: str,
+        identifier: str,
+        tenant_slug: str | None,
+        business_code: str | None,
+    ) -> None:
+        if not tenant_slug or not business_code:
+            raise exceptions.ValidationError(
+                {"tenant_slug": "tenant_slug and business_code are required."}
+            )
+        from apps.api.mobile_helpers import (
+            customer_login_missing_message,
+            find_customer_for_login_identifier,
+            resolve_tenant_business,
+        )
+
+        try:
+            tenant, business = resolve_tenant_business(
+                tenant_slug=tenant_slug,
+                business_code=business_code,
+            )
+        except ValueError as exc:
+            raise exceptions.ValidationError(str(exc)) from exc
+        if (
+            find_customer_for_login_identifier(
+                tenant=tenant,
+                business=business,
+                channel=channel,
+                identifier=identifier,
+            )
+            is None
+        ):
+            raise exceptions.ValidationError(
+                {"identifier": customer_login_missing_message(channel=channel)}
+            )
 
     def _resolve_user(self, *, channel: str, identifier: str) -> User | None:
         if channel == "email":

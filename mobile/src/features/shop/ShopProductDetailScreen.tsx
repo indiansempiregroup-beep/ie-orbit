@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShopProduct, ShopProductReview } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { HtmlContent } from '../../components/HtmlContent';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import { ScreenHeader } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -48,6 +49,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
     detail: string;
     minOrderTotal?: string;
   } | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const primary = branding?.primaryColor ?? colors.primary;
 
   const load = useCallback(async () => {
@@ -174,7 +176,13 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
       <ScreenHeader title={product.name} onBack={() => navigation.goBack()} right={cartBtn} />
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 150 }}>
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.hero} />
+          <Pressable
+            onPress={() => setLightboxOpen(true)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="View product photo"
+          >
+            <Image source={{ uri: imageUri }} style={styles.hero} />
+          </Pressable>
         ) : (
           <View style={[styles.hero, styles.heroPlaceholder]}>
             <Feather name="package" size={40} color={colors.mutedForeground} />
@@ -370,6 +378,13 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
           </View>
         </View>
       </View>
+
+      <ImageLightbox
+        uri={imageUri || null}
+        visible={lightboxOpen}
+        title={product.name}
+        onClose={() => setLightboxOpen(false)}
+      />
     </View>
   );
 }

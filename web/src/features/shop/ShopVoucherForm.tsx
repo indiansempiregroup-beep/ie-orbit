@@ -7,6 +7,7 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import {
   useShopCashAccounts,
   useShopCustomers,
@@ -75,6 +76,7 @@ export function ShopVoucherForm({
   const [lines, setLines] = useState<LineState[]>([newLine()]);
   const [message, setMessage] = useState<string | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const partyOptions = useMemo(() => {
     if (isSale) {
@@ -172,6 +174,15 @@ export function ShopVoucherForm({
         cash_account_id: cashAccountId || undefined,
         points_to_redeem: isSale && partyId && pointsToRedeem > 0 ? pointsToRedeem : undefined,
       });
+      if (isSale && workspace.businessId) {
+        setDocActions({
+          kind: 'sale',
+          id: voucher.id,
+          number: voucher.voucher_number,
+          businessId: workspace.businessId,
+        });
+        return;
+      }
       navigate(`${backTo}?created=${encodeURIComponent(voucher.voucher_number)}`);
     } catch (error) {
       setMessage(getApiErrorMessage(error, `Unable to save ${voucherType}.`));
@@ -182,6 +193,16 @@ export function ShopVoucherForm({
 
   return (
     <div className="page-stack">
+      <DocumentActionsSheet
+        open={Boolean(docActions)}
+        onClose={() => {
+          const number = docActions?.number;
+          setDocActions(null);
+          navigate(`${backTo}${number ? `?created=${encodeURIComponent(number)}` : ''}`);
+        }}
+        target={docActions}
+        title="Sale invoice created"
+      />
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>

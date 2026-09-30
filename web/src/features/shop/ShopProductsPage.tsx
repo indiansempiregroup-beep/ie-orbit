@@ -17,6 +17,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
 import { ShopFilterBar } from './ShopFilterBar';
 import { uploadProductImage } from './uploadProductImage';
+import { ProductImageCropModal, type ProductImageCropResult } from './ProductImageCropModal';
+import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 import { currencySelectOptions, ensureSelectOption } from '../../config/onboarding';
 import {
   MAX_PRODUCT_IMAGES,
@@ -30,6 +32,7 @@ import {
   toStoredProductImageUrl,
 } from './productImages';
 import { enrichSuccessMessage } from './enrichMessages';
+import { formatMoney } from '../../lib/currency';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 
 const emptyForm = {
@@ -215,15 +218,26 @@ export function ShopProductsPage() {
   const workspace = useWorkspace();
   const client = useApiClient();
   const queryClient = useQueryClient();
+  const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
+  const entitledFeatures = useMemo(() => {
+    const snapshot = billingQuery.data;
+    return [
+      ...((snapshot?.entitled_features as string[] | undefined) ?? []),
+      ...((snapshot?.features as string[] | undefined) ?? []),
+    ];
+  }, [billingQuery.data]);
+  const canRemoveBackground = entitledFeatures.includes('shopie_product_bg_remove');
   const scanInputRef = useRef<HTMLInputElement | null>(null);
   const packPhotoRef = useRef<HTMLInputElement | null>(null);
   const products = useShopProducts(search, status, category);
   const godownsQuery = useShopGodowns();
   const godowns = godownsQuery.data ?? [];
   const categoriesQuery = useQuery({
-    queryKey: ['shop-product-categories'],
+    queryKey: ['shop-product-categories', workspace.activeBusiness?.id],
+    enabled: Boolean(workspace.activeBusiness?.id),
     queryFn: async () => {
-      const response = await client.shop.listProductCategories();
+      const bid = workspace.activeBusiness?.id;
+      const response = await client.shop.listProductCategories(bid ? { business_id: bid } : undefined);
       return response.data.items;
     },
   });
@@ -239,6 +253,8 @@ export function ShopProductsPage() {
   const [needsPackPhoto, setNeedsPackPhoto] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const [cropPending, setCropPending] = useState<{ index: number; file: File; previewUrl: string } | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkCategory, setBulkCategory] = useState('');
@@ -474,9 +490,21 @@ export function ShopProductsPage() {
     }
   }
 
-  async function uploadAt(index: number, file: File | null) {
-    if (!file || !auth.token || !workspace.tenantId || !businessId) return;
-    if (index < 0 || index >= MAX_PRODUCT_IMAGES) return;
+  function beginCropAt(index: number, file: File | null) {
+    if (!file || index < 0 || index >= MAX_PRODUCT_IMAGES) return;
+    if (cropPending?.previewUrl) URL.revokeObjectURL(cropPending.previewUrl);
+    setCropPending({ index, file, previewUrl: URL.createObjectURL(file) });
+    setMessage(null);
+  }
+
+  async function confirmCrop(
+    crop: ProductImageCropResult,
+    options?: { removeBackground: boolean },
+  ) {
+    if (!cropPending || !auth.token || !workspace.tenantId || !businessId) return;
+    const { index, file, previewUrl } = cropPending;
+    setCropPending(null);
+    URL.revokeObjectURL(previewUrl);
     setUploadingIndex(index);
     setMessage(null);
     try {
@@ -486,6 +514,9 @@ export function ShopProductsPage() {
         businessId,
         imageFile: file,
         label: productImageSlotLabel(index),
+        prepareProductCanvas: true,
+        removeBackground: Boolean(options?.removeBackground),
+        crop,
       });
       const stored = toStoredProductImageUrl(url) || url;
       setForm((current) => {
@@ -503,6 +534,11 @@ export function ShopProductsPage() {
     } finally {
       setUploadingIndex(null);
     }
+  }
+
+  function cancelCrop() {
+    if (cropPending?.previewUrl) URL.revokeObjectURL(cropPending.previewUrl);
+    setCropPending(null);
   }
 
   function removeImageAt(index: number) {
@@ -579,9 +615,12 @@ export function ShopProductsPage() {
     let categorySlug = form.category;
     if (form.category === 'other' || (form.category_other.trim() && !categorySlug)) {
       try {
-        const created = await client.shop.ensureProductCategory({ label: form.category_other.trim() });
+        const created = await client.shop.ensureProductCategory({
+          business_id: businessId,
+          label: form.category_other.trim(),
+        });
         categorySlug = created.data.slug;
-        void queryClient.invalidateQueries({ queryKey: ['shop-product-categories'] });
+        void queryClient.invalidateQueries({ queryKey: ['shop-product-categories', businessId] });
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Unable to create category.');
         return;
@@ -823,7 +862,7 @@ export function ShopProductsPage() {
                       ? ` · ${product.category_label || categoryOptions.find((item) => item.slug === product.category)?.label || product.category}`
                       : ''}{' '}
                     · {product.brand || 'No brand'} · Stock {product.stock_on_hand} ·{' '}
-                    {product.currency || ''} {product.price}
+                    {formatMoney(Number(product.price ?? 0), product.currency)}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
                     SKU {product.sku || '—'} · HSN {product.hsn_sac || '—'} · GST{' '}
@@ -981,6 +1020,68 @@ export function ShopProductsPage() {
         </div>
       </Dialog>
 
+      <ProductImageCropModal
+        open={Boolean(cropPending)}
+        imageUrl={cropPending?.previewUrl || ''}
+        onCancel={cancelCrop}
+        canRemoveBackground={canRemoveBackground}
+        onConfirm={(crop, options) => void confirmCrop(crop, options)}
+      />
+
+      {lightboxUrl ? (
+        <div
+          role="presentation"
+          onClick={() => setLightboxUrl(null)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setLightboxUrl(null);
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(0,0,0,0.88)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            cursor: 'zoom-out',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close"
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              border: 'none',
+              background: 'rgba(255,255,255,0.15)',
+              color: '#fff',
+              fontSize: 22,
+              cursor: 'pointer',
+            }}
+          >
+            ×
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Product photo"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              maxWidth: 'min(96vw, 960px)',
+              maxHeight: '88vh',
+              objectFit: 'contain',
+              borderRadius: 8,
+              background: 'transparent',
+            }}
+          />
+        </div>
+      ) : null}
+
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
@@ -1003,20 +1104,62 @@ export function ShopProductsPage() {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(event) => void uploadAt(index, event.target.files?.[0] ?? null)}
+                  onChange={(event) => beginCropAt(index, event.target.files?.[0] ?? null)}
                 />
                 {url ? (
                   <div style={{ display: 'grid', gap: 6 }}>
-                    <img
-                      src={resolveMediaAssetUrl(url) || url}
-                      alt=""
-                      width={96}
-                      height={96}
-                      style={{ objectFit: 'cover', borderRadius: 12, border: '1px solid #e5e7eb' }}
+                    <button
+                      type="button"
+                      onClick={() => setLightboxUrl(resolveMediaAssetUrl(url) || url)}
+                      style={{
+                        padding: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'zoom-in',
+                        borderRadius: 12,
+                      }}
+                      aria-label={`View ${productImageSlotLabel(index)} full size`}
+                    >
+                      <img
+                        src={resolveMediaAssetUrl(url) || url}
+                        alt=""
+                        width={96}
+                        height={96}
+                        style={{
+                          objectFit: 'cover',
+                          borderRadius: 12,
+                          border: '1px solid #e5e7eb',
+                          display: 'block',
+                        }}
+                      />
+                    </button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <Button
+                        type="button"
+                        variant="neutral"
+                        onClick={() => {
+                          const input = document.getElementById(
+                            `product-image-restart-${index}`,
+                          ) as HTMLInputElement | null;
+                          input?.click();
+                        }}
+                      >
+                        Restart
+                      </Button>
+                      <Button type="button" variant="neutral" onClick={() => removeImageAt(index)}>
+                        Remove
+                      </Button>
+                    </div>
+                    <input
+                      id={`product-image-restart-${index}`}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(event) => {
+                        beginCropAt(index, event.target.files?.[0] ?? null);
+                        event.target.value = '';
+                      }}
                     />
-                    <Button type="button" variant="neutral" onClick={() => removeImageAt(index)}>
-                      Remove
-                    </Button>
                   </div>
                 ) : null}
                 {uploadingIndex === index ? <span style={{ fontSize: 12 }}>Uploading…</span> : null}
@@ -1304,7 +1447,7 @@ export function ShopProductsPage() {
                   }}
                 />
                 <span style={{ fontSize: 12, color: '#6b7280' }}>
-                  Saved as a real shop category and available in filters everywhere.
+                  Saved to Master Files for this shop and available next time you add a product.
                 </span>
               </label>
             ) : null}

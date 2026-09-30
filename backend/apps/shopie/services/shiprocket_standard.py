@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.businesses.models import Branch, BranchStatus, Business
-from apps.customers.services.contact import resolve_customer_phone
+from apps.customers.services.contact import resolve_order_contact_phone
 from apps.shopie.models import OrderStatus, ShipmentStatus, ShopBusinessSettings, ShopOrder, ShopShipment
 from apps.shopie.services.delivery.providers import ShiprocketQuickProvider, _value
 from apps.shopie.services.delivery_secrets import decrypt_secret
@@ -210,8 +210,9 @@ class ShiprocketStandardService:
         customer = order.customer
         payment_meta = dict((order.metadata or {}).get("pos") or {})
         payment_method = str(payment_meta.get("payment_method") or order.payment_method or "prepaid")
-        drop_parts = [order.delivery_address]
         metadata = dict(order.metadata or {})
+        contact_phone = resolve_order_contact_phone(order, customer=customer)
+        contact_name = getattr(customer, "display_name", "") if customer else ""
         return {
             "pickup": {
                 "address": branch.address_line1 if branch else order.business.address_line1,
@@ -244,13 +245,13 @@ class ShiprocketStandardService:
                     or ""
                 ),
                 "contact": {
-                    "name": getattr(customer, "display_name", "") if customer else "",
-                    "phone": resolve_customer_phone(customer) if customer else "",
+                    "name": contact_name,
+                    "phone": contact_phone,
                 },
             },
             "customer": {
-                "name": getattr(customer, "display_name", "") if customer else "",
-                "phone": resolve_customer_phone(customer) if customer else "",
+                "name": contact_name,
+                "phone": contact_phone,
                 "email": getattr(customer, "email", "") if customer else "",
             },
             "order": {

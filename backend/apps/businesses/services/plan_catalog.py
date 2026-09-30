@@ -48,6 +48,7 @@ def _serialize_row(row: Any) -> dict[str, Any]:
         "features": list(row.features or []),
         "amount_paise": row.amount_paise,
         "yearly_amount_paise": row.yearly_amount_paise,
+        "yearly_months_charged": int(getattr(row, "yearly_months_charged", None) or 10),
         "is_public": bool(row.is_public),
     }
 

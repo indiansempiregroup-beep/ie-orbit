@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 
 from apps.api.mobile_helpers import ensure_customer_for_user
 from apps.api.mobile_serializers import MobileDiscoverQuerySerializer
+from apps.billing.services.cashfree_client import CashfreeClient
+from apps.billing.services.razorpay_client import RazorpayClient
 from apps.businesses.constants import FEATURE_SHOPIE_CUSTOMER_REFERRAL, FEATURE_SHOPIE_GROW_ADS, PRODUCT_SHOPIE
 from apps.businesses.models import Business
 from apps.businesses.services.entitlements import EntitlementService
@@ -21,9 +23,11 @@ from apps.platform_media.models import MediaFolderType, MediaVisibility
 from apps.platform_media.services import MediaService
 from apps.shopie.services.merchant_payments import MerchantPaymentService
 from apps.shopie.api.serializers import (
+    CashfreePaymentVerifySerializer,
     CustomerReferralSerializer,
     MobileShopOrderSerializer,
     MobileShopPetWriteSerializer,
+    RazorpayPaymentVerifySerializer,
     ShopDashboardAdSerializer,
     ShopPetSerializer,
     ShopProductReviewSerializer,
@@ -41,6 +45,7 @@ from apps.shopie.models import (
 from apps.shopie.services import CatalogService, OrderService
 from apps.shopie.services.ads import DashboardAdService
 from apps.shopie.services.coupons import CouponService
+from apps.shopie.services.masters import MasterService
 from apps.shopie.services.pets import PetsService
 from apps.shopie.services.product_reviews import ProductReviewService
 from apps.shopie.services.referrals import CustomerReferralService
@@ -136,9 +141,28 @@ class MobileShopAdListView(APIView):
         return success_response(ShopDashboardAdSerializer(qs, many=True).data)
 
 
+class MobileShopFiltersView(APIView):
+    permission_classes = [AllowAny]
+    masters = MasterService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def get(self, request: Request) -> Response:
+        serializer = MobileDiscoverQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        return success_response(self.masters.list_customer_filters(tenant=tenant, business=business))
+
+
 class MobileShopProductListView(APIView):
     permission_classes = [AllowAny]
     catalog = CatalogService()
+    masters = MasterService()
 
     @extend_schema(tags=["Mobile Shop"])
     def get(self, request: Request) -> Response:
@@ -152,19 +176,29 @@ class MobileShopProductListView(APIView):
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
         category = request.query_params.get("category") or None
+        brand = request.query_params.get("brand") or None
         products = self.catalog.list_products(
             tenant=tenant,
             business=business,
             search=request.query_params.get("search"),
             status=ProductStatus.ACTIVE,
             category=category,
+            brand=brand,
         )
-        return success_response(ShopProductSerializer(products[:100], many=True).data)
+        category_labels = self.masters.category_labels_map(tenant=tenant, business=business)
+        return success_response(
+            ShopProductSerializer(
+                products[:100],
+                many=True,
+                context={"category_labels": category_labels},
+            ).data
+        )
 
 
 class MobileShopProductDetailView(APIView):
     permission_classes = [AllowAny]
     catalog = CatalogService()
+    masters = MasterService()
     reviews = ProductReviewService()
 
     @extend_schema(tags=["Mobile Shop"])
@@ -179,7 +213,8 @@ class MobileShopProductDetailView(APIView):
             product = self.catalog.get_product(tenant=tenant, business=business, product_id=product_id)
         except (ValueError, ShopProduct.DoesNotExist) as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
-        payload = ShopProductSerializer(product).data
+        category_labels = self.masters.category_labels_map(tenant=tenant, business=business)
+        payload = ShopProductSerializer(product, context={"category_labels": category_labels}).data
         review_qs = self.reviews.list_reviews(tenant=tenant, business=business, product=product)[:20]
         payload["reviews"] = ShopProductReviewSerializer(review_qs, many=True).data
         payload["rating_breakdown"] = self.reviews.rating_breakdown(
@@ -338,6 +373,37 @@ class MobileShopOrderListCreateView(APIView):
             business=business,
             fulfillment_mode=mode,
         )
+        bill_discount_type = str(request.data.get("bill_discount_type") or "").strip().lower()
+        bill_discount_value = request.data.get("bill_discount_value") or 0
+        if bill_discount_type:
+            matched = CouponService().match_automation_bill_discount(
+                tenant=tenant,
+                business=business,
+                lines=lines if isinstance(lines, list) else [],
+                fulfillment_mode=str(mode),
+                customer=customer,
+                bill_discount_type=bill_discount_type,
+                bill_discount_value=bill_discount_value,
+            )
+            if matched is None:
+                raise ValidationError(
+                    {
+                        "bill_discount": (
+                            "This special offer is not available for your cart right now."
+                        )
+                    }
+                )
+            metadata_extra = {
+                **metadata_extra,
+                "automation_offer": {
+                    "label": matched.get("label") or matched.get("name") or "Special offer",
+                    "workflow_id": matched.get("workflow_id"),
+                    "source": "automation",
+                },
+            }
+        else:
+            bill_discount_type = ""
+            bill_discount_value = 0
         try:
             order = self.orders.create_order(
                 tenant=tenant,
@@ -356,8 +422,11 @@ class MobileShopOrderListCreateView(APIView):
                 delivery_quote_id=str(request.data.get("delivery_quote_id") or ""),
                 displayed_delivery_fee=request.data.get("displayed_delivery_fee"),
                 delivery_address_line2=str(request.data.get("delivery_address_line2") or ""),
+                delivery_phone=str(request.data.get("delivery_phone") or ""),
                 payment_method=payment_method,
                 coupon_code=str(request.data.get("coupon_code") or ""),
+                bill_discount_type=bill_discount_type,
+                bill_discount_value=bill_discount_value,
                 points_to_redeem=points_to_redeem,
                 confirm=False,
                 metadata_extra=metadata_extra or None,
@@ -427,22 +496,23 @@ class MobileShopCouponAvailableView(APIView):
         )
         lines = request.data.get("lines") or []
         try:
-            offers = self.coupons.list_for_cart(
+            payload = self.coupons.eligible_offers(
                 tenant=tenant,
                 business=business,
-                lines=lines,
+                lines=lines if isinstance(lines, list) else [],
                 fulfillment_mode=fulfillment_mode,
                 customer=customer,
             )
         except (DjangoValidationError, ShopProduct.DoesNotExist, KeyError, TypeError, ValueError):
-            offers = self.coupons.list_for_cart(
+            payload = self.coupons.eligible_offers(
                 tenant=tenant,
                 business=business,
                 lines=[],
                 fulfillment_mode=fulfillment_mode,
                 customer=customer,
             )
-        return success_response(offers)
+        # Keep mobile clients on a flat offer list (coupons + automation discounts).
+        return success_response(payload.get("offers") or [])
 
     @extend_schema(tags=["Mobile Shop"])
     def get(self, request: Request) -> Response:
@@ -511,6 +581,117 @@ class MobileShopOrderClaimPaymentView(APIView):
             if hasattr(exc, "message_dict"):
                 raise ValidationError(exc.message_dict) from exc
             raise ValidationError({"detail": str(exc)}) from exc
+        return success_response(MobileShopOrderSerializer(order).data)
+
+
+class MobileShopOrderRazorpayCheckoutView(APIView):
+    permission_classes = [IsAuthenticated]
+    payments = MerchantPaymentService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request, order_id) -> Response:
+        detail = MobileShopOrderDetailView()
+        try:
+            _, _, _, order = detail._owned_order(request, order_id)
+        except Exception as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            payload = self.payments.create_checkout(order=order)
+        except DjangoValidationError as exc:
+            raise _django_validation(exc) from exc
+        return success_response(payload, status_code=status.HTTP_201_CREATED)
+
+
+class MobileShopOrderRazorpayVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+    orders = OrderService()
+    payments = MerchantPaymentService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request, order_id) -> Response:
+        serializer = RazorpayPaymentVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        detail = MobileShopOrderDetailView()
+        try:
+            tenant, business, _, order = detail._owned_order(request, order_id)
+        except Exception as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        pos = (order.metadata or {}).get("pos") or {}
+        if str(pos.get("razorpay_order_id") or "") != data["razorpay_order_id"]:
+            raise ValidationError({"razorpay_order_id": "Order ID does not match this bill."})
+        config = self.payments.config_for_business(business=business)
+        valid = RazorpayClient(config.as_client_config()).verify_payment_signature(
+            order_id=data["razorpay_order_id"],
+            payment_id=data["razorpay_payment_id"],
+            signature=data["razorpay_signature"],
+        )
+        if not valid:
+            raise ValidationError({"razorpay_signature": "Payment signature is invalid."})
+        order = self.orders.mark_razorpay_paid(
+            tenant=tenant,
+            business=business,
+            order=order,
+            payment_id=data["razorpay_payment_id"],
+        )
+        return success_response(MobileShopOrderSerializer(order).data)
+
+
+class MobileShopOrderCashfreeCheckoutView(APIView):
+    permission_classes = [IsAuthenticated]
+    payments = MerchantPaymentService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request, order_id) -> Response:
+        detail = MobileShopOrderDetailView()
+        try:
+            _, _, _, order = detail._owned_order(request, order_id)
+        except Exception as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            payload = self.payments.create_cashfree_checkout(order=order)
+        except DjangoValidationError as exc:
+            raise _django_validation(exc) from exc
+        return success_response(payload, status_code=status.HTTP_201_CREATED)
+
+
+class MobileShopOrderCashfreeVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+    orders = OrderService()
+    payments = MerchantPaymentService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request, order_id) -> Response:
+        serializer = CashfreePaymentVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        detail = MobileShopOrderDetailView()
+        try:
+            tenant, business, _, order = detail._owned_order(request, order_id)
+        except Exception as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        pos = (order.metadata or {}).get("pos") or {}
+        if str(pos.get("cashfree_order_id") or "") != data["cashfree_order_id"]:
+            raise ValidationError({"cashfree_order_id": "Order ID does not match this bill."})
+        config = self.payments.cashfree_config_for_business(business=business)
+        client = CashfreeClient(config.as_client_config())
+        remote = client.get_order(data["cashfree_order_id"])
+        status_value = str(remote.get("order_status") or "").upper()
+        paid = status_value == "PAID" or bool(remote.get("mock"))
+        if not paid:
+            paid = any(
+                str(item.get("payment_status") or "").upper() == "SUCCESS"
+                for item in client.get_payments(data["cashfree_order_id"])
+            )
+        if not paid:
+            raise ValidationError({"cashfree": "Cashfree has not confirmed this payment yet."})
+        order = self.orders.mark_online_paid(
+            tenant=tenant,
+            business=business,
+            order=order,
+            payment_id=str(data.get("cashfree_payment_id") or data["cashfree_order_id"]),
+            payment_method="cashfree",
+        )
         return success_response(MobileShopOrderSerializer(order).data)
 
 

@@ -16,12 +16,15 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.authentication.api.serializers import UserProfileSerializer
 from apps.authentication.api.utils import client_ip, user_agent
 from apps.authentication.models import User
 from apps.authentication.permissions import IsPlatformAdmin
+from apps.billing.models import BillingCheckoutSession
+from apps.businesses.constants import DEFAULT_TRIAL_DAYS
 from apps.businesses.models import Business
 from apps.businesses.services.businesses import BusinessService
 from apps.businesses.services.entitlements import EntitlementService
@@ -405,12 +408,91 @@ class PlatformPaymentRefundView(APIView):
     @extend_schema(tags=["Platform Admin"])
     def post(self, request: Request, tenant_id: str, payment_id: str) -> Response:
         tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        from apps.billing.services.refunds import BillingRefundService
+
+        method = str(request.data.get("method") or "").strip().lower()
+        if method in {"upi_manual", "bank"} or request.data.get("resolve"):
+            result = BillingRefundService().resolve_refund_request(
+                tenant=tenant,
+                session_id=payment_id,
+                actor=request.user,
+                reason=request.data.get("reason", ""),
+                amount_paise=request.data.get("amount_paise"),
+                method=method or "upi_manual",
+                reference=str(request.data.get("reference") or ""),
+                end_access_now=bool(request.data.get("end_access_now")),
+                ip_address=client_ip(request),
+                user_agent=user_agent(request),
+            )
+            return success_response(result)
         result = _svc().refund_payment(
             tenant=tenant,
             session_id=payment_id,
             actor=request.user,
             reason=request.data.get("reason", ""),
             amount_paise=request.data.get("amount_paise"),
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(result)
+
+
+class PlatformRefundRequestsView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(
+        tags=["Platform Admin"],
+        description="List subscription refund requests. scope=pending (default), history, or all.",
+    )
+    def get(self, request: Request) -> Response:
+        from apps.billing.services.refunds import BillingRefundService
+
+        limit = max(1, min(int(request.query_params.get("limit") or 100), 200))
+        scope = str(request.query_params.get("scope") or "pending").strip().lower()
+        return success_response(
+            {"refunds": BillingRefundService().list_refund_requests(scope=scope, limit=limit)}
+        )
+
+
+class PlatformRefundRejectView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"], description="Reject an owner refund request.")
+    def post(self, request: Request, tenant_id: str, payment_id: str) -> Response:
+        from apps.billing.services.refunds import BillingRefundService
+
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        result = BillingRefundService().reject_refund_request(
+            tenant=tenant,
+            session_id=payment_id,
+            actor=request.user,
+            reason=request.data.get("reason") or request.data.get("note") or "",
+            ip_address=client_ip(request),
+            user_agent=user_agent(request),
+        )
+        return success_response(result)
+
+
+class PlatformRefundResolveView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(
+        tags=["Platform Admin"],
+        description="Approve and record a refund (Razorpay gateway or manual UPI/bank).",
+    )
+    def post(self, request: Request, tenant_id: str, payment_id: str) -> Response:
+        from apps.billing.services.refunds import BillingRefundService
+
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        result = BillingRefundService().resolve_refund_request(
+            tenant=tenant,
+            session_id=payment_id,
+            actor=request.user,
+            reason=request.data.get("reason") or request.data.get("note") or "",
+            amount_paise=request.data.get("amount_paise"),
+            method=str(request.data.get("method") or "upi_manual"),
+            reference=str(request.data.get("reference") or ""),
+            end_access_now=bool(request.data.get("end_access_now")),
             ip_address=client_ip(request),
             user_agent=user_agent(request),
         )
@@ -526,7 +608,7 @@ class PlatformPlanPackagesView(APIView):
             name=_field("name", ""),
             description=_field("description", ""),
             billing_interval=_field("billing_interval", "monthly"),
-            trial_days=int(_field("trial_days", 15) or 15),
+            trial_days=int(_field("trial_days", DEFAULT_TRIAL_DAYS) or DEFAULT_TRIAL_DAYS),
             is_default=bool(_field("is_default", False)),
             max_staff=int(_field("max_staff", 1) or 1),
             max_branches=int(_field("max_branches", 1) or 1),
@@ -539,6 +621,13 @@ class PlatformPlanPackagesView(APIView):
                 int(data["yearly_amount_paise"])
                 if data.get("yearly_amount_paise") not in (None, "")
                 else (existing.yearly_amount_paise if existing else None)
+            ),
+            yearly_months_charged=int(
+                _field(
+                    "yearly_months_charged",
+                    getattr(existing, "yearly_months_charged", 10) if existing else 10,
+                )
+                or 10
             ),
             is_active=bool(_field("is_active", True)),
             is_public=bool(_field("is_public", True)),
@@ -1160,14 +1249,14 @@ class PlatformExportView(APIView):
                     ]
                 )
         elif export_type == "payments":
-            writer.writerow(["tenant", "order_id", "amount_paise", "status", "plan_code", "created_at"])
+            writer.writerow(["tenant", "order_id", "amount_inr", "status", "plan_code", "created_at"])
             for t in Tenant.objects.all()[:50]:
                 for p in _svc().list_payments(tenant=t)[:50]:
                     writer.writerow(
                         [
                             t.slug,
                             p["order_id"],
-                            p["amount_paise"],
+                            f"{int(p.get('amount_paise') or 0) / 100:.2f}",
                             p["status"],
                             p["plan_code"],
                             p["created_at"],
@@ -1296,28 +1385,156 @@ class PlatformInvoicePdfView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request, invoice_id: str) -> HttpResponse:
+        from apps.billing.services.tax_invoices import build_tax_invoice_pdf
+
         invoice = get_object_or_404(
-            PlatformLedgerInvoice.objects.select_related("tenant", "business"),
+            PlatformLedgerInvoice.objects.select_related("tenant", "business", "original_invoice"),
             id=invoice_id,
         )
-        lines = [
-            "IE Orbit Invoice",
-            f"Invoice: {invoice.invoice_number}",
-            f"Tenant: {invoice.tenant.display_name if invoice.tenant else '-'}",
-            f"Business: {invoice.business.display_name if invoice.business else '-'}",
-            f"Amount: {invoice.amount_paise / 100:.2f} {invoice.currency}",
-            f"Status: {invoice.status}",
-            f"Refunded: {invoice.refunded_paise / 100:.2f}",
-            f"Payment: {invoice.razorpay_payment_id or '-'}",
-            f"Issued: {invoice.created_at.isoformat()}",
-        ]
-        pdf = _minimal_pdf(lines)
+        pdf = build_tax_invoice_pdf(invoice)
         if not invoice.pdf_path:
             invoice.pdf_path = f"invoices/{invoice.invoice_number}.pdf"
             invoice.save(update_fields=["pdf_path", "updated_at"])
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{invoice.invoice_number}.pdf"'
         return response
+
+
+class PlatformPaymentTaxInvoicePdfView(APIView):
+    """Issue (if needed) and download the tax invoice PDF for a paid checkout session."""
+
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request, tenant_id: str, payment_id: str) -> HttpResponse:
+        from apps.billing.services.tax_invoices import TaxInvoiceService, build_tax_invoice_pdf
+
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        session = get_object_or_404(BillingCheckoutSession, id=payment_id, tenant=tenant)
+        invoice = TaxInvoiceService().issue_tax_invoice_for_session(session)
+        if invoice is None:
+            invoice = (
+                PlatformLedgerInvoice.objects.filter(
+                    checkout_session=session,
+                    document_type=PlatformLedgerInvoice.DocumentType.TAX_INVOICE,
+                )
+                .order_by("created_at")
+                .first()
+            )
+        if invoice is None:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "No tax invoice for this payment yet."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        pdf = build_tax_invoice_pdf(invoice)
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{invoice.invoice_number}.pdf"'
+        return response
+
+
+class PlatformBillingGstSettingsView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request) -> Response:
+        from apps.billing.services.tax_invoices import get_billing_gst_settings, serialize_billing_gst_settings
+
+        return success_response(serialize_billing_gst_settings(get_billing_gst_settings()))
+
+    @extend_schema(tags=["Platform Admin"])
+    def put(self, request: Request) -> Response:
+        from decimal import Decimal
+
+        from apps.billing.services.tax_invoices import get_billing_gst_settings, serialize_billing_gst_settings
+
+        row = get_billing_gst_settings()
+        data = request.data if isinstance(request.data, dict) else {}
+        for field in (
+            "legal_name",
+            "gstin",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "postal_code",
+            "sac_code",
+            "invoice_prefix",
+            "credit_note_prefix",
+        ):
+            if field in data and data[field] is not None:
+                setattr(row, field, str(data[field]).strip())
+        if "gst_percent" in data and data["gst_percent"] is not None:
+            row.gst_percent = Decimal(str(data["gst_percent"]))
+        row.save()
+        return success_response(serialize_billing_gst_settings(row))
+
+
+class PlatformTenantTaxInvoicesView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request, tenant_id: str) -> Response | HttpResponse:
+        from apps.billing.services.account_statement import list_tax_documents, tax_documents_csv
+
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        business_id = request.query_params.get("business_id")
+        business = None
+        if business_id:
+            business = get_object_or_404(Business, id=business_id, tenant=tenant)
+        rows = list_tax_documents(
+            tenant=tenant,
+            business=business,
+            date_from=request.query_params.get("date_from"),
+            date_to=request.query_params.get("date_to"),
+            document_type=request.query_params.get("document_type"),
+        )
+        if str(request.query_params.get("format") or "").lower() == "csv":
+            response = HttpResponse(tax_documents_csv(rows), content_type="text/csv; charset=utf-8")
+            response["Content-Disposition"] = f'attachment; filename="tenant-{tenant.slug}-tax-invoices.csv"'
+            return response
+        return success_response({"invoices": rows})
+
+
+class PlatformGstr1OutwardView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"], description="Platform-wide SaaS outward supplies (GSTR-1 style CSV).")
+    def get(self, request: Request) -> HttpResponse | Response:
+        from apps.billing.services.account_statement import list_tax_documents, tax_documents_csv
+
+        rows = list_tax_documents(
+            date_from=request.query_params.get("date_from"),
+            date_to=request.query_params.get("date_to"),
+            limit=5000,
+        )
+        if str(request.query_params.get("format") or "csv").lower() == "json":
+            return success_response({"invoices": rows})
+        response = HttpResponse(tax_documents_csv(rows), content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="ie-orbit-gstr1-outward.csv"'
+        return response
+
+
+class PlatformTenantAccountStatementView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    @extend_schema(tags=["Platform Admin"])
+    def get(self, request: Request, tenant_id: str) -> Response | HttpResponse:
+        from apps.billing.services.account_statement import account_statement_csv, build_account_statement
+
+        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        business_id = request.query_params.get("business_id")
+        business = get_object_or_404(Business, id=business_id, tenant=tenant) if business_id else None
+        statement = build_account_statement(
+            tenant=tenant,
+            business=business,
+            date_from=request.query_params.get("date_from"),
+            date_to=request.query_params.get("date_to"),
+        )
+        if str(request.query_params.get("format") or "").lower() == "csv":
+            response = HttpResponse(account_statement_csv(statement), content_type="text/csv; charset=utf-8")
+            response["Content-Disposition"] = f'attachment; filename="tenant-{tenant.slug}-statement.csv"'
+            return response
+        return success_response(statement)
 
 
 class PlatformTransferOwnershipView(APIView):

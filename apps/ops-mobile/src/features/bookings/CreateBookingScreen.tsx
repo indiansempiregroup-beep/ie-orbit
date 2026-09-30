@@ -101,6 +101,15 @@ export function CreateBookingScreen() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assignments, setAssignments] = useState<StaffServiceAssignment[]>([]);
+  const [staffHints, setStaffHints] = useState<
+    Array<{
+      label?: string;
+      discount_type?: string;
+      discount_value?: string;
+      message?: string;
+      workflow_name?: string;
+    }>
+  >([]);
 
   const quickDates = useMemo(() => {
     const today = new Date();
@@ -147,6 +156,26 @@ export function CreateBookingScreen() {
       cancelled = true;
     };
   }, [client, showStaffPicker]);
+
+  useEffect(() => {
+    if (!client || !businessId || !customerId) {
+      setStaffHints([]);
+      return;
+    }
+    let cancelled = false;
+    void client.bookings
+      .eligibleOffers({ business_id: businessId, customer_id: customerId })
+      .then((response) => {
+        if (cancelled) return;
+        setStaffHints(response.data.staff_hints || []);
+      })
+      .catch(() => {
+        if (!cancelled) setStaffHints([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId, client, customerId]);
 
   const selectedServices = useMemo(
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
@@ -332,6 +361,30 @@ export function CreateBookingScreen() {
       }
     >
       <FormHero subtitle="Customer and services first, then pick a time. Notes are optional." />
+
+      {staffHints.length > 0 ? (
+        <View style={styles.offerBanner}>
+          <IconBadge icon="gift" tone="cyan" size="sm" />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={styles.offerTitle}>Automation offer</Text>
+            {staffHints.map((hint, index) => {
+              const pct =
+                hint.discount_type === 'percent' && Number(hint.discount_value) > 0
+                  ? `${hint.discount_value}% off`
+                  : hint.discount_type === 'amount' && Number(hint.discount_value) > 0
+                    ? `₹${hint.discount_value} off`
+                    : null;
+              return (
+                <Text key={`${hint.label}-${index}`} style={styles.offerBody}>
+                  {[hint.label || hint.workflow_name || 'Special offer', pct, hint.message]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.recapCard}>
         <RecapRow
@@ -545,6 +598,19 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     gap: spacing.md,
   },
+  offerBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.secondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  offerTitle: { ...typography.label, color: colors.primary, fontWeight: '700' },
+  offerBody: { ...typography.caption, color: colors.foreground, lineHeight: 18 },
   recapRow: {
     flexDirection: 'row',
     alignItems: 'center',

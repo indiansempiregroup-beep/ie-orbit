@@ -46,7 +46,7 @@ from apps.shopie.services.books import BooksService
 from apps.shopie.services.catalog import CatalogService
 from apps.shopie.services.orders import OrderService
 from apps.staff.models import EmploymentStatus, Staff
-from apps.assistant.services.links import entity_link, pack_reply
+from apps.assistant.services.links import entity_link, looks_like_uuid, pack_reply
 from apps.tenancy.models import Tenant
 from apps.businesses.services.entitlements import EntitlementService
 
@@ -509,27 +509,28 @@ def get_service_detail(*, tenant: Tenant, business: Business, query: str) -> dic
         business=business, feature=FEATURE_APPOINTIE_SERVICES, product_code=PRODUCT_APPOINTIE
     ):
         return "Services are not enabled on your Orbit Appoint plan."
+    q = (query or "").strip().strip("\"'")
     by_id = (
-        Service.objects.require_tenant(tenant)
-        .filter(business=business, id=query.strip())
-        .first()
-        if query and len(query.strip()) >= 8
+        Service.objects.require_tenant(tenant).filter(business=business, id=q).first()
+        if looks_like_uuid(q)
         else None
     )
-    services = (
-        [by_id]
-        if by_id is not None
-        else list(
-            Service.objects.require_tenant(tenant)
-            .filter(business=business, status=ServiceStatus.ACTIVE)
-            .filter(
-                Q(name__icontains=query.strip())
-                | Q(display_name__icontains=query.strip())
-                | Q(service_code__icontains=query.strip())
-            )
-            .order_by("display_name")[:8]
+    if by_id is not None:
+        services = [by_id]
+    else:
+        base = Service.objects.require_tenant(tenant).filter(
+            business=business, status=ServiceStatus.ACTIVE
         )
-    )
+        exact = list(
+            base.filter(
+                Q(name__iexact=q) | Q(display_name__iexact=q) | Q(service_code__iexact=q)
+            ).order_by("display_name")[:8]
+        )
+        services = exact or list(
+            base.filter(
+                Q(name__icontains=q) | Q(display_name__icontains=q) | Q(service_code__icontains=q)
+            ).order_by("display_name")[:8]
+        )
     services = [s for s in services if s is not None]
     if not services:
         return f"No service matching “{query}”."
@@ -543,7 +544,7 @@ def get_service_detail(*, tenant: Tenant, business: Business, query: str) -> dic
             links.append(
                 entity_link(kind="service", id=str(service.id), label=name, subtitle="Service", action="preview")
             )
-            chips.append(f"Service details for {name}")
+            chips.append(f"preview service {name}")
         return pack_reply("\n".join(lines), links=links, suggestions=chips[:5])
     service = services[0]
     duration = (
@@ -582,9 +583,10 @@ def get_service_detail(*, tenant: Tenant, business: Business, query: str) -> dic
 
 
 def get_customer_detail(*, tenant: Tenant, business: Business, query: str) -> dict | str:
+    q = (query or "").strip()
     by_id = (
-        Customer.objects.require_tenant(tenant).filter(business=business, id=query.strip()).first()
-        if query and len(query.strip()) >= 8
+        Customer.objects.require_tenant(tenant).filter(business=business, id=q).first()
+        if looks_like_uuid(q)
         else None
     )
     customer = by_id if by_id is not None else _resolve_customer(tenant=tenant, business=business, query=query)
@@ -787,6 +789,242 @@ def propose_deactivate_coupon(*, tenant: Tenant, business: Business, query: str)
     }
 
 
+def customer_borrow_ledger(*, tenant: Tenant, business: Business, query: str) -> dict | str:
+    customer = _resolve_customer(tenant=tenant, business=business, query=query)
+    if isinstance(customer, dict):
+        return customer
+    if customer is None:
+        return f"No customer matching “{query}”."
+    from apps.customers.services.borrow import BorrowService
+
+    label = _customer_label(customer)
+    balance = BorrowService().get_balance(tenant=tenant, business=business, customer=customer)
+    due = Decimal(str(balance.get("balance_due") or "0"))
+    rows = list(BorrowService().list_ledger(tenant=tenant, business=business, customer=customer)[:12])
+    lines = [f"Borrow ledger for {label} — balance {_money(due)}."]
+    if not rows:
+        lines.append("No ledger entries yet.")
+    else:
+        for row in rows:
+            when = timezone.localtime(row.created_at).strftime("%d %b %H:%M")
+            lines.append(
+                f"• {when} — {row.entry_type} {_money(row.amount)} · bal {_money(row.balance_after)}"
+                + (f" · {row.notes}" if row.notes else "")
+            )
+    return pack_reply(
+        "\n".join(lines),
+        links=[
+            entity_link(
+                kind="customer",
+                id=str(customer.id),
+                label=label,
+                subtitle=f"Due {_money(due)}",
+                action="preview",
+            )
+        ],
+        suggestions=[f"{label} paid 500", f"Borrow balance for {label}"] if due > 0 else None,
+    )
+
+
+def propose_borrow_payment(
+    *,
+    tenant: Tenant,
+    business: Business,
+    query: str,
+    amount: Decimal,
+    payment_method: str = "cash",
+) -> dict[str, Any]:
+    if amount <= 0:
+        raise ValidationError({"detail": "Payment amount must be greater than zero."})
+    customer = _resolve_customer(tenant=tenant, business=business, query=query)
+    if isinstance(customer, dict):
+        raise ValidationError({"detail": "Several customers match — ask again with a phone number."})
+    if customer is None:
+        raise ValidationError({"detail": f"No customer matching “{query}”."})
+    from apps.customers.services.borrow import BorrowService
+
+    balance = BorrowService().get_balance(tenant=tenant, business=business, customer=customer)
+    due = Decimal(str(balance.get("balance_due") or "0"))
+    if due <= 0:
+        raise ValidationError({"detail": f"{_customer_label(customer)} has no borrow balance due."})
+    if amount > due:
+        raise ValidationError({"detail": f"Payment cannot exceed outstanding balance ({_money(due)})."})
+    method = (payment_method or "cash").strip().lower() or "cash"
+    if method not in {"cash", "upi", "card"}:
+        method = "cash"
+    label = _customer_label(customer)
+    return {
+        "action_type": "borrow.record_payment",
+        "summary": f"Record {_money(amount)} {method} payment from {label} (due {_money(due)}).",
+        "payload": {
+            "customer_id": str(customer.id),
+            "customer_label": label,
+            "amount": str(amount),
+            "payment_method": method,
+        },
+    }
+
+
+def lookup_barcode(*, tenant: Tenant, business: Business, code: str) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_PRODUCTS, product_code=PRODUCT_SHOPIE):
+        return "Products are not enabled on your Orbit Mart plan."
+    raw = (code or "").strip()
+    if not raw:
+        return "Share a barcode or SKU to look up."
+    product = CatalogService().lookup_by_barcode(tenant=tenant, business=business, code=raw)
+    if product is None:
+        # Fall back to SKU exact match so “lookup 890…” still helps.
+        product = (
+            ShopProduct.objects.require_tenant(tenant)
+            .filter(business=business, is_active=True, sku__iexact=raw)
+            .first()
+        )
+    if product is None:
+        return f"No product found for barcode/SKU “{raw}”."
+    return pack_reply(
+        f"{product.name}\nSKU: {product.sku or '—'}\nStock: {product.stock_on_hand}\nPrice: {_money(product.price)}",
+        links=[
+            entity_link(
+                kind="product",
+                id=str(product.id),
+                label=product.name,
+                subtitle=f"Stock {product.stock_on_hand} · {_money(product.price)}",
+            )
+        ],
+        suggestions=[f"Stock of {product.name}", f"Set price of {product.name} to {product.price}"],
+    )
+
+
+def books_daybook_today(*, tenant: Tenant, business: Business) -> dict | str:
+    if not (
+        has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE)
+        or has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_CASH, product_code=PRODUCT_SHOPIE)
+        or has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_EXPENSE, product_code=PRODUCT_SHOPIE)
+    ):
+        return "Books daybook is not enabled on your Orbit Mart plan."
+    today = timezone.localdate()
+    rows = BooksService().daybook(
+        tenant=tenant, business=business, date_from=today, date_to=today, limit=15, offset=0
+    )
+    if not rows:
+        return "No books vouchers in today’s daybook."
+    total = sum(Decimal(str(r.get("total") or "0")) for r in rows)
+    lines = [f"Daybook today — {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} · {_money(total)}:"]
+    for row in rows:
+        party = row.get("party") or "—"
+        lines.append(
+            f"• {row.get('voucher_number')} — {row.get('voucher_type')} — {party} — {_money(row.get('total'))}"
+        )
+    return "\n".join(lines)
+
+
+def customer_party_statement(*, tenant: Tenant, business: Business, query: str) -> dict | str:
+    if not has_domain_feature(
+        business=business, feature=FEATURE_SHOPIE_BOOKS_PARTIES, product_code=PRODUCT_SHOPIE
+    ):
+        return "Party statements are not enabled on your Orbit Mart plan."
+    customer = _resolve_customer(tenant=tenant, business=business, query=query)
+    if isinstance(customer, dict):
+        return customer
+    if customer is None:
+        return f"No customer matching “{query}”."
+    from apps.shopie.models import PartyKind
+
+    statement = BooksService().party_statement(
+        tenant=tenant,
+        business=business,
+        party_kind=PartyKind.CUSTOMER,
+        party_id=customer.id,
+    )
+    label = statement.get("party_name") or _customer_label(customer)
+    entries = list(statement.get("entries") or [])[-10:]
+    lines = [
+        f"Statement for {label}",
+        f"Closing balance: {_money(statement.get('closing_balance'))}",
+    ]
+    if not entries:
+        lines.append("No party ledger entries yet.")
+    else:
+        lines.append("Recent entries:")
+        for entry in entries:
+            when = timezone.localtime(entry.created_at).strftime("%d %b")
+            lines.append(
+                f"• {when} — {entry.entry_type} {_money(entry.amount)} · bal {_money(entry.balance_after)}"
+            )
+    return pack_reply(
+        "\n".join(lines),
+        links=[
+            entity_link(
+                kind="customer",
+                id=str(customer.id),
+                label=label,
+                subtitle=f"Bal {_money(statement.get('closing_balance'))}",
+                action="preview",
+            )
+        ],
+    )
+
+
+def service_slots(
+    *,
+    tenant: Tenant,
+    business: Business,
+    query: str,
+    day=None,
+) -> dict | str:
+    if not has_domain_feature(
+        business=business, feature=FEATURE_APPOINTIE_BOOKINGS, product_code=PRODUCT_APPOINTIE
+    ):
+        return "Bookings are not enabled on your Orbit Appoint plan."
+    if not has_domain_feature(
+        business=business, feature=FEATURE_APPOINTIE_SERVICES, product_code=PRODUCT_APPOINTIE
+    ):
+        return "Services are not enabled on your Orbit Appoint plan."
+    q = (query or "").strip()
+    services = list(
+        Service.objects.require_tenant(tenant)
+        .filter(business=business, status=ServiceStatus.ACTIVE)
+        .filter(Q(name__icontains=q) | Q(display_name__icontains=q) | Q(service_code__icontains=q))
+        .order_by("display_name")[:6]
+    )
+    if not services:
+        return f"No service matching “{q}”."
+    if len(services) > 1:
+        lines = [f"Several services match “{q}”. Ask again with the exact name:"]
+        chips = []
+        for service in services:
+            name = service.display_name or service.name
+            lines.append(f"• {name}")
+            chips.append(f"Slots for {name} today")
+        return pack_reply("\n".join(lines), suggestions=chips[:5])
+    service = services[0]
+    name = service.display_name or service.name
+    duration = (
+        ServiceDuration.objects.require_tenant(tenant).filter(service=service).order_by("id").first()
+    )
+    mins = int(getattr(duration, "duration_minutes", None) or 30)
+    target = day or timezone.localdate()
+    from apps.bookings.services.availability import AvailabilityService
+
+    slots = AvailabilityService().available_slots(
+        tenant=tenant,
+        business=business,
+        target_date=target,
+        duration_minutes=mins,
+        service_id=service.id,
+    )
+    label = "today" if target == timezone.localdate() else target.isoformat()
+    if not slots:
+        return f"No open slots for {name} {label}."
+    shown = slots[:12]
+    lines = [f"{len(slots)} slot{'s' if len(slots) != 1 else ''} for {name} {label} ({mins} min) — next {len(shown)}:"]
+    for slot in shown:
+        start = timezone.localtime(slot.start_at).strftime("%H:%M")
+        end = timezone.localtime(slot.end_at).strftime("%H:%M")
+        lines.append(f"• {start}–{end}")
+    return "\n".join(lines)
+
+
 def execute_extra_action(
     *,
     tenant: Tenant,
@@ -824,6 +1062,24 @@ def execute_extra_action(
         coupon.is_active = False
         coupon.save(update_fields=["is_active", "updated_at"])
         return {"code": coupon.code, "is_active": False}
+    if action_type == "borrow.record_payment":
+        from apps.customers.services.borrow import BorrowService
+
+        customer = Customer.objects.require_tenant(tenant).get(business=business, id=payload["customer_id"])
+        result = BorrowService().record_payment(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            amount=Decimal(str(payload["amount"])),
+            payment_method=str(payload.get("payment_method") or "cash"),
+            notes="Business Assistant",
+        )
+        return {
+            "customer_label": _customer_label(customer),
+            "amount": result.get("amount"),
+            "balance_due": result.get("balance_due"),
+            "payment_method": result.get("payment_method"),
+        }
     return None
 
 

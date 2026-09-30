@@ -4,9 +4,10 @@ import { Feather } from '@expo/vector-icons';
 import type { ShopOrder } from '@ie-orbit/sdk';
 import { shopOrderBadgeStyle } from '../features/shop/posPayment';
 import {
+  orderCallPhone,
   orderCustomerLabel,
-  orderCustomerPhone,
   orderDeliveryNote,
+  orderDeliveryPhone,
   orderMetaSummary,
   orderNextActionLabel,
   orderCreatedDateLabel,
@@ -56,7 +57,8 @@ export function OrderRow({
   const timingColors = TIMING_COLORS[timingTone(order.created_at)];
   const badge = shopOrderBadgeStyle(order);
   const customerName = orderCustomerLabel(order, customerMap);
-  const customerPhone = orderCustomerPhone(order);
+  const callPhone = orderCallPhone(order);
+  const deliveryPhone = orderDeliveryPhone(order);
   const deliveryNote = orderDeliveryNote(order);
   const nextAction = orderNextActionLabel(order);
   const createdDate = orderCreatedDateLabel(order.created_at);
@@ -101,13 +103,13 @@ export function OrderRow({
           <Text style={styles.meta} numberOfLines={1}>
             {customerName}
           </Text>
-          {customerPhone ? (
+          {callPhone ? (
             <Pressable
               style={styles.inlineCall}
               hitSlop={8}
               onPress={(event) => {
                 event.stopPropagation?.();
-                void Linking.openURL(`tel:${customerPhone}`);
+                void Linking.openURL(`tel:${callPhone}`);
               }}
             >
               <Feather name="phone" size={13} color={colors.primary} />
@@ -121,6 +123,15 @@ export function OrderRow({
             {orderMetaSummary(order)}
           </Text>
         </View>
+
+        {deliveryPhone ? (
+          <View style={styles.metaRow}>
+            <Feather name="phone" size={12} color={colors.mutedForeground} />
+            <Text style={styles.subMeta} numberOfLines={1}>
+              Delivery · {deliveryPhone}
+            </Text>
+          </View>
+        ) : null}
 
         {deliveryNote ? (
           <View style={styles.metaRow}>

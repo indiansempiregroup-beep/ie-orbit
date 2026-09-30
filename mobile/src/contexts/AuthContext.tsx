@@ -69,7 +69,7 @@ type AuthState = {
     firstName?: string;
     lastName?: string;
   }) => Promise<void>;
-  loginWithGoogle: (idToken: string, remember?: boolean) => Promise<void>;
+  loginWithGoogle: (idToken: string, remember?: boolean, purpose?: 'login' | 'signup') => Promise<void>;
   loginWithBiometrics: () => Promise<void>;
   /** Enable Face ID / fingerprint using the current session (Face ID only — no password). */
   enableBiometrics: (emailOverride?: string) => Promise<void>;
@@ -415,7 +415,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const loginWithGoogle = useCallback(
-    async (idToken: string, remember = true) => {
+    async (idToken: string, remember = true, purpose: 'login' | 'signup' = 'login') => {
       if (!tenantSlug || !businessCode) {
         throw new Error('This app is not linked to a shop yet. Try again in a moment.');
       }
@@ -425,6 +425,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id_token: idToken,
           client: 'customer',
           remember_me: remember,
+          purpose,
           tenant_slug: tenantSlug,
           business_code: businessCode,
         });

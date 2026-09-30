@@ -8,9 +8,11 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts } from './shopHooks';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
+import { formatMoney } from '../../lib/currency';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../lib/loyalty';
 import { normalizeGstin, validateGstin } from '../../lib/gstin';
 import { hasSubscribedProduct } from '../../config/products';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import type { Customer, MerchantCashfreeCheckout, MerchantRazorpayCheckout, ShopProduct } from '@ie-orbit/sdk';
 
 type BasketLine = {
@@ -67,6 +69,8 @@ export function ShopPosPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isChallan = searchParams.get('mode') === 'delivery_challan';
+  const currency = workspace.activeBusiness?.currency;
+  const money = (amount: number) => formatMoney(amount, currency);
   const showGstFields = hasSubscribedProduct(workspace.activeBusiness?.product_subscriptions, 'shopie');
   const products = useShopProducts('', 'active');
   const { lookup, lookupBulk, createOrder } = useShopProductMutations();
@@ -81,6 +85,9 @@ export function ShopPosPage() {
   const [basket, setBasket] = useState<BasketLine[]>([]);
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>('');
   const [billDiscountValue, setBillDiscountValue] = useState('0');
+  const [automationOffers, setAutomationOffers] = useState<
+    Array<{ label: string; discount_type: string; discount_value: string }>
+  >([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [message, setMessage] = useState<string | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
@@ -92,6 +99,7 @@ export function ShopPosPage() {
     amount: number;
     status: 'opening' | 'waiting' | 'paid' | 'failed';
   } | null>(null);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   useEffect(() => {
     if (!workspace.businessId) return;
@@ -196,22 +204,31 @@ export function ShopPosPage() {
       .slice(0, 80);
   }, [productQuery, products.data]);
 
-  const totals = useMemo(
+  const posLineInputs = useMemo(
     () =>
-      computePosTotals(
-        basket.map((line) => ({
-          id: line.product.id,
-          name: line.product.name,
-          unitPrice: Number(line.product.price),
-          taxRate: Number(line.product.tax_rate ?? 0),
-          quantity: line.quantity,
-          discountType: line.discountType,
-          discountValue: line.discountValue,
-        })),
-        billDiscountType,
-        Number(billDiscountValue) || 0,
-      ),
-    [basket, billDiscountType, billDiscountValue],
+      basket.map((line) => ({
+        id: line.product.id,
+        name: line.product.name,
+        unitPrice: Number(line.product.price),
+        taxRate: Number(line.product.tax_rate ?? line.product.gst_rate ?? 0),
+        taxInclusive:
+          typeof line.product.tax_inclusive === 'boolean'
+            ? line.product.tax_inclusive
+            : Boolean(
+                line.product.metadata &&
+                  typeof line.product.metadata === 'object' &&
+                  (line.product.metadata as Record<string, unknown>).tax_inclusive === true,
+              ),
+        quantity: line.quantity,
+        discountType: line.discountType,
+        discountValue: line.discountValue,
+      })),
+    [basket],
+  );
+
+  const baseTotals = useMemo(
+    () => computePosTotals(posLineInputs, billDiscountType, Number(billDiscountValue) || 0, 0),
+    [posLineInputs, billDiscountType, billDiscountValue],
   );
 
   const loyaltyPrefs = useMemo(
@@ -224,6 +241,42 @@ export function ShopPosPage() {
   );
 
   useEffect(() => {
+    if (!workspace.businessId || !customerId || isChallan) {
+      setAutomationOffers([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await client.shop.eligibleOffers({
+          business_id: workspace.businessId!,
+          customer_id: customerId,
+          fulfillment_mode: 'pos',
+          lines: basket.map((line) => ({
+            product_id: line.product.id,
+            quantity: line.quantity,
+          })),
+        });
+        if (cancelled) return;
+        setAutomationOffers(
+          (res.data.automations || [])
+            .map((row) => ({
+              label: String(row.label || row.name || 'Offer'),
+              discount_type: String(row.discount_type || 'percent'),
+              discount_value: String(row.discount_value || '0'),
+            }))
+            .filter((row) => Number(row.discount_value) > 0),
+        );
+      } catch {
+        if (!cancelled) setAutomationOffers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [basket, client, customerId, isChallan, workspace.businessId]);
+
+  useEffect(() => {
     if (!showGstFields) {
       setPartyGstin('');
       return;
@@ -234,11 +287,31 @@ export function ShopPosPage() {
 
   const billGstinCheck = useMemo(() => validateGstin(partyGstin), [partyGstin]);
   const loyaltyMaxPoints = useMemo(
-    () => maxRedeemablePoints(totals.subtotal, loyaltyPrefs, Number(selectedCustomer?.loyalty_points ?? 0)),
-    [totals.subtotal, loyaltyPrefs, selectedCustomer?.loyalty_points],
+    () =>
+      maxRedeemablePoints(
+        baseTotals.subtotal,
+        loyaltyPrefs,
+        Number(selectedCustomer?.loyalty_points ?? 0),
+      ),
+    [baseTotals.subtotal, loyaltyPrefs, selectedCustomer?.loyalty_points],
   );
-  const loyaltyDiscount = redeemDiscountAmount(customerId ? pointsToRedeem : 0, loyaltyPrefs);
-  const payableAfterLoyalty = Math.max(0, totals.payable - loyaltyDiscount);
+  const loyaltyDiscount = redeemDiscountAmount(
+    customerId ? Math.min(pointsToRedeem, loyaltyMaxPoints) : 0,
+    loyaltyPrefs,
+  );
+  const totals = useMemo(
+    () =>
+      loyaltyDiscount > 0
+        ? computePosTotals(
+            posLineInputs,
+            billDiscountType,
+            Number(billDiscountValue) || 0,
+            loyaltyDiscount,
+          )
+        : baseTotals,
+    [baseTotals, posLineInputs, billDiscountType, billDiscountValue, loyaltyDiscount],
+  );
+  const payableAfterLoyalty = totals.payable;
 
   function addProduct(product: ShopProduct, barcode?: string) {
     setBasket((current) => {
@@ -351,9 +424,18 @@ export function ShopPosPage() {
         setBillDiscountType('');
         setBillDiscountValue('0');
         setPointsToRedeem(0);
-        snackbar.push(`Challan ${challan.document_number} created · ${totals.payable.toFixed(2)}`, 'success');
+        snackbar.push(`Challan ${challan.document_number} created · ${money(totals.payable)}`, 'success');
         setMessage(`Challan ${challan.document_number} created.`);
-        navigate('/shop/books/delivery-challans');
+        if (workspace.businessId) {
+          setDocActions({
+            kind: 'delivery_challan',
+            id: challan.id,
+            number: challan.document_number,
+            businessId: workspace.businessId,
+          });
+        } else {
+          navigate('/shop/books/delivery-challans');
+        }
         return;
       }
       const order = await createOrder.mutateAsync({
@@ -414,10 +496,18 @@ export function ShopPosPage() {
             ? ' · Paid online'
             : '';
       snackbar.push(
-        `Bill ${order.order_number} created${dueLabel} · ${totals.payable.toFixed(2)}`,
+        `Bill ${order.order_number} created${dueLabel} · ${money(totals.payable)}`,
         'success',
       );
       setMessage(`Bill ${order.order_number} created.`);
+      if (workspace.businessId && order.books_voucher_id) {
+        setDocActions({
+          kind: 'sale',
+          id: order.books_voucher_id,
+          number: order.books_voucher_number || order.order_number,
+          businessId: workspace.businessId,
+        });
+      }
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Unable to create bill.';
       setMessage(text);
@@ -427,6 +517,14 @@ export function ShopPosPage() {
 
   return (
     <div className="page-stack">
+      <DocumentActionsSheet
+        open={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions?.kind === 'delivery_challan' ? 'Delivery challan ready' : 'Bill created'}
+        allowNewBill={docActions?.kind === 'sale'}
+        onNewBill={() => setDocActions(null)}
+      />
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0,1.1fr) minmax(320px,0.9fr)' }}>
         <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
           <Card>
@@ -494,7 +592,7 @@ export function ShopPosPage() {
                 >
                   <strong>{product.name}</strong>
                   <div style={{ opacity: 0.75 }}>
-                    {product.price} · stock {product.stock_on_hand}
+                    {money(Number(product.price))} · stock {product.stock_on_hand}
                     {product.category ? ` · ${product.category}` : ''}
                   </div>
                 </button>
@@ -552,43 +650,6 @@ export function ShopPosPage() {
               </span>
             </label>
           ) : null}
-          {customerId && !isChallan && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
-            <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Reward points</span>
-              <span style={{ fontSize: 13, opacity: 0.8 }}>
-                Balance {selectedCustomer?.loyalty_points ?? 0} pts · {loyaltyPrefs.points_per_currency_unit} pts = ₹1
-              </span>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Button
-                  type="button"
-                  variant="neutral"
-                  onClick={() =>
-                    setPointsToRedeem((current) => {
-                      if (current <= 0) return 0;
-                      const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
-                      return next < loyaltyPrefs.min_redeem_points ? 0 : next;
-                    })
-                  }
-                >
-                  −
-                </Button>
-                <strong>{pointsToRedeem} pts</strong>
-                <Button
-                  type="button"
-                  variant="neutral"
-                  onClick={() =>
-                    setPointsToRedeem((current) => {
-                      const step = Math.max(1, loyaltyPrefs.min_redeem_points);
-                      if (current <= 0) return Math.min(loyaltyMaxPoints, step);
-                      return Math.min(loyaltyMaxPoints, current + step);
-                    })
-                  }
-                >
-                  +
-                </Button>
-              </div>
-            </div>
-          ) : null}
 
           <div style={{ display: 'grid', gap: 10, maxHeight: 360, overflow: 'auto', marginBottom: 12 }}>
             {basket.map((line) => {
@@ -602,13 +663,13 @@ export function ShopPosPage() {
                     <div>
                       <strong>{line.product.name}</strong>
                       <div style={{ opacity: 0.75, fontSize: 13 }}>
-                        {Number(line.product.price).toFixed(2)} × {line.quantity}
+                        {money(Number(line.product.price))} × {line.quantity}
                         {priced && priced.discountAmount > 0
-                          ? ` · disc. -${priced.discountAmount.toFixed(2)}`
+                          ? ` · disc. -${money(priced.discountAmount)}`
                           : ''}
                       </div>
                     </div>
-                    <strong>{priced?.total.toFixed(2) ?? '0.00'}</strong>
+                    <strong>{money(priced?.total ?? 0)}</strong>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <Button
@@ -666,29 +727,224 @@ export function ShopPosPage() {
             ) : null}
           </div>
 
-          <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Bill discount</span>
-              <select
-                value={billDiscountType}
-                onChange={(event) => {
-                  const next = event.target.value as DiscountType;
-                  setBillDiscountType(next);
-                  if (!next) setBillDiscountValue('0');
+          <div style={{ display: 'grid', gap: 14, marginBottom: 16 }}>
+            {customerId && !isChallan && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 10,
+                  padding: 14,
+                  borderRadius: 14,
+                  border: '1px solid var(--border)',
+                  background: 'var(--card)',
                 }}
-                style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
               >
-                <option value="">None</option>
-                <option value="percent">% off</option>
-                <option value="amount">₹ off</option>
-              </select>
-              {billDiscountType ? (
-                <input
-                  value={billDiscountValue}
-                  onChange={(event) => setBillDiscountValue(event.target.value)}
-                  style={{ width: 88, padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                />
-              ) : null}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: '0.05em',
+                        textTransform: 'uppercase',
+                        color: 'var(--primary)',
+                      }}
+                    >
+                      Customer rewards
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>Reward points</div>
+                  </div>
+                  <div
+                    style={{
+                      minWidth: 68,
+                      textAlign: 'center',
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      background: 'color-mix(in srgb, #d97706 14%, white)',
+                    }}
+                  >
+                    <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>
+                      {selectedCustomer?.loyalty_points ?? 0}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>pts</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.75 }}>
+                  {loyaltyPrefs.points_per_currency_unit} pts = {money(1)} · redeem up to {loyaltyMaxPoints} pts
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Button
+                    type="button"
+                    variant="neutral"
+                    onClick={() =>
+                      setPointsToRedeem((current) => {
+                        if (current <= 0) return 0;
+                        const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
+                        return next < loyaltyPrefs.min_redeem_points ? 0 : next;
+                      })
+                    }
+                  >
+                    −
+                  </Button>
+                  <div style={{ minWidth: 72, textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{pointsToRedeem}</div>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>pts</div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="neutral"
+                    onClick={() =>
+                      setPointsToRedeem((current) => {
+                        const step = Math.max(1, loyaltyPrefs.min_redeem_points);
+                        if (current <= 0) return Math.min(loyaltyMaxPoints, step);
+                        return Math.min(loyaltyMaxPoints, current + step);
+                      })
+                    }
+                  >
+                    +
+                  </Button>
+                  <Button type="button" onClick={() => setPointsToRedeem(loyaltyMaxPoints)}>
+                    Max
+                  </Button>
+                </div>
+                {pointsToRedeem > 0 ? (
+                  <div
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      background: 'color-mix(in srgb, #059669 12%, white)',
+                      color: '#047857',
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Saves {money(loyaltyDiscount)} on this bill
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, opacity: 0.7 }}>Tap + to redeem points on this bill</div>
+                )}
+              </div>
+            ) : null}
+            {customerId && !isChallan && automationOffers.length > 0 ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 10,
+                  padding: 14,
+                  borderRadius: 14,
+                  border: '1px solid var(--border)',
+                  background: 'var(--card)',
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      color: 'var(--primary)',
+                    }}
+                  >
+                    Special for this customer
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>Automation offers</div>
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {automationOffers.map((offer) => {
+                    const dtype = offer.discount_type === 'amount' ? 'amount' : 'percent';
+                    const active =
+                      billDiscountType === dtype &&
+                      String(Number(billDiscountValue) || 0) === String(Number(offer.discount_value) || 0);
+                    const badge =
+                      dtype === 'amount'
+                        ? `${money(Number(offer.discount_value) || 0)} off`
+                        : `${Number(offer.discount_value) || 0}% off`;
+                    return (
+                      <button
+                        key={`${offer.label}-${offer.discount_value}`}
+                        type="button"
+                        onClick={() => {
+                          setBillDiscountType(dtype);
+                          setBillDiscountValue(offer.discount_value);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: 12,
+                          borderRadius: 12,
+                          border: active
+                            ? '1px solid var(--primary)'
+                            : '1px solid var(--border)',
+                          background: active
+                            ? 'color-mix(in srgb, var(--primary) 12%, white)'
+                            : 'color-mix(in srgb, var(--primary) 6%, white)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <span
+                          style={{
+                            minWidth: 78,
+                            textAlign: 'center',
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: active ? 'var(--primary-foreground)' : 'var(--primary)',
+                            background: active ? 'var(--primary)' : 'var(--card)',
+                            border: active ? 'none' : '1px solid var(--border)',
+                          }}
+                        >
+                          {badge}
+                        </span>
+                        <span style={{ flex: 1 }}>
+                          <strong style={{ display: 'block', fontSize: 14 }}>{offer.label}</strong>
+                          <span style={{ fontSize: 12, opacity: 0.7 }}>
+                            {active ? 'Applied to bill' : 'Tap to apply'}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            <div
+              style={{
+                display: 'grid',
+                gap: 10,
+                padding: 14,
+                borderRadius: 14,
+                border: '1px solid var(--border)',
+                background: 'var(--card)',
+              }}
+            >
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Bill discount</span>
+                <select
+                  value={billDiscountType}
+                  onChange={(event) => {
+                    const next = event.target.value as DiscountType;
+                    setBillDiscountType(next);
+                    if (!next) setBillDiscountValue('0');
+                  }}
+                  style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                >
+                  <option value="">None</option>
+                  <option value="percent">% off</option>
+                  <option value="amount">₹ off</option>
+                </select>
+                {billDiscountType ? (
+                  <input
+                    value={billDiscountValue}
+                    onChange={(event) => setBillDiscountValue(event.target.value)}
+                    style={{ width: 88, padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  />
+                ) : null}
+              </div>
             </div>
             {!isChallan ? (
             <>
@@ -741,29 +997,46 @@ export function ShopPosPage() {
             <strong>{isChallan ? 'Challan summary' : 'Bill summary'}</strong>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>Items</span>
-              <span>{totals.merchandiseGross.toFixed(2)}</span>
+              <span>{money(totals.merchandiseGross)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Product discounts</span>
-              <span>-{totals.lineDiscountTotal.toFixed(2)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Bill discount</span>
-              <span>-{totals.billDiscountAmount.toFixed(2)}</span>
-            </div>
-            {loyaltyDiscount > 0 ? (
+            {totals.lineDiscountTotal > 0 ? (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Reward points</span>
-                <span>-{loyaltyDiscount.toFixed(2)}</span>
+                <span>Product discounts</span>
+                <span>-{money(totals.lineDiscountTotal)}</span>
               </div>
             ) : null}
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Tax</span>
-              <span>{totals.taxTotal.toFixed(2)}</span>
-            </div>
+            {totals.billDiscountAmount > 0 ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Bill discount</span>
+                <span>-{money(totals.billDiscountAmount)}</span>
+              </div>
+            ) : null}
+            {totals.loyaltyDiscountAmount > 0 ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Reward points</span>
+                <span>-{money(totals.loyaltyDiscountAmount)}</span>
+              </div>
+            ) : null}
+            {totals.taxTotal > 0 ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>CGST</span>
+                  <span>{money(Math.round((totals.taxTotal / 2) * 100) / 100)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>SGST</span>
+                  <span>{money(totals.taxTotal - Math.round((totals.taxTotal / 2) * 100) / 100)}</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Tax</span>
+                <span>{money(totals.taxTotal)}</span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 18 }}>
               <span>{isChallan ? 'Total' : paymentMethod === 'borrow' ? 'Amount due' : 'Payable'}</span>
-              <span>{payableAfterLoyalty.toFixed(2)}</span>
+              <span>{money(payableAfterLoyalty)}</span>
             </div>
           </div>
 
@@ -778,14 +1051,14 @@ export function ShopPosPage() {
               : createOrder.isPending
               ? 'Creating bill…'
               : isChallan
-                ? `Save challan · ${totals.payable.toFixed(2)}`
+                ? `Save challan · ${money(totals.payable)}`
               : paymentMethod === 'borrow'
-                ? `Create Bill · Due ${payableAfterLoyalty.toFixed(2)}`
+                ? `Create Bill · Due ${money(payableAfterLoyalty)}`
                 : paymentMethod === 'razorpay'
-                  ? `Pay with Razorpay · ${payableAfterLoyalty.toFixed(2)}`
+                  ? `Pay with Razorpay · ${money(payableAfterLoyalty)}`
                 : paymentMethod === 'cashfree'
-                  ? `Pay with Cashfree · ${payableAfterLoyalty.toFixed(2)}`
-                : `Create Bill · ${payableAfterLoyalty.toFixed(2)}`}
+                  ? `Pay with Cashfree · ${money(payableAfterLoyalty)}`
+                : `Create Bill · ${money(payableAfterLoyalty)}`}
           </Button>
         </Card>
       </div>
@@ -817,7 +1090,7 @@ export function ShopPosPage() {
             </h2>
             <p style={{ margin: '0 0 4px', color: '#6b7280' }}>Bill {paymentSheet.orderNumber}</p>
             <strong style={{ display: 'block', fontSize: 28, margin: '12px 0 20px' }}>
-              ₹{paymentSheet.amount.toFixed(2)}
+              {money(paymentSheet.amount)}
             </strong>
             {paymentSheet.status !== 'paid' ? (
               <p style={{ color: '#6b7280' }}>

@@ -33,7 +33,8 @@ from apps.billing.constants import BULK_REPROCESS_COOLDOWN_SECONDS
 from apps.billing.models import BillingCheckoutSession, BillingWebhookEvent, WebhookEventStatus
 from apps.billing.services.checkout import CheckoutService
 from apps.billing.services.ops_digest import build_ops_digest
-from apps.billing.services.orders import serialize_checkout_order
+from apps.billing.services.orders import merchant_history_sessions, serialize_checkout_order
+from apps.billing.services.refunds import BillingRefundService
 from apps.billing.services.upi_proof import proof_url_from_meta
 from apps.billing.services.platform_revenue import build_platform_revenue_insights
 from apps.billing.services.reconciliation import BillingReconciliationService
@@ -172,6 +173,7 @@ class BillingUpiCheckoutView(APIView):
             extra_staff=int(request.data.get("extra_staff") or 0),
             extra_offices=int(request.data.get("extra_offices") or 0),
             pets_pack_enabled=bool(request.data.get("pets_pack_enabled")),
+            billing_interval=str(request.data.get("billing_interval") or "") or None,
             items=raw_items if isinstance(raw_items, list) else None,
             actor_id=str(request.user.id),
         )
@@ -224,13 +226,62 @@ class BillingOrdersView(APIView):
         if not business_id:
             raise ValidationError({"business_id": "Business context is required."})
         business = get_object_or_404(Business, id=business_id, tenant=tenant)
-        sessions = (
+        sessions = merchant_history_sessions(
             BillingCheckoutSession.objects.filter(tenant=tenant, business=business)
             .select_related("business")
-            .order_by("-created_at")[:200]
-        )
+            .order_by("-created_at")
+        )[:200]
         return success_response(
             {"orders": [serialize_checkout_order(session) for session in sessions]},
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingOrderRefundRequestView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(tags=["Billing"], description="Request a refund on a paid subscription order.")
+    def post(self, request: Request, session_id) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.data.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        business = get_object_or_404(Business, id=business_id, tenant=tenant)
+        amount_raw = request.data.get("amount_paise")
+        session = BillingRefundService().request_refund(
+            session_id=str(session_id),
+            business=business,
+            actor=request.user,
+            reason=str(request.data.get("reason") or ""),
+            amount_paise=int(amount_raw) if amount_raw not in (None, "") else None,
+        )
+        return success_response(
+            serialize_checkout_order(session),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class BillingOrderRefundWithdrawView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(tags=["Billing"], description="Withdraw a pending refund request.")
+    def post(self, request: Request, session_id) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.data.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        business = get_object_or_404(Business, id=business_id, tenant=tenant)
+        session = BillingRefundService().withdraw_refund_request(
+            session_id=str(session_id),
+            business=business,
+            actor=request.user,
+        )
+        return success_response(
+            serialize_checkout_order(session),
             request_id=getattr(request, "request_id", None),
         )
 
@@ -1342,3 +1393,84 @@ class CashfreeWebhookView(APIView):
         if not result.get("accepted"):
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
         return success_response(result, request_id=getattr(request, "request_id", None))
+
+
+class BillingTaxInvoicesView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(tags=["Billing"], description="List SaaS GST tax invoices / credit notes for the business.")
+    def get(self, request: Request) -> Response | HttpResponse:
+        from apps.billing.services.account_statement import list_tax_documents, tax_documents_csv
+
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        business = get_object_or_404(Business, id=business_id, tenant=tenant)
+        rows = list_tax_documents(
+            tenant=tenant,
+            business=business,
+            date_from=request.query_params.get("date_from"),
+            date_to=request.query_params.get("date_to"),
+            document_type=request.query_params.get("document_type"),
+        )
+        if str(request.query_params.get("format") or "").lower() == "csv":
+            response = HttpResponse(tax_documents_csv(rows), content_type="text/csv; charset=utf-8")
+            response["Content-Disposition"] = 'attachment; filename="ie-orbit-tax-invoices.csv"'
+            return response
+        return success_response({"invoices": rows}, request_id=getattr(request, "request_id", None))
+
+
+class BillingTaxInvoicePdfView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(tags=["Billing"], description="Download a SaaS GST tax invoice / credit note PDF.")
+    def get(self, request: Request, invoice_id) -> HttpResponse:
+        from apps.billing.services.tax_invoices import build_tax_invoice_pdf
+        from apps.platform_admin.models import PlatformLedgerInvoice
+
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        invoice = get_object_or_404(
+            PlatformLedgerInvoice.objects.select_related("original_invoice"),
+            id=invoice_id,
+            tenant=tenant,
+            business_id=business_id,
+        )
+        pdf = build_tax_invoice_pdf(invoice)
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{invoice.invoice_number}.pdf"'
+        return response
+
+
+class BillingAccountStatementView(APIView):
+    permission_classes = [IsAuthenticated, BusinessAccessPermission]
+
+    @extend_schema(tags=["Billing"], description="CA-ready SaaS account statement for the business.")
+    def get(self, request: Request) -> Response | HttpResponse:
+        from apps.billing.services.account_statement import account_statement_csv, build_account_statement
+
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        if not tenant:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        business_id = request.headers.get("X-Business-ID") or request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "Business context is required."})
+        business = get_object_or_404(Business, id=business_id, tenant=tenant)
+        statement = build_account_statement(
+            tenant=tenant,
+            business=business,
+            date_from=request.query_params.get("date_from"),
+            date_to=request.query_params.get("date_to"),
+        )
+        if str(request.query_params.get("format") or "").lower() == "csv":
+            response = HttpResponse(account_statement_csv(statement), content_type="text/csv; charset=utf-8")
+            response["Content-Disposition"] = 'attachment; filename="ie-orbit-account-statement.csv"'
+            return response
+        return success_response(statement, request_id=getattr(request, "request_id", None))

@@ -35,6 +35,10 @@ import type {
   ShopProduct,
   ShopSupplier,
 } from '@ie-orbit/sdk';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
+import { useAuth } from '../../contexts/AuthContext';
+import { getApiErrorMessage } from '../../utils/format';
 import {
   customerLabel,
   formatMoney,
@@ -97,10 +101,24 @@ function emptyLine(): DocLine {
   };
 }
 
-function canConvert(doc: ShopBooksDocument) {
+function docStatus(doc: ShopBooksDocument) {
+  return (doc.status || '').toLowerCase();
+}
+
+function canDispatch(doc: ShopBooksDocument) {
   if (doc.converted_voucher) return false;
-  const status = (doc.status || '').toLowerCase();
+  const status = docStatus(doc);
   return status !== 'converted' && status !== 'cancelled' && status !== 'void' && status !== 'dispatched';
+}
+
+function canInvoiceChallan(doc: ShopBooksDocument) {
+  if (doc.converted_voucher) return false;
+  const status = docStatus(doc);
+  return status === 'dispatched' || status === 'confirmed' || status === 'draft';
+}
+
+function canConvert(doc: ShopBooksDocument) {
+  return canDispatch(doc);
 }
 
 export function ShopBooksDocumentsScreen() {
@@ -111,7 +129,8 @@ export function ShopBooksDocumentsScreen() {
   const meta = DOC_META[docType];
   const client = useOpsClient();
   const toast = useToast();
-  const { businessId } = useWorkspace();
+  const auth = useAuth();
+  const { businessId, tenantId } = useWorkspace();
 
   const [documents, setDocuments] = useState<ShopBooksDocument[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -128,6 +147,8 @@ export function ShopBooksDocumentsScreen() {
   const [lines, setLines] = useState<DocLine[]>([emptyLine()]);
   const [notes, setNotes] = useState('');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'dispatched' | 'invoiced'>('all');
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -210,26 +231,41 @@ export function ShopBooksDocumentsScreen() {
 
   const filteredDocs = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return documents;
-    return documents.filter((item) =>
-      [item.document_number, item.customer_name ?? '', item.supplier_name ?? '', item.status, String(item.total)]
+    return documents.filter((item) => {
+      const status = docStatus(item);
+      if (docType === 'delivery_challan' && statusFilter !== 'all') {
+        if (statusFilter === 'open' && !['draft', 'confirmed'].includes(status)) return false;
+        if (statusFilter === 'dispatched' && status !== 'dispatched') return false;
+        if (statusFilter === 'invoiced' && status !== 'converted' && !item.converted_voucher) return false;
+      }
+      if (!term) return true;
+      return [item.document_number, item.customer_name ?? '', item.supplier_name ?? '', item.status, String(item.total)]
         .join(' ')
         .toLowerCase()
-        .includes(term),
-    );
-  }, [documents, search]);
+        .includes(term);
+    });
+  }, [documents, search, docType, statusFilter]);
 
   const docSummary = useMemo(() => {
     let total = 0;
     let open = 0;
     let converted = 0;
-    for (const item of filteredDocs) {
+    let dispatched = 0;
+    for (const item of documents) {
       total += Number(item.total ?? 0);
-      if (canConvert(item)) open += 1;
-      else converted += 1;
+      const status = docStatus(item);
+      if (docType === 'delivery_challan') {
+        if (status === 'converted' || item.converted_voucher) converted += 1;
+        else if (status === 'dispatched') dispatched += 1;
+        else if (canDispatch(item)) open += 1;
+      } else if (canConvert(item)) {
+        open += 1;
+      } else {
+        converted += 1;
+      }
     }
-    return { total, open, converted, count: filteredDocs.length };
-  }, [filteredDocs]);
+    return { total, open, converted, dispatched, count: documents.length };
+  }, [documents, docType]);
 
   const partyOptions = useMemo(() => {
     if (meta.usesSupplier) {
@@ -322,15 +358,26 @@ export function ShopBooksDocumentsScreen() {
     }
   }
 
-  async function onConvert(doc: ShopBooksDocument) {
+  async function onConvert(doc: ShopBooksDocument, action?: 'dispatch' | 'to_invoice') {
     if (!client) return;
     setConvertingId(doc.id);
     try {
-      await client.shop.convertDocument(doc.id, {});
-      toast.push(
-        docType === 'delivery_challan' ? 'Dispatched' : `Converted · ${meta.convertLabel}`,
-        'success',
+      const result = await client.shop.convertDocument(
+        doc.id,
+        action ? { action } : {},
       );
+      if (docType === 'delivery_challan' && action === 'to_invoice') {
+        const voucherNumber =
+          result && typeof result === 'object' && 'voucher_number' in result
+            ? String((result as { voucher_number?: string }).voucher_number || '')
+            : '';
+        toast.push(voucherNumber ? `Invoice ${voucherNumber} created` : 'Invoiced from challan', 'success');
+      } else {
+        toast.push(
+          docType === 'delivery_challan' ? 'Dispatched · stock updated' : `Converted · ${meta.convertLabel}`,
+          'success',
+        );
+      }
       await load();
     } catch (err) {
       toast.push(err instanceof Error ? err.message : 'Unable to convert document', 'error');
@@ -449,13 +496,44 @@ export function ShopBooksDocumentsScreen() {
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <VoucherSummaryCards
-          metrics={[
-            { label: 'Total', value: formatMoney(docSummary.total), hint: String(docSummary.count) },
-            { label: 'Open', value: String(docSummary.open), tone: 'due' },
-            { label: 'Done', value: String(docSummary.converted), tone: 'paid' },
-          ]}
+          metrics={
+            docType === 'delivery_challan'
+              ? [
+                  { label: 'Open', value: String(docSummary.open), tone: 'due' as const, hint: formatMoney(docSummary.total) },
+                  { label: 'Dispatched', value: String(docSummary.dispatched) },
+                  { label: 'Invoiced', value: String(docSummary.converted), tone: 'paid' as const },
+                ]
+              : [
+                  { label: 'Total', value: formatMoney(docSummary.total), hint: String(docSummary.count) },
+                  { label: 'Open', value: String(docSummary.open), tone: 'due' },
+                  { label: 'Done', value: String(docSummary.converted), tone: 'paid' },
+                ]
+          }
         />
         <SearchBar value={search} onChangeText={setSearch} placeholder={`Search ${meta.title.toLowerCase()}`} style={styles.search} />
+        {docType === 'delivery_challan' ? (
+          <View style={styles.filterRow}>
+            {(
+              [
+                { value: 'all', label: 'All' },
+                { value: 'open', label: 'Open' },
+                { value: 'dispatched', label: 'Dispatched' },
+                { value: 'invoiced', label: 'Invoiced' },
+              ] as const
+            ).map((option) => {
+              const active = statusFilter === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setStatusFilter(option.value)}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
@@ -468,37 +546,117 @@ export function ShopBooksDocumentsScreen() {
             const party =
               item.customer_name ||
               item.supplier_name ||
-              (item.customer || item.supplier ? 'Party' : 'No party');
+              (item.customer || item.supplier ? 'Party' : 'Walk-in / no customer');
             const converting = convertingId === item.id;
-            const open = canConvert(item);
-            const converted = Boolean(item.converted_voucher || (item.status || '').toLowerCase() === 'converted');
+            const open = canDispatch(item);
+            const status = docStatus(item);
+            const converted = Boolean(item.converted_voucher || status === 'converted');
+            const dispatched = status === 'dispatched';
+            const isChallan = docType === 'delivery_challan';
+            const showInvoice = isChallan && !converted && canInvoiceChallan(item) && (dispatched || open);
+            const primaryAction =
+              isChallan && open
+                ? { label: converting ? 'Working…' : 'Dispatch', onPress: () => void onConvert(item, 'dispatch') }
+                : isChallan && dispatched
+                  ? {
+                      label: converting ? 'Working…' : 'Create invoice',
+                      onPress: () => void onConvert(item, 'to_invoice'),
+                    }
+                  : open
+                    ? { label: converting ? 'Working…' : meta.convertLabel, onPress: () => void onConvert(item) }
+                    : null;
+            const challanExtras =
+              businessId && isChallan
+                ? [
+                    ...(showInvoice && open
+                      ? [
+                          {
+                            label: converting ? 'Working…' : 'Invoice',
+                            onPress: () => void onConvert(item, 'to_invoice'),
+                          },
+                        ]
+                      : []),
+                    {
+                      label: 'View',
+                      icon: 'eye' as const,
+                      onPress: () => {
+                        if (!auth.token) {
+                          toast.push('Sign in again to view this challan', 'error');
+                          return;
+                        }
+                        void openShopDocumentHtmlView({
+                          target: {
+                            kind: 'delivery_challan',
+                            id: item.id,
+                            number: item.document_number,
+                            businessId,
+                          },
+                          token: auth.token,
+                          tenantId,
+                        }).catch((err) =>
+                          toast.push(getApiErrorMessage(err, 'View failed'), 'error'),
+                        );
+                      },
+                    },
+                    {
+                      label: 'Share',
+                      icon: 'share-2' as const,
+                      onPress: () =>
+                        setDocActions({
+                          kind: 'delivery_challan',
+                          id: item.id,
+                          number: item.document_number,
+                          businessId,
+                          phone: item.customer_phone || '',
+                          email: item.customer_email || '',
+                        }),
+                    },
+                  ]
+                : undefined;
             return (
               <BooksDocumentRow
                 title={party}
                 amount={formatMoney(item.total)}
                 meta={`${item.document_number}${item.document_date || item.created_at ? ` · ${formatVoucherDateTime(item.document_date, item.created_at)}` : ''}`}
                 badge={item.status}
-                badgeKind={converted ? 'paid' : open ? 'due' : 'neutral'}
-                icon="file-text"
-                iconTone={converted ? 'green' : 'navy'}
-                actionLabel={open ? (converting ? 'Working…' : meta.convertLabel) : undefined}
-                onAction={open && !converting ? () => void onConvert(item) : undefined}
+                badgeKind={converted ? 'paid' : open ? 'due' : dispatched ? 'neutral' : 'neutral'}
+                icon={isChallan ? 'truck' : 'file-text'}
+                iconTone={converted ? 'green' : dispatched ? 'cyan' : 'navy'}
+                actionLabel={primaryAction?.label}
+                onAction={primaryAction && !converting ? primaryAction.onPress : undefined}
+                extraActions={challanExtras}
               />
             );
           }}
           ListEmptyComponent={
             !loading ? (
               <EmptyState
-                icon="file-text"
-                title={`No ${meta.title.toLowerCase()} yet`}
-                message={`Create a ${meta.singular} and convert it when ready.`}
-                actionLabel={`New ${meta.singular}`}
-                onAction={openCreate}
+                icon={docType === 'delivery_challan' ? 'truck' : 'file-text'}
+                title={
+                  documents.length && docType === 'delivery_challan'
+                    ? 'No challans match these filters'
+                    : `No ${meta.title.toLowerCase()} yet`
+                }
+                message={
+                  docType === 'delivery_challan'
+                    ? documents.length
+                      ? 'Try a different search or status.'
+                      : 'Create a challan from the Sale counter, share or print it, then Dispatch when goods leave. Convert to invoice when you bill the customer.'
+                    : `Create a ${meta.singular} and convert it when ready.`
+                }
+                actionLabel={documents.length && docType === 'delivery_challan' ? undefined : `New ${meta.singular}`}
+                onAction={documents.length && docType === 'delivery_challan' ? undefined : openCreate}
               />
             ) : null
           }
         />
       </View>
+      <DocumentActionsSheet
+        visible={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Challan ${docActions.number || ''}` : 'Delivery challan'}
+      />
     </DesktopPage>
   );
 }
@@ -506,6 +664,32 @@ export function ShopBooksDocumentsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   search: { marginBottom: spacing.sm },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: spacing.sm,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  filterChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.tint,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.mutedForeground,
+  },
+  filterChipTextActive: {
+    color: colors.primary,
+  },
   headerBtn: {
     width: 40,
     height: 40,

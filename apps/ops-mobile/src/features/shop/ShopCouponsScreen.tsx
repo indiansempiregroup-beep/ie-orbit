@@ -1,7 +1,6 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -19,6 +18,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
+import { formatMoney } from './posPayment';
 import { SearchBar } from '../../components/SearchBar';
 import { SelectField } from '../../components/SelectField';
 import { DateField } from '../../components/DateField';
@@ -32,6 +32,7 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { confirmAction } from '../../utils/confirmAction';
 
 type FormState = {
   code: string;
@@ -101,9 +102,13 @@ function couponToForm(coupon: ShopCoupon): FormState {
   };
 }
 
-function discountLabel(coupon: ShopCoupon) {
-  if (coupon.discount_type === 'amount') return `₹${coupon.discount_value} off`;
-  const cap = coupon.max_discount_amount ? ` (max ₹${coupon.max_discount_amount})` : '';
+function discountLabel(coupon: ShopCoupon, currency?: string | null) {
+  if (coupon.discount_type === 'amount') {
+    return `${formatMoney(coupon.discount_value, currency)} off`;
+  }
+  const cap = coupon.max_discount_amount
+    ? ` (max ${formatMoney(coupon.max_discount_amount, currency)})`
+    : '';
   return `${coupon.discount_value}% off${cap}`;
 }
 
@@ -112,7 +117,8 @@ export function ShopCouponsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const toast = useToast();
-  const { businessId } = useWorkspace();
+  const { businessId, activeBusiness } = useWorkspace();
+  const currency = activeBusiness?.currency;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -237,28 +243,23 @@ export function ShopCouponsScreen() {
     }
   }
 
-  function confirmDelete() {
-    if (!editingId) return;
-    Alert.alert('Delete coupon', `Remove ${form.code || 'this coupon'}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            if (!client) return;
-            try {
-              await client.shop.deleteCoupon(editingId);
-              toast.push('Coupon deleted.', 'success');
-              closeForm();
-              await load();
-            } catch (err) {
-              toast.push(err instanceof Error ? err.message : 'Unable to delete', 'error');
-            }
-          })();
-        },
-      },
-    ]);
+  async function confirmDelete() {
+    if (!editingId || !client) return;
+    const ok = await confirmAction({
+      title: 'Delete coupon',
+      message: `Remove ${form.code || 'this coupon'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await client.shop.deleteCoupon(editingId);
+      toast.push('Coupon deleted.', 'success');
+      closeForm();
+      await load();
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Unable to delete', 'error');
+    }
   }
 
   if (showForm) {
@@ -274,7 +275,12 @@ export function ShopCouponsScreen() {
               onPress={() => void save()}
             />
             {editingId ? (
-              <Button label="Delete coupon" variant="destructive" fullWidth onPress={confirmDelete} />
+              <Button
+                label="Delete coupon"
+                variant="destructive"
+                fullWidth
+                onPress={() => void confirmDelete()}
+              />
             ) : null}
           </View>
         }
@@ -425,8 +431,8 @@ export function ShopCouponsScreen() {
           renderItem={({ item }) => (
             <BooksDocumentRow
               title={item.code}
-              amount={discountLabel(item)}
-              meta={`${item.name} · Used ${item.redemption_count ?? 0}${item.max_redemptions != null ? `/${item.max_redemptions}` : ''}${item.min_order_total && Number(item.min_order_total) > 0 ? ` · min ₹${item.min_order_total}` : ''}`}
+              amount={discountLabel(item, currency)}
+              meta={`${item.name} · Used ${item.redemption_count ?? 0}${item.max_redemptions != null ? `/${item.max_redemptions}` : ''}${item.min_order_total && Number(item.min_order_total) > 0 ? ` · min ${formatMoney(item.min_order_total, currency)}` : ''}`}
               badge={item.is_active === false ? 'Inactive' : 'Active'}
               badgeKind={item.is_active === false ? 'void' : 'paid'}
               icon="tag"

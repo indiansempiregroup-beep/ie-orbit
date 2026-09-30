@@ -58,7 +58,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       name: 'Orbit Appoint Starter',
       description: 'White-label customer app plus scheduling for a single location.',
       billing_interval: 'monthly',
-      trial_days: 15,
+      trial_days: 45,
       is_default: true,
       max_staff: 2,
       max_branches: 1,
@@ -72,7 +72,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       name: 'Orbit Appoint Pro',
       description: 'Ad-free white-label customer app, WhatsApp reminders, and full BI.',
       billing_interval: 'monthly',
-      trial_days: 15,
+      trial_days: 45,
       is_default: false,
       max_staff: 5,
       max_branches: 2,
@@ -88,7 +88,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       name: 'Orbit Mart Starter',
       description: 'White-label customer app plus counter POS, online orders, and returns.',
       billing_interval: 'monthly',
-      trial_days: 15,
+      trial_days: 45,
       is_default: true,
       max_staff: 2,
       max_branches: 1,
@@ -102,7 +102,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       name: 'Orbit Mart Pro',
       description: 'Ad-free white-label customer app, Instant Delivery with Porter/Shiprocket, GST books, and Grow.',
       billing_interval: 'monthly',
-      trial_days: 15,
+      trial_days: 45,
       is_default: false,
       max_staff: 5,
       max_branches: 2,
@@ -126,7 +126,7 @@ function planTitle(plan: Pick<BillingPlanCatalogItem, 'name'> | string) {
 export function RegisterWizard() {
   usePageMeta({
     title: 'Create account — IE Orbit',
-    description: 'Create a white-label workspace for Orbit Appoint, Orbit Mart, or both. 15-day full-Pro trial.',
+    description: 'Create a white-label workspace for Orbit Appoint, Orbit Mart, or both. 45-day full-Pro trial.',
   });
 
   const navigate = useNavigate();

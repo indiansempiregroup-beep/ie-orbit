@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from django.core.exceptions import ValidationError
-from django.core.files.uploadedfile import UploadedFile
+from django.core.files.uploadedfile import InMemoryUploadedFile, UploadedFile
 from django.db import transaction
 
 from apps.platform_media.models import (
@@ -21,7 +21,13 @@ from apps.platform_media.repositories import MediaRepository
 from apps.platform_media.services.security import VirusScanService
 from apps.platform_media.storage import get_storage_provider
 from apps.platform_media.utils.files import calculate_checksum, normalize_filename, storage_filename
-from apps.platform_media.utils.images import export_webp_variant, extract_image_metadata
+from apps.platform_media.utils.images import (
+    BackgroundRemoveUnavailable,
+    export_webp_variant,
+    extract_image_metadata,
+    open_image_exif,
+    prepare_product_or_service_image,
+)
 from apps.platform_media.validators import validate_file_upload
 
 logger = logging.getLogger("ie_orbit.media")
@@ -43,7 +49,6 @@ class MediaService:
         self.repository = repository or MediaRepository()
         self.virus_scan_service = virus_scan_service or VirusScanService()
 
-    @transaction.atomic
     def upload(
         self,
         *,
@@ -57,6 +62,59 @@ class MediaService:
         tags: list[str] | None = None,
         display_name: str = "",
         metadata: dict[str, Any] | None = None,
+        prepare_product_canvas: bool = False,
+        remove_background: bool = False,
+        crop_norm: tuple[float, float, float, float] | None = None,
+    ) -> UploadedMediaResult:
+        # Heavy image work (rembg) must stay outside the DB transaction so we do not
+        # hold a connection open for seconds and drop the client mid-upload.
+        transformed = False
+        if prepare_product_canvas or remove_background or crop_norm is not None:
+            logger.info(
+                "Preparing product/service image",
+                extra={
+                    "remove_background": remove_background,
+                    "prepare_product_canvas": prepare_product_canvas,
+                    "has_crop": crop_norm is not None,
+                },
+            )
+            uploaded_file = self._prepare_image_file(
+                uploaded_file,
+                crop_norm=crop_norm,
+                remove_background=remove_background,
+                prepare_product_canvas=prepare_product_canvas,
+            )
+            transformed = True
+
+        return self._persist_upload(
+            uploaded_file=uploaded_file,
+            tenant=tenant,
+            business=business,
+            uploaded_by=uploaded_by,
+            folder=folder,
+            folder_type=folder_type,
+            visibility=visibility,
+            tags=tags,
+            display_name=display_name,
+            metadata=metadata,
+            transformed=transformed,
+        )
+
+    @transaction.atomic
+    def _persist_upload(
+        self,
+        *,
+        uploaded_file: UploadedFile,
+        tenant: Any,
+        business: Any | None,
+        uploaded_by: Any,
+        folder: MediaFolder | None = None,
+        folder_type: str = MediaFolderType.BRANDING,
+        visibility: str = MediaVisibility.PRIVATE,
+        tags: list[str] | None = None,
+        display_name: str = "",
+        metadata: dict[str, Any] | None = None,
+        transformed: bool = False,
     ) -> UploadedMediaResult:
         validation = validate_file_upload(uploaded_file)
         scan_result = self.virus_scan_service.scan(uploaded_file)
@@ -74,7 +132,12 @@ class MediaService:
             return UploadedMediaResult(media=duplicate, duplicate=True)
 
         original_filename = normalize_filename(uploaded_file.name)
-        generated_filename = storage_filename(original_filename)
+        if transformed and not original_filename.lower().endswith(".png"):
+            stem = Path(original_filename).stem or "product"
+            original_filename = f"{stem}.png"
+            generated_filename = storage_filename(original_filename)
+        else:
+            generated_filename = storage_filename(original_filename)
         media_type = self._media_type(validation.mime_type, validation.extension)
         folder_type = normalize_folder_type(folder_type)
         folder = folder or self.ensure_folder(
@@ -119,7 +182,7 @@ class MediaService:
             uploaded_by=uploaded_by if getattr(uploaded_by, "is_authenticated", False) else None,
             folder=folder,
             media_type=media_type,
-            original_filename=uploaded_file.name,
+            original_filename=original_filename,
             storage_filename=generated_filename,
             display_name=display_name or Path(original_filename).stem,
             file_extension=validation.extension,
@@ -261,6 +324,69 @@ class MediaService:
     ) -> str:
         kind = folder.folder_type if folder else folder_type
         return f"{self._object_prefix(tenant=tenant, business=business, folder_type=kind)}/{filename}"
+
+    def _prepare_image_file(
+        self,
+        uploaded_file: UploadedFile,
+        *,
+        crop_norm: tuple[float, float, float, float] | None = None,
+        remove_background: bool = False,
+        prepare_product_canvas: bool = False,
+    ) -> UploadedFile:
+        uploaded_file.seek(0)
+        pixel_box = None
+        if crop_norm is not None:
+            try:
+                oriented = open_image_exif(uploaded_file)
+                width = int(oriented.width or 0)
+                height = int(oriented.height or 0)
+            except Exception as exc:
+                raise ValidationError("Unable to read image dimensions for crop.") from exc
+            if width < 1 or height < 1:
+                raise ValidationError("Unable to read image dimensions for crop.")
+            left_n, top_n, width_n, height_n = crop_norm
+            left = int(round(left_n * width))
+            top = int(round(top_n * height))
+            right = int(round((left_n + width_n) * width))
+            bottom = int(round((top_n + height_n) * height))
+            pixel_box = (left, top, right, bottom)
+            uploaded_file.seek(0)
+        try:
+            buffer = prepare_product_or_service_image(
+                uploaded_file,
+                crop_box=pixel_box,
+                remove_background=remove_background,
+                prepare_product_canvas=prepare_product_canvas,
+            )
+        except BackgroundRemoveUnavailable:
+            raise
+        except Exception as exc:
+            if isinstance(exc, ValidationError):
+                raise
+            raise ValidationError("Unable to process image.") from exc
+        stem = Path(normalize_filename(uploaded_file.name)).stem or "image"
+        name = f"{stem}.png"
+        return InMemoryUploadedFile(
+            file=buffer,
+            field_name=getattr(uploaded_file, "field_name", "file"),
+            name=name,
+            content_type="image/png",
+            size=buffer.getbuffer().nbytes,
+            charset=None,
+        )
+
+    def _prepare_product_canvas_file(
+        self,
+        uploaded_file: UploadedFile,
+        *,
+        crop_norm: tuple[float, float, float, float] | None = None,
+    ) -> UploadedFile:
+        return self._prepare_image_file(
+            uploaded_file,
+            crop_norm=crop_norm,
+            remove_background=False,
+            prepare_product_canvas=True,
+        )
 
     def _media_type(self, mime_type: str, extension: str) -> str:
         if mime_type.startswith("image/"):

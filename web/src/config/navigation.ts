@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ChartColumnBig,
   FileSpreadsheet,
+  FolderOpen,
   Landmark,
   LayoutDashboard,
   MapPinned,
@@ -26,6 +27,7 @@ import {
   UsersRound,
   WalletCards,
   Warehouse,
+  Zap,
 } from 'lucide-react';
 import { getSubscribedProductIds, hasPetsPack, type ProductSubscriptionLike } from './products';
 import type { UserProfile } from '@ie-orbit/sdk';
@@ -89,6 +91,14 @@ export const navigationItems: AppNavItem[] = [
     to: '/shop/products',
     labelKey: 'nav.shopProducts',
     icon: Package,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'service:read'],
+  },
+  {
+    to: '/shop/master',
+    labelKey: 'nav.shopMasterFiles',
+    icon: FolderOpen,
     group: 'operations',
     products: ['shopie'],
     anyPermissions: ['business:read', 'service:read'],
@@ -219,6 +229,13 @@ export const navigationItems: AppNavItem[] = [
     icon: TicketPercent,
     group: 'operations',
     products: ['shopie'],
+    anyPermissions: ['business:read', 'business:write'],
+  },
+  {
+    to: '/automations',
+    labelKey: 'nav.automations',
+    icon: Zap,
+    group: 'operations',
     anyPermissions: ['business:read', 'business:write'],
   },
   {

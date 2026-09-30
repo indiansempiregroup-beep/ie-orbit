@@ -173,6 +173,8 @@ export function shopPaymentMethodLabel(
 ): string {
   const value = String(method || '').toLowerCase();
   if (value === 'upi') return 'UPI';
+  if (value === 'razorpay') return 'Pay online';
+  if (value === 'cashfree') return 'Pay online (Cashfree)';
   if (value === 'card') return 'Card';
   if (value === 'borrow') return 'On account';
   if (value === 'cash') {
@@ -206,6 +208,17 @@ export function shopOrderNeedsAppPayment(
   const method = String(order.payment_method || '').toLowerCase();
   const status = String(order.payment_status || '').toLowerCase();
   return method === 'upi' && !['paid', 'settled', 'awaiting_confirmation'].includes(status);
+}
+
+export function shopOrderNeedsGatewayPayment(
+  order: Pick<ShopOrder, 'payment_method' | 'payment_status'>,
+): boolean {
+  const method = String(order.payment_method || '').toLowerCase();
+  const status = String(order.payment_status || '').toLowerCase();
+  return (
+    (method === 'razorpay' || method === 'cashfree') &&
+    !['paid', 'settled', 'awaiting_confirmation'].includes(status)
+  );
 }
 
 export function shopOrderIsCashOnHandover(
@@ -573,7 +586,13 @@ export function shopOrderMatchesFilters(
   const mode = String(order.fulfillment_mode || '').toLowerCase();
   if (filters.fulfillment !== 'all' && mode !== filters.fulfillment) return false;
 
-  if (filters.payment === 'unpaid' && !shopOrderNeedsAppPayment(order)) return false;
+  if (
+    filters.payment === 'unpaid' &&
+    !shopOrderNeedsAppPayment(order) &&
+    !shopOrderNeedsGatewayPayment(order)
+  ) {
+    return false;
+  }
 
   if (filters.period !== 'all') {
     const created = order.created_at ? new Date(order.created_at).getTime() : 0;

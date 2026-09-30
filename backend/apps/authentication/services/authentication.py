@@ -193,11 +193,18 @@ class AuthenticationService:
         user_agent: str,
         tenant: object | None = None,
         business: object | None = None,
+        create_if_missing: bool = False,
     ) -> LoginResult:
         identity = verify_google_id_token(id_token)
         user = self._resolve_google_user(identity)
         if user is None:
-            if client != "customer":
+            if client != "customer" or not create_if_missing:
+                if client == "customer":
+                    from apps.api.mobile_helpers import customer_login_missing_message
+
+                    raise exceptions.ValidationError(
+                        {"id_token": customer_login_missing_message(channel="email")}
+                    )
                 raise GoogleAccountNotRegistered()
             user = self._create_google_user(
                 identity=identity,
@@ -212,6 +219,26 @@ class AuthenticationService:
             self._activate_verified_google_user(user=user, identity=identity)
             if client == "ops" and not self._user_has_ops_workspace(user):
                 raise GoogleAccountNotRegistered()
+
+        if client == "customer" and tenant is not None and business is not None and not create_if_missing:
+            from apps.api.mobile_helpers import (
+                customer_login_missing_message,
+                find_customer_for_login_identifier,
+            )
+
+            if (
+                find_customer_for_login_identifier(
+                    tenant=tenant,
+                    business=business,
+                    channel="email",
+                    identifier=identity.email,
+                )
+                is None
+            ):
+                raise exceptions.ValidationError(
+                    {"id_token": customer_login_missing_message(channel="email")}
+                )
+
         return self.issue_session(
             user=user,
             remember_me=remember_me,

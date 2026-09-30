@@ -72,6 +72,8 @@ export type RootStackParamList = {
   ShopProducts: undefined;
   ShopProductAdd: { enrichCode?: string; productId?: string; returnTo?: 'pos' } | undefined;
   ShopProductsAddMany: { enrichCode?: string; enrichRowId?: string } | undefined;
+  ShopMasterFiles: undefined;
+  ShopMasterKind: { kind: string; title?: string };
   ShopOrders: undefined;
   ShopOrderDetail: { orderId: string };
   ShopPos:
@@ -126,6 +128,7 @@ export type RootStackParamList = {
   GrowUtilities: undefined;
   GrowAds: undefined;
   GrowReferral: undefined;
+  Automations: undefined;
   Branches: undefined;
   BranchForm: { branchId?: string } | undefined;
   BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };

@@ -3,6 +3,7 @@ import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 import * as ImagePicker from 'expo-image-picker';
 import QRCodeSvg from 'react-native-qrcode-svg';
 import type { ApiClient } from '@ie-orbit/sdk';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import { Button } from '../../components/ui/Button';
 import { FieldLabel } from '../../components/ui/FieldLabel';
 import { FormAlert } from '../../components/ui/FormAlert';
@@ -37,12 +38,14 @@ export type SubscriptionUpiPayRequest = {
   extraStaff?: number;
   extraOffices?: number;
   petsPackEnabled?: boolean;
+  billingInterval?: 'monthly' | 'yearly';
   items?: Array<{
     productCode: string;
     planCode: string;
     extraStaff?: number;
     extraOffices?: number;
     petsPackEnabled?: boolean;
+    billingInterval?: 'monthly' | 'yearly';
   }>;
   mode: 'subscribe' | 'change_plan' | 'addons' | 'renew';
   /** When true, generate QR immediately when the sheet opens. */
@@ -96,6 +99,7 @@ export function SubscriptionUpiPaySheet({
   const [status, setStatus] = useState<'idle' | 'ready' | 'awaiting' | 'done'>('idle');
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ utr?: string; proof?: string }>({});
+  const [proofLightboxOpen, setProofLightboxOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   function clearProofErrors() {
@@ -113,6 +117,7 @@ export function SubscriptionUpiPaySheet({
           extraStaff: request.extraStaff,
           extraOffices: request.extraOffices,
           petsPackEnabled: request.petsPackEnabled,
+          billingInterval: request.billingInterval,
         },
       ];
     }
@@ -147,6 +152,7 @@ export function SubscriptionUpiPaySheet({
               extra_staff: payItems[0].extraStaff ?? 0,
               extra_offices: payItems[0].extraOffices ?? 0,
               pets_pack_enabled: Boolean(payItems[0].petsPackEnabled),
+              billing_interval: payItems[0].billingInterval,
             }
           : {
               business_id: businessId,
@@ -156,6 +162,7 @@ export function SubscriptionUpiPaySheet({
                 extra_staff: item.extraStaff ?? 0,
                 extra_offices: item.extraOffices ?? 0,
                 pets_pack_enabled: Boolean(item.petsPackEnabled),
+                billing_interval: item.billingInterval,
               })),
             };
       const res = await client.billing.createUpiCheckout(body);
@@ -337,7 +344,9 @@ export function SubscriptionUpiPaySheet({
                       ) : null}
                     </View>
                     {proofUrl ? (
-                      <Image source={{ uri: proofUrl }} style={styles.proof} resizeMode="cover" />
+                      <Pressable onPress={() => setProofLightboxOpen(true)} accessibilityLabel="View payment screenshot">
+                        <Image source={{ uri: proofUrl }} style={styles.proof} resizeMode="cover" />
+                      </Pressable>
                     ) : null}
                   </>
                 ) : (
@@ -376,6 +385,17 @@ export function SubscriptionUpiPaySheet({
           </View>
         </View>
       </View>
+      <ImageLightbox
+        uri={proofUrl || null}
+        visible={proofLightboxOpen}
+        title="Payment screenshot"
+        onClose={() => setProofLightboxOpen(false)}
+        replaceLabel="Change screenshot"
+        onReplace={() => {
+          setProofLightboxOpen(false);
+          void pickProof();
+        }}
+      />
     </Modal>
   );
 }

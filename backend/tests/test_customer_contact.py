@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from apps.customers.services.contact import format_contact_phone, resolve_customer_phone
+from apps.customers.services.contact import (
+    format_contact_phone,
+    require_address_phone,
+    resolve_customer_phone,
+    resolve_order_contact_phone,
+)
 from apps.shopie.services.delivery.contact import porter_book_payload
+import pytest
 
 
 def test_format_contact_phone_normalizes_india_numbers() -> None:
@@ -17,6 +23,24 @@ def test_resolve_customer_phone_prefers_primary_number() -> None:
         email = ""
 
     assert resolve_customer_phone(Customer()) == "9000011111"
+
+
+def test_resolve_order_contact_phone_prefers_delivery_address_phone() -> None:
+    class Customer:
+        phone_number = "9000011111"
+        alternate_phone = ""
+        email = ""
+
+    class Order:
+        customer = Customer()
+        metadata = {"delivery_contact_phone": "9876543210"}
+
+    assert resolve_order_contact_phone(Order()) == "9876543210"
+
+
+def test_require_address_phone_rejects_blank() -> None:
+    with pytest.raises(ValueError):
+        require_address_phone("")
 
 
 def test_porter_book_payload_includes_customer_mobile() -> None:

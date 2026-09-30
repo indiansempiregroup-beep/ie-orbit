@@ -75,7 +75,71 @@ def _progress_index_for_status(order: ShopOrder, *, status: str, kicker: str) ->
     return 0
 
 
-def _order_extra_html(order: ShopOrder, *, kicker: str, shipment: ShopShipment | None = None, status: str = "") -> str:
+def _books_sale_voucher(order: ShopOrder):
+    from apps.shopie.api.document_views import books_voucher_for_order
+
+    return books_voucher_for_order(tenant=order.tenant, order=order)
+
+
+def _invoice_share_url(order: ShopOrder) -> tuple[object | None, str]:
+    """Return (voucher, public invoice URL) when a Books sale invoice exists."""
+    voucher = _books_sale_voucher(order)
+    if voucher is None:
+        return None, ""
+    try:
+        from apps.shopie.services.shop_documents import ShopDocumentKind, ShopDocumentService
+
+        docs = ShopDocumentService()
+        link = docs.create_share_link(
+            tenant=order.tenant,
+            business=order.business,
+            kind=ShopDocumentKind.SALE,
+            document_id=voucher.id,
+        )
+        return voucher, docs.public_url_for(link)
+    except Exception:
+        logger.exception(
+            "Invoice share link failed",
+            extra={"order_id": str(order.id), "voucher_id": str(voucher.id)},
+        )
+        return voucher, ""
+
+
+def _send_order_tax_invoice(order: ShopOrder, *, voucher) -> None:
+    """Email/WhatsApp the same tax invoice document used by POS share."""
+    from apps.customers.services.contact import resolve_order_contact_phone
+    from apps.shopie.services.shop_documents import ShopDocumentKind, ShopDocumentService
+
+    customer = getattr(order, "customer", None)
+    phone = resolve_order_contact_phone(order, customer=customer)
+    email = str(getattr(customer, "email", "") or "").strip()
+    channels: list[str] = []
+    if email:
+        channels.append("email")
+    if phone:
+        channels.append("whatsapp")
+    if not channels:
+        return
+    ShopDocumentService().send_document(
+        tenant=order.tenant,
+        business=order.business,
+        kind=ShopDocumentKind.SALE,
+        document_id=voucher.id,
+        channels=channels,
+        to_phone=phone,
+        to_email=email,
+    )
+
+
+def _order_extra_html(
+    order: ShopOrder,
+    *,
+    kicker: str,
+    shipment: ShopShipment | None = None,
+    status: str = "",
+    invoice_url: str = "",
+    invoice_number: str = "",
+) -> str:
     mode = "Delivery" if str(order.fulfillment_mode).lower() == "delivery" else "Pickup"
     address = str(order.delivery_address or "").strip()
     currency = order.currency or "INR"
@@ -107,9 +171,22 @@ def _order_extra_html(order: ShopOrder, *, kicker: str, shipment: ShopShipment |
     if payment:
         totals.insert(0, ("Payment", payment.replace("_", " ").title()))
 
+    invoice_card = ""
+    if invoice_url:
+        label = f"Tax invoice {invoice_number}".strip() if invoice_number else "Tax invoice"
+        invoice_card = email_info_card(
+            title="Tax invoice",
+            lines=[
+                label,
+                "Same GST invoice as in the shop Books sale — view or download the PDF.",
+                invoice_url,
+            ],
+        )
+
     return (
         email_info_card(title=kicker or "Order update", lines=callout_lines)
         + progress
+        + invoice_card
         + email_item_rows(item_rows)
         + email_totals_block(totals)
     )
@@ -262,6 +339,18 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
         return
     status_value = str(status or order.status or "").lower()
     subject, body, kicker = _copy_for_status(order, status=status_value)
+    voucher = None
+    invoice_url = ""
+    invoice_number = ""
+    if status_value in {
+        OrderStatus.CONFIRMED,
+        OrderStatus.READY,
+        OrderStatus.OUT_FOR_DELIVERY,
+        OrderStatus.COMPLETED,
+    }:
+        voucher, invoice_url = _invoice_share_url(order)
+        if voucher is not None:
+            invoice_number = str(getattr(voucher, "voucher_number", "") or "")
     try:
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
         from apps.notifications.services.record_links import record_cta
@@ -272,6 +361,12 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
             record_id=order.id,
             business=order.business,
         )
+        cta_label = cta["cta_label"]
+        cta_url = cta["cta_url"]
+        if invoice_url and status_value == OrderStatus.CONFIRMED:
+            cta_label = "View tax invoice"
+            cta_url = invoice_url
+            body = f"{body}\n\nYour tax invoice is attached / linked: {invoice_url}"
         CustomerDirectNotifier().notify_customer(
             tenant=order.tenant,
             business=order.business,
@@ -285,14 +380,32 @@ def notify_online_order(*, order: ShopOrder, status: str | None = None) -> None:
                 "order_number": order.order_number,
                 "status": status_value,
                 "fulfillment_mode": order.fulfillment_mode,
+                "invoice_url": invoice_url,
+                "invoice_number": invoice_number,
             },
-            extra_html=_order_extra_html(order, kicker=kicker, status=status_value),
+            extra_html=_order_extra_html(
+                order,
+                kicker=kicker,
+                status=status_value,
+                invoice_url=invoice_url,
+                invoice_number=invoice_number,
+            ),
             headline=kicker,
-            cta_label=cta["cta_label"],
-            cta_url=cta["cta_url"],
+            cta_label=cta_label,
+            cta_url=cta_url,
         )
     except Exception:
         logger.exception("Online order notify failed", extra={"order_id": str(order.id), "status": status_value})
+
+    # Same POS invoice email/WhatsApp (PDF + share link) when the order is confirmed.
+    if status_value == OrderStatus.CONFIRMED and voucher is not None:
+        try:
+            _send_order_tax_invoice(order, voucher=voucher)
+        except Exception:
+            logger.exception(
+                "Online order tax invoice send failed",
+                extra={"order_id": str(order.id), "voucher_id": str(voucher.id)},
+            )
 
     if status_value != OrderStatus.PENDING:
         return

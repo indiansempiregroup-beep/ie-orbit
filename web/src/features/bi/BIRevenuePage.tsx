@@ -1,5 +1,6 @@
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { formatMoney } from '../../lib/currency';
 import { StatCard } from './components/StatCard';
 import { useBIRevenueQuery } from './biHooks';
 
@@ -7,6 +8,7 @@ export function BIRevenuePage() {
   usePageMeta({ title: 'BI Revenue — Orbit Appoint' });
   const revenueQuery = useBIRevenueQuery();
   const revenue = revenueQuery.data;
+  const currency = revenue?.currency;
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -20,25 +22,19 @@ export function BIRevenuePage() {
         <StatCard
           label="Estimated revenue"
           value={
-            revenueQuery.isLoading
-              ? '...'
-              : `${revenue?.currency ?? ''} ${(revenue?.estimated_revenue ?? 0).toFixed(2)}`
+            revenueQuery.isLoading ? '...' : formatMoney(revenue?.estimated_revenue ?? 0, currency)
           }
         />
         <StatCard
           label="Completed revenue"
           value={
-            revenueQuery.isLoading
-              ? '...'
-              : `${revenue?.currency ?? ''} ${(revenue?.completed_revenue ?? 0).toFixed(2)}`
+            revenueQuery.isLoading ? '...' : formatMoney(revenue?.completed_revenue ?? 0, currency)
           }
         />
         <StatCard
           label="Avg booking value"
           value={
-            revenueQuery.isLoading
-              ? '...'
-              : `${revenue?.currency ?? ''} ${(revenue?.avg_booking_value ?? 0).toFixed(2)}`
+            revenueQuery.isLoading ? '...' : formatMoney(revenue?.avg_booking_value ?? 0, currency)
           }
         />
       </div>
@@ -54,9 +50,7 @@ export function BIRevenuePage() {
                     {row.bookings ?? 0} bookings · {row.completed ?? 0} completed
                   </div>
                 </div>
-                <span>
-                  {revenue?.currency} {row.revenue.toFixed(2)}
-                </span>
+                <span>{formatMoney(row.revenue, currency)}</span>
               </div>
             ))
           ) : (

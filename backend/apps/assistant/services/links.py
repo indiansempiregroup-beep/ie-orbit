@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 LIST_PAGE_SIZE = 5
+
+
+def looks_like_uuid(value: str) -> bool:
+    try:
+        UUID(str(value))
+        return True
+    except (TypeError, ValueError, AttributeError):
+        return False
 
 
 def entity_link(
@@ -17,6 +26,8 @@ def entity_link(
     action: str = "preview",
     select_text: str | None = None,
     badge: str | None = None,
+    section: str | None = None,
+    group: str | None = None,
 ) -> dict[str, Any]:
     """Build a record chip.
 
@@ -24,13 +35,16 @@ def entity_link(
       - preview: tapping asks Assistant for details in chat (default for lists)
       - open: tapping navigates to the full record screen
       - select: tapping sends select_text (or label) as the next chat message
+      - send: help tool — send select_text immediately
+      - compose: help tool — put select_text into the composer for editing
     """
+    allowed = {"preview", "open", "select", "send", "compose"}
     link: dict[str, Any] = {
         "kind": kind,
         "id": str(id),
         "label": label,
         "subtitle": subtitle or "",
-        "action": action if action in {"preview", "open", "select"} else "preview",
+        "action": action if action in allowed else "preview",
     }
     if order_id:
         link["order_id"] = str(order_id)
@@ -38,6 +52,10 @@ def entity_link(
         link["select_text"] = select_text
     if badge:
         link["badge"] = str(badge)
+    if section:
+        link["section"] = str(section)
+    if group:
+        link["group"] = str(group)
     return link
 
 

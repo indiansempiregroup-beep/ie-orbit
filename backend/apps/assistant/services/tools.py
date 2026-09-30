@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
 
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -20,6 +19,7 @@ from apps.businesses.constants import (
     FEATURE_SHOPIE_BOOKS_CASH,
     FEATURE_SHOPIE_BOOKS_EXPENSE,
     FEATURE_SHOPIE_BOOKS_GODOWNS,
+    FEATURE_SHOPIE_BOOKS_PARTIES,
     FEATURE_SHOPIE_BOOKS_PURCHASE,
     FEATURE_SHOPIE_BOOKS_SALE,
     FEATURE_SHOPIE_COUPONS,
@@ -55,6 +55,7 @@ from apps.staff.models import EmploymentStatus, Staff
 from apps.assistant.services.links import (
     LIST_PAGE_SIZE,
     entity_link,
+    looks_like_uuid,
     pack_reply,
     slice_page,
     unpack_reply,
@@ -126,93 +127,185 @@ def has_domain_feature(*, business: Business, feature: str, product_code: str) -
 
 
 def suggestion_chips(*, access: AssistantAccess, business: Business) -> list[str]:
+    help_chip = "What can you do?"
     chips: list[str] = []
     if access.mart_enabled:
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
-            chips.extend(["Today overview", "Orders today", "Online orders", "Open orders", "Sales today"])
+            chips.extend(["Today overview", "Orders today", "Open orders", "Payments to confirm", "Sales today"])
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_PRODUCTS, product_code=PRODUCT_SHOPIE):
-            chips.append("Low stock")
+            chips.extend(["List products", "Low stock", "Out of stock"])
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_RETURNS, product_code=PRODUCT_SHOPIE):
             chips.append("Pending returns")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_CASH, product_code=PRODUCT_SHOPIE):
             chips.append("Cash balance")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE):
+            chips.append("Daybook today")
     if access.appoint_enabled:
         if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_BOOKINGS, product_code=PRODUCT_APPOINTIE):
-            chips.extend(["Bookings today", "Pending bookings", "Upcoming bookings", "Staff workload today"])
+            chips.extend(["Bookings today", "Pending bookings", "Upcoming bookings", "No-shows today"])
         if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_REVIEWS, product_code=PRODUCT_APPOINTIE):
             chips.append("Recent reviews")
         if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_STAFF, product_code=PRODUCT_APPOINTIE):
             chips.append("Who's working today")
-    chips.extend(["Find customer", "What can you do?"])
+    chips.extend(["List customers", "Find customer", "New customers today"])
     seen: set[str] = set()
     ordered: list[str] = []
     for chip in chips:
-        if chip not in seen:
+        if chip not in seen and chip != help_chip:
             seen.add(chip)
             ordered.append(chip)
-    return ordered[:6]
+    # Always reserve a slot so new/empty chats can open the capability guide.
+    return ordered[:5] + [help_chip]
 
 
-def help_text(*, access: AssistantAccess, business: Business) -> str:
+def _help_prompt(
+    *,
+    label: str,
+    text: str,
+    section: str,
+    group: str,
+    compose: bool = False,
+) -> dict[str, Any]:
+    """Pickable help tool: send immediately, or compose into the chat box for editing."""
+    return entity_link(
+        kind="prompt",
+        id=f"help-{group}-{section}-{label}".lower().replace(" ", "-")[:72],
+        label=label,
+        subtitle="Replace the [bracket] text, then send" if compose else "Tap to ask",
+        action="compose" if compose else "send",
+        select_text=text,
+        badge="Type" if compose else None,
+        section=section,
+        group=group,
+    )
+
+
+def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
+    """Capability guide with sectioned tap-to-run / tap-to-edit tools."""
     lines = [
-        "I work like your ops app — anything your plan unlocks here, I can help with.",
-        "Ask naturally. Writes always need Confirm.",
-        "",
+        "Here’s what I can help with on your plan.",
+        "Ask in plain language. Any change needs your Confirm.",
+        "Solid chips run now. Type chips put a template in the box — replace the [bracket] text, then send.",
     ]
+    tools: list[dict[str, Any]] = []
+    mart_count = 0
+    appoint_count = 0
+
+    def add(group: str, section: str, label: str, text: str, *, compose: bool = False) -> None:
+        nonlocal mart_count, appoint_count
+        tools.append(
+            _help_prompt(label=label, text=text, section=section, group=group, compose=compose)
+        )
+        if group == "Orbit Mart":
+            mart_count += 1
+        elif group == "Orbit Appoint":
+            appoint_count += 1
+
     if access.mart_enabled:
-        lines.append("Orbit Mart")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
-            lines.append(
-                "• Orders: today/yesterday/open/pending/ready/out for delivery/failed deliveries · "
-                "order #123 · sales today · payments to confirm · confirm/reject payment for order 123 · "
-                "orders for Riya · change order status · mark order 123 as delivered"
+            add("Orbit Mart", "Orders", "Orders today", "Orders today")
+            add("Orbit Mart", "Orders", "Open orders", "Open orders")
+            add("Orbit Mart", "Orders", "Sales today", "Sales today")
+            add("Orbit Mart", "Orders", "Payments to confirm", "Payments to confirm")
+            add("Orbit Mart", "Orders", "Order by number", "order #[order number]", compose=True)
+            add(
+                "Orbit Mart",
+                "Orders",
+                "Mark delivered",
+                "mark order [order number] as delivered",
+                compose=True,
             )
+            add("Orbit Mart", "Orders", "Orders for customer", "orders for [customer name]", compose=True)
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_PRODUCTS, product_code=PRODUCT_SHOPIE):
-            lines.append(
-                "• Products: low/out of stock · find product · stock of · price of · "
-                "set stock · add stock · set price of tea to 120"
+            add("Orbit Mart", "Products", "List products", "List products")
+            add("Orbit Mart", "Products", "Low stock", "Low stock")
+            add("Orbit Mart", "Products", "Out of stock", "Out of stock")
+            add("Orbit Mart", "Products", "Lookup barcode", "lookup barcode [barcode]", compose=True)
+            add("Orbit Mart", "Products", "Stock of product", "stock of [product name]", compose=True)
+            add(
+                "Orbit Mart",
+                "Products",
+                "Set price",
+                "set price of [product name] to [price]",
+                compose=True,
             )
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_RETURNS, product_code=PRODUCT_SHOPIE):
-            lines.append("• Returns: pending returns · return R-123 · complete return R-123")
+            add("Orbit Mart", "Returns", "Pending returns", "Pending returns")
+            add("Orbit Mart", "Returns", "Complete return", "complete return [return number]", compose=True)
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_COUPONS, product_code=PRODUCT_SHOPIE):
-            lines.append("• Coupons: active coupons · find coupon SAVE10 · deactivate coupon SAVE10")
+            add("Orbit Mart", "Coupons", "Active coupons", "Active coupons")
+            add("Orbit Mart", "Coupons", "Find coupon", "find coupon [code]", compose=True)
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_CASH, product_code=PRODUCT_SHOPIE):
-            lines.append("• Books cash: cash balance · list cash accounts · to collect / to pay")
+            add("Orbit Mart", "Cash", "Cash balance", "Cash balance")
+            add("Orbit Mart", "Cash", "To collect", "to collect")
+            add("Orbit Mart", "Cash", "To pay", "to pay")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE):
-            lines.append("• Books sale: books sales today")
+            add("Orbit Mart", "Books", "Books sales today", "Books sales today")
+            add("Orbit Mart", "Books", "Daybook today", "Daybook today")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_PURCHASE, product_code=PRODUCT_SHOPIE):
-            lines.append("• Books purchase: purchases today")
+            add("Orbit Mart", "Books", "Purchases today", "Purchases today")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_EXPENSE, product_code=PRODUCT_SHOPIE):
-            lines.append("• Books expense: expenses today")
+            add("Orbit Mart", "Books", "Expenses today", "Expenses today")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_PARTIES, product_code=PRODUCT_SHOPIE):
+            add("Orbit Mart", "Books", "Statement for customer", "statement for [customer name]", compose=True)
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_GODOWNS, product_code=PRODUCT_SHOPIE):
-            lines.append("• Godowns: list godowns · stock of tea in godown")
-        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_LOYALTY, product_code=PRODUCT_SHOPIE):
-            lines.append("• Loyalty: loyalty points for Riya")
-    else:
-        lines.append("• Orbit Mart is off on your plan")
-    if access.appoint_enabled:
-        lines.append("Orbit Appoint")
-        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_BOOKINGS, product_code=PRODUCT_APPOINTIE):
-            lines.append(
-                "• Bookings: today/tomorrow/week · pending/upcoming · no-shows · "
-                "booking B-123 · confirm/cancel/complete/check-in/no-show · "
-                "Riya's bookings today · staff workload today · upcoming bookings for Riya"
+            add("Orbit Mart", "Godowns", "List godowns", "List godowns")
+            add(
+                "Orbit Mart",
+                "Godowns",
+                "Stock in godown",
+                "stock of [product name] in godown",
+                compose=True,
             )
-        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_SERVICES, product_code=PRODUCT_APPOINTIE):
-            lines.append("• Services: list services · price of haircut / find service facial")
-        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_STAFF, product_code=PRODUCT_APPOINTIE):
-            lines.append("• Staff: list staff · find staff · who's working today")
-        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_REVIEWS, product_code=PRODUCT_APPOINTIE):
-            lines.append("• Reviews: recent reviews · review summary · low ratings")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_LOYALTY, product_code=PRODUCT_SHOPIE):
+            add("Orbit Mart", "Loyalty", "Loyalty points", "loyalty points for [customer name]", compose=True)
+        if mart_count == 0:
+            lines.append("")
+            lines.append("Orbit Mart — nothing unlocked yet on this product.")
     else:
-        lines.append("• Orbit Appoint is off on your plan")
-    lines.append("Customers")
-    lines.append(
-        "• find customer · customer details for Riya · new customers today · "
-        "customer count · borrow balance for Riya"
+        lines.append("")
+        lines.append("Orbit Mart — off on your plan")
+
+    if access.appoint_enabled:
+        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_BOOKINGS, product_code=PRODUCT_APPOINTIE):
+            add("Orbit Appoint", "Bookings", "Bookings today", "Bookings today")
+            add("Orbit Appoint", "Bookings", "Pending bookings", "Pending bookings")
+            add("Orbit Appoint", "Bookings", "Upcoming bookings", "Upcoming bookings")
+            add("Orbit Appoint", "Bookings", "No-shows today", "No-shows today")
+            add("Orbit Appoint", "Bookings", "Booking by number", "booking [booking number]", compose=True)
+            add("Orbit Appoint", "Bookings", "Confirm booking", "confirm booking [booking number]", compose=True)
+        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_SERVICES, product_code=PRODUCT_APPOINTIE):
+            add("Orbit Appoint", "Services", "List services", "List services")
+            add("Orbit Appoint", "Services", "Slots today", "slots for [service name] today", compose=True)
+            add("Orbit Appoint", "Services", "Price of service", "price of [service name]", compose=True)
+        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_STAFF, product_code=PRODUCT_APPOINTIE):
+            add("Orbit Appoint", "Staff", "Who’s working today", "Who's working today")
+            add("Orbit Appoint", "Staff", "Find staff", "find staff [name]", compose=True)
+        if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_REVIEWS, product_code=PRODUCT_APPOINTIE):
+            add("Orbit Appoint", "Reviews", "Recent reviews", "Recent reviews")
+            add("Orbit Appoint", "Reviews", "Low ratings", "low ratings")
+        if appoint_count == 0:
+            lines.append("")
+            lines.append("Orbit Appoint — nothing unlocked yet on this product.")
+    else:
+        lines.append("")
+        lines.append("Orbit Appoint — off on your plan")
+
+    add("Customers & overview", "Customers", "List customers", "List customers")
+    add("Customers & overview", "Customers", "Find customer", "find customer [name or phone]", compose=True)
+    add("Customers & overview", "Customers", "New customers today", "New customers today")
+    add("Customers & overview", "Customers", "Borrow balance", "borrow balance for [customer name]", compose=True)
+    add("Customers & overview", "Customers", "Borrow ledger", "borrow ledger for [customer name]", compose=True)
+    add(
+        "Customers & overview",
+        "Customers",
+        "Record payment",
+        "[customer name] paid [amount]",
+        compose=True,
     )
-    lines.append("• today overview")
-    return "\n".join(lines)
+    add("Customers & overview", "Overview", "Today overview", "Today overview")
+
+    return pack_reply("\n".join(lines), links=tools)
 
 
 def _customer_label(customer: Customer | None) -> str:
@@ -229,11 +322,7 @@ def _money(amount) -> str:
 
 
 def _looks_like_uuid(value: str) -> bool:
-    try:
-        UUID(str(value))
-        return True
-    except (TypeError, ValueError, AttributeError):
-        return False
+    return looks_like_uuid(value)
 
 
 def _fulfillment_tag(order: ShopOrder) -> str:
@@ -646,6 +735,39 @@ def search_products(*, tenant: Tenant, business: Business, query: str) -> dict[s
     return pack_reply("\n".join(lines), links=links, suggestions=chips[:5])
 
 
+def list_products(*, tenant: Tenant, business: Business, offset: int = 0) -> dict[str, Any] | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_PRODUCTS, product_code=PRODUCT_SHOPIE):
+        return "Products are not enabled on your Orbit Mart plan."
+    qs = ShopProduct.objects.require_tenant(tenant).filter(business=business, is_active=True)
+    total = qs.count()
+    if total == 0:
+        return "No active products yet for this business."
+    all_rows = list(qs.order_by("name", "sku")[:200])
+    rows, page = slice_page(all_rows, offset=offset)
+    start = page["offset"]
+    lines = [
+        f"{total} product{'s' if total != 1 else ''} — "
+        f"showing {start + 1}–{start + len(rows)}. Tap one for details:"
+    ]
+    links = []
+    for product in rows:
+        lines.append(
+            f"• {product.name} — stock {product.stock_on_hand} — "
+            f"{_money(product.price)} — SKU {product.sku or '—'}"
+        )
+        links.append(
+            entity_link(
+                kind="product",
+                id=str(product.id),
+                label=product.name,
+                subtitle=f"Stock {product.stock_on_hand} · {_money(product.price)}",
+                action="preview",
+            )
+        )
+    page.update({"list": "list_products", "more_label": "Show more products"})
+    return pack_reply("\n".join(lines), links=links, page=page)
+
+
 def count_bookings_for_date(
     *, tenant: Tenant, business: Business, day, offset: int = 0
 ) -> dict[str, Any] | str:
@@ -884,6 +1006,30 @@ def find_customer(*, tenant: Tenant, business: Business, query: str, offset: int
             entity_link(kind="customer", id=str(customer.id), label=label, subtitle=phone, action="preview")
         )
     page.update({"list": "find_customer", "query": q, "more_label": "Show more customers"})
+    return pack_reply("\n".join(lines), links=links, page=page)
+
+
+def list_customers(*, tenant: Tenant, business: Business, offset: int = 0) -> dict[str, Any] | str:
+    qs = Customer.objects.require_tenant(tenant).filter(business=business)
+    total = qs.count()
+    if total == 0:
+        return "No customers yet for this business."
+    all_rows = list(qs.order_by("display_name", "first_name", "last_name", "phone_number")[:200])
+    rows, page = slice_page(all_rows, offset=offset)
+    start = page["offset"]
+    lines = [
+        f"{total} customer{'s' if total != 1 else ''} — "
+        f"showing {start + 1}–{start + len(rows)}. Tap one for details:"
+    ]
+    links = []
+    for customer in rows:
+        phone = customer.phone_number or "—"
+        label = _customer_label(customer)
+        lines.append(f"• {label} — {phone}")
+        links.append(
+            entity_link(kind="customer", id=str(customer.id), label=label, subtitle=phone, action="preview")
+        )
+    page.update({"list": "list_customers", "more_label": "Show more customers"})
     return pack_reply("\n".join(lines), links=links, page=page)
 
 
@@ -1457,27 +1603,31 @@ def propose_return_complete(*, tenant: Tenant, business: Business, number: str) 
 def preview_record(*, tenant: Tenant, business: Business, kind: str, record_id: str) -> dict[str, Any] | str:
     """Fetch important details for a record without leaving chat."""
     kind_key = (kind or "").strip().lower()
-    rid = (record_id or "").strip()
+    rid = (record_id or "").strip().lstrip("#").strip("\"'")
     if not rid:
         return "Missing record id."
 
     if kind_key == "order":
-        order = (
-            ShopOrder.objects.require_tenant(tenant)
-            .filter(business=business, id=rid)
-            .select_related("customer")
-            .first()
-        )
+        if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
+            return "Online orders are not enabled on your Orbit Mart plan."
+        order = None
+        if _looks_like_uuid(rid):
+            order = (
+                ShopOrder.objects.require_tenant(tenant)
+                .filter(business=business, id=rid)
+                .select_related("customer")
+                .first()
+            )
         if order is None:
             order = find_order(tenant=tenant, business=business, number=rid)
         if order is None:
-            return "Order not found."
+            return f"No order found for #{rid}."
         return _order_detail_pack(order)
 
     if kind_key == "booking":
         booking = find_booking(tenant=tenant, business=business, number=rid)
         if booking is None:
-            return "Booking not found."
+            return f"No booking found for {rid}."
         return _booking_detail_pack(tenant=tenant, booking=booking)
 
     if kind_key == "customer":
@@ -1487,13 +1637,22 @@ def preview_record(*, tenant: Tenant, business: Business, kind: str, record_id: 
         return get_return(tenant=tenant, business=business, number=rid)
 
     if kind_key == "product":
-        product = (
-            ShopProduct.objects.require_tenant(tenant)
-            .filter(business=business, id=rid)
-            .first()
-        )
+        product = None
+        if _looks_like_uuid(rid):
+            product = (
+                ShopProduct.objects.require_tenant(tenant)
+                .filter(business=business, id=rid)
+                .first()
+            )
         if product is None:
-            return "Product not found."
+            base = ShopProduct.objects.require_tenant(tenant).filter(business=business, is_active=True)
+            product = base.filter(Q(sku__iexact=rid) | Q(name__iexact=rid)).order_by("name").first()
+            if product is None:
+                product = (
+                    base.filter(Q(sku__icontains=rid) | Q(name__icontains=rid)).order_by("name").first()
+                )
+        if product is None:
+            return f"No product found for “{rid}”."
         text = "\n".join(
             [
                 f"Product {product.name}",
@@ -1522,9 +1681,20 @@ def preview_record(*, tenant: Tenant, business: Business, kind: str, record_id: 
         return ops.get_service_detail(tenant=tenant, business=business, query=rid)
 
     if kind_key == "staff":
-        staff = Staff.objects.require_tenant(tenant).filter(business=business, id=rid).first()
+        staff = None
+        if _looks_like_uuid(rid):
+            staff = Staff.objects.require_tenant(tenant).filter(business=business, id=rid).first()
         if staff is None:
-            return "Staff not found."
+            base = Staff.objects.require_tenant(tenant).filter(business=business)
+            staff = (
+                base.filter(Q(display_name__iexact=rid) | Q(staff_code__iexact=rid)).first()
+            )
+            if staff is None:
+                staff = (
+                    base.filter(Q(display_name__icontains=rid) | Q(staff_code__icontains=rid)).first()
+                )
+        if staff is None:
+            return f"No staff found for “{rid}”."
         role = staff.designation or ("Bookable" if staff.is_bookable else "Non-bookable")
         text = "\n".join(
             [
@@ -1619,6 +1789,10 @@ def continue_paged_list(*, tenant: Tenant, business: Business, flow: dict[str, A
             query=str(flow.get("query") or ""),
             offset=offset,
         )
+    if list_key == "list_customers":
+        return list_customers(tenant=tenant, business=business, offset=offset)
+    if list_key == "list_products":
+        return list_products(tenant=tenant, business=business, offset=offset)
     return "Nothing more to show."
 
 
@@ -1814,10 +1988,13 @@ def execute_proposed_action(
 # Re-export ops tools so RulesBrain and tests can use apps.assistant.services.tools.*
 from apps.assistant.services.tools_ops import (  # noqa: E402
     books_cash_summary,
+    books_daybook_today,
     books_expenses_today,
     books_purchases_today,
     bookings_for_staff_today,
     customer_borrow_balance,
+    customer_borrow_ledger,
+    customer_party_statement,
     customer_upcoming_bookings,
     find_coupon,
     get_customer_detail,
@@ -1827,14 +2004,17 @@ from apps.assistant.services.tools_ops import (  # noqa: E402
     list_godowns,
     list_orders_awaiting_payment,
     list_recent_reviews,
+    lookup_barcode,
     low_rating_reviews,
     loyalty_points_for_customer,
     orders_for_customer,
     price_of_product,
+    propose_borrow_payment,
     propose_deactivate_coupon,
     propose_order_payment,
     propose_set_product_price,
     reviews_summary,
+    service_slots,
     staff_on_duty_today,
     staff_workload_today,
 )

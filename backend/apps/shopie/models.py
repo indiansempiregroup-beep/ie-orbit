@@ -225,6 +225,7 @@ class ShopProduct(TenantModel):
     stock_on_hand = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0"))
     low_stock_threshold = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0"))
     pack_size = models.CharField(max_length=80, blank=True)
+    unit = models.CharField(max_length=32, blank=True, help_text="Shop master unit slug or label (pcs, kg, …)")
     image_url = models.CharField(max_length=1024, blank=True)
     # Slug from ShopProductCategory (builtins + auto-created). Not a closed ChoiceField.
     category = models.CharField(
@@ -1811,6 +1812,9 @@ class ShopCoupon(TenantModel):
     max_redemptions_per_customer = models.PositiveIntegerField(null=True, blank=True)
     first_order_only = models.BooleanField(default=False)
     redemption_count = models.PositiveIntegerField(default=0)
+    applies_to_online = models.BooleanField(default=True)
+    applies_to_pos = models.BooleanField(default=False)
+    eligibility = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):
@@ -1883,6 +1887,57 @@ class ShopProductCategory(BaseModel):
 
     def __str__(self) -> str:
         return self.label
+
+
+class ShopMasterKind(models.TextChoices):
+    CATEGORY = "category", "Product category"
+    BRAND = "brand", "Brand"
+    UNIT = "unit", "Unit"
+    EXPENSE_CATEGORY = "expense_category", "Expense category"
+    INCOME_CATEGORY = "income_category", "Income category"
+    TAX_RATE = "tax_rate", "Tax rate"
+
+
+class ShopMasterRecord(TenantModel):
+    """Shop-owned master lookup rows (categories, brands, units, ledger cats, tax rates)."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_master_records",
+    )
+    kind = models.CharField(max_length=32, choices=ShopMasterKind.choices, db_index=True)
+    slug = models.SlugField(max_length=64)
+    label = models.CharField(max_length=120)
+    value = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="Optional typed value (e.g. tax rate percent as string).",
+    )
+    is_builtin = models.BooleanField(default=False, db_index=True)
+    sort_order = models.PositiveSmallIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_master_records"
+        ordering = ["kind", "sort_order", "label"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "business", "kind", "slug"],
+                name="uniq_shop_master_kind_slug",
+            )
+        ]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "kind", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind}:{self.label}"
 
 
 class PlatformGtinCatalog(BaseModel):
@@ -1971,3 +2026,43 @@ class SmartLookupUsage(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.code} {self.source} {self.charged_paise}p"
+
+
+class ShopDocumentKind(models.TextChoices):
+    SALE = "sale", "Sale invoice"
+    QUOTATION = "quotation", "Quotation"
+    DELIVERY_CHALLAN = "delivery_challan", "Delivery challan"
+    CREDIT_NOTE = "credit_note", "Credit note"
+    DEBIT_NOTE = "debit_note", "Debit note"
+
+
+class ShopDocumentShareLink(TenantModel):
+    """Signed public token for customer view / PDF of a shop document."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_document_share_links",
+    )
+    kind = models.CharField(max_length=32, choices=ShopDocumentKind.choices, db_index=True)
+    document_id = models.UUIDField(db_index=True)
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    max_views = models.PositiveIntegerField(null=True, blank=True)
+    view_count = models.PositiveIntegerField(default=0)
+    created_by_user_id = models.UUIDField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_document_share_links"
+        ordering = ["-created_at"]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "kind", "document_id"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind}:{self.document_id}:{self.token[:8]}"

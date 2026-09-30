@@ -7,9 +7,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.businesses.constants import FEATURE_SHOPIE_COUPONS
+from apps.businesses.constants import FEATURE_SHOPIE_COUPONS, FEATURE_SHOPIE_POS
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
+from apps.customers.models import Customer
 from apps.shopie.api.access import require_business as _business
 from apps.shopie.api.access import require_shopie_feature
 from apps.shopie.api.permissions import ShopAccessPermission
@@ -18,7 +19,7 @@ from apps.shopie.api.serializers import (
     ShopCouponSerializer,
     ShopCouponWriteSerializer,
 )
-from apps.shopie.models import ShopCoupon
+from apps.shopie.models import ShopCoupon, ShopPet
 from apps.shopie.services.coupons import CouponService
 
 
@@ -28,6 +29,45 @@ def _validation_error(exc: DjangoValidationError) -> ValidationError:
     if hasattr(exc, "messages"):
         return ValidationError(exc.messages)
     return ValidationError(str(exc))
+
+
+class ShopCheckoutEligibleOffersView(APIView):
+    """POS/online: coupons + automation offers for the selected customer."""
+
+    permission_classes = [ShopAccessPermission]
+    coupons = CouponService()
+
+    def post(self, request: Request) -> Response:
+        data = request.data or {}
+        business_id = data.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "This field is required."})
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_POS)
+        customer = None
+        customer_id = data.get("customer_id")
+        if customer_id:
+            customer = Customer.objects.filter(
+                tenant=request.current_tenant, business=business, id=customer_id
+            ).first()
+            if customer is None:
+                raise NotFound("Customer not found.")
+        pet = None
+        pet_id = data.get("pet_id")
+        if pet_id:
+            pet = ShopPet.objects.filter(
+                tenant=request.current_tenant, business=business, id=pet_id
+            ).first()
+        lines = data.get("lines") if isinstance(data.get("lines"), list) else []
+        fulfillment_mode = str(data.get("fulfillment_mode") or "pos").strip().lower()
+        payload = self.coupons.eligible_offers(
+            tenant=request.current_tenant,
+            business=business,
+            lines=lines,
+            fulfillment_mode=fulfillment_mode,
+            customer=customer,
+            pet=pet,
+        )
+        return success_response(payload)
 
 
 class ShopCouponListCreateView(APIView):

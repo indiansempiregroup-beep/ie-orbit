@@ -9,6 +9,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.billing.constants import (
     PLAN_PRICE_PAISE,
     YEARLY_PRICE_MULTIPLIER,
+    yearly_months_from_definition,
 )
 from apps.billing.services.addon_pricing import get_addon_prices
 from apps.businesses.constants import (
@@ -103,6 +104,14 @@ class PlanEntitlements:
     def effective_max_branches(self) -> int:
         return self.max_branches + self.extra_offices
 
+    def _plan_definition(self) -> dict[str, Any] | None:
+        from apps.businesses.services.plan_catalog import list_plan_definitions
+
+        for definition in list_plan_definitions():
+            if str(definition.get("code", "")) == self.plan_code:
+                return definition
+        return None
+
     @property
     def base_amount_paise(self) -> int:
         from apps.billing.services.checkout import CheckoutService
@@ -115,7 +124,7 @@ class PlanEntitlements:
             return int(resolved)
         monthly = PLAN_PRICE_PAISE.get(self.plan_code, 0)
         if self.billing_interval == "yearly":
-            return monthly * YEARLY_PRICE_MULTIPLIER
+            return monthly * yearly_months_from_definition(self._plan_definition())
         return monthly
 
     @property
@@ -125,9 +134,10 @@ class PlanEntitlements:
         office_unit = prices["office_price_paise"]
         pets_unit = prices["pets_price_paise"]
         if self.billing_interval == "yearly":
-            staff_unit *= YEARLY_PRICE_MULTIPLIER
-            office_unit *= YEARLY_PRICE_MULTIPLIER
-            pets_unit *= YEARLY_PRICE_MULTIPLIER
+            multiplier = yearly_months_from_definition(self._plan_definition())
+            staff_unit *= multiplier
+            office_unit *= multiplier
+            pets_unit *= multiplier
         total = (self.extra_staff * staff_unit) + (self.extra_offices * office_unit)
         if self.pets_pack_enabled:
             total += pets_unit
@@ -149,9 +159,10 @@ class PlanEntitlements:
         office_unit = prices["office_price_paise"]
         pets_unit = prices["pets_price_paise"]
         if self.billing_interval == "yearly":
-            staff_unit *= YEARLY_PRICE_MULTIPLIER
-            office_unit *= YEARLY_PRICE_MULTIPLIER
-            pets_unit *= YEARLY_PRICE_MULTIPLIER
+            multiplier = yearly_months_from_definition(self._plan_definition())
+            staff_unit *= multiplier
+            office_unit *= multiplier
+            pets_unit *= multiplier
         pending_payload = pending or {}
         return {
             "plan_code": self.plan_code,

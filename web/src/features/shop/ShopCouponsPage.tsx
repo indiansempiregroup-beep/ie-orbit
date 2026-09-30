@@ -7,6 +7,8 @@ import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useShopCouponMutations, useShopCoupons } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
+import { formatMoney } from '../../lib/currency';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 import type { ShopCoupon } from '@ie-orbit/sdk';
 
 type FormState = {
@@ -100,13 +102,19 @@ function formPayload(form: FormState) {
   };
 }
 
-function discountLabel(coupon: ShopCoupon) {
-  if (coupon.discount_type === 'amount') return `₹${coupon.discount_value} off`;
-  const cap = coupon.max_discount_amount ? ` (max ₹${coupon.max_discount_amount})` : '';
+function discountLabel(coupon: ShopCoupon, currency?: string | null) {
+  if (coupon.discount_type === 'amount') {
+    return `${formatMoney(Number(coupon.discount_value ?? 0), currency)} off`;
+  }
+  const cap = coupon.max_discount_amount
+    ? ` (max ${formatMoney(Number(coupon.max_discount_amount), currency)})`
+    : '';
   return `${coupon.discount_value}% off${cap}`;
 }
 
 export function ShopCouponsPage() {
+  const workspace = useWorkspace();
+  const currency = workspace.activeBusiness?.currency;
   const coupons = useShopCoupons();
   const { createCoupon, patchCoupon, deleteCoupon } = useShopCouponMutations();
   const dialog = useDialog();
@@ -252,9 +260,9 @@ export function ShopCouponsPage() {
                   <strong>{coupon.code}</strong>
                   <div style={{ opacity: 0.8 }}>
                     {coupon.is_active === false ? 'Inactive' : 'Active'} · {coupon.name} ·{' '}
-                    {discountLabel(coupon)}
+                    {discountLabel(coupon, currency)}
                     {coupon.min_order_total && Number(coupon.min_order_total) > 0
-                      ? ` · min ₹${coupon.min_order_total}`
+                      ? ` · min ${formatMoney(Number(coupon.min_order_total), currency)}`
                       : ''}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>

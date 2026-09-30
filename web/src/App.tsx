@@ -31,6 +31,9 @@ const IntegrationsPage = lazy(() =>
 const CookiesPage = lazy(() => import('./features/public/CookiesPage').then((m) => ({ default: m.CookiesPage })));
 const DownloadPage = lazy(() => import('./features/public/DownloadPage').then((m) => ({ default: m.DownloadPage })));
 const OpenRecordPage = lazy(() => import('./features/public/OpenRecordPage').then((m) => ({ default: m.OpenRecordPage })));
+const OpenShopDocPage = lazy(() =>
+  import('./features/public/OpenShopDocPage').then((m) => ({ default: m.OpenShopDocPage })),
+);
 const AuthPage = lazy(() => import('./features/auth/AuthPage').then((m) => ({ default: m.AuthPage })));
 const ForgotPasswordPage = lazy(() => import('./features/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
@@ -51,6 +54,12 @@ const BookingsPage = lazy(() => import('./features/bookings/BookingsPage').then(
 const BookingDetailPage = lazy(() => import('./features/bookings/BookingDetailPage').then((m) => ({ default: m.BookingDetailPage })));
 const ShopPosPage = lazy(() => import('./features/shop/ShopPosPage').then((m) => ({ default: m.ShopPosPage })));
 const ShopProductsPage = lazy(() => import('./features/shop/ShopProductsPage').then((m) => ({ default: m.ShopProductsPage })));
+const ShopMasterFilesPage = lazy(() =>
+  import('./features/shop/ShopMasterFilesPage').then((m) => ({ default: m.ShopMasterFilesPage })),
+);
+const ShopMasterKindPage = lazy(() =>
+  import('./features/shop/ShopMasterFilesPage').then((m) => ({ default: m.ShopMasterKindPage })),
+);
 const ShopProductsAddManyPage = lazy(() =>
   import('./features/shop/ShopProductsAddManyPage').then((m) => ({ default: m.ShopProductsAddManyPage })),
 );
@@ -68,6 +77,9 @@ const ShopDeliverySettingsPage = lazy(() =>
 );
 const ShopCouponsPage = lazy(() =>
   import('./features/shop/ShopCouponsPage').then((m) => ({ default: m.ShopCouponsPage })),
+);
+const AutomationsPage = lazy(() =>
+  import('./features/automations/AutomationsPage').then((m) => ({ default: m.AutomationsPage })),
 );
 const ShopPetsPage = lazy(() => import('./features/shop/ShopPetsPage').then((m) => ({ default: m.ShopPetsPage })));
 const ShopBillingPage = lazy(() => import('./features/shop/ShopBillingPage').then((m) => ({ default: m.ShopBillingPage })));
@@ -202,6 +214,7 @@ function App() {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/cookies" element={<CookiesPage />} />
             <Route path="/download" element={<DownloadPage />} />
+            <Route path="/open/shop-doc/:token" element={<OpenShopDocPage />} />
             <Route path="/open/:kind/:id" element={<OpenRecordPage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/help" element={<HelpCenterPage />} />
@@ -281,6 +294,8 @@ function App() {
                     <Route path="/shop/pos" element={<ShopPosPage />} />
                     <Route path="/shop/products" element={<ShopProductsPage />} />
                     <Route path="/shop/products/add-many" element={<ShopProductsAddManyPage />} />
+                    <Route path="/shop/master" element={<ShopMasterFilesPage />} />
+                    <Route path="/shop/master/:kind" element={<ShopMasterKindPage />} />
                     <Route path="/shop/orders" element={<ShopOrdersPage />} />
                     <Route path="/shop/orders/:orderId" element={<ShopOrderDetailPage />} />
                     <Route path="/shop/billing" element={<ShopBillingPage />} />
@@ -300,6 +315,7 @@ function App() {
                     <Route path="/shop/delivery-zones" element={<ShopDeliveryZonesPage />} />
                     <Route path="/shop/delivery-settings" element={<ShopDeliverySettingsPage />} />
                     <Route path="/shop/coupons" element={<ShopCouponsPage />} />
+                    <Route path="/automations" element={<AutomationsPage />} />
                     <Route path="/shop/pets" element={<ShopPetsPage />} />
                   </Route>
                 </Route>

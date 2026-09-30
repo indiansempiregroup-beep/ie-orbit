@@ -4,6 +4,9 @@ type UploadProductImageArgs = {
   businessId: string;
   imageFile: File;
   label?: string;
+  prepareProductCanvas?: boolean;
+  removeBackground?: boolean;
+  crop?: { left: number; top: number; width: number; height: number };
 };
 
 export async function uploadProductImage({
@@ -12,6 +15,9 @@ export async function uploadProductImage({
   businessId,
   imageFile,
   label = 'Product',
+  prepareProductCanvas = true,
+  removeBackground = false,
+  crop,
 }: UploadProductImageArgs): Promise<string> {
   const uploadData = new FormData();
   uploadData.set('file', imageFile);
@@ -22,6 +28,18 @@ export async function uploadProductImage({
   uploadData.append('tags', 'product');
   uploadData.append('tags', 'image');
   uploadData.set('display_name', `${label} image`);
+  if (prepareProductCanvas) {
+    uploadData.set('prepare_product_canvas', 'true');
+  }
+  if (removeBackground) {
+    uploadData.set('remove_background', 'true');
+  }
+  if (crop) {
+    uploadData.set('crop_left', String(crop.left));
+    uploadData.set('crop_top', String(crop.top));
+    uploadData.set('crop_width', String(crop.width));
+    uploadData.set('crop_height', String(crop.height));
+  }
 
   const uploadResponse = await fetch('/api/v1/media/upload', {
     method: 'POST',

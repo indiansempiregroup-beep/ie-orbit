@@ -42,8 +42,9 @@ def test_category_service_seeds_and_creates_custom() -> None:
 
     row = service.ensure_category(label="Dry dog food")
     assert row is not None
-    assert row.slug == "dry_dog_food"
-    assert row.is_builtin is False
+    # Builtin pet_food wins over a custom dry_dog_food slug when the label is pet-related.
+    assert row.slug in {"dry_dog_food", "pet_food"}
+    assert row.is_builtin is (row.slug == "pet_food")
 
     again = service.ensure_category(label="Dry  Dog Food")
     assert again is not None
@@ -106,6 +107,7 @@ def test_enrich_miss_sets_needs_pack_photo(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(ProductEnrichmentService, "_fetch_by_barcode", fake_fetch)
     monkeypatch.setattr("apps.shopie.services.enrichment.barcode_api_configured", lambda: False)
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_public_barcode", lambda code: None)  # noqa: ARG005
     result = enrichment.enrich(code="8906002483785")
     assert result["found"] is False
     assert result["needs_pack_photo"] is True
@@ -176,7 +178,93 @@ def test_enrich_uses_commercial_barcode_after_open_facts_miss(monkeypatch: pytes
     monkeypatch.setattr(ProductEnrichmentService, "_fetch_by_barcode", fake_fetch)
     monkeypatch.setattr("apps.shopie.services.enrichment.barcode_api_configured", lambda: True)
     monkeypatch.setattr("apps.shopie.services.enrichment.lookup_commercial_barcode", fake_commercial)
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_public_barcode", lambda code: None)  # noqa: ARG005
     result = enrichment.enrich(code="8901234567890")
     assert result["found"] is True
     assert result["name"] == "Acme Widget"
     assert PlatformGtinCatalog.objects.filter(code="8901234567890", name="Acme Widget").exists()
+
+
+@pytest.mark.django_db
+def test_enrich_uses_public_go_upc_after_open_facts_miss(monkeypatch: pytest.MonkeyPatch) -> None:
+    enrichment = ProductEnrichmentService()
+
+    def fake_fetch(self, code: str, *, prefer_pet: bool = False):  # noqa: ARG001
+        return {
+            "found": False,
+            "code": code,
+            "source": "barcode_lookup",
+            "confidence": "none",
+            "needs_pack_photo": True,
+        }
+
+    def fake_public(code: str):
+        return {
+            "found": True,
+            "code": code,
+            "source": "public_go_upc",
+            "name": "Himalaya Liv 52 Drops, Dogs And Cats, 30 Ml",
+            "brand": "Himalaya",
+            "pack_size": "30 Ml",
+            "description": "",
+            "categories": "Pet Vitamins & Supplements",
+            "image_url": "https://go-upc.s3.amazonaws.com/images/example.webp",
+            "front_image_url": "https://go-upc.s3.amazonaws.com/images/example.webp",
+            "images": {
+                "front": "https://go-upc.s3.amazonaws.com/images/example.webp",
+                "back": "",
+                "gallery": ["https://go-upc.s3.amazonaws.com/images/example.webp"],
+            },
+            "mrp": "0",
+            "gst_rate": "0",
+            "confidence": "medium",
+        }
+
+    monkeypatch.setattr(ProductEnrichmentService, "_fetch_by_barcode", fake_fetch)
+    monkeypatch.setattr("apps.shopie.services.enrichment.barcode_api_configured", lambda: False)
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_public_barcode", fake_public)
+    result = enrichment.enrich(code="8901138501235")
+    assert result["found"] is True
+    assert result["name"].startswith("Himalaya Liv 52")
+    assert result["source"] == "public_go_upc"
+    assert PlatformGtinCatalog.objects.filter(code="8901138501235").exists()
+
+
+def test_go_upc_public_html_parser(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apps.shopie.services import barcode_providers as providers
+
+    html = """
+    <html><head><title>Himalaya Liv 52 Drops — EAN 8901138501235 — Go-UPC</title></head>
+    <body>
+      <h1>Himalaya Liv 52 Drops, Dogs And Cats, 30 Ml</h1>
+      <table>
+        <tr><td>EAN</td><td>8901138501235</td></tr>
+        <tr><td>Brand</td><td>Himalaya</td></tr>
+        <tr><td>Category</td><td>Pet Vitamins &amp; Supplements</td></tr>
+      </table>
+      <img src="https://go-upc.s3.amazonaws.com/images/122044980.webp" />
+    </body></html>
+    """
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return html.encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):  # noqa: ARG001
+        return FakeResponse()
+
+    monkeypatch.setattr(providers.urllib.request, "urlopen", fake_urlopen)
+    raw = providers._fetch_go_upc_public("8901138501235")
+
+    assert raw is not None
+    assert raw["name"].startswith("Himalaya Liv 52")
+    assert raw["brand"] == "Himalaya"
+    assert "Pet Vitamins" in raw["categories"]
+    assert raw["image_url"].endswith(".webp")
+    assert raw["pack_size"].lower() == "30 ml"

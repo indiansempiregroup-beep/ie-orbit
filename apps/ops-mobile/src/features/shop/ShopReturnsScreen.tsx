@@ -204,7 +204,7 @@ export function ShopReturnsScreen() {
             return (
               <BooksDocumentRow
                 title={item.return_number}
-                amount={`${item.currency || 'INR'} ${formatMoney(item.refund_total)}`}
+                amount={formatMoney(item.refund_total, item.currency)}
                 meta={[
                   order?.order_number,
                   customer,

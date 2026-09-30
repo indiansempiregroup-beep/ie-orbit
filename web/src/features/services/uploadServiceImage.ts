@@ -4,6 +4,8 @@ type UploadServiceImageArgs = {
   businessId: string;
   imageFile: File;
   serviceName: string;
+  removeBackground?: boolean;
+  crop?: { left: number; top: number; width: number; height: number };
 };
 
 export async function uploadServiceImage({
@@ -12,6 +14,8 @@ export async function uploadServiceImage({
   businessId,
   imageFile,
   serviceName,
+  removeBackground = false,
+  crop,
 }: UploadServiceImageArgs): Promise<string> {
   const uploadData = new FormData();
   uploadData.set('file', imageFile);
@@ -21,6 +25,15 @@ export async function uploadServiceImage({
   uploadData.append('tags', 'service');
   uploadData.append('tags', 'image');
   uploadData.set('display_name', `${serviceName} image`);
+  if (removeBackground) {
+    uploadData.set('remove_background', 'true');
+  }
+  if (crop) {
+    uploadData.set('crop_left', String(crop.left));
+    uploadData.set('crop_top', String(crop.top));
+    uploadData.set('crop_width', String(crop.width));
+    uploadData.set('crop_height', String(crop.height));
+  }
 
   const uploadResponse = await fetch('/api/v1/media/upload', {
     method: 'POST',

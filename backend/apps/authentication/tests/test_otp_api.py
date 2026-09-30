@@ -87,6 +87,110 @@ def test_otp_send_login_rejects_unregistered_email(api_client: APIClient) -> Non
 
 
 @pytest.mark.django_db
+def test_otp_send_customer_login_rejects_user_without_shop_customer(api_client: APIClient) -> None:
+    from apps.businesses.models import Business
+    from apps.customers.models import Customer
+    from apps.tenancy.models import Organization, Tenant
+
+    user = User.objects.create_user(
+        email="global-user@example.com",
+        password=None,
+        status=UserStatus.ACTIVE,
+        phone_number="9766855617",
+    )
+    tenant = Tenant.objects.create(slug="otp-shop", display_name="OTP Shop")
+    organization = Organization.objects.create(tenant=tenant, name="OTP Shop Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="main",
+        business_name="OTP Shop",
+        display_name="OTP Shop",
+    )
+    # Same phone as the User, but a different customer email must not unlock email login.
+    Customer.objects.create(
+        tenant=tenant,
+        business=business,
+        customer_code="other-phone-match",
+        first_name="Other",
+        last_name="Customer",
+        display_name="Other Customer",
+        email="other-customer@example.com",
+        phone_number="9766855617",
+    )
+    mail.outbox.clear()
+    response = api_client.post(
+        reverse("auth-otp-send"),
+        {
+            "client": "customer",
+            "channel": "email",
+            "identifier": user.email,
+            "purpose": "login",
+            "tenant_slug": tenant.slug,
+            "business_code": business.business_code,
+        },
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "No account found for this shop" in str(response.json())
+    assert len(mail.outbox) == 0
+
+
+@pytest.mark.django_db
+def test_otp_verify_customer_signup_creates_shop_customer(api_client: APIClient) -> None:
+    from apps.businesses.models import Business
+    from apps.customers.models import Customer
+    from apps.tenancy.models import Organization, Tenant
+
+    tenant = Tenant.objects.create(slug="signup-shop", display_name="Signup Shop")
+    organization = Organization.objects.create(tenant=tenant, name="Signup Shop Org")
+    business = Business.objects.create(
+        tenant=tenant,
+        organization=organization,
+        business_code="main",
+        business_name="Signup Shop",
+        display_name="Signup Shop",
+    )
+    email = "new-shopper@example.com"
+    mail.outbox.clear()
+    send_response = api_client.post(
+        reverse("auth-otp-send"),
+        {
+            "client": "customer",
+            "channel": "email",
+            "identifier": email,
+            "purpose": "signup",
+            "tenant_slug": tenant.slug,
+            "business_code": business.business_code,
+        },
+        format="json",
+    )
+    assert send_response.status_code == 200
+    code = send_response.json()["data"].get("debug_code")
+    assert code
+    verify_response = api_client.post(
+        reverse("auth-otp-verify"),
+        {
+            "client": "customer",
+            "channel": "email",
+            "identifier": email,
+            "code": code,
+            "remember_me": True,
+            "create_if_missing": True,
+            "first_name": "New",
+            "last_name": "Shopper",
+            "tenant_slug": tenant.slug,
+            "business_code": business.business_code,
+        },
+        format="json",
+    )
+    assert verify_response.status_code == 200, verify_response.content
+    assert Customer.objects.filter(
+        tenant=tenant, business=business, email__iexact=email
+    ).exists()
+
+
+@pytest.mark.django_db
 def test_otp_send_signup_allows_unregistered_email(api_client: APIClient) -> None:
     mail.outbox.clear()
     response = api_client.post(

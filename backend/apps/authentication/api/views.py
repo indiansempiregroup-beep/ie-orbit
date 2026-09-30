@@ -66,6 +66,24 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         tenant, business = _customer_auth_scope(serializer.validated_data)
+        if tenant is not None and business is not None:
+            from apps.api.mobile_helpers import (
+                customer_login_missing_message,
+                find_customer_for_login_identifier,
+            )
+
+            if (
+                find_customer_for_login_identifier(
+                    tenant=tenant,
+                    business=business,
+                    channel="email",
+                    identifier=serializer.validated_data["email"],
+                )
+                is None
+            ):
+                raise exceptions.ValidationError(
+                    {"email": customer_login_missing_message(channel="email")}
+                )
         result = AuthenticationService().login(
             email=serializer.validated_data["email"],
             password=serializer.validated_data["password"],
@@ -75,10 +93,6 @@ class LoginView(APIView):
             tenant=tenant,
             business=business,
         )
-        if tenant is not None and business is not None:
-            from apps.api.mobile_helpers import ensure_customer_for_user
-
-            ensure_customer_for_user(tenant=tenant, business=business, user=result.user)
         user = RoleService().ensure_superuser_platform_role(user=result.user)
         return success_response(
             {
@@ -103,6 +117,8 @@ class GoogleLoginView(APIView):
         serializer = GoogleLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         tenant, business = _customer_auth_scope(serializer.validated_data)
+        purpose = serializer.validated_data.get("purpose", "login")
+        create_if_missing = purpose == "signup" and serializer.validated_data["client"] == "customer"
         result = AuthenticationService().login_with_google(
             id_token=serializer.validated_data["id_token"],
             client=serializer.validated_data["client"],
@@ -111,8 +127,9 @@ class GoogleLoginView(APIView):
             user_agent=user_agent(request),
             tenant=tenant,
             business=business,
+            create_if_missing=create_if_missing,
         )
-        if tenant is not None and business is not None:
+        if create_if_missing and tenant is not None and business is not None:
             from apps.api.mobile_helpers import ensure_customer_for_user
 
             ensure_customer_for_user(tenant=tenant, business=business, user=result.user)

@@ -3,6 +3,9 @@
 Configured via env (disabled when no key):
   BARCODE_API_PROVIDER = barcodelookup | upcitemdb | go_upc
   BARCODE_API_KEY      = provider API key / user key / bearer token
+
+Free fallback (no key): public Go-UPC product page scrape for retail GTINs
+that Open*Facts and trial UPC APIs often miss (common for Indian EANs).
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,10 +21,12 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "IE-Orbit-ShopIE/1.0"
+USER_AGENT = "IE-Orbit-ShopIE/1.0 (product enrichment)"
 HTTP_TIMEOUT_SECONDS = 12
 
 SUPPORTED_PROVIDERS = frozenset({"barcodelookup", "upcitemdb", "go_upc"})
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"\s+")
 
 
 def gtin_variants(code: str) -> list[str]:
@@ -99,6 +105,123 @@ def lookup_commercial_barcode(code: str) -> dict[str, Any] | None:
             "metadata": {"enrichment_source": f"commercial_{provider}", "provider": provider},
         }
     return None
+
+
+def lookup_public_barcode(code: str) -> dict[str, Any] | None:
+    """Free public-page fallback (Go-UPC) when Open*Facts / commercial APIs miss."""
+    for digits in gtin_variants(code):
+        try:
+            raw = _fetch_go_upc_public(digits)
+        except Exception as exc:  # noqa: BLE001 — never break enrich on scrape failure
+            logger.info("Public Go-UPC lookup failed for %s: %s", digits, exc)
+            continue
+        if not raw or not str(raw.get("name") or "").strip():
+            continue
+        image_url = str(raw.get("image_url") or "").strip()
+        return {
+            "found": True,
+            "code": digits if len(digits) >= 12 else code,
+            "source": "public_go_upc",
+            "sku": digits,
+            "name": str(raw.get("name") or "")[:200],
+            "brand": str(raw.get("brand") or "")[:120],
+            "pack_size": str(raw.get("pack_size") or "")[:80],
+            "serving_size": "",
+            "description": str(raw.get("description") or "")[:2000],
+            "details_html": "",
+            "categories": str(raw.get("categories") or "")[:500],
+            "category": "",
+            "category_label": "",
+            "hsn_sac": "",
+            "gst_rate": "0",
+            "mrp": "0",
+            "image_url": image_url[:1024],
+            "front_image_url": image_url[:1024],
+            "back_image_url": "",
+            "images": {
+                "front": image_url,
+                "back": "",
+                "gallery": [image_url] if image_url else [],
+            },
+            "confidence": "medium",
+            "needs_pack_photo": not bool(image_url),
+            "message": "Filled from an online product database. Review price and stock, then save.",
+            "metadata": {"enrichment_source": "public_go_upc", "provider": "go_upc_public"},
+        }
+    return None
+
+
+def _strip_html(value: str) -> str:
+    return _WS_RE.sub(" ", _TAG_RE.sub(" ", value or "")).replace("&amp;", "&").strip()
+
+
+def _fetch_go_upc_public(code: str) -> dict[str, Any] | None:
+    """Parse the public Go-UPC HTML product page (no API key)."""
+    url = f"https://go-upc.com/search?q={urllib.parse.quote(code)}"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; IE-Orbit-ShopIE/1.0)",
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        html = response.read().decode("utf-8", errors="replace")
+
+    # Confirm the page is for this GTIN (avoid search-miss landing pages).
+    if code not in html:
+        return None
+
+    title = ""
+    h1 = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.I | re.S)
+    if h1:
+        title = _strip_html(h1.group(1))
+    if not title:
+        title_tag = re.search(r"<title>(.*?)</title>", html, re.I | re.S)
+        if title_tag:
+            title = _strip_html(title_tag.group(1)).split("—")[0].split("|")[0].strip()
+    if not title or title.lower() in {"go-upc", "search", "not found"}:
+        return None
+
+    fields: dict[str, str] = {}
+    for label, value in re.findall(
+        r"<tr[^>]*>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>",
+        html,
+        re.I | re.S,
+    ):
+        key = _strip_html(label).lower()
+        val = _strip_html(value)
+        if key and val:
+            fields[key] = val
+
+    brand = fields.get("brand") or fields.get("manufacturer") or ""
+    category = fields.get("category") or fields.get("categories") or ""
+    pack_size = fields.get("size") or fields.get("quantity") or fields.get("volume") or ""
+    # Infer pack size from title when the table omits it (e.g. "…, 30 Ml").
+    if not pack_size:
+        size_match = re.search(
+            r"(\d+(?:[.,]\d+)?\s*(?:ml|mL|l|L|g|kg|oz|pcs?|tabs?|tablets?|caps?))\b",
+            title,
+            re.I,
+        )
+        if size_match:
+            pack_size = size_match.group(1).strip()
+
+    image_url = ""
+    for src in re.findall(r'<img[^>]+src="([^"]+)"', html, re.I):
+        if "go-upc" in src and "/images/" in src:
+            image_url = src.strip()
+            break
+
+    return {
+        "name": title[:200],
+        "brand": brand[:120],
+        "description": "",
+        "categories": category[:500],
+        "pack_size": pack_size[:80],
+        "image_url": image_url[:1024],
+        "mrp": "0",
+    }
 
 
 def _http_json(url: str, *, headers: dict[str, str] | None = None) -> dict[str, Any] | list[Any] | None:

@@ -31,6 +31,7 @@ import {
   formatShopOrderPlaced,
   formatShopQty,
   shopOrderNeedsAppPayment,
+  shopOrderNeedsGatewayPayment,
   shopOrderIsCashOnHandover,
   shopFulfillmentLabel,
   shopOrderDeliverySummary,
@@ -171,7 +172,9 @@ export function ShopOrderHistoryScreen() {
           {deliverySummary?.etaLabel ? (
             <Text style={[styles.statusText, { color: tone.text }]}> · ETA {deliverySummary.etaLabel}</Text>
           ) : null}
-          {shopOrderNeedsAppPayment(item) ? <Text style={styles.unpaidHint}> · Pay now</Text> : null}
+          {shopOrderNeedsAppPayment(item) || shopOrderNeedsGatewayPayment(item) ? (
+            <Text style={styles.unpaidHint}> · Pay now</Text>
+          ) : null}
         </View>
 
         {deliverySummary?.active ? (

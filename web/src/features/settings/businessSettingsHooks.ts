@@ -9,6 +9,7 @@ import {
   createBusinessProfile,
   listBusinessProfiles,
   listProductPlans,
+  scheduleCancelBusinessProduct,
   subscribeBusinessProduct,
   unsubscribeBusinessProduct,
   updateActiveBusinessProfile,
@@ -127,8 +128,12 @@ export function useBusinessProductSubscribe() {
   const auth = useAuth();
   const workspace = useWorkspace();
   const queryClient = useQueryClient();
-  return useMutation<Business, Error, { productCode: string; setActive?: boolean; planCode?: string }>({
-    mutationFn: async ({ productCode, setActive = true, planCode }) => {
+  return useMutation<
+    Business,
+    Error,
+    { productCode: string; setActive?: boolean; planCode?: string; billingInterval?: 'monthly' | 'yearly' }
+  >({
+    mutationFn: async ({ productCode, setActive = true, planCode, billingInterval }) => {
       if (!workspace.businessId) {
         throw new Error('Select a business before subscribing to a product.');
       }
@@ -137,7 +142,7 @@ export function useBusinessProductSubscribe() {
         workspace.tenantId,
         workspace.businessId,
         productCode,
-        { setActive, planCode },
+        { setActive, planCode, billingInterval },
       );
     },
     onSuccess: (business) => {
@@ -165,12 +170,35 @@ export function useBusinessProductUnsubscribe() {
   });
 }
 
+export function useScheduleCancelBusinessProduct() {
+  const auth = useAuth();
+  const workspace = useWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation<Business, Error, string>({
+    mutationFn: async (productCode) => {
+      if (!workspace.businessId) {
+        throw new Error('Select a business before canceling a product.');
+      }
+      return scheduleCancelBusinessProduct(auth.token, workspace.tenantId, workspace.businessId, productCode);
+    },
+    onSuccess: (business) => {
+      workspace.setActiveBusiness(business);
+      invalidateWorkspaceData(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ['business-billing-snapshot'] });
+    },
+  });
+}
+
 export function useBusinessProductPlanChange() {
   const auth = useAuth();
   const workspace = useWorkspace();
   const queryClient = useQueryClient();
-  return useMutation<Business, Error, { productCode: string; planCode: string }>({
-    mutationFn: async ({ productCode, planCode }) => {
+  return useMutation<
+    Business,
+    Error,
+    { productCode: string; planCode: string; billingInterval?: 'monthly' | 'yearly' }
+  >({
+    mutationFn: async ({ productCode, planCode, billingInterval }) => {
       if (!workspace.businessId) {
         throw new Error('Select a business before changing a product plan.');
       }
@@ -180,6 +208,7 @@ export function useBusinessProductPlanChange() {
         workspace.businessId,
         productCode,
         planCode,
+        { billingInterval },
       );
     },
     onSuccess: (business) => {

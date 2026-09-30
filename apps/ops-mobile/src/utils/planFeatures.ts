@@ -6,6 +6,7 @@ export const PlanFeature = {
   appointieServices: 'appointie_services',
   appointieStaff: 'appointie_staff',
   appointieAiAssistant: 'appointie_ai_assistant',
+  appointieServiceBgRemove: 'appointie_service_bg_remove',
   shopiePos: 'shopie_pos',
   shopieProducts: 'shopie_products',
   shopieOrders: 'shopie_orders',
@@ -15,6 +16,7 @@ export const PlanFeature = {
   shopieCoupons: 'shopie_coupons',
   shopieLoyalty: 'shopie_loyalty',
   shopieSmartLookup: 'shopie_smart_lookup',
+  shopieProductBgRemove: 'shopie_product_bg_remove',
   shopieAiAssistant: 'shopie_ai_assistant',
   shopieBooksSale: 'shopie_books_sale',
   shopieBooksPurchase: 'shopie_books_purchase',
@@ -45,6 +47,7 @@ export const PlanFeature = {
   razorpayPayments: 'razorpay_payments',
   cashfreePayments: 'cashfree_payments',
   notificationsWhatsapp: 'notifications_whatsapp',
+  automations: 'automations',
 } as const;
 
 export const SHOPIE_BOOKS_FEATURES = [

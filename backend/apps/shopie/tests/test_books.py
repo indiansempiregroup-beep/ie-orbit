@@ -18,7 +18,7 @@ from apps.shopie.models import (
     VoucherType,
 )
 from apps.shopie.services.books import BooksService
-from apps.shopie.services.gst import split_gst
+from apps.shopie.services.gst import resolve_sale_supply, split_gst, split_stored_tax_total
 from apps.shopie.services.suppliers import SupplierService
 from apps.tenancy.models import Organization, Tenant
 
@@ -78,6 +78,42 @@ def test_split_gst_interstate_uses_igst() -> None:
     result = split_gst(Decimal("1000"), Decimal("18"), interstate=True)
     assert result["cgst"] == Decimal("0.00")
     assert result["igst"] == Decimal("180.00")
+
+
+def test_resolve_sale_supply_intra_inter_and_b2c() -> None:
+    from types import SimpleNamespace
+
+    shop_business = SimpleNamespace(
+        gst_tax_number="27AABCU9603R1ZM",
+        billing_state_code="27",
+        state="Maharashtra",
+    )
+
+    intra = resolve_sale_supply(business=shop_business, customer_gstin="27ABCDE1234F1Z5")
+    assert intra["is_interstate"] is False
+    assert intra["invoice_type"] == "B2B"
+    assert intra["place_of_supply"] == "27"
+
+    inter = resolve_sale_supply(business=shop_business, customer_gstin="29AABCU9603R1ZM")
+    assert inter["is_interstate"] is True
+    assert inter["place_of_supply"] == "29"
+    assert inter["invoice_type"] == "B2B"
+
+    b2c = resolve_sale_supply(business=shop_business, customer_gstin="")
+    assert b2c["is_interstate"] is False
+    assert b2c["invoice_type"] == "B2C"
+    assert b2c["place_of_supply"] == "27"
+
+
+def test_split_stored_tax_total_respects_interstate() -> None:
+    intra = split_stored_tax_total(Decimal("18.00"), interstate=False)
+    assert intra["cgst"] + intra["sgst"] == Decimal("18.00")
+    assert intra["igst"] == Decimal("0.00")
+
+    inter = split_stored_tax_total(Decimal("18.00"), interstate=True)
+    assert inter["igst"] == Decimal("18.00")
+    assert inter["cgst"] == Decimal("0.00")
+    assert inter["sgst"] == Decimal("0.00")
 
 
 def test_compute_line_tax_inclusive_extracts_gst() -> None:
@@ -196,6 +232,8 @@ def test_gstr1_uses_customer_gstin_for_direct_books_sale(
     rows = books.gstr1_rows(tenant=shop_business.tenant, business=shop_business)
 
     row = next(item for item in rows if item["voucher_number"] == voucher.voucher_number)
+    assert row["id"] == str(voucher.id)
+    assert row["voucher_type"] == voucher.voucher_type
     assert row["invoice_type"] == "B2B"
     assert row["customer_gstin"] == "27ABCDE1234F1Z5"
     assert row["customer_name"] == "Test Buyer"

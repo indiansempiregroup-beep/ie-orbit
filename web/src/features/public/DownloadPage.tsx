@@ -46,7 +46,7 @@ export function DownloadPage() {
             <h2>Owners and staff</h2>
             <p>
               Operators sign in on the web and on the IE Orbit ops app for day-to-day work. Download it for iOS or
-              Android, then start on this website with a 15-day full-Pro trial — no credit card required.
+              Android, then start on this website with a 45-day full-Pro trial — no credit card required.
             </p>
             <OpsStoreBadges />
           </article>

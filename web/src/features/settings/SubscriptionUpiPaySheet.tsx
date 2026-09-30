@@ -15,6 +15,7 @@ export type SubscriptionUpiPayItem = {
   extraStaff?: number;
   extraOffices?: number;
   petsPackEnabled?: boolean;
+  billingInterval?: 'monthly' | 'yearly';
 };
 
 export type SubscriptionUpiPayRequest = {
@@ -88,6 +89,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
               extra_staff: request.items[0].extraStaff ?? 0,
               extra_offices: request.items[0].extraOffices ?? 0,
               pets_pack_enabled: Boolean(request.items[0].petsPackEnabled),
+              billing_interval: request.items[0].billingInterval,
             }
           : {
               business_id: workspace.businessId ?? undefined,
@@ -97,6 +99,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
                 extra_staff: item.extraStaff ?? 0,
                 extra_offices: item.extraOffices ?? 0,
                 pets_pack_enabled: Boolean(item.petsPackEnabled),
+                billing_interval: item.billingInterval,
               })),
             };
       const res = await client.billing.createUpiCheckout(body);

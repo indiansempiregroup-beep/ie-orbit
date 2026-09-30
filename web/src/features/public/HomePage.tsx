@@ -41,7 +41,7 @@ const paths = [
 const differences = [
   { index: '01', title: 'White-label customer app', body: 'Customers install your brand — iOS and Android — not a generic IE Orbit store listing.' },
   { index: '02', title: 'Your brand front and centre', body: 'Bookings, shop, and order tracking under your name.' },
-  { index: '03', title: 'Built to grow with you', body: '15-day full-Pro trial, then Starter or Pro with UPI billing.' },
+  { index: '03', title: 'Built to grow with you', body: '45-day full-Pro trial, then Starter or Pro with UPI billing.' },
 ];
 
 const sharedBenefits = [
@@ -62,7 +62,7 @@ const sharedBenefits = [
   },
   {
     title: 'Grow when you need to',
-    body: 'Add extra staff and offices as you scale. Yearly billing is 10× monthly — two months free.',
+    body: 'Add extra staff and offices as you scale. Yearly billing charges less than 12 months — typically two months free.',
     icon: TrendingUp,
   },
 ];
@@ -101,7 +101,7 @@ export function HomePage() {
                 See how it works
               </Link>
             </div>
-            <p className="public-hero-note">White-label app on every plan · 15-day full-Pro trial · UPI · No credit card</p>
+            <p className="public-hero-note">White-label app on every plan · 45-day full-Pro trial · UPI · No credit card</p>
           </div>
           <div className="public-hero-visual">
             <div className="public-visual-tag public-visual-tag--one" aria-hidden="true">
@@ -194,7 +194,7 @@ export function HomePage() {
       <div className="public-page">
         <div className="public-stats" aria-label="Platform snapshot">
           <div className="public-card public-stat">
-            <strong>15 days</strong>
+            <strong>45 days</strong>
             <span>Full-Pro trial on every new workspace</span>
           </div>
           <div className="public-card public-stat">

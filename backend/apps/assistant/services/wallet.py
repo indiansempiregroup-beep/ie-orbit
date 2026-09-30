@@ -160,6 +160,37 @@ class AssistantWalletService:
         )
         return wallet
 
+    @transaction.atomic
+    def clawback_wallet(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        amount_paise: int,
+        reason: str = "refund",
+        metadata: dict[str, Any] | None = None,
+    ) -> tuple[AssistantWallet, int]:
+        """Debit up to amount_paise from the wallet. Returns (wallet, clawed_paise)."""
+        wanted = max(0, int(amount_paise or 0))
+        wallet = self.ensure_wallet(tenant=tenant, business=business)
+        wallet = AssistantWallet.objects.select_for_update().get(pk=wallet.pk)
+        clawed = min(wanted, max(0, int(wallet.balance_paise)))
+        if clawed <= 0:
+            return wallet, 0
+        wallet.balance_paise = int(wallet.balance_paise) - clawed
+        wallet.save(update_fields=["balance_paise", "updated_at", "version"])
+        meta = dict(metadata or {})
+        meta.setdefault("reason", reason)
+        AssistantWalletLedger.objects.create(
+            tenant=tenant,
+            business=business,
+            source="refund_clawback",
+            charged_paise=clawed,
+            balance_after_paise=int(wallet.balance_paise),
+            metadata=meta,
+        )
+        return wallet, clawed
+
     def wallet_history(
         self,
         *,

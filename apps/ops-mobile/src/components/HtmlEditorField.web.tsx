@@ -27,7 +27,7 @@ const EDITOR_CSS = `
 .ie-html-editor p { margin: 0 0 8px; }
 .ie-html-editor h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
 .ie-html-editor ul, .ie-html-editor ol { margin: 0 0 8px; padding-left: 1.25rem; }
-.ie-html-editor a { color: #19576b; }
+.ie-html-editor a { color: #163a47; }
 `;
 
 function isEditorEmpty(el: HTMLElement) {

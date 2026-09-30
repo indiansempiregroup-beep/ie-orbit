@@ -16,7 +16,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { HelpArticleSummary, MobileReview, SupportTicketSummary } from '@ie-orbit/sdk';
+import type { HelpArticleSummary, MobileBranch, MobileReview, SupportTicketSummary } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -27,6 +27,7 @@ import { Input } from '../../components/ui/Input';
 import { requiredMessage } from '../../utils/formValidation';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { bookingDirectionsUrl } from '../../utils/bookingDisplay';
 import { formatDate, getApiErrorMessage } from '../../utils/format';
 import { customerAppFeatures } from '../../utils/customerFeatures';
 import type { RootStackParamList } from '../../navigation/types';
@@ -40,8 +41,10 @@ export function NotificationPreferencesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, refreshProfile } = useAuth();
   const toast = useToast();
-  const { branding } = useBootstrap();
+  const { branding, bootstrap } = useBootstrap();
   const primary = branding?.primaryColor ?? colors.primary;
+  const whatsappAvailable = bootstrap?.otp_auth?.whatsapp_status === 'live';
+  const smsAvailable = Boolean(bootstrap?.otp_auth?.mobile_otp_via_sms);
   const prefs = (user?.notification_preferences ?? {}) as Record<string, boolean>;
   const [email, setEmail] = useState(
     prefs.email !== false && prefs.email_updates !== false,
@@ -54,9 +57,10 @@ export function NotificationPreferencesScreen() {
   async function onSave() {
     setLoading(true);
     try {
-      await mobileClient.auth.patchMe({
-        notification_preferences: { email, push, sms, whatsapp },
-      });
+      const notification_preferences: Record<string, boolean> = { email, push };
+      if (whatsappAvailable) notification_preferences.whatsapp = whatsapp;
+      if (smsAvailable) notification_preferences.sms = sms;
+      await mobileClient.auth.patchMe({ notification_preferences });
       await refreshProfile();
       toast.push('Notification preferences updated.', 'success');
       navigation.goBack();
@@ -71,8 +75,10 @@ export function NotificationPreferencesScreen() {
     <ProfileMenuScreen title="Notification Preferences" onBack={() => navigation.goBack()}>
       <PrefRow label="Email notifications" value={email} onChange={setEmail} />
       <PrefRow label="Push notifications" value={push} onChange={setPush} />
-      <PrefRow label="WhatsApp notifications" value={whatsapp} onChange={setWhatsapp} />
-      <PrefRow label="SMS reminders" value={sms} onChange={setSms} />
+      {whatsappAvailable ? (
+        <PrefRow label="WhatsApp notifications" value={whatsapp} onChange={setWhatsapp} />
+      ) : null}
+      {smsAvailable ? <PrefRow label="SMS reminders" value={sms} onChange={setSms} /> : null}
       <Button label="Save preferences" size="lg" fullWidth loading={loading} primaryColor={primary} onPress={onSave} />
     </ProfileMenuScreen>
   );
@@ -202,17 +208,36 @@ export function PaymentMethodsScreen() {
   const { branding, bootstrap } = useBootstrap();
   const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
   const appName = branding?.appName ?? 'this business';
+  const canPayOnline = Boolean(
+    bootstrap?.business?.razorpay?.can_accept_payments ||
+      bootstrap?.business?.cashfree?.can_accept_payments,
+  );
+  const canPayUpi = Boolean(bootstrap?.business?.upi_vpa || bootstrap?.business?.payment_qr_url);
   const settlement = showBooking && showShop
-    ? 'When you book or order in the app, you can pay at the venue unless a digital payment is offered at checkout.'
+    ? 'Bookings are usually settled at the venue. Shop orders use the payment options offered at checkout.'
     : showShop
-      ? 'Pay at pickup or on delivery unless a digital payment is offered at checkout.'
+      ? 'At checkout you can use the payment options this shop has enabled.'
       : 'When you book in the app, your appointment is confirmed and you settle payment when you visit.';
   return (
     <ProfileMenuScreen title="Payment Methods" onBack={() => navigation.goBack()}>
       <View style={styles.paymentCard}>
-        <Text style={styles.comingTitle}>Pay at venue</Text>
+        <Text style={styles.comingTitle}>
+          {showShop
+            ? canPayOnline
+              ? 'Online checkout available'
+              : canPayUpi
+                ? 'UPI and cash options'
+                : 'Pay at pickup or delivery'
+            : 'Pay at venue'}
+        </Text>
         <Text style={styles.body}>
-          Your default payment method for {appName} is pay at the venue. Online cards and UPI checkout will arrive in a later release.
+          {showShop
+            ? canPayOnline
+              ? `${appName} accepts secure online payments (cards, UPI, netbanking) at checkout when Pay online is shown. Cash on delivery / pickup and UPI QR may also be available.`
+              : canPayUpi
+                ? `${appName} accepts UPI at checkout when configured, plus cash on delivery or pickup when enabled.`
+                : `For ${appName}, pay at pickup or on delivery unless the shop enables online checkout.`
+            : `Your default payment method for ${appName} is pay at the venue.`}
         </Text>
         <Text style={styles.body}>{settlement}</Text>
       </View>
@@ -328,7 +353,7 @@ function customerFaqs(options: {
     {
       category: 'account',
       q: 'How do I manage notifications?',
-      a: 'Open Profile → Notification Preferences to turn email, push, or SMS reminders on or off.',
+      a: 'Open Profile → Notification Preferences to turn email, push, and (when available) WhatsApp or SMS reminders on or off.',
     },
     {
       category: 'account',
@@ -552,13 +577,14 @@ export function HelpSupportScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { bootstrap, branding } = useBootstrap();
-  const { tenantId } = useBusinessContext();
+  const { tenantId, tenantSlug, businessCode } = useBusinessContext();
   const toast = useToast();
   const business = bootstrap?.business;
   const { showBooking, showShop, showPets } = customerAppFeatures(bootstrap?.features);
   const primary = branding?.primaryColor ?? colors.primary;
   const [articles, setArticles] = useState<HelpArticleSummary[]>([]);
   const [tickets, setTickets] = useState<SupportTicketSummary[]>([]);
+  const [visitBranch, setVisitBranch] = useState<MobileBranch | null>(null);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [status, setStatus] = useState<string | null>(null);
@@ -574,6 +600,30 @@ export function HelpSupportScreen() {
       .then((res) => setArticles(res.data.articles ?? []))
       .catch(() => setArticles([]));
   }, []);
+
+  useEffect(() => {
+    if (!tenantSlug || !businessCode) {
+      setVisitBranch(null);
+      return;
+    }
+    void mobileClient.mobile
+      .branches({ tenant_slug: tenantSlug, business_code: businessCode })
+      .then((res) => {
+        const rows = res.data ?? [];
+        setVisitBranch(rows.find((row) => row.is_primary) ?? rows[0] ?? null);
+      })
+      .catch(() => setVisitBranch(null));
+  }, [tenantSlug, businessCode]);
+
+  const visitAddress =
+    visitBranch?.formatted_address?.trim() ||
+    business?.formatted_address?.trim() ||
+    [business?.address_line1, business?.city, business?.postal_code].filter(Boolean).join(', ');
+  const visitMapsUrl =
+    bookingDirectionsUrl(visitBranch) ||
+    (visitAddress
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(visitAddress)}`
+      : null);
 
   const loadTickets = useCallback(() => {
     return mobileClient.support
@@ -664,9 +714,9 @@ export function HelpSupportScreen() {
         </View>
       </View>
 
-      {business?.phone || business?.email || business?.formatted_address ? (
+      {business?.phone || business?.email || visitAddress ? (
         <GroupedList>
-          {business.phone ? (
+          {business?.phone ? (
             <HelpContactRow
               icon="phone"
               label="Call"
@@ -674,7 +724,7 @@ export function HelpSupportScreen() {
               onPress={() => void Linking.openURL(`tel:${business.phone}`)}
             />
           ) : null}
-          {business.email ? (
+          {business?.email ? (
             <HelpContactRow
               icon="mail"
               label="Email"
@@ -682,16 +732,12 @@ export function HelpSupportScreen() {
               onPress={() => void Linking.openURL(`mailto:${business.email}`)}
             />
           ) : null}
-          {business.formatted_address ? (
+          {visitAddress && visitMapsUrl ? (
             <HelpContactRow
               icon="map-pin"
               label="Visit"
-              value={business.formatted_address}
-              onPress={() =>
-                void Linking.openURL(
-                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(business.formatted_address || '')}`,
-                )
-              }
+              value={visitAddress}
+              onPress={() => void Linking.openURL(visitMapsUrl)}
             />
           ) : null}
         </GroupedList>

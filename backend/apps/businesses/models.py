@@ -96,6 +96,12 @@ class Business(TenantModel):
     currency = models.CharField(max_length=3, default="USD")
     language = models.CharField(max_length=16, default="en")
     gst_tax_number = models.CharField(max_length=80, blank=True)
+    billing_legal_name = models.CharField(max_length=255, blank=True)
+    billing_state_code = models.CharField(
+        max_length=2,
+        blank=True,
+        help_text="GST place-of-supply state code (e.g. 27 for Maharashtra).",
+    )
     registration_number = models.CharField(max_length=80, blank=True)
     status = models.CharField(
         max_length=32,

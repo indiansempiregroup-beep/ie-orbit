@@ -57,7 +57,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'White-label customer app branded to your salon',
       'Fewer missed slots from confirmations and a shared calendar',
       'One customer record for services and product sales',
-      'UPI billing for your IE Orbit subscription — no credit card to start the 15-day trial',
+      'UPI billing for your IE Orbit subscription — no credit card to start the 45-day trial',
     ],
     customerTitle: 'What clients experience',
     customer:
@@ -113,7 +113,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'White-label customer app for patient bookings',
       'Fewer double-booked practitioners',
       'A single customer list for visits and counter sales',
-      '15-day full-Pro trial with no credit card',
+      '45-day full-Pro trial with no credit card',
     ],
     customerTitle: 'What patients experience',
     customer:
@@ -169,7 +169,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'White-label customer app for booking and shop',
       'A shared calendar instead of scattered chat bookings',
       'Optional retail without a second software login',
-      'Yearly IE Orbit billing at 10× monthly (two months free)',
+      'Yearly IE Orbit billing at a discounted multiple of monthly (months free shown at checkout)',
     ],
     customerTitle: 'What members experience',
     customer:
@@ -184,7 +184,7 @@ export const INDUSTRIES: IndustryContent[] = [
       },
       {
         q: 'Is there a free trial?',
-        a: 'New workspaces get a 15-day full-Pro trial with no credit card. After that the workspace soft-locks until you subscribe.',
+        a: 'New workspaces get a 45-day full-Pro trial with no credit card. After that the workspace soft-locks until you subscribe.',
       },
       {
         q: 'Do we need extra offices for multiple studios?',
@@ -393,7 +393,7 @@ export const INDUSTRIES: IndustryContent[] = [
       'A customer app branded to your trade',
       'Fewer overlapping visits',
       'Optional GST-ready product sales',
-      '15-day full-Pro trial without a credit card',
+      '45-day full-Pro trial without a credit card',
     ],
     customerTitle: 'What households experience',
     customer:
@@ -412,7 +412,7 @@ export const INDUSTRIES: IndustryContent[] = [
       },
       {
         q: 'How do we start?',
-        a: 'Create an account, pick Orbit Appoint (and Orbit Mart if you sell parts), and use the 15-day full-Pro trial.',
+        a: 'Create an account, pick Orbit Appoint (and Orbit Mart if you sell parts), and use the 45-day full-Pro trial.',
       },
     ],
     related: ['professional-services', 'retail', 'salon-spa'],

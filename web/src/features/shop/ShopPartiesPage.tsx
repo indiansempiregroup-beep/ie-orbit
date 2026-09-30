@@ -77,9 +77,14 @@ export function ShopPartiesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SupplierForm>(emptySupplierForm);
   const [statementSupplier, setStatementSupplier] = useState<ShopSupplier | null>(null);
+  const [statementFrom, setStatementFrom] = useState('');
+  const [statementTo, setStatementTo] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
-  const statement = usePartyStatement('supplier', statementSupplier?.id ?? '');
+  const statement = usePartyStatement('supplier', statementSupplier?.id ?? '', {
+    date_from: statementFrom || undefined,
+    date_to: statementTo || undefined,
+  });
 
   useEffect(() => {
     const wantsNew = searchParams.get('new');
@@ -111,7 +116,38 @@ export function ShopPartiesPage() {
 
   function openStatement(supplier: ShopSupplier) {
     setStatementSupplier(supplier);
+    setStatementFrom('');
+    setStatementTo('');
     statementDialog.show();
+  }
+
+  function downloadStatementCsv() {
+    if (!statement.data || !statementSupplier) return;
+    const lines = [
+      ['Party', statement.data.party_name].join(','),
+      ['Opening', statement.data.opening_balance].join(','),
+      ['Closing', statement.data.closing_balance].join(','),
+      ['From', statement.data.date_from || ''].join(','),
+      ['To', statement.data.date_to || ''].join(','),
+      '',
+      ['Date', 'Type', 'Amount', 'Balance after', 'Notes'].join(','),
+      ...statement.data.entries.map((entry) =>
+        [
+          entry.created_at ? new Date(entry.created_at).toISOString().slice(0, 10) : '',
+          entry.entry_type || entry.direction || '',
+          entry.amount ?? '',
+          entry.balance_after ?? '',
+          (entry.notes || '').replace(/,/g, ' '),
+        ].join(','),
+      ),
+    ];
+    const url = URL.createObjectURL(new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    const safe = statementSupplier.name.replace(/[^\w.-]+/g, '_').slice(0, 40);
+    anchor.download = `${safe}_party_statement_${statementFrom || 'all'}_${statementTo || 'today'}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   async function submit(event: React.FormEvent) {
@@ -298,6 +334,26 @@ export function ShopPartiesPage() {
         labelledBy="supplier-statement-dialog"
       >
         <div style={{ minWidth: 340, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+            <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+              From
+              <input
+                type="date"
+                value={statementFrom}
+                onChange={(event) => setStatementFrom(event.target.value)}
+                style={fieldStyle}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+              To
+              <input
+                type="date"
+                value={statementTo}
+                onChange={(event) => setStatementTo(event.target.value)}
+                style={fieldStyle}
+              />
+            </label>
+          </div>
           {statement.isLoading ? <p>Loading…</p> : null}
           {statement.data ? (
             <div style={{ display: 'grid', gap: 12 }}>
@@ -324,7 +380,10 @@ export function ShopPartiesPage() {
               </div>
             </div>
           ) : null}
-          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button type="button" variant="neutral" onClick={downloadStatementCsv} disabled={!statement.data}>
+              CSV for CA
+            </Button>
             <Button type="button" variant="ghost" onClick={statementDialog.hide}>
               Close
             </Button>

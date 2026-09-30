@@ -10,7 +10,7 @@ type EnrichMessageInput = {
 };
 
 const TECHNICAL_SOURCE_RE =
-  /platform_gtin|gemini_text|gemini_vision|open_food|open_pet|open_product|open_beauty|barcode_lookup|shop_catalog|image_hint|_barcode|_search/i;
+  /platform_gtin|gemini_text|gemini_vision|open_food|open_pet|open_product|open_beauty|barcode_lookup|shop_catalog|image_hint|public_go_upc|commercial_|_barcode|_search/i;
 
 export function enrichSourceLabel(source?: string | null): string {
   const key = (source || '').trim();
@@ -29,6 +29,9 @@ export function enrichSourceLabel(source?: string | null): string {
       return 'lookup';
     default:
       if (key.startsWith('open_') || key.endsWith('_barcode') || key.endsWith('_search')) {
+        return 'online product database';
+      }
+      if (key === 'public_go_upc' || key.startsWith('commercial_')) {
         return 'online product database';
       }
       return 'lookup';
@@ -92,7 +95,7 @@ export function enrichLedgerSourceLabel(source?: string | null): string {
       return 'Name search';
     default:
       if (!key) return 'Lookup';
-      if (key.startsWith('commercial_')) return 'Barcode provider';
+      if (key.startsWith('commercial_') || key === 'public_go_upc') return 'Barcode provider';
       if (key.startsWith('open_') || key.endsWith('_barcode') || key.endsWith('_search')) {
         return 'Online database';
       }

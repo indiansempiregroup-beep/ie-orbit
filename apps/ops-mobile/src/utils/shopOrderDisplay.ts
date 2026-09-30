@@ -61,8 +61,25 @@ export function orderCustomerLabel(order: ShopOrder, customerMap?: Map<string, s
   return 'Walk-in';
 }
 
+/** Account / profile phone on the customer. */
 export function orderCustomerPhone(order: ShopOrder): string {
   return String(order.customer_phone || '').trim();
+}
+
+/** Delivery-address phone saved on this order (Amazon-style contact). */
+export function orderDeliveryPhone(order: ShopOrder): string {
+  const fromField = String(order.delivery_phone || '').trim();
+  if (fromField) return fromField;
+  const metadata = order.metadata && typeof order.metadata === 'object' ? order.metadata : {};
+  const direct = String((metadata as { delivery_contact_phone?: string }).delivery_contact_phone || '').trim();
+  if (direct) return direct;
+  const delivery = (metadata as { delivery?: { drop?: { contact?: { phone?: string } } } }).delivery;
+  return String(delivery?.drop?.contact?.phone || '').trim();
+}
+
+/** Best number to dial for this order: delivery address phone, then profile phone. */
+export function orderCallPhone(order: ShopOrder): string {
+  return orderDeliveryPhone(order) || orderCustomerPhone(order);
 }
 
 export function orderLinePreview(order: ShopOrder, maxLines = 2): string {
@@ -113,9 +130,7 @@ export function orderFulfillmentLabel(order: ShopOrder): string {
 }
 
 export function orderTotalLabel(order: ShopOrder): string {
-  const currency = String(order.currency || 'INR').toUpperCase();
-  const amount = formatMoney(order.total);
-  return currency === 'INR' ? `₹${amount}` : `${currency} ${amount}`;
+  return formatMoney(order.total, order.currency);
 }
 
 export function orderMetaSummary(order: ShopOrder): string {

@@ -2,9 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useShopInvoices, useShopOrders, useShopQuotations } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
 import { useApiClient } from '../../hooks/useApiClient';
+import { formatMoney } from '../../lib/currency';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 /**
@@ -12,6 +15,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
  * Platform SaaS subscription billing lives under Settings → Products & billing.
  */
 export function ShopBillingPage() {
+  const workspace = useWorkspace();
   const invoices = useShopInvoices();
   const quotations = useShopQuotations();
   const orders = useShopOrders('completed');
@@ -20,6 +24,7 @@ export function ShopBillingPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const createInvoice = useMutation({
     mutationFn: async (orderId: string) => {
@@ -137,7 +142,7 @@ export function ShopBillingPage() {
           {filteredInvoices.map((invoice) => (
             <div key={invoice.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
               <span>
-                {invoice.invoice_number} · {invoice.status} · {invoice.currency} {invoice.total}
+                {invoice.invoice_number} · {invoice.status} · {formatMoney(Number(invoice.total ?? 0), invoice.currency)}
               </span>
               {invoice.order ? <Link to={`/shop/orders/${invoice.order}`}>Order</Link> : null}
             </div>
@@ -155,7 +160,7 @@ export function ShopBillingPage() {
           {(orders.data ?? []).slice(0, 20).map((order) => (
             <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
               <span>
-                {order.order_number} · {order.currency} {order.total}
+                {order.order_number} · {formatMoney(Number(order.total ?? 0), order.currency)}
               </span>
               <Button
                 type="button"
@@ -175,13 +180,39 @@ export function ShopBillingPage() {
         <h2>Quotations</h2>
         <div style={{ display: 'grid', gap: 8 }}>
           {(quotations.data ?? []).map((quote) => (
-            <div key={quote.id}>
-              {quote.quotation_number} · {quote.status} · {quote.currency} {quote.total}
+            <div key={quote.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>
+                {quote.quotation_number} · {quote.status} · {formatMoney(Number(quote.total ?? 0), quote.currency)}
+              </span>
+              {workspace.businessId ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    setDocActions({
+                      kind: 'quotation',
+                      id: quote.id,
+                      number: quote.quotation_number,
+                      businessId: workspace.businessId!,
+                      phone: quote.customer_phone || '',
+                      email: quote.customer_email || '',
+                    })
+                  }
+                >
+                  View / Share
+                </Button>
+              ) : null}
             </div>
           ))}
           {!quotations.data?.length ? <p>No quotations yet.</p> : null}
         </div>
       </Card>
+      <DocumentActionsSheet
+        open={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Quotation ${docActions.number || ''}` : 'Quotation'}
+      />
     </div>
   );
 }

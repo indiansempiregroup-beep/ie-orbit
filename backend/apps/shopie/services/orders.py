@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from apps.businesses.models import Business
 from apps.customers.models import Customer
-from apps.customers.services.contact import resolve_customer_phone
+from apps.customers.services.contact import format_contact_phone, resolve_customer_phone
 from apps.shopie.models import (
     DiscountType,
     FulfillmentMode,
@@ -114,6 +114,7 @@ class OrderService:
         points_to_redeem: int = 0,
         metadata_extra: dict[str, Any] | None = None,
         delivery_address_line2: str = "",
+        delivery_phone: str = "",
     ) -> ShopOrder:
         if not lines:
             raise ValidationError({"lines": "At least one line item is required."})
@@ -122,9 +123,20 @@ class OrderService:
         metadata: dict[str, Any] = dict(metadata_extra or {})
         live_delivery_enabled = False
         selected_delivery_method = str(delivery_method or "").strip().lower()
+        delivery_contact_phone = format_contact_phone(delivery_phone)
+        if not delivery_contact_phone and customer is not None:
+            delivery_contact_phone = resolve_customer_phone(customer)
         if mode == FulfillmentMode.DELIVERY:
             from apps.shopie.services.delivery import DeliveryService
 
+            if not delivery_contact_phone:
+                raise ValidationError(
+                    {
+                        "delivery_phone": (
+                            "A valid delivery phone number is required for this address."
+                        )
+                    }
+                )
             delivery_service = DeliveryService()
             live_delivery_enabled = delivery_service.ensure_settings(
                 tenant=tenant, business=business
@@ -155,6 +167,7 @@ class OrderService:
                 metadata["delivery_latitude"] = str(delivery_latitude)
             if delivery_longitude not in (None, ""):
                 metadata["delivery_longitude"] = str(delivery_longitude)
+            metadata["delivery_contact_phone"] = delivery_contact_phone
             if selected_delivery_method == DELIVERY_METHOD_INSTANT:
                 if not live_delivery_enabled:
                     raise ValidationError(
@@ -435,18 +448,15 @@ class OrderService:
                 customer=customer,
                 exclude_order_id=order.id,
             )
+            # Coupons quote payable (shelf) savings — apply that amount on payable.
             bill_dtype = DiscountType.AMOUNT
-            savings = quoted_coupon["discount_amount"]
-            if payable_total > 0 and merchandise_subtotal > 0:
-                bill_dvalue = (savings * merchandise_subtotal / payable_total).quantize(
-                    Decimal("0.01")
-                )
-            else:
-                bill_dvalue = savings
-            quoted_coupon["taxable_discount_amount"] = bill_dvalue
+            bill_dvalue = Decimal(str(quoted_coupon["discount_amount"]))
 
+        # Bill % / ₹ off and coupons reduce what the customer pays (line totals),
+        # then GST is re-extracted so tax-inclusive prices stay exact
+        # (e.g. ₹100 incl. @ 15% → save ₹15.00 / pay ₹85.00, not ₹14.99 / ₹85.01).
         bill_discount = self._apply_discount(
-            gross=merchandise_subtotal,
+            gross=payable_total,
             discount_type=bill_dtype,
             discount_value=bill_dvalue,
         )
@@ -455,34 +465,37 @@ class OrderService:
             business=business,
             order=order,
             customer=customer,
-            eligible_amount=(merchandise_subtotal - bill_discount).quantize(Decimal("0.01")),
+            eligible_amount=(payable_total - bill_discount).quantize(Decimal("0.01")),
             points_to_redeem=points_to_redeem,
         )
         if loyalty_snapshot is not None:
             bill_discount = (
                 bill_discount + Decimal(str(loyalty_snapshot["discount_amount"]))
             ).quantize(Decimal("0.01"))
-        # Allocate bill discount across lines proportionally and recompute tax on discounted base.
-        if bill_discount > 0 and merchandise_subtotal > 0:
+        # Allocate payable discount across lines; re-split GST from each discounted total.
+        if bill_discount > 0 and payable_total > 0:
             remaining_discount = bill_discount
-            remaining_base = merchandise_subtotal
             tax_total = Decimal("0.00")
             for index, line in enumerate(built_lines):
                 if index == len(built_lines) - 1:
                     share = remaining_discount
                 else:
-                    share = (bill_discount * line.line_subtotal / merchandise_subtotal).quantize(
+                    share = (bill_discount * line.line_total / payable_total).quantize(
                         Decimal("0.01")
                     )
                     remaining_discount -= share
-                line.line_subtotal = (line.line_subtotal - share).quantize(Decimal("0.01"))
-                if line.line_subtotal < 0:
-                    line.line_subtotal = Decimal("0.00")
-                remaining_base -= share
-                line.line_tax = (line.line_subtotal * line.tax_rate / Decimal("100")).quantize(
-                    Decimal("0.01")
-                )
-                line.line_total = line.line_subtotal + line.line_tax
+                new_total = (line.line_total - share).quantize(Decimal("0.01"))
+                if new_total < 0:
+                    new_total = Decimal("0.00")
+                if line.tax_rate > 0:
+                    line.line_subtotal = (
+                        new_total * Decimal("100") / (Decimal("100") + line.tax_rate)
+                    ).quantize(Decimal("0.01"))
+                    line.line_tax = (new_total - line.line_subtotal).quantize(Decimal("0.01"))
+                else:
+                    line.line_subtotal = new_total
+                    line.line_tax = Decimal("0.00")
+                line.line_total = new_total
                 tax_total += line.line_tax
             subtotal = sum((line.line_subtotal for line in built_lines), Decimal("0.00")).quantize(
                 Decimal("0.01")
@@ -513,7 +526,7 @@ class OrderService:
             customer_name = (
                 str(getattr(customer, "display_name", "") or "") if customer is not None else ""
             )
-            customer_phone = resolve_customer_phone(customer) if customer is not None else ""
+            customer_phone = delivery_contact_phone
             quoted = DeliveryService().quote(
                 tenant=tenant,
                 business=business,
@@ -586,6 +599,29 @@ class OrderService:
             }
         if loyalty_snapshot is not None:
             metadata["loyalty"] = loyalty_snapshot
+        from apps.shopie.services.gst import resolve_sale_supply, split_stored_tax_total
+
+        customer_gstin = str(
+            metadata.get("customer_gstin")
+            or (getattr(customer, "gstin", None) if customer is not None else "")
+            or ""
+        ).strip().upper()
+        supply = resolve_sale_supply(
+            business=business,
+            customer_gstin=customer_gstin,
+            delivery_state=str(metadata.get("delivery_state") or delivery_state or ""),
+        )
+        tax_split = split_stored_tax_total(tax_total, interstate=supply["is_interstate"])
+        metadata["gst"] = {
+            **supply,
+            "taxable_value": str(subtotal),
+            "cgst_total": str(tax_split["cgst"]),
+            "sgst_total": str(tax_split["sgst"]),
+            "igst_total": str(tax_split["igst"]),
+            "tax_total": str(tax_total),
+        }
+        if supply["customer_gstin"]:
+            metadata["customer_gstin"] = supply["customer_gstin"]
         if payment == "borrow":
             pos_meta["amount_paid"] = "0.00"
             pos_meta["amount_due"] = str(order.total)

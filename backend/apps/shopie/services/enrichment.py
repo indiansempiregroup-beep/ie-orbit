@@ -15,6 +15,7 @@ from apps.shopie.services.barcode_providers import (
     barcode_api_configured,
     gtin_variants,
     lookup_commercial_barcode,
+    lookup_public_barcode,
 )
 from apps.shopie.services.categories import CategoryService
 
@@ -124,7 +125,7 @@ class ProductEnrichmentService:
             message = f"Already in your catalog as {name}."
         elif source == "shop_shared":
             message = "Filled from products saved by shops on the platform. Review price and stock, then save."
-        elif source.startswith("commercial_"):
+        elif source.startswith("commercial_") or source == "public_go_upc":
             message = (
                 "Filled from a barcode data provider. Review price and stock, then save."
                 if found
@@ -190,9 +191,21 @@ class ProductEnrichmentService:
                     commercial["sku"] = normalized_code
                     result = commercial
 
+            # Free public pages often cover Indian retail EANs that Open*Facts / trial
+            # UPC APIs miss (e.g. Himalaya pet SKUs on Go-UPC).
+            if not result.get("found"):
+                public = lookup_public_barcode(normalized_code)
+                if public and public.get("found") and public.get("name"):
+                    public["code"] = normalized_code
+                    public["sku"] = normalized_code
+                    result = public
+
             if result.get("found"):
                 result = self._attach_category(result)
                 self._upsert_platform_gtin(result)
+            else:
+                result.setdefault("needs_pack_photo", True)
+                result.setdefault("confidence", "none")
             return self.with_user_message(result)
 
         if search_query:

@@ -665,8 +665,14 @@ export function useShopBooksDocumentMutations() {
   });
 
   const convert = useMutation({
-    mutationFn: async (documentId: string) => {
-      const response = await client.shop.convertDocument(documentId, {});
+    mutationFn: async (input: {
+      documentId: string;
+      amount_paid?: string | number;
+      cash_account_id?: string | null;
+      action?: 'dispatch' | 'to_invoice' | 'invoice' | 'convert';
+    }) => {
+      const { documentId, ...body } = input;
+      const response = await client.shop.convertDocument(documentId, body);
       return response.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-books-documents', businessId] }),
@@ -821,15 +827,24 @@ export function useShopSupplierMutations() {
   return { create, update, remove, businessId };
 }
 
-export function usePartyStatement(kind: 'customer' | 'supplier', id: string) {
+export function usePartyStatement(
+  kind: 'customer' | 'supplier',
+  id: string,
+  range: { date_from?: string; date_to?: string } = {},
+) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
   return useQuery({
-    queryKey: ['shop-books-party-statement', businessId, kind, id],
+    queryKey: ['shop-books-party-statement', businessId, kind, id, range],
     enabled: Boolean(businessId) && Boolean(id),
     queryFn: async () => {
-      const response = await client.shop.partyStatement({ business_id: businessId, kind, id });
+      const response = await client.shop.partyStatement({
+        business_id: businessId,
+        kind,
+        id,
+        ...range,
+      });
       return response.data;
     },
   });

@@ -8,6 +8,8 @@ from apps.notifications.models import Notification, NotificationTemplate
 def notification_type_from_metadata(metadata: dict | None) -> str:
     raw = metadata or {}
     event_type = str(raw.get("event_type") or raw.get("type") or "").lower()
+    if "workflow" in event_type or "automation" in event_type:
+        return "automation"
     if "pet" in event_type:
         return "pet"
     if "cancel" in event_type:

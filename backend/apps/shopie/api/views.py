@@ -62,11 +62,12 @@ from apps.shopie.api.serializers import (
     SmartLookupTopUpSerializer,
     StockAdjustSerializer,
 )
-from apps.shopie.models import ShopInvoice, ShopOrder, ShopProduct, ShopQuotation, ShopStockMovement
+from apps.shopie.models import ShopInvoice, ShopOrder, ShopProduct, ShopQuotation, ShopStockMovement, ShopMasterKind
 from apps.shopie.services import CatalogService, OrderService
 from apps.shopie.services.categories import CategoryService
 from apps.shopie.services.enrichment import ProductEnrichmentService
 from apps.shopie.services.fulfillment import FulfillmentService
+from apps.shopie.services.masters import MasterService
 from apps.shopie.services.merchant_payments import MerchantPaymentService
 from apps.shopie.services.packaging_analysis import PackagingAnalysisService
 from apps.shopie.services.smart_lookup import SmartLookupService
@@ -379,17 +380,62 @@ class ShopBarcodeEnrichView(APIView):
 class ShopProductCategoryListView(APIView):
     permission_classes = [ShopAccessPermission]
     categories = CategoryService()
+    masters = MasterService()
 
     def get(self, request: Request) -> Response:
+        business_id = request.query_params.get("business_id")
+        if business_id:
+            business = _business(request, business_id, features=CATALOG_FEATURES)
+            items = self.masters.list_records(
+                tenant=request.current_tenant,
+                business=business,
+                kind=ShopMasterKind.CATEGORY,
+            )
+            return success_response(
+                {
+                    "items": [
+                        {
+                            "slug": item["slug"],
+                            "label": item["label"],
+                            "is_builtin": item["is_builtin"],
+                            "id": item["id"],
+                            "value": item.get("value") or "",
+                        }
+                        for item in items
+                    ]
+                }
+            )
         return success_response({"items": self.categories.list_categories()})
 
     @extend_schema(request=EnsureCategorySerializer)
     def post(self, request: Request) -> Response:
         serializer = EnsureCategorySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business_id = data.get("business_id") or request.query_params.get("business_id")
+        if business_id:
+            business = _business(request, business_id, features=CATALOG_FEATURES)
+            row = self.masters.ensure(
+                tenant=request.current_tenant,
+                business=business,
+                kind=ShopMasterKind.CATEGORY,
+                label=data["label"],
+                slug=data.get("slug") or "",
+            )
+            if not row:
+                raise ValidationError({"label": "Provide a category name."})
+            return success_response(
+                {
+                    "slug": row.slug,
+                    "label": row.label,
+                    "is_builtin": row.is_builtin,
+                    "id": str(row.id),
+                    "value": row.value,
+                }
+            )
         row = self.categories.ensure_category(
-            label=serializer.validated_data["label"],
-            slug=serializer.validated_data.get("slug") or "",
+            label=data["label"],
+            slug=data.get("slug") or "",
         )
         if not row:
             raise ValidationError({"label": "Provide a category name."})
@@ -693,6 +739,7 @@ class ShopOrderListCreateView(APIView):
                 delivery_quote_id=data.get("delivery_quote_id") or "",
                 displayed_delivery_fee=data.get("displayed_delivery_fee"),
                 delivery_address_line2=data.get("delivery_address_line2") or "",
+                delivery_phone=data.get("delivery_phone") or "",
                 confirm=bool(data.get("confirm")),
                 bill_discount_type=data.get("bill_discount_type") or "",
                 bill_discount_value=data.get("bill_discount_value") or 0,
@@ -709,7 +756,14 @@ class ShopOrderListCreateView(APIView):
             from apps.notifications.services.whatsapp_opt_in import set_whatsapp_opt_in
 
             set_whatsapp_opt_in(enabled=True, user=request.user, customer=customer)
-        return success_response(ShopOrderSerializer(order).data, status_code=status.HTTP_201_CREATED)
+        payload = ShopOrderSerializer(order).data
+        from apps.shopie.api.document_views import books_voucher_for_order
+
+        voucher = books_voucher_for_order(tenant=request.current_tenant, order=order)
+        if voucher is not None:
+            payload["books_voucher_id"] = str(voucher.id)
+            payload["books_voucher_number"] = voucher.voucher_number
+        return success_response(payload, status_code=status.HTTP_201_CREATED)
 
 
 class ShopOrderDetailView(APIView):
@@ -1083,6 +1137,7 @@ class ShopQuotationListCreateView(APIView):
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_QUOTATIONS)
         qs = ShopQuotation.objects.filter(tenant=request.current_tenant, business=business)
+        qs = qs.select_related("customer")
         return paginated_list_response(request, qs, ShopQuotationSerializer)
 
     def post(self, request: Request) -> Response:

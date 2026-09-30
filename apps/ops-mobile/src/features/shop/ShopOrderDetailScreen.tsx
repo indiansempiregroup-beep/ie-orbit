@@ -23,12 +23,12 @@ import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
-import { formatCustomerAddressLabel } from '../../utils/customerAddress';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { confirmAction } from '../../utils/confirmAction';
 import { DesktopPage } from '../../components/DesktopPage';
 import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
 import { SelectField } from '../../components/SelectField';
+import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import {
   formatMoney,
@@ -48,6 +48,9 @@ import {
   formatDeliveryStatus,
   groupDeliveryEvents,
 } from './deliveryTracking';
+import { shopOrderBillBreakdown } from '../../utils/shopOrderBill';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { orderCallPhone, orderDeliveryPhone } from '../../utils/shopOrderDisplay';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
 
@@ -116,6 +119,7 @@ export function ShopOrderDetailScreen() {
   const [shipAwb, setShipAwb] = useState('');
   const [shipEta, setShipEta] = useState('');
   const [shipNotify, setShipNotify] = useState(true);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const refreshOrderData = useCallback(async () => {
     if (!client || !orderId || !businessId) return;
@@ -443,8 +447,8 @@ export function ShopOrderDetailScreen() {
       const borrowCut = isBorrow ? Math.min(refund, Math.max(0, dueBefore)) : 0;
       toast.push(
         borrowCut > 0
-          ? `Return ${response.data.return_number} · stock updated · due -${borrowCut.toFixed(2)}`
-          : `Return ${response.data.return_number} completed · ${refund.toFixed(2)}`,
+          ? `Return ${response.data.return_number} · stock updated · due -${formatMoney(borrowCut, order.currency)}`
+          : `Return ${response.data.return_number} completed · ${formatMoney(refund, order.currency)}`,
         'success',
       );
       closeReturnMode();
@@ -512,9 +516,15 @@ export function ShopOrderDetailScreen() {
     customer?.phone_number?.trim() ||
     customer?.alternate_phone?.trim() ||
     '';
-  const deliveryAddress =
-    String(order.delivery_address || '').trim() || formatCustomerAddressLabel(customer || {});
+  const deliveryPhone = orderDeliveryPhone(order);
+  const deliveryAddress = String(order.delivery_address || '').trim();
   const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
+  const bill = shopOrderBillBreakdown(order);
+  const invoiceVoucherId = String(order.books_voucher_id || '').trim();
+  const invoiceVoucherNumber = String(
+    order.books_voucher_number || bill.booksVoucherNumber || order.order_number,
+  ).trim();
+  const invoicePhone = orderCallPhone(order) || customerPhone;
   const cashPaymentDue =
     isOnlineOrder &&
     paymentMethodValue === 'cash' &&
@@ -532,13 +542,6 @@ export function ShopOrderDetailScreen() {
   const showFulfillmentCard =
     isOnlineOrder &&
     (nextAction || canCancel || canStandardShip || canStandardMarkDelivered || canInstantDispatch);
-  const lineDiscountTotal = Number(pos.line_discount_total ?? 0);
-  const billDiscountAmount = Number(pos.bill_discount_amount ?? 0);
-  const merchandiseGross = (order.lines ?? []).reduce((sum, line) => {
-    const qty = Number(line.quantity || 0);
-    const unit = Number(line.unit_price || 0);
-    return sum + qty * unit;
-  }, 0);
   const borrowPreview = isBorrow ? Math.min(selectedRefund, Math.max(0, amountDue)) : 0;
   const cashCreditPreview = Math.max(0, selectedRefund - borrowPreview);
   const deliveryGroups = deliveryLive?.available ? groupDeliveryEvents(deliveryLive) : [];
@@ -559,6 +562,12 @@ export function ShopOrderDetailScreen() {
 
   return (
     <DesktopPage>
+      <DocumentActionsSheet
+        visible={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Invoice ${docActions.number || ''}`.trim() : 'Sale invoice'}
+      />
       <ScrollView
         style={styles.screen}
         keyboardShouldPersistTaps="handled"
@@ -588,19 +597,38 @@ export function ShopOrderDetailScreen() {
             <CustomerDetailLinkCard
               customerId={order.customer_id}
               customerName={customerName}
-              customerPhone={customerPhone}
+              customerPhone={customerPhone || undefined}
               customerEmail={customer?.email?.trim() || undefined}
-              addressPreview={deliveryAddress || undefined}
+              deliveryAddress={
+                String(order.fulfillment_mode).toLowerCase() === 'delivery'
+                  ? deliveryAddress || undefined
+                  : undefined
+              }
+              deliveryPhone={
+                String(order.fulfillment_mode).toLowerCase() === 'delivery'
+                  ? deliveryPhone || undefined
+                  : undefined
+              }
             />
           ) : (
             <Text style={styles.customer}>{customerName}</Text>
           )}
-          {isOnlineOrder && deliveryAddress && !order.customer_id ? (
+          {!order.customer_id && isOnlineOrder && (deliveryAddress || deliveryPhone) ? (
             <View style={styles.addressBox}>
               <Text style={styles.addressLabel}>
                 {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'Delivery address' : 'Customer address'}
               </Text>
-              <Text style={styles.addressValue}>{deliveryAddress}</Text>
+              {deliveryAddress ? <Text style={styles.addressValue}>{deliveryAddress}</Text> : null}
+              {deliveryPhone ? (
+                <Pressable
+                  style={styles.deliveryPhoneRow}
+                  onPress={() => void Linking.openURL(`tel:${deliveryPhone}`)}
+                >
+                  <Text style={styles.addressLabel}>Delivery phone</Text>
+                  <Text style={styles.deliveryPhoneValue}>{deliveryPhone}</Text>
+                  <Feather name="phone" size={14} color={colors.primary} />
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
           {payment ? <Text style={[styles.payment, due && styles.due]}>{payment}</Text> : null}
@@ -910,44 +938,120 @@ export function ShopOrderDetailScreen() {
 
         <View style={styles.totalsCard}>
           <Text style={styles.summaryTitle}>Bill summary</Text>
+          {(bill.invoiceType === 'B2B' || bill.customerGstin || bill.sellerGstin) ? (
+            <Text style={styles.currencyNote}>
+              {bill.invoiceType || 'B2C'}
+              {bill.customerGstin ? ` · Buyer ${bill.customerGstin}` : ''}
+              {bill.placeOfSupply ? ` · PoS ${bill.placeOfSupply}` : ''}
+              {bill.booksVoucherNumber ? ` · ${bill.booksVoucherNumber}` : ''}
+            </Text>
+          ) : bill.booksVoucherNumber ? (
+            <Text style={styles.currencyNote}>{bill.booksVoucherNumber}</Text>
+          ) : null}
           <View style={styles.totalRow}>
             <Text style={styles.meta}>Items</Text>
-            <Text style={styles.meta}>{formatMoney(merchandiseGross)}</Text>
+            <Text style={styles.meta}>{formatMoney(bill.merchandiseGross)}</Text>
           </View>
+          {bill.lineDiscountTotal > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Product discounts</Text>
+              <Text style={styles.meta}>-{formatMoney(bill.lineDiscountTotal)}</Text>
+            </View>
+          ) : null}
+          {bill.billDiscount > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Bill discount</Text>
+              <Text style={styles.meta}>-{formatMoney(bill.billDiscount)}</Text>
+            </View>
+          ) : null}
+          {bill.couponDiscount > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>
+                Coupon{bill.couponCode ? ` ${bill.couponCode}` : ''}
+              </Text>
+              <Text style={styles.meta}>-{formatMoney(bill.couponDiscount)}</Text>
+            </View>
+          ) : null}
+          {bill.rewardDiscount > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>
+                Reward points{bill.rewardPoints > 0 ? ` (${bill.rewardPoints} pts)` : ''}
+              </Text>
+              <Text style={styles.meta}>-{formatMoney(bill.rewardDiscount)}</Text>
+            </View>
+          ) : null}
           <View style={styles.totalRow}>
-            <Text style={styles.meta}>Product discounts</Text>
-            <Text style={styles.meta}>-{formatMoney(lineDiscountTotal)}</Text>
+            <Text style={styles.meta}>Taxable value</Text>
+            <Text style={styles.meta}>{formatMoney(bill.taxableSubtotal)}</Text>
           </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>
-              {order.coupon_code ? `Coupon ${order.coupon_code}` : 'Bill discount'}
-            </Text>
-            <Text style={styles.meta}>-{formatMoney(billDiscountAmount)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>Tax</Text>
-            <Text style={styles.meta}>{formatMoney(order.tax_total)}</Text>
-          </View>
+          {bill.deliveryFee > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Delivery</Text>
+              <Text style={styles.meta}>{formatMoney(bill.deliveryFee)}</Text>
+            </View>
+          ) : null}
+          {bill.taxTotal > 0 ? (
+            bill.isInterstate || bill.igst > 0 ? (
+              <View style={styles.totalRow}>
+                <Text style={styles.meta}>IGST</Text>
+                <Text style={styles.meta}>{formatMoney(bill.igst || bill.taxTotal)}</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.totalRow}>
+                  <Text style={styles.meta}>CGST</Text>
+                  <Text style={styles.meta}>{formatMoney(bill.cgst)}</Text>
+                </View>
+                <View style={styles.totalRow}>
+                  <Text style={styles.meta}>SGST</Text>
+                  <Text style={styles.meta}>{formatMoney(bill.sgst)}</Text>
+                </View>
+              </>
+            )
+          ) : (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>GST</Text>
+              <Text style={styles.meta}>{formatMoney(bill.taxTotal)}</Text>
+            </View>
+          )}
           <View style={styles.totalRow}>
             <Text style={styles.payableLabel}>{due ? 'Amount due' : 'Payable'}</Text>
             <Text style={styles.payableValue}>
-              {formatMoney(due ? pos.amount_due ?? order.total : order.total)}
+              {formatMoney(due ? pos.amount_due ?? order.total : bill.total)}
             </Text>
           </View>
-          <Text style={styles.currencyNote}>{order.currency || 'INR'}</Text>
+          <Text style={styles.currencyNote}>{bill.currency || 'INR'}</Text>
+          {businessId && invoiceVoucherId ? (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              <Button
+                label="View / Print / Share invoice"
+                fullWidth
+                onPress={() =>
+                  setDocActions({
+                    kind: 'sale',
+                    id: invoiceVoucherId,
+                    number: invoiceVoucherNumber,
+                    businessId,
+                    phone: invoicePhone || undefined,
+                    email: customer?.email?.trim() || undefined,
+                  })
+                }
+              />
+              {bill.booksVoucherNumber ? (
+                <Text style={styles.currencyNote}>Books · {bill.booksVoucherNumber}</Text>
+              ) : null}
+            </View>
+          ) : isOnlineOrder ? (
+            <Text style={[styles.meta, { marginTop: 10 }]}>
+              Tax invoice actions appear after this order is confirmed and posted to Books.
+            </Text>
+          ) : null}
         </View>
 
         {order.notes ? (
           <View style={styles.notesCard}>
             <Text style={styles.section}>Notes</Text>
             <Text style={styles.meta}>{order.notes}</Text>
-          </View>
-        ) : null}
-
-        {order.delivery_address && !order.customer_id ? (
-          <View style={styles.notesCard}>
-            <Text style={styles.section}>Delivery</Text>
-            <Text style={styles.meta}>{order.delivery_address}</Text>
           </View>
         ) : null}
 
@@ -1288,6 +1392,14 @@ const styles = StyleSheet.create({
   },
   addressLabel: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, textTransform: 'uppercase' },
   addressValue: { fontSize: 14, color: colors.foreground, lineHeight: 20, flexShrink: 1 },
+  deliveryPhoneRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  deliveryPhoneValue: { fontSize: 15, fontWeight: '700', color: colors.foreground, flex: 1 },
   payment: { fontSize: 14, fontWeight: '600', color: colors.foreground, marginTop: 4 },
   due: { color: colors.destructive },
   section: {

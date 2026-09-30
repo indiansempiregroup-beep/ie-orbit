@@ -61,7 +61,7 @@ const productTabs: Array<{
       'One white-label app for book and shop',
       'Unified customer profiles',
       'Cross-sell bookings and products',
-      'One 15-day trial, one workspace, UPI billing',
+      'One 45-day trial, one workspace, UPI billing',
     ],
   },
 ];
@@ -252,7 +252,7 @@ export function FeaturesPage() {
           </section>
         ) : null}
       </div>
-      <PublicCtaBand title="Try the white-label app for 15 days" />
+      <PublicCtaBand title="Try the white-label app for 45 days" />
     </>
   );
 }

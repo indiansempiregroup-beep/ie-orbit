@@ -159,6 +159,8 @@ class BusinessSerializer(serializers.ModelSerializer):
             "currency",
             "language",
             "gst_tax_number",
+            "billing_legal_name",
+            "billing_state_code",
             "registration_number",
             "status",
             "verification_status",
@@ -252,6 +254,10 @@ class BusinessProductSubscribeSerializer(serializers.Serializer):
     product_code = serializers.CharField(max_length=80)
     plan_code = serializers.CharField(max_length=80, required=False, allow_blank=True)
     set_active = serializers.BooleanField(default=True, required=False)
+    billing_interval = serializers.ChoiceField(
+        choices=["monthly", "yearly"],
+        required=False,
+    )
 
 
 class BusinessProductPlanChangeSerializer(serializers.Serializer):

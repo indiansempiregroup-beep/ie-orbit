@@ -1,0 +1,145 @@
+.auto-wizard .auto-hero {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 12%, white), var(--card));
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+}
+
+.auto-hero__eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.auto-hero h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.auto-best__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.auto-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 140px;
+  line-height: 1.45;
+}
+
+.auto-section-label {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+
+.auto-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.auto-chip {
+  max-width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.auto-chip:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+
+.auto-preview {
+  display: grid;
+  gap: 16px;
+}
+
+.auto-preview__step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.auto-preview__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.auto-preview__step em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 2px;
+}
+
+.auto-preview__step p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.auto-preview__note {
+  margin: 0;
+  font-size: 13px;
+}
+
+.auto-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.auto-actions--col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.auto-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.auto-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.auto-list li:last-child {
+  border-bottom: none;
+}
+
+.auto-list__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

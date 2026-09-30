@@ -9,12 +9,16 @@ import { Dialog } from '../../components/Dialog';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { useApiClient } from '../../hooks/useApiClient';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatDateTime } from '../../lib/datetime';
 import { ServiceMultiPicker } from './ServiceMultiPicker';
 import { bookingServiceLabel, buildBookingCreateInput } from './bookingHelpers';
 
 export function BookingsPage() {
   const snackbar = useSnackbar();
+  const client = useApiClient();
+  const workspace = useWorkspace();
   const [searchTerm, setSearchTerm] = useState('');
   const createBooking = useBookingCreation();
   const confirmBooking = useConfirmBooking();
@@ -33,8 +37,32 @@ export function BookingsPage() {
     start_at: new Date().toISOString(),
   });
   const [creationError, setCreationError] = useState<string | null>(null);
+  const [staffHints, setStaffHints] = useState<
+    Array<{ label?: string; discount_value?: string; discount_type?: string; message?: string }>
+  >([]);
   const offices = branchesQuery.data ?? [];
   const needsOfficePicker = offices.length > 1;
+
+  useEffect(() => {
+    const businessId = workspace.businessId;
+    const customerId = formState.customer_id;
+    if (!businessId || !customerId) {
+      setStaffHints([]);
+      return;
+    }
+    let cancelled = false;
+    void client.bookings
+      .eligibleOffers({ business_id: businessId, customer_id: customerId })
+      .then((res) => {
+        if (!cancelled) setStaffHints(res.data.staff_hints || []);
+      })
+      .catch(() => {
+        if (!cancelled) setStaffHints([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, formState.customer_id, workspace.businessId]);
 
   useEffect(() => {
     if (!offices.length) return;
@@ -324,6 +352,32 @@ export function BookingsPage() {
               <option key={customer.id} value={customer.id}>{customer.full_name ?? customer.id}</option>
             ))}
           </select>
+
+          {staffHints.length > 0 ? (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 12,
+                background: 'color-mix(in srgb, var(--primary) 10%, white)',
+                border: '1px solid color-mix(in srgb, var(--primary) 25%, var(--border))',
+              }}
+            >
+              <strong style={{ display: 'block', marginBottom: 6 }}>Automation offer</strong>
+              {staffHints.map((hint, index) => (
+                <div key={`${hint.label}-${index}`} style={{ fontSize: 14, lineHeight: 1.4 }}>
+                  {[
+                    hint.label,
+                    hint.discount_type === 'percent' && Number(hint.discount_value) > 0
+                      ? `${hint.discount_value}% off`
+                      : null,
+                    hint.message,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <ServiceMultiPicker
             services={servicesQuery.data ?? []}

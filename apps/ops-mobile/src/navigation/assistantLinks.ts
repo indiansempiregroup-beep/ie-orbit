@@ -11,10 +11,45 @@ export function messageEntityLinks(metadata?: { links?: AssistantEntityLink[] } 
   );
 }
 
+export function splitAssistantLinks(links: AssistantEntityLink[]) {
+  const prompts: AssistantEntityLink[] = [];
+  const records: AssistantEntityLink[] = [];
+  for (const link of links) {
+    if (String(link.kind || '').toLowerCase() === 'prompt') prompts.push(link);
+    else records.push(link);
+  }
+  return { prompts, records };
+}
+
+export type AssistantPromptSection = {
+  group: string;
+  section: string;
+  tools: AssistantEntityLink[];
+};
+
+export function groupPromptTools(prompts: AssistantEntityLink[]): AssistantPromptSection[] {
+  const order: string[] = [];
+  const map = new Map<string, AssistantPromptSection>();
+  for (const link of prompts) {
+    const group = String(link.group || 'Tools').trim() || 'Tools';
+    const section = String(link.section || 'General').trim() || 'General';
+    const key = `${group}\0${section}`;
+    let row = map.get(key);
+    if (!row) {
+      row = { group, section, tools: [] };
+      map.set(key, row);
+      order.push(key);
+    }
+    row.tools.push(link);
+  }
+  return order.map((key) => map.get(key)!);
+}
+
 /** Drop bullet lines when clickable record cards already show the same rows. */
 export function assistantMessageBody(content: string, links: AssistantEntityLink[]): string {
   const text = String(content || '').trim();
-  if (!text || links.length === 0) return text;
+  const records = links.filter((link) => String(link.kind || '').toLowerCase() !== 'prompt');
+  if (!text || records.length === 0) return text;
   const kept = text
     .split('\n')
     .map((line) => line.trimEnd())
@@ -29,9 +64,8 @@ export function previewQueryForLink(link: AssistantEntityLink): string {
     return String(link.select_text || link.label || '').trim();
   }
   const kind = String(link.kind || '').trim().toLowerCase();
-  // Orders/bookings/returns use human-readable numbers as the label; keep UUID for navigation.
-  const preferLabel = kind === 'order' || kind === 'booking' || kind === 'return';
-  const raw = preferLabel ? String(link.label || link.id || '') : String(link.id || '');
+  // Prefer human labels in the chat bubble; UUID stays on link.id for open/navigation.
+  const raw = String(link.label || link.id || '');
   const id = raw.trim().replace(/^Open\s+/i, '');
   return `preview ${kind} ${id}`.trim();
 }

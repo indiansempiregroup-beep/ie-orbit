@@ -57,7 +57,9 @@ export function bookingStartsInLabel(
   return { label: formatTime(startAt), tone: 'later' };
 }
 
-export function bookingDirectionsUrl(branch?: MobileBookingBranch | null): string | null {
+export function bookingDirectionsUrl(
+  branch?: Pick<MobileBookingBranch, 'latitude' | 'longitude' | 'formatted_address' | 'display_name'> | null,
+): string | null {
   if (!branch) return null;
   if (branch.latitude != null && branch.longitude != null) {
     return `https://www.google.com/maps/dir/?api=1&destination=${branch.latitude},${branch.longitude}`;

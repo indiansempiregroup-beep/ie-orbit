@@ -97,6 +97,7 @@ export type GoogleLoginRequest = {
   id_token: string;
   client: 'customer' | 'ops';
   remember_me?: boolean;
+  purpose?: 'login' | 'signup';
   tenant_slug?: string;
   business_code?: string;
 };
@@ -364,6 +365,7 @@ export type BusinessProductSubscribeInput = {
   product_code: string;
   plan_code?: string;
   set_active?: boolean;
+  billing_interval?: 'monthly' | 'yearly';
 };
 
 export type BusinessProductPlanChangeInput = {
@@ -432,6 +434,7 @@ export type BillingPlanCatalogItem = {
   features?: string[];
   amount_paise?: number | null;
   yearly_amount_paise?: number | null;
+  yearly_months_charged?: number | null;
   addon_staff_price_paise?: number;
   addon_office_price_paise?: number;
   addon_pets_price_paise?: number;
@@ -1068,6 +1071,8 @@ export type MobileBootstrapResponse = {
     upi_vpa?: string;
     payment_qr_url?: string;
     cod_enabled?: boolean;
+    razorpay?: { can_accept_payments?: boolean };
+    cashfree?: { can_accept_payments?: boolean };
   };
   branding: MobileBootstrapBranding;
   enabled_products: string[];
@@ -1464,12 +1469,45 @@ export type BillingOrder = {
   claim_intent?: string;
   resolved_at?: string | null;
   note?: string;
+  refund_status?: string;
+  refund_request?: {
+    amount_paise?: number;
+    reason?: string;
+    requested_at?: string;
+    requested_by?: string;
+    suggested_amount_paise?: number;
+    withdrawn_at?: string;
+  } | null;
+  refunded_paise?: number;
+  refunds?: Array<{
+    amount_paise?: number;
+    method?: string;
+    reference?: string;
+    note?: string;
+    recorded_at?: string;
+    admin_id?: string;
+    razorpay_refund_id?: string | null;
+  }>;
+  suggested_refund_paise?: number | null;
+  available_refund_paise?: number | null;
+  wallet_balance_paise?: number | null;
+  refund_kind?: string;
+  is_wallet_top_up?: boolean;
+  tax_invoice_id?: string | null;
+  tax_invoice_number?: string | null;
+  credit_notes?: Array<{
+    id: string;
+    invoice_number: string;
+    amount_paise?: number;
+    issued_at?: string | null;
+  }>;
   line_items?: Array<{
     product_code: string;
     plan_code: string;
     extra_staff?: number;
     extra_offices?: number;
     pets_pack_enabled?: boolean;
+    billing_interval?: string;
     amount_paise?: number;
     intent?: string;
   }>;
@@ -1482,6 +1520,72 @@ export type PlatformPaymentRow = BillingOrder & {
   refunded_paise?: number;
   invoice_id?: string | null;
   invoice_number?: string | null;
+};
+
+export type PlatformTaxInvoice = {
+  id: string;
+  invoice_number: string;
+  document_type: 'tax_invoice' | 'credit_note' | string;
+  amount_paise: number;
+  taxable_paise: number;
+  cgst_paise: number;
+  sgst_paise: number;
+  igst_paise: number;
+  gst_rate_percent: number;
+  is_interstate: boolean;
+  place_of_supply?: string;
+  sac_code?: string;
+  currency?: string;
+  status?: string;
+  issued_at?: string | null;
+  created_at?: string;
+  payment_ref?: string;
+  notes?: string;
+  gst_inclusive?: boolean;
+  original_invoice_number?: string | null;
+  buyer_snapshot?: Record<string, unknown>;
+  seller_snapshot?: Record<string, unknown>;
+};
+
+export type PlatformBillingGstSettings = {
+  legal_name: string;
+  gstin: string;
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state_code: string;
+  postal_code: string;
+  sac_code: string;
+  gst_percent: number;
+  invoice_prefix: string;
+  credit_note_prefix: string;
+};
+
+export type BillingAccountStatement = {
+  tenant_id: string;
+  business_id?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+  /** Rupee amounts as decimal strings, e.g. "249.00". */
+  opening_balance_inr: string;
+  closing_balance_inr: string;
+  currency: string;
+  gst_inclusive: boolean;
+  lines: Array<{
+    date: string;
+    entry_type: string;
+    document_number: string;
+    taxable_inr: string;
+    cgst_inr: string;
+    sgst_inr: string;
+    igst_inr: string;
+    debit_inr: string;
+    credit_inr: string;
+    balance_after_inr: string;
+    payment_ref?: string;
+    notes?: string;
+  }>;
+  generated_at: string;
 };
 
 export type PlatformPlanPackage = {
@@ -1501,6 +1605,7 @@ export type PlatformPlanPackage = {
   features: string[];
   amount_paise: number;
   yearly_amount_paise?: number | null;
+  yearly_months_charged?: number;
   is_active: boolean;
   is_public: boolean;
   sort_order: number;
@@ -1635,6 +1740,7 @@ export type PlatformPlanPackageUpsertInput = {
   features?: string[];
   amount_paise?: number;
   yearly_amount_paise?: number | null;
+  yearly_months_charged?: number;
   is_active?: boolean;
   is_public?: boolean;
   sort_order?: number;
@@ -2211,6 +2317,7 @@ export type ShopProduct = {
   stock_on_hand: string | number;
   low_stock_threshold?: string | number;
   pack_size?: string;
+  unit?: string;
   image_url?: string;
   category?: ShopProductCategory | string;
   category_label?: string;
@@ -2244,6 +2351,7 @@ export type ShopProductWriteInput = {
   godown_id?: string | null;
   low_stock_threshold?: string | number;
   pack_size?: string;
+  unit?: string;
   image_url?: string;
   category?: ShopProductCategory | string;
   metadata?: Record<string, unknown>;
@@ -2328,9 +2436,40 @@ export type ShopBarcodeEnrichment = {
 };
 
 export type ShopProductCategoryItem = {
+  id?: string;
   slug: string;
   label: string;
   is_builtin: boolean;
+  value?: string;
+};
+
+export type ShopMasterKind =
+  | 'category'
+  | 'brand'
+  | 'unit'
+  | 'expense_category'
+  | 'income_category'
+  | 'tax_rate';
+
+export type ShopMasterRecord = {
+  id: string;
+  kind: ShopMasterKind | string;
+  slug: string;
+  label: string;
+  value?: string;
+  is_builtin: boolean;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type ShopCustomerFilterOption = {
+  slug: string;
+  label: string;
+};
+
+export type ShopCustomerFilters = {
+  categories: ShopCustomerFilterOption[];
+  brands: ShopCustomerFilterOption[];
 };
 
 export type ShopSmartLookupLedgerEntry = {
@@ -2446,7 +2585,10 @@ export type ShopOrder = {
   business: string;
   customer_id?: string | null;
   customer_name?: string;
+  /** Account / profile phone for the customer. */
   customer_phone?: string;
+  /** Delivery-address phone for this order (Amazon-style contact). */
+  delivery_phone?: string;
   order_number: string;
   status: string;
   fulfillment_mode: string;
@@ -2454,6 +2596,17 @@ export type ShopOrder = {
   subtotal: string | number;
   discount_total?: string | number;
   tax_total: string | number;
+  /** Taxable value after discounts (prefer books voucher when posted). */
+  taxable_value?: string | number;
+  cgst_total?: string | number;
+  sgst_total?: string | number;
+  igst_total?: string | number;
+  is_interstate?: boolean;
+  place_of_supply?: string;
+  customer_gstin?: string;
+  seller_gstin?: string;
+  /** B2B when customer GSTIN present, else B2C. */
+  invoice_type?: 'B2B' | 'B2C' | string;
   total: string | number;
   notes?: string;
   delivery_address?: string;
@@ -2471,6 +2624,8 @@ export type ShopOrder = {
   coupon_code?: string;
   coupon_name?: string;
   coupon_discount?: string | number;
+  books_voucher_id?: string | null;
+  books_voucher_number?: string | null;
   lines?: ShopOrderLine[];
   created_at?: string;
   updated_at?: string;
@@ -2629,9 +2784,12 @@ export type ShopOrderCreateInput = {
   fulfillment_mode?: string;
   notes?: string;
   delivery_address?: string;
+  delivery_address_line2?: string;
   delivery_city?: string;
   delivery_state?: string;
   delivery_postal_code?: string;
+  /** Delivery contact phone for this order (from selected address). */
+  delivery_phone?: string;
   delivery_latitude?: string | number | null;
   delivery_longitude?: string | number | null;
   delivery_method?: 'standard' | 'instant' | string;
@@ -2935,6 +3093,8 @@ export type ShopQuotation = {
   id: string;
   business: string;
   customer?: string | null;
+  customer_phone?: string;
+  customer_email?: string;
   quotation_number: string;
   status: string;
   currency?: string;
@@ -3018,6 +3178,9 @@ export type ShopCoupon = {
   max_redemptions?: number | null;
   max_redemptions_per_customer?: number | null;
   first_order_only?: boolean;
+  applies_to_online?: boolean;
+  applies_to_pos?: boolean;
+  eligibility?: Record<string, unknown>;
   redemption_count?: number;
   is_active?: boolean;
   created_at?: string;
@@ -3038,6 +3201,9 @@ export type ShopCouponWriteInput = {
   max_redemptions?: number | null;
   max_redemptions_per_customer?: number | null;
   first_order_only?: boolean;
+  applies_to_online?: boolean;
+  applies_to_pos?: boolean;
+  eligibility?: Record<string, unknown>;
   is_active?: boolean;
 };
 
@@ -3054,7 +3220,7 @@ export type ShopCouponPreview = {
 };
 
 export type ShopCouponOffer = {
-  code: string;
+  code?: string | null;
   name: string;
   description?: string;
   discount_type: string;
@@ -3067,6 +3233,11 @@ export type ShopCouponOffer = {
   remaining_to_unlock: string;
   first_order_only?: boolean;
   ends_at?: string | null;
+  source?: 'coupon' | 'automation' | string;
+  label?: string | null;
+  workflow_id?: string | null;
+  applies_to_pos?: boolean;
+  applies_to_online?: boolean;
 };
 
 export type ShopDashboardAd = {
@@ -3176,6 +3347,8 @@ export type ShopBooksVoucher = {
   status: string;
   customer?: string | null;
   customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
   supplier?: string | null;
   supplier_name?: string;
   cash_account?: string | null;
@@ -3200,6 +3373,55 @@ export type ShopBooksVoucher = {
   metadata?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
+};
+
+export type ShopDocumentKind = 'sale' | 'quotation' | 'delivery_challan' | 'credit_note' | 'debit_note';
+
+export type ShopDocumentPayload = {
+  kind: ShopDocumentKind | string;
+  id: string;
+  title: string;
+  short_title?: string;
+  number_label?: string;
+  number: string;
+  date?: string;
+  status?: string;
+  currency?: string;
+  seller?: Record<string, string | null | undefined>;
+  buyer?: Record<string, string | null | undefined>;
+  lines?: Array<Record<string, string | number>>;
+  subtotal?: string | number;
+  discount_total?: string | number;
+  tax_total?: string | number;
+  cgst_total?: string | number;
+  sgst_total?: string | number;
+  igst_total?: string | number;
+  total?: string | number;
+  amount_paid?: string | number;
+  amount_due?: string | number;
+  notes?: string;
+  irn?: string;
+  upi_pay_url?: string;
+  payment_qr_url?: string;
+  public_url?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  customer_id?: string | null;
+};
+
+export type ShopDocumentShareLinkResult = {
+  token: string;
+  public_url: string;
+  expires_at?: string | null;
+  message?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  amount_due?: string | number;
+};
+
+export type ShopDocumentSendResult = {
+  public_url: string;
+  channels: Record<string, { status?: string; detail?: string; message?: string; phone?: string; to?: string }>;
 };
 
 export type ShopBooksVoucherCreateInput = {
@@ -3243,6 +3465,8 @@ export type ShopPartyStatement = {
   party_kind: 'customer' | 'supplier' | string;
   party_id: string;
   party_name: string;
+  date_from?: string | null;
+  date_to?: string | null;
   opening_balance: string;
   closing_balance: string;
   entries: ShopPartyLedgerEntry[];
@@ -3375,6 +3599,8 @@ export type ShopBooksDocument = {
   status: string;
   customer?: string | null;
   customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
   supplier?: string | null;
   supplier_name?: string;
   currency?: string;
@@ -3640,6 +3866,8 @@ export type CustomerAddress = {
   state?: string | null;
   country?: string | null;
   postal_code?: string | null;
+  /** Delivery contact phone for this address (Amazon-style). */
+  phone_number?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
   is_default?: boolean;
@@ -3737,6 +3965,7 @@ export type CustomerCreateInput = {
     state?: string;
     country?: string;
     postal_code?: string;
+    phone_number?: string;
     latitude?: number | string | null;
     longitude?: number | string | null;
     is_default?: boolean;
@@ -4012,9 +4241,11 @@ export type AssistantEntityLink = {
   label: string;
   subtitle?: string;
   order_id?: string;
-  action?: 'preview' | 'open' | 'select' | string;
+  action?: 'preview' | 'open' | 'select' | 'send' | 'compose' | string;
   select_text?: string;
   badge?: string;
+  section?: string;
+  group?: string;
 };
 
 export type AssistantUsage = {
@@ -4134,6 +4365,64 @@ export type AssistantActionResult = {
   proposed_action: AssistantProposedAction;
   assistant_message: AssistantMessage;
   usage: AssistantUsage;
+};
+
+export type WorkflowDefinition = {
+  id: string;
+  business: string;
+  name: string;
+  description?: string;
+  product_code: string;
+  status: 'draft' | 'active' | 'paused' | string;
+  trigger: Record<string, unknown>;
+  conditions: Array<Record<string, unknown>>;
+  actions: Array<Record<string, unknown>>;
+  created_via?: string;
+  source_prompt?: string;
+  metadata?: Record<string, unknown>;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type WorkflowAccess = {
+  entitled: boolean;
+  product_code: string;
+  templates: Array<{
+    key: string;
+    product_code: string;
+    name: string;
+    description?: string;
+    trigger: Record<string, unknown>;
+    conditions: Array<Record<string, unknown>>;
+    actions: Array<Record<string, unknown>>;
+  }>;
+};
+
+export type WorkflowDraftResult = {
+  draft: {
+    name: string;
+    description?: string;
+    product_code: string;
+    trigger: Record<string, unknown>;
+    conditions: Array<Record<string, unknown>>;
+    actions: Array<Record<string, unknown>>;
+  };
+  explanation?: {
+    title?: string;
+    summary?: string;
+    how_it_works?: string;
+    product_note?: string;
+    steps?: Array<{ title: string; body: string }>;
+  };
+  suggestions?: string[];
+  usage: {
+    model: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  definition: WorkflowDefinition | null;
 };
 
 export type Notification = {
@@ -4372,10 +4661,24 @@ class ApiClient {
       hint?: string;
       use_smart_lookup?: boolean;
     }) => this.request<ShopBarcodeEnrichment>('/shop/barcodes/enrich', { method: 'POST', body }),
-    listProductCategories: () =>
-      this.request<{ items: ShopProductCategoryItem[] }>('/shop/categories', { method: 'GET' }),
-    ensureProductCategory: (body: { label: string; slug?: string }) =>
+    listProductCategories: (query?: { business_id?: string }) =>
+      this.request<{ items: ShopProductCategoryItem[] }>('/shop/categories', { method: 'GET', query }),
+    ensureProductCategory: (body: { label: string; slug?: string; business_id?: string }) =>
       this.request<ShopProductCategoryItem>('/shop/categories', { method: 'POST', body }),
+    listMasterRecords: (kind: ShopMasterKind | string, query: { business_id: string; include_inactive?: boolean }) =>
+      this.request<{ items: ShopMasterRecord[]; kind: string }>(`/shop/master/${kind}`, {
+        method: 'GET',
+        query,
+      }),
+    createMasterRecord: (
+      kind: ShopMasterKind | string,
+      body: { business_id: string; label: string; slug?: string; value?: string },
+    ) => this.request<ShopMasterRecord>(`/shop/master/${kind}`, { method: 'POST', body }),
+    patchMasterRecord: (
+      kind: ShopMasterKind | string,
+      recordId: string,
+      body: { label?: string; slug?: string; value?: string; is_active?: boolean; sort_order?: number },
+    ) => this.request<ShopMasterRecord>(`/shop/master/${kind}/${recordId}`, { method: 'PATCH', body }),
     getSmartLookup: (query: { business_id: string }) =>
       this.request<ShopSmartLookupDashboard>('/shop/smart-lookup', { method: 'GET', query }),
     updateSmartLookup: (body: { business_id: string; enabled?: boolean }) =>
@@ -4529,6 +4832,18 @@ class ApiClient {
       this.request<ShopCoupon>(`/shop/coupons/${couponId}`, { method: 'PATCH', body }),
     deleteCoupon: (couponId: string) =>
       this.request<{ deleted: boolean }>(`/shop/coupons/${couponId}`, { method: 'DELETE' }),
+    eligibleOffers: (body: {
+      business_id: string;
+      customer_id?: string;
+      pet_id?: string;
+      fulfillment_mode?: string;
+      lines?: Array<Record<string, unknown>>;
+    }) =>
+      this.request<{
+        coupons: ShopCouponOffer[];
+        automations: Array<Record<string, unknown>>;
+        offers: Array<Record<string, unknown>>;
+      }>('/shop/checkout/eligible-offers', { method: 'POST', body }),
     matchDeliveryZone: (body: { business_id: string; city?: string; postal_code?: string }) =>
       this.request<{ matched: boolean; zone: ShopDeliveryZone | null }>('/shop/delivery-zones/match', {
         method: 'POST',
@@ -4596,7 +4911,12 @@ class ApiClient {
       this.request<ShopBooksDocument>('/shop/books/documents', { method: 'POST', body }),
     convertDocument: (
       documentId: string,
-      body?: { amount_paid?: string | number; cash_account_id?: string | null },
+      body?: {
+        amount_paid?: string | number;
+        cash_account_id?: string | null;
+        /** Delivery challan: `dispatch` (default) or `to_invoice`. */
+        action?: 'dispatch' | 'to_invoice' | 'invoice' | 'convert';
+      },
     ) =>
       this.request<ShopBooksVoucher | ShopBooksDocument>(`/shop/books/documents/${documentId}/convert`, {
         method: 'POST',
@@ -4694,8 +5014,13 @@ class ApiClient {
       this.request<ShopBooksVoucher>(`/shop/books/vouchers/${voucherId}`, { method: 'GET' }),
     voidVoucher: (voucherId: string) =>
       this.request<ShopBooksVoucher>(`/shop/books/vouchers/${voucherId}/void`, { method: 'POST' }),
-    partyStatement: (query: { business_id: string; kind: 'customer' | 'supplier'; id: string }) =>
-      this.request<ShopPartyStatement>('/shop/books/party-statement', { method: 'GET', query }),
+    partyStatement: (query: {
+      business_id: string;
+      kind: 'customer' | 'supplier';
+      id: string;
+      date_from?: string;
+      date_to?: string;
+    }) => this.request<ShopPartyStatement>('/shop/books/party-statement', { method: 'GET', query }),
     booksReport: (
       slug: ShopBooksReportSlug | string,
       query: {
@@ -4732,6 +5057,39 @@ class ApiClient {
       this.request<ShopEWayBill[]>('/shop/books/eway', { method: 'GET', query }),
     cancelEWay: (ewayId: string, body: { reason: string }) =>
       this.request<ShopEWayBill>(`/shop/books/eway/${ewayId}/cancel`, { method: 'POST', body }),
+    getShopDocument: (
+      kind: ShopDocumentKind | string,
+      documentId: string,
+      query?: { business_id?: string; format?: 'json' | 'html'; layout?: 'a4' | 'thermal' },
+    ) =>
+      this.request<ShopDocumentPayload>(`/shop/docs/${kind}/${documentId}`, {
+        method: 'GET',
+        query,
+      }),
+    createShopDocumentShareLink: (
+      kind: ShopDocumentKind | string,
+      documentId: string,
+      body?: { business_id?: string; expires_days?: number },
+    ) =>
+      this.request<ShopDocumentShareLinkResult>(`/shop/docs/${kind}/${documentId}/share-link`, {
+        method: 'POST',
+        body: body ?? {},
+      }),
+    sendShopDocument: (
+      kind: ShopDocumentKind | string,
+      documentId: string,
+      body: {
+        business_id?: string;
+        channels: Array<'email' | 'whatsapp' | 'sms' | string>;
+        to_phone?: string;
+        to_email?: string;
+        remind_payment?: boolean;
+      },
+    ) =>
+      this.request<ShopDocumentSendResult>(`/shop/docs/${kind}/${documentId}/send`, {
+        method: 'POST',
+        body,
+      }),
   };
 
   whatsappNotifications = {
@@ -4767,11 +5125,27 @@ class ApiClient {
       this.request<WhatsAppActivityRow[]>('/notifications/whatsapp/activity', { method: 'GET', query }),
   };
 
-  bookings = {
+    bookings = {
     list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<Booking[]>('/bookings', { method: 'GET', query }),
     create: (body: BookingCreateInput) => this.request<Booking>('/bookings', { method: 'POST', body }),
     get: (bookingId: string) => this.request<Booking>(`/bookings/${bookingId}`, { method: 'GET' }),
     patch: (bookingId: string, body: BookingPatchInput) => this.request<Booking>(`/bookings/${bookingId}`, { method: 'PATCH', body }),
+    eligibleOffers: (body: {
+      business_id: string;
+      customer_id?: string;
+    }) =>
+      this.request<{
+        staff_hints: Array<{
+          label?: string;
+          discount_type?: string;
+          discount_value?: string;
+          message?: string;
+          workflow_name?: string;
+          source?: string;
+        }>;
+        offers: Array<Record<string, unknown>>;
+        entitled?: boolean;
+      }>('/bookings/eligible-offers', { method: 'POST', body }),
     confirm: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/confirm`, { method: 'POST', body }),
     cancel: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/cancel`, { method: 'POST', body }),
     checkIn: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/check-in`, { method: 'POST', body }),
@@ -4872,6 +5246,11 @@ class ApiClient {
       this.request<Business>(`/businesses/${businessId}/product-subscriptions`, { method: 'POST', body }),
     unsubscribeProduct: (businessId: string, productCode: string) =>
       this.request<Business>(`/businesses/${businessId}/product-subscriptions/${productCode}`, { method: 'DELETE' }),
+    scheduleCancelProduct: (businessId: string, productCode: string) =>
+      this.request<Business & { billing?: BusinessBillingSnapshot }>(
+        `/businesses/${businessId}/product-subscriptions/${productCode}/cancel`,
+        { method: 'POST' },
+      ),
     changeProductPlan: (businessId: string, productCode: string, body: BusinessProductPlanChangeInput) =>
       this.request<Business & { billing?: BusinessBillingSnapshot }>(
         `/businesses/${businessId}/product-subscriptions/${productCode}/plan`,
@@ -5007,6 +5386,64 @@ class ApiClient {
       }),
   };
 
+  workflow = {
+    access: (query?: { business_id?: string }) =>
+      this.request<WorkflowAccess>('/workflow/access', { method: 'GET', query }),
+    listDefinitions: (query?: { business_id?: string; product_code?: string }) =>
+      this.request<{ definitions: WorkflowDefinition[] }>('/workflow/definitions', {
+        method: 'GET',
+        query,
+      }),
+    createDefinition: (body: Record<string, unknown>) =>
+      this.request<WorkflowDefinition>('/workflow/definitions', { method: 'POST', body }),
+    getDefinition: (definitionId: string, query?: { business_id?: string }) =>
+      this.request<WorkflowDefinition>(`/workflow/definitions/${definitionId}`, {
+        method: 'GET',
+        query,
+      }),
+    updateDefinition: (definitionId: string, body: Record<string, unknown>) =>
+      this.request<WorkflowDefinition>(`/workflow/definitions/${definitionId}`, {
+        method: 'PATCH',
+        body,
+      }),
+    deleteDefinition: (definitionId: string, query?: { business_id?: string }) =>
+      this.request<{ ok: boolean }>(`/workflow/definitions/${definitionId}`, {
+        method: 'DELETE',
+        query,
+      }),
+    activate: (definitionId: string, body?: { business_id?: string }) =>
+      this.request<WorkflowDefinition>(`/workflow/definitions/${definitionId}/activate`, {
+        method: 'POST',
+        body: body ?? {},
+      }),
+    pause: (definitionId: string, body?: { business_id?: string }) =>
+      this.request<WorkflowDefinition>(`/workflow/definitions/${definitionId}/pause`, {
+        method: 'POST',
+        body: body ?? {},
+      }),
+    draftFromPrompt: (body: {
+      prompt: string;
+      product_code?: string;
+      business_id?: string;
+      prior_draft?: Record<string, unknown>;
+      conversation?: Array<{ role: string; content: string }>;
+      save_draft?: boolean;
+    }) => this.request<WorkflowDraftResult>('/workflow/draft-from-prompt', { method: 'POST', body }),
+    activateDraft: (body: Record<string, unknown>) =>
+      this.request<WorkflowDefinition>('/workflow/activate-draft', { method: 'POST', body }),
+    preview: (body: {
+      definition_id: string;
+      customer_id?: string;
+      pet_id?: string;
+      business_id?: string;
+    }) => this.request<Record<string, unknown>>('/workflow/preview', { method: 'POST', body }),
+    listRuns: (query?: { business_id?: string }) =>
+      this.request<{ runs: Array<Record<string, unknown>> }>('/workflow/runs', {
+        method: 'GET',
+        query,
+      }),
+  };
+
   analytics = {
     summary: (query?: Record<string, string | number | boolean | undefined | null>) =>
       this.request<AnalyticsSummary>('/analytics/summary', { method: 'GET', query }),
@@ -5095,8 +5532,41 @@ class ApiClient {
       this.request<{ payments: PlatformPaymentRow[] }>(`/platform/tenants/${tenantId}/payments`, { method: 'GET' }),
     upiClaims: (query?: { limit?: number; scope?: 'pending' | 'history' | 'all' }) =>
       this.request<{ claims: PlatformPaymentRow[] }>('/platform/upi-claims', { method: 'GET', query }),
-    refundPayment: (tenantId: string, paymentId: string, body: { reason: string; amount_paise?: number }) =>
+    refundRequests: (query?: { limit?: number; scope?: 'pending' | 'history' | 'all' }) =>
+      this.request<{ refunds: PlatformPaymentRow[] }>('/platform/refund-requests', { method: 'GET', query }),
+    refundPayment: (
+      tenantId: string,
+      paymentId: string,
+      body: {
+        reason: string;
+        amount_paise?: number;
+        method?: 'razorpay' | 'upi_manual' | 'bank';
+        reference?: string;
+        end_access_now?: boolean;
+        resolve?: boolean;
+      },
+    ) =>
       this.request<Record<string, unknown>>(`/platform/tenants/${tenantId}/payments/${paymentId}/refund`, {
+        method: 'POST',
+        body,
+      }),
+    rejectRefundRequest: (tenantId: string, paymentId: string, body: { reason: string }) =>
+      this.request<PlatformPaymentRow>(`/platform/tenants/${tenantId}/payments/${paymentId}/refund-reject`, {
+        method: 'POST',
+        body,
+      }),
+    resolveRefundRequest: (
+      tenantId: string,
+      paymentId: string,
+      body: {
+        reason: string;
+        amount_paise?: number;
+        method?: 'razorpay' | 'upi_manual' | 'bank';
+        reference?: string;
+        end_access_now?: boolean;
+      },
+    ) =>
+      this.request<PlatformPaymentRow>(`/platform/tenants/${tenantId}/payments/${paymentId}/refund-resolve`, {
         method: 'POST',
         body,
       }),
@@ -5312,6 +5782,28 @@ class ApiClient {
     }) => this.request<PlatformSmartLookupSettings>('/platform/smart-lookup-settings', { method: 'PUT', body }),
     assistantSettings: () =>
       this.request<PlatformAssistantSettings>('/platform/assistant-settings', { method: 'GET' }),
+    billingGstSettings: () =>
+      this.request<PlatformBillingGstSettings>('/platform/billing-gst-settings', { method: 'GET' }),
+    updateBillingGstSettings: (body: Partial<PlatformBillingGstSettings>) =>
+      this.request<PlatformBillingGstSettings>('/platform/billing-gst-settings', { method: 'PUT', body }),
+    gstr1Outward: (query?: { date_from?: string; date_to?: string; format?: 'json' | 'csv' }) =>
+      this.request<{ invoices: PlatformTaxInvoice[] } | Blob>('/platform/gstr1-outward', { method: 'GET', query }),
+    tenantTaxInvoices: (
+      tenantId: string,
+      query?: { business_id?: string; date_from?: string; date_to?: string; format?: 'json' | 'csv' },
+    ) =>
+      this.request<{ invoices: PlatformTaxInvoice[] }>(`/platform/tenants/${tenantId}/tax-invoices`, {
+        method: 'GET',
+        query,
+      }),
+    tenantAccountStatement: (
+      tenantId: string,
+      query?: { business_id?: string; date_from?: string; date_to?: string; format?: 'json' | 'csv' },
+    ) =>
+      this.request<BillingAccountStatement>(`/platform/tenants/${tenantId}/account-statement`, {
+        method: 'GET',
+        query,
+      }),
     updateAssistantSettings: (body: {
       enabled: boolean;
       message_price_paise: number;
@@ -5510,6 +6002,29 @@ class ApiClient {
       this.request<BillingReconciliationResult>('/billing/reconciliation/run', { method: 'POST', body }),
     checkout: (body: BillingCheckoutInput) => this.request<BillingCheckoutSession>('/billing/checkout', { method: 'POST', body }),
     orders: () => this.request<{ orders: BillingOrder[] }>('/billing/orders', { method: 'GET' }),
+    taxInvoices: (query?: {
+      business_id?: string;
+      date_from?: string;
+      date_to?: string;
+      document_type?: string;
+      format?: 'json' | 'csv';
+    }) => this.request<{ invoices: PlatformTaxInvoice[] }>('/billing/tax-invoices', { method: 'GET', query }),
+    taxInvoicePdfUrl: (invoiceId: string) => `/api/v1/billing/tax-invoices/${invoiceId}/pdf`,
+    accountStatement: (query?: {
+      business_id?: string;
+      date_from?: string;
+      date_to?: string;
+      format?: 'json' | 'csv';
+    }) => this.request<BillingAccountStatement>('/billing/account-statement', { method: 'GET', query }),
+    requestOrderRefund: (
+      sessionId: string,
+      body: { reason: string; amount_paise?: number; business_id?: string },
+    ) => this.request<BillingOrder>(`/billing/orders/${sessionId}/refund-request`, { method: 'POST', body }),
+    withdrawOrderRefund: (sessionId: string, body?: { business_id?: string }) =>
+      this.request<BillingOrder>(`/billing/orders/${sessionId}/refund-request/withdraw`, {
+        method: 'POST',
+        body: body ?? {},
+      }),
     createUpiCheckout: (body: {
       product_code?: string;
       plan_code?: string;
@@ -5518,12 +6033,14 @@ class ApiClient {
       extra_staff?: number;
       extra_offices?: number;
       pets_pack_enabled?: boolean;
+      billing_interval?: 'monthly' | 'yearly';
       items?: Array<{
         product_code: string;
         plan_code: string;
         extra_staff?: number;
         extra_offices?: number;
         pets_pack_enabled?: boolean;
+        billing_interval?: 'monthly' | 'yearly';
       }>;
     }) =>
       this.request<{
@@ -5544,6 +6061,7 @@ class ApiClient {
           extra_staff?: number;
           extra_offices?: number;
           pets_pack_enabled?: boolean;
+          billing_interval?: string;
           amount_paise?: number;
           intent?: string;
         }>;
@@ -5703,11 +6221,14 @@ class ApiClient {
       this.request<MobileReferralSnapshot>('/mobile/shop/referral', { method: 'GET', query }),
     applyReferral: (body: { tenant_slug: string; business_code: string; referral_code: string }) =>
       this.request<MobileReferralSnapshot>('/mobile/shop/referral/apply', { method: 'POST', body }),
+    listShopFilters: (query: { tenant_slug: string; business_code: string }) =>
+      this.request<ShopCustomerFilters>('/mobile/shop/filters', { method: 'GET', query, auth: false }),
     listShopProducts: (query: {
       tenant_slug: string;
       business_code: string;
       search?: string;
       category?: string;
+      brand?: string;
     }) => this.request<ShopProduct[]>('/mobile/shop/products', { method: 'GET', query, auth: false }),
     getShopProduct: (productId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopProduct>(`/mobile/shop/products/${productId}`, { method: 'GET', query }),
@@ -5754,6 +6275,7 @@ class ApiClient {
       delivery_city?: string;
       delivery_state?: string;
       delivery_postal_code?: string;
+      delivery_phone?: string;
       delivery_latitude?: string | number | null;
       delivery_longitude?: string | number | null;
       delivery_method?: 'standard' | 'instant';
@@ -5761,6 +6283,8 @@ class ApiClient {
       displayed_delivery_fee?: string | number | null;
       payment_method?: string;
       coupon_code?: string;
+      bill_discount_type?: 'percent' | 'amount' | '';
+      bill_discount_value?: string | number;
       points_to_redeem?: number;
       whatsapp_opt_in?: boolean;
       lines: Array<{ product_id: string; quantity?: string | number; barcode_scanned?: string }>;
@@ -5795,6 +6319,41 @@ class ApiClient {
       orderId: string,
       body: { tenant_slug: string; business_code: string; upi_utr: string; payment_proof_url?: string },
     ) => this.request<ShopOrder>(`/mobile/shop/orders/${orderId}/claim-payment`, { method: 'POST', body }),
+    createShopRazorpayCheckout: (
+      orderId: string,
+      body: { tenant_slug: string; business_code: string },
+    ) =>
+      this.request<MerchantRazorpayCheckout>(`/mobile/shop/orders/${orderId}/razorpay-checkout`, {
+        method: 'POST',
+        body,
+      }),
+    verifyShopRazorpayPayment: (
+      orderId: string,
+      body: {
+        tenant_slug: string;
+        business_code: string;
+        razorpay_payment_id: string;
+        razorpay_order_id: string;
+        razorpay_signature: string;
+      },
+    ) => this.request<ShopOrder>(`/mobile/shop/orders/${orderId}/razorpay-verify`, { method: 'POST', body }),
+    createShopCashfreeCheckout: (
+      orderId: string,
+      body: { tenant_slug: string; business_code: string },
+    ) =>
+      this.request<MerchantCashfreeCheckout>(`/mobile/shop/orders/${orderId}/cashfree-checkout`, {
+        method: 'POST',
+        body,
+      }),
+    verifyShopCashfreePayment: (
+      orderId: string,
+      body: {
+        tenant_slug: string;
+        business_code: string;
+        cashfree_order_id: string;
+        cashfree_payment_id?: string;
+      },
+    ) => this.request<ShopOrder>(`/mobile/shop/orders/${orderId}/cashfree-verify`, { method: 'POST', body }),
     matchDeliveryZone: (query: {
       tenant_slug: string;
       business_code: string;
@@ -5836,6 +6395,8 @@ class ApiClient {
       city?: string;
       state?: string;
       postal_code?: string;
+      phone?: string;
+      delivery_phone?: string;
       subtotal: string | number;
       lines?: Array<{ product_id: string; quantity: string | number }>;
     }) => this.request<ShopDeliveryQuote>('/mobile/shop/delivery/quote', { method: 'POST', body }),

@@ -35,7 +35,9 @@ class DocumentsService:
         business: Business,
         doc_type: str | None = None,
     ):
-        qs = ShopBooksDocument.objects.filter(tenant=tenant, business=business)
+        qs = ShopBooksDocument.objects.filter(tenant=tenant, business=business).select_related(
+            "customer", "supplier"
+        )
         if doc_type:
             qs = qs.filter(doc_type=doc_type)
         return qs
@@ -134,24 +136,8 @@ class DocumentsService:
             line_items=serialized,
         )
 
-    @transaction.atomic
-    def convert_document(
-        self,
-        *,
-        tenant: Tenant,
-        business: Business,
-        document: ShopBooksDocument,
-        cash_account_id=None,
-        amount_paid: Any = 0,
-    ) -> ShopBooksVoucher | ShopBooksDocument:
-        if document.status == BooksDocumentStatus.CONVERTED:
-            raise ValidationError({"status": "Document already converted."})
-        if document.status == BooksDocumentStatus.DISPATCHED:
-            raise ValidationError({"status": "Delivery challan already dispatched."})
-        if document.status == BooksDocumentStatus.CANCELLED:
-            raise ValidationError({"status": "Cancelled documents cannot be converted."})
-
-        lines = [
+    def _document_lines(self, document: ShopBooksDocument) -> list[dict[str, Any]]:
+        return [
             {
                 "product_id": row.get("product_id"),
                 "name": row.get("name"),
@@ -162,6 +148,88 @@ class DocumentsService:
             for row in (document.line_items or [])
             if row.get("product_id")
         ]
+
+    def _dispatch_challan(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        document: ShopBooksDocument,
+        lines: list[dict[str, Any]],
+    ) -> ShopBooksDocument:
+        from apps.shopie.models import StockMovementType
+        from apps.shopie.services.catalog import CatalogService
+
+        catalog = CatalogService()
+        for row in lines:
+            product = ShopProduct.objects.get(tenant=tenant, business=business, id=row["product_id"])
+            qty = Decimal(str(row.get("qty") or "0"))
+            if qty > 0:
+                catalog.adjust_stock(
+                    tenant=tenant,
+                    business=business,
+                    product=product,
+                    quantity_delta=-qty,
+                    movement_type=StockMovementType.SALE,
+                    reason=f"Challan {document.document_number}",
+                )
+        document.status = BooksDocumentStatus.DISPATCHED
+        document.save(update_fields=["status", "updated_at", "version"])
+        return document
+
+    def _invoice_challan(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        document: ShopBooksDocument,
+        lines: list[dict[str, Any]],
+        cash_account_id=None,
+        amount_paid: Any = 0,
+        already_dispatched: bool,
+    ) -> ShopBooksVoucher:
+        voucher = self.books.create_sale_voucher(
+            tenant=tenant,
+            business=business,
+            data={
+                "customer": document.customer,
+                "lines": lines,
+                "notes": document.notes or f"Invoice from challan {document.document_number}",
+                "voucher_date": timezone.localdate(),
+                "amount_paid": amount_paid,
+                "cash_account_id": cash_account_id,
+                # Stock already left on dispatch — do not deduct again.
+                "adjust_stock": not already_dispatched,
+                "metadata": {
+                    "source_document_id": str(document.id),
+                    "source_document_number": document.document_number,
+                    "source_doc_type": BooksDocumentType.DELIVERY_CHALLAN,
+                },
+            },
+        )
+        document.status = BooksDocumentStatus.CONVERTED
+        document.converted_voucher = voucher
+        document.save(update_fields=["status", "converted_voucher", "updated_at", "version"])
+        return voucher
+
+    @transaction.atomic
+    def convert_document(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        document: ShopBooksDocument,
+        cash_account_id=None,
+        amount_paid: Any = 0,
+        action: str | None = None,
+    ) -> ShopBooksVoucher | ShopBooksDocument:
+        action_norm = (action or "").strip().lower()
+        if document.status == BooksDocumentStatus.CONVERTED:
+            raise ValidationError({"status": "Document already converted."})
+        if document.status == BooksDocumentStatus.CANCELLED:
+            raise ValidationError({"status": "Cancelled documents cannot be converted."})
+
+        lines = self._document_lines(document)
 
         if document.doc_type == BooksDocumentType.SALE_ORDER:
             voucher = self.books.create_sale_voucher(
@@ -207,27 +275,34 @@ class DocumentsService:
                 },
             )
         elif document.doc_type == BooksDocumentType.DELIVERY_CHALLAN:
-            from apps.shopie.models import StockMovementType
-            from apps.shopie.services.catalog import CatalogService
+            to_invoice = action_norm in {"to_invoice", "invoice", "convert"}
+            already_dispatched = document.status == BooksDocumentStatus.DISPATCHED
 
-            catalog = CatalogService()
-            for row in lines:
-                product = ShopProduct.objects.get(
-                    tenant=tenant, business=business, id=row["product_id"]
+            if already_dispatched and not to_invoice:
+                raise ValidationError({"status": "Delivery challan already dispatched."})
+            if document.status not in {
+                BooksDocumentStatus.DRAFT,
+                BooksDocumentStatus.CONFIRMED,
+                BooksDocumentStatus.DISPATCHED,
+            }:
+                raise ValidationError({"status": "Delivery challan cannot be converted."})
+
+            if to_invoice:
+                return self._invoice_challan(
+                    tenant=tenant,
+                    business=business,
+                    document=document,
+                    lines=lines,
+                    cash_account_id=cash_account_id,
+                    amount_paid=amount_paid,
+                    already_dispatched=already_dispatched,
                 )
-                qty = Decimal(str(row.get("qty") or "0"))
-                if qty > 0:
-                    catalog.adjust_stock(
-                        tenant=tenant,
-                        business=business,
-                        product=product,
-                        quantity_delta=-qty,
-                        movement_type=StockMovementType.SALE,
-                        reason=f"Challan {document.document_number}",
-                    )
-            document.status = BooksDocumentStatus.DISPATCHED
-            document.save(update_fields=["status", "updated_at", "version"])
-            return document
+            return self._dispatch_challan(
+                tenant=tenant,
+                business=business,
+                document=document,
+                lines=lines,
+            )
         else:
             raise ValidationError({"doc_type": "Unsupported conversion."})
 

@@ -166,11 +166,19 @@ class MerchantPaymentService:
                     )
                 }
             )
-        if enabled is not None:
-            stored["enabled"] = bool(enabled)
 
         normalized_key_id = str(key_id or "").strip()
         if not normalized_key_id:
+            if enabled is True:
+                raise ValidationError(
+                    {
+                        "enabled": (
+                            "Add and test your Razorpay credentials before enabling payments."
+                        )
+                    }
+                )
+            if enabled is not None:
+                stored["enabled"] = bool(enabled)
             if stored:
                 stored.pop("key_id", None)
                 stored.pop("key_secret", None)
@@ -205,26 +213,41 @@ class MerchantPaymentService:
         credentials_changed = normalized_key_id != str(stored.get("key_id") or "").strip() or bool(
             str(key_secret or "").strip()
         )
+        tested_ok = False
         if test_connection:
             try:
                 RazorpayClient(config.as_client_config()).test_connection()
+                tested_ok = True
             except RuntimeError as exc:
                 raise ValidationError(
                     {"credentials": "Razorpay rejected these credentials."}
                 ) from exc
+
+        previous_last_tested = stored.get("last_tested_at")
+        new_last_tested = (
+            timezone.now().isoformat()
+            if tested_ok
+            else None
+            if credentials_changed
+            else previous_last_tested
+        )
+        if enabled is True and not (tested_ok or bool(new_last_tested)):
+            raise ValidationError(
+                {
+                    "enabled": (
+                        "Test your Razorpay credentials successfully before enabling payments."
+                    )
+                }
+            )
+        if enabled is not None:
+            stored["enabled"] = bool(enabled)
 
         stored.update(
             {
                 "key_id": normalized_key_id,
                 "key_secret": encrypt_secret(plain_key_secret),
                 "webhook_secret": encrypt_secret(plain_webhook_secret),
-                "last_tested_at": (
-                    timezone.now().isoformat()
-                    if test_connection
-                    else None
-                    if credentials_changed
-                    else stored.get("last_tested_at")
-                ),
+                "last_tested_at": new_last_tested,
             }
         )
         metadata[self.metadata_key] = stored
@@ -398,13 +421,21 @@ class MerchantPaymentService:
                     )
                 }
             )
-        if enabled is not None:
-            stored["enabled"] = bool(enabled)
         if env in {"sandbox", "production"}:
             stored["env"] = env
 
         normalized_app_id = str(app_id or "").strip()
         if not normalized_app_id:
+            if enabled is True:
+                raise ValidationError(
+                    {
+                        "enabled": (
+                            "Add and test your Cashfree credentials before enabling payments."
+                        )
+                    }
+                )
+            if enabled is not None:
+                stored["enabled"] = bool(enabled)
             if stored:
                 stored.pop("app_id", None)
                 stored.pop("secret_key", None)
@@ -437,25 +468,40 @@ class MerchantPaymentService:
             or bool(str(secret_key or "").strip())
             or previous_env != config.env
         )
+        tested_ok = False
         if test_connection:
             try:
                 CashfreeClient(config.as_client_config()).test_connection()
+                tested_ok = True
             except RuntimeError as exc:
                 raise ValidationError(
                     {"credentials": "Cashfree rejected these credentials."}
                 ) from exc
 
+        previous_last_tested = stored.get("last_tested_at")
+        new_last_tested = (
+            timezone.now().isoformat()
+            if tested_ok
+            else None
+            if credentials_changed
+            else previous_last_tested
+        )
+        if enabled is True and not (tested_ok or bool(new_last_tested)):
+            raise ValidationError(
+                {
+                    "enabled": (
+                        "Test your Cashfree credentials successfully before enabling payments."
+                    )
+                }
+            )
+        if enabled is not None:
+            stored["enabled"] = bool(enabled)
+
         stored.update(
             {
                 "app_id": normalized_app_id,
                 "secret_key": encrypt_secret(plain_secret),
-                "last_tested_at": (
-                    timezone.now().isoformat()
-                    if test_connection
-                    else None
-                    if credentials_changed
-                    else stored.get("last_tested_at")
-                ),
+                "last_tested_at": new_last_tested,
             }
         )
         metadata[self.cashfree_metadata_key] = stored

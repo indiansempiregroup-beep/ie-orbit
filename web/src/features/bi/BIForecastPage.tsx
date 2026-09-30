@@ -1,5 +1,6 @@
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { formatMoney } from '../../lib/currency';
 import { StatCard } from './components/StatCard';
 import { useBIForecastQuery } from './biHooks';
 
@@ -7,6 +8,7 @@ export function BIForecastPage() {
   usePageMeta({ title: 'BI Forecast — Orbit Appoint' });
   const forecastQuery = useBIForecastQuery(30);
   const forecast = forecastQuery.data;
+  const currency = forecast?.currency;
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -25,7 +27,7 @@ export function BIForecastPage() {
           value={
             forecastQuery.isLoading
               ? '...'
-              : `${forecast?.currency ?? ''} ${(forecast?.projected_revenue ?? 0).toFixed(2)}`
+              : formatMoney(forecast?.projected_revenue ?? 0, currency)
           }
         />
         <StatCard
@@ -37,7 +39,7 @@ export function BIForecastPage() {
           value={
             forecastQuery.isLoading
               ? '...'
-              : `${forecast?.currency ?? ''} ${(forecast?.avg_daily_revenue ?? 0).toFixed(2)}`
+              : formatMoney(forecast?.avg_daily_revenue ?? 0, currency)
           }
         />
       </div>

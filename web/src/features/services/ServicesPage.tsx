@@ -13,6 +13,8 @@ import { useDialog } from '../../hooks/useDialog';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { canWriteServices } from '../../utils/roles';
+import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
+import { ProductImageCropModal, type ProductImageCropResult } from '../shop/ProductImageCropModal';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServicesPage() {
@@ -20,6 +22,15 @@ export function ServicesPage() {
   const canManageServices = canWriteServices(auth.user);
   const workspace = useWorkspace();
   const navigate = useNavigate();
+  const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
+  const entitledFeatures = useMemo(() => {
+    const snapshot = billingQuery.data;
+    return [
+      ...((snapshot?.entitled_features as string[] | undefined) ?? []),
+      ...((snapshot?.features as string[] | undefined) ?? []),
+    ];
+  }, [billingQuery.data]);
+  const canRemoveBackground = entitledFeatures.includes('appointie_service_bg_remove');
   const [searchTerm, setSearchTerm] = useState('');
   const createService = useServiceCreate();
   const updateService = useServiceUpdate();
@@ -40,6 +51,9 @@ export function ServicesPage() {
   });
   const [creationError, setCreationError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageCrop, setImageCrop] = useState<ProductImageCropResult | null>(null);
+  const [imageRemoveBg, setImageRemoveBg] = useState(false);
+  const [cropPending, setCropPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { data: services, isLoading, error, refetch } = useServiceList();
   const search = useServiceSearch(searchTerm);
@@ -76,6 +90,34 @@ export function ServicesPage() {
       loyalty_points_earn: 0,
     });
     setImageFile(null);
+    setImageCrop(null);
+    setImageRemoveBg(false);
+  }
+
+  function beginServiceCrop(file: File | null) {
+    if (cropPending?.previewUrl) URL.revokeObjectURL(cropPending.previewUrl);
+    if (!file) {
+      setImageFile(null);
+      setImageCrop(null);
+      setImageRemoveBg(false);
+      setCropPending(null);
+      return;
+    }
+    setCropPending({ file, previewUrl: URL.createObjectURL(file) });
+  }
+
+  function confirmServiceCrop(crop: ProductImageCropResult, options?: { removeBackground: boolean }) {
+    if (!cropPending) return;
+    setImageFile(cropPending.file);
+    setImageCrop(crop);
+    setImageRemoveBg(Boolean(options?.removeBackground));
+    URL.revokeObjectURL(cropPending.previewUrl);
+    setCropPending(null);
+  }
+
+  function cancelServiceCrop() {
+    if (cropPending?.previewUrl) URL.revokeObjectURL(cropPending.previewUrl);
+    setCropPending(null);
   }
 
   function formatPrice(service: { price?: number; currency?: string | null }) {
@@ -278,6 +320,8 @@ export function ServicesPage() {
                     businessId,
                     imageFile,
                     serviceName,
+                    removeBackground: imageRemoveBg,
+                    crop: imageCrop ?? undefined,
                   });
                   primaryImage = { media_id: mediaId };
                 }
@@ -433,7 +477,7 @@ export function ServicesPage() {
           />
           <LogoUploadField
             value={imageFile}
-            onChange={setImageFile}
+            onChange={beginServiceCrop}
             label="Service image (optional)"
             hint="PNG, JPG, or WebP. Shown in the mobile app when customers browse services."
             dropzoneTitle="Upload a service image"
@@ -449,6 +493,14 @@ export function ServicesPage() {
           {creationError ? <div style={{ color: '#dc2626' }}>{creationError}</div> : null}
         </form>
       </Dialog>
+
+      <ProductImageCropModal
+        open={Boolean(cropPending)}
+        imageUrl={cropPending?.previewUrl || ''}
+        onCancel={cancelServiceCrop}
+        canRemoveBackground={canRemoveBackground}
+        onConfirm={(crop, options) => confirmServiceCrop(crop, options)}
+      />
     </div>
   );
 }

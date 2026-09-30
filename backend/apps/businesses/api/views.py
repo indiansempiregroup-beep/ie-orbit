@@ -127,6 +127,7 @@ class BusinessViewSet(viewsets.ViewSet):
             actor=request.user,
             set_active=serializer.validated_data.get("set_active", True),
             plan_code=serializer.validated_data.get("plan_code") or None,
+            billing_interval=serializer.validated_data.get("billing_interval"),
         )
         business.refresh_from_db()
         business = self.repository.get_for_request(
@@ -163,6 +164,39 @@ class BusinessViewSet(viewsets.ViewSet):
         )
         return success_response(
             BusinessSerializer(business).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Businesses"],
+        responses={200: BusinessSerializer},
+        description="Schedule cancellation at the end of the current paid period.",
+    )
+    def schedule_cancel_product(
+        self,
+        request: Request,
+        pk: str | None = None,
+        product_code: str | None = None,
+    ) -> Response:
+        business = self.get_object(request=request, business_id=pk)
+        self.service.schedule_cancel_at_period_end(
+            business=business,
+            product_code=product_code or "",
+            actor=request.user,
+        )
+        business = self.repository.get_for_request(
+            business_id=str(business.id),
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return success_response(
+            {
+                **BusinessSerializer(business).data,
+                "billing": self.service.billing_snapshot(
+                    business=business,
+                    product_code=product_code,
+                ),
+            },
             request_id=getattr(request, "request_id", None),
         )
 

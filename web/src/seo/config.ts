@@ -3,7 +3,7 @@ export const ORGANIZATION_NAME = 'Indians Empire Technologies';
 export const DEFAULT_TITLE = 'IE Orbit — White-label booking and retail apps for Indian businesses';
 export const TITLE_TEMPLATE = '%s — IE Orbit';
 export const DEFAULT_DESCRIPTION =
-  'Your own branded customer app, plus Orbit Appoint bookings and Orbit Mart POS. White-label on every plan. 15-day full-Pro trial, UPI billing, no credit card to start.';
+  'Your own branded customer app, plus Orbit Appoint bookings and Orbit Mart POS. White-label on every plan. 45-day full-Pro trial, UPI billing, no credit card to start.';
 export const DEFAULT_OG_IMAGE_PATH = '/og/default.png';
 export const DEFAULT_LOCALE = 'en_IN';
 export const DEFAULT_LANGUAGE = 'en';
@@ -20,7 +20,7 @@ export const PRO_MONTHLY_INR = 799;
 export const STAFF_ADDON_INR = 199;
 export const OFFICE_ADDON_INR = 299;
 export const PETS_ADDON_INR = 500;
-export const TRIAL_DAYS = 15;
+export const TRIAL_DAYS = 45;
 
 export function trimOrigin(value: string): string {
   return value.trim().replace(/\/$/, '');

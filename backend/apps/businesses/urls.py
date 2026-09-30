@@ -22,6 +22,7 @@ business_detail = BusinessViewSet.as_view(
 )
 business_subscribe_product = BusinessViewSet.as_view({"post": "subscribe_product"})
 business_unsubscribe_product = BusinessViewSet.as_view({"delete": "unsubscribe_product"})
+business_schedule_cancel_product = BusinessViewSet.as_view({"post": "schedule_cancel_product"})
 business_change_product_plan = BusinessViewSet.as_view({"patch": "change_product_plan"})
 business_cancel_pending_plan = BusinessViewSet.as_view({"delete": "cancel_pending_plan_change"})
 business_update_product_addons = BusinessViewSet.as_view({"patch": "update_product_addons"})
@@ -49,6 +50,11 @@ urlpatterns = [
         "businesses/<uuid:pk>/product-subscriptions/<slug:product_code>",
         business_unsubscribe_product,
         name="business-unsubscribe-product",
+    ),
+    path(
+        "businesses/<uuid:pk>/product-subscriptions/<slug:product_code>/cancel",
+        business_schedule_cancel_product,
+        name="business-schedule-cancel-product",
     ),
     path(
         "businesses/<uuid:pk>/product-subscriptions/<slug:product_code>/plan",

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "apps.billing",
     "apps.audit",
     "apps.assistant",
+    "apps.workflow.apps.WorkflowConfig",
     "apps.platform_admin",
     "apps.api",
 ]
@@ -173,7 +174,11 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
+    "DEFAULT_RENDERER_CLASSES": (
+        "rest_framework.renderers.JSONRenderer",
+        "apps.common.api.renderers.CsvExportRenderer",
+        "apps.common.api.renderers.PdfExportRenderer",
+    ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.cursor.StandardCursorPagination",
     "DEFAULT_THROTTLE_CLASSES": (
@@ -192,6 +197,10 @@ REST_FRAMEWORK = {
     },
     "PAGE_SIZE": 50,
     "EXCEPTION_HANDLER": "apps.common.api.exceptions.global_exception_handler",
+    # Views use ?format=csv for file exports (tax invoices, statements, ops snapshot).
+    # DRF's default URL_FORMAT_OVERRIDE="format" treats that as a renderer suffix and
+    # raises Http404 when no CSVRenderer is registered — break export downloads.
+    "URL_FORMAT_OVERRIDE": None,
 }
 
 SPECTACULAR_SETTINGS = {
@@ -292,6 +301,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "shopie.send_pet_birthday_reminders",
         "schedule": crontab(minute=0, hour=4),
         "kwargs": {"lead_days": 5},
+    },
+    "workflow-run-daily-schedule": {
+        "task": "workflow.run_daily_schedule",
+        "schedule": crontab(minute=15, hour=4),
     },
     "analytics-snapshot-platform-usage": {
         "task": "analytics.snapshot_platform_usage",

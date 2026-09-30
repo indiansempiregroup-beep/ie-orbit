@@ -25,6 +25,7 @@ from apps.customers.models import (
 from apps.common.utils.business_context import resolve_business_id
 from apps.customers.emails.registration_invite import build_customer_registration_invite
 from apps.customers.repositories import CustomerRepository
+from apps.customers.services.contact import format_contact_phone, require_address_phone
 
 logger = logging.getLogger("ie_orbit.customers")
 
@@ -240,6 +241,13 @@ class CustomerService:
             payload["latitude"] = _as_coordinate(payload.get("latitude"))
         if "longitude" in payload:
             payload["longitude"] = _as_coordinate(payload.get("longitude"))
+        raw_phone = payload.pop("phone_number", None)
+        if raw_phone is None or str(raw_phone).strip() == "":
+            raw_phone = address.phone_number or customer.phone_number or customer.alternate_phone or ""
+        try:
+            payload["phone_number"] = require_address_phone(raw_phone)
+        except ValueError as exc:
+            raise ValidationError({"phone_number": str(exc)}) from exc
         for field, value in payload.items():
             if hasattr(address, field):
                 setattr(address, field, value)
@@ -268,6 +276,10 @@ class CustomerService:
             payload["latitude"] = _as_coordinate(payload.get("latitude"))
         if "longitude" in payload:
             payload["longitude"] = _as_coordinate(payload.get("longitude"))
+        try:
+            phone_number = require_address_phone(payload.get("phone_number"))
+        except ValueError as exc:
+            raise ValidationError({"phone_number": str(exc)}) from exc
         make_default = bool(payload.pop("is_default", False)) or not customer.addresses.exists()
         address = CustomerAddress(
             tenant=customer.tenant,
@@ -279,6 +291,7 @@ class CustomerService:
             state=str(payload.get("state") or ""),
             country=str(payload.get("country") or ""),
             postal_code=str(payload.get("postal_code") or ""),
+            phone_number=phone_number,
             latitude=payload.get("latitude"),
             longitude=payload.get("longitude"),
             is_default=make_default,
@@ -321,6 +334,15 @@ class CustomerService:
         ):
             if field in payload and payload[field] is not None:
                 setattr(address, field, payload[field])
+        if "phone_number" in payload:
+            try:
+                address.phone_number = require_address_phone(payload.get("phone_number"))
+            except ValueError as exc:
+                raise ValidationError({"phone_number": str(exc)}) from exc
+        elif not format_contact_phone(address.phone_number):
+            raise ValidationError(
+                {"phone_number": "A valid 10-digit Indian mobile number is required for this address."}
+            )
         if make_default:
             address.is_default = True
         try:

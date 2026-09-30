@@ -7,14 +7,19 @@ from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.exceptions import NotAuthenticated, NotFound, PermissionDenied
+from rest_framework.exceptions import APIException, NotAuthenticated, NotFound, PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.businesses.constants import (
+    FEATURE_APPOINTIE_SERVICE_BG_REMOVE,
+    FEATURE_SHOPIE_PRODUCT_BG_REMOVE,
+)
 from apps.businesses.models import Business
+from apps.businesses.services.entitlements import EntitlementService
 from apps.common.api.responses import success_response
 from apps.platform_media.api.permissions import MediaAccessPermission
 from apps.platform_media.api.serializers import (
@@ -22,10 +27,17 @@ from apps.platform_media.api.serializers import (
     MediaUploadMultipleSerializer,
     MediaUploadSerializer,
 )
-from apps.platform_media.models import Media, MediaFolder, MediaVisibility
+from apps.platform_media.models import Media, MediaFolder, MediaFolderType, MediaVisibility
 from apps.platform_media.repositories import MediaRepository
 from apps.platform_media.services import MediaService
 from apps.platform_media.storage import get_storage_provider
+from apps.platform_media.utils.images import BackgroundRemoveUnavailable
+
+
+class BackgroundRemoveUnavailableAPI(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "Background removal is temporarily unavailable."
+    default_code = "background_remove_unavailable"
 
 
 class MediaListView(APIView):
@@ -95,24 +107,62 @@ class MediaUploadView(APIView):
         serializer.is_valid(raise_exception=True)
         business = self._business(request, serializer.validated_data.get("business"))
         folder = self._folder(request, serializer.validated_data.get("folder"))
-        result = self.service.upload(
-            uploaded_file=serializer.validated_data["file"],
-            tenant=request.current_tenant,
-            business=business,
-            uploaded_by=request.user,
-            folder=folder,
-            folder_type=serializer.validated_data["folder_type"],
-            visibility=serializer.validated_data["visibility"],
-            tags=serializer.validated_data["tags"],
-            display_name=serializer.validated_data.get("display_name", ""),
-            metadata=serializer.validated_data["metadata"],
-        )
+        folder_type = serializer.validated_data["folder_type"]
+        remove_background = bool(serializer.validated_data.get("remove_background"))
+        if remove_background:
+            self._ensure_bg_remove_entitlement(business=business, folder_type=folder_type)
+        crop_box = None
+        if all(
+            key in serializer.validated_data for key in ("crop_left", "crop_top", "crop_width", "crop_height")
+        ):
+            crop_box = (
+                float(serializer.validated_data["crop_left"]),
+                float(serializer.validated_data["crop_top"]),
+                float(serializer.validated_data["crop_width"]),
+                float(serializer.validated_data["crop_height"]),
+            )
+        try:
+            result = self.service.upload(
+                uploaded_file=serializer.validated_data["file"],
+                tenant=request.current_tenant,
+                business=business,
+                uploaded_by=request.user,
+                folder=folder,
+                folder_type=folder_type,
+                visibility=serializer.validated_data["visibility"],
+                tags=serializer.validated_data["tags"],
+                display_name=serializer.validated_data.get("display_name", ""),
+                metadata=serializer.validated_data["metadata"],
+                prepare_product_canvas=bool(serializer.validated_data.get("prepare_product_canvas")),
+                remove_background=remove_background,
+                crop_norm=crop_box,
+            )
+        except BackgroundRemoveUnavailable as exc:
+            raise BackgroundRemoveUnavailableAPI(detail=str(exc)) from exc
         return success_response(
             MediaSerializer(result.media).data,
             status_code=status.HTTP_200_OK if result.duplicate else status.HTTP_201_CREATED,
             request_id=getattr(request, "request_id", None),
             meta={"duplicate": result.duplicate},
         )
+
+    def _ensure_bg_remove_entitlement(self, *, business: Business | None, folder_type: str) -> None:
+        if business is None:
+            raise PermissionDenied("A business is required to remove image backgrounds.")
+        kind = str(folder_type or "").strip().lower()
+        if kind == MediaFolderType.PRODUCTS:
+            EntitlementService().ensure_feature(
+                business=business,
+                feature=FEATURE_SHOPIE_PRODUCT_BG_REMOVE,
+            )
+            return
+        if kind == MediaFolderType.SERVICES:
+            EntitlementService().ensure_feature(
+                business=business,
+                feature=FEATURE_APPOINTIE_SERVICE_BG_REMOVE,
+            )
+            return
+        raise PermissionDenied("Background removal is only available for product or service photos.")
 
     def _business(self, request: Request, business_id: object | None) -> Business | None:
         if business_id:

@@ -25,7 +25,7 @@ from apps.authentication.services.passwords import PasswordService
 from apps.authentication.services.roles import RoleService
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.razorpay_client import RazorpayClient
-from apps.businesses.constants import VALID_PRODUCT_CODES, plan_display_name, product_display_name
+from apps.businesses.constants import DEFAULT_TRIAL_DAYS, VALID_PRODUCT_CODES, plan_display_name, product_display_name
 from apps.businesses.models import Business, BusinessProductSubscription, BusinessProductSubscriptionStatus
 from apps.businesses.services.businesses import BusinessService
 from apps.businesses.services.entitlements import EntitlementService
@@ -997,6 +997,7 @@ class PlatformAdminService:
                 "features": row.features,
                 "amount_paise": row.amount_paise,
                 "yearly_amount_paise": row.yearly_amount_paise,
+                "yearly_months_charged": int(getattr(row, "yearly_months_charged", None) or 10),
                 "is_active": row.is_active,
                 "is_public": row.is_public,
                 "sort_order": row.sort_order,
@@ -1015,7 +1016,7 @@ class PlatformAdminService:
         name: str,
         description: str = "",
         billing_interval: str = "monthly",
-        trial_days: int = 15,
+        trial_days: int = DEFAULT_TRIAL_DAYS,
         is_default: bool = False,
         max_staff: int = 1,
         max_branches: int = 1,
@@ -1025,6 +1026,7 @@ class PlatformAdminService:
         features: list[str] | None = None,
         amount_paise: int = 0,
         yearly_amount_paise: int | None = None,
+        yearly_months_charged: int = 10,
         is_active: bool = True,
         is_public: bool = True,
         sort_order: int = 0,
@@ -1085,6 +1087,7 @@ class PlatformAdminService:
                 "yearly_amount_paise": (
                     int(yearly_amount_paise) if yearly_amount_paise is not None else None
                 ),
+                "yearly_months_charged": max(1, min(12, int(yearly_months_charged or 10))),
                 "is_active": bool(is_active),
                 "is_public": bool(is_public),
                 "sort_order": int(sort_order),
@@ -1127,7 +1130,7 @@ class PlatformAdminService:
                         "name": str(plan.get("name", code)),
                         "description": str(plan.get("description", "")),
                         "billing_interval": str(plan.get("billing_interval", "monthly")),
-                        "trial_days": int(plan.get("trial_days", 15) or 15),
+                        "trial_days": int(plan.get("trial_days", DEFAULT_TRIAL_DAYS) or DEFAULT_TRIAL_DAYS),
                         "is_default": bool(plan.get("is_default", False)),
                         "max_staff": int(plan.get("max_staff", 1) or 1),
                         "max_branches": int(plan.get("max_branches", 1) or 1),
@@ -1137,6 +1140,7 @@ class PlatformAdminService:
                         "features": list(plan.get("features") or []),
                         "amount_paise": monthly or 0,
                         "yearly_amount_paise": monthly * YEARLY_PRICE_MULTIPLIER if monthly else None,
+                        "yearly_months_charged": YEARLY_PRICE_MULTIPLIER,
                         "sort_order": sort_order,
                     },
                 )

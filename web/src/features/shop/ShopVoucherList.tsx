@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Eye, Plus, SlidersHorizontal } from 'lucide-react';
+import { Eye, Plus, Share2, SlidersHorizontal } from 'lucide-react';
 import type { ShopBooksVoucher, ShopEWayGenerateInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -14,6 +14,9 @@ import { formatMoney } from '../../lib/currency';
 import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { openShopDocumentView } from './shopDocumentActions';
+import { useAuthContext } from '../../contexts/AuthContext';
 import {
   useShopComplianceMutations,
   useShopEInvoice,
@@ -260,6 +263,7 @@ export function ShopVoucherList({
   heading?: string;
 }) {
   const workspace = useWorkspace();
+  const auth = useAuthContext();
   const currency = workspace.activeBusiness?.currency;
   const snackbar = useSnackbar();
   const [searchParams] = useSearchParams();
@@ -272,6 +276,7 @@ export function ShopVoucherList({
   const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected] = useState<ShopBooksVoucher | null>(null);
   const detailDialog = useDialog();
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const isSale = voucherType === 'sale';
   const pageTitle = heading ?? (isSale ? 'Sale invoices' : 'Purchases');
 
@@ -464,11 +469,18 @@ export function ShopVoucherList({
             const isVoid = voucher.status === 'void';
             const paid = !isVoid && due <= 0.009;
             return (
-              <button
+              <div
                 key={voucher.id}
-                type="button"
                 className={`invoice-row${isVoid ? ' invoice-row--void' : ''}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => openDetail(voucher)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openDetail(voucher);
+                  }
+                }}
               >
                 <div className="invoice-row__main">
                   <strong>{party}</strong>
@@ -485,8 +497,54 @@ export function ShopVoucherList({
                     {isVoid ? 'Void' : paid ? 'Paid' : `Due ${formatMoney(due, currency)}`}
                   </span>
                 </div>
-                <Eye size={16} aria-hidden="true" className="invoice-row__icon" />
-              </button>
+                {isSale && workspace.businessId ? (
+                  <div className="invoice-row__actions" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="invoice-row__action"
+                      title="View invoice"
+                      aria-label={`View ${voucher.voucher_number}`}
+                      onClick={() => {
+                        const target = {
+                          kind: 'sale' as const,
+                          id: voucher.id,
+                          number: voucher.voucher_number,
+                          businessId: workspace.businessId!,
+                          phone: voucher.customer_phone || '',
+                          email: voucher.customer_email || '',
+                        };
+                        void openShopDocumentView(target, auth.token, 'a4', workspace.tenantId).catch((error) =>
+                          snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
+                        );
+                      }}
+                    >
+                      <Eye size={15} aria-hidden="true" />
+                      <span>View</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="invoice-row__action"
+                      title="Share invoice"
+                      aria-label={`Share ${voucher.voucher_number}`}
+                      onClick={() =>
+                        setDocActions({
+                          kind: 'sale',
+                          id: voucher.id,
+                          number: voucher.voucher_number,
+                          businessId: workspace.businessId!,
+                          phone: voucher.customer_phone || '',
+                          email: voucher.customer_email || '',
+                        })
+                      }
+                    >
+                      <Share2 size={15} aria-hidden="true" />
+                      <span>Share</span>
+                    </button>
+                  </div>
+                ) : (
+                  <Eye size={16} aria-hidden="true" className="invoice-row__icon" />
+                )}
+              </div>
             );
           })}
           {!vouchers.isLoading && !filtered.length ? (
@@ -547,7 +605,24 @@ export function ShopVoucherList({
 
             {voucherType === 'sale' ? <GstComplianceSection voucher={selected} /> : null}
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              {voucherType === 'sale' && workspace.businessId ? (
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setDocActions({
+                      kind: 'sale',
+                      id: selected.id,
+                      number: selected.voucher_number,
+                      businessId: workspace.businessId!,
+                      phone: selected.customer_phone || '',
+                      email: selected.customer_email || '',
+                    })
+                  }
+                >
+                  View / Print / Share
+                </Button>
+              ) : null}
               {selected.status !== 'void' ? (
                 <Button type="button" variant="neutral" onClick={() => void handleVoid(selected)} disabled={voidVoucher.isPending}>
                   {voidVoucher.isPending ? 'Voiding…' : 'Void voucher'}
@@ -560,6 +635,12 @@ export function ShopVoucherList({
           </div>
         ) : null}
       </Dialog>
+      <DocumentActionsSheet
+        open={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
+      />
     </div>
   );
 }

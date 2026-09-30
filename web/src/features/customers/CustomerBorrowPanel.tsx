@@ -3,6 +3,7 @@ import type { CustomerBorrowLedgerEntry } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { formatMoney } from '../../lib/currency';
 import { formatTimestamp } from '../../lib/datetime';
 
 type Props = {
@@ -20,6 +21,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
   const [method, setMethod] = useState<'cash' | 'upi' | 'card'>('cash');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
+  const money = (value: number) => formatMoney(value, currency);
 
   useEffect(() => {
     void (async () => {
@@ -39,7 +41,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
       return;
     }
     if (value > balanceDue) {
-      snackbar.push(`Amount cannot exceed outstanding ${balanceDue.toFixed(2)}.`, 'error');
+      snackbar.push(`Amount cannot exceed outstanding ${money(balanceDue)}.`, 'error');
       return;
     }
     setBusy(true);
@@ -49,7 +51,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
         payment_method: method,
         notes: notes.trim(),
       });
-      snackbar.push(`Payment of ${value.toFixed(2)} recorded.`, 'success');
+      snackbar.push(`Payment of ${money(value)} recorded.`, 'success');
       setAmount('');
       setNotes('');
       onChanged();
@@ -74,7 +76,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
       <div>
         <p style={{ margin: 0, color: '#6b7280', fontWeight: 600 }}>Borrow / credit outstanding</p>
         <p style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 700, color: balanceDue > 0 ? '#b42318' : undefined }}>
-          {currency} {balanceDue.toFixed(2)}
+          {money(balanceDue)}
         </p>
         <p style={{ margin: '6px 0 0', fontSize: 13, color: '#6b7280' }}>
           Record repayments here (partial or full). Order fulfillment status is not changed.
@@ -86,7 +88,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
           <input
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
-            placeholder={`Amount (max ${balanceDue.toFixed(2)})`}
+            placeholder={`Amount (max ${money(balanceDue)})`}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -127,11 +129,11 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
                   : entry.entry_type === 'charge'
                     ? 'Borrow'
                     : entry.entry_type}{' '}
-                · {Number(entry.amount).toFixed(2)}
+                · {money(Number(entry.amount))}
                 {entry.order_number ? ` · ${entry.order_number}` : ''}
               </div>
               <div style={{ opacity: 0.7 }}>
-                Balance {Number(entry.balance_after).toFixed(2)}
+                Balance {money(Number(entry.balance_after))}
                 {entry.created_at ? ` · ${formatTimestamp(entry.created_at)}` : ''}
               </div>
             </div>

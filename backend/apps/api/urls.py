@@ -28,6 +28,7 @@ urlpatterns = [
     path("", include("apps.analytics.urls")),
     path("", include("apps.billing.urls")),
     path("", include("apps.assistant.urls")),
+    path("", include("apps.workflow.urls")),
     path("", include("apps.platform_admin.urls")),
     path("search", OperationsSearchView.as_view(), name="operations-search"),
     path("health/", HealthView.as_view(), name="health"),

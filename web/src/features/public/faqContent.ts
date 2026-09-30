@@ -141,7 +141,7 @@ export const faqSections: FaqSection[] = [
             'Your workspace is provisioned automatically (tenant, business, default settings)',
             'You verify your email before full access',
             'A getting-started checklist on the dashboard helps you add services, staff, or catalog items',
-            'Your 15-day full-Pro trial begins for the product(s) you selected',
+            'Your 45-day full-Pro trial begins for the product(s) you selected',
           ],
         },
       },
@@ -167,7 +167,7 @@ export const faqSections: FaqSection[] = [
         q: 'How does the free trial work?',
         a: {
           paragraphs: [
-            'Every new workspace gets a 15-day trial with full Pro access for the product(s) you selected. No credit card is required to start.',
+            'Every new workspace gets a 45-day trial with full Pro access for the product(s) you selected. No credit card is required to start.',
             'When the trial ends without an upgrade, the workspace soft-locks — you can still sign in and view data, but day-to-day operations pause until you subscribe. Your data remains in place.',
           ],
         },
@@ -195,7 +195,7 @@ export const faqSections: FaqSection[] = [
       },
       {
         q: 'Can I switch plans later?',
-        a: 'Yes. Upgrade or change packages from workspace billing settings. Pending plan changes can be scheduled; you can cancel a pending change before it applies. Yearly billing is available at 10× monthly (two months free compared to paying monthly for twelve months).',
+        a: 'Yes. Upgrade or change packages from workspace billing settings. Pending plan changes can be scheduled; you can cancel a pending change before it applies. Yearly billing is available at a discounted multiple of monthly (shown in Products & Billing and on Pricing).',
       },
     ],
   },

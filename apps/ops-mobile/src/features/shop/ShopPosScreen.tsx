@@ -40,6 +40,7 @@ import { StickyFooterBar } from '../../components/ui/StickyFooterBar';
 import { fieldStyles, inputReset } from '../../components/ui/fieldStyles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { applyDiscount, computePosTotals, isProductTaxInclusive, type DiscountType } from './posPricing';
 import {
@@ -49,7 +50,7 @@ import {
   takePosPendingAddProductId,
   writePosSession,
 } from './posSession';
-import { normalizeGstin, validateGstin } from '../../utils/gstin';
+import { gstinStateCode, isInterstateGstin, normalizeGstin, validateGstin } from '../../utils/gstin';
 import { getApiErrorMessage } from '../../utils/format';
 import { hasShopie } from '../../utils/products';
 import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../utils/loyalty';
@@ -57,6 +58,8 @@ import { RemoteImage } from '../../components/RemoteImage';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { primaryProductImageUrl } from './productImages';
 import { formatMoney } from './shopBooksHelpers';
+import { usePlanFeatures } from '../../hooks/useOpsExtended';
+import { PlanFeature } from '../../utils/planFeatures';
 
 type BasketLine = {
   product: ShopProduct;
@@ -67,6 +70,7 @@ type BasketLine = {
 };
 
 type PaymentMethod = 'cash' | 'upi' | 'card' | 'borrow';
+type NoteSettlement = 'adjust' | 'cash';
 type PosMode =
   | 'sale'
   | 'purchase'
@@ -178,6 +182,7 @@ export function ShopPosScreen() {
   const client = useOpsClient();
   const toast = useToast();
   const { businessId, activeBusiness } = useWorkspace();
+  const { has: hasFeature } = usePlanFeatures();
   const showGstFields = hasShopie(activeBusiness?.product_subscriptions);
   const mode = resolvePosMode(route.params?.mode);
   const isPurchase = mode === 'purchase';
@@ -187,6 +192,7 @@ export function ShopPosScreen() {
   const isSaleOrder = mode === 'sale_order';
   const isPurchaseOrder = mode === 'purchase_order';
   const isChallan = mode === 'delivery_challan';
+  const canCreateChallan = hasFeature(PlanFeature.shopieBooksChallan);
   const isNote = isCreditNote || isDebitNote;
   const isOrder = isSaleOrder || isPurchaseOrder;
   const isDocument = isQuotation || isNote || isOrder || isChallan;
@@ -220,6 +226,14 @@ export function ShopPosScreen() {
   const [billDiscountValue, setBillDiscountValue] = useState(
     () => (skipSaleSession ? '0' : initialSession.billDiscountValue),
   );
+  const [automationOffers, setAutomationOffers] = useState<
+    Array<{
+      label: string;
+      discount_type: string;
+      discount_value: string;
+      source?: string;
+    }>
+  >([]);
   const [partyGstin, setPartyGstin] = useState(() =>
     skipSaleSession ? '' : initialSession.partyGstin ?? '',
   );
@@ -227,6 +241,8 @@ export function ShopPosScreen() {
     () => (isPurchase ? 'borrow' : initialSession.paymentMethod),
   );
   const [validUntil, setValidUntil] = useState('');
+  const [noteSettlement, setNoteSettlement] = useState<NoteSettlement>('adjust');
+  const [documentNotes, setDocumentNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -234,6 +250,7 @@ export function ShopPosScreen() {
   const [discountLineId, setDiscountLineId] = useState<string | null>(null);
   const [draftDiscType, setDraftDiscType] = useState<DiscountType>('percent');
   const [draftDiscValue, setDraftDiscValue] = useState('');
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const catalogLoadedRef = React.useRef(false);
 
@@ -253,7 +270,7 @@ export function ShopPosScreen() {
         usesSupplier
           ? client.shop.listSuppliers({ business_id: businessId })
           : Promise.resolve({ data: [] as ShopSupplier[] }),
-        isPurchase
+        isPurchase || isNote
           ? client.shop.listCashAccounts({ business_id: businessId })
           : Promise.resolve({ data: [] as ShopCashAccount[] }),
       ]);
@@ -269,7 +286,7 @@ export function ShopPosScreen() {
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, isPurchase, usesSupplier]);
+  }, [businessId, client, isPurchase, isNote, usesSupplier]);
 
   const updateCustomerId = useCallback(
     (id: string) => {
@@ -314,6 +331,40 @@ export function ShopPosScreen() {
       return fromCustomer;
     });
   }, [customerId, customers, showGstFields, skipSaleSession, usesSupplier]);
+
+  useEffect(() => {
+    if (!client || !businessId || mode !== 'sale' || !customerId) {
+      setAutomationOffers([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await client.shop.eligibleOffers({
+          business_id: businessId,
+          customer_id: customerId,
+          fulfillment_mode: 'pos',
+          lines: basket.map((line) => ({
+            product_id: line.product.id,
+            quantity: line.quantity,
+          })),
+        });
+        if (cancelled) return;
+        const autos = (res.data.automations || []).map((row) => ({
+          label: String(row.label || row.name || 'Offer'),
+          discount_type: String(row.discount_type || 'percent'),
+          discount_value: String(row.discount_value || '0'),
+          source: String(row.source || 'automation'),
+        }));
+        setAutomationOffers(autos.filter((row) => Number(row.discount_value) > 0));
+      } catch {
+        if (!cancelled) setAutomationOffers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [basket, businessId, client, customerId, mode]);
 
   const syncBasket = useCallback(
     (next: BasketLine[] | ((current: BasketLine[]) => BasketLine[])) => {
@@ -581,29 +632,35 @@ export function ShopPosScreen() {
   }, [productQuery, products, productCategory, productStock, productSort]);
 
   const billGstinCheck = useMemo(() => validateGstin(partyGstin), [partyGstin]);
+  const sellerGstin = String(activeBusiness?.gst_tax_number || '').trim();
+  const billIsInterstate =
+    billGstinCheck.ok &&
+    Boolean(billGstinCheck.gstin) &&
+    isInterstateGstin(sellerGstin, billGstinCheck.gstin);
 
-  const totals = useMemo(
+  const posLineInputs = useMemo(
     () =>
-      computePosTotals(
-        basket.map((line) => ({
-          id: line.product.id,
-          name: line.product.name,
-          unitPrice: Number(line.product.price),
-          taxRate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
-          taxInclusive: isProductTaxInclusive(line.product),
-          quantity: line.quantity,
-          discountType: line.discountType,
-          discountValue: line.discountValue,
-        })),
-        billDiscountType,
-        Number(billDiscountValue) || 0,
-      ),
-    [basket, billDiscountType, billDiscountValue],
+      basket.map((line) => ({
+        id: line.product.id,
+        name: line.product.name,
+        unitPrice: Number(line.product.price),
+        taxRate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+        taxInclusive: isProductTaxInclusive(line.product),
+        quantity: line.quantity,
+        discountType: line.discountType,
+        discountValue: line.discountValue,
+      })),
+    [basket],
+  );
+
+  const baseTotals = useMemo(
+    () => computePosTotals(posLineInputs, billDiscountType, Number(billDiscountValue) || 0, 0),
+    [posLineInputs, billDiscountType, billDiscountValue],
   );
 
   const discountLine = basket.find((line) => line.product.id === discountLineId) ?? null;
   const discountPriced = discountLine
-    ? totals.lines.find((row) => row.id === discountLine.product.id)
+    ? baseTotals.lines.find((row) => row.id === discountLine.product.id)
     : undefined;
   const draftDiscAmount = applyDiscount(
     discountPriced?.gross ?? 0,
@@ -635,16 +692,27 @@ export function ShopPosScreen() {
   const loyaltyMaxPoints = useMemo(() => {
     if (mode !== 'sale' || !customerId) return 0;
     return maxRedeemablePoints(
-      totals.subtotal,
+      baseTotals.subtotal,
       loyaltyPrefs,
       Number(selectedPosCustomer?.loyalty_points ?? 0),
     );
-  }, [mode, customerId, totals.subtotal, loyaltyPrefs, selectedPosCustomer?.loyalty_points]);
+  }, [mode, customerId, baseTotals.subtotal, loyaltyPrefs, selectedPosCustomer?.loyalty_points]);
   const loyaltyDiscount = useMemo(
-    () => redeemDiscountAmount(pointsToRedeem, loyaltyPrefs),
-    [pointsToRedeem, loyaltyPrefs],
+    () => redeemDiscountAmount(Math.min(pointsToRedeem, loyaltyMaxPoints), loyaltyPrefs),
+    [pointsToRedeem, loyaltyMaxPoints, loyaltyPrefs],
   );
-  const payableAfterLoyalty = Math.max(0, totals.payable - loyaltyDiscount);
+  const totals = useMemo(
+    () =>
+      loyaltyDiscount > 0
+        ? computePosTotals(
+            posLineInputs,
+            billDiscountType,
+            Number(billDiscountValue) || 0,
+            loyaltyDiscount,
+          )
+        : baseTotals,
+    [baseTotals, posLineInputs, billDiscountType, billDiscountValue, loyaltyDiscount],
+  );
 
   useEffect(() => {
     if (pointsToRedeem > loyaltyMaxPoints) setPointsToRedeem(loyaltyMaxPoints);
@@ -718,6 +786,14 @@ export function ShopPosScreen() {
       toast.push(text, 'error');
       return;
     }
+    if (isNote && noteSettlement === 'cash' && !cashAccountId) {
+      const text = isCreditNote
+        ? 'Select a cash/bank account for the refund.'
+        : 'Select a cash/bank account to record the receipt.';
+      setMessage(text);
+      toast.push(text, 'error');
+      return;
+    }
     if (isPurchaseOrder && !supplierId) {
       const text = 'Select a supplier for the purchase order.';
       setMessage(text);
@@ -756,6 +832,12 @@ export function ShopPosScreen() {
         : {};
 
       if (isOrder || isChallan) {
+        if (isChallan && !canCreateChallan) {
+          const text = 'Delivery challan is not on your plan.';
+          setMessage(text);
+          toast.push(text, 'error');
+          return;
+        }
         const gstinNote = resolvedGstin
           ? `${usesSupplier ? 'Supplier' : 'Customer'} GSTIN ${resolvedGstin}`
           : '';
@@ -788,9 +870,21 @@ export function ShopPosScreen() {
         setSupplierId('');
         const label = isPurchaseOrder ? 'Purchase order' : isChallan ? 'Delivery challan' : 'Sale order';
         toast.push(
-          `${label} ${response.data.document_number} created · ${totals.payable.toFixed(2)}`,
+          `${label} ${response.data.document_number} created · ${formatMoney(totals.payable)}`,
           'success',
         );
+        if (isChallan) {
+          const selectedCustomer = customers.find((row) => row.id === customerId);
+          setDocActions({
+            kind: 'delivery_challan',
+            id: response.data.id,
+            number: response.data.document_number,
+            businessId,
+            phone: String(selectedCustomer?.phone_number || ''),
+            email: String(selectedCustomer?.email || ''),
+          });
+          return;
+        }
         navigation.navigate('ShopBooksDocuments', { docType });
         return;
       }
@@ -813,33 +907,62 @@ export function ShopPosScreen() {
         setBillDiscountValue('0');
         setValidUntil('');
         toast.push(
-          `Quotation ${response.data.quotation_number} created · ${totals.payable.toFixed(2)}`,
+          `Quotation ${response.data.quotation_number} created · ${formatMoney(totals.payable)}`,
           'success',
         );
-        navigation.navigate('ShopBooksQuotations');
+        setDocActions({
+          kind: 'quotation',
+          id: response.data.id,
+          number: response.data.quotation_number,
+          businessId,
+        });
         return;
       }
 
       if (isNote) {
+        const settleCash = noteSettlement === 'cash';
+        const defaultNote = isCreditNote ? 'Credit note from Sale counter' : 'Debit note from Sale counter';
         const response = await client.shop.createVoucher({
           voucher_type: mode,
           business_id: businessId,
           customer_id: isCreditNote ? customerId : null,
           supplier_id: isDebitNote ? supplierId : null,
           lines: taxLines,
-          notes: isCreditNote ? 'Credit note from Sale counter' : 'Debit note from Sale counter',
-          metadata: partyMeta,
+          amount_paid: settleCash ? totals.payable : 0,
+          cash_account_id: settleCash ? cashAccountId || undefined : undefined,
+          is_interstate: billIsInterstate,
+          place_of_supply: resolvedGstin ? gstinStateCode(resolvedGstin) : undefined,
+          notes: documentNotes.trim() || defaultNote,
+          metadata: {
+            ...partyMeta,
+            ...(billIsInterstate ? { gst: { is_interstate: true } } : {}),
+          },
         });
         setBasket([]);
         setBillDiscountType('');
         setBillDiscountValue('0');
         setSupplierId('');
+        setDocumentNotes('');
+        setNoteSettlement('adjust');
         if (isDebitNote) setPartyGstin('');
         toast.push(
-          `${isCreditNote ? 'Credit' : 'Debit'} note ${response.data.voucher_number} recorded · ${totals.payable.toFixed(2)}`,
+          `${isCreditNote ? 'Credit' : 'Debit'} note ${response.data.voucher_number} recorded · ${formatMoney(totals.payable)}`,
           'success',
         );
-        navigation.navigate('ShopBooksNotes');
+        const selectedCustomer = customers.find((row) => row.id === customerId);
+        const selectedSupplier = suppliers.find((row) => row.id === supplierId);
+        setDocActions({
+          kind: mode,
+          id: response.data.id,
+          number: response.data.voucher_number,
+          businessId,
+          phone: isCreditNote
+            ? String(selectedCustomer?.phone_number || '')
+            : String(selectedSupplier?.phone || ''),
+          email: isCreditNote
+            ? String(selectedCustomer?.email || '')
+            : String(selectedSupplier?.email || ''),
+        });
         return;
       }
 
@@ -863,7 +986,7 @@ export function ShopPosScreen() {
         setSupplierId('');
         setPartyGstin('');
         toast.push(
-          `Purchase ${response.data.voucher_number} recorded${paidNow ? '' : ' · Due'} · ${totals.payable.toFixed(2)}`,
+          `Purchase ${response.data.voucher_number} recorded${paidNow ? '' : ' · Due'} · ${formatMoney(totals.payable)}`,
           'success',
         );
         navigation.navigate('ShopBooksPurchase');
@@ -911,11 +1034,20 @@ export function ShopPosScreen() {
       const dueLabel = paymentMethod === 'borrow' ? ' · Due' : '';
       const gstLabel = resolvedGstin ? ' · B2B' : '';
       toast.push(
-        `Sale invoice ${response.data.order_number} posted to Books${dueLabel}${gstLabel} · ${totals.payable.toFixed(2)}`,
+        `Sale invoice ${response.data.order_number} posted to Books${dueLabel}${gstLabel} · ${formatMoney(totals.payable)}`,
         'success',
       );
       setMessage(`Sale invoice ${response.data.order_number} posted to Books`);
-      navigation.navigate('ShopBooksSale');
+      if (response.data.books_voucher_id) {
+        setDocActions({
+          kind: 'sale',
+          id: response.data.books_voucher_id,
+          number: response.data.books_voucher_number || response.data.order_number,
+          businessId,
+        });
+      } else {
+        navigation.navigate('ShopBooksSale');
+      }
     } catch (err) {
       const fallback =
         isOrder || isChallan
@@ -939,7 +1071,9 @@ export function ShopPosScreen() {
     }
   }
 
-  const payableShown = mode === 'sale' ? payableAfterLoyalty : totals.payable;
+  const payableShown = totals.payable;
+  const billCgst = Math.round((totals.taxTotal / 2) * 100) / 100;
+  const billSgst = Math.round((totals.taxTotal - billCgst) * 100) / 100;
   const checkoutLabel = busy
     ? isSaleOrder
       ? 'Saving sale order…'
@@ -976,6 +1110,31 @@ export function ShopPosScreen() {
 
   return (
     <DesktopPage maxWidth={960}>
+    <DocumentActionsSheet
+      visible={Boolean(docActions)}
+      onClose={() => {
+        const kind = docActions?.kind;
+        setDocActions(null);
+        if (kind === 'quotation') navigation.navigate('ShopBooksQuotations');
+        else if (kind === 'delivery_challan') navigation.navigate('ShopBooksDocuments', { docType: 'delivery_challan' });
+        else if (kind === 'credit_note' || kind === 'debit_note') navigation.navigate('ShopBooksNotes');
+        else if (kind === 'sale') navigation.navigate('ShopBooksSale');
+      }}
+      target={docActions}
+      title={
+        docActions?.kind === 'quotation'
+          ? 'Quotation created'
+          : docActions?.kind === 'delivery_challan'
+            ? 'Challan created'
+            : docActions?.kind === 'credit_note'
+              ? 'Credit note created'
+              : docActions?.kind === 'debit_note'
+                ? 'Debit note created'
+                : 'Bill created'
+      }
+      allowNewBill={docActions?.kind === 'sale'}
+      onNewBill={() => setDocActions(null)}
+    />
     <View style={[styles.screen, { paddingTop: spacing.md }]}>
       <ScrollView
         style={styles.scroll}
@@ -986,11 +1145,15 @@ export function ShopPosScreen() {
         <FormHero
           title={modeTitle(mode)}
           subtitle={
-            isDocument
-              ? 'Add products, then save the document.'
-              : isPurchase
-                ? 'Scan supplier items and record the bill.'
-                : 'Scan or search products, then take payment.'
+            isCreditNote
+              ? 'Add returned items, choose settlement, then save the credit note.'
+              : isDebitNote
+                ? 'Add returned purchase items, choose settlement, then save the debit note.'
+                : isDocument
+                  ? 'Add products, then save the document.'
+                  : isPurchase
+                    ? 'Scan supplier items and record the bill.'
+                    : 'Scan or search products, then take payment.'
           }
         />
 
@@ -1016,7 +1179,7 @@ export function ShopPosScreen() {
                 <View style={styles.customerField}>
                   <SelectField
                     label="Customer"
-                    required
+                    required={isCreditNote || (!isSaleOrder && !isChallan && !isQuotation)}
                     value={customerId}
                     options={customerOptions}
                     onChange={updateCustomerId}
@@ -1043,45 +1206,6 @@ export function ShopPosScreen() {
             )}
           </View>
         </FormSection>
-
-        {mode === 'sale' && customerId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
-          <View style={styles.loyaltyBox}>
-            <Text style={styles.section}>Reward points</Text>
-            <Text style={styles.meta}>
-              Balance {selectedPosCustomer?.loyalty_points ?? 0} pts · {loyaltyPrefs.points_per_currency_unit} pts = ₹1
-            </Text>
-            <View style={styles.redeemRow}>
-              <Pressable
-                style={styles.redeemBtn}
-                onPress={() =>
-                  setPointsToRedeem((current) => {
-                    if (current <= 0) return 0;
-                    const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
-                    return next < loyaltyPrefs.min_redeem_points ? 0 : next;
-                  })
-                }
-              >
-                <Feather name="minus" size={16} color={colors.foreground} />
-              </Pressable>
-              <Text style={styles.redeemValue}>{pointsToRedeem} pts</Text>
-              <Pressable
-                style={styles.redeemBtn}
-                onPress={() =>
-                  setPointsToRedeem((current) => {
-                    const stepAmount = Math.max(1, loyaltyPrefs.min_redeem_points);
-                    if (current <= 0) return Math.min(loyaltyMaxPoints, stepAmount);
-                    return Math.min(loyaltyMaxPoints, current + stepAmount);
-                  })
-                }
-              >
-                <Feather name="plus" size={16} color={colors.foreground} />
-              </Pressable>
-            </View>
-            {pointsToRedeem > 0 ? (
-              <Text style={styles.meta}>Saves ₹{loyaltyDiscount.toFixed(2)}</Text>
-            ) : null}
-          </View>
-        ) : null}
 
         <FormSection
           title="Bill"
@@ -1213,7 +1337,7 @@ export function ShopPosScreen() {
               line.discountType === 'percent'
                 ? `−${line.discountValue}%`
                 : line.discountType === 'amount'
-                  ? `−₹${formatMoney(line.discountValue)}`
+                  ? `−${formatMoney(line.discountValue)}`
                   : '';
             return (
               <View key={line.product.id} style={styles.lineCard}>
@@ -1363,45 +1487,6 @@ export function ShopPosScreen() {
           ) : null}
         </PickerSheet>
 
-        <FormSection title="Bill discount" subtitle="Optional off the whole bill">
-        <View style={styles.discountRow}>
-          {(
-            [
-              { value: '', label: 'None' },
-              { value: 'percent', label: '%' },
-              { value: 'amount', label: '₹' },
-            ] as const
-          ).map((option) => (
-            <Chip
-              key={option.value || 'none'}
-              label={option.label}
-              active={billDiscountType === option.value}
-              onPress={() => {
-                setBillDiscountType(option.value);
-                if (!option.value) setBillDiscountValue('0');
-                writePosSession({
-                  billDiscountType: option.value,
-                  billDiscountValue: option.value ? billDiscountValue : '0',
-                });
-              }}
-            />
-          ))}
-          {billDiscountType ? (
-            <TextInput
-              style={[styles.input, styles.discountInput]}
-              value={billDiscountValue}
-              onChangeText={(value) => {
-                setBillDiscountValue(value);
-                writePosSession({ billDiscountValue: value });
-              }}
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor={colors.mutedForeground}
-            />
-          ) : null}
-        </View>
-        </FormSection>
-
         {showGstFields ? (
           <FormSection title="GST" subtitle={usesSupplier ? 'Supplier GSTIN' : 'Customer GSTIN'}>
             <Input
@@ -1425,7 +1510,218 @@ export function ShopPosScreen() {
           </FormSection>
         ) : null}
 
-        {isDocument ? (
+        {mode === 'sale' && customerId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+          <View style={styles.perkCard}>
+            <View style={styles.perkHeader}>
+              <IconBadge icon="award" tone="amber" size="sm" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.perkEyebrow}>Customer rewards</Text>
+                <Text style={styles.perkTitle}>Reward points</Text>
+              </View>
+              <View style={styles.perkBalancePill}>
+                <Text style={styles.perkBalanceValue}>{selectedPosCustomer?.loyalty_points ?? 0}</Text>
+                <Text style={styles.perkBalanceUnit}>pts</Text>
+              </View>
+            </View>
+            <Text style={styles.perkHint}>
+              {loyaltyPrefs.points_per_currency_unit} pts = {formatMoney(1)} · redeem up to {loyaltyMaxPoints} pts
+            </Text>
+            <View style={styles.redeemRow}>
+              <Pressable
+                style={styles.redeemBtn}
+                onPress={() =>
+                  setPointsToRedeem((current) => {
+                    if (current <= 0) return 0;
+                    const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
+                    return next < loyaltyPrefs.min_redeem_points ? 0 : next;
+                  })
+                }
+              >
+                <Feather name="minus" size={16} color={colors.foreground} />
+              </Pressable>
+              <View style={styles.redeemValueWrap}>
+                <Text style={styles.redeemValue}>{pointsToRedeem}</Text>
+                <Text style={styles.redeemValueUnit}>pts</Text>
+              </View>
+              <Pressable
+                style={styles.redeemBtn}
+                onPress={() =>
+                  setPointsToRedeem((current) => {
+                    const stepAmount = Math.max(1, loyaltyPrefs.min_redeem_points);
+                    if (current <= 0) return Math.min(loyaltyMaxPoints, stepAmount);
+                    return Math.min(loyaltyMaxPoints, current + stepAmount);
+                  })
+                }
+              >
+                <Feather name="plus" size={16} color={colors.foreground} />
+              </Pressable>
+              <Pressable
+                style={styles.redeemMaxBtn}
+                onPress={() => setPointsToRedeem(loyaltyMaxPoints)}
+              >
+                <Text style={styles.redeemMaxText}>Max</Text>
+              </Pressable>
+            </View>
+            {pointsToRedeem > 0 ? (
+              <View style={styles.perkSaveBanner}>
+                <Feather name="check-circle" size={14} color={colors.success} />
+                <Text style={styles.perkSaveText}>Saves {formatMoney(loyaltyDiscount)} on this bill</Text>
+              </View>
+            ) : (
+              <Text style={styles.perkHint}>Tap + to redeem points on this bill</Text>
+            )}
+          </View>
+        ) : null}
+
+        {mode === 'sale' && customerId && automationOffers.length > 0 ? (
+          <View style={styles.perkCard}>
+            <View style={styles.perkHeader}>
+              <IconBadge icon="gift" tone="cyan" size="sm" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.perkEyebrow}>Special for this customer</Text>
+                <Text style={styles.perkTitle}>Automation offers</Text>
+              </View>
+            </View>
+            <View style={styles.offerList}>
+              {automationOffers.map((offer) => {
+                const dtype = offer.discount_type === 'amount' ? 'amount' : 'percent';
+                const active =
+                  billDiscountType === dtype &&
+                  String(Number(billDiscountValue) || 0) === String(Number(offer.discount_value) || 0);
+                const badge =
+                  dtype === 'amount'
+                    ? `${formatMoney(Number(offer.discount_value) || 0)} off`
+                    : `${Number(offer.discount_value) || 0}% off`;
+                return (
+                  <Pressable
+                    key={`${offer.label}-${offer.discount_value}`}
+                    style={[styles.offerCard, active && styles.offerCardActive]}
+                    onPress={() => {
+                      setBillDiscountType(dtype);
+                      setBillDiscountValue(offer.discount_value);
+                      writePosSession({
+                        billDiscountType: dtype,
+                        billDiscountValue: offer.discount_value,
+                      });
+                    }}
+                  >
+                    <View style={[styles.offerBadge, active && styles.offerBadgeActive]}>
+                      <Text style={[styles.offerBadgeText, active && styles.offerBadgeTextActive]}>{badge}</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.offerLabel} numberOfLines={2}>
+                        {offer.label}
+                      </Text>
+                      <Text style={styles.offerMeta}>{active ? 'Applied to bill' : 'Tap to apply'}</Text>
+                    </View>
+                    <Feather
+                      name={active ? 'check-circle' : 'chevron-right'}
+                      size={18}
+                      color={active ? colors.success : colors.mutedForeground}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {!isChallan ? (
+        <FormSection title="Bill discount" subtitle="Optional off the whole bill">
+          <View style={styles.discountRow}>
+            {(
+              [
+                { value: '', label: 'None' },
+                { value: 'percent', label: '%' },
+                { value: 'amount', label: '₹' },
+              ] as const
+            ).map((option) => (
+              <Chip
+                key={option.value || 'none'}
+                label={option.label}
+                active={billDiscountType === option.value}
+                onPress={() => {
+                  setBillDiscountType(option.value);
+                  if (!option.value) setBillDiscountValue('0');
+                  writePosSession({
+                    billDiscountType: option.value,
+                    billDiscountValue: option.value ? billDiscountValue : '0',
+                  });
+                }}
+              />
+            ))}
+            {billDiscountType ? (
+              <TextInput
+                style={[styles.input, styles.discountInput]}
+                value={billDiscountValue}
+                onChangeText={(value) => {
+                  setBillDiscountValue(value);
+                  writePosSession({ billDiscountValue: value });
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                placeholderTextColor={colors.mutedForeground}
+              />
+            ) : null}
+          </View>
+        </FormSection>
+        ) : null}
+
+        {isNote ? (
+          <>
+            <FormSection
+              title="Settlement"
+              subtitle={
+                isCreditNote
+                  ? 'Adjust the customer balance, or refund cash now'
+                  : 'Adjust what you owe, or receive cash now'
+              }
+            >
+              <View style={styles.discountRow}>
+                <Chip
+                  label={isCreditNote ? 'Adjust balance' : 'Adjust payable'}
+                  active={noteSettlement === 'adjust'}
+                  onPress={() => setNoteSettlement('adjust')}
+                />
+                <Chip
+                  label={isCreditNote ? 'Refund cash' : 'Receive cash'}
+                  active={noteSettlement === 'cash'}
+                  onPress={() => setNoteSettlement('cash')}
+                />
+              </View>
+              {noteSettlement === 'cash' ? (
+                <SelectField
+                  label={isCreditNote ? 'Refund from' : 'Receive into'}
+                  required
+                  value={cashAccountId}
+                  options={cashAccountOptions}
+                  onChange={setCashAccountId}
+                  placeholder="Select account"
+                />
+              ) : (
+                <Text style={styles.hint}>
+                  {isCreditNote
+                    ? 'Reduces what the customer owes. Use Refund cash if they already paid and need money back.'
+                    : 'Reduces what you owe the supplier. Use Receive cash if the supplier is paying you back now.'}
+                </Text>
+              )}
+            </FormSection>
+            <FormSection title="Reason" subtitle="Shown on the note (optional)">
+              <Input
+                label="Notes"
+                optional
+                value={documentNotes}
+                onChangeText={setDocumentNotes}
+                placeholder={
+                  isCreditNote
+                    ? 'e.g. Return of damaged goods'
+                    : 'e.g. Purchase return / rate difference'
+                }
+                multiline
+              />
+            </FormSection>
+          </>
+        ) : isDocument ? (
           isQuotation ? (
             <DateField
               label="Valid until"
@@ -1442,13 +1738,7 @@ export function ShopPosScreen() {
                   ? 'No invoice and no payment. Dispatch this challan when goods leave — stock is deducted then.'
                   : 'No payment and no stock change yet. Convert this sale order to a sale invoice when you deliver.'}
             </Text>
-          ) : (
-            <Text style={styles.hint}>
-              {isCreditNote
-                ? 'Credit note reduces what the customer owes (returns / adjustments).'
-                : 'Debit note reduces what you owe the supplier (returns / adjustments).'}
-            </Text>
-          )
+          ) : null
         ) : (
           <FormSection title="Payment" subtitle="How this bill is settled">
             <View style={styles.discountRow}>
@@ -1515,26 +1805,60 @@ export function ShopPosScreen() {
             <Text style={styles.meta}>Items</Text>
             <Text style={styles.meta}>{formatMoney(totals.merchandiseGross)}</Text>
           </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>Product discounts</Text>
-            <Text style={styles.meta}>-{formatMoney(totals.lineDiscountTotal)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>Bill discount</Text>
-            <Text style={styles.meta}>-{formatMoney(totals.billDiscountAmount)}</Text>
-          </View>
-          {loyaltyDiscount > 0 ? (
+          {totals.lineDiscountTotal > 0 ? (
             <View style={styles.totalRow}>
-              <Text style={styles.meta}>Reward points</Text>
-              <Text style={styles.meta}>-{formatMoney(loyaltyDiscount)}</Text>
+              <Text style={styles.meta}>Product discounts</Text>
+              <Text style={styles.meta}>-{formatMoney(totals.lineDiscountTotal)}</Text>
+            </View>
+          ) : null}
+          {totals.billDiscountAmount > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Bill discount</Text>
+              <Text style={styles.meta}>-{formatMoney(totals.billDiscountAmount)}</Text>
+            </View>
+          ) : null}
+          {totals.loyaltyDiscountAmount > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>
+                Reward points{pointsToRedeem > 0 ? ` (${pointsToRedeem} pts)` : ''}
+              </Text>
+              <Text style={styles.meta}>-{formatMoney(totals.loyaltyDiscountAmount)}</Text>
             </View>
           ) : null}
           <View style={styles.totalRow}>
-            <Text style={styles.meta}>
-              GST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
-            </Text>
-            <Text style={styles.meta}>{formatMoney(totals.taxTotal)}</Text>
+            <Text style={styles.meta}>Taxable value</Text>
+            <Text style={styles.meta}>{formatMoney(totals.subtotal)}</Text>
           </View>
+          {totals.taxTotal > 0 ? (
+            billIsInterstate ? (
+              <View style={styles.totalRow}>
+                <Text style={styles.meta}>
+                  IGST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
+                </Text>
+                <Text style={styles.meta}>{formatMoney(totals.taxTotal)}</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.totalRow}>
+                  <Text style={styles.meta}>
+                    CGST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
+                  </Text>
+                  <Text style={styles.meta}>{formatMoney(billCgst)}</Text>
+                </View>
+                <View style={styles.totalRow}>
+                  <Text style={styles.meta}>SGST</Text>
+                  <Text style={styles.meta}>{formatMoney(billSgst)}</Text>
+                </View>
+              </>
+            )
+          ) : (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>
+                GST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
+              </Text>
+              <Text style={styles.meta}>{formatMoney(totals.taxTotal)}</Text>
+            </View>
+          )}
           <View style={styles.totalRow}>
             <Text style={styles.payableLabel}>
               {isQuotation || isNote || isOrder || isChallan
@@ -1739,18 +2063,100 @@ const styles = StyleSheet.create({
   },
   customerField: { flex: 1 },
   loyaltyBox: { marginTop: spacing.sm, gap: 6 },
-  redeemRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  perkCard: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.sm,
+  },
+  perkHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  perkEyebrow: {
+    ...typography.caption,
+    color: colors.primary,
+    fontFamily: fonts.bodySemi,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontSize: 11,
+  },
+  perkTitle: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodySemi },
+  perkHint: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
+  perkBalancePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.warningSoft,
+    alignItems: 'center',
+    minWidth: 64,
+  },
+  perkBalanceValue: { fontFamily: fonts.bodySemi, fontSize: 18, color: colors.foreground },
+  perkBalanceUnit: { ...typography.caption, color: colors.mutedForeground },
+  perkSaveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.successSoft,
+  },
+  perkSaveText: { ...typography.caption, color: colors.success, fontFamily: fonts.bodySemi, flex: 1 },
+  redeemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   redeemBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: colors.secondary,
   },
-  redeemValue: { fontFamily: fonts.bodySemi, fontSize: 16, color: colors.foreground, minWidth: 72, textAlign: 'center' },
+  redeemValueWrap: { alignItems: 'center', minWidth: 64 },
+  redeemValue: { fontFamily: fonts.bodySemi, fontSize: 22, color: colors.foreground },
+  redeemValueUnit: { ...typography.caption, color: colors.mutedForeground },
+  redeemMaxBtn: {
+    marginLeft: 'auto',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+  },
+  redeemMaxText: { ...typography.caption, color: colors.primaryForeground, fontFamily: fonts.bodySemi },
+  offerList: { gap: 8, marginTop: 4 },
+  offerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.secondary,
+  },
+  offerCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: '#D8E8ED',
+  },
+  offerBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.sm,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  offerBadgeActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  offerBadgeText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
+  offerBadgeTextActive: { color: colors.primaryForeground },
+  offerLabel: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodySemi },
+  offerMeta: { ...typography.caption, color: colors.mutedForeground },
   sideAddBtn: {
     width: 48,
     height: 48,

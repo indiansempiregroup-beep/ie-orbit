@@ -79,6 +79,15 @@ export function usePlatformUpiClaimsQuery(scope: 'pending' | 'history' | 'all' =
   });
 }
 
+export function usePlatformRefundRequestsQuery(scope: 'pending' | 'history' | 'all' = 'pending') {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'refund-requests', scope],
+    queryFn: async () => (await client.platform.refundRequests({ limit: 100, scope })).data.refunds,
+    retry: false,
+  });
+}
+
 export function usePlatformTenantCreditsQuery(tenantId: string | undefined) {
   const client = useApiClient();
   return useQuery({
@@ -374,4 +383,24 @@ export function useInvalidatePlatform() {
   return () => {
     void queryClient.invalidateQueries({ queryKey: ['platform'] });
   };
+}
+
+export function usePlatformBillingGstSettingsQuery() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['platform', 'billing-gst-settings'],
+    queryFn: async () => (await client.platform.billingGstSettings()).data,
+    retry: false,
+  });
+}
+
+export function useUpdatePlatformBillingGstSettingsMutation() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: Record<string, unknown>) => (await client.platform.updateBillingGstSettings(body)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'billing-gst-settings'] });
+    },
+  });
 }

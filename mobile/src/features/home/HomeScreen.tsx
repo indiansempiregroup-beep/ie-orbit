@@ -20,7 +20,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { useScreenInsets, useTabBarLayout } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { isUpcomingBooking, mapBookingStatus } from '../../utils/format';
+import { isUpcomingBooking, mapBookingStatus, formatMoney } from '../../utils/format';
 import {
   bookingServiceLabel,
   bookingStaffLabel,
@@ -417,7 +417,7 @@ export function HomeScreen() {
                     {service.name}
                   </Text>
                   <Text style={styles.serviceMeta}>
-                    {service.duration_minutes} min · {service.currency} {service.price}
+                    {service.duration_minutes} min · {formatMoney(Number(service.price), service.currency)}
                   </Text>
                 </Pressable>
               ))}
@@ -465,7 +465,7 @@ export function HomeScreen() {
                     {product.name}
                   </Text>
                   <Text style={styles.serviceMeta}>
-                    {product.currency ?? ''} {product.price}
+                    {formatShopMoney(product.price, product.currency)}
                   </Text>
                 </Pressable>
               ))}

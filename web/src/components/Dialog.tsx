@@ -121,6 +121,8 @@ export function Dialog({ open, onClose, title, children, labelledBy, busy = fals
           borderRadius: 8,
           minWidth: 320,
           maxWidth: '90%',
+          maxHeight: '92vh',
+          overflow: 'auto',
           padding: 16,
           boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
           position: 'relative',

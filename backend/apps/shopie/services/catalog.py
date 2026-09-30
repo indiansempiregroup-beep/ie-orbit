@@ -39,6 +39,7 @@ class CatalogService:
         search: str | None = None,
         status: str | None = None,
         category: str | None = None,
+        brand: str | None = None,
     ) -> QuerySet[ShopProduct]:
         qs = (
             ShopProduct.objects.filter(tenant=tenant, business=business)
@@ -57,6 +58,8 @@ class CatalogService:
             qs = qs.filter(status=status)
         if category:
             qs = qs.filter(category=category)
+        if brand:
+            qs = self._apply_brand_filter(qs, tenant=tenant, business=business, brand=brand)
         if search:
             term = search.strip()
             qs = qs.filter(
@@ -153,6 +156,7 @@ class CatalogService:
             stock_on_hand=Decimal("0"),
             low_stock_threshold=Decimal(str(data.get("low_stock_threshold") or "0")),
             pack_size=str(data.get("pack_size") or "").strip(),
+            unit=str(data.get("unit") or "").strip(),
             image_url=str(data.get("image_url") or "").strip(),
             category=self._normalize_category(data.get("category")),
             metadata=data.get("metadata") or {},
@@ -172,6 +176,7 @@ class CatalogService:
                 godown_id=data.get("godown_id"),
             )
         product = self.get_product(tenant=tenant, business=business, product_id=product.id)
+        self._sync_master_lookups(tenant=tenant, business=business, product=product)
         self._contribute_gtin(product)
         return product
 
@@ -193,6 +198,7 @@ class CatalogService:
             "details_html",
             "status",
             "pack_size",
+            "unit",
             "image_url",
             "hsn_sac",
         ):
@@ -240,8 +246,76 @@ class CatalogService:
             for row in barcodes:
                 self._attach_barcode(tenant=tenant, business=business, product=product, row=row)
         product = self.get_product(tenant=tenant, business=business, product_id=product.id)
+        self._sync_master_lookups(tenant=tenant, business=business, product=product)
         self._contribute_gtin(product)
         return product
+
+    def _sync_master_lookups(self, *, tenant: Tenant, business: Business, product: ShopProduct) -> None:
+        from apps.shopie.models import ShopMasterKind
+        from apps.shopie.services.masters import MasterService
+
+        masters = MasterService()
+        if product.category:
+            masters.ensure(
+                tenant=tenant,
+                business=business,
+                kind=ShopMasterKind.CATEGORY,
+                slug=product.category,
+                label=product.category,
+            )
+        if product.brand:
+            masters.ensure(
+                tenant=tenant,
+                business=business,
+                kind=ShopMasterKind.BRAND,
+                label=product.brand,
+            )
+        if product.unit:
+            masters.ensure(
+                tenant=tenant,
+                business=business,
+                kind=ShopMasterKind.UNIT,
+                label=product.unit,
+                slug=product.unit,
+            )
+
+    @staticmethod
+    def _apply_brand_filter(
+        qs: QuerySet[ShopProduct],
+        *,
+        tenant: Tenant,
+        business: Business,
+        brand: str,
+    ) -> QuerySet[ShopProduct]:
+        from apps.shopie.models import ShopMasterKind, ShopMasterRecord
+
+        term = (brand or "").strip()
+        if not term:
+            return qs
+        master = (
+            ShopMasterRecord.objects.filter(
+                tenant=tenant,
+                business=business,
+                kind=ShopMasterKind.BRAND,
+                deleted_at__isnull=True,
+                is_active=True,
+            )
+            .filter(Q(slug__iexact=term) | Q(label__iexact=term))
+            .first()
+        )
+        if not master:
+            return qs.filter(brand__iexact=term)
+        aliases = {
+            master.label.strip(),
+            master.slug.strip(),
+            master.slug.replace("_", " ").strip(),
+            term,
+        }
+        brand_q = Q()
+        for alias in aliases:
+            if alias:
+                brand_q |= Q(brand__iexact=alias)
+        return qs.filter(brand_q) if brand_q else qs.filter(brand__iexact=term)
 
     def _contribute_gtin(self, product: ShopProduct) -> None:
         try:

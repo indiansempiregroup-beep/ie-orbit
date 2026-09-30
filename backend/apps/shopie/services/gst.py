@@ -3,6 +3,8 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, TypedDict
 
+from apps.shopie.services.einvoice.state_codes import resolve_state_code
+
 CENTS = Decimal("0.01")
 
 
@@ -15,6 +17,62 @@ class GstSplit(TypedDict):
     sgst: Decimal
     igst: Decimal
     tax_total: Decimal
+
+
+class SaleSupply(TypedDict):
+    seller_state_code: str
+    buyer_state_code: str
+    place_of_supply: str
+    is_interstate: bool
+    customer_gstin: str
+    invoice_type: str  # B2B | B2C
+
+
+def resolve_sale_supply(
+    *,
+    business: Any,
+    customer_gstin: str = "",
+    delivery_state: str = "",
+    place_of_supply: str = "",
+) -> SaleSupply:
+    """Resolve place of supply + CGST/SGST vs IGST for a shop sale.
+
+    Seller state prefers business GSTIN → billing_state_code → address state.
+    Buyer/place of supply prefers customer GSTIN → explicit POS → delivery state → seller.
+    """
+    seller = (
+        resolve_state_code(getattr(business, "gst_tax_number", None))
+        or resolve_state_code(getattr(business, "billing_state_code", None))
+        or resolve_state_code(getattr(business, "state", None))
+    )
+    gstin = str(customer_gstin or "").strip().upper()
+    buyer = (
+        resolve_state_code(gstin)
+        or resolve_state_code(place_of_supply)
+        or resolve_state_code(delivery_state)
+        or seller
+    )
+    interstate = bool(seller and buyer and seller != buyer)
+    return {
+        "seller_state_code": seller,
+        "buyer_state_code": buyer,
+        "place_of_supply": buyer or seller,
+        "is_interstate": interstate,
+        "customer_gstin": gstin,
+        "invoice_type": "B2B" if gstin else "B2C",
+    }
+
+
+def split_stored_tax_total(tax_total: Decimal, *, interstate: bool) -> GstSplit:
+    """Split an already-computed GST amount into CGST/SGST or IGST for display/reporting."""
+    tax_total = _q(Decimal(str(tax_total or "0")))
+    zero = Decimal("0.00")
+    if tax_total <= 0:
+        return {"cgst": zero, "sgst": zero, "igst": zero, "tax_total": zero}
+    if interstate:
+        return {"cgst": zero, "sgst": zero, "igst": tax_total, "tax_total": tax_total}
+    half = _q(tax_total / 2)
+    return {"cgst": half, "sgst": _q(tax_total - half), "igst": zero, "tax_total": tax_total}
 
 
 def split_gst(taxable: Decimal, rate: Decimal, *, interstate: bool) -> GstSplit:

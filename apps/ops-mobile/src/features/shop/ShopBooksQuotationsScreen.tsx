@@ -28,6 +28,10 @@ import { groupedListProps } from '../../components/ui/GroupedList';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
+import { useAuth } from '../../contexts/AuthContext';
+import { getApiErrorMessage } from '../../utils/format';
 import type { Customer, ShopProduct, ShopQuotation } from '@ie-orbit/sdk';
 import {
   customerLabel,
@@ -69,7 +73,8 @@ export function ShopBooksQuotationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const toast = useToast();
-  const { businessId } = useWorkspace();
+  const auth = useAuth();
+  const { businessId, tenantId } = useWorkspace();
 
   const [quotations, setQuotations] = useState<ShopQuotation[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -87,6 +92,7 @@ export function ShopBooksQuotationsScreen() {
   const [validUntil, setValidUntil] = useState('');
   const [lines, setLines] = useState<QuoteLine[]>([emptyLine()]);
   const [notes, setNotes] = useState('');
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -249,6 +255,14 @@ export function ShopBooksQuotationsScreen() {
       });
       toast.push(`Quotation ${response.data.quotation_number} created`, 'success');
       closeForm();
+      setDocActions({
+        kind: 'quotation',
+        id: response.data.id,
+        number: response.data.quotation_number,
+        businessId,
+        phone: response.data.customer_phone || customers.find((c) => c.id === customerId)?.phone_number || '',
+        email: response.data.customer_email || customers.find((c) => c.id === customerId)?.email || '',
+      });
       await load();
     } catch (err) {
       toast.push(err instanceof Error ? err.message : 'Unable to create quotation', 'error');
@@ -343,6 +357,52 @@ export function ShopBooksQuotationsScreen() {
                 iconTone={converted ? 'green' : 'navy'}
                 actionLabel={open ? (converting ? 'Converting…' : 'Convert to sale') : undefined}
                 onAction={open && !converting ? () => void onConvert(item) : undefined}
+                extraActions={
+                  businessId
+                    ? [
+                        {
+                          label: 'View',
+                          icon: 'eye',
+                          onPress: () => {
+                            if (!auth.token) {
+                              toast.push('Sign in again to view this quotation', 'error');
+                              return;
+                            }
+                            void openShopDocumentHtmlView({
+                              target: {
+                                kind: 'quotation',
+                                id: item.id,
+                                number: item.quotation_number,
+                                businessId,
+                              },
+                              token: auth.token,
+                              tenantId,
+                            }).catch((err) =>
+                              toast.push(getApiErrorMessage(err, 'View failed'), 'error'),
+                            );
+                          },
+                        },
+                        {
+                          label: 'Share',
+                          icon: 'share-2',
+                          onPress: () => {
+                            const customer =
+                              item.customer && customerById.get(item.customer)
+                                ? customerById.get(item.customer)!
+                                : null;
+                            setDocActions({
+                              kind: 'quotation',
+                              id: item.id,
+                              number: item.quotation_number,
+                              businessId,
+                              phone: item.customer_phone || customer?.phone_number || '',
+                              email: item.customer_email || customer?.email || '',
+                            });
+                          },
+                        },
+                      ]
+                    : undefined
+                }
               />
             );
           }}
@@ -359,6 +419,12 @@ export function ShopBooksQuotationsScreen() {
           }
         />
       </View>
+      <DocumentActionsSheet
+        visible={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Quotation ${docActions.number || ''}` : 'Quotation'}
+      />
     </DesktopPage>
   );
 }

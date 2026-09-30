@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -35,8 +36,35 @@ import {
   stockLabel,
   type ShopSortKey,
 } from './shopHelpers';
-import type { ShopProduct } from '@ie-orbit/sdk';
+import type { ShopCustomerFilterOption, ShopProduct } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
+
+type FilterSection = 'category' | 'brand' | 'availability' | 'sort';
+
+type FilterDraft = {
+  category: string | null;
+  brand: string | null;
+  inStockOnly: boolean;
+  sort: ShopSortKey;
+};
+
+function brandMatches(productBrand: string | null | undefined, option: ShopCustomerFilterOption): boolean {
+  const value = String(productBrand || '').trim().toLowerCase();
+  if (!value) return false;
+  const aliases = [option.label, option.slug, option.slug.replace(/_/g, ' ')].map((item) =>
+    item.trim().toLowerCase(),
+  );
+  return aliases.includes(value);
+}
+
+function countActiveFilters(filters: FilterDraft): number {
+  let count = 0;
+  if (filters.category) count += 1;
+  if (filters.brand) count += 1;
+  if (filters.inStockOnly) count += 1;
+  if (filters.sort !== 'featured') count += 1;
+  return count;
+}
 
 export function ShopScreen() {
   const { t } = useTranslation();
@@ -47,15 +75,28 @@ export function ShopScreen() {
   const { tenantSlug, businessCode } = useBusinessContext();
   const { addItem, setQuantity, quantityFor, itemCount } = useCart();
   const [items, setItems] = useState<ShopProduct[]>([]);
+  const [filterOptions, setFilterOptions] = useState<{
+    categories: ShopCustomerFilterOption[];
+    brands: ShopCustomerFilterOption[];
+  }>({ categories: [], brands: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [brand, setBrand] = useState<string | null>(null);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<ShopSortKey>('featured');
-  const [menuOpen, setMenuOpen] = useState<'sort' | 'category' | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<FilterSection>('category');
+  const [valueQuery, setValueQuery] = useState('');
+  const [draft, setDraft] = useState<FilterDraft>({
+    category: null,
+    brand: null,
+    inStockOnly: false,
+    sort: 'featured',
+  });
   const hasLoadedRef = useRef(false);
   const primary = branding?.primaryColor ?? colors.primary;
   const storeName = bootstrap?.business.display_name ?? branding?.appName ?? t('nav.shop');
@@ -72,11 +113,18 @@ export function ShopScreen() {
       else if (!hasLoadedRef.current) setLoading(true);
       setError(null);
       try {
-        const response = await mobileClient.mobile.listShopProducts({
-          tenant_slug: tenantSlug,
-          business_code: businessCode,
-        });
-        setItems(response.data);
+        const scope = { tenant_slug: tenantSlug, business_code: businessCode };
+        const [productsResponse, filtersResponse] = await Promise.all([
+          mobileClient.mobile.listShopProducts(scope),
+          mobileClient.mobile.listShopFilters(scope).catch(() => null),
+        ]);
+        setItems(productsResponse.data);
+        if (filtersResponse?.data) {
+          setFilterOptions({
+            categories: filtersResponse.data.categories ?? [],
+            brands: filtersResponse.data.brands ?? [],
+          });
+        }
         hasLoadedRef.current = true;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to load shop');
@@ -95,6 +143,9 @@ export function ShopScreen() {
   );
 
   const categories = useMemo(() => {
+    if (filterOptions.categories.length) {
+      return filterOptions.categories.map((item) => ({ id: item.slug, label: item.label }));
+    }
     const set = new Map<string, string>();
     let hasUncategorized = false;
     items.forEach((item) => {
@@ -107,14 +158,44 @@ export function ShopScreen() {
       .map(([id, label]) => ({ id, label }));
     if (hasUncategorized) rows.push({ id: UNCATEGORIZED_ID, label: 'Uncategorized' });
     return rows;
-  }, [items]);
+  }, [filterOptions.categories, items]);
+
+  const brands = useMemo(() => {
+    if (filterOptions.brands.length) {
+      return filterOptions.brands.map((item) => ({ id: item.slug, label: item.label }));
+    }
+    const set = new Map<string, string>();
+    items.forEach((item) => {
+      const label = String(item.brand || '').trim();
+      if (!label) return;
+      const key = label.toLowerCase();
+      if (!set.has(key)) set.set(key, label);
+    });
+    return Array.from(set.entries())
+      .sort(([, a], [, b]) => a.localeCompare(b))
+      .map(([id, label]) => ({ id, label }));
+  }, [filterOptions.brands, items]);
+
+  const selectedBrandOption = useMemo(() => {
+    if (!brand) return null;
+    return (
+      filterOptions.brands.find((item) => item.slug === brand) ??
+      ({
+        slug: brand,
+        label: brands.find((item) => item.id === brand)?.label ?? brand,
+      } as ShopCustomerFilterOption)
+    );
+  }, [brand, brands, filterOptions.brands]);
 
   const visibleItems = useMemo(() => {
     const needle = query.toLowerCase();
     const filtered = items.filter((item) => {
       if (inStockOnly && isOutOfStock(item)) return false;
       if (category === UNCATEGORIZED_ID && shopCategoryKey(item.category)) return false;
-      if (category && category !== UNCATEGORIZED_ID && shopCategoryKey(item.category) !== category) return false;
+      if (category && category !== UNCATEGORIZED_ID && shopCategoryKey(item.category) !== category) {
+        return false;
+      }
+      if (selectedBrandOption && !brandMatches(item.brand, selectedBrandOption)) return false;
       if (!needle) return true;
       const haystack = [
         item.name,
@@ -136,13 +217,113 @@ export function ShopScreen() {
       return a.name.localeCompare(b.name);
     });
     return sorted;
-  }, [category, inStockOnly, items, query, sort]);
+  }, [category, inStockOnly, items, query, selectedBrandOption, sort]);
 
-  const sortLabel = SHOP_SORT_OPTIONS.find((item) => item.id === sort)?.label ?? 'Featured';
-  const categoryOptions = [{ id: 'all', label: 'All' }, ...categories];
+  const appliedFilters: FilterDraft = useMemo(
+    () => ({ category, brand, inStockOnly, sort }),
+    [brand, category, inStockOnly, sort],
+  );
+  const activeFilterCount = countActiveFilters(appliedFilters);
+
+  const filterSections = useMemo(() => {
+    const rows: Array<{ id: FilterSection; label: string; count: number }> = [
+      { id: 'category', label: 'Category', count: draft.category ? 1 : 0 },
+    ];
+    if (brands.length) {
+      rows.push({ id: 'brand', label: 'Brand', count: draft.brand ? 1 : 0 });
+    }
+    rows.push(
+      { id: 'availability', label: 'Availability', count: draft.inStockOnly ? 1 : 0 },
+      { id: 'sort', label: 'Sort by', count: draft.sort !== 'featured' ? 1 : 0 },
+    );
+    return rows;
+  }, [brands.length, draft.brand, draft.category, draft.inStockOnly, draft.sort]);
+
+  const sectionValues = useMemo(() => {
+    if (activeSection === 'category') {
+      return [{ id: 'all', label: 'All categories' }, ...categories];
+    }
+    if (activeSection === 'brand') {
+      return [{ id: 'all', label: 'All brands' }, ...brands];
+    }
+    if (activeSection === 'availability') {
+      return [
+        { id: 'all', label: 'All products' },
+        { id: 'in_stock', label: 'In stock only' },
+      ];
+    }
+    return SHOP_SORT_OPTIONS.map((item) => ({ id: item.id, label: item.label }));
+  }, [activeSection, brands, categories]);
+
+  const filteredSectionValues = useMemo(() => {
+    const needle = valueQuery.trim().toLowerCase();
+    if (!needle) return sectionValues;
+    return sectionValues.filter((item) => item.label.toLowerCase().includes(needle));
+  }, [sectionValues, valueQuery]);
+
+  function openFilters(section: FilterSection = 'category') {
+    setDraft(appliedFilters);
+    setActiveSection(section);
+    setValueQuery('');
+    setFilterOpen(true);
+  }
+
+  function closeFilters() {
+    setFilterOpen(false);
+    setValueQuery('');
+  }
+
+  function isValueSelected(id: string): boolean {
+    if (activeSection === 'category') {
+      return (id === 'all' && !draft.category) || id === draft.category;
+    }
+    if (activeSection === 'brand') {
+      return (id === 'all' && !draft.brand) || id === draft.brand;
+    }
+    if (activeSection === 'availability') {
+      return draft.inStockOnly ? id === 'in_stock' : id === 'all';
+    }
+    return draft.sort === id;
+  }
+
+  function selectValue(id: string) {
+    setDraft((current) => {
+      if (activeSection === 'category') {
+        return { ...current, category: id === 'all' ? null : id };
+      }
+      if (activeSection === 'brand') {
+        return { ...current, brand: id === 'all' ? null : id };
+      }
+      if (activeSection === 'availability') {
+        return { ...current, inStockOnly: id === 'in_stock' };
+      }
+      return { ...current, sort: id as ShopSortKey };
+    });
+  }
+
+  function applyFilters() {
+    setCategory(draft.category);
+    setBrand(draft.brand);
+    setInStockOnly(draft.inStockOnly);
+    setSort(draft.sort);
+    closeFilters();
+  }
+
+  function clearDraftFilters() {
+    setDraft({ category: null, brand: null, inStockOnly: false, sort: 'featured' });
+  }
+
+  function clearAppliedFilters() {
+    setCategory(null);
+    setBrand(null);
+    setInStockOnly(false);
+    setSort('featured');
+  }
+
   const categoryLabel =
-    categoryOptions.find((item) => (item.id === 'all' && !category) || item.id === category)?.label ?? 'All';
-  const filtersActive = Boolean(category) || inStockOnly || sort !== 'featured';
+    categories.find((item) => item.id === category)?.label ?? (category ? category : null);
+  const brandLabel = brands.find((item) => item.id === brand)?.label ?? (brand ? brand : null);
+  const sortLabel = SHOP_SORT_OPTIONS.find((item) => item.id === sort)?.label ?? 'Featured';
 
   function renderProduct({ item }: { item: ShopProduct }) {
     const qty = quantityFor(item.id);
@@ -239,87 +420,166 @@ export function ShopScreen() {
             ) : null}
           </Pressable>
         </View>
-        <View style={styles.searchWrap}>
-          <Feather name="search" size={16} color={colors.mutedForeground} />
-          <TextInput
-            style={styles.search}
-            placeholder="Search products"
-            placeholderTextColor={colors.mutedForeground}
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {search ? (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <Feather name="x" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ) : null}
+        <View style={styles.searchRow}>
+          <View style={styles.searchWrap}>
+            <Feather name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              style={styles.search}
+              placeholder="Search products"
+              placeholderTextColor={colors.mutedForeground}
+              value={search}
+              onChangeText={setSearch}
+              returnKeyType="search"
+              autoCorrect={false}
+            />
+            {search ? (
+              <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                <Feather name="x" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            ) : null}
+          </View>
+          <Pressable
+            style={[styles.filterIconBtn, activeFilterCount > 0 && { backgroundColor: '#fff' }]}
+            onPress={() => openFilters(categories.length ? 'category' : brands.length ? 'brand' : 'availability')}
+            accessibilityLabel="Filters"
+          >
+            <Feather name="sliders" size={18} color={activeFilterCount > 0 ? primary : '#fff'} />
+            {activeFilterCount > 0 ? (
+              <View style={[styles.filterBadge, { backgroundColor: primary }]}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
+            ) : null}
+          </Pressable>
         </View>
       </View>
 
-      <View style={styles.filterRow}>
-        <Pressable style={styles.sortBtn} onPress={() => setMenuOpen('category')}>
-          <Feather name="grid" size={14} color={colors.foreground} />
-          <Text style={styles.sortLabel} numberOfLines={1}>
-            {categoryLabel}
-          </Text>
-          <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
-        </Pressable>
-        <Pressable style={styles.sortBtn} onPress={() => setMenuOpen('sort')}>
-          <Feather name="sliders" size={14} color={colors.foreground} />
-          <Text style={styles.sortLabel} numberOfLines={1}>
-            {sortLabel}
-          </Text>
-          <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
-        </Pressable>
-        <Pressable
-          style={[styles.stockChip, inStockOnly && { backgroundColor: primary, borderColor: primary }]}
-          onPress={() => setInStockOnly((value) => !value)}
-        >
-          <Text style={[styles.stockChipText, inStockOnly && styles.stockChipTextOn]}>In stock</Text>
-        </Pressable>
-        {filtersActive ? (
-          <Pressable
-            onPress={() => {
-              setCategory(null);
-              setInStockOnly(false);
-              setSort('featured');
-            }}
-          >
+      {activeFilterCount > 0 ? (
+        <View style={styles.activeFilterBar}>
+          <Pressable style={styles.activeFilterSummary} onPress={() => openFilters()}>
+            <Feather name="filter" size={12} color={primary} />
+            <Text style={[styles.activeFilterSummaryText, { color: primary }]} numberOfLines={1}>
+              {[categoryLabel, brandLabel, inStockOnly ? 'In stock' : null, sort !== 'featured' ? sortLabel : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          </Pressable>
+          <Pressable onPress={clearAppliedFilters} hitSlop={8}>
             <Text style={[styles.clearFilters, { color: primary }]}>Clear</Text>
           </Pressable>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
 
-      <Modal visible={menuOpen != null} transparent animationType="fade" onRequestClose={() => setMenuOpen(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setMenuOpen(null)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{menuOpen === 'category' ? 'Category' : 'Sort by'}</Text>
-            {(menuOpen === 'category' ? categoryOptions : SHOP_SORT_OPTIONS).map((option) => {
-              const selected =
-                menuOpen === 'category'
-                  ? (option.id === 'all' && !category) || option.id === category
-                  : sort === option.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  style={styles.modalRow}
-                  onPress={() => {
-                    if (menuOpen === 'category') setCategory(option.id === 'all' ? null : option.id);
-                    else setSort(option.id as ShopSortKey);
-                    setMenuOpen(null);
-                  }}
+      <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={closeFilters}>
+        <View style={styles.filterModalRoot}>
+          <Pressable style={styles.filterBackdrop} onPress={closeFilters} />
+          <View style={[styles.filterSheet, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>Filters</Text>
+              <Pressable onPress={closeFilters} hitSlop={8} accessibilityLabel="Close filters">
+                <Feather name="x" size={22} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <View style={styles.filterBody}>
+              <View style={styles.filterLeft}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {filterSections.map((section) => {
+                    const selected = activeSection === section.id;
+                    return (
+                      <Pressable
+                        key={section.id}
+                        style={[
+                          styles.filterNavItem,
+                          selected && [styles.filterNavItemOn, { borderLeftColor: primary }],
+                        ]}
+                        onPress={() => {
+                          setActiveSection(section.id);
+                          setValueQuery('');
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.filterNavText,
+                            selected && { color: primary, fontWeight: '700' },
+                          ]}
+                        >
+                          {section.label}
+                        </Text>
+                        {section.count > 0 ? (
+                          <View style={[styles.sectionDot, { backgroundColor: primary }]} />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              <View style={styles.filterRight}>
+                <View style={styles.valueSearchWrap}>
+                  <Feather name="search" size={14} color={colors.mutedForeground} />
+                  <TextInput
+                    style={styles.valueSearch}
+                    placeholder={`Search ${filterSections.find((item) => item.id === activeSection)?.label ?? 'filters'}`}
+                    placeholderTextColor={colors.mutedForeground}
+                    value={valueQuery}
+                    onChangeText={setValueQuery}
+                    autoCorrect={false}
+                    returnKeyType="search"
+                  />
+                  {valueQuery ? (
+                    <Pressable onPress={() => setValueQuery('')} hitSlop={8}>
+                      <Feather name="x" size={14} color={colors.mutedForeground} />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <ScrollView
+                  style={styles.valueList}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
                 >
-                  <Text style={[styles.modalRowText, selected && { color: primary, fontWeight: '700' }]}>
-                    {option.label}
-                  </Text>
-                  {selected ? <Feather name="check" size={16} color={primary} /> : null}
-                </Pressable>
-              );
-            })}
+                  {filteredSectionValues.length ? (
+                    filteredSectionValues.map((option) => {
+                      const selected = isValueSelected(option.id);
+                      return (
+                        <Pressable
+                          key={option.id}
+                          style={styles.valueRow}
+                          onPress={() => selectValue(option.id)}
+                        >
+                          <View style={[styles.radio, selected && { borderColor: primary }]}>
+                            {selected ? <View style={[styles.radioDot, { backgroundColor: primary }]} /> : null}
+                          </View>
+                          <Text
+                            style={[
+                              styles.valueText,
+                              selected && { color: primary, fontWeight: '700' },
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })
+                  ) : (
+                    <Text style={styles.valueEmpty}>No matching options</Text>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+
+            <View style={styles.filterFooter}>
+              <Pressable style={styles.clearBtn} onPress={clearDraftFilters}>
+                <Text style={styles.clearBtnText}>Clear filters</Text>
+              </Pressable>
+              <Pressable style={[styles.applyBtn, { backgroundColor: primary }]} onPress={applyFilters}>
+                <Text style={styles.applyBtnText}>
+                  Apply{countActiveFilters(draft) ? ` (${countActiveFilters(draft)})` : ''}
+                </Text>
+              </Pressable>
+            </View>
           </View>
-        </Pressable>
+        </View>
       </Modal>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -340,10 +600,10 @@ export function ShopScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="shopping-bag"
-              title={query || category || inStockOnly ? 'No matching products' : 'No products yet'}
+              title={query || activeFilterCount ? 'No matching products' : 'No products yet'}
               description={
-                query || category || inStockOnly
-                  ? 'Try another search, category, or clear filters.'
+                query || activeFilterCount
+                  ? 'Try another search or clear filters.'
                   : 'This shop has not listed products yet.'
               }
             />
@@ -358,7 +618,12 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   topBar: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
-  kicker: { ...typography.tiny, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: 0.6 },
+  kicker: {
+    ...typography.tiny,
+    color: 'rgba(255,255,255,0.75)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   storeName: { ...typography.title, color: '#fff', fontSize: 20 },
   iconBtn: {
     width: 40,
@@ -383,7 +648,9 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   badgeText: { color: '#111', fontSize: 10, fontWeight: '800' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -393,61 +660,161 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   search: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
-  filterRow: {
+  filterIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  filterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  activeFilterBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+    minHeight: 32,
   },
-  sortBtn: {
+  activeFilterSummary: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flexShrink: 1,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    maxWidth: '42%',
+    minWidth: 0,
   },
-  sortLabel: { ...typography.caption, color: colors.foreground, fontWeight: '600', flexShrink: 1 },
-  stockChip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.card,
-  },
-  stockChipText: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
-  stockChipTextOn: { color: '#fff' },
-  clearFilters: { ...typography.caption, fontWeight: '700' },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15,22,35,0.35)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
+  activeFilterSummaryText: { ...typography.tiny, fontWeight: '700', flexShrink: 1 },
+  clearFilters: { ...typography.tiny, fontWeight: '800' },
+  filterModalRoot: { flex: 1, justifyContent: 'flex-end' },
+  filterBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,22,35,0.4)' },
+  filterSheet: {
     backgroundColor: colors.card,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    padding: spacing.xl,
-    paddingBottom: spacing.xxxl,
-    gap: 4,
+    maxHeight: '88%',
+    minHeight: '72%',
+    overflow: 'hidden',
   },
-  modalTitle: { ...typography.title, color: colors.foreground, marginBottom: spacing.md },
-  modalRow: {
+  filterHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  modalRowText: { ...typography.body, color: colors.foreground },
+  filterTitle: { ...typography.title, color: colors.foreground, fontSize: 20 },
+  filterBody: { flex: 1, flexDirection: 'row', minHeight: 320 },
+  filterLeft: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: '40%',
+    width: '40%',
+    maxWidth: '40%',
+    backgroundColor: colors.muted,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+  },
+  filterNavItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
+  },
+  filterNavItemOn: {
+    backgroundColor: colors.card,
+  },
+  filterNavText: { ...typography.caption, color: colors.foreground, fontWeight: '600', flex: 1 },
+  sectionDot: { width: 7, height: 7, borderRadius: 4 },
+  filterRight: { flexGrow: 1, flexShrink: 1, flexBasis: '60%', width: '60%', backgroundColor: colors.card },
+  valueSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    minHeight: 40,
+    backgroundColor: colors.background,
+  },
+  valueSearch: { flex: 1, ...typography.caption, color: colors.foreground, paddingVertical: 8 },
+  valueList: { flex: 1, paddingHorizontal: spacing.md },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  valueText: { ...typography.body, color: colors.foreground, flex: 1 },
+  valueEmpty: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    paddingVertical: spacing.xl,
+    textAlign: 'center',
+  },
+  filterFooter: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  clearBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+  },
+  clearBtnText: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  applyBtn: {
+    flex: 1.3,
+    minHeight: 46,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyBtnText: { ...typography.label, color: '#fff', fontWeight: '800' },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingCount: { ...typography.tiny, color: colors.mutedForeground },
   ratingEmpty: { ...typography.tiny, color: colors.mutedForeground, marginTop: 4 },
@@ -461,7 +828,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  image: { width: '100%', height: 132, borderRadius: radius.md, marginBottom: spacing.sm, backgroundColor: colors.muted },
+  image: {
+    width: '100%',
+    height: 132,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.muted,
+  },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   name: { ...typography.label, fontWeight: '700', color: colors.foreground, minHeight: 36 },
   brand: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },

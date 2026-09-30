@@ -154,6 +154,8 @@ class CustomerAddress(TenantModel):
     state = models.CharField(max_length=120, blank=True)
     country = models.CharField(max_length=120, blank=True, db_index=True)
     postal_code = models.CharField(max_length=32, blank=True)
+    # Delivery contact for this address (Amazon-style). Required on create/update via API.
+    phone_number = models.CharField(max_length=32, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     is_default = models.BooleanField(default=False)

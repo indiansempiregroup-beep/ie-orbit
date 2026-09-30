@@ -244,6 +244,18 @@ export function MoreScreen() {
           </MenuSection>
         ) : null}
 
+        {has(PlanFeature.automations) ? (
+          <MenuSection title="Automations">
+            <MenuRow
+              icon="zap"
+              label="Automation Creator"
+              subtitle="Birthday, VIP & day offers"
+              last
+              onPress={() => navigation.navigate('Automations')}
+            />
+          </MenuSection>
+        ) : null}
+
         <MenuSection title={t('settings.business')}>
           {has(PlanFeature.appointieCustomers) || showShop ? (
             <MenuRow icon="users" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />

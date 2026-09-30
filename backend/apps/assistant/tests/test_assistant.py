@@ -172,6 +172,36 @@ def test_rules_brain_help_and_unknown(monkeypatch):
     assert "not able to help" in unknown.reply.lower() or "what can you do" in unknown.reply.lower()
 
 
+def test_help_text_is_scannable(monkeypatch):
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=True)
+    business = SimpleNamespace()
+    monkeypatch.setattr(toolset, "has_domain_feature", lambda **kwargs: True)
+    packed = toolset.help_text(access=access, business=business)
+    assert isinstance(packed, dict)
+    text = packed["text"]
+    links = packed["links"]
+    assert "Here’s what I can help with" in text
+    assert "Orbit Mart" in text or any(link.get("group") == "Orbit Mart" for link in links)
+    assert any(link.get("group") == "Orbit Appoint" for link in links)
+    assert "·" not in text  # no dense middle-dot command dumps
+    assert "•" not in text
+    assert "Confirm" in text
+    assert any(link.get("kind") == "prompt" and link.get("action") == "send" for link in links)
+    assert any(link.get("kind") == "prompt" and link.get("action") == "compose" for link in links)
+    assert any(link.get("label") == "Orders today" and link.get("section") == "Orders" for link in links)
+    assert any(link.get("select_text") == "order #[order number]" for link in links)
+    assert any(link.get("group") == "Customers & overview" for link in links)
+
+
+def test_suggestion_chips_always_include_help(monkeypatch):
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=True)
+    business = SimpleNamespace()
+    monkeypatch.setattr(toolset, "has_domain_feature", lambda **kwargs: True)
+    chips = toolset.suggestion_chips(access=access, business=business)
+    assert chips[-1] == "What can you do?"
+    assert len(chips) <= 6
+
+
 def test_rules_brain_tool_validation_becomes_reply(monkeypatch):
     brain = RulesBrain()
     access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
@@ -557,3 +587,160 @@ def test_rules_brain_online_orders_not_order_lookup(monkeypatch):
     assert called["lookup"] is False
     assert "online order" in result.reply.lower()
     assert result.metadata["links"][0]["badge"] == "Pickup"
+
+
+def test_rules_brain_daybook_and_barcode(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
+    monkeypatch.setattr(toolset, "books_daybook_today", lambda **kwargs: "Daybook today — 1 entry · ₹100.00:")
+    monkeypatch.setattr(toolset, "lookup_barcode", lambda **kwargs: "Tea\nSKU: T1\nStock: 3\nPrice: ₹40.00")
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    ctx = {"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access}
+    daybook = brain.handle(text="Daybook today", context=ctx)
+    assert "Daybook" in daybook.reply
+    barcode = brain.handle(text="lookup barcode 890123", context=ctx)
+    assert "Tea" in barcode.reply
+
+
+def test_rules_brain_borrow_ledger_and_payment(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
+    monkeypatch.setattr(
+        toolset,
+        "customer_borrow_ledger",
+        lambda **kwargs: "Borrow ledger for Riya — balance ₹500.00.",
+    )
+
+    def fake_propose(*, tenant, business, query, amount, payment_method="cash"):
+        return {
+            "action_type": "borrow.record_payment",
+            "summary": f"Record ₹{amount} {payment_method} payment from {query}.",
+            "payload": {"customer_id": "c1", "amount": str(amount), "payment_method": payment_method},
+        }
+
+    monkeypatch.setattr(toolset, "propose_borrow_payment", fake_propose)
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    ctx = {"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access}
+    ledger = brain.handle(text="borrow ledger for Riya", context=ctx)
+    assert "Riya" in ledger.reply
+    paid = brain.handle(text="Riya paid 500", context=ctx)
+    assert paid.proposal is not None
+    assert paid.proposal["action_type"] == "borrow.record_payment"
+    assert "Confirm" in paid.reply
+
+
+def test_rules_brain_service_slots(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=False, appoint_enabled=True)
+    monkeypatch.setattr(
+        toolset,
+        "service_slots",
+        lambda **kwargs: "3 slots for Haircut today (30 min) — next 3:\n• 10:00–10:30",
+    )
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    result = brain.handle(
+        text="slots for haircut today",
+        context={"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access},
+    )
+    assert "Haircut" in result.reply
+    assert "10:00" in result.reply
+
+
+def test_rules_brain_list_customers(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
+    monkeypatch.setattr(
+        toolset,
+        "list_customers",
+        lambda **kwargs: "3 customers — showing 1–3. Tap one for details:",
+    )
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    result = brain.handle(
+        text="List customers",
+        context={"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access},
+    )
+    assert "customer" in result.reply.lower()
+
+
+def test_rules_brain_list_products(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
+    monkeypatch.setattr(
+        toolset,
+        "list_products",
+        lambda **kwargs: "5 products — showing 1–5. Tap one for details:",
+    )
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    result = brain.handle(
+        text="List products",
+        context={"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access},
+    )
+    assert "product" in result.reply.lower()
+
+
+def test_preview_record_order_number_skips_invalid_uuid(monkeypatch):
+    order = SimpleNamespace(id="oid-1", order_number="SO-RUPALI-S-20260825132551")
+    called = {"find": False}
+
+    def fake_find(*, tenant, business, number):
+        called["find"] = True
+        assert number == "SO-RUPALI-S-20260825132551"
+        return order
+
+    monkeypatch.setattr(toolset, "has_domain_feature", lambda **kwargs: True)
+    monkeypatch.setattr(toolset, "find_order", fake_find)
+    monkeypatch.setattr(toolset, "_order_detail_pack", lambda o: f"Order {o.order_number}")
+    result = toolset.preview_record(
+        tenant=SimpleNamespace(),
+        business=SimpleNamespace(),
+        kind="order",
+        record_id="SO-RUPALI-S-20260825132551",
+    )
+    assert called["find"] is True
+    assert "SO-RUPALI-S-20260825132551" in result
+
+
+def test_rules_brain_preview_preserves_order_number_case(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
+    seen = {"id": None}
+
+    def fake_preview(*, tenant, business, kind, record_id):
+        seen["id"] = record_id
+        return f"Order details for {record_id}"
+
+    monkeypatch.setattr(toolset, "preview_record", fake_preview)
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    result = brain.handle(
+        text="preview order SO-RUPALI-S-20260825132551",
+        context={"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access},
+    )
+    assert seen["id"] == "SO-RUPALI-S-20260825132551"
+    assert "SO-RUPALI-S-20260825132551" in result.reply
+
+
+def test_rules_brain_preview_service_keeps_spaces_and_plus(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=False, appoint_enabled=True)
+    seen = {"id": None}
+
+    def fake_preview(*, tenant, business, kind, record_id):
+        seen["id"] = record_id
+        return f"Service {record_id}"
+
+    monkeypatch.setattr(toolset, "preview_record", fake_preview)
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    result = brain.handle(
+        text="preview service Hair Color + Cut",
+        context={"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access},
+    )
+    assert seen["id"] == "Hair Color + Cut"
+    assert "Hair Color + Cut" in result.reply
+
+
+def test_looks_like_uuid_helper():
+    from apps.assistant.services.links import looks_like_uuid
+
+    assert looks_like_uuid("550e8400-e29b-41d4-a716-446655440000") is True
+    assert looks_like_uuid("SO-RUPALI-S-20260825132551") is False
+    assert looks_like_uuid("Riya") is False

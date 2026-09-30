@@ -48,8 +48,8 @@ def business() -> Business:
 
 
 @pytest.mark.django_db
-def test_default_trial_days_is_fifteen() -> None:
-    assert DEFAULT_TRIAL_DAYS == 15
+def test_default_trial_days_is_forty_five() -> None:
+    assert DEFAULT_TRIAL_DAYS == 45
 
 
 @pytest.mark.django_db

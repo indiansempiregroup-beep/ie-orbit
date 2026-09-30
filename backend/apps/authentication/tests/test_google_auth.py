@@ -65,6 +65,7 @@ def test_google_customer_signup_creates_verified_user(
             "id_token": "fake-google-token",
             "client": "customer",
             "remember_me": True,
+            "purpose": "signup",
             "tenant_slug": tenant.slug,
             "business_code": business.business_code,
         },
@@ -85,6 +86,44 @@ def test_google_customer_signup_creates_verified_user(
     assert SocialAccount.objects.filter(
         user=user, provider="google", subject="google-sub-123"
     ).exists()
+    from apps.customers.models import Customer
+
+    assert Customer.objects.filter(
+        tenant=tenant, business=business, email__iexact="ada@gmail.com"
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_google_customer_login_rejects_user_without_shop_customer(
+    api_client: APIClient, monkeypatch: pytest.MonkeyPatch, settings
+) -> None:
+    settings.GOOGLE_OAUTH_CLIENT_IDS = ("web-client.apps.googleusercontent.com",)
+    User.objects.create_user(
+        email="ada@gmail.com",
+        password="ValidPass123",
+        first_name="Ada",
+        status=UserStatus.ACTIVE,
+    )
+    monkeypatch.setattr(
+        "apps.authentication.services.authentication.verify_google_id_token",
+        lambda token: GOOGLE_IDENTITY,
+    )
+
+    tenant, business = _customer_shop()
+    response = api_client.post(
+        reverse("auth-google"),
+        {
+            "id_token": "fake-google-token",
+            "client": "customer",
+            "purpose": "login",
+            "tenant_slug": tenant.slug,
+            "business_code": business.business_code,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "No account found for this shop" in str(response.json())
 
 
 @pytest.mark.django_db
@@ -105,11 +144,23 @@ def test_google_customer_login_links_existing_password_user(
     )
 
     tenant, business = _customer_shop()
+    from apps.customers.models import Customer
+
+    Customer.objects.create(
+        tenant=tenant,
+        business=business,
+        customer_code="cust-ada",
+        first_name="Ada",
+        last_name="Lovelace",
+        display_name="Ada Lovelace",
+        email=user.email,
+    )
     response = api_client.post(
         reverse("auth-google"),
         {
             "id_token": "fake-google-token",
             "client": "customer",
+            "purpose": "login",
             "tenant_slug": tenant.slug,
             "business_code": business.business_code,
         },

@@ -17,7 +17,7 @@ export function AboutPage() {
             <p className="public-lead">
               IE Orbit is the appointments-and-retail workspace from Indians Empire Technologies. The customer-facing
               app is white-label — your brand, not ours. Orbit Appoint runs bookings and staff. Orbit Mart runs the
-              counter and catalog — GST books and Grow on Pro — with UPI subscription billing and a 15-day full-Pro
+              counter and catalog — GST books and Grow on Pro — with UPI subscription billing and a 45-day full-Pro
               trial.
             </p>
           </div>
@@ -65,7 +65,7 @@ export function AboutPage() {
             <p className="public-kicker">Self-serve</p>
             <h2>Live without waiting on an admin</h2>
             <p style={{ marginBottom: 0 }}>
-              New customers can create a workspace, pick a product, and start a 15-day trial on their own.
+              New customers can create a workspace, pick a product, and start a 45-day trial on their own.
             </p>
           </article>
         </div>

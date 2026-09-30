@@ -48,6 +48,9 @@ type UploadMediaArgs = {
   folderType: 'branding' | 'products' | 'pets' | 'services' | 'staff' | 'documents';
   tags: string[];
   displayName: string;
+  prepareProductCanvas?: boolean;
+  removeBackground?: boolean;
+  crop?: { left: number; top: number; width: number; height: number };
 };
 
 export async function uploadMedia({
@@ -58,6 +61,9 @@ export async function uploadMedia({
   folderType,
   tags,
   displayName,
+  prepareProductCanvas,
+  removeBackground,
+  crop,
 }: UploadMediaArgs): Promise<MediaUploadResult> {
   const formData = new FormData();
   await appendPickerFile(formData, asset);
@@ -66,6 +72,18 @@ export async function uploadMedia({
   formData.append('visibility', 'public');
   tags.forEach((tag) => formData.append('tags', tag));
   formData.append('display_name', displayName);
+  if (prepareProductCanvas) {
+    formData.append('prepare_product_canvas', 'true');
+  }
+  if (removeBackground) {
+    formData.append('remove_background', 'true');
+  }
+  if (crop) {
+    formData.append('crop_left', String(crop.left));
+    formData.append('crop_top', String(crop.top));
+    formData.append('crop_width', String(crop.width));
+    formData.append('crop_height', String(crop.height));
+  }
 
   const response = await fetch(`${getApiBaseUrl()}/media/upload`, {
     method: 'POST',
@@ -79,7 +97,31 @@ export async function uploadMedia({
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || 'Image upload failed.');
+    let detail = text;
+    try {
+      const payload = JSON.parse(text) as {
+        detail?: string | string[];
+        error?: { message?: string };
+        message?: string;
+      };
+      const raw = payload.detail ?? payload.error?.message ?? payload.message;
+      if (raw) detail = Array.isArray(raw) ? raw.join(' ') : String(raw);
+    } catch {
+      // keep raw text
+    }
+    if (response.status === 403) {
+      throw new Error(
+        detail ||
+          'Background removal is not included in your plan. Turn off Remove background or upgrade.',
+      );
+    }
+    if (response.status === 503) {
+      throw new Error(
+        detail ||
+          'Background removal is temporarily unavailable. Try again or turn off Remove background.',
+      );
+    }
+    throw new Error(detail || 'Image upload failed.');
   }
 
   const payload = (await response.json()) as {
@@ -106,12 +148,20 @@ export async function uploadBrandingLogo(args: Omit<UploadMediaArgs, 'folderType
   });
 }
 
-export async function uploadServiceImage(args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { serviceName: string }) {
+export async function uploadServiceImage(
+  args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & {
+    serviceName: string;
+    removeBackground?: boolean;
+    crop?: { left: number; top: number; width: number; height: number };
+  },
+) {
   return uploadMedia({
     ...args,
     folderType: 'services',
     tags: ['service', 'image'],
     displayName: `${args.serviceName} image`,
+    removeBackground: args.removeBackground,
+    crop: args.crop,
   });
 }
 
@@ -127,13 +177,21 @@ export async function uploadStaffPhoto(
 }
 
 export async function uploadProductImage(
-  args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & { productName?: string },
+  args: Omit<UploadMediaArgs, 'folderType' | 'tags' | 'displayName'> & {
+    productName?: string;
+    prepareProductCanvas?: boolean;
+    removeBackground?: boolean;
+    crop?: { left: number; top: number; width: number; height: number };
+  },
 ) {
   return uploadMedia({
     ...args,
     folderType: 'products',
     tags: ['shop', 'product', 'image'],
     displayName: `${args.productName?.trim() || 'Product'} image`,
+    prepareProductCanvas: args.prepareProductCanvas ?? true,
+    removeBackground: args.removeBackground,
+    crop: args.crop,
   });
 }
 

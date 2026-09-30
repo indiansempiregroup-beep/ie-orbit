@@ -8,8 +8,27 @@ PLAN_PRICE_PAISE: dict[str, int] = {
     "shopie-pro": 79900,
 }
 
-# Yearly = 10 × monthly (2 months free).
+# Yearly = N × monthly (default: 10 = 2 months free). Per-package yearly_months_charged overrides this.
 YEARLY_PRICE_MULTIPLIER = 10
+
+
+def clamp_yearly_months_charged(value: object | None, *, default: int = YEARLY_PRICE_MULTIPLIER) -> int:
+    """Return months charged for a yearly plan (1–12)."""
+    try:
+        months = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        months = int(default)
+    if months < 1:
+        return 1
+    if months > 12:
+        return 12
+    return months
+
+
+def yearly_months_from_definition(definition: dict | None, *, default: int = YEARLY_PRICE_MULTIPLIER) -> int:
+    if not definition:
+        return clamp_yearly_months_charged(default)
+    return clamp_yearly_months_charged(definition.get("yearly_months_charged"), default=default)
 
 # Self-serve add-on unit prices (monthly, paise).
 ADDON_STAFF_PRICE_PAISE = 19900

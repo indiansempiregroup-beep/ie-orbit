@@ -15,7 +15,7 @@ export function LandingPage() {
 
   usePageMeta({
     title: 'Register — IE Orbit',
-    description: 'Create a white-label IE Orbit workspace for Orbit Appoint and Orbit Mart. 15-day full-Pro trial.',
+    description: 'Create a white-label IE Orbit workspace for Orbit Appoint and Orbit Mart. 45-day full-Pro trial.',
   });
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export function LandingPage() {
                 <span className="register-landing-accent"> Not ours.</span>
               </h1>
               <p className="register-landing-lead">
-                Start Orbit Appoint, Orbit Mart, or both under one login. 15-day full-Pro trial. No credit card.
+                Start Orbit Appoint, Orbit Mart, or both under one login. 45-day full-Pro trial. No credit card.
               </p>
               <div className="register-landing-actions">
                 <Button variant="primary" onClick={startRegistration}>

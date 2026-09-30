@@ -27,8 +27,7 @@ type Props = {
 };
 
 function moneyLabel(value: number, currency: string) {
-  const amount = formatMoney(value);
-  return currency ? `${currency} ${amount}` : amount;
+  return formatMoney(value, currency);
 }
 
 export function DashboardAnalytics({

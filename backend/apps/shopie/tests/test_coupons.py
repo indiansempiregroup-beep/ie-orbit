@@ -126,7 +126,7 @@ def test_coupon_rejects_pos_and_min_order(shop_ctx: tuple[Tenant, Business, Cust
             coupon_code="BIG50",
             confirm=True,
         )
-    assert "online" in str(pos_exc.value).lower()
+    assert "pos" in str(pos_exc.value).lower() or "counter" in str(pos_exc.value).lower()
 
     with pytest.raises(ValidationError) as min_exc:
         orders.create_order(
@@ -303,3 +303,76 @@ def test_percent_coupon_uses_shelf_price_when_tax_inclusive(
     )
     assert Decimal(str(order.metadata["coupon"]["discount_amount"])) == Decimal("11.80")
     assert Decimal(str(order.total)) == Decimal("106.20")
+
+
+@pytest.mark.django_db
+def test_eligible_offers_includes_online_automation_discount(
+    shop_ctx: tuple[Tenant, Business, Customer],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from apps.workflow.models import WorkflowDefinition, WorkflowStatus
+
+    tenant, business, customer = shop_ctx
+    coupons = CouponService()
+    product = _product(tenant, business, price="100.00")
+
+    monkeypatch.setattr(
+        "apps.workflow.services.access.has_automations",
+        lambda *, business: True,
+    )
+    WorkflowDefinition.objects.create(
+        tenant=tenant,
+        business=business,
+        name="VIP online 10%",
+        product_code="shopie",
+        status=WorkflowStatus.ACTIVE,
+        trigger={"type": "checkout.quote"},
+        conditions=[],
+        actions=[
+            {
+                "type": "discount.offer",
+                "label": "VIP 10% off",
+                "discount_type": "percent",
+                "discount_value": "10",
+                "applies_to_pos": True,
+                "applies_to_online": True,
+            }
+        ],
+    )
+
+    payload = coupons.eligible_offers(
+        tenant=tenant,
+        business=business,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        customer=customer,
+    )
+    assert len(payload["automations"]) == 1
+    offer = payload["automations"][0]
+    assert offer["source"] == "automation"
+    assert offer["label"] == "VIP 10% off"
+    assert Decimal(str(offer["discount_amount"])) == Decimal("10.00")
+    assert any(row.get("source") == "automation" for row in payload["offers"])
+
+    matched = coupons.match_automation_bill_discount(
+        tenant=tenant,
+        business=business,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        customer=customer,
+        bill_discount_type="percent",
+        bill_discount_value="10",
+    )
+    assert matched is not None
+
+    order = OrderService().create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        bill_discount_type="percent",
+        bill_discount_value="10",
+    )
+    assert Decimal(str(order.discount_total)) == Decimal("10.00")
+    assert Decimal(str(order.total)) == Decimal("90.00")

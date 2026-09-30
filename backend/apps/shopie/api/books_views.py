@@ -363,6 +363,8 @@ class ShopPartyStatementView(APIView):
                 "business_id": request.query_params.get("business_id"),
                 "kind": request.query_params.get("kind"),
                 "id": request.query_params.get("id"),
+                "date_from": request.query_params.get("date_from") or None,
+                "date_to": request.query_params.get("date_to") or None,
             }
         )
         serializer.is_valid(raise_exception=True)
@@ -374,6 +376,8 @@ class ShopPartyStatementView(APIView):
                 business=business,
                 party_kind=data["kind"],
                 party_id=data["id"],
+                date_from=data.get("date_from"),
+                date_to=data.get("date_to"),
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc

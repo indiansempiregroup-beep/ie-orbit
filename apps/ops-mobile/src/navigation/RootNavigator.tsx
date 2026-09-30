@@ -52,6 +52,7 @@ import { WhatsAppNotificationMappingsScreen } from '../features/settings/WhatsAp
 import { ShopProductsScreen } from '../features/shop/ShopProductsScreen';
 import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
 import { ShopProductsAddManyScreen } from '../features/shop/ShopProductsAddManyScreen';
+import { ShopMasterFilesScreen, ShopMasterKindScreen } from '../features/shop/ShopMasterFilesScreen';
 import { ShopOrdersScreen } from '../features/shop/ShopOrdersScreen';
 import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopPosScreen } from '../features/shop/ShopPosScreen';
@@ -83,6 +84,7 @@ import { GoogleProfileScreen } from '../features/grow/GoogleProfileScreen';
 import { SyncShareScreen } from '../features/grow/SyncShareScreen';
 import { UtilitiesScreen } from '../features/grow/UtilitiesScreen';
 import { GrowAdsScreen } from '../features/grow/GrowAdsScreen';
+import { AutomationsScreen } from '../features/automations/AutomationsScreen';
 import { GrowReferralScreen } from '../features/grow/GrowReferralScreen';
 import { BranchesScreen } from '../features/branches/BranchesScreen';
 import { BranchFormScreen } from '../features/branches/BranchFormScreen';
@@ -275,6 +277,8 @@ export function RootNavigator() {
             {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
             {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
             {stackScreen('ShopProductsAddMany', ShopProductsAddManyScreen, 'Add many products')}
+            {stackScreen('ShopMasterFiles', ShopMasterFilesScreen, 'Master Files')}
+            {stackScreen('ShopMasterKind', ShopMasterKindScreen, 'Master')}
             {stackScreen('ShopOrders', ShopOrdersScreen, t('nav.shopOrders'))}
             {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
             {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}
@@ -312,6 +316,7 @@ export function RootNavigator() {
             {stackScreen('GrowUtilities', UtilitiesScreen, 'Utilities')}
             {stackScreen('GrowAds', GrowAdsScreen, 'Ads')}
             {stackScreen('GrowReferral', GrowReferralScreen, 'Referrals')}
+            {stackScreen('Automations', AutomationsScreen, 'Automations')}
             {stackScreen('Branches', BranchesScreen, t('settings.offices'))}
             {stackScreen('BranchForm', BranchFormScreen, 'Office')}
             {stackScreen('BI', BIScreen, t('nav.businessIntelligence'), t('nav.last30Days'))}

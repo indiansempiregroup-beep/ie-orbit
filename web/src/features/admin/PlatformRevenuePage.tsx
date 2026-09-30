@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { Banknote, CreditCard, IndianRupee, RefreshCw, TimerReset } from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatTimestamp } from '../../lib/datetime';
 import { useBillingPlatformRevenueQuery } from '../settings/billingHooks';
 import {
   AdminEmpty,
+  AdminField,
   AdminKpi,
   AdminPage,
   AdminPageHeader,
@@ -13,6 +15,7 @@ import {
   planLabel,
   productLabel,
 } from './AdminChrome';
+import { usePlatformBillingGstSettingsQuery, useUpdatePlatformBillingGstSettingsMutation } from './adminHooks';
 
 function formatInr(paise?: number | null) {
   return `₹${Math.round((paise ?? 0) / 100).toLocaleString('en-IN')}`;
@@ -27,10 +30,36 @@ function shortDay(isoDay: string) {
 export function PlatformRevenuePage() {
   usePageMeta({ title: 'Revenue — Platform Admin' });
   const revenueQuery = useBillingPlatformRevenueQuery(true);
+  const gstQuery = usePlatformBillingGstSettingsQuery();
+  const updateGst = useUpdatePlatformBillingGstSettingsMutation();
   const data = revenueQuery.data;
   const maxDaily = Math.max(1, ...(data?.daily ?? []).map((row) => row.collected_paise));
   const maxProduct = Math.max(1, ...(data?.by_product ?? []).map((row) => row.collected_paise || row.mrr_paise));
   const maxPlan = Math.max(1, ...(data?.by_plan ?? []).map((row) => row.mrr_paise));
+  const [gstForm, setGstForm] = useState({
+    legal_name: '',
+    gstin: '',
+    address_line1: '',
+    city: '',
+    state_code: '',
+    postal_code: '',
+    sac_code: '998314',
+    gst_percent: '18',
+  });
+
+  useEffect(() => {
+    if (!gstQuery.data) return;
+    setGstForm({
+      legal_name: gstQuery.data.legal_name || '',
+      gstin: gstQuery.data.gstin || '',
+      address_line1: gstQuery.data.address_line1 || '',
+      city: gstQuery.data.city || '',
+      state_code: gstQuery.data.state_code || '',
+      postal_code: gstQuery.data.postal_code || '',
+      sac_code: gstQuery.data.sac_code || '998314',
+      gst_percent: String(gstQuery.data.gst_percent ?? 18),
+    });
+  }, [gstQuery.data]);
 
   return (
     <AdminPage>
@@ -38,14 +67,19 @@ export function PlatformRevenuePage() {
         title="Revenue"
         description="Money collected from tenant checkouts, plus recognized monthly recurring revenue from paying subscriptions."
         actions={
-          <button
-            type="button"
-            className="admin-btn admin-btn--primary"
-            onClick={() => void revenueQuery.refetch()}
-          >
-            <RefreshCw size={14} />
-            {revenueQuery.isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <>
+            <a className="admin-btn admin-btn--ghost" href="/api/v1/platform/gstr1-outward?format=csv">
+              GSTR-1 outward CSV
+            </a>
+            <button
+              type="button"
+              className="admin-btn admin-btn--primary"
+              onClick={() => void revenueQuery.refetch()}
+            >
+              <RefreshCw size={14} />
+              {revenueQuery.isFetching ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </>
         }
       />
 
@@ -213,6 +247,72 @@ export function PlatformRevenuePage() {
           )}
         </AdminSection>
       </div>
+
+      <AdminSection
+        title="Seller GST profile (SaaS tax invoices)"
+        description="Used on IE Orbit tax invoices and credit notes. Catalog prices stay GST-inclusive."
+      >
+        <div className="admin-form-grid">
+          <AdminField label="Legal name">
+            <input
+              value={gstForm.legal_name}
+              onChange={(e) => setGstForm({ ...gstForm, legal_name: e.target.value })}
+            />
+          </AdminField>
+          <AdminField label="GSTIN">
+            <input value={gstForm.gstin} onChange={(e) => setGstForm({ ...gstForm, gstin: e.target.value })} />
+          </AdminField>
+          <AdminField label="Address">
+            <input
+              value={gstForm.address_line1}
+              onChange={(e) => setGstForm({ ...gstForm, address_line1: e.target.value })}
+            />
+          </AdminField>
+          <AdminField label="City">
+            <input value={gstForm.city} onChange={(e) => setGstForm({ ...gstForm, city: e.target.value })} />
+          </AdminField>
+          <AdminField label="State code" hint="e.g. 27">
+            <input
+              value={gstForm.state_code}
+              maxLength={2}
+              onChange={(e) => setGstForm({ ...gstForm, state_code: e.target.value })}
+            />
+          </AdminField>
+          <AdminField label="PIN">
+            <input
+              value={gstForm.postal_code}
+              onChange={(e) => setGstForm({ ...gstForm, postal_code: e.target.value })}
+            />
+          </AdminField>
+          <AdminField label="SAC">
+            <input value={gstForm.sac_code} onChange={(e) => setGstForm({ ...gstForm, sac_code: e.target.value })} />
+          </AdminField>
+          <AdminField label="GST %">
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={gstForm.gst_percent}
+              onChange={(e) => setGstForm({ ...gstForm, gst_percent: e.target.value })}
+            />
+          </AdminField>
+        </div>
+        <div className="admin-action-bar">
+          <button
+            type="button"
+            className="admin-btn admin-btn--primary"
+            disabled={updateGst.isPending}
+            onClick={() =>
+              void updateGst.mutateAsync({
+                ...gstForm,
+                gst_percent: Number(gstForm.gst_percent),
+              })
+            }
+          >
+            {updateGst.isPending ? 'Saving…' : 'Save seller GST profile'}
+          </button>
+        </div>
+      </AdminSection>
     </AdminPage>
   );
 }

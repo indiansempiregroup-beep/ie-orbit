@@ -95,6 +95,84 @@ def test_delivery_challan_dispatches_stock_only_once(
 
 
 @pytest.mark.django_db
+def test_delivery_challan_invoice_after_dispatch_skips_stock(
+    shop_business: Business, customer: Customer
+) -> None:
+    product = ShopProduct.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Invoice After Dispatch",
+        price=Decimal("100"),
+        gst_rate=Decimal("0"),
+        stock_on_hand=Decimal("10"),
+    )
+    docs = DocumentsService()
+    document = docs.create_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        doc_type=BooksDocumentType.DELIVERY_CHALLAN,
+        customer=customer,
+        lines=[{"product_id": product.id, "quantity": "4", "unit_price": "100", "tax_rate": "0"}],
+    )
+    docs.convert_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        document=document,
+    )
+    product.refresh_from_db()
+    assert product.stock_on_hand == Decimal("6.000")
+
+    document.refresh_from_db()
+    voucher = docs.convert_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        document=document,
+        action="to_invoice",
+        amount_paid="0",
+    )
+    document.refresh_from_db()
+    product.refresh_from_db()
+    assert document.status == BooksDocumentStatus.CONVERTED
+    assert document.converted_voucher_id == voucher.id
+    assert voucher.total == Decimal("400.00")
+    assert product.stock_on_hand == Decimal("6.000")
+
+
+@pytest.mark.django_db
+def test_delivery_challan_invoice_without_dispatch_deducts_stock(
+    shop_business: Business, customer: Customer
+) -> None:
+    product = ShopProduct.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Invoice Direct",
+        price=Decimal("50"),
+        gst_rate=Decimal("0"),
+        stock_on_hand=Decimal("8"),
+    )
+    docs = DocumentsService()
+    document = docs.create_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        doc_type=BooksDocumentType.DELIVERY_CHALLAN,
+        customer=customer,
+        lines=[{"product_id": product.id, "quantity": "2", "unit_price": "50", "tax_rate": "0"}],
+    )
+    voucher = docs.convert_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        document=document,
+        action="to_invoice",
+        amount_paid="0",
+    )
+    document.refresh_from_db()
+    product.refresh_from_db()
+    assert document.status == BooksDocumentStatus.CONVERTED
+    assert voucher.total == Decimal("100.00")
+    assert product.stock_on_hand == Decimal("6.000")
+
+
+@pytest.mark.django_db
 def test_godown_transfer_moves_location_stock(shop_business: Business) -> None:
     product = ShopProduct.objects.create(
         tenant=shop_business.tenant,

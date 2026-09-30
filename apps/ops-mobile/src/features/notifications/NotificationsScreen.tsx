@@ -27,6 +27,8 @@ const TYPE_META: Record<string, { icon: keyof typeof Feather.glyphMap; tone: Ico
   order: { icon: 'package', tone: 'violet', label: 'Order' },
   return: { icon: 'rotate-ccw', tone: 'coral', label: 'Return' },
   pet: { icon: 'gift', tone: 'rose', label: 'Pet' },
+  WorkflowAutomation: { icon: 'zap', tone: 'amber', label: 'Automation' },
+  automation: { icon: 'zap', tone: 'amber', label: 'Automation' },
 };
 
 function typeMeta(type?: string) {

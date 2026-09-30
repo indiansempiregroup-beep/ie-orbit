@@ -31,7 +31,7 @@ function buildEditorHtml(placeholder: string) {
       width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent;
       font: 700 13px/1 system-ui, sans-serif; color: #0F1623;
     }
-    .toolbar button.active { background: #19576b; color: #fff; }
+    .toolbar button.active { background: #163a47; color: #fff; }
     .editor {
       min-height: 160px; padding: 12px; outline: none; font-size: 15px; line-height: 1.5; color: #0F1623;
     }
@@ -39,7 +39,7 @@ function buildEditorHtml(placeholder: string) {
     .editor p { margin: 0 0 8px; }
     .editor h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
     .editor ul, .editor ol { margin: 0 0 8px; padding-left: 1.25rem; }
-    .editor a { color: #19576b; }
+    .editor a { color: #163a47; }
     .link-box {
       display: none; padding: 8px; border-bottom: 1px solid rgba(15,22,35,0.08); background: #F0F2F7; gap: 8px; align-items: center;
     }
@@ -47,8 +47,8 @@ function buildEditorHtml(placeholder: string) {
     .link-box input {
       flex: 1; min-width: 0; height: 36px; border: 1px solid transparent; border-radius: 12px; padding: 0 10px; font-size: 14px; background: #fff;
     }
-    .link-box button { height: 32px; border: 0; border-radius: 8px; padding: 0 10px; font-weight: 700; background: #19576b; color: #fff; }
-    .link-box button.secondary { background: #E4EEF1; color: #19576b; }
+    .link-box button { height: 32px; border: 0; border-radius: 8px; padding: 0 10px; font-weight: 700; background: #163a47; color: #fff; }
+    .link-box button.secondary { background: #E4EEF1; color: #163a47; }
   </style>
 </head>
 <body>

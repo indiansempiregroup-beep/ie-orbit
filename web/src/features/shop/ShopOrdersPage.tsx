@@ -5,6 +5,7 @@ import { Button } from '../../components/Button';
 import { useShopOrders, useShopProductMutations } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
 import { formatShopOrderPayment, getShopOrderPosMeta } from './posPayment';
+import { formatMoney } from '../../lib/currency';
 import {
   shopOrderDeliveryMethod,
   shopOrderDeliverySummary,
@@ -115,7 +116,7 @@ export function ShopOrdersPage() {
                   <div>
                     <strong>{order.order_number}</strong>
                     <div style={{ opacity: 0.8 }}>
-                      {shopOrderStatusLabel(order)} · {fulfillmentLabel} · {order.currency} {order.total}
+                      {shopOrderStatusLabel(order)} · {fulfillmentLabel} · {formatMoney(Number(order.total ?? 0), order.currency)}
                     </div>
                     {deliverySummary ? (
                       <div style={{ color: 'var(--primary)', fontSize: 13, fontWeight: 700 }}>

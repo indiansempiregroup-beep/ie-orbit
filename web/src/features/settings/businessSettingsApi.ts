@@ -58,12 +58,13 @@ export async function subscribeBusinessProduct(
   tenantId: string | null | undefined,
   businessId: string,
   productCode: string,
-  options?: { setActive?: boolean; planCode?: string },
+  options?: { setActive?: boolean; planCode?: string; billingInterval?: 'monthly' | 'yearly' },
 ) {
   const response = await createAuthenticatedClient(token, tenantId).businesses.subscribeProduct(businessId, {
     product_code: productCode,
     set_active: options?.setActive ?? true,
     plan_code: options?.planCode,
+    billing_interval: options?.billingInterval,
   });
   return response.data;
 }
@@ -81,17 +82,31 @@ export async function unsubscribeBusinessProduct(
   return response.data;
 }
 
+export async function scheduleCancelBusinessProduct(
+  token: string | null,
+  tenantId: string | null | undefined,
+  businessId: string,
+  productCode: string,
+) {
+  const response = await createAuthenticatedClient(token, tenantId).businesses.scheduleCancelProduct(
+    businessId,
+    productCode,
+  );
+  return response.data;
+}
+
 export async function changeBusinessProductPlan(
   token: string | null,
   tenantId: string | null | undefined,
   businessId: string,
   productCode: string,
   planCode: string,
+  options?: { billingInterval?: 'monthly' | 'yearly' },
 ) {
   const response = await createAuthenticatedClient(token, tenantId).businesses.changeProductPlan(
     businessId,
     productCode,
-    { plan_code: planCode },
+    { plan_code: planCode, billing_interval: options?.billingInterval },
   );
   return response.data;
 }

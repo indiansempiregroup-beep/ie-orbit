@@ -21,7 +21,11 @@ from apps.shopie.api.compliance_views import (
     ShopVoucherEInvoiceView,
     ShopVoucherEWayView,
 )
-from apps.shopie.api.coupon_views import ShopCouponDetailView, ShopCouponListCreateView
+from apps.shopie.api.coupon_views import (
+    ShopCheckoutEligibleOffersView,
+    ShopCouponDetailView,
+    ShopCouponListCreateView,
+)
 from apps.shopie.api.delivery_views import (
     ShopDeliveryQuoteView,
     ShopDeliverySettingsView,
@@ -63,6 +67,15 @@ from apps.shopie.api.grow_views import (
     ShopDashboardAdDetailView,
     ShopDashboardAdListCreateView,
 )
+from apps.shopie.api.master_views import ShopMasterDetailView, ShopMasterListCreateView
+from apps.shopie.api.document_views import (
+    PublicShopDocumentPdfView,
+    PublicShopDocumentView,
+    ShopDocumentDetailView,
+    ShopDocumentPdfView,
+    ShopDocumentSendView,
+    ShopDocumentShareLinkView,
+)
 from apps.shopie.api.views import (
     MerchantPaymentSettingsView,
     ShopBarcodeEnrichView,
@@ -97,6 +110,36 @@ from apps.shopie.api.views import (
 
 urlpatterns = [
     path("shop/products", ShopProductListCreateView.as_view(), name="shop-product-list-create"),
+    path(
+        "shop/docs/<slug:kind>/<uuid:document_id>",
+        ShopDocumentDetailView.as_view(),
+        name="shop-document-detail",
+    ),
+    path(
+        "shop/docs/<slug:kind>/<uuid:document_id>/pdf",
+        ShopDocumentPdfView.as_view(),
+        name="shop-document-pdf",
+    ),
+    path(
+        "shop/docs/<slug:kind>/<uuid:document_id>/share-link",
+        ShopDocumentShareLinkView.as_view(),
+        name="shop-document-share-link",
+    ),
+    path(
+        "shop/docs/<slug:kind>/<uuid:document_id>/send",
+        ShopDocumentSendView.as_view(),
+        name="shop-document-send",
+    ),
+    path(
+        "public/shop-docs/<str:token>",
+        PublicShopDocumentView.as_view(),
+        name="public-shop-document",
+    ),
+    path(
+        "public/shop-docs/<str:token>/pdf",
+        PublicShopDocumentPdfView.as_view(),
+        name="public-shop-document-pdf",
+    ),
     path("shop/products/bulk", ShopProductBulkView.as_view(), name="shop-product-bulk"),
     path("shop/products/<uuid:product_id>", ShopProductDetailView.as_view(), name="shop-product-detail"),
     path(
@@ -113,6 +156,12 @@ urlpatterns = [
     path("shop/barcodes/lookup-bulk", ShopBarcodeBulkLookupView.as_view(), name="shop-barcode-lookup-bulk"),
     path("shop/barcodes/enrich", ShopBarcodeEnrichView.as_view(), name="shop-barcode-enrich"),
     path("shop/categories", ShopProductCategoryListView.as_view(), name="shop-product-categories"),
+    path("shop/master/<str:kind>", ShopMasterListCreateView.as_view(), name="shop-master-list-create"),
+    path(
+        "shop/master/<str:kind>/<uuid:record_id>",
+        ShopMasterDetailView.as_view(),
+        name="shop-master-detail",
+    ),
     path("shop/smart-lookup", ShopSmartLookupView.as_view(), name="shop-smart-lookup"),
     path("shop/smart-lookup/top-up", ShopSmartLookupTopUpView.as_view(), name="shop-smart-lookup-top-up"),
     path(
@@ -248,6 +297,11 @@ urlpatterns = [
         "shop/coupons/<uuid:coupon_id>",
         ShopCouponDetailView.as_view(),
         name="shop-coupon-detail",
+    ),
+    path(
+        "shop/checkout/eligible-offers",
+        ShopCheckoutEligibleOffersView.as_view(),
+        name="shop-checkout-eligible-offers",
     ),
     path(
         "shop/dashboard-ads",

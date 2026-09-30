@@ -5,6 +5,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useApiClient } from '../../hooks/useApiClient';
 import { getApiErrorMessage } from '../../lib/apiClient';
+import { formatMoney } from '../../lib/currency';
 import { useShopReturnMutations, useShopReturns } from './shopHooks';
 import {
   shopOrderDeliveryMethod,
@@ -383,19 +384,22 @@ export function ShopOrderDetailPage() {
         </div>
         {message ? <p role="status">{message}</p> : null}
         <p>
-          Total: {data.currency} {data.total}
+          Total: {formatMoney(Number(data.total ?? 0), data.currency)}
         </p>
         {data.coupon_code ? (
           <p>
             Coupon {data.coupon_code}
             {data.coupon_name ? ` · ${data.coupon_name}` : ''}
-            {Number(data.coupon_discount || 0) > 0 ? ` − ${data.currency} ${data.coupon_discount}` : ''}
+            {Number(data.coupon_discount || 0) > 0
+              ? ` − ${formatMoney(Number(data.coupon_discount), data.currency)}`
+              : ''}
           </p>
         ) : null}
         <ul>
           {(data.lines ?? []).map((line) => (
             <li key={line.id}>
-              {line.product_name} × {line.quantity} = {line.line_total}
+              {line.product_name} × {line.quantity} ={' '}
+              {formatMoney(Number(line.line_total ?? 0), data.currency)}
             </li>
           ))}
         </ul>
@@ -571,7 +575,7 @@ export function ShopOrderDetailPage() {
         <h2>Returns on this order</h2>
         {(returns.data ?? []).map((item) => (
           <div key={item.id}>
-            {item.return_number} · {item.status} · {item.refund_total}
+            {item.return_number} · {item.status} · {formatMoney(Number(item.refund_total ?? 0), data.currency)}
           </div>
         ))}
         {!returns.data?.length ? <p>No returns yet.</p> : null}

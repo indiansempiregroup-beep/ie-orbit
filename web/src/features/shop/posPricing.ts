@@ -5,6 +5,7 @@ export type PosLineInput = {
   name: string;
   unitPrice: number;
   taxRate: number;
+  taxInclusive?: boolean;
   quantity: number;
   discountType: DiscountType;
   discountValue: number;
@@ -15,10 +16,10 @@ export type PosTotals = {
   lineDiscountTotal: number;
   merchandiseAfterLineDiscount: number;
   billDiscountAmount: number;
+  loyaltyDiscountAmount: number;
   subtotal: number;
   taxTotal: number;
   payable: number;
-  /** Line amounts after product discounts only — bill discount stays in summary. */
   lines: Array<{
     id: string;
     gross: number;
@@ -42,62 +43,99 @@ export function applyDiscount(gross: number, discountType: DiscountType, discoun
   return money(Math.min(gross, value));
 }
 
+export function splitTax(
+  amount: number,
+  taxRate: number,
+  taxInclusive: boolean,
+): { taxable: number; tax: number; total: number } {
+  const rate = Math.max(0, Number(taxRate) || 0);
+  const base = money(Math.max(0, amount));
+  if (rate <= 0) {
+    return { taxable: base, tax: 0, total: base };
+  }
+  if (taxInclusive) {
+    const taxable = money((base * 100) / (100 + rate));
+    const tax = money(base - taxable);
+    return { taxable, tax, total: base };
+  }
+  const tax = money((base * rate) / 100);
+  return { taxable: base, tax, total: money(base + tax) };
+}
+
+/**
+ * Mirrors backend OrderService.create_order / ops-mobile posPricing.
+ * Bill % / ₹ off reduce payable (shelf) totals, then GST is re-extracted.
+ */
 export function computePosTotals(
   lines: PosLineInput[],
   billDiscountType: DiscountType = '',
   billDiscountValue = 0,
+  loyaltyDiscountAmount = 0,
 ): PosTotals {
   const built = lines.map((line) => {
     const qty = Math.max(0, Number(line.quantity) || 0);
     const unitPrice = Math.max(0, Number(line.unitPrice) || 0);
     const taxRate = Math.max(0, Number(line.taxRate) || 0);
+    const taxInclusive = Boolean(line.taxInclusive);
     const gross = money(unitPrice * qty);
     const discountAmount = applyDiscount(gross, line.discountType, line.discountValue);
-    const subtotal = money(gross - discountAmount);
-    const tax = money((subtotal * taxRate) / 100);
+    const afterDiscount = money(gross - discountAmount);
+    const split = splitTax(afterDiscount, taxRate, taxInclusive);
     return {
       id: line.id,
       gross,
       discountAmount,
-      subtotal,
-      tax,
-      total: money(subtotal + tax),
+      subtotal: split.taxable,
+      tax: split.tax,
+      total: split.total,
       taxRate,
     };
   });
 
-  const merchandiseAfterLineDiscount = money(built.reduce((sum, row) => sum + row.subtotal, 0));
   const lineDiscountTotal = money(built.reduce((sum, row) => sum + row.discountAmount, 0));
   const merchandiseGross = money(built.reduce((sum, row) => sum + row.gross, 0));
-  const billDiscountAmount = applyDiscount(
-    merchandiseAfterLineDiscount,
-    billDiscountType,
-    billDiscountValue,
-  );
+  const payableBefore = money(built.reduce((sum, row) => sum + row.total, 0));
 
-  // Bill discount affects payable tax only — line rows stay product-level amounts.
+  const billOnly = applyDiscount(payableBefore, billDiscountType, billDiscountValue);
+  const loyaltyOnly = money(
+    Math.min(
+      Math.max(0, Number(loyaltyDiscountAmount) || 0),
+      Math.max(0, payableBefore - billOnly),
+    ),
+  );
+  const combinedBillDiscount = money(billOnly + loyaltyOnly);
+
   let taxTotal = 0;
-  let remainingDiscount = billDiscountAmount;
-  built.forEach((row, index) => {
-    let share = 0;
-    if (billDiscountAmount > 0 && merchandiseAfterLineDiscount > 0) {
+  let remainingDiscount = combinedBillDiscount;
+  if (combinedBillDiscount > 0 && payableBefore > 0) {
+    built.forEach((row, index) => {
+      let share = 0;
       if (index === built.length - 1) {
         share = remainingDiscount;
       } else {
-        share = money((billDiscountAmount * row.subtotal) / merchandiseAfterLineDiscount);
+        share = money((combinedBillDiscount * row.total) / payableBefore);
         remainingDiscount = money(remainingDiscount - share);
       }
-    }
-    const discountedSubtotal = money(row.subtotal - share);
-    taxTotal = money(taxTotal + money((discountedSubtotal * row.taxRate) / 100));
-  });
+      const newTotal = money(Math.max(0, row.total - share));
+      const rate = Math.max(0, row.taxRate);
+      const taxable = rate > 0 ? money((newTotal * 100) / (100 + rate)) : newTotal;
+      const tax = money(newTotal - taxable);
+      row.subtotal = taxable;
+      row.tax = tax;
+      row.total = newTotal;
+      taxTotal = money(taxTotal + tax);
+    });
+  } else {
+    taxTotal = money(built.reduce((sum, row) => sum + row.tax, 0));
+  }
 
-  const subtotal = money(merchandiseAfterLineDiscount - billDiscountAmount);
+  const subtotal = money(built.reduce((sum, row) => sum + row.subtotal, 0));
   return {
     merchandiseGross,
     lineDiscountTotal,
-    merchandiseAfterLineDiscount,
-    billDiscountAmount,
+    merchandiseAfterLineDiscount: subtotal,
+    billDiscountAmount: billOnly,
+    loyaltyDiscountAmount: loyaltyOnly,
     subtotal,
     taxTotal,
     payable: money(subtotal + taxTotal),

@@ -399,7 +399,7 @@ class RulesBrain(AssistantBrain):
             "commands",
             "show commands",
         }:
-            return BrainResult(reply=toolset.help_text(access=access, business=business), suggestions=suggestions)
+            return _ok(toolset.help_text(access=access, business=business), suggestions)
 
         if flow:
             if flow.get("type") == "list_page" and (
@@ -431,16 +431,23 @@ class RulesBrain(AssistantBrain):
                 return continued
 
         m_preview = re.search(
-            r"\bpreview\s+(order|booking|customer|product|service|staff|return)\s+([A-Za-z0-9\-]+)\b",
+            r"\bpreview\s+(order|booking|customer|product|service|staff|return)\s+#?(.+?)\s*$",
             lowered,
         )
         if m_preview:
+            # Prefer original casing from the typed message (names/order numbers are often mixed-case).
+            m_raw = re.search(
+                r"\bpreview\s+(order|booking|customer|product|service|staff|return)\s+#?(.+?)\s*$",
+                raw,
+                flags=re.IGNORECASE,
+            )
+            record_id = (m_raw.group(2) if m_raw else m_preview.group(2)).strip().strip("\"'")
             return _ok(
                 toolset.preview_record(
                     tenant=tenant,
                     business=business,
                     kind=m_preview.group(1),
-                    record_id=m_preview.group(2),
+                    record_id=record_id,
                 ),
                 suggestions,
             )
@@ -508,6 +515,24 @@ def _handle_mart(*, lowered: str, tenant, business, suggestions: list[str]) -> B
             flow={"type": "order_status", "step": "pick_order"},
         )
 
+    if re.search(r"\b(daybook(?:\s+today)?|today'?s?\s+daybook|books?\s+daybook)\b", lowered):
+        return _ok(toolset.books_daybook_today(tenant=tenant, business=business), suggestions)
+    m = re.search(
+        r"\b(?:lookup|scan)\s+(?:barcode|sku)\s+([A-Za-z0-9\-]+)\b|"
+        r"\b(?:barcode|sku)\s+([A-Za-z0-9\-]+)\b|"
+        r"\bproduct\s+with\s+barcode\s+([A-Za-z0-9\-]+)\b",
+        lowered,
+    )
+    if m:
+        code = next((g for g in m.groups() if g), "")
+        if code:
+            return _ok(toolset.lookup_barcode(tenant=tenant, business=business, code=code), suggestions)
+    m = re.search(r"\b(?:statement|party\s+statement|customer\s+statement)\s+for\s+(.+)$", lowered)
+    if m:
+        return _ok(
+            toolset.customer_party_statement(tenant=tenant, business=business, query=m.group(1).strip()),
+            suggestions,
+        )
     if re.search(r"\b(cash\s+balance|bank\s+balance|how\s+much\s+cash|books?\s+cash|to\s+collect|to\s+pay|customer\s+dues|supplier\s+dues)\b", lowered):
         return _ok(toolset.books_cash_summary(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(list\s+cash\s+accounts?|cash\s+accounts?|bank\s+accounts?)\b", lowered):
@@ -620,6 +645,12 @@ def _handle_mart(*, lowered: str, tenant, business, suggestions: list[str]) -> B
         return _ok(toolset.low_stock_products(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(out\s+of\s+stock|zero\s+stock)\b", lowered):
         return _ok(toolset.out_of_stock_products(tenant=tenant, business=business), suggestions)
+    if (
+        lowered in {"products", "all products", "product list", "list products", "show products"}
+        or re.search(r"\b(list|show|all)\s+products?\b", lowered)
+        or re.search(r"\bproducts?\s+list\b", lowered)
+    ):
+        return _ok(toolset.list_products(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(pending\s+returns?|returns?\s+pending)\b", lowered):
         return _ok(toolset.pending_returns(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(active\s+coupons?|list\s+coupons?)\b", lowered):
@@ -728,6 +759,24 @@ def _handle_mart(*, lowered: str, tenant, business, suggestions: list[str]) -> B
 
 
 def _handle_appoint(*, lowered: str, tenant, business, suggestions: list[str]) -> BrainResult | None:
+    m_slots = re.search(
+        r"\b(?:slots?|availability|available\s+slots?)\s+for\s+(.+?)\s+(today|tomorrow)\b|"
+        r"\b(?:slots?|availability)\s+for\s+(.+)$|"
+        r"\bwhen\s+is\s+(.+?)\s+available\s+(today|tomorrow)\b",
+        lowered,
+    )
+    if m_slots:
+        groups = [g for g in m_slots.groups() if g]
+        query = groups[0].strip() if groups else ""
+        day_word = groups[1].strip().lower() if len(groups) > 1 else "today"
+        if query:
+            day = timezone.localdate()
+            if day_word == "tomorrow":
+                day = day + timedelta(days=1)
+            return _ok(
+                toolset.service_slots(tenant=tenant, business=business, query=query, day=day),
+                suggestions,
+            )
     if re.search(r"\b(recent\s+reviews?|latest\s+reviews?|reviews?)\b", lowered) and "summary" not in lowered and "low" not in lowered and "average" not in lowered:
         if lowered in {"reviews", "recent reviews", "latest reviews"} or "recent review" in lowered or "latest review" in lowered:
             return _ok(toolset.list_recent_reviews(tenant=tenant, business=business), suggestions)
@@ -841,11 +890,56 @@ def _handle_appoint(*, lowered: str, tenant, business, suggestions: list[str]) -
     return None
 
 
-def _handle_shared(*, lowered: str, tenant, business, suggestions: list[str]) -> BrainResult | None:
+def _handle_shared(*, lowered: str, raw: str = "", tenant=None, business=None, suggestions: list[str] | None = None) -> BrainResult | None:
+    suggestions = suggestions or []
     if re.search(r"\b(new\s+customers?\s+today|customers?\s+today)\b", lowered):
         return _ok(toolset.new_customers_today(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(customer\s+count|how\s+many\s+customers?|total\s+customers?)\b", lowered):
         return _ok(toolset.customer_count(tenant=tenant, business=business), suggestions)
+    if (
+        lowered in {"customers", "all customers", "customer list", "list customers", "show customers"}
+        or re.search(r"\b(list|show|all)\s+customers?\b", lowered)
+        or re.search(r"\bcustomers?\s+list\b", lowered)
+    ):
+        return _ok(toolset.list_customers(tenant=tenant, business=business), suggestions)
+    m = re.search(
+        r"\b(?:borrow\s+ledger|dues?\s+history|ledger)\s+(?:for\s+)?(.+)$",
+        lowered,
+    )
+    if m:
+        return _ok(
+            toolset.customer_borrow_ledger(tenant=tenant, business=business, query=m.group(1).strip()),
+            suggestions,
+        )
+    # “Riya paid 500” / “settle 500 for Riya” / “record payment 500 for Riya”
+    m_paid = re.search(r"^(.+?)\s+paid\s+(\d+(?:\.\d+)?)(?:\s+(cash|upi|card))?$", lowered)
+    m_settle = re.search(
+        r"\b(?:settle|record)\s+(?:dues?|payment|borrow(?:\s+payment)?)\s+"
+        r"(?:of\s+)?(\d+(?:\.\d+)?)\s+(?:for|from|to)\s+(.+?)(?:\s+(cash|upi|card))?$",
+        lowered,
+    )
+    m_settle2 = re.search(
+        r"\b(?:settle|record)\s+(\d+(?:\.\d+)?)\s+(?:for|from|to)\s+(.+?)(?:\s+(cash|upi|card))?$",
+        lowered,
+    )
+    if m_paid or m_settle or m_settle2:
+        if m_paid:
+            query, amount_s, method = m_paid.group(1), m_paid.group(2), m_paid.group(3) or "cash"
+        elif m_settle:
+            amount_s, query, method = m_settle.group(1), m_settle.group(2), m_settle.group(3) or "cash"
+        else:
+            amount_s, query, method = m_settle2.group(1), m_settle2.group(2), m_settle2.group(3) or "cash"
+        try:
+            proposal = toolset.propose_borrow_payment(
+                tenant=tenant,
+                business=business,
+                query=query.strip(),
+                amount=Decimal(amount_s),
+                payment_method=method,
+            )
+        except (InvalidOperation, ValidationError) as exc:
+            return BrainResult(reply=validation_message(exc), suggestions=suggestions)
+        return _propose(proposal, suggestions)
     m = re.search(r"\b(?:borrow\s+balance(?:\s+for)?|owes?(?:\s+anything)?(?:\s+for)?)\s+(.+)$", lowered)
     if m:
         return _ok(toolset.customer_borrow_balance(

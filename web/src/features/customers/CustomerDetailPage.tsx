@@ -25,6 +25,7 @@ type AddressFormState = {
   state: string;
   country: string;
   postal_code: string;
+  phone_number: string;
   latitude: number | null;
   longitude: number | null;
 };
@@ -53,6 +54,7 @@ export function CustomerDetailPage() {
     state: '',
     country: '',
     postal_code: '',
+    phone_number: '',
     latitude: null,
     longitude: null,
   });
@@ -73,6 +75,7 @@ export function CustomerDetailPage() {
       state: customer.address?.state ?? '',
       country: customer.address?.country ?? '',
       postal_code: customer.address?.postal_code ?? '',
+      phone_number: customer.address?.phone_number ?? customer.phone_number ?? '',
       latitude:
         customer.latitude != null || customer.address?.latitude != null
           ? Number(customer.latitude ?? customer.address?.latitude)
@@ -230,6 +233,7 @@ export function CustomerDetailPage() {
                     state: addressForm.state,
                     country: addressForm.country,
                     postal_code: addressForm.postal_code,
+                    phone_number: addressForm.phone_number,
                     latitude: addressForm.latitude,
                     longitude: addressForm.longitude,
                     is_default: true,
@@ -317,6 +321,14 @@ export function CustomerDetailPage() {
               value={addressForm.line2}
               onChange={(event) => setAddressForm((current) => ({ ...current, line2: event.target.value }))}
               placeholder="Flat, floor, building or landmark"
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
+            />
+            <input
+              required={Boolean(addressForm.full_address.trim())}
+              value={addressForm.phone_number}
+              onChange={(event) => setAddressForm((current) => ({ ...current, phone_number: event.target.value }))}
+              placeholder="Delivery phone for this address"
+              inputMode="tel"
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
             />
             <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>

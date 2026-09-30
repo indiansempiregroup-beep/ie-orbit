@@ -32,4 +32,4 @@
 
 ## Conversion
 
-Primary CTA: Create account (15-day full-Pro trial, no credit card). Secondary: Pricing, Contact/demo.
+Primary CTA: Create account (45-day full-Pro trial, no credit card). Secondary: Pricing, Contact/demo.

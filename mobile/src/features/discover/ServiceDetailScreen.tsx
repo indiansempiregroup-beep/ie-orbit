@@ -6,11 +6,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { MobileDiscoverServiceDetail } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import { Button } from '../../components/ui/Button';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useScreenInsets } from '../../theme/layout';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { formatMoney } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
 export function ServiceDetailScreen() {
@@ -22,6 +24,7 @@ export function ServiceDetailScreen() {
   const primary = branding?.primaryColor ?? colors.primary;
   const [service, setService] = useState<MobileDiscoverServiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (!tenantSlug || !businessCode) return;
@@ -54,7 +57,13 @@ export function ServiceDetailScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           {service.image_url ? (
-            <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.hero} />
+            <Pressable
+              onPress={() => setLightboxOpen(true)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel="View service photo"
+            >
+              <Image source={{ uri: resolveMediaUrl(service.image_url) }} style={styles.hero} />
+            </Pressable>
           ) : (
             <View style={[styles.heroFallback, { backgroundColor: `${primary}14` }]}>
               <Feather name="calendar" size={36} color={primary} />
@@ -62,7 +71,7 @@ export function ServiceDetailScreen() {
           )}
           <Text style={styles.title}>{service.name}</Text>
           <Text style={[styles.price, { color: primary }]}>
-            {service.duration_minutes} min · {service.currency} {service.price}
+            {service.duration_minutes} min · {formatMoney(Number(service.price), service.currency)}
           </Text>
           {service.category_name ? <Text style={styles.meta}>{service.category_name}</Text> : null}
           <Text style={styles.body}>{service.description || service.short_description || 'No description yet.'}</Text>
@@ -93,6 +102,13 @@ export function ServiceDetailScreen() {
           />
         </ScrollView>
       )}
+
+      <ImageLightbox
+        uri={service?.image_url ? resolveMediaUrl(service.image_url) : null}
+        visible={lightboxOpen}
+        title={service?.name || 'Service photo'}
+        onClose={() => setLightboxOpen(false)}
+      />
     </View>
   );
 }

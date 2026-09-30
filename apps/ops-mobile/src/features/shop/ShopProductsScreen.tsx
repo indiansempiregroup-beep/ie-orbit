@@ -38,6 +38,7 @@ import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/F
 import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
+import { formatMoney } from './posPayment';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -366,7 +367,7 @@ export function ShopProductsScreen() {
             return (
               <BooksDocumentRow
                 title={item.name}
-                amount={`${item.currency} ${item.price}`}
+                amount={formatMoney(item.price, item.currency)}
                 meta={`SKU ${item.sku || '—'} · stock ${item.stock_on_hand}${categoryLabel ? ` · ${categoryLabel}` : ''}`}
                 badge={item.status}
                 badgeKind={item.status === 'active' ? 'paid' : item.status === 'inactive' ? 'void' : 'neutral'}

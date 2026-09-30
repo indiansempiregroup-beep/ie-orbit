@@ -1,3 +1,4 @@
+import { getActiveIntlLocale } from '@ie-orbit/i18n';
 import type { ShopOrder } from '@ie-orbit/sdk';
 
 export type PosMeta = {
@@ -23,7 +24,7 @@ export function formatShopOrderPayment(order: ShopOrder): string {
   if (!method) return '';
   if (method === 'borrow') {
     const due = Number(pos.amount_due ?? order.total ?? 0);
-    if (due > 0) return `Borrow · Due ${due.toFixed(2)}`;
+    if (due > 0) return `Borrow · Due ${formatMoney(due, order.currency)}`;
     return 'Borrow · Settled';
   }
   return method.toUpperCase();
@@ -185,8 +186,39 @@ export function canDispatchShopOrder(order: ShopOrder): boolean {
   return !getShopOrderDeliveryMeta(order).booking_id;
 }
 
-export function formatMoney(value: string | number | undefined | null, fallback = '0.00'): string {
+const FALLBACK_CURRENCY = 'INR';
+
+let configuredCurrency: string | undefined;
+
+/** Keep money formatters in sync with the active business currency. */
+export function configureBusinessCurrency(currency?: string | null) {
+  const normalized = currency?.trim().toUpperCase();
+  configuredCurrency = normalized && normalized.length === 3 ? normalized : undefined;
+}
+
+function resolveCurrency(currency?: string | null): string {
+  const normalized = currency?.trim().toUpperCase();
+  if (normalized && normalized.length === 3) return normalized;
+  if (configuredCurrency) return configuredCurrency;
+  return FALLBACK_CURRENCY;
+}
+
+export function formatMoney(
+  value: string | number | undefined | null,
+  currency?: string | null,
+  fallback = '0.00',
+): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n)) return fallback;
-  return n.toFixed(2);
+  const code = resolveCurrency(currency);
+  try {
+    return new Intl.NumberFormat(getActiveIntlLocale(), {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return `${code} ${n.toFixed(2)}`;
+  }
 }

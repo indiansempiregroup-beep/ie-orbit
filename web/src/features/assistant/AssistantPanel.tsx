@@ -41,18 +41,34 @@ function formatInr(paise: number | undefined): string {
 
 function usagePrimaryLine(usage: AssistantUsage): string {
   const wallet = formatInr(usage.balance_paise);
+  const freeBits = `${usage.messages_remaining} msgs · ${usage.confirms_remaining} confirms`;
+  const rates =
+    usage.overage_enabled === false
+      ? null
+      : `${formatInr(usage.message_price_paise)}/msg · ${formatInr(usage.confirm_price_paise)}/confirm`;
   if (usage.using_prepaid_messages || usage.using_prepaid_confirms) {
-    return `Using prepaid · Wallet ${wallet} · ${formatInr(usage.message_price_paise)}/msg · ${formatInr(usage.confirm_price_paise)}/confirm`;
+    return `Free today: ${freeBits} · Using prepaid · Wallet ${wallet}${rates ? ` · ${rates}` : ''}`;
   }
-  return `Free today: ${usage.messages_remaining} msgs · ${usage.confirms_remaining} confirms · Wallet ${wallet}`;
+  const free = `Free today: ${freeBits} · Wallet ${wallet}`;
+  return rates ? `${free} · After free: ${rates}` : free;
 }
 
 function usageNote(usage: AssistantUsage, blocked: boolean, nearLimit: boolean): string {
   if (blocked) {
+    if (usage.messages_remaining <= 0 && usage.confirms_remaining > 0) {
+      return `Free messages used · ${usage.confirms_remaining} free confirms left. You can still confirm pending actions; top up to keep chatting.`;
+    }
+    if (usage.confirms_remaining <= 0 && usage.messages_remaining > 0) {
+      return `Free confirms used · ${usage.messages_remaining} free msgs left. Top up to confirm more actions.`;
+    }
     return 'Free limit used · wallet too low. Top up to keep chatting.';
   }
   if (usage.using_prepaid_messages || usage.using_prepaid_confirms) {
-    return 'Free daily limit used. This send/confirm will debit your prepaid wallet.';
+    const freeLeft =
+      usage.messages_remaining > 0 || usage.confirms_remaining > 0
+        ? ` Still free today: ${usage.messages_remaining} msgs · ${usage.confirms_remaining} confirms.`
+        : '';
+    return `Free daily quota used for this action — prepaid wallet covers the rest.${freeLeft}`;
   }
   if (nearLimit) {
     const canCover =
@@ -62,7 +78,10 @@ function usageNote(usage: AssistantUsage, blocked: boolean, nearLimit: boolean):
       ? `Running low — ${usage.messages_remaining} msgs · ${usage.confirms_remaining} confirms left. Wallet will cover after free runs out.`
       : `Running low — ${usage.messages_remaining} msgs · ${usage.confirms_remaining} confirms left today.`;
   }
-  return 'Free daily limits for your workspace. Top up anytime for prepaid overage.';
+  if (usage.overage_enabled === false) {
+    return 'Free daily limits for your workspace. Prepaid overage is currently off.';
+  }
+  return `Free daily limits first, then ${formatInr(usage.message_price_paise)}/msg and ${formatInr(usage.confirm_price_paise)}/confirm from wallet (platform rates).`;
 }
 
 function messageLinks(message: AssistantMessage): AssistantEntityLink[] {
@@ -74,10 +93,41 @@ function messageLinks(message: AssistantMessage): AssistantEntityLink[] {
   );
 }
 
+function splitMessageLinks(links: AssistantEntityLink[]) {
+  const prompts: AssistantEntityLink[] = [];
+  const records: AssistantEntityLink[] = [];
+  for (const link of links) {
+    if (String(link.kind || '').toLowerCase() === 'prompt') prompts.push(link);
+    else records.push(link);
+  }
+  return { prompts, records };
+}
+
+type PromptSection = { group: string; section: string; tools: AssistantEntityLink[] };
+
+function groupPromptTools(prompts: AssistantEntityLink[]): PromptSection[] {
+  const order: string[] = [];
+  const map = new Map<string, PromptSection>();
+  for (const link of prompts) {
+    const group = String(link.group || 'Tools').trim() || 'Tools';
+    const section = String(link.section || 'General').trim() || 'General';
+    const key = `${group}\0${section}`;
+    let row = map.get(key);
+    if (!row) {
+      row = { group, section, tools: [] };
+      map.set(key, row);
+      order.push(key);
+    }
+    row.tools.push(link);
+  }
+  return order.map((key) => map.get(key)!);
+}
+
 /** Drop bullet lines when clickable record cards already show the same rows. */
 function assistantMessageBody(content: string, links: AssistantEntityLink[]): string {
   const text = String(content || '').trim();
-  if (!text || links.length === 0) return text;
+  const records = links.filter((link) => String(link.kind || '').toLowerCase() !== 'prompt');
+  if (!text || records.length === 0) return text;
   const kept = text
     .split('\n')
     .map((line) => line.trimEnd())
@@ -92,11 +142,16 @@ function previewQueryForLink(link: AssistantEntityLink): string {
     return String(link.select_text || link.label || '').trim();
   }
   const kind = String(link.kind || '').trim().toLowerCase();
-  // Orders/bookings/returns use human-readable numbers as the label; keep UUID for navigation.
-  const preferLabel = kind === 'order' || kind === 'booking' || kind === 'return';
-  const raw = preferLabel ? String(link.label || link.id || '') : String(link.id || '');
+  // Prefer human labels in the chat bubble; UUID stays on link.id for open/navigation.
+  const raw = String(link.label || link.id || '');
   const id = raw.trim().replace(/^Open\s+/i, '');
   return `preview ${kind} ${id}`.trim();
+}
+
+function firstBracketRange(text: string): { start: number; end: number } | null {
+  const match = text.match(/\[[^\]]+\]/);
+  if (!match || match.index == null) return null;
+  return { start: match.index, end: match.index + match[0].length };
 }
 
 function AssistantWorkingStatus() {
@@ -135,6 +190,7 @@ export function AssistantPanel({ open, onClose }: Props) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
+  const [composeHint, setComposeHint] = useState(false);
   const [sending, setSending] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,8 +212,6 @@ export function AssistantPanel({ open, onClose }: Props) {
   const accessSuggestions = accessQuery.data?.suggestions ?? [];
   const canSend = usage == null || Boolean(usage.can_send ?? usage.messages_remaining > 0);
   const canConfirm = usage == null || Boolean(usage.can_confirm ?? usage.confirms_remaining > 0);
-  const freeMsgsEmpty = usage != null && usage.messages_remaining <= 0;
-  const freeConfirmsEmpty = usage != null && usage.confirms_remaining <= 0;
   const blocked = usage != null && (!canSend || !canConfirm);
   const nearLimit =
     usage != null &&
@@ -165,6 +219,7 @@ export function AssistantPanel({ open, onClose }: Props) {
     ((usage.message_limit > 0 && usage.messages_remaining <= 5 && usage.messages_remaining > 0) ||
       (usage.confirm_limit > 0 && usage.confirms_remaining <= 3 && usage.confirms_remaining > 0));
   const usingPrepaid = Boolean(usage?.using_prepaid_messages || usage?.using_prepaid_confirms);
+  const lowWallet = usage != null && Number(usage.balance_paise || 0) < 500;
   const usageLine = usage ? usagePrimaryLine(usage) : null;
   const suggestedTops =
     usage?.suggested_top_up_paise?.filter((v) => Number(v) >= 100) ?? [5000, 10000, 25000, 50000];
@@ -255,10 +310,13 @@ export function AssistantPanel({ open, onClose }: Props) {
     setError(null);
     try {
       const created = (await client.assistant.createThread()).data;
+      const starters = accessSuggestions.length > 0 ? accessSuggestions : ['What can you do?'];
       setThread(created);
       setMessages(created.messages ?? []);
-      setSuggestions(accessSuggestions);
+      setSuggestions(starters);
       setDraft('');
+      setComposeHint(false);
+      setHelpOpen(false);
       threadCacheRef.current = {
         businessId: String(activeBusiness?.id || ''),
         thread: created,
@@ -278,6 +336,7 @@ export function AssistantPanel({ open, onClose }: Props) {
     setSending(true);
     setError(null);
     setDraft('');
+    setComposeHint(false);
     const optimisticId = `local-user-${Date.now()}`;
     const optimistic: AssistantMessage = {
       id: optimisticId,
@@ -356,8 +415,36 @@ export function AssistantPanel({ open, onClose }: Props) {
     }
   }
 
+  function fillComposer(text: string) {
+    setDraft(text);
+    setComposeHint(true);
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (!el) return;
+      el.focus();
+      const range = firstBracketRange(text);
+      try {
+        if (range) el.setSelectionRange(range.start, range.end);
+        else el.setSelectionRange(text.length, text.length);
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
   function handleLink(link: AssistantEntityLink) {
     const action = String(link.action || 'preview').toLowerCase();
+    const kind = String(link.kind || '').toLowerCase();
+    if (kind === 'prompt' || action === 'send' || action === 'compose') {
+      const text = String(link.select_text || link.label || '').trim();
+      if (!text) return;
+      if (action === 'compose') {
+        fillComposer(text);
+        return;
+      }
+      void sendText(text);
+      return;
+    }
     if (action === 'open') {
       const path = staffRecordPath(link.kind, link.id, { orderId: link.order_id });
       if (!path) return;
@@ -403,7 +490,7 @@ export function AssistantPanel({ open, onClose }: Props) {
           >
             <p className="assistant-usage-line">{usageLine}</p>
             <p className="assistant-usage-note">{usage ? usageNote(usage, blocked, nearLimit) : null}</p>
-            {blocked || freeMsgsEmpty || freeConfirmsEmpty || usingPrepaid ? (
+            {lowWallet ? (
               <div className="assistant-usage-tops">
                 {suggestedTops.slice(0, 4).map((paise) => (
                   <button
@@ -428,7 +515,7 @@ export function AssistantPanel({ open, onClose }: Props) {
           ) : messages.length === 0 ? (
             <div className="assistant-empty">
               <MessageCircle size={28} strokeWidth={1.5} />
-              <p>Ask about orders, bookings, stock, or customers. Open a record from any reply — this chat stays when you return.</p>
+              <p>Fresh chat — previous questions aren’t carried over. Pick a suggestion or ask anything.</p>
               <div className="assistant-chips">
                 {chips.map((chip) => (
                   <button key={chip} type="button" className="assistant-chip" onClick={() => void sendText(chip)}>
@@ -440,6 +527,7 @@ export function AssistantPanel({ open, onClose }: Props) {
           ) : (
             messages.map((message) => {
               const links = message.role === 'assistant' ? messageLinks(message) : [];
+              const { prompts, records } = splitMessageLinks(links);
               const body =
                 message.role === 'assistant'
                   ? assistantMessageBody(message.content, links)
@@ -450,9 +538,38 @@ export function AssistantPanel({ open, onClose }: Props) {
                   className={`assistant-bubble ${message.role === 'user' ? 'is-user' : 'is-assistant'}`}
                 >
                   {body ? <p className="assistant-bubble-text">{body}</p> : null}
-                  {links.length > 0 ? (
+                  {prompts.length > 0 ? (
+                    <div className="assistant-prompt-sections">
+                      {groupPromptTools(prompts).map((block, index, all) => {
+                        const showGroup = index === 0 || all[index - 1].group !== block.group;
+                        return (
+                          <div key={`${block.group}-${block.section}`} className="assistant-prompt-section">
+                            {showGroup ? <p className="assistant-prompt-group">{block.group}</p> : null}
+                            <p className="assistant-prompt-section-title">{block.section}</p>
+                            <div className="assistant-prompt-tools">
+                              {block.tools.map((link) => {
+                                const isCompose = String(link.action || '').toLowerCase() === 'compose';
+                                return (
+                                  <button
+                                    key={`${link.kind}-${link.id}-${link.label}`}
+                                    type="button"
+                                    className={`assistant-prompt-tool${isCompose ? ' is-compose' : ''}`}
+                                    onClick={() => handleLink(link)}
+                                  >
+                                    {isCompose ? <span className="assistant-prompt-badge">Type</span> : null}
+                                    <span>{link.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  {records.length > 0 ? (
                     <div className="assistant-links">
-                      {links.map((link) => (
+                      {records.map((link) => (
                         <button
                           key={`${link.kind}-${link.id}-${link.label}`}
                           type="button"
@@ -525,16 +642,22 @@ export function AssistantPanel({ open, onClose }: Props) {
         </button>
         {helpOpen ? (
           <p className="assistant-help">
-            Try “Orders today”, “Low stock”, “Bookings today”, “order #123”, or “mark order 123 as delivered”. Changes
-            always need Confirm. Tap any record link in a reply to open it. Daily free limits apply.
+            Ask in plain language — e.g. “Orders today”, “Low stock”, “Bookings today”, or “order #123”. Changes always
+            need Confirm. Tap a record link to open it. For the full list, ask “What can you do?”
           </p>
         ) : null}
 
         {error ? <p className="assistant-error">{error}</p> : null}
 
         <div className="assistant-composer-wrap">
-          <p className="assistant-composer-hint">
-            <kbd>Enter</kbd> to send · <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line
+          <p className={`assistant-composer-hint${composeHint ? ' is-compose' : ''}`}>
+            {composeHint ? (
+              <>Replace the highlighted [bracket] text with a real value, then send.</>
+            ) : (
+              <>
+                <kbd>Enter</kbd> to send · <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line
+              </>
+            )}
           </p>
           <form
             className="assistant-composer"
@@ -546,7 +669,12 @@ export function AssistantPanel({ open, onClose }: Props) {
             <textarea
               ref={composerRef}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                if (composeHint && !/\[[^\]]+\]/.test(event.target.value)) {
+                  setComposeHint(false);
+                }
+              }}
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' || event.shiftKey) return;
                 event.preventDefault();

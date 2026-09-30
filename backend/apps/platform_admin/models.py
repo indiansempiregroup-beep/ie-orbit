@@ -68,7 +68,7 @@ class PlatformPlanPackage(BaseModel):
     name = models.CharField(max_length=160)
     description = models.TextField(blank=True)
     billing_interval = models.CharField(max_length=16, default="monthly")
-    trial_days = models.PositiveIntegerField(default=15)
+    trial_days = models.PositiveIntegerField(default=45)
     is_default = models.BooleanField(default=False)
     max_staff = models.PositiveIntegerField(default=1)
     max_branches = models.PositiveIntegerField(default=1)
@@ -78,6 +78,10 @@ class PlatformPlanPackage(BaseModel):
     features = models.JSONField(default=list, blank=True)
     amount_paise = models.PositiveIntegerField(default=0)
     yearly_amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    yearly_months_charged = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Months charged for yearly billing (e.g. 10 = pay 10 months, get 12).",
+    )
     is_active = models.BooleanField(default=True)
     is_public = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
@@ -105,6 +109,31 @@ class PlatformAuthSettings(BaseModel):
 
     class Meta:
         db_table = "platform_auth_settings"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return self.key
+
+
+class PlatformBillingGstSettings(BaseModel):
+    """Singleton seller GST profile for IE Orbit SaaS tax invoices."""
+
+    key = models.SlugField(max_length=20, unique=True, default="default")
+    legal_name = models.CharField(max_length=255, blank=True, default="")
+    gstin = models.CharField(max_length=20, blank=True, default="")
+    address_line1 = models.CharField(max_length=255, blank=True, default="")
+    address_line2 = models.CharField(max_length=255, blank=True, default="")
+    city = models.CharField(max_length=120, blank=True, default="")
+    state_code = models.CharField(max_length=2, blank=True, default="")
+    postal_code = models.CharField(max_length=16, blank=True, default="")
+    sac_code = models.CharField(max_length=16, blank=True, default="998314")
+    gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("18.00"))
+    invoice_prefix = models.CharField(max_length=24, blank=True, default="IEO-INV-")
+    credit_note_prefix = models.CharField(max_length=24, blank=True, default="IEO-CN-")
+    next_invoice_seq = models.PositiveIntegerField(default=1)
+    next_credit_note_seq = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        db_table = "platform_billing_gst_settings"
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return self.key
@@ -231,13 +260,33 @@ class PlatformCouponRedemption(TenantModel):
 
 
 class PlatformLedgerInvoice(TenantModel):
+    class DocumentType(models.TextChoices):
+        TAX_INVOICE = "tax_invoice", "Tax invoice"
+        CREDIT_NOTE = "credit_note", "Credit note"
+
     business = models.ForeignKey(
         "businesses.Business",
         on_delete=models.CASCADE,
         related_name="ledger_invoices",
     )
     invoice_number = models.CharField(max_length=40, db_index=True)
+    document_type = models.CharField(
+        max_length=20,
+        choices=DocumentType.choices,
+        default=DocumentType.TAX_INVOICE,
+        db_index=True,
+    )
     amount_paise = models.PositiveIntegerField()
+    taxable_paise = models.PositiveIntegerField(default=0)
+    cgst_paise = models.PositiveIntegerField(default=0)
+    sgst_paise = models.PositiveIntegerField(default=0)
+    igst_paise = models.PositiveIntegerField(default=0)
+    gst_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("18.00"))
+    is_interstate = models.BooleanField(default=False)
+    place_of_supply = models.CharField(max_length=2, blank=True, default="")
+    sac_code = models.CharField(max_length=16, blank=True, default="998314")
+    seller_snapshot = models.JSONField(default=dict, blank=True)
+    buyer_snapshot = models.JSONField(default=dict, blank=True)
     currency = models.CharField(max_length=3, default="INR")
     status = models.CharField(max_length=32, default="open", db_index=True)
     line_items = models.JSONField(default=list, blank=True)
@@ -248,9 +297,17 @@ class PlatformLedgerInvoice(TenantModel):
         blank=True,
         related_name="ledger_invoices",
     )
+    original_invoice = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="credit_notes",
+    )
     razorpay_payment_id = models.CharField(max_length=120, blank=True)
     refunded_paise = models.PositiveIntegerField(default=0)
     pdf_path = models.CharField(max_length=512, blank=True)
+    issued_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):

@@ -27,11 +27,12 @@ class OtpSendSerializer(serializers.Serializer):
     business_code = serializers.SlugField(required=False)
 
     def validate(self, attrs: dict) -> dict:
-        if attrs.get("client") == "customer" and attrs.get("channel") == "whatsapp":
-            if not attrs.get("tenant_slug") or not attrs.get("business_code"):
-                raise serializers.ValidationError(
-                    "tenant_slug and business_code are required for customer WhatsApp OTP."
-                )
+        if attrs.get("client") == "customer" and (
+            not attrs.get("tenant_slug") or not attrs.get("business_code")
+        ):
+            raise serializers.ValidationError(
+                "tenant_slug and business_code are required for customer OTP."
+            )
         return attrs
 
 
@@ -79,6 +80,9 @@ class GoogleLoginSerializer(serializers.Serializer):
     id_token = serializers.CharField(write_only=True, trim_whitespace=False)
     client = serializers.ChoiceField(choices=("customer", "ops"), default="customer")
     remember_me = serializers.BooleanField(default=True)
+    # login: require an existing Customer for this shop (default).
+    # signup: create User/Customer if needed (Create account / Google on register).
+    purpose = serializers.ChoiceField(choices=("login", "signup"), default="login")
     tenant_slug = serializers.SlugField(required=False)
     business_code = serializers.SlugField(required=False)
 

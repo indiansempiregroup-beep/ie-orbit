@@ -13,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { CommonActions, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct } from '@ie-orbit/sdk';
+import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct, ShopProductCategoryItem } from '@ie-orbit/sdk';
 import { SHOP_PRODUCT_CATEGORIES, guessShopProductCategory } from '@ie-orbit/sdk';
 import type { IEOrbitClient } from '@ie-orbit/sdk';
 import { createScopedClient } from '../../api/client';
@@ -23,9 +23,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadProductImage } from '../../api/media';
 import { enrichSuccessMessage } from './enrichMessages';
+import { ProductImageCropModal } from './ProductImageCropModal';
 import { FormScreen } from '../../components/FormScreen';
 import { FormHero } from '../../components/FormHero';
 import { HtmlEditorField } from '../../components/HtmlEditorField';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import { RemoteImage } from '../../components/RemoteImage';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
@@ -64,7 +66,7 @@ const emptyForm = {
   details_html: '',
   price: '0',
   tax_rate: '0',
-  tax_inclusive: 'excluded' as 'included' | 'excluded',
+  tax_inclusive: 'included' as 'included' | 'excluded',
   currency: 'INR',
   stock_on_hand: '0',
   low_stock_threshold: '0',
@@ -74,6 +76,7 @@ const emptyForm = {
   barcode_type: 'manufacturer' as string,
   status: 'active',
   category: '',
+  category_other: '',
 };
 
 type FormState = typeof emptyForm;
@@ -115,9 +118,10 @@ function wipeIdentity(
     images: emptyProductImageSlots(),
     barcode: code,
     barcode_type: 'manufacturer',
+    category_other: '',
     ...(options?.keepPriceStock
       ? {}
-      : { price: '0', tax_rate: '0', tax_inclusive: 'excluded' as const }),
+      : { price: '0', tax_rate: '0', tax_inclusive: 'included' as const }),
   };
 }
 
@@ -231,6 +235,7 @@ function formFromProduct(product: ShopProduct): FormState {
     barcode_type: primaryBarcode?.barcode_type || 'manufacturer',
     status: product.status || 'active',
     category: product.category || '',
+    category_other: product.category === 'other' ? product.category_label || '' : '',
   };
 }
 
@@ -243,6 +248,7 @@ export function ShopProductAddScreen() {
   const { token, ensureFreshAccess } = useAuth();
   const { has } = usePlanFeatures();
   const showGodowns = has(PlanFeature.shopieBooksGodowns);
+  const canRemoveBackground = has(PlanFeature.shopieProductBgRemove);
   const productId = route.params?.productId;
   const isEditing = Boolean(productId);
   const [form, setForm] = useState(emptyForm);
@@ -255,6 +261,14 @@ export function ShopProductAddScreen() {
   const [needsPackPhoto, setNeedsPackPhoto] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [previews, setPreviews] = useState<string[]>(emptyProductImageSlots());
+  const [categoryOptions, setCategoryOptions] = useState<ShopProductCategoryItem[]>(
+    SHOP_PRODUCT_CATEGORIES.map((item) => ({ slug: item.value, label: item.label, is_builtin: true })),
+  );
+  const [cropPending, setCropPending] = useState<{
+    index: number;
+    asset: ImagePickerAsset;
+  } | null>(null);
+  const [lightbox, setLightbox] = useState<{ index: number; uri: string } | null>(null);
   const touchedRef = useRef<Set<FormKey>>(new Set());
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -306,6 +320,19 @@ export function ShopProductAddScreen() {
       }
     })();
   }, [client, businessId, showGodowns, productId]);
+
+  useEffect(() => {
+    if (!client || !businessId) return;
+    void (async () => {
+      try {
+        const response = await client.shop.listProductCategories({ business_id: businessId });
+        const items = response.data.items ?? [];
+        if (items.length) setCategoryOptions(items);
+      } catch {
+        /* keep builtin fallback */
+      }
+    })();
+  }, [client, businessId]);
 
   useEffect(() => {
     const code = route.params?.enrichCode;
@@ -388,10 +415,13 @@ export function ShopProductAddScreen() {
     if (/token not valid|token_not_valid|unauthorized|401|authentication/i.test(text)) {
       return 'Your session expired. Please sign out and sign in again, then retry.';
     }
+    if (/network request failed|failed to fetch|networkerror|timed out|timeout/i.test(text)) {
+      return 'Upload lost connection while processing the photo. Try again, use a smaller photo, or turn off Remove background.';
+    }
     return text || fallback;
   }
 
-  async function uploadAsset(index: number, asset: ImagePickerAsset) {
+  async function uploadAsset(index: number, asset: ImagePickerAsset, removeBackground = false) {
     const access = (await ensureFreshAccess()) || token;
     if (!businessId || !tenantId || !access) {
       throw new Error('Workspace is not ready. Please sign in again.');
@@ -402,6 +432,8 @@ export function ShopProductAddScreen() {
       businessId,
       asset,
       productName: productImageSlotLabel(index),
+      prepareProductCanvas: true,
+      removeBackground,
     });
     const imageUrl = uploaded.public_url || uploaded.private_url || '';
     if (!imageUrl) throw new Error('Photo uploaded but no URL was returned.');
@@ -448,7 +480,6 @@ export function ShopProductAddScreen() {
     const pickerOptions = {
       mediaTypes: ['images'] as const,
       quality: 0.85,
-      ...(Platform.OS === 'web' ? {} : { allowsEditing: true as const, aspect: [3, 4] as [number, number] }),
     };
     const result =
       source === 'camera'
@@ -462,16 +493,42 @@ export function ShopProductAddScreen() {
       next[index] = asset.uri;
       return next;
     });
+    setCropPending({ index, asset });
+  }
 
+  async function confirmCrop(
+    croppedAsset: ImagePickerAsset,
+    options?: { removeBackground: boolean },
+  ) {
+    if (!cropPending) return;
+    const { index } = cropPending;
+    setCropPending(null);
+    setPreviews((current) => {
+      const next = ensureProductImageSlots(current);
+      next[index] = croppedAsset.uri;
+      return next;
+    });
     setBusy(true);
-    setMessage(null);
+    setMessage(
+      options?.removeBackground
+        ? 'Removing background and uploading… this can take a few seconds.'
+        : 'Uploading photo…',
+    );
     try {
-      const imageUrl = await uploadAsset(index, asset);
+      // Pixels already cropped on device; server letterboxes (+ optional rembg).
+      const imageUrl = await uploadAsset(index, croppedAsset, Boolean(options?.removeBackground));
       const stored = toStoredProductImageUrl(imageUrl) || imageUrl;
+      // Bust caches so the slot shows the final server image (canvas / rembg), not the local crop.
+      const previewUrl = stored.includes('?') ? `${stored}&t=${Date.now()}` : `${stored}?t=${Date.now()}`;
       setForm((current) => {
         const next = ensureProductImageSlots(current.images);
         next[index] = stored;
         return { ...current, images: next };
+      });
+      setPreviews((current) => {
+        const next = ensureProductImageSlots(current);
+        next[index] = previewUrl;
+        return next;
       });
       setMessage(
         index === 0
@@ -483,6 +540,17 @@ export function ShopProductAddScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function cancelCrop() {
+    if (!cropPending) return;
+    const { index } = cropPending;
+    setCropPending(null);
+    setPreviews((current) => {
+      const next = ensureProductImageSlots(current);
+      next[index] = form.images[index] || '';
+      return next;
+    });
   }
 
   function removeAt(index: number) {
@@ -703,6 +771,9 @@ export function ShopProductAddScreen() {
     else if (!Number.isFinite(priceValue) || priceValue < 0) nextErrors.price = 'Enter a valid price';
     if (!form.status.trim()) nextErrors.status = requiredMessage('Status');
     if (!form.currency.trim()) nextErrors.currency = requiredMessage('Currency');
+    if (form.category === 'other' && !form.category_other.trim()) {
+      nextErrors.category_other = requiredMessage('New category name');
+    }
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
       return;
@@ -710,6 +781,24 @@ export function ShopProductAddScreen() {
     setFieldErrors({});
     setBusy(true);
     setMessage(null);
+    let categorySlug = form.category;
+    if (form.category === 'other' || (form.category_other.trim() && form.category === 'other')) {
+      try {
+        const created = await client.shop.ensureProductCategory({
+          business_id: businessId,
+          label: form.category_other.trim(),
+        });
+        categorySlug = created.data.slug;
+        setCategoryOptions((current) => {
+          if (current.some((item) => item.slug === categorySlug)) return current;
+          return [...current.filter((item) => item.slug !== 'other'), created.data];
+        });
+      } catch (err) {
+        setBusy(false);
+        setMessage(authErrorMessage(err, 'Unable to save category'));
+        return;
+      }
+    }
     const gallery = normalizeProductGallery(form.images.map(toStoredProductImageUrl));
     const payload = {
       business_id: businessId,
@@ -728,7 +817,7 @@ export function ShopProductAddScreen() {
       pack_size: form.pack_size,
       ...(gallery[0] ? { image_url: gallery[0] } : { image_url: '' }),
       status: form.status,
-      ...(form.category ? { category: form.category } : { category: '' }),
+      ...(categorySlug ? { category: categorySlug } : { category: '' }),
       metadata: {
         images: buildProductImageMetadata(gallery),
         tax_inclusive: form.tax_inclusive === 'included',
@@ -783,6 +872,30 @@ export function ShopProductAddScreen() {
   }
 
   return (
+    <>
+    <ProductImageCropModal
+      uri={cropPending?.asset.uri ?? null}
+      visible={Boolean(cropPending)}
+      onCancel={cancelCrop}
+      canRemoveBackground={canRemoveBackground}
+      onConfirm={(cropped, options) => void confirmCrop(cropped, options)}
+    />
+    <ImageLightbox
+      uri={lightbox?.uri ?? null}
+      visible={Boolean(lightbox)}
+      title={lightbox ? productImageSlotLabel(lightbox.index) : 'Photo'}
+      replaceLabel="Restart photo"
+      onClose={() => setLightbox(null)}
+      onReplace={
+        lightbox
+          ? () => {
+              const index = lightbox.index;
+              setLightbox(null);
+              void captureAt(index);
+            }
+          : undefined
+      }
+    />
     <FormScreen
       footer={
         <Button
@@ -823,12 +936,23 @@ export function ShopProductAddScreen() {
           {imageSlots.map((url, index) => {
             const preview = previews[index] || url;
             const isPrimary = index === 0;
+            const displayUri = preview ? resolveMediaUrl(preview) || preview : '';
             return (
               <View key={index} style={[styles.photoCard, isPrimary && styles.photoCardPrimary]}>
-                <Pressable onPress={() => void captureAt(index)} disabled={busy} style={styles.photoHit}>
+                <Pressable
+                  onPress={() => {
+                    if (displayUri) {
+                      setLightbox({ index, uri: displayUri });
+                      return;
+                    }
+                    void captureAt(index);
+                  }}
+                  disabled={busy}
+                  style={styles.photoHit}
+                >
                   {preview ? (
                     <RemoteImage
-                      uri={resolveMediaUrl(preview) || preview}
+                      uri={displayUri}
                       style={[styles.photo, isPrimary && styles.photoPrimary]}
                     />
                   ) : (
@@ -841,13 +965,23 @@ export function ShopProductAddScreen() {
                   )}
                 </Pressable>
                 {url || previews[index] ? (
-                  <Pressable
-                    onPress={() => removeAt(index)}
-                    style={styles.photoRemove}
-                    accessibilityLabel={`Remove ${productImageSlotLabel(index)}`}
-                  >
-                    <Feather name="x" size={14} color="#fff" />
-                  </Pressable>
+                  <>
+                    <Pressable
+                      onPress={() => void captureAt(index)}
+                      disabled={busy}
+                      style={styles.photoRestart}
+                      accessibilityLabel={`Restart ${productImageSlotLabel(index)}`}
+                    >
+                      <Feather name="refresh-cw" size={13} color="#fff" />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => removeAt(index)}
+                      style={styles.photoRemove}
+                      accessibilityLabel={`Remove ${productImageSlotLabel(index)}`}
+                    >
+                      <Feather name="x" size={14} color="#fff" />
+                    </Pressable>
+                  </>
                 ) : null}
                 {isPrimary && (url || previews[index]) ? (
                   <View style={styles.primaryBadge}>
@@ -941,15 +1075,47 @@ export function ShopProductAddScreen() {
         <View style={styles.chipBlock}>
           <FieldLabel label="Category" optional />
           <View style={styles.chips}>
-            {SHOP_PRODUCT_CATEGORIES.map((item) => (
+            {categoryOptions.map((item) => (
               <Chip
-                key={item.value}
+                key={item.slug}
                 label={item.label}
-                active={form.category === item.value}
-                onPress={() => setField('category', form.category === item.value ? '' : item.value)}
+                active={form.category === item.slug}
+                onPress={() => {
+                  const next = form.category === item.slug ? '' : item.slug;
+                  setForm((current) => ({
+                    ...current,
+                    category: next,
+                    category_other: next === 'other' ? current.category_other : '',
+                  }));
+                  touchedRef.current.add('category');
+                }}
               />
             ))}
+            {!categoryOptions.some((item) => item.slug === 'other') ? (
+              <Chip
+                label="Other"
+                active={form.category === 'other'}
+                onPress={() => {
+                  setForm((current) => ({
+                    ...current,
+                    category: current.category === 'other' ? '' : 'other',
+                    category_other: current.category === 'other' ? '' : current.category_other,
+                  }));
+                  touchedRef.current.add('category');
+                }}
+              />
+            ) : null}
           </View>
+          {form.category === 'other' ? (
+            <Input
+              label="New category name"
+              required
+              value={form.category_other}
+              onChangeText={(value) => setField('category_other', value)}
+              placeholder="e.g. Dry dog food"
+              error={fieldErrors.category_other}
+            />
+          ) : null}
         </View>
       </FormSection>
 
@@ -1088,6 +1254,7 @@ export function ShopProductAddScreen() {
         />
       </FormSection>
     </FormScreen>
+    </>
   );
 }
 
@@ -1125,6 +1292,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,23,42,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoRestart: {
+    position: 'absolute',
+    top: 8,
+    right: 42,
     width: 28,
     height: 28,
     borderRadius: 14,

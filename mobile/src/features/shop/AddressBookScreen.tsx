@@ -264,7 +264,17 @@ function AddressCard({
             {line}
           </Text>
         ))}
+        {address.phone_number ? (
+          <Text style={styles.line}>Phone: {address.phone_number}</Text>
+        ) : null}
       </View>
+
+      {!address.phone_number ? (
+        <View style={styles.warnRow}>
+          <Feather name="alert-triangle" size={12} color={colors.warning} />
+          <Text style={styles.warnText}>Add a phone number before using this address for delivery</Text>
+        </View>
+      ) : null}
 
       {!pinned ? (
         <View style={styles.warnRow}>

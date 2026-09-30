@@ -5,6 +5,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   PanResponder,
   Platform,
@@ -36,9 +37,32 @@ import { useCart } from './CartContext';
 import { addressSingleLine, addressTypeMeta, deliveryAddressLine } from './addressUtils';
 import { QtyStepper } from './QtyStepper';
 import { formatShopMoney, formatShopDateIso, formatShopDateLabel, formatShopTimeLabel, isPickupTimeAfterNow, nextAvailablePickupTime, shopLinePayable } from './shopHelpers';
+import {
+  cartLinesFromProducts,
+  computeCartTotals,
+  couponPayableToTaxableDiscount,
+  isInterstateSupply,
+  type DiscountType,
+} from './cartPricing';
+import { splitGstDisplay } from './shopOrderBill';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { ApiClientError, type CustomerAddress, type ShopCouponOffer } from '@ie-orbit/sdk';
+import {
+  ApiClientError,
+  type CustomerAddress,
+  type MerchantCashfreeCheckout,
+  type MerchantRazorpayCheckout,
+  type ShopCouponOffer,
+} from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
+import { GatewayCheckoutModal } from './GatewayCheckoutModal';
+import {
+  startCashfreeCheckout,
+  startRazorpayCheckout,
+  verifyCashfreeCheckout,
+  verifyRazorpayCheckout,
+} from './payShopOrderOnline';
+
+type CheckoutPaymentMethod = 'cash' | 'upi' | 'razorpay' | 'cashfree';
 
 const PLACE_ORDER_TIMEOUT_MS = 45000;
 const PLACE_ORDER_BUSY_MESSAGE = 'Server is busy. Please try again in a moment.';
@@ -58,6 +82,15 @@ function couponHeadline(offer: ShopCouponOffer, currency: string) {
     return `${value}% OFF${cap}`;
   }
   return `${formatShopMoney(value, currency)} OFF`;
+}
+
+function isAutomationOffer(offer: ShopCouponOffer) {
+  return String(offer.source || '') === 'automation' || !offer.code;
+}
+
+function offerKey(offer: ShopCouponOffer) {
+  if (offer.code) return `coupon:${offer.code}`;
+  return `auto:${offer.workflow_id || offer.name || 'offer'}:${offer.discount_type}:${offer.discount_value}`;
 }
 
 type DeliveryMethod = 'instant' | 'standard';
@@ -97,13 +130,25 @@ export function CartScreen() {
     name: string;
     discount: number;
   } | null>(null);
+  const [appliedAutomation, setAppliedAutomation] = useState<{
+    label: string;
+    discount_type: 'percent' | 'amount';
+    discount_value: string;
+    discount: number;
+  } | null>(null);
   const [couponBusy, setCouponBusy] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponOffers, setCouponOffers] = useState<ShopCouponOffer[]>([]);
   const [couponSheetOpen, setCouponSheetOpen] = useState(false);
   const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('standard');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('cash');
+  const [gatewayModal, setGatewayModal] = useState<
+    | { provider: 'razorpay'; checkout: MerchantRazorpayCheckout }
+    | { provider: 'cashfree'; checkout: MerchantCashfreeCheckout }
+    | null
+  >(null);
+  const [pendingGatewayOrderId, setPendingGatewayOrderId] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [instantDelivery, setInstantDelivery] = useState<InstantDeliveryOption | null>(null);
@@ -123,11 +168,15 @@ export function CartScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const primary = branding?.primaryColor ?? colors.primary;
   const business = bootstrap?.business;
+  const whatsappUpdatesAvailable = bootstrap?.otp_auth?.whatsapp_status === 'live';
   const currency = lines[0]?.product.currency || business?.currency || 'INR';
   const upiVpa = business?.upi_vpa || '';
   const codEnabled = Boolean(business?.cod_enabled ?? true);
   const canPayCash = codEnabled;
   const canPayQr = Boolean(upiVpa || business?.payment_qr_url);
+  const canPayRazorpay = Boolean(business?.razorpay?.can_accept_payments);
+  const canPayCashfree = Boolean(business?.cashfree?.can_accept_payments);
+  const canPayOnline = canPayRazorpay || canPayCashfree || canPayQr;
   const cashPaymentLabel = fulfillment === 'delivery' ? 'Cash on delivery' : 'Pay at pickup';
   const cashPaymentHint =
     fulfillment === 'delivery' ? 'Pay when you receive your order' : 'Pay when you collect your order';
@@ -155,23 +204,73 @@ export function CartScreen() {
   const deliveryFee = selectedDelivery?.fee ?? 0;
   const deliveryQuoteId = deliveryMethod === 'instant' ? instantDelivery?.quoteId ?? '' : '';
 
-  const couponDiscount = appliedCoupon?.discount ?? 0;
-  const merchandiseAfterCoupon = Math.max(0, total - couponDiscount);
+  const automationOffers = useMemo(
+    () => couponOffers.filter((offer) => isAutomationOffer(offer) && offer.applicable),
+    [couponOffers],
+  );
+
+  const cartLineInputs = useMemo(() => cartLinesFromProducts(lines), [lines]);
+  const baseTotals = useMemo(() => computeCartTotals(cartLineInputs), [cartLineInputs]);
+
+  const billDiscountType: DiscountType = appliedAutomation
+    ? appliedAutomation.discount_type
+    : appliedCoupon
+      ? 'amount'
+      : '';
+  const billDiscountValue = appliedAutomation
+    ? Number(appliedAutomation.discount_value) || 0
+    : appliedCoupon
+      ? couponPayableToTaxableDiscount(
+          appliedCoupon.discount,
+          baseTotals.taxableSubtotal,
+          baseTotals.payable,
+        )
+      : 0;
+
+  const afterBillTotals = useMemo(
+    () => computeCartTotals(cartLineInputs, billDiscountType, billDiscountValue, 0),
+    [billDiscountType, billDiscountValue, cartLineInputs],
+  );
+
   const maxRedeemablePoints = useMemo(() => {
     if (!loyaltyEnabled || loyaltyBalance <= 0) return 0;
     const rate = Math.max(1, pointsPerCurrency);
-    const maxByPercent = Math.floor(((merchandiseAfterCoupon * maxRedeemPercent) / 100) * rate);
+    const eligible = afterBillTotals.taxableSubtotal;
+    const maxByPercent = Math.floor(((eligible * maxRedeemPercent) / 100) * rate);
     return Math.max(0, Math.min(loyaltyBalance, maxByPercent));
-  }, [loyaltyEnabled, loyaltyBalance, merchandiseAfterCoupon, pointsPerCurrency, maxRedeemPercent]);
-  const redeemDiscount = pointsToRedeem > 0 ? pointsToRedeem / Math.max(1, pointsPerCurrency) : 0;
-  const grandTotal = Math.max(
-    0,
-    merchandiseAfterCoupon - redeemDiscount + (fulfillment === 'delivery' ? deliveryFee : 0),
+  }, [afterBillTotals.taxableSubtotal, loyaltyEnabled, loyaltyBalance, maxRedeemPercent, pointsPerCurrency]);
+
+  const redeemDiscount =
+    pointsToRedeem > 0 ? pointsToRedeem / Math.max(1, pointsPerCurrency) : 0;
+
+  const totals = useMemo(
+    () => computeCartTotals(cartLineInputs, billDiscountType, billDiscountValue, redeemDiscount),
+    [billDiscountType, billDiscountValue, cartLineInputs, redeemDiscount],
   );
+
+  const deliveryFeeAmount = fulfillment === 'delivery' ? deliveryFee : 0;
+  const grandTotal = Math.max(0, totals.payable + deliveryFeeAmount);
+  const couponDiscount = appliedCoupon ? totals.billDiscountAmount : 0;
+  const automationDiscount = appliedAutomation ? totals.billDiscountAmount : 0;
+  const loyaltySavingsPayable = totals.loyaltyDiscountAmount;
+  const merchandiseAfterCoupon = afterBillTotals.taxableSubtotal;
+
+  const billIsInterstate =
+    fulfillment === 'delivery'
+      ? isInterstateSupply(business?.state, selectedAddress?.state)
+      : false;
+  const gstSplit = splitGstDisplay(totals.taxTotal, { isInterstate: billIsInterstate });
+
   const orderEarnPoints =
     loyaltyEnabled && earnPointsPer100 > 0
       ? Math.floor((grandTotal * earnPointsPer100) / 100)
       : 0;
+
+  useEffect(() => {
+    if (pointsToRedeem > maxRedeemablePoints) {
+      setPointsToRedeem(maxRedeemablePoints);
+    }
+  }, [maxRedeemablePoints, pointsToRedeem]);
 
   const previewUpiUrl = useMemo(() => {
     if (!upiVpa || paymentMethod !== 'upi') return '';
@@ -185,10 +284,17 @@ export function CartScreen() {
   }, [business?.currency, business?.display_name, grandTotal, paymentMethod, upiVpa]);
 
   useEffect(() => {
-    if (!canPayCash && canPayQr && paymentMethod === 'cash') {
-      setPaymentMethod('upi');
-    }
-  }, [canPayCash, canPayQr, paymentMethod]);
+    const allowed = new Set<CheckoutPaymentMethod>();
+    if (canPayRazorpay) allowed.add('razorpay');
+    if (canPayCashfree) allowed.add('cashfree');
+    if (canPayQr) allowed.add('upi');
+    if (canPayCash) allowed.add('cash');
+    if (allowed.has(paymentMethod)) return;
+    if (canPayRazorpay) setPaymentMethod('razorpay');
+    else if (canPayCashfree) setPaymentMethod('cashfree');
+    else if (canPayQr) setPaymentMethod('upi');
+    else if (canPayCash) setPaymentMethod('cash');
+  }, [canPayCash, canPayCashfree, canPayQr, canPayRazorpay, paymentMethod]);
 
   const loadAddresses = useCallback(async () => {
     if (!tenantSlug || !businessCode) return;
@@ -390,6 +496,8 @@ export function CartScreen() {
             city: selectedAddress.city || '',
             state: selectedAddress.state || '',
             postal_code: selectedAddress.postal_code || '',
+            phone: selectedAddress.phone_number || '',
+            delivery_phone: selectedAddress.phone_number || '',
             subtotal: merchandiseAfterCoupon,
             lines: lines.map((line) => ({
               product_id: line.product.id,
@@ -438,6 +546,7 @@ export function CartScreen() {
             quantity: line.quantity,
           })),
         });
+        setAppliedAutomation(null);
         setAppliedCoupon({
           code: response.data.code,
           name: response.data.name,
@@ -453,6 +562,31 @@ export function CartScreen() {
       }
     },
     [businessCode, fulfillment, lines, tenantSlug],
+  );
+
+  const applyAutomation = useCallback(
+    (offer: ShopCouponOffer, closeSheet = false) => {
+      const dtype = String(offer.discount_type || 'percent') === 'amount' ? 'amount' : 'percent';
+      const value = String(offer.discount_value || '0');
+      const savings = Number(offer.discount_amount || 0);
+      if (!(savings > 0) && !(Number(value) > 0)) return;
+      setAppliedCoupon(null);
+      setCouponDraft('');
+      setCouponError(null);
+      setAppliedAutomation({
+        label: String(offer.label || offer.name || 'Special offer'),
+        discount_type: dtype,
+        discount_value: value,
+        discount:
+          savings > 0
+            ? savings
+            : dtype === 'percent'
+              ? (total * Number(value)) / 100
+              : Math.min(total, Number(value)),
+      });
+      if (closeSheet) setCouponSheetOpen(false);
+    },
+    [total],
   );
 
   const loadCouponOffers = useCallback(async () => {
@@ -501,6 +635,25 @@ export function CartScreen() {
   }, [applyCoupon, itemCount, total, fulfillment]);
 
   useEffect(() => {
+    if (!appliedAutomation) return;
+    const match = automationOffers.find(
+      (offer) =>
+        String(offer.discount_type || 'percent') === appliedAutomation.discount_type &&
+        String(Number(offer.discount_value) || 0) === String(Number(appliedAutomation.discount_value) || 0),
+    );
+    if (!match) {
+      setAppliedAutomation(null);
+      return;
+    }
+    const savings = Number(match.discount_amount || 0);
+    if (savings > 0 && savings !== appliedAutomation.discount) {
+      setAppliedAutomation((current) =>
+        current ? { ...current, discount: savings, label: String(match.label || match.name || current.label) } : current,
+      );
+    }
+  }, [appliedAutomation, automationOffers]);
+
+  useEffect(() => {
     void loadCouponOffers();
   }, [loadCouponOffers, itemCount, total, fulfillment]);
 
@@ -536,7 +689,11 @@ export function CartScreen() {
       setError('The selected delivery option is not available for this address.');
       return;
     }
-    if (!canPayCash && !canPayQr) {
+    if (fulfillment === 'delivery' && !String(selectedAddress?.phone_number || '').trim()) {
+      setError('Add a phone number to this delivery address before ordering.');
+      return;
+    }
+    if (!canPayCash && !canPayOnline) {
       setError('This shop has not set up online payments yet. Contact the shop to order.');
       return;
     }
@@ -546,6 +703,14 @@ export function CartScreen() {
     }
     if (paymentMethod === 'upi' && !canPayQr) {
       setError('Shop has not configured UPI payments yet.');
+      return;
+    }
+    if (paymentMethod === 'razorpay' && !canPayRazorpay) {
+      setError('Online payment is not available for this shop.');
+      return;
+    }
+    if (paymentMethod === 'cashfree' && !canPayCashfree) {
+      setError('Cashfree payment is not available for this shop.');
       return;
     }
     setSubmitting(true);
@@ -563,6 +728,7 @@ export function CartScreen() {
         delivery_city: fulfillment === 'delivery' ? selectedAddress?.city || '' : '',
         delivery_state: fulfillment === 'delivery' ? selectedAddress?.state || '' : '',
         delivery_postal_code: fulfillment === 'delivery' ? selectedAddress?.postal_code || '' : '',
+        delivery_phone: fulfillment === 'delivery' ? selectedAddress?.phone_number || '' : '',
         delivery_latitude: fulfillment === 'delivery' ? selectedAddress?.latitude : undefined,
         delivery_longitude: fulfillment === 'delivery' ? selectedAddress?.longitude : undefined,
         delivery_method: fulfillment === 'delivery' ? deliveryMethod : undefined,
@@ -570,8 +736,10 @@ export function CartScreen() {
         displayed_delivery_fee: fulfillment === 'delivery' ? deliveryFee : undefined,
         payment_method: paymentMethod,
         coupon_code: appliedCoupon?.code || undefined,
+        bill_discount_type: appliedAutomation?.discount_type || undefined,
+        bill_discount_value: appliedAutomation ? Number(appliedAutomation.discount_value) || 0 : undefined,
         points_to_redeem: pointsToRedeem > 0 ? pointsToRedeem : undefined,
-        whatsapp_opt_in: whatsappOptIn || undefined,
+        whatsapp_opt_in: whatsappUpdatesAvailable && whatsappOptIn ? true : undefined,
         lines: lines.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
@@ -581,9 +749,40 @@ export function CartScreen() {
         setTimeout(() => reject(new Error(PLACE_ORDER_BUSY_MESSAGE)), PLACE_ORDER_TIMEOUT_MS);
       });
       const response = await Promise.race([orderRequest, timeout]);
+      const orderId = response.data.id;
       clear();
+      if (paymentMethod === 'razorpay' || paymentMethod === 'cashfree') {
+        setPendingGatewayOrderId(orderId);
+        try {
+          if (paymentMethod === 'razorpay') {
+            const checkout = await startRazorpayCheckout({
+              orderId,
+              tenantSlug,
+              businessCode,
+            });
+            setGatewayModal({ provider: 'razorpay', checkout });
+          } else {
+            const checkout = await startCashfreeCheckout({
+              orderId,
+              tenantSlug,
+              businessCode,
+            });
+            setGatewayModal({ provider: 'cashfree', checkout });
+          }
+          return;
+        } catch (gatewayErr) {
+          toast.push(
+            gatewayErr instanceof Error
+              ? gatewayErr.message
+              : 'Order placed. Complete payment from order details.',
+            'error',
+          );
+          navigation.replace('ShopOrderDetail', { orderId, placed: true });
+          return;
+        }
+      }
       toast.push('Order placed.', 'success');
-      navigation.replace('ShopOrderDetail', { orderId: response.data.id, placed: true });
+      navigation.replace('ShopOrderDetail', { orderId, placed: true });
     } catch (err) {
       if (err instanceof ApiClientError && (err.status === 504 || err.status === 502 || err.status === 503)) {
         setError(PLACE_ORDER_BUSY_MESSAGE);
@@ -595,6 +794,51 @@ export function CartScreen() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function finishGatewaySuccess(
+    result:
+      | { provider: 'razorpay'; payload: Parameters<typeof verifyRazorpayCheckout>[0]['result'] }
+      | { provider: 'cashfree'; payload: Parameters<typeof verifyCashfreeCheckout>[0]['result'] },
+  ) {
+    const orderId = pendingGatewayOrderId;
+    setGatewayModal(null);
+    if (!orderId) return;
+    setSubmitting(true);
+    try {
+      if (result.provider === 'razorpay') {
+        await verifyRazorpayCheckout({
+          orderId,
+          tenantSlug,
+          businessCode,
+          result: result.payload,
+        });
+      } else {
+        await verifyCashfreeCheckout({
+          orderId,
+          tenantSlug,
+          businessCode,
+          result: result.payload,
+        });
+      }
+      toast.push('Payment successful.', 'success');
+      navigation.replace('ShopOrderDetail', { orderId, placed: true });
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Payment verification failed.', 'error');
+      navigation.replace('ShopOrderDetail', { orderId, placed: true });
+    } finally {
+      setPendingGatewayOrderId(null);
+      setSubmitting(false);
+    }
+  }
+
+  function finishGatewayCancel(message?: string) {
+    const orderId = pendingGatewayOrderId;
+    setGatewayModal(null);
+    setPendingGatewayOrderId(null);
+    if (!orderId) return;
+    if (message) toast.push(message, 'error');
+    navigation.replace('ShopOrderDetail', { orderId, placed: true });
   }
 
   return (
@@ -630,8 +874,10 @@ export function CartScreen() {
             }}
           >
             <Text style={styles.subtotalTop}>
-              Subtotal ({itemCount} {itemCount === 1 ? 'item' : 'items'}):{' '}
-              <Text style={{ color: primary }}>{formatShopMoney(total, currency)}</Text>
+              Items ({itemCount} {itemCount === 1 ? 'item' : 'items'}):{' '}
+              <Text style={{ color: primary }}>
+                {formatShopMoney(totals.merchandiseGross, currency)}
+              </Text>
             </Text>
 
             <GroupedList style={styles.itemGroup}>
@@ -673,7 +919,61 @@ export function CartScreen() {
             })}
             </GroupedList>
 
-            <Pressable style={styles.couponEntry} onPress={() => setCouponSheetOpen(true)}>
+            {automationOffers.length > 0 ? (
+              <View style={styles.specialOffers}>
+                <Text style={styles.specialOffersTitle}>Special for you</Text>
+                {automationOffers.map((offer) => {
+                  const active =
+                    appliedAutomation != null &&
+                    appliedAutomation.discount_type ===
+                      (String(offer.discount_type || 'percent') === 'amount' ? 'amount' : 'percent') &&
+                    String(Number(appliedAutomation.discount_value) || 0) ===
+                      String(Number(offer.discount_value) || 0);
+                  const savings = Number(offer.discount_amount || 0);
+                  return (
+                    <Pressable
+                      key={offerKey(offer)}
+                      style={[styles.specialOfferCard, active ? { borderColor: primary } : null]}
+                      onPress={() => {
+                        if (active) {
+                          setAppliedAutomation(null);
+                          return;
+                        }
+                        applyAutomation(offer);
+                      }}
+                    >
+                      <View style={[styles.specialOfferBadge, { backgroundColor: `${primary}14` }]}>
+                        <Text style={[styles.specialOfferBadgeText, { color: primary }]}>
+                          {couponHeadline(offer, currency)}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={styles.specialOfferLabel} numberOfLines={2}>
+                          {offer.label || offer.name || 'Special offer'}
+                        </Text>
+                        <Text style={styles.meta}>
+                          {active
+                            ? `Applied · save ${formatShopMoney(automationDiscount, currency)}`
+                            : savings > 0
+                              ? `Tap to save ${formatShopMoney(savings, currency)}`
+                              : 'Tap to apply'}
+                        </Text>
+                      </View>
+                      <Feather
+                        name={active ? 'check-circle' : 'chevron-right'}
+                        size={18}
+                        color={active ? colors.success : colors.mutedForeground}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            <Pressable
+              style={[styles.couponEntry, automationOffers.length ? { marginTop: spacing.sm } : null]}
+              onPress={() => setCouponSheetOpen(true)}
+            >
               <View style={[styles.couponEntryIcon, { backgroundColor: `${primary}14` }]}>
                 <Feather name="tag" size={16} color={primary} />
               </View>
@@ -686,9 +986,16 @@ export function CartScreen() {
                       {appliedCoupon.name ? ` · ${appliedCoupon.name}` : ''}
                     </Text>
                   </>
+                ) : appliedAutomation ? (
+                  <>
+                    <Text style={styles.couponEntryTitle}>{appliedAutomation.label} applied</Text>
+                    <Text style={styles.couponOk}>
+                      You save {formatShopMoney(automationDiscount, currency)}
+                    </Text>
+                  </>
                 ) : (
                   <>
-                    <Text style={styles.couponEntryTitle}>Apply coupon</Text>
+                    <Text style={styles.couponEntryTitle}>Apply coupon or offer</Text>
                     <Text style={styles.meta}>
                       {couponOffers.length
                         ? `${couponOffers.length} ${couponOffers.length === 1 ? 'offer' : 'offers'} available`
@@ -786,6 +1093,11 @@ export function CartScreen() {
                       ) : null}
                     </View>
                     <Text style={styles.meta}>{addressSingleLine(selectedAddress)}</Text>
+                    {selectedAddress.phone_number ? (
+                      <Text style={styles.meta}>Phone: {selectedAddress.phone_number}</Text>
+                    ) : (
+                      <Text style={styles.error}>Add a phone number to this address.</Text>
+                    )}
                   </View>
                 ) : (
                   <Text style={styles.meta}>Add an address so we can check delivery for your area.</Text>
@@ -937,13 +1249,36 @@ export function CartScreen() {
 
             <Text style={styles.section}>Payment</Text>
             <View style={styles.modeRow}>
-              {canPayCash ? (
+              {canPayRazorpay ? (
                 <Pressable
-                  style={[styles.modeBtn, paymentMethod === 'cash' && { borderColor: primary, backgroundColor: `${primary}14` }]}
-                  onPress={() => setPaymentMethod('cash')}
+                  style={[
+                    styles.modeBtn,
+                    paymentMethod === 'razorpay' && { borderColor: primary, backgroundColor: `${primary}14` },
+                  ]}
+                  onPress={() => setPaymentMethod('razorpay')}
                 >
-                  <Feather name="dollar-sign" size={16} color={paymentMethod === 'cash' ? primary : colors.mutedForeground} />
-                  <Text style={styles.modeText}>{cashPaymentLabel}</Text>
+                  <Feather
+                    name="credit-card"
+                    size={16}
+                    color={paymentMethod === 'razorpay' ? primary : colors.mutedForeground}
+                  />
+                  <Text style={styles.modeText}>Pay online</Text>
+                </Pressable>
+              ) : null}
+              {canPayCashfree ? (
+                <Pressable
+                  style={[
+                    styles.modeBtn,
+                    paymentMethod === 'cashfree' && { borderColor: primary, backgroundColor: `${primary}14` },
+                  ]}
+                  onPress={() => setPaymentMethod('cashfree')}
+                >
+                  <Feather
+                    name="globe"
+                    size={16}
+                    color={paymentMethod === 'cashfree' ? primary : colors.mutedForeground}
+                  />
+                  <Text style={styles.modeText}>Cashfree</Text>
                 </Pressable>
               ) : null}
               {canPayQr ? (
@@ -955,25 +1290,46 @@ export function CartScreen() {
                   onPress={() => setPaymentMethod('upi')}
                 >
                   <Feather name="smartphone" size={16} color={paymentMethod === 'upi' ? primary : colors.mutedForeground} />
-                  <Text style={styles.modeText}>Pay by QR</Text>
+                  <Text style={styles.modeText}>Pay by UPI</Text>
+                </Pressable>
+              ) : null}
+              {canPayCash ? (
+                <Pressable
+                  style={[styles.modeBtn, paymentMethod === 'cash' && { borderColor: primary, backgroundColor: `${primary}14` }]}
+                  onPress={() => setPaymentMethod('cash')}
+                >
+                  <Feather name="dollar-sign" size={16} color={paymentMethod === 'cash' ? primary : colors.mutedForeground} />
+                  <Text style={styles.modeText}>{cashPaymentLabel}</Text>
                 </Pressable>
               ) : null}
             </View>
             {canPayCash && paymentMethod === 'cash' ? (
               <Text style={styles.meta}>{cashPaymentHint}</Text>
             ) : null}
+            {paymentMethod === 'razorpay' || paymentMethod === 'cashfree' ? (
+              <Text style={styles.meta}>
+                Secure checkout opens after you place the order. Cards, UPI, and netbanking are supported.
+              </Text>
+            ) : null}
 
             {paymentMethod === 'upi' && previewUpiUrl ? (
               <View style={styles.qrWrap}>
                 <QRCode value={previewUpiUrl} size={180} />
                 <Text style={styles.meta}>
-                  Scan to pay {formatShopMoney(grandTotal, currency)}. After placing, confirm with UTR and/or a payment screenshot.
+                  Pay {formatShopMoney(grandTotal, currency)} after placing, then submit your UTR or payment screenshot.
                 </Text>
                 <Text style={styles.meta}>UPI: {upiVpa}</Text>
+                <Pressable
+                  style={[styles.modeBtn, { borderColor: primary, marginTop: spacing.sm }]}
+                  onPress={() => void Linking.openURL(previewUpiUrl)}
+                >
+                  <Feather name="external-link" size={16} color={primary} />
+                  <Text style={[styles.modeText, { color: primary }]}>Open UPI app</Text>
+                </Pressable>
               </View>
             ) : null}
             {paymentMethod === 'upi' && !previewUpiUrl && business?.payment_qr_url ? (
-              <Text style={styles.meta}>Static shop QR will be shown on the order after checkout.</Text>
+              <Text style={styles.meta}>Shop QR will be shown on the order after checkout.</Text>
             ) : null}
 
             {loyaltyEnabled ? (
@@ -1013,7 +1369,9 @@ export function CartScreen() {
                         </Pressable>
                       </View>
                       {pointsToRedeem > 0 ? (
-                        <Text style={styles.meta}>Saves {formatShopMoney(redeemDiscount, currency)}</Text>
+                        <Text style={styles.meta}>
+                          Saves {formatShopMoney(loyaltySavingsPayable, currency)}
+                        </Text>
                       ) : null}
                     </>
                   ) : (
@@ -1026,16 +1384,51 @@ export function CartScreen() {
             ) : null}
 
             <View style={styles.summary}>
+              <Text style={styles.summaryTitle}>Bill summary</Text>
               <View style={styles.summaryRow}>
                 <Text style={styles.meta}>Items</Text>
-                <Text style={styles.meta}>{formatShopMoney(total, currency)}</Text>
+                <Text style={styles.meta}>{formatShopMoney(totals.merchandiseGross, currency)}</Text>
+              </View>
+              {automationDiscount > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.meta}>{appliedAutomation?.label || 'Bill discount'}</Text>
+                  <Text style={[styles.meta, styles.discountValue]}>
+                    −{formatShopMoney(automationDiscount, currency)}
+                  </Text>
+                </View>
+              ) : null}
+              {couponDiscount > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.meta}>
+                    Coupon{appliedCoupon?.code ? ` ${appliedCoupon.code}` : ''}
+                  </Text>
+                  <Text style={[styles.meta, styles.discountValue]}>
+                    −{formatShopMoney(couponDiscount, currency)}
+                  </Text>
+                </View>
+              ) : null}
+              {totals.loyaltyDiscountAmount > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.meta}>
+                    Reward points{pointsToRedeem > 0 ? ` (${pointsToRedeem} pts)` : ''}
+                  </Text>
+                  <Text style={[styles.meta, styles.discountValue]}>
+                    −{formatShopMoney(loyaltySavingsPayable, currency)}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={styles.summaryRow}>
+                <Text style={styles.meta}>Taxable value</Text>
+                <Text style={styles.meta}>{formatShopMoney(totals.taxableSubtotal, currency)}</Text>
               </View>
               {fulfillment === 'delivery' ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.meta}>
-                    {deliveryMethod === 'instant' ? 'Deliver now' : 'Standard delivery'}
+                    {deliveryMethod === 'instant' ? 'Delivery (now)' : 'Delivery'}
                   </Text>
-                  <Text style={styles.meta}>{deliveryFee > 0 ? formatShopMoney(deliveryFee, currency) : 'Free'}</Text>
+                  <Text style={styles.meta}>
+                    {deliveryFeeAmount > 0 ? formatShopMoney(deliveryFeeAmount, currency) : 'Free'}
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.summaryRow}>
@@ -1045,21 +1438,35 @@ export function CartScreen() {
                   </Text>
                 </View>
               )}
-              {couponDiscount > 0 ? (
+              {totals.taxTotal > 0 ? (
+                billIsInterstate ? (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.meta}>IGST</Text>
+                    <Text style={styles.meta}>{formatShopMoney(gstSplit.igst || totals.taxTotal, currency)}</Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.meta}>CGST</Text>
+                      <Text style={styles.meta}>{formatShopMoney(gstSplit.cgst, currency)}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.meta}>SGST</Text>
+                      <Text style={styles.meta}>{formatShopMoney(gstSplit.sgst, currency)}</Text>
+                    </View>
+                  </>
+                )
+              ) : (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.meta}>Coupon {appliedCoupon?.code}</Text>
-                  <Text style={styles.meta}>-{formatShopMoney(couponDiscount, currency)}</Text>
+                  <Text style={styles.meta}>GST</Text>
+                  <Text style={styles.meta}>{formatShopMoney(totals.taxTotal, currency)}</Text>
                 </View>
-              ) : null}
-              {redeemDiscount > 0 ? (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.meta}>Reward points</Text>
-                  <Text style={styles.meta}>-{formatShopMoney(redeemDiscount, currency)}</Text>
-                </View>
-              ) : null}
-              <View style={styles.summaryRow}>
-                <Text style={styles.totalLabel}>Order total</Text>
-                <Text style={[styles.totalLabel, { color: primary }]}>{formatShopMoney(grandTotal, currency)}</Text>
+              )}
+              <View style={[styles.summaryRow, styles.summaryTotal]}>
+                <Text style={styles.totalLabel}>Payable</Text>
+                <Text style={[styles.totalLabel, { color: primary }]}>
+                  {formatShopMoney(grandTotal, currency)}
+                </Text>
               </View>
               {orderEarnPoints > 0 ? (
                 <Text style={styles.earnHint}>
@@ -1067,13 +1474,15 @@ export function CartScreen() {
                 </Text>
               ) : null}
             </View>
-            <View style={styles.whatsappRow}>
-              <View style={{ flex: 1, paddingRight: spacing.md }}>
-                <Text style={styles.whatsappTitle}>WhatsApp updates</Text>
-                <Text style={styles.barHint}>Order status on WhatsApp if this shop is connected</Text>
+            {whatsappUpdatesAvailable ? (
+              <View style={styles.whatsappRow}>
+                <View style={{ flex: 1, paddingRight: spacing.md }}>
+                  <Text style={styles.whatsappTitle}>WhatsApp updates</Text>
+                  <Text style={styles.barHint}>Get order status updates on WhatsApp</Text>
+                </View>
+                <Switch value={whatsappOptIn} onValueChange={setWhatsappOptIn} trackColor={{ true: primary }} />
               </View>
-              <Switch value={whatsappOptIn} onValueChange={setWhatsappOptIn} trackColor={{ true: primary }} />
-            </View>
+            ) : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
 
@@ -1190,12 +1599,19 @@ export function CartScreen() {
               >
                 {couponOffers.length ? (
                   couponOffers.map((offer) => {
-                    const applied = appliedCoupon?.code === offer.code;
+                    const automation = isAutomationOffer(offer);
+                    const applied = automation
+                      ? appliedAutomation != null &&
+                        appliedAutomation.discount_type ===
+                          (String(offer.discount_type || 'percent') === 'amount' ? 'amount' : 'percent') &&
+                        String(Number(appliedAutomation.discount_value) || 0) ===
+                          String(Number(offer.discount_value) || 0)
+                      : appliedCoupon?.code === offer.code;
                     const savings = Number(offer.discount_amount || 0);
                     const remaining = Number(offer.remaining_to_unlock || 0);
                     return (
                       <View
-                        key={offer.code}
+                        key={offerKey(offer)}
                         style={[
                           styles.offerCard,
                           applied ? { borderColor: primary } : null,
@@ -1209,7 +1625,9 @@ export function CartScreen() {
                           ]}
                         />
                         <View style={styles.offerBody}>
-                          <Text style={styles.offerCode}>{offer.code}</Text>
+                          <Text style={styles.offerCode}>
+                            {automation ? 'SPECIAL' : offer.code}
+                          </Text>
                           <Text style={styles.offerHeadline}>{couponHeadline(offer, currency)}</Text>
                           {offer.name ? <Text style={styles.offerName}>{offer.name}</Text> : null}
                           {offer.description ? (
@@ -1219,7 +1637,15 @@ export function CartScreen() {
                           ) : null}
                           {offer.applicable || applied ? (
                             <Text style={styles.couponOk}>
-                              {applied ? 'Applied · ' : ''}Save {formatShopMoney(applied ? couponDiscount : savings, currency)}
+                              {applied ? 'Applied · ' : ''}Save{' '}
+                              {formatShopMoney(
+                                applied
+                                  ? automation
+                                    ? automationDiscount
+                                    : couponDiscount
+                                  : savings,
+                                currency,
+                              )}
                             </Text>
                           ) : (
                             <Text style={styles.offerLocked}>
@@ -1233,8 +1659,12 @@ export function CartScreen() {
                           <Pressable
                             style={styles.offerAction}
                             onPress={() => {
-                              setAppliedCoupon(null);
-                              setCouponDraft('');
+                              if (automation) {
+                                setAppliedAutomation(null);
+                              } else {
+                                setAppliedCoupon(null);
+                                setCouponDraft('');
+                              }
                               setCouponError(null);
                             }}
                           >
@@ -1245,12 +1675,18 @@ export function CartScreen() {
                             style={styles.offerAction}
                             disabled={couponBusy}
                             onPress={() => {
-                              setCouponDraft(offer.code);
-                              void applyCoupon(offer.code, true);
+                              if (automation) {
+                                applyAutomation(offer, true);
+                                return;
+                              }
+                              if (offer.code) {
+                                setCouponDraft(offer.code);
+                                void applyCoupon(offer.code, true);
+                              }
                             }}
                           >
                             <Text style={[styles.panelTitle, { color: primary }]}>
-                              {couponBusy && couponDraft === offer.code ? '…' : 'APPLY'}
+                              {couponBusy && !automation && couponDraft === offer.code ? '…' : 'APPLY'}
                             </Text>
                           </Pressable>
                         ) : (
@@ -1260,13 +1696,32 @@ export function CartScreen() {
                     );
                   })
                 ) : (
-                  <Text style={styles.meta}>No coupons to show for this cart yet.</Text>
+                  <Text style={styles.meta}>No offers to show for this cart yet.</Text>
                 )}
               </ScrollView>
             </Animated.View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {gatewayModal?.provider === 'razorpay' ? (
+        <GatewayCheckoutModal
+          visible
+          provider="razorpay"
+          checkout={gatewayModal.checkout}
+          onSuccess={(payload) => void finishGatewaySuccess({ provider: 'razorpay', payload })}
+          onCancel={finishGatewayCancel}
+        />
+      ) : null}
+      {gatewayModal?.provider === 'cashfree' ? (
+        <GatewayCheckoutModal
+          visible
+          provider="cashfree"
+          checkout={gatewayModal.checkout}
+          onSuccess={(payload) => void finishGatewaySuccess({ provider: 'cashfree', payload })}
+          onCancel={finishGatewayCancel}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1292,9 +1747,10 @@ const styles = StyleSheet.create({
   lineTotal: { ...typography.label, fontWeight: '700', color: colors.foreground },
   section: { marginTop: spacing.lg, marginBottom: spacing.sm, fontWeight: '700', color: colors.foreground },
   meta: { color: colors.mutedForeground, marginTop: 2, ...typography.caption },
-  modeRow: { flexDirection: 'row', gap: 8 },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   modeBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '45%',
     flexDirection: 'row',
     gap: 6,
     borderWidth: 1,
@@ -1383,12 +1839,52 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.sm,
   },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  summaryTitle: {
+    ...typography.label,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginBottom: 2,
+  },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
+  summaryTotal: {
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  discountValue: { color: colors.success, fontWeight: '600' },
   earnHint: { ...typography.caption, color: colors.success, fontWeight: '600' },
   couponRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   couponInput: { flex: 1, marginTop: 0 },
   couponBtn: { paddingHorizontal: 12, paddingVertical: 10 },
   couponOk: { color: colors.success, ...typography.caption, fontWeight: '600' },
+  specialOffers: {
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  specialOffersTitle: {
+    ...typography.label,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginBottom: 2,
+  },
+  specialOfferCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  specialOfferBadge: {
+    borderRadius: radius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  specialOfferBadgeText: { ...typography.caption, fontWeight: '800' },
+  specialOfferLabel: { ...typography.label, fontWeight: '700', color: colors.foreground },
   couponEntry: {
     marginTop: spacing.lg,
     flexDirection: 'row',

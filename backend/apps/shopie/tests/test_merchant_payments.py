@@ -34,6 +34,51 @@ def test_merchant_credentials_are_encrypted_and_masked(shop_business: Business) 
     assert payload["key_secret_masked"] == "••••••••"
 
 
+def test_razorpay_enable_requires_verified_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+    shop_business: Business,
+) -> None:
+    monkeypatch.setattr(
+        MerchantPaymentService,
+        "availability",
+        lambda self, **kwargs: {
+            "platform_enabled": True,
+            "plan_entitled": True,
+            "available": True,
+            "enabled": False,
+        },
+    )
+    service = MerchantPaymentService()
+
+    with pytest.raises(ValidationError, match="Add and test your Razorpay"):
+        service.update_settings(
+            business=shop_business,
+            key_id="",
+            enabled=True,
+            test_connection=False,
+        )
+
+    with pytest.raises(ValidationError, match="Test your Razorpay credentials"):
+        service.update_settings(
+            business=shop_business,
+            key_id="rzp_test_unverified",
+            key_secret="secret",
+            enabled=True,
+            test_connection=False,
+        )
+
+    monkeypatch.setattr(RazorpayClient, "test_connection", lambda self: True)
+    payload = service.update_settings(
+        business=shop_business,
+        key_id="rzp_test_verified",
+        key_secret="secret",
+        enabled=True,
+        test_connection=True,
+    )
+    assert payload["enabled"] is True
+    assert payload["connected"] is True
+
+
 def test_razorpay_connected_only_after_successful_test(
     monkeypatch: pytest.MonkeyPatch,
     shop_business: Business,
@@ -167,6 +212,51 @@ def test_merchant_cashfree_credentials_are_encrypted(shop_business: Business) ->
     assert payload["cashfree"]["connected"] is False
     assert payload["cashfree"]["status"] == "not_in_plan"
     assert payload["cashfree"]["secret_masked"] == "••••••••"
+
+
+def test_cashfree_enable_requires_verified_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+    shop_business: Business,
+) -> None:
+    monkeypatch.setattr(
+        MerchantPaymentService,
+        "cashfree_availability",
+        lambda self, **kwargs: {
+            "platform_enabled": True,
+            "plan_entitled": True,
+            "available": True,
+            "enabled": False,
+        },
+    )
+    service = MerchantPaymentService()
+
+    with pytest.raises(ValidationError, match="Add and test your Cashfree"):
+        service.update_cashfree_settings(
+            business=shop_business,
+            app_id="",
+            enabled=True,
+            test_connection=False,
+        )
+
+    with pytest.raises(ValidationError, match="Test your Cashfree credentials"):
+        service.update_cashfree_settings(
+            business=shop_business,
+            app_id="TEST_UNVERIFIED",
+            secret_key="secret",
+            enabled=True,
+            test_connection=False,
+        )
+
+    monkeypatch.setattr(CashfreeClient, "test_connection", lambda self: True)
+    payload = service.update_cashfree_settings(
+        business=shop_business,
+        app_id="TEST_VERIFIED",
+        secret_key="secret",
+        enabled=True,
+        test_connection=True,
+    )
+    assert payload["cashfree"]["enabled"] is True
+    assert payload["cashfree"]["connected"] is True
 
 
 def test_cashfree_connected_only_after_successful_test(

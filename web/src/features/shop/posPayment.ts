@@ -1,4 +1,5 @@
 import type { ShopOrder } from '@ie-orbit/sdk';
+import { formatMoney } from '../../lib/currency';
 
 type PosMeta = {
   payment_method?: string;
@@ -18,7 +19,7 @@ export function formatShopOrderPayment(order: ShopOrder): string {
   if (!method) return '';
   if (method === 'borrow') {
     const due = Number(pos.amount_due ?? order.total ?? 0);
-    if (due > 0) return `Borrow · Due ${due.toFixed(2)}`;
+    if (due > 0) return `Borrow · Due ${formatMoney(due, order.currency)}`;
     return 'Borrow · Settled';
   }
   return method.toUpperCase();

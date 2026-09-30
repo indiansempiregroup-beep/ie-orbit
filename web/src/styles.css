@@ -818,8 +818,34 @@ h6 {
 
 .invoice-row__side {
   display: grid;
-  justify-items: end;
   gap: 4px;
+  justify-items: end;
+  flex-shrink: 0;
+}
+
+.invoice-row__actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.invoice-row__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.invoice-row__action:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  color: var(--primary);
 }
 
 .invoice-pill {
@@ -3344,6 +3370,88 @@ h6 {
   border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
   background: color-mix(in srgb, var(--sidebar-accent) 70%, var(--card));
   color: var(--primary);
+}
+
+.billing-cadence {
+  margin: 0.85rem 0 1rem;
+}
+
+.billing-cadence__switch {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 55%, transparent);
+  border: 1px solid var(--border);
+}
+
+.billing-cadence__switch button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.billing-cadence__switch button.is-on {
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  transform: translateY(-0.5px);
+  color: var(--primary);
+}
+
+.billing-cadence__badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: var(--primary);
+}
+
+.billing-cadence__hint {
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.billing-cadence__save {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.billing-refund-form {
+  display: grid;
+  gap: 0.65rem;
+  width: 100%;
+  max-width: 28rem;
+}
+
+.billing-refund-form label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.billing-refund-form input {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: inherit;
 }
 
 .product-settings-filter {
@@ -6464,6 +6572,61 @@ h6 {
   font-size: 13px;
 }
 
+.admin-package-pricing {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--muted) 28%, transparent);
+}
+
+.admin-package-pricing__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.admin-package-pricing__row .admin-field {
+  min-width: 0;
+}
+
+.admin-package-pricing__row .admin-field input {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  box-sizing: border-box;
+}
+
+.admin-package-pricing__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.admin-package-pricing__bar .admin-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.admin-package-pricing__note {
+  margin: 0;
+  flex: 1 1 180px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 720px) {
+  .admin-package-pricing__row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-billing-grid strong {
   display: block;
   margin-top: 2px;
@@ -8105,6 +8268,75 @@ h6 {
   margin-top: 10px;
 }
 
+.assistant-prompt-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.assistant-prompt-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-prompt-group {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.assistant-prompt-section-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground, #64748b);
+}
+
+.assistant-prompt-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assistant-prompt-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  background: color-mix(in srgb, var(--primary) 7%, white);
+  color: var(--foreground);
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.assistant-prompt-tool:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, white);
+}
+
+.assistant-prompt-tool.is-compose {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--muted) 55%, white);
+}
+
+.assistant-prompt-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--primary);
+  opacity: 0.9;
+}
+
 .assistant-link {
   display: flex;
   align-items: flex-start;
@@ -8278,6 +8510,11 @@ h6 {
   font-size: 11px;
   color: var(--muted-foreground);
   line-height: 1.4;
+}
+
+.assistant-composer-hint.is-compose {
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .assistant-composer-hint kbd {

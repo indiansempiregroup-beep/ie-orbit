@@ -14,6 +14,7 @@ from apps.billing.constants import (
     DEFAULT_CHECKOUT_CURRENCY,
     PLAN_PRICE_PAISE,
     YEARLY_PRICE_MULTIPLIER,
+    yearly_months_from_definition,
 )
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
 from apps.billing.services.addon_pricing import get_addon_prices
@@ -104,7 +105,13 @@ class CheckoutService:
         if get_plan_definition(normalized_product, normalized_plan) is None:
             raise ValidationError({"plan_code": "Unknown plan for this product."})
 
-        amount_paise = self._resolve_plan_price_paise(normalized_plan)
+        interval = "monthly"
+        subscription = (
+            business.product_subscriptions.filter(product_code=normalized_product).only("billing_interval").first()
+        )
+        if subscription is not None and subscription.billing_interval:
+            interval = subscription.billing_interval
+        amount_paise = self._resolve_plan_price_paise(normalized_plan, interval)
         if amount_paise is None:
             raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
         checkout_provider = self._resolve_checkout_provider(provider)
@@ -259,10 +266,11 @@ class CheckoutService:
             )
 
             definition_yearly = definition.get("yearly_amount_paise")
+            months_charged = yearly_months_from_definition(definition)
             if definition_yearly is not None:
                 yearly_amount = int(definition_yearly)
             else:
-                yearly_amount = None if amount_paise is None else amount_paise * YEARLY_PRICE_MULTIPLIER
+                yearly_amount = None if amount_paise is None else amount_paise * months_charged
 
             plans.append(
                 {
@@ -281,6 +289,7 @@ class CheckoutService:
                     "features": list(definition.get("features") or []),
                     "amount_paise": amount_paise,
                     "yearly_amount_paise": yearly_amount,
+                    "yearly_months_charged": months_charged,
                     "addon_staff_price_paise": addon_prices["staff_price_paise"],
                     "addon_office_price_paise": addon_prices["office_price_paise"],
                     "addon_pets_price_paise": addon_prices["pets_price_paise"],
@@ -310,6 +319,8 @@ class CheckoutService:
         overrides = getattr(settings, "BILLING_PLAN_PRICE_OVERRIDES", {}) or {}
         override = overrides.get(plan_code)
         monthly: int | None = None
+        yearly_override: int | None = None
+        months_charged = YEARLY_PRICE_MULTIPLIER
         if override is not None:
             try:
                 monthly = int(override)
@@ -324,14 +335,25 @@ class CheckoutService:
                     definition_amount = definition.get("amount_paise")
                     if definition_amount is not None:
                         monthly = int(definition_amount)
+                    definition_yearly = definition.get("yearly_amount_paise")
+                    if definition_yearly is not None:
+                        try:
+                            yearly_override = int(definition_yearly)
+                        except (TypeError, ValueError):
+                            yearly_override = None
+                    months_charged = yearly_months_from_definition(definition)
                     break
 
         if monthly is None:
             monthly = PLAN_PRICE_PAISE.get(plan_code)
-        if monthly is None:
+        if monthly is None and yearly_override is None:
             return None
         if billing_interval == "yearly":
-            return monthly * YEARLY_PRICE_MULTIPLIER
+            if yearly_override is not None:
+                return yearly_override
+            if monthly is None:
+                return None
+            return monthly * months_charged
         return monthly
 
     def mark_session_paid(
@@ -385,10 +407,13 @@ class CheckoutService:
         extra_staff = max(0, int(raw.get("extra_staff") or 0))
         extra_offices = max(0, int(raw.get("extra_offices") or 0))
         pets_pack_enabled = bool(raw.get("pets_pack_enabled"))
+        requested_interval = str(raw.get("billing_interval") or "").strip().lower()
         if product_code not in VALID_PRODUCT_CODES:
             raise ValidationError({"product_code": "Unknown product code."})
         if get_plan_definition(product_code, plan_code) is None:
             raise ValidationError({"plan_code": "Unknown plan for this product."})
+        if requested_interval and requested_interval not in {"monthly", "yearly"}:
+            raise ValidationError({"billing_interval": "Use monthly or yearly."})
 
         EntitlementService().ensure_addon_caps(
             business=business,
@@ -400,14 +425,15 @@ class CheckoutService:
         subscription = (
             business.product_subscriptions.filter(product_code=product_code).select_related("plan").first()
         )
-        interval = "monthly"
-        if subscription is not None and subscription.billing_interval:
+        interval = requested_interval or "monthly"
+        if not requested_interval and subscription is not None and subscription.billing_interval:
             interval = subscription.billing_interval
         base = self._resolve_plan_price_paise(plan_code, interval)
         if base is None:
             raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
         addon_prices = get_addon_prices()
-        multiplier = YEARLY_PRICE_MULTIPLIER if interval == "yearly" else 1
+        plan_definition = get_plan_definition(product_code, plan_code) or {}
+        multiplier = yearly_months_from_definition(plan_definition) if interval == "yearly" else 1
         amount_paise = (
             base
             + extra_staff * addon_prices["staff_price_paise"] * multiplier
@@ -443,6 +469,7 @@ class CheckoutService:
         extra_staff: int = 0,
         extra_offices: int = 0,
         pets_pack_enabled: bool = False,
+        billing_interval: str | None = None,
         items: list[dict[str, Any]] | None = None,
         actor_id: str | None = None,
     ) -> dict[str, Any]:
@@ -457,6 +484,11 @@ class CheckoutService:
                     "extra_staff": extra_staff,
                     "extra_offices": extra_offices,
                     "pets_pack_enabled": pets_pack_enabled,
+                    **(
+                        {"billing_interval": billing_interval}
+                        if billing_interval
+                        else {}
+                    ),
                 }
             ]
         if len(raw_items) > 8:
@@ -627,6 +659,12 @@ class CheckoutService:
                 self._credit_assistant_wallet(session)
             else:
                 self._activate_subscription_for_session(session)
+            try:
+                from apps.billing.services.tax_invoices import TaxInvoiceService
+
+                TaxInvoiceService().issue_tax_invoice_for_session(session)
+            except Exception:
+                logger.exception("tax_invoice_issue_failed session_id=%s", session.id)
             try:
                 notify_upi_claim_resolved(session, action="confirm", note=str(note or ""))
             except Exception:
@@ -890,12 +928,16 @@ class CheckoutService:
         for item in self._line_items_for_session(session):
             product_code = str(item.get("product_code") or session.product_code)
             plan_code = str(item.get("plan_code") or session.plan_code)
+            billing_interval = str(item.get("billing_interval") or "").strip().lower() or None
+            if billing_interval not in {None, "monthly", "yearly"}:
+                billing_interval = None
             subscription = business_service.subscribe_to_product(
                 business=session.business,
                 product_code=product_code,
                 plan_code=plan_code,
                 actor=None,
                 set_active=True,
+                billing_interval=billing_interval,
             )
             subscription.extra_staff = int(item.get("extra_staff") or 0)
             subscription.extra_offices = int(item.get("extra_offices") or 0)

@@ -1218,6 +1218,8 @@ class BooksService:
         business: Business,
         party_kind: str,
         party_id: UUID,
+        date_from: date | None = None,
+        date_to: date | None = None,
     ) -> dict[str, Any]:
         filters: dict[str, Any] = dict(tenant=tenant, business=business, party_kind=party_kind)
         if party_kind == PartyKind.CUSTOMER:
@@ -1231,10 +1233,20 @@ class BooksService:
         if party is None:
             raise ValidationError({"party_id": "Party not found."})
 
-        entries = list(ShopPartyLedgerEntry.objects.filter(**filters).order_by("created_at", "id"))
+        qs = ShopPartyLedgerEntry.objects.filter(**filters).order_by("created_at", "id")
         opening_balance = Decimal("0.00")
         if party_kind == PartyKind.SUPPLIER:
             opening_balance = _q(getattr(party, "opening_balance", 0))
+
+        if date_from is not None:
+            prior = qs.filter(created_at__date__lt=date_from).order_by("-created_at", "-id").first()
+            if prior is not None:
+                opening_balance = _q(prior.balance_after)
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to is not None:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        entries = list(qs)
         closing_balance = entries[-1].balance_after if entries else opening_balance
 
         party_name = getattr(party, "name", None) or getattr(party, "display_name", "")
@@ -1242,6 +1254,8 @@ class BooksService:
             "party_kind": party_kind,
             "party_id": str(party_id),
             "party_name": party_name,
+            "date_from": date_from.isoformat() if date_from else None,
+            "date_to": date_to.isoformat() if date_to else None,
             "opening_balance": str(opening_balance),
             "closing_balance": str(_q(closing_balance)),
             "entries": entries,
@@ -1357,13 +1371,27 @@ class BooksService:
                 else "Walk-in / B2C"
             )
         )
+        delivery_state = str(metadata.get("delivery_state") or "").strip()
+        gst_meta = metadata.get("gst") if isinstance(metadata.get("gst"), dict) else {}
+        from apps.shopie.services.gst import resolve_sale_supply
+
+        supply = resolve_sale_supply(
+            business=business,
+            customer_gstin=customer_gstin or str(gst_meta.get("customer_gstin") or ""),
+            delivery_state=delivery_state,
+            place_of_supply=str(gst_meta.get("place_of_supply") or ""),
+        )
         voucher_meta: dict[str, Any] = {
             "source_order_id": str(order.id),
             "source": "sale",
             "customer_name": customer_name,
+            "gst": dict(supply),
         }
-        if customer_gstin:
-            voucher_meta["customer_gstin"] = customer_gstin
+        if supply["customer_gstin"]:
+            voucher_meta["customer_gstin"] = supply["customer_gstin"]
+        order_loyalty = metadata.get("loyalty") if isinstance(metadata.get("loyalty"), dict) else None
+        if order_loyalty:
+            voucher_meta["loyalty"] = order_loyalty
 
         voucher = self.create_sale_voucher(
             tenant=tenant,
@@ -1377,6 +1405,8 @@ class BooksService:
                 "cash_account_id": resolved_cash_id,
                 "linked_order": order,
                 "adjust_stock": False,
+                "is_interstate": supply["is_interstate"],
+                "place_of_supply": supply["place_of_supply"],
                 "metadata": voucher_meta,
             },
         )
@@ -1595,8 +1625,11 @@ class BooksService:
             )
             rows.append(
                 {
+                    "id": str(voucher.id),
+                    "voucher_type": voucher.voucher_type,
                     "voucher_number": voucher.voucher_number,
                     "voucher_date": voucher.voucher_date.isoformat(),
+                    "created_at": voucher.created_at.isoformat() if voucher.created_at else None,
                     "invoice_type": "B2B" if gstin else "B2C",
                     "customer_name": customer_name,
                     "customer_gstin": gstin,

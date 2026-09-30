@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDialog } from '../../hooks/useDialog';
 import { useEditFormInit } from '../../hooks/useEditFormInit';
@@ -13,6 +13,8 @@ import { LogoUploadField } from '../../components/LogoUploadField';
 import { formatTimestamp } from '../../lib/datetime';
 import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { canWriteServices } from '../../utils/roles';
+import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
+import { ProductImageCropModal, type ProductImageCropResult } from '../shop/ProductImageCropModal';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServiceDetailPage() {
@@ -25,6 +27,15 @@ export function ServiceDetailPage() {
   const serviceQuery = useServiceDetail(serviceId);
   const updateService = useServiceUpdate();
   const editDialog = useDialog();
+  const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
+  const entitledFeatures = useMemo(() => {
+    const snapshot = billingQuery.data;
+    return [
+      ...((snapshot?.entitled_features as string[] | undefined) ?? []),
+      ...((snapshot?.features as string[] | undefined) ?? []),
+    ];
+  }, [billingQuery.data]);
+  const canRemoveBackground = entitledFeatures.includes('appointie_service_bg_remove');
   const [formState, setFormState] = useState({
     name: '',
     display_name: '',
@@ -39,6 +50,9 @@ export function ServiceDetailPage() {
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageCrop, setImageCrop] = useState<ProductImageCropResult | null>(null);
+  const [imageRemoveBg, setImageRemoveBg] = useState(false);
+  const [cropPending, setCropPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
@@ -58,12 +72,42 @@ export function ServiceDetailPage() {
     });
     setCurrentImageUrl(resolveMediaAssetUrl(service.image_url));
     setImageFile(null);
+    setImageCrop(null);
+    setImageRemoveBg(false);
     setRemoveImage(false);
   }, []);
 
   useEditFormInit(editDialog.open, serviceQuery.data, initForm);
 
   const serviceName = serviceQuery.data?.name ?? 'Service profile';
+
+  function beginServiceCrop(file: File | null) {
+    if (cropPending?.previewUrl) URL.revokeObjectURL(cropPending.previewUrl);
+    if (!file) {
+      setImageFile(null);
+      setImageCrop(null);
+      setImageRemoveBg(false);
+      setCropPending(null);
+      if (currentImageUrl) setRemoveImage(true);
+      return;
+    }
+    setRemoveImage(false);
+    setCropPending({ file, previewUrl: URL.createObjectURL(file) });
+  }
+
+  function confirmServiceCrop(crop: ProductImageCropResult, options?: { removeBackground: boolean }) {
+    if (!cropPending) return;
+    setImageFile(cropPending.file);
+    setImageCrop(crop);
+    setImageRemoveBg(Boolean(options?.removeBackground));
+    URL.revokeObjectURL(cropPending.previewUrl);
+    setCropPending(null);
+  }
+
+  function cancelServiceCrop() {
+    if (cropPending?.previewUrl) URL.revokeObjectURL(cropPending.previewUrl);
+    setCropPending(null);
+  }
 
   function formatPrice(amount?: number, code = currency) {
     if (amount == null) return '—';
@@ -231,6 +275,8 @@ export function ServiceDetailPage() {
                     businessId,
                     imageFile,
                     serviceName,
+                    removeBackground: imageRemoveBg,
+                    crop: imageCrop ?? undefined,
                   });
                   primaryImage = { media_id: mediaId };
                 } else if (removeImage) {
@@ -357,11 +403,7 @@ export function ServiceDetailPage() {
           />
           <LogoUploadField
             value={imageFile}
-            onChange={(file) => {
-              setImageFile(file);
-              if (file) setRemoveImage(false);
-              if (!file && currentImageUrl) setRemoveImage(true);
-            }}
+            onChange={beginServiceCrop}
             currentLogoUrl={removeImage ? null : currentImageUrl}
             label="Service image (optional)"
             hint="PNG, JPG, or WebP. Shown in the mobile app when customers browse services."
@@ -378,6 +420,14 @@ export function ServiceDetailPage() {
           {editError ? <div style={{ color: '#dc2626' }}>{editError}</div> : null}
         </form>
       </Dialog>
+
+      <ProductImageCropModal
+        open={Boolean(cropPending)}
+        imageUrl={cropPending?.previewUrl || ''}
+        onCancel={cancelServiceCrop}
+        canRemoveBackground={canRemoveBackground}
+        onConfirm={(crop, options) => confirmServiceCrop(crop, options)}
+      />
     </div>
   );
 }

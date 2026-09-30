@@ -80,6 +80,7 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "stock_on_hand",
             "low_stock_threshold",
             "pack_size",
+            "unit",
             "image_url",
             "category",
             "category_label",
@@ -95,6 +96,11 @@ class ShopProductSerializer(serializers.ModelSerializer):
     def get_category_label(self, obj: ShopProduct) -> str:
         from apps.shopie.services.categories import CategoryService
 
+        labels = self.context.get("category_labels")
+        if isinstance(labels, dict) and obj.category:
+            master_label = labels.get(obj.category)
+            if master_label:
+                return str(master_label)
         return CategoryService().label_for(obj.category)
 
     def get_tax_inclusive(self, obj: ShopProduct) -> bool:
@@ -143,6 +149,7 @@ class ShopProductWriteSerializer(serializers.Serializer):
     godown_id = serializers.UUIDField(required=False, allow_null=True)
     low_stock_threshold = serializers.DecimalField(max_digits=12, decimal_places=3, required=False)
     pack_size = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    unit = serializers.CharField(required=False, allow_blank=True, max_length=32)
     image_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)
     category = serializers.CharField(required=False, allow_blank=True, max_length=64)
     metadata = serializers.DictField(required=False)
@@ -239,8 +246,24 @@ class EnrichBarcodeSerializer(serializers.Serializer):
 
 
 class EnsureCategorySerializer(serializers.Serializer):
+    business_id = serializers.UUIDField(required=False)
     label = serializers.CharField(max_length=120)
     slug = serializers.CharField(required=False, allow_blank=True, max_length=64)
+
+
+class ShopMasterEnsureSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    label = serializers.CharField(max_length=120)
+    slug = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    value = serializers.CharField(required=False, allow_blank=True, max_length=64)
+
+
+class ShopMasterWriteSerializer(serializers.Serializer):
+    label = serializers.CharField(required=False, max_length=120)
+    slug = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    value = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    is_active = serializers.BooleanField(required=False)
+    sort_order = serializers.IntegerField(required=False, min_value=0, max_value=10_000)
 
 
 class SmartLookupSettingsSerializer(serializers.Serializer):
@@ -308,11 +331,26 @@ class ShopOrderLineListSerializer(serializers.ModelSerializer):
         fields = ["id", "product_name", "quantity"]
 
 
+def _order_delivery_phone(obj: ShopOrder) -> str:
+    """Phone saved on the delivery address for this order (empty if unset)."""
+    from apps.customers.services.contact import format_contact_phone
+
+    metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
+    phone = format_contact_phone(metadata.get("delivery_contact_phone"))
+    if phone:
+        return phone
+    delivery = metadata.get("delivery") if isinstance(metadata.get("delivery"), dict) else {}
+    drop = delivery.get("drop") if isinstance(delivery.get("drop"), dict) else {}
+    contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
+    return format_contact_phone(contact.get("phone"))
+
+
 class ShopOrderListSerializer(serializers.ModelSerializer):
     lines = ShopOrderLineListSerializer(many=True, read_only=True)
     customer_id = serializers.UUIDField(source="customer.id", read_only=True, allow_null=True)
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
+    delivery_phone = serializers.SerializerMethodField()
     payment_method = serializers.SerializerMethodField()
     payment_status = serializers.SerializerMethodField()
 
@@ -324,6 +362,7 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
             "customer_id",
             "customer_name",
             "customer_phone",
+            "delivery_phone",
             "order_number",
             "status",
             "fulfillment_mode",
@@ -361,14 +400,10 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
     def get_customer_phone(self, obj: ShopOrder) -> str:
         from apps.customers.services.contact import resolve_customer_phone
 
-        customer = getattr(obj, "customer", None)
-        delivery = obj.metadata.get("delivery") if isinstance(obj.metadata, dict) else {}
-        drop = delivery.get("drop") if isinstance(delivery, dict) else {}
-        drop_contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
-        return resolve_customer_phone(
-            customer,
-            fallback=str(drop_contact.get("phone") or ""),
-        )
+        return resolve_customer_phone(getattr(obj, "customer", None))
+
+    def get_delivery_phone(self, obj: ShopOrder) -> str:
+        return _order_delivery_phone(obj)
 
 
 class ShopOrderSerializer(serializers.ModelSerializer):
@@ -376,6 +411,7 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     customer_id = serializers.UUIDField(source="customer.id", read_only=True, allow_null=True)
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
+    delivery_phone = serializers.SerializerMethodField()
     payment_method = serializers.SerializerMethodField()
     payment_status = serializers.SerializerMethodField()
     upi_utr = serializers.SerializerMethodField()
@@ -389,6 +425,17 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     coupon_code = serializers.SerializerMethodField()
     coupon_name = serializers.SerializerMethodField()
     coupon_discount = serializers.SerializerMethodField()
+    books_voucher_id = serializers.SerializerMethodField()
+    books_voucher_number = serializers.SerializerMethodField()
+    taxable_value = serializers.SerializerMethodField()
+    cgst_total = serializers.SerializerMethodField()
+    sgst_total = serializers.SerializerMethodField()
+    igst_total = serializers.SerializerMethodField()
+    is_interstate = serializers.SerializerMethodField()
+    place_of_supply = serializers.SerializerMethodField()
+    customer_gstin = serializers.SerializerMethodField()
+    invoice_type = serializers.SerializerMethodField()
+    seller_gstin = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopOrder
@@ -398,6 +445,7 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "customer_id",
             "customer_name",
             "customer_phone",
+            "delivery_phone",
             "order_number",
             "status",
             "fulfillment_mode",
@@ -405,6 +453,15 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "subtotal",
             "discount_total",
             "tax_total",
+            "taxable_value",
+            "cgst_total",
+            "sgst_total",
+            "igst_total",
+            "is_interstate",
+            "place_of_supply",
+            "customer_gstin",
+            "seller_gstin",
+            "invoice_type",
             "total",
             "notes",
             "delivery_address",
@@ -422,6 +479,8 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "coupon_code",
             "coupon_name",
             "coupon_discount",
+            "books_voucher_id",
+            "books_voucher_number",
             "lines",
             "created_at",
             "updated_at",
@@ -447,14 +506,10 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     def get_customer_phone(self, obj: ShopOrder) -> str:
         from apps.customers.services.contact import resolve_customer_phone
 
-        customer = getattr(obj, "customer", None)
-        delivery = obj.metadata.get("delivery") if isinstance(obj.metadata, dict) else {}
-        drop = delivery.get("drop") if isinstance(delivery, dict) else {}
-        drop_contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
-        return resolve_customer_phone(
-            customer,
-            fallback=str(drop_contact.get("phone") or ""),
-        )
+        return resolve_customer_phone(getattr(obj, "customer", None))
+
+    def get_delivery_phone(self, obj: ShopOrder) -> str:
+        return _order_delivery_phone(obj)
 
     def get_upi_utr(self, obj: ShopOrder) -> str:
         return str(self._pos(obj).get("upi_utr") or "")
@@ -512,6 +567,125 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             currency=obj.currency or "INR",
         )
 
+    def _books_voucher(self, obj: ShopOrder):
+        if hasattr(obj, "_books_voucher_cache"):
+            return obj._books_voucher_cache
+        voucher = (
+            obj.books_vouchers.filter(voucher_type="sale").order_by("-created_at").first()
+            if hasattr(obj, "books_vouchers")
+            else None
+        )
+        obj._books_voucher_cache = voucher
+        return voucher
+
+    def get_books_voucher_id(self, obj: ShopOrder) -> str | None:
+        voucher = self._books_voucher(obj)
+        return str(voucher.id) if voucher is not None else None
+
+    def get_books_voucher_number(self, obj: ShopOrder) -> str | None:
+        voucher = self._books_voucher(obj)
+        return str(voucher.voucher_number) if voucher is not None else None
+
+    def _gst_snapshot(self, obj: ShopOrder) -> dict:
+        """Prefer linked books voucher GST; fall back to order.metadata.gst snapshot."""
+        if hasattr(obj, "_gst_snapshot_cache"):
+            return obj._gst_snapshot_cache
+
+        voucher = self._books_voucher(obj)
+        metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
+        gst_meta = metadata.get("gst") if isinstance(metadata.get("gst"), dict) else {}
+        customer_gstin = str(
+            metadata.get("customer_gstin")
+            or gst_meta.get("customer_gstin")
+            or (getattr(obj.customer, "gstin", None) if getattr(obj, "customer_id", None) else "")
+            or ""
+        ).strip().upper()
+
+        if voucher is not None:
+            snapshot = {
+                "taxable_value": str(voucher.subtotal),
+                "cgst_total": str(voucher.cgst_total),
+                "sgst_total": str(voucher.sgst_total),
+                "igst_total": str(voucher.igst_total),
+                "tax_total": str(voucher.tax_total),
+                "is_interstate": bool(voucher.is_interstate),
+                "place_of_supply": str(voucher.place_of_supply or gst_meta.get("place_of_supply") or ""),
+                "customer_gstin": customer_gstin
+                or str((voucher.metadata or {}).get("customer_gstin") or ""),
+                "invoice_type": "B2B"
+                if (
+                    customer_gstin
+                    or str((voucher.metadata or {}).get("customer_gstin") or "").strip()
+                )
+                else "B2C",
+                "source": "books_voucher",
+            }
+            obj._gst_snapshot_cache = snapshot
+            return snapshot
+
+        from apps.shopie.services.gst import resolve_sale_supply, split_stored_tax_total
+
+        business = getattr(obj, "business", None)
+        supply = resolve_sale_supply(
+            business=business,
+            customer_gstin=customer_gstin,
+            delivery_state=str(metadata.get("delivery_state") or ""),
+            place_of_supply=str(gst_meta.get("place_of_supply") or ""),
+        )
+        interstate = bool(gst_meta.get("is_interstate")) if "is_interstate" in gst_meta else supply["is_interstate"]
+        if gst_meta.get("cgst_total") is not None or gst_meta.get("igst_total") is not None:
+            split = {
+                "cgst": gst_meta.get("cgst_total") or "0",
+                "sgst": gst_meta.get("sgst_total") or "0",
+                "igst": gst_meta.get("igst_total") or "0",
+            }
+        else:
+            split = split_stored_tax_total(obj.tax_total, interstate=interstate)
+        snapshot = {
+            "taxable_value": str(gst_meta.get("taxable_value") or obj.subtotal),
+            "cgst_total": str(split["cgst"]),
+            "sgst_total": str(split["sgst"]),
+            "igst_total": str(split["igst"]),
+            "tax_total": str(obj.tax_total),
+            "is_interstate": interstate,
+            "place_of_supply": str(
+                gst_meta.get("place_of_supply") or supply["place_of_supply"] or ""
+            ),
+            "customer_gstin": supply["customer_gstin"] or customer_gstin,
+            "invoice_type": supply["invoice_type"],
+            "source": "order_metadata",
+        }
+        obj._gst_snapshot_cache = snapshot
+        return snapshot
+
+    def get_taxable_value(self, obj: ShopOrder) -> str:
+        return str(self._gst_snapshot(obj).get("taxable_value") or obj.subtotal)
+
+    def get_cgst_total(self, obj: ShopOrder) -> str:
+        return str(self._gst_snapshot(obj).get("cgst_total") or "0.00")
+
+    def get_sgst_total(self, obj: ShopOrder) -> str:
+        return str(self._gst_snapshot(obj).get("sgst_total") or "0.00")
+
+    def get_igst_total(self, obj: ShopOrder) -> str:
+        return str(self._gst_snapshot(obj).get("igst_total") or "0.00")
+
+    def get_is_interstate(self, obj: ShopOrder) -> bool:
+        return bool(self._gst_snapshot(obj).get("is_interstate"))
+
+    def get_place_of_supply(self, obj: ShopOrder) -> str:
+        return str(self._gst_snapshot(obj).get("place_of_supply") or "")
+
+    def get_customer_gstin(self, obj: ShopOrder) -> str:
+        return str(self._gst_snapshot(obj).get("customer_gstin") or "")
+
+    def get_invoice_type(self, obj: ShopOrder) -> str:
+        return str(self._gst_snapshot(obj).get("invoice_type") or "B2C")
+
+    def get_seller_gstin(self, obj: ShopOrder) -> str:
+        business = getattr(obj, "business", None)
+        return str(getattr(business, "gst_tax_number", "") or "").strip().upper()
+
 
 class MobileShopOrderSerializer(ShopOrderSerializer):
     """Customer-facing order payload.
@@ -547,6 +721,7 @@ class ShopOrderCreateSerializer(serializers.Serializer):
     delivery_city = serializers.CharField(required=False, allow_blank=True)
     delivery_state = serializers.CharField(required=False, allow_blank=True)
     delivery_postal_code = serializers.CharField(required=False, allow_blank=True)
+    delivery_phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
     delivery_latitude = CoordinateField()
     delivery_longitude = CoordinateField()
     delivery_method = serializers.ChoiceField(
@@ -726,6 +901,8 @@ class ShopDeliveryQuoteSerializer(serializers.Serializer):
     city = serializers.CharField(required=False, allow_blank=True)
     state = serializers.CharField(required=False, allow_blank=True)
     postal_code = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    delivery_phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
     subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
     lines = LineSerializer(many=True, required=False, default=list)
 
@@ -884,12 +1061,17 @@ class ShopInvoiceSerializer(serializers.ModelSerializer):
 
 
 class ShopQuotationSerializer(serializers.ModelSerializer):
+    customer_phone = serializers.SerializerMethodField()
+    customer_email = serializers.SerializerMethodField()
+
     class Meta:
         model = ShopQuotation
         fields = [
             "id",
             "business",
             "customer",
+            "customer_phone",
+            "customer_email",
             "quotation_number",
             "status",
             "currency",
@@ -903,6 +1085,21 @@ class ShopQuotationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_customer_phone(self, obj: ShopQuotation) -> str:
+        from apps.customers.services.contact import resolve_customer_phone
+
+        if not obj.customer_id:
+            return ""
+        phone = resolve_customer_phone(obj.customer)
+        if phone:
+            return phone
+        return str(getattr(obj.customer, "phone_number", "") or "").strip()
+
+    def get_customer_email(self, obj: ShopQuotation) -> str:
+        if not obj.customer_id:
+            return ""
+        return str(getattr(obj.customer, "email", "") or "").strip()
 
 
 class ShopQuotationCreateSerializer(serializers.Serializer):
@@ -1019,6 +1216,8 @@ class ShopBooksVoucherLineSerializer(serializers.Serializer):
 class ShopBooksVoucherSerializer(serializers.ModelSerializer):
     voucher_type_display = serializers.CharField(source="get_voucher_type_display", read_only=True)
     customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+    customer_email = serializers.SerializerMethodField()
     supplier_name = serializers.SerializerMethodField()
     cash_account_name = serializers.SerializerMethodField()
     contra_account_name = serializers.SerializerMethodField()
@@ -1035,6 +1234,8 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
             "status",
             "customer",
             "customer_name",
+            "customer_phone",
+            "customer_email",
             "supplier",
             "supplier_name",
             "cash_account",
@@ -1063,6 +1264,26 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
 
     def get_customer_name(self, obj: ShopBooksVoucher) -> str:
         return str(obj.customer.display_name) if obj.customer_id else ""
+
+    def get_customer_phone(self, obj: ShopBooksVoucher) -> str:
+        from apps.customers.services.contact import resolve_customer_phone
+
+        if obj.customer_id:
+            phone = resolve_customer_phone(obj.customer)
+            if phone:
+                return phone
+            return str(getattr(obj.customer, "phone_number", "") or "").strip()
+        # Debit notes (and similar) use supplier contact for share/PDF actions.
+        if obj.supplier_id:
+            return str(getattr(obj.supplier, "phone", "") or "").strip()
+        return ""
+
+    def get_customer_email(self, obj: ShopBooksVoucher) -> str:
+        if obj.customer_id:
+            return str(getattr(obj.customer, "email", "") or "").strip()
+        if obj.supplier_id:
+            return str(getattr(obj.supplier, "email", "") or "").strip()
+        return ""
 
     def get_supplier_name(self, obj: ShopBooksVoucher) -> str:
         return str(obj.supplier.name) if obj.supplier_id else ""
@@ -1114,9 +1335,13 @@ class ShopPurchaseVoucherCreateSerializer(serializers.Serializer):
 class ShopCreditNoteCreateSerializer(ShopSaleVoucherCreateSerializer):
     """Same shape as sale — customer + lines; amount_paid is optional refund."""
 
+    customer_id = serializers.UUIDField(required=True)
+
 
 class ShopDebitNoteCreateSerializer(ShopPurchaseVoucherCreateSerializer):
     """Same shape as purchase — supplier + lines."""
+
+    supplier_id = serializers.UUIDField(required=True)
 
 
 class ShopPaymentInCreateSerializer(serializers.Serializer):
@@ -1199,6 +1424,8 @@ class ShopPartyStatementQuerySerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     kind = serializers.ChoiceField(choices=PartyKind.choices)
     id = serializers.UUIDField()
+    date_from = serializers.DateField(required=False, allow_null=True)
+    date_to = serializers.DateField(required=False, allow_null=True)
 
 
 class ShopQuotationConvertSerializer(serializers.Serializer):
@@ -1214,6 +1441,8 @@ class ShopQuotationConvertSerializer(serializers.Serializer):
 
 class ShopBooksDocumentSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+    customer_email = serializers.SerializerMethodField()
     supplier_name = serializers.SerializerMethodField()
     doc_type_display = serializers.CharField(source="get_doc_type_display", read_only=True)
 
@@ -1229,6 +1458,8 @@ class ShopBooksDocumentSerializer(serializers.ModelSerializer):
             "status",
             "customer",
             "customer_name",
+            "customer_phone",
+            "customer_email",
             "supplier",
             "supplier_name",
             "currency",
@@ -1255,6 +1486,21 @@ class ShopBooksDocumentSerializer(serializers.ModelSerializer):
             or str(c.id)
         )
 
+    def get_customer_phone(self, obj) -> str:
+        from apps.customers.services.contact import resolve_customer_phone
+
+        if not obj.customer_id:
+            return ""
+        phone = resolve_customer_phone(obj.customer)
+        if phone:
+            return phone
+        return str(getattr(obj.customer, "phone_number", "") or "").strip()
+
+    def get_customer_email(self, obj) -> str:
+        if not obj.customer_id:
+            return ""
+        return str(getattr(obj.customer, "email", "") or "").strip()
+
     def get_supplier_name(self, obj) -> str:
         return str(obj.supplier.name) if obj.supplier_id else ""
 
@@ -1276,6 +1522,12 @@ class ShopBooksDocumentConvertSerializer(serializers.Serializer):
         max_digits=14, decimal_places=2, required=False, default=0
     )
     cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+    # Delivery challan: omit/dispatch = stock out; to_invoice = create tax invoice.
+    action = serializers.ChoiceField(
+        choices=["dispatch", "to_invoice", "invoice", "convert"],
+        required=False,
+        allow_blank=True,
+    )
 
 
 class ShopGodownStockLineSerializer(serializers.ModelSerializer):
@@ -1754,6 +2006,9 @@ class ShopCouponSerializer(serializers.ModelSerializer):
             "max_redemptions",
             "max_redemptions_per_customer",
             "first_order_only",
+            "applies_to_online",
+            "applies_to_pos",
+            "eligibility",
             "redemption_count",
             "is_active",
             "created_at",
@@ -1782,6 +2037,9 @@ class ShopCouponWriteSerializer(serializers.Serializer):
         required=False, allow_null=True, min_value=1
     )
     first_order_only = serializers.BooleanField(required=False, default=False)
+    applies_to_online = serializers.BooleanField(required=False, default=True)
+    applies_to_pos = serializers.BooleanField(required=False, default=False)
+    eligibility = serializers.JSONField(required=False)
     is_active = serializers.BooleanField(required=False, default=True)
 
 

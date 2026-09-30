@@ -7,6 +7,20 @@ export function normalizeGstin(value: string): string {
   return value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase().slice(0, 15);
 }
 
+/** First two digits of a GSTIN (or bare 2-digit state code). */
+export function gstinStateCode(value: string): string {
+  const raw = normalizeGstin(value);
+  if (raw.length >= 2 && /^\d{2}/.test(raw)) return raw.slice(0, 2);
+  return '';
+}
+
+/** True when both GSTINs resolve and their state codes differ. */
+export function isInterstateGstin(sellerGstin: string, buyerGstin: string): boolean {
+  const seller = gstinStateCode(sellerGstin);
+  const buyer = gstinStateCode(buyerGstin);
+  return Boolean(seller && buyer && seller !== buyer);
+}
+
 /** Empty is allowed (B2C). Non-empty must be a valid 15-char GSTIN. */
 export function validateGstin(value: string): { ok: true; gstin: string } | { ok: false; message: string } {
   const gstin = normalizeGstin(value);

@@ -21,9 +21,11 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { Input } from '../../components/ui/Input';
+import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
+import { indianMobileError } from '../../utils/formValidation';
 import { ADDRESS_TYPES, toCoordinate, type AddressTypeKey } from './addressUtils';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -35,6 +37,7 @@ export function AddressFormScreen() {
   const route = useRoute<AddressFormRoute>();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { user } = useAuth();
   const toast = useToast();
   const primary = branding?.primaryColor ?? colors.primary;
 
@@ -53,6 +56,7 @@ export function AddressFormScreen() {
   const [state, setState] = useState('');
   const [country, setCountry] = useState('India');
   const [postalCode, setPostalCode] = useState('');
+  const [phone, setPhone] = useState(user?.phone_number ?? '');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [addressType, setAddressType] = useState<AddressTypeKey>('home');
@@ -77,6 +81,7 @@ export function AddressFormScreen() {
       setState(found.state || '');
       setCountry(found.country || '');
       setPostalCode(found.postal_code || '');
+      setPhone(found.phone_number || user?.phone_number || '');
       setLatitude(toCoordinate(found.latitude));
       setLongitude(toCoordinate(found.longitude));
       const type = String(found.address_type || 'home').toLowerCase();
@@ -88,7 +93,7 @@ export function AddressFormScreen() {
     } finally {
       setLoading(false);
     }
-  }, [addressId, businessCode, tenantSlug]);
+  }, [addressId, businessCode, tenantSlug, user?.phone_number]);
 
   useEffect(() => {
     void loadExisting();
@@ -102,6 +107,8 @@ export function AddressFormScreen() {
     const nextErrors: Record<string, string> = {};
     if (!city.trim()) nextErrors.city = 'City is required';
     if (!country.trim()) nextErrors.country = 'Country is required';
+    const phoneError = indianMobileError(phone, true);
+    if (phoneError) nextErrors.phone = phoneError;
     if (Object.keys(nextErrors).length) {
       setDetailErrors(nextErrors);
       return;
@@ -117,6 +124,7 @@ export function AddressFormScreen() {
       state: state.trim(),
       country: country.trim(),
       postal_code: postalCode.trim(),
+      phone_number: phone.replace(/[\s-]/g, '').trim(),
       latitude,
       longitude,
       address_type: addressType,
@@ -217,6 +225,21 @@ export function AddressFormScreen() {
             placeholder="Flat 302, B wing, near City Mall"
             value={line2}
             onChangeText={setLine2}
+          />
+          <Input
+            label="Phone number"
+            required
+            hint="Delivery partner will call this number for this address."
+            placeholder="9876543210"
+            value={phone}
+            onChangeText={(value) => {
+              setPhone(value);
+              setDetailErrors((current) => ({ ...current, phone: '' }));
+            }}
+            error={detailErrors.phone}
+            leftIcon="phone"
+            keyboardType="phone-pad"
+            autoComplete="tel"
           />
           <View style={styles.row}>
             <View style={styles.rowItem}>

@@ -268,6 +268,7 @@ export function ShopOrdersScreen() {
                 ? entityLabel(customerMap, item.customer_id, 'Customer')
                 : 'Walk-in';
               const customerPhone = item.customer_phone || customerRow?.phone_number || '';
+              const deliveryPhone = String(item.delivery_phone || '').trim();
               const address = orderDeliveryAddress(item, customerRow);
               const preview = (item.lines ?? [])
                 .slice(0, 2)
@@ -308,11 +309,18 @@ export function ShopOrdersScreen() {
                           {customer}
                         </Text>
                         <Text style={[styles.amount, due && styles.amountDue]} numberOfLines={1}>
-                          {item.currency || 'INR'} {formatMoney(item.total)}
+                          {formatMoney(item.total, item.currency)}
                         </Text>
                       </View>
                       <Text style={styles.body} numberOfLines={2}>
-                        {[item.order_number, fulfillmentLabel, customerPhone, preview].filter(Boolean).join(' · ')}
+                        {[
+                          item.order_number,
+                          fulfillmentLabel,
+                          deliveryPhone ? `Delivery ${deliveryPhone}` : customerPhone,
+                          preview,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </Text>
                       {address ? (
                         <Text style={styles.address} numberOfLines={1}>

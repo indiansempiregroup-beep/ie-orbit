@@ -26,6 +26,14 @@ def otp_login_customer(
     tenant_slug: str,
     business_code: str,
 ) -> dict:
+    from apps.api.mobile_helpers import ensure_customer_for_user, resolve_tenant_business
+
+    tenant, business = resolve_tenant_business(
+        tenant_slug=tenant_slug,
+        business_code=business_code,
+    )
+    ensure_customer_for_user(tenant=tenant, business=business, user=user)
+
     mail.outbox.clear()
     send_response = api_client.post(
         reverse("auth-otp-send"),
@@ -33,6 +41,7 @@ def otp_login_customer(
             "client": "customer",
             "channel": "email",
             "identifier": user.email,
+            "purpose": "login",
             "tenant_slug": tenant_slug,
             "business_code": business_code,
         },

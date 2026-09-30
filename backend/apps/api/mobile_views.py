@@ -791,6 +791,12 @@ class MobileCustomerProfileView(APIView):
             if key in serializer.validated_data
         }
         if address_payload:
+            # Profile phone becomes the default address contact when not sent separately.
+            address_payload["phone_number"] = (
+                customer_payload.get("phone_number")
+                if "phone_number" in customer_payload
+                else customer.phone_number
+            )
             try:
                 self.customer_service.upsert_default_address(customer=customer, data=address_payload)
             except DjangoValidationError as exc:
@@ -1454,6 +1460,7 @@ def _serialize_address(address) -> dict:
         "state": address.state,
         "country": address.country,
         "postal_code": address.postal_code,
+        "phone_number": address.phone_number,
         "latitude": address.latitude,
         "longitude": address.longitude,
         "is_default": address.is_default,

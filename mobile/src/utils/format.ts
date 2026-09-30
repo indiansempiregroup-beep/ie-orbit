@@ -250,7 +250,8 @@ export function getApiErrorMessage(
     const details = formatErrorDetails(error.payload.error.details);
     const message = error.payload.error.message || error.message || fallback;
     if (details && message === 'One or more request fields are invalid.') {
-      return details;
+      // "identifier: No account found..." → show the user-facing sentence only.
+      return details.replace(/^[a-z_]+:\s*/i, '');
     }
     if (error.payload.error.code === 'AUTHENTICATION_FAILED' || isTechnicalAuthMessage(message)) {
       return humanizeAuthMessage(message, context);

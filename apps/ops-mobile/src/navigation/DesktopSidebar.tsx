@@ -15,7 +15,9 @@ import {
   canAccessStaffDirectory,
 } from '../utils/roles';
 import { brand, colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { toneForMenuIcon } from '../theme/menuIconTones';
 import { layout } from '../theme/layout';
+import { IconBadge } from '../components/ui/IconBadge';
 import type { RootStackParamList } from './types';
 import { navigateRoot } from './rootNavigationRef';
 import { confirmAction } from '../utils/confirmAction';
@@ -169,6 +171,13 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               onPress: () => go('ShopProducts'),
             },
             {
+              key: 'masterFiles',
+              label: 'Master Files',
+              icon: 'folder',
+              match: ['ShopMasterFiles', 'ShopMasterKind'],
+              onPress: () => go('ShopMasterFiles'),
+            },
+            {
               key: 'orders',
               label: t('nav.shopOrders'),
               icon: 'list',
@@ -262,6 +271,19 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
       ],
     };
 
+    const automations: NavGroup = {
+      title: 'Automations',
+      items: [
+        {
+          key: 'automations',
+          label: 'Automation Creator',
+          icon: 'zap',
+          match: ['Automations'],
+          onPress: () => go('Automations'),
+        },
+      ],
+    };
+
     const saleVisible = sale
       ? {
           ...sale,
@@ -269,6 +291,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
             if (item.key === 'pos') return has(PlanFeature.shopiePos);
             if (item.key === 'books') return hasAny(SHOPIE_BOOKS_FEATURES);
             if (item.key === 'products') return has(PlanFeature.shopieProducts);
+            if (item.key === 'masterFiles') return has(PlanFeature.shopieProducts);
             if (item.key === 'orders') return has(PlanFeature.shopieOrders);
             if (item.key === 'returns') return has(PlanFeature.shopieReturns);
             if (item.key === 'zones') return has(PlanFeature.shopieDeliveryZones);
@@ -291,6 +314,10 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
         return true;
       }),
     };
+
+    const automationsVisible = has(PlanFeature.automations)
+      ? automations
+      : { ...automations, items: [] };
 
     const businessItems: NavItem[] = [
       ...(has(PlanFeature.appointieCustomers) || showShop
@@ -396,6 +423,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
       primary,
       ...(saleVisible && saleVisible.items.length ? [saleVisible] : []),
       ...(growVisible && growVisible.items.length ? [growVisible] : []),
+      ...(automationsVisible && automationsVisible.items.length ? [automationsVisible] : []),
       { title: t('settings.business'), items: businessItems },
       account,
     ];
@@ -456,16 +484,10 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
                     pressed && styles.itemPressed,
                   ]}
                 >
-                  <Feather
-                    name={item.icon}
-                    size={16}
-                    color={
-                      item.destructive
-                        ? '#FCA5A5'
-                        : focused
-                          ? colors.sidebarText
-                          : colors.sidebarMuted
-                    }
+                  <IconBadge
+                    icon={item.icon}
+                    tone={toneForMenuIcon(item.icon, item.destructive)}
+                    size="sm"
                   />
                   <Text
                     style={[
@@ -530,8 +552,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: 10,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
   },
   itemActive: {

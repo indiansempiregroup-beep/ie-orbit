@@ -351,6 +351,39 @@ class SmartLookupService:
         )
         return wallet
 
+    @transaction.atomic
+    def clawback_wallet(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        amount_paise: int,
+        reason: str = "refund",
+        metadata: dict[str, Any] | None = None,
+    ) -> tuple[SmartLookupWallet, int]:
+        """Debit up to amount_paise from the wallet. Returns (wallet, clawed_paise)."""
+        wanted = max(0, int(amount_paise or 0))
+        wallet = self.ensure_wallet(tenant=tenant, business=business)
+        wallet = SmartLookupWallet.objects.select_for_update().get(pk=wallet.pk)
+        clawed = min(wanted, max(0, int(wallet.balance_paise)))
+        if clawed <= 0:
+            return wallet, 0
+        wallet.balance_paise = int(wallet.balance_paise) - clawed
+        wallet.save(update_fields=["balance_paise", "updated_at", "version"])
+        meta = dict(metadata or {})
+        meta.setdefault("reason", reason)
+        SmartLookupUsage.objects.create(
+            tenant=tenant,
+            business=business,
+            code="",
+            source="refund_clawback",
+            found=False,
+            charged_paise=clawed,
+            balance_after_paise=int(wallet.balance_paise),
+            metadata=meta,
+        )
+        return wallet, clawed
+
     def dashboard(self, *, tenant: Tenant, business: Business) -> dict[str, Any]:
         settings = self.ensure_settings(tenant=tenant, business=business)
         wallet = self.ensure_wallet(tenant=tenant, business=business)
@@ -809,66 +842,84 @@ class SmartLookupService:
         hint: str,
     ) -> dict[str, Any]:
         image_url = (image_url or "").strip()
+        code = (code or "").strip()
+        hint = (hint or "").strip()
         if image_url:
-            prompt = (
-                "Extract retail product details from this packaging photo. "
-                "Return ONLY compact JSON with keys: "
-                "code, name, brand, pack_size, serving_size, description, ingredients, "
-                "category, categories, hsn_sac, gst_rate, mrp. "
-                f"Barcode hint: {code or 'unknown'}. Extra hint: {hint or 'none'}."
-            )
-        else:
-            prompt = (
-                "Look up the exact retail product for this barcode GTIN (and optional name hint). "
-                "Use web search when available. Only fill name/brand when sources confirm THIS exact "
-                "GTIN — never invent or reuse a nearby barcode. If unsure, leave name and brand empty. "
-                "Return ONLY compact JSON with keys: "
-                "code, name, brand, pack_size, serving_size, description, ingredients, "
-                "category, categories, hsn_sac, gst_rate, mrp. "
-                f"Barcode: {code or 'unknown'}. Name/query: {hint or 'none'}."
-            )
-        parts: list[dict[str, Any]] = [{"text": prompt}]
-        if image_url:
-            image_bytes = self._download_image(image_url)
-            if image_bytes:
-                mime = "image/jpeg"
-                if image_url.lower().endswith(".png"):
-                    mime = "image/png"
-                parts.append(
-                    {
-                        "inline_data": {
-                            "mime_type": mime,
-                            "data": base64.b64encode(image_bytes).decode("ascii"),
-                        }
-                    }
+            prompts = [
+                (
+                    "Extract retail product details from this packaging photo. "
+                    "Return ONLY compact JSON with keys: "
+                    "code, name, brand, pack_size, serving_size, description, ingredients, "
+                    "category, categories, hsn_sac, gst_rate, mrp. "
+                    f"Barcode hint: {code or 'unknown'}. Extra hint: {hint or 'none'}."
                 )
-            else:
-                parts.append({"text": f"Image URL (fetch if possible): {image_url}"})
+            ]
+        else:
+            prompts = [
+                (
+                    "Look up the exact retail product for this barcode GTIN (and optional name hint). "
+                    "Use web search when available. Search Go-UPC, Open Food Facts, manufacturer and "
+                    "retail listings for THIS exact GTIN. Fill name and brand when any listing "
+                    "confirms the code — do not invent a nearby barcode. If no listing exists, leave "
+                    "name and brand empty. "
+                    "Return ONLY compact JSON with keys: "
+                    "code, name, brand, pack_size, serving_size, description, ingredients, "
+                    "category, categories, hsn_sac, gst_rate, mrp. "
+                    f"Barcode: {code or 'unknown'}. Name/query: {hint or 'none'}."
+                ),
+                (
+                    f"Web-search barcode/EAN/GTIN {code or 'unknown'}. "
+                    "Return the product title and brand from the best exact-code match "
+                    "(Go-UPC, retailer, or brand site). Optional hint: "
+                    f"{hint or 'none'}. "
+                    "Return ONLY compact JSON with keys: "
+                    "code, name, brand, pack_size, serving_size, description, ingredients, "
+                    "category, categories, hsn_sac, gst_rate, mrp. "
+                    "Use empty strings when unknown — never guess a different GTIN."
+                ),
+            ]
 
         use_search = bool(GEMINI_TEXT_USE_SEARCH and not image_url)
-        # Prefer grounded search for text GTIN lookups; fall back without tools if needed.
         attempts: list[dict[str, Any]] = []
-        if use_search:
+        for prompt in prompts:
+            parts: list[dict[str, Any]] = [{"text": prompt}]
+            if image_url:
+                image_bytes = self._download_image(image_url)
+                if image_bytes:
+                    mime = "image/jpeg"
+                    if image_url.lower().endswith(".png"):
+                        mime = "image/png"
+                    parts.append(
+                        {
+                            "inline_data": {
+                                "mime_type": mime,
+                                "data": base64.b64encode(image_bytes).decode("ascii"),
+                            }
+                        }
+                    )
+                else:
+                    parts.append({"text": f"Image URL (fetch if possible): {image_url}"})
+            if use_search:
+                attempts.append(
+                    {
+                        "contents": [{"role": "user", "parts": parts}],
+                        "tools": [{"google_search": {}}],
+                        "generationConfig": {"temperature": 0.1},
+                    }
+                )
             attempts.append(
                 {
                     "contents": [{"role": "user", "parts": parts}],
-                    "tools": [{"google_search": {}}],
-                    "generationConfig": {"temperature": 0.1},
+                    "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
                 }
             )
-        attempts.append(
-            {
-                "contents": [{"role": "user", "parts": parts}],
-                "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
-            }
-        )
 
         endpoint = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{GEMINI_MODEL}:generateContent?key={api_key}"
         )
-        payload: dict[str, Any] | None = None
         last_error: dict[str, Any] | None = None
+        last_empty: dict[str, Any] | None = None
         for body in attempts:
             try:
                 request = urllib.request.Request(
@@ -879,10 +930,6 @@ class SmartLookupService:
                 )
                 with urllib.request.urlopen(request, timeout=35 if body.get("tools") else 20) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                # Grounded calls sometimes return empty candidates — try next attempt.
-                if payload.get("candidates"):
-                    break
-                logger.info("Gemini smart lookup returned no candidates; trying fallback.")
             except urllib.error.HTTPError as exc:
                 detail = ""
                 try:
@@ -904,7 +951,6 @@ class SmartLookupService:
                         "ok": False,
                         "error": "Smart lookup API key was rejected. Check GEMINI_API_KEY on the server.",
                     }
-                # Tool/search unsupported → try next body without tools.
                 last_error = {
                     "ok": False,
                     "error": "Smart lookup could not reach the AI service. Try again, or capture a pack photo.",
@@ -921,12 +967,34 @@ class SmartLookupService:
                 }
                 continue
 
-        if not payload or not payload.get("candidates"):
-            return last_error or {
-                "ok": False,
-                "error": "Smart lookup could not reach the AI service. Try again, or capture a pack photo.",
-            }
+            if not payload.get("candidates"):
+                logger.info("Gemini smart lookup returned no candidates; trying next attempt.")
+                continue
 
+            parsed = self._parse_gemini_payload(payload)
+            if not parsed.get("ok"):
+                last_error = parsed
+                continue
+            data = parsed.get("data") or {}
+            # Normalize nulls from grounded JSON.
+            for key, value in list(data.items()):
+                if value is None:
+                    data[key] = ""
+            has_identity = bool(str(data.get("name") or "").strip() or str(data.get("brand") or "").strip())
+            if has_identity or image_url:
+                return {"ok": True, "data": data, "usage": parsed.get("usage") or {}}
+            # Text lookup with empty identity — try next prompt/tool combo instead of stopping.
+            last_empty = {"ok": True, "data": data, "usage": parsed.get("usage") or {}}
+            logger.info("Gemini smart lookup returned empty identity; trying next attempt.")
+
+        if last_empty:
+            return last_empty
+        return last_error or {
+            "ok": False,
+            "error": "Smart lookup could not reach the AI service. Try again, or capture a pack photo.",
+        }
+
+    def _parse_gemini_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         text = ""
         for candidate in payload.get("candidates") or []:
             content = candidate.get("content") or {}

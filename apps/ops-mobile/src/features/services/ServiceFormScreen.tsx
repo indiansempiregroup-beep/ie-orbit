@@ -17,9 +17,10 @@ import { DURATION_OPTIONS } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useService, useServiceMutations } from '../../hooks/useOpsExtended';
+import { usePlanFeatures, useService, useServiceMutations } from '../../hooks/useOpsExtended';
 import { getApiErrorMessage } from '../../utils/format';
 import { requiredMessage } from '../../utils/formValidation';
+import { PlanFeature } from '../../utils/planFeatures';
 import {
   serviceCurrency,
   serviceDurationMinutes,
@@ -27,6 +28,7 @@ import {
   servicePriceAmount,
 } from '../../utils/services';
 import type { RootStackParamList } from '../../navigation/types';
+import { ProductImageCropModal } from '../shop/ProductImageCropModal';
 
 export function ServiceFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ServiceForm'>>();
@@ -34,6 +36,8 @@ export function ServiceFormScreen() {
   const { token } = useAuth();
   const { businessId, tenantId, activeBusiness } = useWorkspace();
   const toast = useToast();
+  const { has } = usePlanFeatures();
+  const canRemoveBackground = has(PlanFeature.appointieServiceBgRemove);
   const isEdit = Boolean(route.params?.serviceId);
   const { service, loading } = useService(route.params?.serviceId ?? '');
   const mutations = useServiceMutations();
@@ -44,7 +48,9 @@ export function ServiceFormScreen() {
   const [price, setPrice] = useState('');
   const [loyaltyPointsEarn, setLoyaltyPointsEarn] = useState('0');
   const [imageAsset, setImageAsset] = useState<ImagePickerAsset | null>(null);
+  const [imageRemoveBg, setImageRemoveBg] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [cropPending, setCropPending] = useState<ImagePickerAsset | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -69,111 +75,124 @@ export function ServiceFormScreen() {
   const currency = serviceCurrency(service, activeBusiness?.currency || 'INR');
 
   return (
-    <FormScreen
-      footer={
-        <Button
-          label={isEdit ? 'Save' : 'Create service'}
-          loading={submitting}
-          fullWidth
-          size="lg"
-          onPress={async () => {
-            if (!token || !tenantId || !businessId) return;
-            setSubmitting(true);
-            setError(null);
-            try {
-              const nextErrors: Record<string, string> = {};
-              if (!name.trim()) nextErrors.name = requiredMessage('Name');
-              if (!duration.trim() || Number(duration) <= 0) nextErrors.duration = requiredMessage('Duration');
-              if (!price.trim()) nextErrors.price = requiredMessage('Price');
-              else if (!Number.isFinite(Number(price)) || Number(price) < 0) nextErrors.price = 'Enter a valid price';
-              if (Object.keys(nextErrors).length) {
-                setFieldErrors(nextErrors);
-                return;
-              }
-              setFieldErrors({});
-              let primaryImage: { media_id: string } | undefined;
-              if (imageAsset) {
-                const uploaded = await uploadServiceImage({
-                  token,
-                  tenantId,
-                  businessId,
-                  asset: imageAsset,
-                  serviceName: name || 'Service',
-                });
-                primaryImage = { media_id: uploaded.id };
-              }
-
-              const durationMinutes = Number(duration) || 30;
-              const payload = {
-                name,
-                display_name: name,
-                description,
-                loyalty_points_earn: Math.max(0, Number(loyaltyPointsEarn) || 0),
-                default_duration: { duration_minutes: durationMinutes, is_default: true },
-                default_price: {
-                  base_price: price.trim(),
-                  currency,
-                  is_default: true,
-                },
-                ...(primaryImage ? { primary_image: primaryImage } : {}),
-              };
-
-              if (isEdit && route.params?.serviceId) {
-                await mutations.update(route.params.serviceId, payload);
-                toast.push('Service updated.', 'success');
-                navigation.replace('ServiceDetail', { serviceId: route.params.serviceId });
-              } else {
-                const code = `svc-${Date.now().toString(36)}`;
-                const created = await mutations.create({
-                  business: businessId,
-                  service_code: code,
-                  ...payload,
-                });
-                toast.push('Service created.', 'success');
-                navigation.replace('ServiceDetail', { serviceId: created.id });
-              }
-            } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to save service.'));
-            } finally {
-              setSubmitting(false);
-            }
-          }}
-        />
-      }
-    >
-      <FormHero
-        icon="package"
-        title={isEdit ? 'Edit service' : 'Add service'}
-        subtitle="What customers book and what staff can be assigned to."
+    <>
+      <ProductImageCropModal
+        uri={cropPending?.uri ?? null}
+        visible={Boolean(cropPending)}
+        canRemoveBackground={canRemoveBackground}
+        onCancel={() => setCropPending(null)}
+        onConfirm={(cropped, options) => {
+          setImageAsset(cropped);
+          setImagePreview(cropped.uri);
+          setImageRemoveBg(Boolean(options?.removeBackground));
+          setCropPending(null);
+        }}
       />
+      <FormScreen
+        footer={
+          <Button
+            label={isEdit ? 'Save' : 'Create service'}
+            loading={submitting}
+            fullWidth
+            size="lg"
+            onPress={async () => {
+              if (!token || !tenantId || !businessId) return;
+              setSubmitting(true);
+              setError(null);
+              try {
+                const nextErrors: Record<string, string> = {};
+                if (!name.trim()) nextErrors.name = requiredMessage('Name');
+                if (!duration.trim() || Number(duration) <= 0) nextErrors.duration = requiredMessage('Duration');
+                if (!price.trim()) nextErrors.price = requiredMessage('Price');
+                else if (!Number.isFinite(Number(price)) || Number(price) < 0) nextErrors.price = 'Enter a valid price';
+                if (Object.keys(nextErrors).length) {
+                  setFieldErrors(nextErrors);
+                  return;
+                }
+                setFieldErrors({});
+                let primaryImage: { media_id: string } | undefined;
+                if (imageAsset) {
+                  const uploaded = await uploadServiceImage({
+                    token,
+                    tenantId,
+                    businessId,
+                    asset: imageAsset,
+                    serviceName: name || 'Service',
+                    removeBackground: imageRemoveBg,
+                  });
+                  primaryImage = { media_id: uploaded.id };
+                }
 
-      <FormSection title="Basics">
-        <ImagePickerButton
-          label="Service image"
-          optional
-          variant="card"
-          valueUri={imagePreview || serviceImageUrl(service)}
-          onPicked={(asset) => {
-            setImageAsset(asset);
-            setImagePreview(asset.uri);
-          }}
-          helperText="Shown on service lists and booking screens."
-        />
-        <Input
-          label="Name"
-          required
-          value={name}
-          onChangeText={(value) => {
-            setName(value);
-            setFieldErrors((current) => ({ ...current, name: '' }));
-          }}
-          error={fieldErrors.name}
-        />
-        <Input label="Description" optional value={description} onChangeText={setDescription} multiline />
-      </FormSection>
+                const durationMinutes = Number(duration) || 30;
+                const payload = {
+                  name,
+                  display_name: name,
+                  description,
+                  loyalty_points_earn: Math.max(0, Number(loyaltyPointsEarn) || 0),
+                  default_duration: { duration_minutes: durationMinutes, is_default: true },
+                  default_price: {
+                    base_price: price.trim(),
+                    currency,
+                    is_default: true,
+                  },
+                  ...(primaryImage ? { primary_image: primaryImage } : {}),
+                };
 
-      <FormSection title="Duration & price">
-        <FieldRow>
+                if (isEdit && route.params?.serviceId) {
+                  await mutations.update(route.params.serviceId, payload);
+                  toast.push('Service updated.', 'success');
+                  navigation.replace('ServiceDetail', { serviceId: route.params.serviceId });
+                } else {
+                  const code = `svc-${Date.now().toString(36)}`;
+                  const created = await mutations.create({
+                    business: businessId,
+                    service_code: code,
+                    ...payload,
+                  });
+                  toast.push('Service created.', 'success');
+                  navigation.replace('ServiceDetail', { serviceId: created.id });
+                }
+              } catch (err) {
+                setError(getApiErrorMessage(err, 'Unable to save service.'));
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+          />
+        }
+      >
+        <FormHero
+          icon="package"
+          title={isEdit ? 'Edit service' : 'Add service'}
+          subtitle="What customers book and what staff can be assigned to."
+        />
+
+        <FormSection title="Basics">
+          <ImagePickerButton
+            label="Service image"
+            optional
+            variant="card"
+            valueUri={imagePreview || serviceImageUrl(service)}
+            onPicked={(asset) => {
+              setCropPending(asset);
+            }}
+            helperText="Shown on service lists and booking screens."
+          />
+          <Input
+            label="Name"
+            required
+            value={name}
+            onChangeText={(value) => {
+              setName(value);
+              setFieldErrors((current) => ({ ...current, name: '' }));
+            }}
+            error={fieldErrors.name}
+          />
+          <Input label="Description" optional value={description} onChangeText={setDescription} multiline />
+        </FormSection>
+
+        <FormSection title="Duration & price">
+          <FieldRow>
           <SelectField
             label="Duration"
             required
@@ -207,7 +226,8 @@ export function ServiceFormScreen() {
         />
       </FormSection>
 
-      {error ? <FormAlert message={error} /> : null}
-    </FormScreen>
+        {error ? <FormAlert message={error} /> : null}
+      </FormScreen>
+    </>
   );
 }

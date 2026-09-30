@@ -35,16 +35,18 @@ export function PaymentSettingsPage() {
         setSettings(response.data);
         setKeyId(response.data.key_id);
         setUpiVpa(response.data.upi_vpa);
-        setEnabled(response.data.enabled);
+        setEnabled(Boolean(response.data.enabled && response.data.connected));
         setCodEnabled(response.data.cod_enabled ?? true);
         setCashfreeAppId(response.data.cashfree?.app_id ?? '');
-        setCashfreeEnabled(response.data.cashfree?.enabled ?? true);
+        setCashfreeEnabled(
+          Boolean(response.data.cashfree?.enabled && response.data.cashfree?.connected),
+        );
       })
       .catch((error) => snackbar.push(getApiErrorMessage(error, 'Unable to load payment settings.'), 'error'))
       .finally(() => setLoading(false));
   }, [client, snackbar, workspace.businessId]);
 
-  async function save() {
+  async function save(nextEnabled = enabled) {
     if (!workspace.businessId) return;
     setSaving(true);
     try {
@@ -55,24 +57,30 @@ export function PaymentSettingsPage() {
         webhook_secret: webhookSecret.trim() || undefined,
         upi_vpa: upiVpa.trim(),
         cod_enabled: codEnabled,
-        enabled,
-        test_connection: enabled && Boolean(keyId.trim()),
+        enabled: nextEnabled,
+        test_connection: Boolean(keyId.trim() || settings?.configured),
       });
       setSettings(response.data);
+      setEnabled(Boolean(response.data.enabled && response.data.connected));
       setKeySecret('');
       setWebhookSecret('');
       snackbar.push(
-        response.data.connected ? 'Razorpay connected and tested.' : 'Razorpay settings saved.',
+        response.data.connected
+          ? nextEnabled
+            ? 'Razorpay connected, tested, and enabled.'
+            : 'Razorpay connected and tested.'
+          : 'Razorpay settings saved.',
         'success',
       );
     } catch (error) {
+      setEnabled(Boolean(settings?.enabled && settings?.connected));
       snackbar.push(getApiErrorMessage(error, 'Unable to connect Razorpay.'), 'error');
     } finally {
       setSaving(false);
     }
   }
 
-  async function saveCashfree() {
+  async function saveCashfree(nextEnabled = cashfreeEnabled) {
     if (!workspace.businessId) return;
     setSavingCashfree(true);
     try {
@@ -83,17 +91,23 @@ export function PaymentSettingsPage() {
         cashfree: {
           app_id: cashfreeAppId.trim(),
           secret_key: cashfreeSecret.trim() || undefined,
-          enabled: cashfreeEnabled,
-          test_connection: cashfreeEnabled && Boolean(cashfreeAppId.trim()),
+          enabled: nextEnabled,
+          test_connection: Boolean(cashfreeAppId.trim() || settings?.cashfree?.configured),
         },
       });
       setSettings(response.data);
+      setCashfreeEnabled(Boolean(response.data.cashfree?.enabled && response.data.cashfree?.connected));
       setCashfreeSecret('');
       snackbar.push(
-        response.data.cashfree?.connected ? 'Cashfree connected and tested.' : 'Cashfree settings saved.',
+        response.data.cashfree?.connected
+          ? nextEnabled
+            ? 'Cashfree connected, tested, and enabled.'
+            : 'Cashfree connected and tested.'
+          : 'Cashfree settings saved.',
         'success',
       );
     } catch (error) {
+      setCashfreeEnabled(Boolean(settings?.cashfree?.enabled && settings?.cashfree?.connected));
       snackbar.push(getApiErrorMessage(error, 'Unable to connect Cashfree.'), 'error');
     } finally {
       setSavingCashfree(false);
@@ -138,9 +152,24 @@ export function PaymentSettingsPage() {
           </div>
           <input
             type="checkbox"
-            checked={enabled}
+            checked={Boolean(enabled && settings?.connected)}
             disabled={!settings?.available}
-            onChange={(event) => setEnabled(event.target.checked)}
+            onChange={(event) => {
+              const next = event.target.checked;
+              if (!next) {
+                setEnabled(false);
+                return;
+              }
+              if (!keyId.trim() && !settings?.configured) {
+                snackbar.push('Add your Razorpay Key ID and Key Secret, then save to test.', 'error');
+                return;
+              }
+              if (settings?.connected) {
+                setEnabled(true);
+                return;
+              }
+              void save(true);
+            }}
             aria-label="Enable Razorpay payments"
           />
         </div>
@@ -257,7 +286,7 @@ export function PaymentSettingsPage() {
       </Card>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button variant="primary" onClick={save} disabled={saving || !settings?.available}>
+        <Button variant="primary" onClick={() => void save()} disabled={saving || !settings?.available}>
           {saving ? 'Testing connection…' : settings?.configured ? 'Save Razorpay and test' : 'Connect Razorpay and test'}
         </Button>
       </div>
@@ -271,14 +300,29 @@ export function PaymentSettingsPage() {
                 ? 'Disabled for this tenant by the platform administrator.'
                 : !settings?.cashfree?.plan_entitled
                   ? 'Upgrade to a package that includes Cashfree customer payments.'
-                  : 'Turn Cashfree on or off without deleting your credentials.'}
+                  : 'Turn Cashfree on or off without deleting your credentials. Credentials must pass a connection test first.'}
             </p>
           </div>
           <input
             type="checkbox"
-            checked={cashfreeEnabled}
+            checked={Boolean(cashfreeEnabled && settings?.cashfree?.connected)}
             disabled={!settings?.cashfree?.available}
-            onChange={(event) => setCashfreeEnabled(event.target.checked)}
+            onChange={(event) => {
+              const next = event.target.checked;
+              if (!next) {
+                setCashfreeEnabled(false);
+                return;
+              }
+              if (!cashfreeAppId.trim() && !settings?.cashfree?.configured) {
+                snackbar.push('Add your Cashfree App ID and Secret Key, then save to test.', 'error');
+                return;
+              }
+              if (settings?.cashfree?.connected) {
+                setCashfreeEnabled(true);
+                return;
+              }
+              void saveCashfree(true);
+            }}
             aria-label="Enable Cashfree payments"
           />
         </div>
@@ -359,7 +403,7 @@ export function PaymentSettingsPage() {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           variant="primary"
-          onClick={saveCashfree}
+          onClick={() => void saveCashfree()}
           disabled={savingCashfree || !settings?.cashfree?.available}
         >
           {savingCashfree

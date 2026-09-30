@@ -1,10 +1,14 @@
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { formatMoney } from '../../lib/currency';
 import { StatCard } from './components/StatCard';
 import { useBIGrowthQuery } from './biHooks';
 
 export function BIGrowthPage() {
   usePageMeta({ title: 'BI Growth — Orbit Appoint' });
+  const workspace = useWorkspace();
+  const currency = workspace.activeBusiness?.currency;
   const growthQuery = useBIGrowthQuery();
   const data = growthQuery.data;
 
@@ -40,7 +44,7 @@ export function BIGrowthPage() {
                     {row.bookings} bookings · {row.is_returning ? 'returning' : 'new'}
                   </div>
                 </div>
-                <div style={{ fontWeight: 700 }}>{Number(row.revenue).toFixed(2)}</div>
+                <div style={{ fontWeight: 700 }}>{formatMoney(Number(row.revenue), currency)}</div>
               </div>
             ))
           ) : (

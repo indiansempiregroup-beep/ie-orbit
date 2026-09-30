@@ -6,7 +6,7 @@ import { trackEvent } from '../../seo/analytics';
 
 export function PublicCtaBand({
   title = 'Your brand in their pocket',
-  body = 'Every plan includes a white-label customer app. Start a 15-day full-Pro trial. No credit card. Pay later with UPI.',
+  body = 'Every plan includes a white-label customer app. Start a 45-day full-Pro trial. No credit card. Pay later with UPI.',
 }: {
   title?: string;
   body?: string;

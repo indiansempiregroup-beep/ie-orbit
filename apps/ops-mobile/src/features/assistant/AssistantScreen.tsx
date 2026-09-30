@@ -27,7 +27,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
-import { messageEntityLinks, openAssistantEntityLink, assistantMessageBody, previewQueryForLink } from '../../navigation/assistantLinks';
+import { messageEntityLinks, openAssistantEntityLink, assistantMessageBody, previewQueryForLink, splitAssistantLinks, groupPromptTools } from '../../navigation/assistantLinks';
 import type { RootStackParamList } from '../../navigation/types';
 import { PlanFeature } from '../../utils/planFeatures';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';
@@ -53,12 +53,26 @@ function formatInr(paise: number | undefined): string {
   return `₹${value.toFixed(value % 1 ? 2 : 0)}`;
 }
 
-function usageShort(usage: AssistantUsage): string {
+function usageShort(usage: AssistantUsage, opts?: { blocked?: boolean }): string {
   const wallet = formatInr(usage.balance_paise);
-  if (usage.using_prepaid_messages || usage.using_prepaid_confirms) {
-    return `Prepaid · ${wallet} · ${formatInr(usage.message_price_paise)}/msg`;
+  const freeBits = `${usage.messages_remaining} msgs · ${usage.confirms_remaining} confirms`;
+  const rates =
+    usage.overage_enabled === false
+      ? ''
+      : ` · ${formatInr(usage.message_price_paise)}/msg · ${formatInr(usage.confirm_price_paise)}/confirm`;
+  if (opts?.blocked) {
+    if (usage.messages_remaining <= 0 && usage.confirms_remaining > 0) {
+      return `${freeBits} left · top up to chat`;
+    }
+    if (usage.confirms_remaining <= 0 && usage.messages_remaining > 0) {
+      return `${freeBits} left · top up to confirm`;
+    }
+    return `${freeBits} · wallet too low`;
   }
-  return `${usage.messages_remaining} msgs · ${usage.confirms_remaining} confirms · ${wallet}`;
+  if (usage.using_prepaid_messages || usage.using_prepaid_confirms) {
+    return `${freeBits} · Prepaid ${wallet}${rates}`;
+  }
+  return `${freeBits} · ${wallet}${rates ? ` · After free${rates}` : ''}`;
 }
 
 function WorkingStatusBubble() {
@@ -93,6 +107,7 @@ function MessageBubble({
   onCancel,
   onOpenLink,
   onSelectLink,
+  onPromptLink,
 }: {
   message: AssistantMessage;
   actingId: string | null;
@@ -100,12 +115,14 @@ function MessageBubble({
   onCancel: (action: AssistantProposedAction) => void;
   onOpenLink: (link: AssistantEntityLink) => void;
   onSelectLink: (link: AssistantEntityLink) => void;
+  onPromptLink: (link: AssistantEntityLink) => void;
 }) {
   const isUser = message.role === 'user';
   const pending = message.proposed_action?.status === 'pending' ? message.proposed_action : null;
   const confirmed = message.proposed_action?.status === 'confirmed';
   const cancelled = message.proposed_action?.status === 'cancelled';
   const links = !isUser ? messageEntityLinks(message.metadata) : [];
+  const { prompts, records } = splitAssistantLinks(links);
   const body = isUser ? message.content : assistantMessageBody(message.content, links);
 
   return (
@@ -119,9 +136,41 @@ function MessageBubble({
         {body ? (
           <Text style={[styles.bubbleText, isUser && styles.bubbleTextUser]}>{body}</Text>
         ) : null}
-        {links.length > 0 ? (
+        {prompts.length > 0 ? (
+          <View style={styles.promptSections}>
+            {groupPromptTools(prompts).map((block, index, all) => {
+              const showGroup = index === 0 || all[index - 1].group !== block.group;
+              return (
+                <View key={`${block.group}-${block.section}`} style={styles.promptSection}>
+                  {showGroup ? <Text style={styles.promptGroup}>{block.group}</Text> : null}
+                  <Text style={styles.promptSectionTitle}>{block.section}</Text>
+                  <View style={styles.promptTools}>
+                    {block.tools.map((link) => {
+                      const isCompose = String(link.action || '').toLowerCase() === 'compose';
+                      return (
+                        <Pressable
+                          key={`${link.kind}-${link.id}-${link.label}`}
+                          style={({ pressed }) => [
+                            styles.promptTool,
+                            isCompose && styles.promptToolCompose,
+                            pressed && styles.pressed,
+                          ]}
+                          onPress={() => onPromptLink(link)}
+                        >
+                          {isCompose ? <Text style={styles.promptBadge}>Type</Text> : null}
+                          <Text style={styles.promptToolText}>{link.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+        {records.length > 0 ? (
           <View style={styles.linkList}>
-            {links.map((link) => {
+            {records.map((link) => {
               const action = String(link.action || 'preview').toLowerCase();
               const isOpen = action === 'open';
               return (
@@ -220,6 +269,8 @@ export function AssistantScreen() {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
+  const [composeHint, setComposeHint] = useState(false);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const [sending, setSending] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -244,6 +295,7 @@ export function AssistantScreen() {
       (usage.confirm_limit > 0 && usage.confirms_remaining <= 3 && usage.confirms_remaining > 0));
   const blocked = usage != null && (!quotaAllowsSend || !quotaAllowsConfirm);
   const usingPrepaid = Boolean(usage?.using_prepaid_messages || usage?.using_prepaid_confirms);
+  const lowWallet = usage != null && Number(usage.balance_paise || 0) < 500;
   const suggestedTops =
     usage?.suggested_top_up_paise?.filter((v) => Number(v) >= 100) ?? [5000, 10000, 25000, 50000];
 
@@ -314,6 +366,16 @@ export function AssistantScreen() {
       setThread(created);
       setMessages(created.messages ?? []);
       setDraft('');
+      setComposeHint(false);
+      setSelection(undefined);
+      try {
+        const access = (await client.assistant.access()).data;
+        const starters = access.suggestions?.length ? access.suggestions : ['What can you do?'];
+        setSuggestions(starters);
+        if (access.usage) setUsage(access.usage);
+      } catch {
+        setSuggestions(['What can you do?']);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start a new chat.');
     } finally {
@@ -344,6 +406,8 @@ export function AssistantScreen() {
     setSending(true);
     setError(null);
     setDraft('');
+    setComposeHint(false);
+    setSelection(undefined);
     const optimisticId = `local-user-${Date.now()}`;
     const optimistic: AssistantMessage = {
       id: optimisticId,
@@ -459,16 +523,12 @@ export function AssistantScreen() {
             ]}
             numberOfLines={1}
           >
-            {blocked
-              ? 'Free limit used · wallet too low'
-              : usingPrepaid
-                ? usageShort(usage)
-                : usageShort(usage)}
+            {usageShort(usage, { blocked })}
           </Text>
         </View>
       ) : null}
 
-      {usage && (blocked || usingPrepaid || nearLimit) ? (
+      {lowWallet ? (
         <View style={styles.topUpRow}>
           {suggestedTops.slice(0, 3).map((paise) => (
             <Pressable
@@ -508,7 +568,7 @@ export function AssistantScreen() {
               </View>
               <Text style={styles.emptyTitle}>How can I help?</Text>
               <Text style={styles.emptyText}>
-                Ask about orders, bookings, stock, or customers. Open any record from a reply, then come back — this chat stays here.
+                Fresh chat — previous questions aren’t carried over. Pick a suggestion or ask anything.
               </Text>
               {suggestions.length > 0 ? (
                 <View style={styles.chips}>
@@ -539,6 +599,23 @@ export function AssistantScreen() {
                 onSelectLink={(link) => {
                   const query = previewQueryForLink(link);
                   if (query) void sendText(query);
+                }}
+                onPromptLink={(link) => {
+                  const action = String(link.action || 'send').toLowerCase();
+                  const text = String(link.select_text || link.label || '').trim();
+                  if (!text) return;
+                  if (action === 'compose') {
+                    setDraft(text);
+                    setComposeHint(true);
+                    const match = text.match(/\[[^\]]+\]/);
+                    if (match && match.index != null) {
+                      setSelection({ start: match.index, end: match.index + match[0].length });
+                    } else {
+                      setSelection({ start: text.length, end: text.length });
+                    }
+                    return;
+                  }
+                  void sendText(text);
                 }}
               />
             ))
@@ -591,7 +668,11 @@ export function AssistantScreen() {
             },
           ]}
         >
-          {Platform.OS === 'web' || isDesktop ? (
+          {composeHint ? (
+            <Text style={[styles.composerHint, styles.composerHintCompose]}>
+              Replace the highlighted [bracket] text with a real value, then send.
+            </Text>
+          ) : Platform.OS === 'web' || isDesktop ? (
             <Text style={styles.composerHint}>Enter to send · Shift + Enter for a new line</Text>
           ) : (
             <Text style={styles.composerHint}>Return for a new line · tap ↑ to send</Text>
@@ -621,7 +702,11 @@ export function AssistantScreen() {
                     paddingTop: 10,
                     paddingBottom: 10,
                   },
-                  onChange: (event: { target: { value: string } }) => setDraft(event.target.value),
+                  onChange: (event: { target: { value: string } }) => {
+                    const next = event.target.value;
+                    setDraft(next);
+                    if (composeHint && !/\[[^\]]+\]/.test(next)) setComposeHint(false);
+                  },
                   onKeyDown: (event: {
                     key: string;
                     shiftKey: boolean;
@@ -639,7 +724,14 @@ export function AssistantScreen() {
               <TextInput
                 style={styles.input}
                 value={draft}
-                onChangeText={setDraft}
+                onChangeText={(next) => {
+                  setDraft(next);
+                  if (composeHint && !/\[[^\]]+\]/.test(next)) setComposeHint(false);
+                }}
+                selection={selection}
+                onSelectionChange={(event) => {
+                  setSelection(event.nativeEvent.selection);
+                }}
                 placeholder={!quotaAllowsSend ? 'Top up to keep chatting' : 'Ask anything…'}
                 placeholderTextColor={colors.mutedForeground}
                 editable={!sending && Boolean(thread) && quotaAllowsSend}
@@ -897,6 +989,57 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
   },
   linkList: { marginTop: spacing.sm, gap: spacing.sm },
+  promptSections: {
+    marginTop: spacing.sm,
+    gap: 12,
+  },
+  promptSection: {
+    gap: 6,
+  },
+  promptGroup: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginTop: 2,
+  },
+  promptSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: colors.mutedForeground,
+  },
+  promptTools: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  promptTool: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.card,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  promptToolCompose: {
+    borderStyle: 'dashed',
+    backgroundColor: colors.muted,
+  },
+  promptBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  promptToolText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: colors.foreground,
+  },
   linkChip: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1022,6 +1165,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: colors.mutedForeground,
     marginBottom: spacing.xs,
+  },
+  composerHintCompose: {
+    color: colors.primary,
+    fontWeight: '600',
   },
   inputShell: {
     flexDirection: 'row',

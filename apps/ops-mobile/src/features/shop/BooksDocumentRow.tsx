@@ -9,6 +9,7 @@ type ExtraAction = {
   label: string;
   onPress: () => void;
   destructive?: boolean;
+  icon?: keyof typeof Feather.glyphMap;
 };
 
 type Props = {
@@ -48,11 +49,13 @@ export function BooksDocumentRow({
   leading,
   children,
 }: Props) {
-  const showFooter = Boolean(badge || actionLabel || extraActions?.length || onPress);
-  const actions = [
+  const iconActions = (extraActions ?? []).filter((action) => action.icon);
+  const textExtras = (extraActions ?? []).filter((action) => !action.icon);
+  const textActions = [
     ...(actionLabel && onAction ? [{ label: actionLabel, onPress: onAction }] : []),
-    ...(extraActions ?? []),
+    ...textExtras,
   ];
+  const showFooter = Boolean(badge || textActions.length);
 
   const body = (
     <View style={styles.rowInner}>
@@ -80,7 +83,7 @@ export function BooksDocumentRow({
           ) : null}
         </View>
         {meta ? (
-          <Text style={styles.meta} numberOfLines={2}>
+          <Text style={styles.meta} numberOfLines={1}>
             {meta}
           </Text>
         ) : null}
@@ -109,16 +112,14 @@ export function BooksDocumentRow({
             ) : (
               <View />
             )}
-            {actions.length ? (
-              <View style={styles.actions}>
-                {actions.map((action) => (
+            {textActions.length ? (
+              <View style={styles.textActions}>
+                {textActions.map((action) => (
                   <Pressable key={action.label} onPress={action.onPress} hitSlop={8}>
-                    <Text style={[styles.action, action.destructive && styles.actionDanger]}>{action.label}</Text>
+                    <Text style={styles.textAction}>{action.label}</Text>
                   </Pressable>
                 ))}
               </View>
-            ) : onPress ? (
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             ) : null}
           </View>
         ) : null}
@@ -127,59 +128,77 @@ export function BooksDocumentRow({
     </View>
   );
 
-  if (leading) {
-    return (
-      <View style={[styles.row, styles.rowSplit, dimmed && styles.dim]}>
-        <View style={styles.leading}>{leading}</View>
-        {onPress ? (
-          <Pressable style={styles.rowMain} onPress={onPress}>
-            {body}
-          </Pressable>
-        ) : (
-          <View style={styles.rowMain}>{body}</View>
-        )}
-      </View>
-    );
-  }
+  const main = onPress ? (
+    <Pressable style={styles.rowMain} onPress={onPress}>
+      {body}
+    </Pressable>
+  ) : (
+    <View style={styles.rowMain}>{body}</View>
+  );
 
-  if (onPress) {
-    return (
-      <Pressable style={[styles.row, dimmed && styles.dim]} onPress={onPress}>
-        {body}
-      </Pressable>
-    );
-  }
-
-  return <View style={[styles.row, dimmed && styles.dim]}>{body}</View>;
+  return (
+    <View style={[styles.row, dimmed && styles.dim]}>
+      {leading ? <View style={styles.leading}>{leading}</View> : null}
+      {main}
+      {iconActions.length ? (
+        <View style={styles.iconRail}>
+          {iconActions.map((action) => (
+            <Pressable
+              key={action.label}
+              onPress={action.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                action.destructive && styles.iconBtnDanger,
+                pressed && styles.iconBtnPressed,
+              ]}
+            >
+              <Feather
+                name={action.icon!}
+                size={16}
+                color={action.destructive ? colors.destructive : colors.primary}
+              />
+            </Pressable>
+          ))}
+        </View>
+      ) : onPress ? (
+        <Feather name="chevron-right" size={16} color={colors.mutedForeground} style={styles.chevron} />
+      ) : null}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   row: {
-    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
     backgroundColor: colors.card,
+    gap: 10,
   },
-  rowSplit: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  leading: { height: 52, justifyContent: 'center', alignItems: 'center' },
+  leading: { height: 44, justifyContent: 'center', alignItems: 'center' },
   rowMain: { flex: 1, minWidth: 0 },
   rowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   thumb: {
-    width: 52,
-    height: 52,
+    width: 44,
+    height: 44,
     borderRadius: radius.md,
     backgroundColor: colors.muted,
     flexShrink: 0,
   },
   dim: { opacity: 0.72 },
-  body: { flex: 1, minWidth: 0, gap: 4 },
-  top: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
+  body: { flex: 1, minWidth: 0, gap: 3 },
+  top: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, alignItems: 'center' },
   title: { flex: 1, fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
   amount: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
   amountDim: { textDecorationLine: 'line-through', color: colors.mutedForeground },
   amountPaid: { color: colors.success },
   amountDue: { color: colors.destructive },
-  meta: { color: colors.mutedForeground, fontSize: 13 },
-  bottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  meta: { color: colors.mutedForeground, fontSize: 12.5 },
+  bottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 },
   badge: {
     borderRadius: radius.full,
     paddingHorizontal: 10,
@@ -193,6 +212,28 @@ const styles = StyleSheet.create({
   badgeTextPaid: { color: '#047857' },
   badgeTextDue: { color: '#B91C1C' },
   badgeTextVoid: { color: colors.destructive },
-  action: { color: colors.primary, fontSize: 13, fontFamily: fonts.bodySemi },
-  actionDanger: { color: colors.destructive },
+  textActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  textAction: { color: colors.primary, fontSize: 12.5, fontFamily: fonts.bodySemi },
+  iconRail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.tint,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iconBtnDanger: {
+    backgroundColor: colors.destructiveSoft,
+    borderColor: colors.destructiveSoft,
+  },
+  iconBtnPressed: { opacity: 0.75 },
+  chevron: { marginLeft: 2 },
 });

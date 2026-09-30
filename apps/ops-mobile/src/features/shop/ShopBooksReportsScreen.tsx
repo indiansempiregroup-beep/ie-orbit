@@ -1,9 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
+import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DateField } from '../../components/DateField';
@@ -11,10 +22,14 @@ import { SearchBar } from '../../components/SearchBar';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { DesktopPage } from '../../components/DesktopPage';
 import { GroupedList } from '../../components/ui/GroupedList';
+import { Button } from '../../components/ui/Button';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { getApiErrorMessage } from '../../utils/format';
+import { openShopDocumentHtmlView, type ShopDocTarget } from '../../utils/shopDocumentShare';
+import { DocumentActionsSheet } from './DocumentActionsSheet';
 import { formatVoucherDateTime } from './shopBooksHelpers';
-import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
+import type { ShopBooksReportSlug, ShopBooksVoucher } from '@ie-orbit/sdk';
 
 type ReportOption = {
   value: ShopBooksReportSlug;
@@ -60,6 +75,9 @@ const VOUCHER_TYPE_LABELS: Record<string, string> = {
   transfer: 'Transfer',
 };
 
+/** Invoice-style docs that support HTML view / PDF / share links. */
+const DOCUMENT_KINDS = new Set(['sale', 'credit_note', 'debit_note']);
+
 /** Voucher types that make up each report's underlying records. Undefined means every type. */
 const RECORD_TYPES: Partial<Record<ShopBooksReportSlug, string[]>> = {
   sales: ['sale', 'credit_note'],
@@ -79,11 +97,14 @@ const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
 
 type ReportRecord = {
   key: string;
+  id: string | null;
   number: string;
   date: string;
   createdAt?: string;
   type: string;
   typeLabel: string;
+  /** Document API kind when view/share is supported (`sale`, `credit_note`, `debit_note`). */
+  docKind: string | null;
   party: string;
   status: string;
   total: number;
@@ -105,15 +126,23 @@ function num(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function docKindFor(voucherType: string): string | null {
+  const kind = voucherType.toLowerCase();
+  return DOCUMENT_KINDS.has(kind) ? kind : null;
+}
+
 function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRecord {
   const type = String(row.voucher_type ?? '').toLowerCase();
+  const id = row.id == null || row.id === '' ? null : String(row.id);
   return {
-    key: String(row.id ?? `${row.voucher_number ?? 'row'}-${index}`),
+    key: id ?? `${row.voucher_number ?? 'row'}-${index}`,
+    id,
     number: String(row.voucher_number ?? '—'),
     date: String(row.voucher_date ?? ''),
     createdAt: String(row.created_at ?? ''),
     type,
     typeLabel: VOUCHER_TYPE_LABELS[type] ?? labelFor(type || 'entry'),
+    docKind: docKindFor(type),
     party: String(row.party ?? row.cash_account ?? 'Cash / walk-in'),
     status: String(row.status ?? '').toLowerCase(),
     total: num(row.total),
@@ -134,14 +163,18 @@ function hasGstDetail(record: ReportRecord) {
 }
 
 function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecord {
-  const type = String(row.invoice_type ?? 'B2C').toUpperCase();
+  const invoiceType = String(row.invoice_type ?? 'B2C').toUpperCase();
+  const voucherType = String(row.voucher_type ?? 'sale').toLowerCase();
+  const id = row.id == null || row.id === '' ? null : String(row.id);
   return {
-    key: `${String(row.voucher_number ?? 'invoice')}-${index}`,
+    key: id ?? `${String(row.voucher_number ?? 'invoice')}-${index}`,
+    id,
     number: String(row.voucher_number ?? '—'),
     date: String(row.voucher_date ?? ''),
     createdAt: String(row.created_at ?? ''),
-    type,
-    typeLabel: type,
+    type: invoiceType,
+    typeLabel: invoiceType,
+    docKind: docKindFor(voucherType),
     party: String(row.customer_name ?? 'Walk-in / B2C'),
     status: 'confirmed',
     total: num(row.total),
@@ -153,6 +186,11 @@ function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecor
     gstin: String(row.customer_gstin ?? ''),
     placeOfSupply: String(row.place_of_supply ?? ''),
   };
+}
+
+function documentTitle(kind: string, number?: string) {
+  const label = VOUCHER_TYPE_LABELS[kind] ?? 'Document';
+  return number ? `${label} ${number}` : label;
 }
 
 function csvCell(value: unknown) {
@@ -188,19 +226,49 @@ function recordCsvRow(record: ReportRecord) {
   };
 }
 
+function businessAddressLine(business?: {
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+} | null) {
+  if (!business) return '';
+  return [
+    business.address_line1,
+    business.address_line2,
+    [business.city, business.state, business.postal_code].filter(Boolean).join(', '),
+    business.country,
+  ]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function buildReportCsv(input: {
   report: string;
   period: string;
   summary: Array<{ label: string; value: unknown }>;
   records: ReportRecord[];
+  businessName?: string;
+  businessGstin?: string;
+  businessAddress?: string;
 }) {
   const lines = [
+    ['Business', input.businessName || '—'].map(csvCell).join(','),
+    ['GSTIN', input.businessGstin || '—'].map(csvCell).join(','),
+  ];
+  if (input.businessAddress) {
+    lines.push(['Address', input.businessAddress].map(csvCell).join(','));
+  }
+  lines.push(
     ['Report', input.report].map(csvCell).join(','),
     ['Period', input.period].map(csvCell).join(','),
     '',
     ['metric', 'value'].map(csvCell).join(','),
     ...input.summary.map((row) => [row.label, row.value].map(csvCell).join(',')),
-  ];
+  );
   if (input.records.length) {
     const rows = input.records.map(recordCsvRow);
     const columns = Object.keys(rows[0]).filter((column) =>
@@ -304,8 +372,9 @@ function Breakdown({
 export function ShopBooksReportsScreen() {
   const { isDesktop } = useBreakpoint();
   const client = useOpsClient();
+  const auth = useAuth();
   const toast = useToast();
-  const { businessId, activeBusiness } = useWorkspace();
+  const { businessId, activeBusiness, tenantId } = useWorkspace();
 
   const [slug, setSlug] = useState<ShopBooksReportSlug>('sales');
   const [dateFrom, setDateFrom] = useState('');
@@ -322,6 +391,10 @@ export function ShopBooksReportsScreen() {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [sort, setSort] = useState<SortKey>('date_desc');
   const [visibleCount, setVisibleCount] = useState(20);
+  const [detailRecord, setDetailRecord] = useState<ReportRecord | null>(null);
+  const [detailVoucher, setDetailVoucher] = useState<ShopBooksVoucher | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const activeOption = REPORT_OPTIONS.find((option) => option.value === slug) ?? REPORT_OPTIONS[0];
   const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo);
@@ -398,6 +471,67 @@ export function ShopBooksReportsScreen() {
   useEffect(() => {
     if (client && businessId) void runReport();
   }, [client, businessId, slug]); // Date changes are applied explicitly with "View report".
+
+  const openRecord = useCallback(
+    async (record: ReportRecord) => {
+      if (!record.id || !client) return;
+      setDetailRecord(record);
+      setDetailVoucher(null);
+      setDetailLoading(true);
+      try {
+        const response = await client.shop.getVoucher(record.id);
+        setDetailVoucher(response.data);
+      } catch (err) {
+        toast.push(getApiErrorMessage(err, 'Unable to open this record'), 'error');
+        setDetailRecord(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [client, toast],
+  );
+
+  const closeRecord = useCallback(() => {
+    setDetailRecord(null);
+    setDetailVoucher(null);
+    setDetailLoading(false);
+  }, []);
+
+  const openDocActions = useCallback(
+    (record: ReportRecord, voucher?: ShopBooksVoucher | null) => {
+      if (!businessId || !record.id || !record.docKind) return;
+      setDocActions({
+        kind: record.docKind,
+        id: record.id,
+        number: record.number,
+        businessId,
+        phone: voucher?.customer_phone || '',
+        email: voucher?.customer_email || '',
+      });
+    },
+    [businessId],
+  );
+
+  const viewDocument = useCallback(
+    (record: ReportRecord) => {
+      if (!businessId || !record.id || !record.docKind) return;
+      if (!auth.token) {
+        toast.push('Sign in again to view this document', 'error');
+        return;
+      }
+      void openShopDocumentHtmlView({
+        target: {
+          kind: record.docKind,
+          id: record.id,
+          number: record.number,
+          businessId,
+        },
+        token: auth.token,
+        tenantId,
+      }).catch((err) => toast.push(getApiErrorMessage(err, 'View failed'), 'error'));
+    },
+    [auth.token, businessId, tenantId, toast],
+  );
 
   const rows = useMemo(
     () => (Array.isArray(data) ? data.filter(isRecord) : []),
@@ -481,13 +615,19 @@ export function ShopBooksReportsScreen() {
 
   async function shareCsv() {
     if (data == null) return;
+    const businessName =
+      String(activeBusiness?.display_name || activeBusiness?.business_name || '').trim() || 'Business';
     const csv = buildReportCsv({
       report: activeOption.label,
       period: periodLabel,
       summary: flattenSummary(data),
       records: filteredRecords,
+      businessName,
+      businessGstin: String(activeBusiness?.gst_tax_number || '').trim(),
+      businessAddress: businessAddressLine(activeBusiness),
     });
-    const filename = `${slug}-${dateFrom || 'all'}-${dateTo || 'today'}.csv`;
+    const safeBiz = businessName.replace(/[^\w.-]+/g, '_').slice(0, 40);
+    const filename = `${safeBiz}_${slug}_${dateFrom || 'all'}_${dateTo || 'today'}.csv`;
     try {
       if (Platform.OS === 'web' && typeof document !== 'undefined') {
         const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -759,7 +899,22 @@ export function ShopBooksReportsScreen() {
 
         <GroupedList>
           {visible.map((record) => (
-            <RecordCard key={record.key} record={record} money={money} />
+            <RecordCard
+              key={record.key}
+              record={record}
+              money={money}
+              onPress={record.id ? () => void openRecord(record) : undefined}
+              onView={
+                record.id && record.docKind && businessId
+                  ? () => viewDocument(record)
+                  : undefined
+              }
+              onShare={
+                record.id && record.docKind && businessId
+                  ? () => openDocActions(record)
+                  : undefined
+              }
+            />
           ))}
         </GroupedList>
 
@@ -895,6 +1050,29 @@ export function ShopBooksReportsScreen() {
         {renderReport()}
         {renderRecords()}
       </RefreshableScrollView>
+
+      <ReportRecordDetailModal
+        visible={Boolean(detailRecord)}
+        loading={detailLoading}
+        record={detailRecord}
+        voucher={detailVoucher}
+        money={money}
+        onClose={closeRecord}
+        onShare={() => {
+          if (detailRecord) openDocActions(detailRecord, detailVoucher);
+        }}
+      />
+
+      <DocumentActionsSheet
+        visible={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={
+          docActions
+            ? documentTitle(String(docActions.kind), docActions.number)
+            : 'Document'
+        }
+      />
     </DesktopPage>
   );
 }
@@ -936,14 +1114,26 @@ function FilterRow({
   );
 }
 
-function RecordCard({ record, money }: { record: ReportRecord; money: (value: unknown) => string }) {
+function RecordCard({
+  record,
+  money,
+  onPress,
+  onView,
+  onShare,
+}: {
+  record: ReportRecord;
+  money: (value: unknown) => string;
+  onPress?: () => void;
+  onView?: () => void;
+  onShare?: () => void;
+}) {
   const isVoid = record.status === 'void';
   const payment = paymentState(record);
   const balance = record.paid == null ? 0 : Math.max(record.total - record.paid, 0);
   const hasGst = hasGstDetail(record);
 
-  return (
-    <View style={[styles.entryCard, isVoid && styles.entryCardVoid]}>
+  const body = (
+    <>
       <View style={styles.entryTop}>
         <View style={styles.entryIdentity}>
           <View style={styles.invoiceTitleRow}>
@@ -979,6 +1169,7 @@ function RecordCard({ record, money }: { record: ReportRecord; money: (value: un
         </Text>
         <View style={[styles.statusDot, isVoid && styles.statusDotVoid]} />
         <Text style={[styles.statusText, isVoid && styles.dangerText]}>{labelFor(record.status || 'posted')}</Text>
+        {onPress ? <Feather name="chevron-right" size={16} color={colors.mutedForeground} /> : null}
       </View>
 
       {hasGst ? (
@@ -995,7 +1186,168 @@ function RecordCard({ record, money }: { record: ReportRecord; money: (value: un
           </View>
         </>
       ) : null}
+    </>
+  );
+
+  return (
+    <View style={[styles.entryCard, isVoid && styles.entryCardVoid]}>
+      {onPress ? (
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${record.number}`}
+          style={styles.entryMain}
+        >
+          {body}
+        </Pressable>
+      ) : (
+        <View style={styles.entryMain}>{body}</View>
+      )}
+
+      {onView || onShare ? (
+        <View style={styles.entryActions}>
+          {onView ? (
+            <Pressable
+              style={styles.entryActionBtn}
+              onPress={onView}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${record.number}`}
+            >
+              <Feather name="eye" size={14} color={colors.primary} />
+              <Text style={styles.entryActionText}>View</Text>
+            </Pressable>
+          ) : null}
+          {onShare ? (
+            <Pressable
+              style={styles.entryActionBtn}
+              onPress={onShare}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Share ${record.number}`}
+            >
+              <Feather name="share-2" size={14} color={colors.primary} />
+              <Text style={styles.entryActionText}>Share</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
+  );
+}
+
+function ReportRecordDetailModal({
+  visible,
+  loading,
+  record,
+  voucher,
+  money,
+  onClose,
+  onShare,
+}: {
+  visible: boolean;
+  loading: boolean;
+  record: ReportRecord | null;
+  voucher: ShopBooksVoucher | null;
+  money: (value: unknown) => string;
+  onClose: () => void;
+  onShare: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  if (!record) return null;
+
+  const lines = Array.isArray(voucher?.line_items) ? voucher.line_items : [];
+  const party =
+    voucher?.customer_name ||
+    voucher?.supplier_name ||
+    voucher?.cash_account_name ||
+    record.party;
+  const canShare = Boolean(record.docKind && record.id);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={detailStyles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityRole="button" />
+        <View style={[detailStyles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <View style={detailStyles.handle} />
+          <View style={detailStyles.header}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={detailStyles.kicker}>{record.typeLabel}</Text>
+              <Text style={detailStyles.title}>{record.number}</Text>
+              <Text style={detailStyles.meta}>
+                {[formatDate(record.date, record.createdAt || voucher?.created_at), party]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </View>
+            <Pressable style={detailStyles.closeBtn} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+              <Feather name="x" size={18} color={colors.foreground} />
+            </Pressable>
+          </View>
+
+          {loading ? (
+            <View style={detailStyles.loadingBox}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={detailStyles.meta}>Loading record…</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={detailStyles.body} keyboardShouldPersistTaps="handled">
+              <View style={detailStyles.amountRow}>
+                <Text style={detailStyles.amountLabel}>Total</Text>
+                <Text style={detailStyles.amountValue}>{money(voucher?.total ?? record.total)}</Text>
+              </View>
+              {voucher ? (
+                <>
+                  <View style={detailStyles.amountRow}>
+                    <Text style={detailStyles.amountLabel}>Tax</Text>
+                    <Text style={detailStyles.amountValue}>{money(voucher.tax_total)}</Text>
+                  </View>
+                  <View style={detailStyles.amountRow}>
+                    <Text style={detailStyles.amountLabel}>Paid</Text>
+                    <Text style={detailStyles.amountValue}>{money(voucher.amount_paid)}</Text>
+                  </View>
+                  <Text style={detailStyles.section}>Line items</Text>
+                  {lines.length ? (
+                    lines.map((raw, index) => {
+                      const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+                      const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                      const qty = Number(line.qty ?? line.quantity ?? 0);
+                      const total = Number(line.total ?? 0);
+                      return (
+                        <View key={`${name}-${index}`} style={detailStyles.lineRow}>
+                          <Text style={detailStyles.lineName} numberOfLines={2}>
+                            {name}
+                            {qty ? ` × ${qty}` : ''}
+                          </Text>
+                          <Text style={detailStyles.lineTotal}>{money(total)}</Text>
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <Text style={detailStyles.meta}>No line items on this voucher.</Text>
+                  )}
+                  {voucher.notes ? (
+                    <>
+                      <Text style={detailStyles.section}>Notes</Text>
+                      <Text style={detailStyles.meta}>{voucher.notes}</Text>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={detailStyles.meta}>Record details are unavailable.</Text>
+              )}
+            </ScrollView>
+          )}
+
+          <View style={detailStyles.footer}>
+            {canShare ? (
+              <Button label="View / Print / Share" fullWidth onPress={onShare} />
+            ) : null}
+            <Button label="Close" variant="ghost" fullWidth onPress={onClose} />
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1208,6 +1560,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   entryCardVoid: { backgroundColor: colors.background },
+  entryMain: { gap: spacing.sm },
   entryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md },
   entryIdentity: { flex: 1, gap: 2 },
   entryAmountCol: { alignItems: 'flex-end', gap: 2 },
@@ -1225,6 +1578,20 @@ const styles = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
   statusDotVoid: { backgroundColor: colors.destructive },
   statusText: { ...typography.tiny, color: colors.success, textTransform: 'capitalize' },
+  entryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  entryActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  entryActionText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
   invoiceTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   customerName: { ...typography.body, fontFamily: fonts.bodyMedium, color: colors.foreground },
   gstMetaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
@@ -1308,4 +1675,51 @@ const styles = StyleSheet.create({
   stateText: { ...typography.body, color: colors.mutedForeground, textAlign: 'center', lineHeight: 20 },
   retryBtn: { marginTop: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: colors.tint },
   retryText: { ...typography.label, color: colors.primary },
+});
+
+const detailStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    maxHeight: '88%',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    gap: spacing.md,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  kicker: { ...typography.caption, color: colors.mutedForeground, textTransform: 'uppercase' },
+  title: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.foreground },
+  meta: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+  loadingBox: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xxl },
+  body: { gap: spacing.sm, paddingBottom: spacing.md },
+  amountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  amountLabel: { ...typography.body, color: colors.mutedForeground },
+  amountValue: { ...typography.label, color: colors.foreground },
+  section: { ...typography.label, color: colors.foreground, marginTop: spacing.sm },
+  lineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
+  lineName: { ...typography.body, color: colors.foreground, flex: 1 },
+  lineTotal: { ...typography.label, color: colors.foreground },
+  footer: { gap: spacing.sm },
 });

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from apps.customers.services.contact import format_contact_phone, resolve_customer_phone
+from apps.customers.services.contact import format_contact_phone
 
 
 def merge_location_contact(
@@ -28,19 +28,19 @@ def resolve_order_delivery_contact(
     order: Any,
     delivery: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
+    from apps.customers.services.contact import resolve_order_contact_phone
+
     delivery_meta = dict(delivery or {})
     drop = delivery_meta.get("drop") if isinstance(delivery_meta.get("drop"), dict) else {}
     drop_contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
 
     name = ""
-    phone = ""
     customer = getattr(order, "customer", None)
     if customer is not None:
         name = str(getattr(customer, "display_name", "") or "").strip()
-        phone = resolve_customer_phone(customer)
 
-    if not phone:
-        phone = format_contact_phone(drop_contact.get("phone"))
+    # Address / delivery contact phone wins over profile phone (Amazon-style).
+    phone = resolve_order_contact_phone(order, customer=customer)
     if not name:
         name = str(drop_contact.get("name") or "").strip()
     if not name and customer is not None:

@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { FormScreen } from '../../components/FormScreen';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { RemoteImage } from '../../components/RemoteImage';
 import { Button } from '../../components/ui/Button';
@@ -49,6 +50,7 @@ export function GrowAdsScreen() {
   const [imageUrl, setImageUrl] = useState<string | undefined>();
   const [mediaId, setMediaId] = useState<string | undefined>();
   const [pendingAsset, setPendingAsset] = useState<ImagePickerAsset | null>(null);
+  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -264,7 +266,9 @@ export function GrowAdsScreen() {
         return (
           <View key={ad.id} style={styles.row}>
             {thumbUri ? (
-              <RemoteImage uri={thumbUri} style={styles.thumb} />
+              <Pressable onPress={() => setLightboxUri(thumbUri)} accessibilityLabel="View ad image">
+                <RemoteImage uri={thumbUri} style={styles.thumb} />
+              </Pressable>
             ) : (
               <View style={[styles.thumb, styles.thumbEmpty]}>
                 <Feather name="image" size={18} color={colors.mutedForeground} />
@@ -302,6 +306,13 @@ export function GrowAdsScreen() {
           onAction={startCreate}
         />
       ) : null}
+
+      <ImageLightbox
+        uri={lightboxUri}
+        visible={Boolean(lightboxUri)}
+        title="Ad image"
+        onClose={() => setLightboxUri(null)}
+      />
     </FormScreen>
   );
 }

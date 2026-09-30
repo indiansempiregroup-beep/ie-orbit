@@ -1449,6 +1449,27 @@ def test_owner_billing_orders_lists_submitted_claim(
     assert rows[0]["order_number"]
 
 
+@pytest.mark.django_db
+def test_owner_billing_orders_hides_unpaid_checkout(
+    api_client: APIClient, user: User, settings
+) -> None:
+    """Open/unpaid checkouts must not appear in Products & Billing history."""
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    _upi_workspace(api_client, user, slug="upi-hide-due-tenant", business_code="upi-hide-due-biz")
+    created = api_client.post(
+        reverse("billing-upi-checkout"),
+        {"product_code": "appointie", "plan_code": "appointie-starter"},
+        format="json",
+    )
+    assert created.status_code == 201
+    session_id = created.json()["data"]["session_id"]
+    orders = api_client.get(reverse("billing-orders"))
+    assert orders.status_code == 200
+    rows = orders.json()["data"]["orders"]
+    assert session_id not in {row["id"] for row in rows}
+    assert rows == []
+
+
 def test_proof_url_from_meta_strips_loopback(settings) -> None:
     from apps.billing.services.upi_proof import proof_url_from_meta
 
@@ -1515,3 +1536,236 @@ def test_platform_upi_claims_history_includes_confirmed(
     assert row["upi_utr"] == "HISTORYUTR123"
 
 
+
+
+@pytest.mark.django_db
+def test_resolve_plan_price_prefers_yearly_amount_paise(settings) -> None:
+    from apps.platform_admin.models import PlatformPlanPackage
+
+    package = PlatformPlanPackage.objects.filter(code="appointie-starter").first()
+    if package is None:
+        pytest.skip("appointie-starter package not seeded")
+    package.amount_paise = 39900
+    package.yearly_amount_paise = 350000
+    package.save(update_fields=["amount_paise", "yearly_amount_paise", "updated_at"])
+
+    service = CheckoutService()
+    assert service._resolve_plan_price_paise("appointie-starter", "monthly") == 39900
+    assert service._resolve_plan_price_paise("appointie-starter", "yearly") == 350000
+
+
+@pytest.mark.django_db
+def test_upi_checkout_yearly_interval_and_refund_flow(api_client: APIClient, user: User, settings) -> None:
+    from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
+    from apps.businesses.models import BusinessProductSubscription
+
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    _access, tenant_id, business_id = _upi_workspace(
+        api_client, user, slug="yearly-refund-tenant", business_code="yearly-refund-biz"
+    )
+
+    created = api_client.post(
+        reverse("billing-upi-checkout"),
+        {
+            "product_code": "appointie",
+            "plan_code": "appointie-starter",
+            "billing_interval": "yearly",
+        },
+        format="json",
+    )
+    assert created.status_code == 201
+    payload = created.json()["data"]
+    assert payload["amount"] == 399000
+    assert payload["line_items"][0]["billing_interval"] == "yearly"
+    session_id = payload["session_id"]
+
+    claimed = api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "YEARLYUTR123456"},
+        format="json",
+    )
+    assert claimed.status_code == 200
+    confirmed = api_client.post(
+        reverse("platform-payment-confirm", kwargs={"tenant_id": tenant_id, "payment_id": session_id}),
+        {"action": "confirm", "reason": "Matched yearly UTR"},
+        format="json",
+    )
+    assert confirmed.status_code == 200
+
+    subscription = BusinessProductSubscription.objects.get(business_id=business_id, product_code="appointie")
+    assert subscription.billing_interval == "yearly"
+    assert subscription.status == "active"
+
+    refund_request = api_client.post(
+        reverse("billing-order-refund-request", kwargs={"session_id": session_id}),
+        {"reason": "Closing the shop this year", "amount_paise": 100000},
+        format="json",
+    )
+    assert refund_request.status_code == 200
+    assert refund_request.json()["data"]["refund_status"] == "requested"
+
+    pending = api_client.get(reverse("platform-refund-requests"), {"scope": "pending"})
+    assert pending.status_code == 200
+    assert any(row["id"] == session_id for row in pending.json()["data"]["refunds"])
+
+    resolved = api_client.post(
+        reverse("platform-refund-resolve", kwargs={"tenant_id": tenant_id, "payment_id": session_id}),
+        {
+            "reason": "Paid back via UPI",
+            "amount_paise": 100000,
+            "method": "upi_manual",
+            "reference": "REFUTR999",
+            "end_access_now": False,
+        },
+        format="json",
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["data"]["refund_status"] == "partially_refunded"
+    assert resolved.json()["data"]["refunded_paise"] == 100000
+
+    session = BillingCheckoutSession.objects.get(id=session_id)
+    assert session.status == CheckoutSessionStatus.PAID
+    assert (session.metadata or {}).get("refund_status") == "partially_refunded"
+
+
+@pytest.mark.django_db
+def test_schedule_cancel_at_period_end(api_client: APIClient, user: User) -> None:
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.businesses.models import BusinessProductSubscription, BusinessProductSubscriptionStatus
+
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_response = api_client.post(
+        reverse("business-list-create"),
+        {
+            "business_code": "cancel-period-biz",
+            "business_name": "Cancel Period Biz",
+            "display_name": "Cancel Period Biz",
+        },
+        format="json",
+    )
+    business_id = business_response.json()["data"]["id"]
+    api_client.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {access}",
+        HTTP_X_TENANT_ID=tenant_id,
+        HTTP_X_BUSINESS_ID=business_id,
+    )
+    subscribed = api_client.post(
+        reverse("business-subscribe-product", kwargs={"pk": business_id}),
+        {"product_code": "appointie", "plan_code": "appointie-starter", "billing_interval": "yearly"},
+        format="json",
+    )
+    assert subscribed.status_code == 200
+    subscription = BusinessProductSubscription.objects.get(business_id=business_id, product_code="appointie")
+    subscription.status = BusinessProductSubscriptionStatus.ACTIVE
+    subscription.billing_interval = "yearly"
+    subscription.current_period_starts_at = timezone.now() - timedelta(days=10)
+    subscription.current_period_ends_at = timezone.now() + timedelta(days=100)
+    subscription.save()
+
+    canceled = api_client.post(
+        reverse("business-schedule-cancel-product", kwargs={"pk": business_id, "product_code": "appointie"}),
+        {},
+        format="json",
+    )
+    assert canceled.status_code == 200
+    subscription.refresh_from_db()
+    assert subscription.pending_cancel is True
+    assert subscription.status == BusinessProductSubscriptionStatus.ACTIVE
+
+
+@pytest.mark.django_db
+def test_assistant_wallet_refund_caps_to_unused_and_claws_back(api_client: APIClient, user: User, settings) -> None:
+    from apps.assistant.models import AssistantWallet, AssistantWalletLedger
+    from apps.assistant.services.wallet import AssistantWalletService
+    from apps.billing.models import BillingCheckoutSession
+    from apps.businesses.models import Business
+    from apps.tenancy.models import Tenant
+
+    settings.PLATFORM_UPI_VPA = "ieorbit@upi"
+    RoleService().assign_role(user=user, role_code="platform_admin")
+    _access, tenant_id, business_id = _upi_workspace(
+        api_client, user, slug="assistant-refund-tenant", business_code="assistant-refund-biz"
+    )
+
+    created = api_client.post(
+        reverse("assistant-wallet-top-up"),
+        {"amount_paise": 10000},
+        format="json",
+    )
+    assert created.status_code == 201
+    session_id = created.json()["data"]["session_id"]
+
+    claimed = api_client.post(
+        reverse("billing-upi-claim", kwargs={"session_id": session_id}),
+        {"upi_utr": "ASSISTUTR123456"},
+        format="json",
+    )
+    assert claimed.status_code == 200
+    confirmed = api_client.post(
+        reverse("platform-payment-confirm", kwargs={"tenant_id": tenant_id, "payment_id": session_id}),
+        {"action": "confirm", "reason": "Matched assistant top-up"},
+        format="json",
+    )
+    assert confirmed.status_code == 200
+
+    tenant = Tenant.objects.get(id=tenant_id)
+    business = Business.objects.get(id=business_id)
+    wallet = AssistantWallet.objects.get(business=business)
+    assert wallet.balance_paise == 10000
+
+    # Spend ₹40 of the ₹100 top-up.
+    AssistantWalletService().debit_wallet(
+        tenant=tenant,
+        business=business,
+        amount_paise=4000,
+        source="message",
+        metadata={"test": True},
+    )
+    wallet.refresh_from_db()
+    assert wallet.balance_paise == 6000
+
+    # Cannot request more than unused balance.
+    too_much = api_client.post(
+        reverse("billing-order-refund-request", kwargs={"session_id": session_id}),
+        {"reason": "Want full top-up back", "amount_paise": 10000},
+        format="json",
+    )
+    assert too_much.status_code == 400
+
+    refund_request = api_client.post(
+        reverse("billing-order-refund-request", kwargs={"session_id": session_id}),
+        {"reason": "Unused Assistant balance", "amount_paise": 6000},
+        format="json",
+    )
+    assert refund_request.status_code == 200
+    assert refund_request.json()["data"]["available_refund_paise"] == 6000
+    assert refund_request.json()["data"]["is_wallet_top_up"] is True
+
+    resolved = api_client.post(
+        reverse("platform-refund-resolve", kwargs={"tenant_id": tenant_id, "payment_id": session_id}),
+        {
+            "reason": "Refunded unused Assistant wallet",
+            "amount_paise": 6000,
+            "method": "upi_manual",
+            "reference": "ASSISTREFUND1",
+        },
+        format="json",
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["data"]["refund_status"] == "partially_refunded"
+    assert resolved.json()["data"]["refunded_paise"] == 6000
+
+    wallet.refresh_from_db()
+    assert wallet.balance_paise == 0
+    assert AssistantWalletLedger.objects.filter(
+        business=business, source="refund_clawback", charged_paise=6000
+    ).exists()
+
+    session = BillingCheckoutSession.objects.get(id=session_id)
+    assert (session.metadata or {}).get("wallet_clawed_paise") == 6000

@@ -132,7 +132,7 @@ export function IndustryDetailPage() {
           </div>
         </section>
       </div>
-      <PublicCtaBand title="Start a 15-day full-Pro trial" />
+      <PublicCtaBand title="Start a 45-day full-Pro trial" />
     </>
   );
 }

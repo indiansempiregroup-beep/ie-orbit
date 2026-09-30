@@ -265,3 +265,111 @@ def notify_upi_claim_resolved(
             cta_url=_frontend_url("/settings/products"),
         ),
     )
+
+
+def notify_refund_request_submitted(session: BillingCheckoutSession) -> None:
+    products = _product_labels(session)
+    amount = _amount_label(session)
+    meta = session.metadata or {}
+    request_payload = meta.get("refund_request") if isinstance(meta.get("refund_request"), dict) else {}
+    requested_paise = int(request_payload.get("amount_paise") or session.amount_paise or 0)
+    requested = f"₹{requested_paise // 100}"
+    reason = str(request_payload.get("reason") or "").strip() or "No reason given"
+    tenant_name = session.tenant.display_name if session.tenant_id else "a workspace"
+    business_name = session.business.display_name if session.business_id else "a business"
+    admin_subject = f"Refund request · {tenant_name} · {products}"
+    admin_body = (
+        f"{business_name} at {tenant_name} requested a refund of {requested} "
+        f"(order {amount}) for {products}.\nReason: {reason}"
+    )
+    owner_subject = f"Refund request received for {products}"
+    owner_body = (
+        f"We received your refund request of {requested} for {products}. "
+        "Our team will review it and update the order in Products & Billing."
+    )
+    try:
+        from apps.platform_admin.services import _platform_admin_users
+
+        admins = _platform_admin_users()
+        admin_email = _ie_orbit_email(
+            headline="Refund to review",
+            cta_label="Open refunds inbox",
+            cta_url=_frontend_url(f"/admin/claims?tab=refunds&claim={session.id}"),
+        )
+        notify_subscription_users(
+            tenant=session.tenant,
+            business=session.business,
+            users=admins,
+            subject=admin_subject,
+            body=admin_body,
+            event_type="billing.refund_requested",
+            metadata=_session_meta(session, screen="PlatformAdminTenantDetail"),
+            audience=AUDIENCE_ADMIN,
+            email_style=admin_email,
+        )
+        _email_fallback_admins(
+            users=admins,
+            subject=admin_subject,
+            body=admin_body,
+            style=admin_email,
+        )
+    except Exception:
+        logger.exception("refund_request_admin_notify_failed session_id=%s", session.id)
+
+    notify_subscription_users(
+        tenant=session.tenant,
+        business=session.business,
+        users=_operator_users(session),
+        subject=owner_subject,
+        body=owner_body,
+        event_type="billing.refund_requested",
+        metadata=_session_meta(session, screen="ProductSettings"),
+        audience=AUDIENCE_ADMIN,
+        email_style=_ie_orbit_email(
+            headline="Refund request received",
+            cta_label="View order history",
+            cta_url=_frontend_url("/settings/products"),
+        ),
+    )
+
+
+def notify_refund_request_resolved(
+    session: BillingCheckoutSession,
+    *,
+    action: str,
+    note: str = "",
+) -> None:
+    products = _product_labels(session)
+    amount = _amount_label(session)
+    resolved = str(action or "").strip().lower() == "resolve"
+    if resolved:
+        owner_subject = f"Refund processed for {products}"
+        owner_body = (
+            f"Your refund for {products} ({amount} order) has been processed. "
+            f"{str(note or '').strip() or 'Check Products & Billing for the updated status.'}"
+        )
+        owner_headline = "Refund processed"
+    else:
+        reason = str(note or "").strip() or "The request could not be approved."
+        owner_subject = f"Refund request for {products} was not approved"
+        owner_body = (
+            f"We could not approve your refund request for {products}. {reason} "
+            "You can keep using the product for the paid period, or contact support."
+        )
+        owner_headline = "Refund not approved"
+
+    notify_subscription_users(
+        tenant=session.tenant,
+        business=session.business,
+        users=_operator_users(session),
+        subject=owner_subject,
+        body=owner_body,
+        event_type="billing.refund_resolved",
+        metadata=_session_meta(session, screen="ProductSettings"),
+        audience=AUDIENCE_ADMIN,
+        email_style=_ie_orbit_email(
+            headline=owner_headline,
+            cta_label="View order history",
+            cta_url=_frontend_url("/settings/products"),
+        ),
+    )

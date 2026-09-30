@@ -150,6 +150,8 @@ export function CustomerFormScreen() {
                 if (!String(address.state || '').trim()) nextErrors.state = requiredMessage('State');
                 if (!String(address.country || '').trim()) nextErrors.country = requiredMessage('Country');
                 if (!String(address.postalCode || '').trim()) nextErrors.postalCode = requiredMessage('Postal code');
+                const addressPhoneError = indianMobileError(phone, true);
+                if (addressPhoneError) nextErrors.phone = addressPhoneError;
               }
               if (Object.keys(nextErrors).length) {
                 setFieldErrors(nextErrors);
@@ -173,6 +175,7 @@ export function CustomerFormScreen() {
                         state: address.state?.trim() || '',
                         country: address.country?.trim() || '',
                         postal_code: address.postalCode?.trim() || '',
+                        phone_number: phone.replace(/[\s-]/g, '').trim(),
                         latitude: address.latitude ?? undefined,
                         longitude: address.longitude ?? undefined,
                         is_default: true,

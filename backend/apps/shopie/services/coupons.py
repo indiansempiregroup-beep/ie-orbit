@@ -142,6 +142,26 @@ class CouponService:
                         }
                     )
                 payload["max_redemptions_per_customer"] = per_customer
+        if "applies_to_online" in payload or existing is None:
+            if "applies_to_online" in payload:
+                payload["applies_to_online"] = bool(payload.get("applies_to_online"))
+            elif existing is None:
+                payload["applies_to_online"] = True
+        if "applies_to_pos" in payload or existing is None:
+            if "applies_to_pos" in payload:
+                payload["applies_to_pos"] = bool(payload.get("applies_to_pos"))
+            elif existing is None:
+                payload["applies_to_pos"] = False
+        if "eligibility" in payload:
+            elig = payload.get("eligibility")
+            if elig in (None, ""):
+                payload["eligibility"] = {}
+            elif not isinstance(elig, dict):
+                raise ValidationError({"eligibility": "eligibility must be an object."})
+            else:
+                payload["eligibility"] = elig
+        elif existing is None:
+            payload["eligibility"] = {}
         return payload
 
     @transaction.atomic
@@ -165,6 +185,9 @@ class CouponService:
                 max_redemptions=payload.get("max_redemptions"),
                 max_redemptions_per_customer=payload.get("max_redemptions_per_customer"),
                 first_order_only=bool(payload.get("first_order_only", False)),
+                applies_to_online=bool(payload.get("applies_to_online", True)),
+                applies_to_pos=bool(payload.get("applies_to_pos", False)),
+                eligibility=payload.get("eligibility") or {},
                 is_active=bool(payload.get("is_active", True)),
             )
         except IntegrityError as exc:
@@ -186,6 +209,9 @@ class CouponService:
             "max_redemptions",
             "max_redemptions_per_customer",
             "first_order_only",
+            "applies_to_online",
+            "applies_to_pos",
+            "eligibility",
             "is_active",
         ):
             if field in payload:
@@ -297,9 +323,19 @@ class CouponService:
         payable_total: Decimal | None = None,
     ) -> dict[str, Any]:
         mode = (fulfillment_mode or "").strip().lower()
-        if mode not in ONLINE_FULFILLMENT:
+        if mode == FulfillmentMode.POS:
+            if not getattr(coupon, "applies_to_pos", False):
+                raise ValidationError(
+                    {"coupon_code": "This coupon does not apply to counter / POS sales."}
+                )
+        elif mode in ONLINE_FULFILLMENT:
+            if not getattr(coupon, "applies_to_online", True):
+                raise ValidationError(
+                    {"coupon_code": "This coupon does not apply to online orders."}
+                )
+        else:
             raise ValidationError(
-                {"coupon_code": "Coupons apply to online pickup and delivery orders only."}
+                {"coupon_code": "Coupons apply to POS, pickup, or delivery orders only."}
             )
         if not EntitlementService().has_feature(
             business=business,
@@ -323,6 +359,7 @@ class CouponService:
             ),
             customer=customer,
             exclude_order_id=exclude_order_id,
+            fulfillment_mode=mode,
         )
         if not check["applicable"]:
             raise ValidationError({"coupon_code": check["reason"]})
@@ -342,8 +379,16 @@ class CouponService:
         payable_total: Decimal,
         customer: Customer | None = None,
         exclude_order_id: UUID | None = None,
+        fulfillment_mode: str | None = None,
+        pet=None,
+        pets: list | None = None,
     ) -> dict[str, Any]:
         now = timezone.now()
+        mode = (fulfillment_mode or "").strip().lower()
+        if mode == FulfillmentMode.POS and not getattr(coupon, "applies_to_pos", False):
+            return self._eval_result(False, hide=True, reason="Not available at the counter.")
+        if mode in ONLINE_FULFILLMENT and not getattr(coupon, "applies_to_online", True):
+            return self._eval_result(False, hide=True, reason="Not available for online orders.")
         if not coupon.is_active:
             return self._eval_result(False, hide=True, reason="This coupon is no longer active.")
         if coupon.starts_at and coupon.starts_at > now:
@@ -354,6 +399,61 @@ class CouponService:
             return self._eval_result(
                 False, hide=True, reason="This coupon has reached its redemption limit."
             )
+        elig = getattr(coupon, "eligibility", None) or {}
+        if isinstance(elig, dict) and elig:
+            today = timezone.localdate()
+            if elig.get("customer_birthday"):
+                dob = getattr(customer, "date_of_birth", None) if customer else None
+                if dob is None or dob.month != today.month or dob.day != today.day:
+                    return self._eval_result(
+                        False, hide=True, reason="This offer is for birthdays only."
+                    )
+            if elig.get("pet_birthday"):
+                pet_list = list(pets or [])
+                if pet is not None:
+                    pet_list = [pet, *pet_list]
+                matched = False
+                for item in pet_list:
+                    bday = getattr(item, "birthday", None)
+                    if bday and bday.month == today.month and bday.day == today.day:
+                        matched = True
+                        break
+                if not matched and customer is not None:
+                    try:
+                        from apps.shopie.models import ShopPet
+
+                        for item in ShopPet.objects.filter(
+                            tenant=coupon.tenant,
+                            business=coupon.business,
+                            customer=customer,
+                            is_active=True,
+                        ):
+                            bday = item.birthday
+                            if bday and bday.month == today.month and bday.day == today.day:
+                                matched = True
+                                break
+                    except Exception:  # noqa: BLE001
+                        matched = False
+                if not matched:
+                    return self._eval_result(
+                        False, hide=True, reason="This offer is for pet birthdays only."
+                    )
+            tags_needed = elig.get("tags") or []
+            if tags_needed:
+                customer_tags = {
+                    str(t).strip().lower()
+                    for t in (getattr(customer, "tags", None) or [])
+                }
+                wanted = {str(t).strip().lower() for t in tags_needed if str(t).strip()}
+                if not wanted.intersection(customer_tags):
+                    return self._eval_result(
+                        False, hide=True, reason="This offer is for selected customers only."
+                    )
+            mmdd = str(elig.get("recurring_mmdd") or "").strip()
+            if mmdd and today.strftime("%m-%d") != mmdd:
+                return self._eval_result(
+                    False, hide=True, reason="This offer is only valid on a specific day."
+                )
         if customer is not None:
             if coupon.first_order_only and (
                 self._customer_order_count(
@@ -424,9 +524,10 @@ class CouponService:
         lines: list[dict[str, Any]],
         fulfillment_mode: str,
         customer: Customer | None = None,
+        pet=None,
     ) -> list[dict[str, Any]]:
         mode = (fulfillment_mode or "").strip().lower() or FulfillmentMode.PICKUP
-        if mode not in ONLINE_FULFILLMENT:
+        if mode not in ONLINE_FULFILLMENT and mode != FulfillmentMode.POS:
             return []
         payable = self._payable_for_offers(
             tenant=tenant, business=business, lines=lines or []
@@ -437,6 +538,8 @@ class CouponService:
                 coupon=coupon,
                 payable_total=payable,
                 customer=customer,
+                fulfillment_mode=mode,
+                pet=pet,
             )
             if check["hide"]:
                 continue
@@ -458,7 +561,10 @@ class CouponService:
                     "reason": check["reason"],
                     "remaining_to_unlock": str(check["remaining_to_unlock"]),
                     "first_order_only": coupon.first_order_only,
+                    "applies_to_pos": bool(getattr(coupon, "applies_to_pos", False)),
+                    "applies_to_online": bool(getattr(coupon, "applies_to_online", True)),
                     "ends_at": coupon.ends_at.isoformat() if coupon.ends_at else None,
+                    "source": "coupon",
                 }
             )
         offers.sort(
@@ -469,6 +575,202 @@ class CouponService:
             )
         )
         return offers
+
+    @staticmethod
+    def _automation_discount_amount(
+        *,
+        discount_type: str,
+        discount_value: Any,
+        payable_total: Decimal,
+    ) -> Decimal:
+        dtype = str(discount_type or "percent").strip().lower()
+        try:
+            value = Decimal(str(discount_value or "0"))
+        except Exception:  # noqa: BLE001
+            value = Decimal("0")
+        if value <= 0 or payable_total <= 0:
+            return Decimal("0.00")
+        if dtype == "amount":
+            return min(payable_total, value).quantize(Decimal("0.01"))
+        if value > Decimal("100"):
+            value = Decimal("100")
+        return (payable_total * value / Decimal("100")).quantize(Decimal("0.01"))
+
+    def eligible_offers(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        lines: list[dict[str, Any]],
+        fulfillment_mode: str,
+        customer: Customer | None = None,
+        pet=None,
+    ) -> dict[str, Any]:
+        """Coupons + automation discount.offer results for POS/online checkout."""
+        coupon_offers = self.list_for_cart(
+            tenant=tenant,
+            business=business,
+            lines=lines,
+            fulfillment_mode=fulfillment_mode,
+            customer=customer,
+            pet=pet,
+        )
+        # Customer-facing "you save" is against payable (shelf total). Percent bill
+        # discounts are applied on taxable in create_order, which still reduces
+        # payable by the same percent for uniform GST (e.g. ₹100 incl. → save ₹15).
+        try:
+            cart_totals = self.totals_for_lines(tenant=tenant, business=business, lines=lines)
+            display_payable = cart_totals["payable"]
+        except (ValidationError, ShopProduct.DoesNotExist, KeyError, TypeError, ValueError):
+            display_payable = self._payable_for_offers(tenant=tenant, business=business, lines=lines)
+        automation_offers: list[dict[str, Any]] = []
+        try:
+            from apps.shopie.models import ShopPet
+            from apps.workflow.services.access import resolve_product_code
+            from apps.workflow.services.events import emit
+
+            product_code = resolve_product_code(business=business)
+            event_key = "booking.quote" if product_code == "appointie" else "checkout.quote"
+            pets: list[Any] = []
+            if pet is not None:
+                pets = [pet]
+            elif customer is not None:
+                pets = list(
+                    ShopPet.objects.filter(
+                        tenant=tenant,
+                        business=business,
+                        customer=customer,
+                    )
+                )
+            outcome = emit(
+                tenant=tenant,
+                business=business,
+                event_key=event_key,
+                context={
+                    "customer": customer,
+                    "pet": pets[0] if pets else pet,
+                    "pets": pets,
+                },
+                product_code=product_code,
+                subject_type="customer" if customer else "",
+                subject_id=str(customer.id) if customer else "",
+                dry_run=True,
+            )
+            mode = (fulfillment_mode or "").strip().lower()
+            for offer in outcome.get("offers") or []:
+                if mode == FulfillmentMode.POS and not offer.get("applies_to_pos", True):
+                    continue
+                if mode in ONLINE_FULFILLMENT and not offer.get("applies_to_online", True):
+                    continue
+                discount_type = str(offer.get("discount_type") or "percent")
+                discount_value = str(offer.get("discount_value") or "0")
+                discount_amount = self._automation_discount_amount(
+                    discount_type=discount_type,
+                    discount_value=discount_value,
+                    payable_total=display_payable,
+                )
+                automation_offers.append(
+                    {
+                        "code": None,
+                        "name": offer.get("label") or offer.get("workflow_name") or "Offer",
+                        "description": "",
+                        "discount_type": discount_type,
+                        "discount_value": discount_value,
+                        "min_order_total": "0",
+                        "max_discount_amount": None,
+                        "discount_amount": str(discount_amount),
+                        "applicable": discount_amount > 0,
+                        "reason": "",
+                        "remaining_to_unlock": "0",
+                        "first_order_only": False,
+                        "applies_to_pos": bool(offer.get("applies_to_pos", True)),
+                        "applies_to_online": bool(offer.get("applies_to_online", True)),
+                        "ends_at": None,
+                        "source": "automation",
+                        "workflow_id": offer.get("workflow_id"),
+                        "label": offer.get("label"),
+                    }
+                )
+            # Appoint automations surface as staff_hint — show them as POS chips too.
+            for hint in outcome.get("staff_hints") or []:
+                discount_type = str(hint.get("discount_type") or "percent")
+                discount_value = str(hint.get("discount_value") or "0")
+                discount_amount = self._automation_discount_amount(
+                    discount_type=discount_type,
+                    discount_value=discount_value,
+                    payable_total=display_payable,
+                )
+                automation_offers.append(
+                    {
+                        "code": None,
+                        "name": hint.get("label") or hint.get("workflow_name") or "Offer",
+                        "description": str(hint.get("message") or ""),
+                        "discount_type": discount_type,
+                        "discount_value": discount_value,
+                        "min_order_total": "0",
+                        "max_discount_amount": None,
+                        "discount_amount": str(discount_amount),
+                        "applicable": discount_amount > 0,
+                        "reason": "",
+                        "remaining_to_unlock": "0",
+                        "first_order_only": False,
+                        "applies_to_pos": True,
+                        "applies_to_online": True,
+                        "ends_at": None,
+                        "source": "automation",
+                        "workflow_id": hint.get("workflow_id"),
+                        "label": hint.get("label"),
+                    }
+                )
+        except Exception:  # noqa: BLE001
+            automation_offers = []
+        return {
+            "coupons": coupon_offers,
+            "automations": automation_offers,
+            "offers": [*automation_offers, *coupon_offers],
+        }
+
+    def match_automation_bill_discount(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        lines: list[dict[str, Any]],
+        fulfillment_mode: str,
+        customer: Customer | None,
+        bill_discount_type: str,
+        bill_discount_value: Decimal | str | int | float,
+    ) -> dict[str, Any] | None:
+        """Return the matching automation offer, or None if the discount is not entitled."""
+        dtype = str(bill_discount_type or "").strip().lower()
+        if dtype not in {"percent", "amount"}:
+            return None
+        try:
+            dvalue = Decimal(str(bill_discount_value or "0"))
+        except Exception:  # noqa: BLE001
+            return None
+        if dvalue <= 0:
+            return None
+        payload = self.eligible_offers(
+            tenant=tenant,
+            business=business,
+            lines=lines,
+            fulfillment_mode=fulfillment_mode,
+            customer=customer,
+        )
+        for offer in payload.get("automations") or []:
+            if str(offer.get("discount_type") or "").strip().lower() != dtype:
+                continue
+            try:
+                offer_value = Decimal(str(offer.get("discount_value") or "0"))
+            except Exception:  # noqa: BLE001
+                continue
+            if offer_value != dvalue:
+                continue
+            if not offer.get("applicable", True):
+                continue
+            return offer
+        return None
 
     def _payable_for_offers(
         self,

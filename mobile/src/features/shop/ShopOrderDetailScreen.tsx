@@ -18,6 +18,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import { Input } from '../../components/ui/Input';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { ScreenHeader } from '../../components/ProfileMenuScreen';
@@ -46,10 +47,26 @@ import {
   shopPaymentMethodLabel,
   shopPaymentStatusLabel,
   shopOrderNeedsAppPayment,
+  shopOrderNeedsGatewayPayment,
   shopOrderIsCashOnHandover,
   shopRefundPlan,
 } from './shopHelpers';
-import type { ShopDeliveryLive, ShopOrder, ShopOrderLine, ShopReturn } from '@ie-orbit/sdk';
+import { shopOrderBillBreakdown } from './shopOrderBill';
+import { GatewayCheckoutModal } from './GatewayCheckoutModal';
+import {
+  startCashfreeCheckout,
+  startRazorpayCheckout,
+  verifyCashfreeCheckout,
+  verifyRazorpayCheckout,
+} from './payShopOrderOnline';
+import type {
+  MerchantCashfreeCheckout,
+  MerchantRazorpayCheckout,
+  ShopDeliveryLive,
+  ShopOrder,
+  ShopOrderLine,
+  ShopReturn,
+} from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
@@ -266,6 +283,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [reason, setReason] = useState('');
   const [utr, setUtr] = useState('');
   const [proofUrl, setProofUrl] = useState('');
+  const [proofLightboxOpen, setProofLightboxOpen] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -274,6 +292,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [showPlacedBanner, setShowPlacedBanner] = useState(() => Boolean(route.params.placed));
+  const [gatewayModal, setGatewayModal] = useState<
+    | { provider: 'razorpay'; checkout: MerchantRazorpayCheckout }
+    | { provider: 'cashfree'; checkout: MerchantCashfreeCheckout }
+    | null
+  >(null);
   const primary = branding?.primaryColor ?? colors.primary;
   const business = bootstrap?.business;
 
@@ -366,8 +389,13 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
   const paymentStatus = order?.payment_status || '';
   const needsAppPayment = order ? shopOrderNeedsAppPayment(order) : false;
+  const needsGatewayPayment = order ? shopOrderNeedsGatewayPayment(order) : false;
   const cashOnHandover = order ? shopOrderIsCashOnHandover(order) : false;
   const showQr = needsAppPayment && Boolean(order?.upi_pay_url);
+  const staticQrUrl = needsAppPayment && !order?.upi_pay_url
+    ? resolveMediaUrl(business?.payment_qr_url)
+    : '';
+  const unpaidOnline = needsAppPayment || needsGatewayPayment;
   const headline = order ? shopOrderHeadline(order) : null;
   const tone = headline ? shopOrderStatusColors(headline.tone) : null;
   const timeline =
@@ -387,11 +415,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
     business?.formatted_address ||
     [business?.address_line1, business?.city, business?.postal_code].filter(Boolean).join(', ');
 
-  const couponDiscount = Number(order?.coupon_discount || 0);
-  const discountTotal = Number(order?.discount_total || 0);
-  const extraDiscount = Math.max(0, discountTotal - couponDiscount);
-  const deliveryFee = Number(order?.delivery_fee || 0);
-  const taxTotal = Number(order?.tax_total || 0);
+  const bill = order ? shopOrderBillBreakdown(order) : null;
 
   async function uploadProof() {
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -436,6 +460,34 @@ export function ShopOrderDetailScreen({ route }: Props) {
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Unable to claim payment');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function payOnlineNow() {
+    if (!order) return;
+    const method = String(order.payment_method || '').toLowerCase();
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (method === 'razorpay') {
+        const checkout = await startRazorpayCheckout({
+          orderId: route.params.orderId,
+          tenantSlug,
+          businessCode,
+        });
+        setGatewayModal({ provider: 'razorpay', checkout });
+      } else if (method === 'cashfree') {
+        const checkout = await startCashfreeCheckout({
+          orderId: route.params.orderId,
+          tenantSlug,
+          businessCode,
+        });
+        setGatewayModal({ provider: 'cashfree', checkout });
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Unable to start payment.');
     } finally {
       setBusy(false);
     }
@@ -587,7 +639,10 @@ export function ShopOrderDetailScreen({ route }: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.confirmTitle}>Order placed</Text>
               <Text style={styles.confirmText}>
-                #{order.order_number} · We will update you when it ships.
+                #{order.order_number}
+                {unpaidOnline
+                  ? ' · Complete payment below to confirm your order.'
+                  : ' · We will update you when it ships.'}
               </Text>
               {order.metadata &&
               typeof order.metadata === 'object' &&
@@ -685,7 +740,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
         <View style={styles.card}>
           <Text style={styles.section}>Items</Text>
-          {(order.lines ?? []).map((line) => (
+          {(order.lines ?? []).map((line) => {
+            const disc = Number(line.discount_amount || 0);
+            return (
             <Pressable
               key={line.id}
               style={styles.itemRow}
@@ -698,12 +755,14 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 </Text>
                 <Text style={styles.itemMeta}>
                   Qty {formatShopQty(line.quantity)} · {formatShopMoney(line.unit_price, order.currency)} each
+                  {disc > 0 ? ` · disc. −${formatShopMoney(disc, order.currency)}` : ''}
                 </Text>
                 <Text style={styles.itemTotal}>{formatShopMoney(line.line_total, order.currency)}</Text>
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
-          ))}
+            );
+          })}
         </View>
 
         <View style={styles.card}>
@@ -780,45 +839,121 @@ export function ShopOrderDetailScreen({ route }: Props) {
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.section}>Order summary</Text>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Items</Text>
-            <Text style={styles.summaryValue}>{formatShopMoney(order.subtotal, order.currency)}</Text>
-          </View>
-          {extraDiscount > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Discount</Text>
-              <Text style={[styles.summaryValue, { color: colors.success }]}>
-                −{formatShopMoney(extraDiscount, order.currency)}
-              </Text>
-            </View>
+          <Text style={styles.section}>Bill summary</Text>
+          {bill ? (
+            <>
+              {(bill.invoiceType === 'B2B' || bill.customerGstin) ? (
+                <Text style={styles.meta}>
+                  {bill.invoiceType}
+                  {bill.customerGstin ? ` · GSTIN ${bill.customerGstin}` : ''}
+                  {bill.placeOfSupply ? ` · Place of supply ${bill.placeOfSupply}` : ''}
+                </Text>
+              ) : null}
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Items</Text>
+                <Text style={styles.summaryValue}>
+                  {formatShopMoney(bill.merchandiseGross, order.currency)}
+                </Text>
+              </View>
+              {bill.lineDiscountTotal > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Item discounts</Text>
+                  <Text style={[styles.summaryValue, { color: colors.success }]}>
+                    −{formatShopMoney(bill.lineDiscountTotal, order.currency)}
+                  </Text>
+                </View>
+              ) : null}
+              {bill.billDiscount > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Bill discount</Text>
+                  <Text style={[styles.summaryValue, { color: colors.success }]}>
+                    −{formatShopMoney(bill.billDiscount, order.currency)}
+                  </Text>
+                </View>
+              ) : null}
+              {bill.couponDiscount > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>
+                    Coupon{bill.couponCode ? ` ${bill.couponCode}` : ''}
+                  </Text>
+                  <Text style={[styles.summaryValue, { color: colors.success }]}>
+                    −{formatShopMoney(bill.couponDiscount, order.currency)}
+                  </Text>
+                </View>
+              ) : null}
+              {bill.rewardDiscount > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>
+                    Reward points{bill.rewardPoints > 0 ? ` (${bill.rewardPoints} pts)` : ''}
+                  </Text>
+                  <Text style={[styles.summaryValue, { color: colors.success }]}>
+                    −{formatShopMoney(bill.rewardDiscount, order.currency)}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Taxable value</Text>
+                <Text style={styles.summaryValue}>
+                  {formatShopMoney(bill.taxableSubtotal, order.currency)}
+                </Text>
+              </View>
+              {bill.deliveryFee > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Delivery</Text>
+                  <Text style={styles.summaryValue}>
+                    {formatShopMoney(bill.deliveryFee, order.currency)}
+                  </Text>
+                </View>
+              ) : null}
+              {bill.taxTotal > 0 ? (
+                bill.isInterstate || bill.igst > 0 ? (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>IGST</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatShopMoney(bill.igst || bill.taxTotal, order.currency)}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>CGST</Text>
+                      <Text style={styles.summaryValue}>
+                        {formatShopMoney(bill.cgst, order.currency)}
+                      </Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>SGST</Text>
+                      <Text style={styles.summaryValue}>
+                        {formatShopMoney(bill.sgst, order.currency)}
+                      </Text>
+                    </View>
+                  </>
+                )
+              ) : null}
+              <View style={[styles.summaryRow, styles.summaryTotal]}>
+                <Text style={styles.totalLabel}>Payable</Text>
+                <Text style={styles.totalValue}>{formatShopMoney(bill.total, order.currency)}</Text>
+              </View>
+            </>
           ) : null}
-          {couponDiscount > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Coupon {order.coupon_code || ''}</Text>
-              <Text style={[styles.summaryValue, { color: colors.success }]}>
-                −{formatShopMoney(couponDiscount, order.currency)}
-              </Text>
-            </View>
-          ) : null}
-          {deliveryFee > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Delivery</Text>
-              <Text style={styles.summaryValue}>{formatShopMoney(deliveryFee, order.currency)}</Text>
-            </View>
-          ) : null}
-          {taxTotal > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tax</Text>
-              <Text style={styles.summaryValue}>{formatShopMoney(taxTotal, order.currency)}</Text>
-            </View>
-          ) : null}
-          <View style={[styles.summaryRow, styles.summaryTotal]}>
-            <Text style={styles.totalLabel}>Order total</Text>
-            <Text style={styles.totalValue}>{formatShopMoney(order.total, order.currency)}</Text>
-          </View>
           <Text style={styles.placedAt}>Placed {formatDateTime(order.created_at)}</Text>
         </View>
+
+        {needsGatewayPayment ? (
+          <View style={styles.card}>
+            <Text style={styles.section}>Pay online</Text>
+            <Text style={styles.meta}>
+              Complete secure checkout for {formatShopMoney(order.total, order.currency)}.
+            </Text>
+            <Pressable
+              style={[styles.button, { backgroundColor: primary }]}
+              disabled={busy}
+              onPress={() => void payOnlineNow()}
+            >
+              <Text style={styles.buttonText}>{busy ? 'Opening…' : 'Pay now'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {showQr ? (
           <View style={styles.card}>
@@ -826,6 +961,25 @@ export function ShopOrderDetailScreen({ route }: Props) {
             <View style={styles.qrWrap}>
               <QRCode value={order.upi_pay_url || ''} size={180} />
               <Text style={styles.meta}>Pay the exact amount, then submit your UTR or screenshot below.</Text>
+              {bootstrap?.business?.upi_vpa ? (
+                <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
+              ) : null}
+              <Pressable
+                style={[styles.secondaryBtn, { borderColor: primary }]}
+                onPress={() => void Linking.openURL(order.upi_pay_url || '')}
+              >
+                <Text style={{ color: primary, fontWeight: '700' }}>Open UPI app</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {staticQrUrl ? (
+          <View style={styles.card}>
+            <Text style={styles.section}>Pay with UPI</Text>
+            <View style={styles.qrWrap}>
+              <Image source={{ uri: staticQrUrl }} style={styles.staticQr} />
+              <Text style={styles.meta}>Scan the shop QR, pay the exact amount, then submit your UTR or screenshot below.</Text>
               {bootstrap?.business?.upi_vpa ? (
                 <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
               ) : null}
@@ -856,7 +1010,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 {proofUrl ? 'Change payment screenshot' : 'Upload payment screenshot'}
               </Text>
             </Pressable>
-            {proofUrl ? <Image source={{ uri: proofUrl }} style={styles.proof} /> : null}
+            {proofUrl ? (
+              <Pressable onPress={() => setProofLightboxOpen(true)} accessibilityLabel="View payment screenshot">
+                <Image source={{ uri: proofUrl }} style={styles.proof} />
+              </Pressable>
+            ) : null}
             <Pressable
               style={[styles.button, { backgroundColor: primary }]}
               disabled={busy}
@@ -1009,6 +1167,73 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
       </RefreshableScrollView>
+
+      <ImageLightbox
+        uri={proofUrl || null}
+        visible={proofLightboxOpen}
+        title="Payment screenshot"
+        onClose={() => setProofLightboxOpen(false)}
+        replaceLabel="Change screenshot"
+        onReplace={() => {
+          setProofLightboxOpen(false);
+          void uploadProof().catch((e) => setMessage(String(e)));
+        }}
+      />
+
+      {gatewayModal?.provider === 'razorpay' ? (
+        <GatewayCheckoutModal
+          visible
+          provider="razorpay"
+          checkout={gatewayModal.checkout}
+          onSuccess={(payload) => {
+            setGatewayModal(null);
+            void verifyRazorpayCheckout({
+              orderId: route.params.orderId,
+              tenantSlug,
+              businessCode,
+              result: payload,
+            })
+              .then(() => {
+                toast.push('Payment successful.', 'success');
+                return load();
+              })
+              .catch((err) =>
+                setMessage(err instanceof Error ? err.message : 'Payment verification failed.'),
+              );
+          }}
+          onCancel={(msg) => {
+            setGatewayModal(null);
+            if (msg) setMessage(msg);
+          }}
+        />
+      ) : null}
+      {gatewayModal?.provider === 'cashfree' ? (
+        <GatewayCheckoutModal
+          visible
+          provider="cashfree"
+          checkout={gatewayModal.checkout}
+          onSuccess={(payload) => {
+            setGatewayModal(null);
+            void verifyCashfreeCheckout({
+              orderId: route.params.orderId,
+              tenantSlug,
+              businessCode,
+              result: payload,
+            })
+              .then(() => {
+                toast.push('Payment successful.', 'success');
+                return load();
+              })
+              .catch((err) =>
+                setMessage(err instanceof Error ? err.message : 'Payment verification failed.'),
+              );
+          }}
+          onCancel={(msg) => {
+            setGatewayModal(null);
+            if (msg) setMessage(msg);
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1217,6 +1442,7 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 18, fontWeight: '800', color: colors.foreground },
   placedAt: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
   qrWrap: { alignItems: 'center', gap: 8 },
+  staticQr: { width: 220, height: 220, borderRadius: radius.md, backgroundColor: colors.muted },
   vpa: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   input: {
     borderWidth: 1,

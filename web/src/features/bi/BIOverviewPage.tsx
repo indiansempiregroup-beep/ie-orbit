@@ -1,5 +1,6 @@
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { formatMoney } from '../../lib/currency';
 import { StatCard } from './components/StatCard';
 import { TrendChart } from './components/TrendChart';
 import { useBIOverviewQuery } from './biHooks';
@@ -32,7 +33,7 @@ function AppointieBlock({ data }: { data: BIReportsBundle }) {
         <StatCard label="Total bookings" value={summary?.bookings ?? 0} hint={changeHint(summary?.comparison?.bookings_change_pct)} />
         <StatCard
           label="Estimated revenue"
-          value={`${data.revenue?.currency ?? ''} ${data.revenue?.estimated_revenue ?? 0}`}
+          value={formatMoney(data.revenue?.estimated_revenue ?? 0, data.revenue?.currency)}
           hint={changeHint(summary?.comparison?.revenue_change_pct)}
         />
         <StatCard
@@ -133,12 +134,12 @@ function ShopieBlock({ data }: { data: BIShopieOverview }) {
       <SectionHeading title="Orbit Mart" subtitle="Orders, GMV, returns, and delivery fees" />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <StatCard label="Orders" value={data.orders} />
-        <StatCard label="GMV" value={`${currency} ${data.gmv}`} />
-        <StatCard label="Avg order value" value={`${currency} ${data.avg_order_value}`} />
+        <StatCard label="GMV" value={formatMoney(Number(data.gmv ?? 0), currency)} />
+        <StatCard label="Avg order value" value={formatMoney(Number(data.avg_order_value ?? 0), currency)} />
         <StatCard label="Returns" value={data.returns} hint={`${Math.round((data.return_rate ?? 0) * 100)}% of orders`} />
         <StatCard label="Pending returns" value={data.pending_returns} />
-        <StatCard label="Refunds" value={`${currency} ${data.refund_total}`} />
-        <StatCard label="Delivery fees" value={`${currency} ${data.delivery_fee_total}`} />
+        <StatCard label="Refunds" value={formatMoney(Number(data.refund_total ?? 0), currency)} />
+        <StatCard label="Delivery fees" value={formatMoney(Number(data.delivery_fee_total ?? 0), currency)} />
         <StatCard label="Cancelled orders" value={data.cancelled_orders} />
       </div>
 

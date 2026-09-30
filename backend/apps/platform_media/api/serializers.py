@@ -122,9 +122,40 @@ class MediaUploadSerializer(serializers.Serializer):
         default=list,
     )
     metadata = serializers.JSONField(required=False, default=dict)
+    # When true, crop (optional) then letterbox onto a 1200×1200 transparent PNG.
+    prepare_product_canvas = serializers.BooleanField(required=False, default=False)
+    # Package-gated rembg cutout (u2netp). Requires shopie_product_bg_remove or
+    # appointie_service_bg_remove depending on folder_type.
+    remove_background = serializers.BooleanField(required=False, default=False)
+    crop_left = serializers.FloatField(required=False, min_value=0, max_value=1)
+    crop_top = serializers.FloatField(required=False, min_value=0, max_value=1)
+    crop_width = serializers.FloatField(required=False, min_value=0.01, max_value=1)
+    crop_height = serializers.FloatField(required=False, min_value=0.01, max_value=1)
 
     def validate_folder_type(self, value: str) -> str:
         return normalize_folder_type(value)
+
+    def validate(self, attrs: dict) -> dict:
+        remove_bg = bool(attrs.get("remove_background"))
+        crop_keys = ("crop_left", "crop_top", "crop_width", "crop_height")
+        has_crop = any(key in attrs and attrs[key] is not None for key in crop_keys)
+        if has_crop and not all(key in attrs and attrs[key] is not None for key in crop_keys):
+            raise serializers.ValidationError(
+                {"crop_left": "Provide crop_left, crop_top, crop_width, and crop_height together."}
+            )
+        if has_crop:
+            left = float(attrs["crop_left"])
+            top = float(attrs["crop_top"])
+            width = float(attrs["crop_width"])
+            height = float(attrs["crop_height"])
+            if left + width > 1.0001 or top + height > 1.0001:
+                raise serializers.ValidationError({"crop_width": "Crop box must stay within the image."})
+        folder_type = normalize_folder_type(attrs.get("folder_type") or MediaFolderType.BRANDING)
+        if remove_bg and folder_type not in {MediaFolderType.PRODUCTS, MediaFolderType.SERVICES}:
+            raise serializers.ValidationError(
+                {"remove_background": "Only supported for products or services folder types."}
+            )
+        return attrs
 
 
 class MediaUploadMultipleSerializer(serializers.Serializer):

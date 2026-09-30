@@ -28,6 +28,9 @@ import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/F
 import { EmptyState } from '../../components/ui/EmptyState';
 import { FormAlert } from '../../components/ui/FormAlert';
 import { BooksDocumentRow } from './BooksDocumentRow';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
+import { useAuth } from '../../contexts/AuthContext';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { DesktopPage } from '../../components/DesktopPage';
 import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
@@ -415,6 +418,7 @@ function SaleInvoiceDetailModal({
   const [restock, setRestock] = useState(true);
   const [busy, setBusy] = useState(false);
   const [localVoucher, setLocalVoucher] = useState<ShopBooksVoucher | null>(voucher);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   useEffect(() => {
     setLocalVoucher(voucher);
@@ -710,10 +714,50 @@ function SaleInvoiceDetailModal({
                   <Text style={detailStyles.meta}>-{formatMoney(localVoucher.discount_total)}</Text>
                 </View>
               ) : null}
-              <View style={detailStyles.totalRow}>
-                <Text style={detailStyles.meta}>GST</Text>
-                <Text style={detailStyles.meta}>{formatMoney(localVoucher.tax_total)}</Text>
-              </View>
+              {(() => {
+                const loyaltyMeta =
+                  localVoucher.metadata && typeof localVoucher.metadata === 'object'
+                    ? (localVoucher.metadata as Record<string, unknown>).loyalty
+                    : null;
+                const loyalty =
+                  loyaltyMeta && typeof loyaltyMeta === 'object'
+                    ? (loyaltyMeta as Record<string, unknown>)
+                    : null;
+                const reward = Number(loyalty?.discount_amount || 0);
+                const pts = Number(loyalty?.points_redeemed || 0);
+                if (reward <= 0) return null;
+                return (
+                  <View style={detailStyles.totalRow}>
+                    <Text style={detailStyles.meta}>
+                      Reward points{pts > 0 ? ` (${pts} pts)` : ''}
+                    </Text>
+                    <Text style={detailStyles.meta}>-{formatMoney(reward)}</Text>
+                  </View>
+                );
+              })()}
+              {voucherAmount(localVoucher.igst_total) > 0 ? (
+                <View style={detailStyles.totalRow}>
+                  <Text style={detailStyles.meta}>IGST</Text>
+                  <Text style={detailStyles.meta}>{formatMoney(localVoucher.igst_total)}</Text>
+                </View>
+              ) : voucherAmount(localVoucher.cgst_total) > 0 ||
+                voucherAmount(localVoucher.sgst_total) > 0 ? (
+                <>
+                  <View style={detailStyles.totalRow}>
+                    <Text style={detailStyles.meta}>CGST</Text>
+                    <Text style={detailStyles.meta}>{formatMoney(localVoucher.cgst_total)}</Text>
+                  </View>
+                  <View style={detailStyles.totalRow}>
+                    <Text style={detailStyles.meta}>SGST</Text>
+                    <Text style={detailStyles.meta}>{formatMoney(localVoucher.sgst_total)}</Text>
+                  </View>
+                </>
+              ) : (
+                <View style={detailStyles.totalRow}>
+                  <Text style={detailStyles.meta}>GST</Text>
+                  <Text style={detailStyles.meta}>{formatMoney(localVoucher.tax_total)}</Text>
+                </View>
+              )}
               {returnedTotal > 0 ? (
                 <>
                   <View style={detailStyles.totalRow}>
@@ -913,6 +957,23 @@ function SaleInvoiceDetailModal({
                 {canReturn ? (
                   <Button label="Return items" fullWidth onPress={() => setReturnMode(true)} />
                 ) : null}
+                {businessId && localVoucher ? (
+                  <Button
+                    label="View / Print / Share"
+                    variant="secondary"
+                    fullWidth
+                    onPress={() =>
+                      setDocActions({
+                        kind: 'sale',
+                        id: localVoucher.id,
+                        number: localVoucher.voucher_number,
+                        businessId,
+                        phone: localVoucher.customer_phone || '',
+                        email: localVoucher.customer_email || '',
+                      })
+                    }
+                  />
+                ) : null}
                 <Button label="GST compliance" variant="outline" fullWidth onPress={onOpenCompliance} />
                 {onVoid && !isVoidedVoucher(localVoucher.status) ? (
                   <Button label="Void sale" variant="destructive" fullWidth onPress={() => onVoid(localVoucher)} />
@@ -923,6 +984,12 @@ function SaleInvoiceDetailModal({
           </View>
         </View>
       </View>
+      <DocumentActionsSheet
+        visible={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
+      />
     </Modal>
   );
 }
@@ -932,7 +999,8 @@ export function ShopBooksSaleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const toast = useToast();
-  const { businessId } = useWorkspace();
+  const auth = useAuth();
+  const { businessId, tenantId } = useWorkspace();
 
   const [vouchers, setVouchers] = useState<ShopBooksVoucher[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -951,6 +1019,7 @@ export function ShopBooksSaleScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [complianceVoucher, setComplianceVoucher] = useState<ShopBooksVoucher | null>(null);
   const [detailVoucher, setDetailVoucher] = useState<ShopBooksVoucher | null>(null);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const [customerId, setCustomerId] = useState('');
   const [voucherDate, setVoucherDate] = useState(todayIso());
@@ -1263,6 +1332,50 @@ export function ShopBooksSaleScreen() {
                 iconTone={voided ? 'rose' : paid ? 'green' : 'amber'}
                 dimmed={voided}
                 onPress={() => setDetailVoucher(item)}
+                extraActions={
+                  businessId
+                    ? [
+                        {
+                          label: 'View',
+                          icon: 'eye',
+                          onPress: () => {
+                            if (!auth.token) {
+                              toast.push('Sign in again to view this invoice', 'error');
+                              return;
+                            }
+                            void openShopDocumentHtmlView({
+                              target: {
+                                kind: 'sale',
+                                id: item.id,
+                                number: item.voucher_number,
+                                businessId,
+                              },
+                              token: auth.token,
+                              tenantId,
+                            }).catch((err) =>
+                              toast.push(getApiErrorMessage(err, 'View failed'), 'error'),
+                            );
+                          },
+                        },
+                        {
+                          label: 'Share',
+                          icon: 'share-2',
+                          onPress: () => {
+                            const customer =
+                              item.customer && customers.find((c) => c.id === item.customer);
+                            setDocActions({
+                              kind: 'sale',
+                              id: item.id,
+                              number: item.voucher_number,
+                              businessId,
+                              phone: item.customer_phone || customer?.phone_number || '',
+                              email: item.customer_email || customer?.email || '',
+                            });
+                          },
+                        },
+                      ]
+                    : undefined
+                }
               />
             );
           }}
@@ -1320,6 +1433,13 @@ export function ShopBooksSaleScreen() {
           voucher={complianceVoucher}
           visible={Boolean(complianceVoucher)}
           onClose={() => setComplianceVoucher(null)}
+        />
+
+        <DocumentActionsSheet
+          visible={Boolean(docActions)}
+          onClose={() => setDocActions(null)}
+          target={docActions}
+          title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
         />
 
         <FilterSheet

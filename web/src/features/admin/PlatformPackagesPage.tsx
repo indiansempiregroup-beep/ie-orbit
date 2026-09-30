@@ -41,6 +41,7 @@ type FormState = {
   max_extra_offices: string;
   amount_inr: string;
   yearly_amount_inr: string;
+  yearly_months_charged: number;
   is_active: boolean;
   is_public: boolean;
   sort_order: number;
@@ -66,7 +67,7 @@ function emptyForm(productCode: string): FormState {
     name: '',
     description: '',
     billing_interval: 'monthly',
-    trial_days: 15,
+    trial_days: 45,
     is_default: false,
     max_staff: 1,
     max_branches: 1,
@@ -74,6 +75,7 @@ function emptyForm(productCode: string): FormState {
     max_extra_offices: '',
     amount_inr: '',
     yearly_amount_inr: '',
+    yearly_months_charged: 10,
     is_active: true,
     is_public: true,
     sort_order: 0,
@@ -98,6 +100,7 @@ function formFromPackage(pkg: PlatformPlanPackage): FormState {
     max_extra_offices: pkg.max_extra_offices == null ? '' : String(pkg.max_extra_offices),
     amount_inr: paiseToInr(pkg.amount_paise),
     yearly_amount_inr: paiseToInr(pkg.yearly_amount_paise),
+    yearly_months_charged: Math.max(1, Math.min(12, Number(pkg.yearly_months_charged ?? 10) || 10)),
     is_active: pkg.is_active,
     is_public: pkg.is_public,
     sort_order: pkg.sort_order,
@@ -785,6 +788,7 @@ export function PlatformPackagesPage() {
         max_extra_offices: form.max_extra_offices.trim() === '' ? null : Number(form.max_extra_offices),
         amount_paise: inrToPaise(form.amount_inr),
         yearly_amount_paise: form.yearly_amount_inr.trim() ? inrToPaise(form.yearly_amount_inr) : null,
+        yearly_months_charged: Math.max(1, Math.min(12, Number(form.yearly_months_charged) || 10)),
         is_active: form.is_active,
         is_public: form.is_public,
         sort_order: Number(form.sort_order) || 0,
@@ -831,7 +835,7 @@ export function PlatformPackagesPage() {
 
       <AdminSection
         title="Add-on prices"
-        description="Monthly unit prices charged when a tenant adds extra staff, extra offices, or the Orbit Mart Pets pack. Yearly billing uses 10× monthly."
+        description="Monthly unit prices charged when a tenant adds extra staff, extra offices, or the Orbit Mart Pets pack. Yearly billing uses each plan’s months-charged setting (default 10×)."
       >
         <div className="admin-action-bar" style={{ alignItems: 'end', flexWrap: 'wrap' }}>
           <AdminField label="Extra staff (₹ / month)">
@@ -991,6 +995,10 @@ export function PlatformPackagesPage() {
                     <span className="admin-package-card__meta"> /mo</span>
                   </div>
                   <div className="admin-package-card__meta">
+                    {pkg.yearly_amount_paise
+                      ? `${formatInrFromPaise(pkg.yearly_amount_paise)} /yr (${pkg.yearly_months_charged ?? 10}× mo)`
+                      : 'Yearly price not set'}
+                    {' · '}
                     {displayPlanCode(pkg.code)} · {pkg.trial_days} day trial · staff {pkg.max_staff} · offices {pkg.max_branches}
                   </div>
                 </button>
@@ -1105,7 +1113,10 @@ export function PlatformPackagesPage() {
 
                 <div className="admin-editor-card">
                   <h3>Pricing & limits</h3>
-                  <AdminField label="Billing interval">
+                  <AdminField
+                    label="Default billing interval"
+                    hint="Owners can still pick Monthly or Yearly when they subscribe."
+                  >
                     <select
                       value={form.billing_interval}
                       onChange={(e) =>
@@ -1116,23 +1127,75 @@ export function PlatformPackagesPage() {
                       <option value="yearly">Yearly</option>
                     </select>
                   </AdminField>
-                  <div className="admin-billing-grid" style={{ background: 'transparent', padding: 0, marginTop: 0 }}>
-                    <AdminField label="Monthly (₹)">
+
+                  <div className="admin-package-pricing">
+                    <div className="admin-package-pricing__row">
+                      <AdminField label="Monthly price (₹)">
+                        <input
+                          type="number"
+                          min={0}
+                          step="1"
+                          value={form.amount_inr}
+                          onChange={(e) => setForm({ ...form, amount_inr: e.target.value })}
+                        />
+                      </AdminField>
+                      <AdminField label="Yearly price (₹)">
+                        <input
+                          type="number"
+                          min={0}
+                          step="1"
+                          value={form.yearly_amount_inr}
+                          onChange={(e) => setForm({ ...form, yearly_amount_inr: e.target.value })}
+                          placeholder={
+                            Number(form.amount_inr) > 0
+                              ? String(Math.round(Number(form.amount_inr) * form.yearly_months_charged))
+                              : 'e.g. 3990'
+                          }
+                        />
+                      </AdminField>
+                    </div>
+                    <AdminField
+                      label="Yearly months charged"
+                      hint="Pay this many months, get 12. Default 10 = 2 months free."
+                    >
                       <input
                         type="number"
-                        min={0}
-                        value={form.amount_inr}
-                        onChange={(e) => setForm({ ...form, amount_inr: e.target.value })}
+                        min={1}
+                        max={12}
+                        value={form.yearly_months_charged}
+                        onChange={(e) => {
+                          const next = Math.max(1, Math.min(12, Number(e.target.value) || 10));
+                          setForm({ ...form, yearly_months_charged: next });
+                        }}
                       />
                     </AdminField>
-                    <AdminField label="Yearly (₹)">
-                      <input
-                        type="number"
-                        min={0}
-                        value={form.yearly_amount_inr}
-                        onChange={(e) => setForm({ ...form, yearly_amount_inr: e.target.value })}
-                      />
-                    </AdminField>
+                    <div className="admin-package-pricing__bar">
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn--ghost"
+                        title={`Set yearly to ${form.yearly_months_charged}× monthly`}
+                        onClick={() => {
+                          const monthly = Number(form.amount_inr);
+                          if (!Number.isFinite(monthly) || monthly <= 0) return;
+                          setForm({
+                            ...form,
+                            yearly_amount_inr: String(Math.round(monthly * form.yearly_months_charged)),
+                          });
+                        }}
+                      >
+                        Fill {form.yearly_months_charged}× monthly
+                      </button>
+                      <p className="admin-package-pricing__note">
+                        {Number(form.amount_inr) > 0 && Number(form.yearly_amount_inr) > 0
+                          ? Number(form.yearly_amount_inr) < Number(form.amount_inr) * 12
+                            ? `≈ ₹${Math.round(Number(form.yearly_amount_inr) / 12).toLocaleString('en-IN')}/mo · saves ₹${Math.round(Number(form.amount_inr) * 12 - Number(form.yearly_amount_inr)).toLocaleString('en-IN')}/year (${Math.max(0, 12 - form.yearly_months_charged)} month${12 - form.yearly_months_charged === 1 ? '' : 's'} free when yearly = ${form.yearly_months_charged}× monthly)`
+                            : 'Yearly is not discounted vs paying monthly for 12 months'
+                          : `Set yearly to ${form.yearly_months_charged}× monthly for ${Math.max(0, 12 - form.yearly_months_charged)} month${12 - form.yearly_months_charged === 1 ? '' : 's'} free`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="admin-billing-grid" style={{ background: 'transparent', padding: 0, marginTop: 12 }}>
                     <AdminField label="Trial days">
                       <input
                         type="number"

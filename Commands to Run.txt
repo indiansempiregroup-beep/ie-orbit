@@ -12,6 +12,14 @@ platform-admin@ieplatform.local
 # Enable + UPI top-up: Product settings → Smart product lookup.
 # PLATFORM_UPI_VPA must be set for wallet top-up QR.
 
+# Package-gated product/service background remove (rembg u2netp) — after pulling:
+#   pip/uv install backend deps (rembg[cpu]) then migrate platform_admin.0033.
+#   First rembg call downloads ~5–13 MB u2netp into U2NET_HOME (default ~/.u2net).
+#   Keep ~1 GB free RAM on the VPS; jobs are single-flight so two uploads do not peak together.
+#   Pro packages get shopie_product_bg_remove / appointie_service_bg_remove by default;
+#   toggle on Starter via Platform Admin → Plan Packages if needed.
+#   Rebuild backend image after rembg is added to pyproject.toml so workers have the package.
+
 # Business Assistant prepaid wallet (after free daily limits):
 #   Same migrate as above (assistant.0002 + platform_admin.0028).
 # Platform Admin → Plan Packages → Assistant wallet (message/confirm ₹ prices + suggested top-ups).

@@ -40,7 +40,8 @@ import {
   filterBillingOrders,
   ORDER_RANGE_FILTERS,
   ORDER_STATUS_FILTERS,
-  orderHistoryCounts,
+  orderListHistoryCounts,
+  orderStatusLabel,
   type OrderHistoryRange,
   type OrderHistoryStatusFilter,
 } from '../settings/subscriptionUx';
@@ -273,6 +274,13 @@ export function PlatformTenantDetailPage() {
   const [addonInputs, setAddonInputs] = useState<
     Record<string, { extra_staff: string; extra_offices: string; pets_pack_enabled: boolean }>
   >({});
+  const [refundDraft, setRefundDraft] = useState<{
+    paymentId: string;
+    amountInr: string;
+    method: 'upi_manual' | 'bank' | 'razorpay';
+    reference: string;
+    endAccessNow: boolean;
+  } | null>(null);
   usePageMeta({ title: `${detailQuery.data?.display_name ?? 'Tenant'} — Platform Admin` });
 
   const payments = paymentsQuery.data ?? [];
@@ -289,7 +297,7 @@ export function PlatformTenantDetailPage() {
       }),
     [historyPayments, historyQueryText, historyStatus, historyRange, historyProduct],
   );
-  const historyCounts = useMemo(() => orderHistoryCounts(historyPayments), [historyPayments]);
+  const historyCounts = useMemo(() => orderListHistoryCounts(historyPayments), [historyPayments]);
   const historyFiltersActive = Boolean(
     historyQueryText.trim() || historyStatus !== 'all' || historyRange !== 'all' || historyProduct,
   );
@@ -979,7 +987,12 @@ export function PlatformTenantDetailPage() {
         <>
           <AdminSection
             title="Awaiting confirmation"
-            description="When a tenant pays by UPI and submits UTR / screenshot, confirm it here to activate the plan."
+            description="When a tenant pays by UPI and submits UTR / screenshot, confirm it here to activate the plan. Tax invoices CSV for CA:"
+            actions={
+              <a className="admin-btn admin-btn--ghost" href={`/api/v1/platform/tenants/${tenantId}/tax-invoices?format=csv`}>
+                Tax invoices CSV
+              </a>
+            }
           >
             {paymentsQuery.isLoading ? (
               <AdminEmpty>Loading claims…</AdminEmpty>
@@ -1150,7 +1163,9 @@ export function PlatformTenantDetailPage() {
                         <strong>{formatInrFromPaise(payment.amount_paise)}</strong>
                       </td>
                       <td>
-                        <AdminStatus status={payment.payment_status || payment.status} />
+                        <AdminStatus
+                          status={orderStatusLabel(payment.payment_status, payment.status, payment.refund_status)}
+                        />
                       </td>
                       <td className="admin-table__muted">
                         {payment.upi_utr || '—'}
@@ -1170,18 +1185,153 @@ export function PlatformTenantDetailPage() {
                         {formatTimestamp(payment.paid_at || payment.resolved_at || payment.created_at)}
                       </td>
                       <td className="admin-table__actions">
-                        {payment.status === 'paid' ? (
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn--danger"
-                            disabled={Boolean(busy)}
-                            onClick={() =>
-                              run('Refund', () => client.platform.refundPayment(tenantId!, payment.id, { reason }))
-                            }
-                          >
-                            Refund
-                          </button>
-                        ) : null}
+                        {(() => {
+                          const refund = String(payment.refund_status || '').toLowerCase();
+                          const isPaid = String(payment.payment_status || payment.status || '').toLowerCase() === 'paid';
+                          const isUpi =
+                            String(payment.payment_channel || '').toLowerCase().includes('upi') ||
+                            Boolean(payment.upi_utr);
+                          const canResolveRequest = refund === 'requested' && Boolean(payment.tenant_id);
+                          const canDirectRefund =
+                            isPaid && (!refund || refund === 'none' || refund === 'rejected') && Boolean(payment.tenant_id);
+                          if (!canResolveRequest && !canDirectRefund) return null;
+                          const draftOpen = refundDraft?.paymentId === payment.id;
+                          if (draftOpen && refundDraft) {
+                            return (
+                              <div className="admin-form-grid" style={{ maxWidth: 280, gap: 8 }}>
+                                <AdminField label="Amount (₹)">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={refundDraft.amountInr}
+                                    onChange={(e) =>
+                                      setRefundDraft({ ...refundDraft, amountInr: e.target.value })
+                                    }
+                                  />
+                                </AdminField>
+                                <AdminField label="Method">
+                                  <select
+                                    value={refundDraft.method}
+                                    onChange={(e) =>
+                                      setRefundDraft({
+                                        ...refundDraft,
+                                        method: e.target.value as 'upi_manual' | 'bank' | 'razorpay',
+                                      })
+                                    }
+                                  >
+                                    <option value="upi_manual">UPI manual</option>
+                                    <option value="bank">Bank</option>
+                                    <option value="razorpay">Razorpay</option>
+                                  </select>
+                                </AdminField>
+                                <AdminField label="Reference">
+                                  <input
+                                    value={refundDraft.reference}
+                                    onChange={(e) =>
+                                      setRefundDraft({ ...refundDraft, reference: e.target.value })
+                                    }
+                                    placeholder="UTR / bank ref"
+                                  />
+                                </AdminField>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={refundDraft.endAccessNow}
+                                    onChange={(e) =>
+                                      setRefundDraft({ ...refundDraft, endAccessNow: e.target.checked })
+                                    }
+                                  />
+                                  End access now
+                                </label>
+                                <div className="admin-action-bar" style={{ marginTop: 0 }}>
+                                  <button
+                                    type="button"
+                                    className="admin-btn admin-btn--ghost"
+                                    onClick={() => setRefundDraft(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="admin-btn admin-btn--danger"
+                                    disabled={Boolean(busy) || !reason.trim()}
+                                    onClick={() => {
+                                      const amountPaise = Math.round(Number(refundDraft.amountInr || 0) * 100);
+                                      const body = {
+                                        reason,
+                                        amount_paise:
+                                          Number.isFinite(amountPaise) && amountPaise > 0 ? amountPaise : undefined,
+                                        method: refundDraft.method,
+                                        reference: refundDraft.reference.trim() || undefined,
+                                        end_access_now: refundDraft.endAccessNow,
+                                      };
+                                      void run(
+                                        canResolveRequest ? 'Resolve refund' : 'Refund',
+                                        async () => {
+                                          if (canResolveRequest || isUpi) {
+                                            await client.platform.resolveRefundRequest(
+                                              tenantId!,
+                                              payment.id,
+                                              body,
+                                            );
+                                          } else {
+                                            await client.platform.refundPayment(tenantId!, payment.id, {
+                                              ...body,
+                                              resolve: true,
+                                            });
+                                          }
+                                          setRefundDraft(null);
+                                        },
+                                      );
+                                    }}
+                                  >
+                                    Confirm
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="admin-action-bar" style={{ marginTop: 0 }}>
+                              {canResolveRequest ? (
+                                <button
+                                  type="button"
+                                  className="admin-btn admin-btn--ghost"
+                                  disabled={Boolean(busy) || !reason.trim()}
+                                  onClick={() =>
+                                    run('Reject refund', () =>
+                                      client.platform.rejectRefundRequest(tenantId!, payment.id, { reason }),
+                                    )
+                                  }
+                                >
+                                  Reject
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn--danger"
+                                disabled={Boolean(busy)}
+                                onClick={() =>
+                                  setRefundDraft({
+                                    paymentId: payment.id,
+                                    amountInr: String(
+                                      Math.round(
+                                        (payment.suggested_refund_paise ?? payment.amount_paise ?? 0) / 100,
+                                      ),
+                                    ),
+                                    method: String(payment.payment_channel || '').includes('razorpay')
+                                      ? 'razorpay'
+                                      : 'upi_manual',
+                                    reference: '',
+                                    endAccessNow: false,
+                                  })
+                                }
+                              >
+                                {canResolveRequest ? 'Resolve' : 'Refund'}
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );

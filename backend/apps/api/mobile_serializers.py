@@ -192,6 +192,7 @@ class MobileCustomerAddressSerializer(serializers.Serializer):
     state = serializers.CharField(required=False, allow_blank=True)
     country = serializers.CharField(required=False, allow_blank=True)
     postal_code = serializers.CharField(required=False, allow_blank=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True)
     latitude = CoordinateField()
     longitude = CoordinateField()
 

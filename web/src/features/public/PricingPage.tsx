@@ -36,6 +36,27 @@ function formatInrAmount(amount: number) {
   return `₹${amount.toLocaleString('en-IN')}`;
 }
 
+function yearlyMonthsFromPlans(plans: BillingPlanCatalogItem[]) {
+  const values = plans
+    .map((plan) => Math.max(1, Math.min(12, Number(plan.yearly_months_charged ?? 10) || 10)))
+    .filter((n) => n > 0);
+  if (!values.length) return 10;
+  const unique = [...new Set(values)];
+  return unique.length === 1 ? unique[0]! : Math.min(...unique);
+}
+
+function yearlyBillingCopy(monthsCharged: number) {
+  const free = Math.max(0, 12 - monthsCharged);
+  return {
+    chip: `Yearly is ${monthsCharged}× monthly`,
+    note:
+      free > 0
+        ? `Yearly billing is ${monthsCharged}× monthly (${free} month${free === 1 ? '' : 's'} free).`
+        : `Yearly billing is ${monthsCharged}× monthly.`,
+    planSuffix: `${monthsCharged}× monthly`,
+  };
+}
+
 function planTitle(plan: BillingPlanCatalogItem) {
   return stripPlanProductPrefix(plan.name);
 }
@@ -65,6 +86,8 @@ export function PricingPage() {
   const staffAddon = catalog?.addon_staff_price_paise ?? STAFF_ADDON_INR * 100;
   const officeAddon = catalog?.addon_office_price_paise ?? OFFICE_ADDON_INR * 100;
   const petsAddon = catalog?.addon_pets_price_paise ?? PETS_ADDON_INR * 100;
+  const yearlyMonths = yearlyMonthsFromPlans([...(appointie ?? []), ...(shopie ?? [])]);
+  const yearlyCopy = yearlyBillingCopy(yearlyMonths);
   const productSections = [
     {
       id: 'appointie' as const,
@@ -105,7 +128,7 @@ export function PricingPage() {
               <span className="public-chip">White-label customer app</span>
               <span className="public-chip">No credit card to start</span>
               <span className="public-chip">UPI billing</span>
-              <span className="public-chip">Yearly is 10× monthly</span>
+              <span className="public-chip">{yearlyCopy.chip}</span>
             </div>
           </div>
         </div>
@@ -113,7 +136,7 @@ export function PricingPage() {
       <div className="public-page">
         <PublicBackLink />
         {catalogQuery.isLoading && !hasLivePlans ? (
-          <PricingFallback trialDays={trialDays} />
+          <PricingFallback trialDays={trialDays} yearlyMonths={yearlyMonths} />
         ) : hasLivePlans ? (
           <>
             {orderedSections
@@ -144,8 +167,7 @@ export function PricingPage() {
             <p className="public-lead" style={{ marginTop: 28 }}>
               Extra staff {formatInr(staffAddon)}/month on Starter (max 1) and Pro. Extra offices{' '}
               {formatInr(officeAddon)}/month on Pro only
-              {petsAddon ? ` · Pets pack ${formatInr(petsAddon)}/month` : ''}. Yearly billing is 10× monthly (two months
-              free).
+              {petsAddon ? ` · Pets pack ${formatInr(petsAddon)}/month` : ''}. {yearlyCopy.note}
             </p>
             {petsAddon ? (
               <p className="public-lead" style={{ marginTop: 8 }}>
@@ -155,7 +177,7 @@ export function PricingPage() {
             ) : null}
           </>
         ) : (
-          <PricingFallback trialDays={trialDays} />
+          <PricingFallback trialDays={trialDays} yearlyMonths={yearlyMonths} />
         )}
       </div>
       <PublicCtaBand title="Start with full Pro access" />
@@ -163,7 +185,8 @@ export function PricingPage() {
   );
 }
 
-function PricingFallback({ trialDays }: { trialDays: number }) {
+function PricingFallback({ trialDays, yearlyMonths = 10 }: { trialDays: number; yearlyMonths?: number }) {
+  const yearlyCopy = yearlyBillingCopy(yearlyMonths);
   return (
     <section className="public-section" style={{ marginTop: 0 }}>
       <div className="public-section__head">
@@ -205,7 +228,7 @@ function PricingFallback({ trialDays }: { trialDays: number }) {
             {formatInrAmount(PRO_MONTHLY_INR)}
             <span>/month</span>
           </p>
-          <p>Full BI, a second office, WhatsApp or GST tools, and an ad-free white-label app. Yearly billing is 10× monthly.</p>
+          <p>Full BI, a second office, WhatsApp or GST tools, and an ad-free white-label app. {yearlyCopy.note}</p>
         </article>
       </div>
       <p className="public-lead" style={{ marginTop: 28 }}>
@@ -262,7 +285,8 @@ function PlanGrid({
             </p>
             {plan.yearly_amount_paise ? (
               <p style={{ margin: '4px 0 0', fontSize: 13 }}>
-                or {formatInr(plan.yearly_amount_paise)}/year (10× monthly)
+                or {formatInr(plan.yearly_amount_paise)}/year (
+                {yearlyBillingCopy(Math.max(1, Math.min(12, Number(plan.yearly_months_charged ?? 10) || 10))).planSuffix})
               </p>
             ) : null}
             <PlanFeatureList groups={planFeatureDisplay(plan, plans)} />

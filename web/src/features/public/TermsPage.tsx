@@ -106,7 +106,7 @@ export function TermsPage() {
       <p>
         After the trial, paid use requires a Starter or Pro subscription for each product you want to keep active,
         plus any add-ons (extra staff, extra offices, Pets pack). Amounts, staff and office limits, and yearly billing
-        (when offered at 10× monthly) are as shown on Pricing and at checkout in INR. Taxes may apply as required by
+        (when offered at a discounted yearly multiple of monthly) are as shown on Pricing and at checkout in INR. Taxes may apply as required by
         law.
       </p>
       <p>

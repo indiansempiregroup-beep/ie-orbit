@@ -1,10 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
-import { Download, Printer, RefreshCw } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ShopBooksReportSlug, ShopBooksVoucher } from '@ie-orbit/sdk';
+import { Download, Eye, Printer, RefreshCw, Share2 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { Dialog } from '../../components/Dialog';
 import { formatMoney } from '../../lib/currency';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useApiClient } from '../../hooks/useApiClient';
+import { useDialog } from '../../hooks/useDialog';
+import { useSnackbar } from '../../hooks/useSnackbar';
+import { getApiErrorMessage } from '../../lib/apiClient';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { openShopDocumentView } from './shopDocumentActions';
 import { ShopFilterBar } from './ShopFilterBar';
 import { useShopBooksReport } from './shopHooks';
 
@@ -52,6 +60,19 @@ const VOUCHER_TYPE_LABELS: Record<string, string> = {
   transfer: 'Transfer',
 };
 
+/** Invoice-style docs that support HTML view / PDF / share links. */
+const DOCUMENT_KINDS = new Set(['sale', 'credit_note', 'debit_note']);
+
+function docKindFor(voucherType: string): string | null {
+  const kind = voucherType.toLowerCase();
+  return DOCUMENT_KINDS.has(kind) ? kind : null;
+}
+
+function documentTitle(kind: string, number?: string) {
+  const label = VOUCHER_TYPE_LABELS[kind] ?? 'Document';
+  return number ? `${label} ${number}` : label;
+}
+
 type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
@@ -78,10 +99,13 @@ const PAYMENT_TONES: Record<'paid' | 'partial' | 'unpaid', string> = {
 
 type ReportRecord = {
   key: string;
+  id: string | null;
   number: string;
   date: string;
   type: string;
   typeLabel: string;
+  /** Document API kind when view/share is supported (`sale`, `credit_note`, `debit_note`). */
+  docKind: string | null;
   party: string;
   status: string;
   total: number;
@@ -154,12 +178,15 @@ function formatVoucherDate(value: string) {
 
 function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRecord {
   const type = String(row.voucher_type ?? '').toLowerCase();
+  const id = row.id == null || row.id === '' ? null : String(row.id);
   return {
-    key: String(row.id ?? `${row.voucher_number ?? 'row'}-${index}`),
+    key: id ?? `${row.voucher_number ?? 'row'}-${index}`,
+    id,
     number: String(row.voucher_number ?? '—'),
     date: String(row.voucher_date ?? ''),
     type,
     typeLabel: VOUCHER_TYPE_LABELS[type] ?? labelFor(type || 'entry'),
+    docKind: docKindFor(type),
     party: String(row.party ?? row.cash_account ?? 'Cash / walk-in'),
     status: String(row.status ?? '').toLowerCase(),
     total: num(row.total),
@@ -174,13 +201,17 @@ function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRec
 }
 
 function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecord {
-  const type = String(row.invoice_type ?? 'B2C').toUpperCase();
+  const invoiceType = String(row.invoice_type ?? 'B2C').toUpperCase();
+  const voucherType = String(row.voucher_type ?? 'sale').toLowerCase();
+  const id = row.id == null || row.id === '' ? null : String(row.id);
   return {
-    key: `${String(row.voucher_number ?? 'invoice')}-${index}`,
+    key: id ?? `${String(row.voucher_number ?? 'invoice')}-${index}`,
+    id,
     number: String(row.voucher_number ?? '—'),
     date: String(row.voucher_date ?? ''),
-    type,
-    typeLabel: type,
+    type: invoiceType,
+    typeLabel: invoiceType,
+    docKind: docKindFor(voucherType),
     party: String(row.customer_name ?? 'Walk-in / B2C'),
     status: 'confirmed',
     total: num(row.total),
@@ -241,19 +272,49 @@ function recordExportRow(record: ReportRecord) {
   };
 }
 
+function businessAddressLine(business?: {
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+} | null) {
+  if (!business) return '';
+  return [
+    business.address_line1,
+    business.address_line2,
+    [business.city, business.state, business.postal_code].filter(Boolean).join(', '),
+    business.country,
+  ]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function buildReportCsv(input: {
   report: string;
   period: string;
   summary: Array<{ metric: string; value: unknown }>;
   records: ReportRecord[];
+  businessName?: string;
+  businessGstin?: string;
+  businessAddress?: string;
 }) {
   const lines = [
+    ['Business', input.businessName || '—'].map(csvCell).join(','),
+    ['GSTIN', input.businessGstin || '—'].map(csvCell).join(','),
+  ];
+  if (input.businessAddress) {
+    lines.push(['Address', input.businessAddress].map(csvCell).join(','));
+  }
+  lines.push(
     ['Report', input.report].map(csvCell).join(','),
     ['Period', input.period].map(csvCell).join(','),
     '',
     ['metric', 'value'].map(csvCell).join(','),
     ...input.summary.map((row) => [row.metric, row.value].map(csvCell).join(',')),
-  ];
+  );
   if (input.records.length) {
     const rows = input.records.map(recordExportRow);
     const columns = Object.keys(rows[0]).filter((column) =>
@@ -270,7 +331,12 @@ function buildReportCsv(input: {
 
 export function ShopBooksReportsPage() {
   const workspace = useWorkspace();
+  const auth = useAuthContext();
+  const client = useApiClient();
+  const snackbar = useSnackbar();
+  const detailDialog = useDialog();
   const currency = workspace.activeBusiness?.currency;
+  const businessId = workspace.businessId ?? '';
   const [slug, setSlug] = useState<ShopBooksReportSlug>('sales');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -280,6 +346,11 @@ export function ShopBooksReportsPage() {
   const [paymentFilter, setPaymentFilter] = useState('');
   const [sort, setSort] = useState<SortKey>('date_desc');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [caPackBusy, setCaPackBusy] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<ReportRecord | null>(null);
+  const [selectedVoucher, setSelectedVoucher] = useState<ShopBooksVoucher | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const range = { date_from: dateFrom || undefined, date_to: dateTo || undefined };
   const report = useShopBooksReport(slug, range);
@@ -393,6 +464,62 @@ export function ShopBooksReportsPage() {
     setSort('date_desc');
   }
 
+  const openRecord = useCallback(
+    async (record: ReportRecord) => {
+      if (!record.id || !client) return;
+      setSelectedRecord(record);
+      setSelectedVoucher(null);
+      setDetailLoading(true);
+      detailDialog.show();
+      try {
+        const response = await client.shop.getVoucher(record.id);
+        setSelectedVoucher(response.data);
+      } catch (error) {
+        snackbar.push(getApiErrorMessage(error, 'Unable to open this record.'), 'error');
+        detailDialog.hide();
+        setSelectedRecord(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [client, detailDialog.hide, detailDialog.show, snackbar],
+  );
+
+  const openDocActions = useCallback(
+    (record: ReportRecord, voucher?: ShopBooksVoucher | null) => {
+      if (!businessId || !record.id || !record.docKind) return;
+      setDocActions({
+        kind: record.docKind,
+        id: record.id,
+        number: record.number,
+        businessId,
+        phone: voucher?.customer_phone || '',
+        email: voucher?.customer_email || '',
+      });
+    },
+    [businessId],
+  );
+
+  const viewDocument = useCallback(
+    (record: ReportRecord) => {
+      if (!businessId || !record.id || !record.docKind) return;
+      void openShopDocumentView(
+        {
+          kind: record.docKind,
+          id: record.id,
+          number: record.number,
+          businessId,
+        },
+        auth.token,
+        'a4',
+        workspace.tenantId,
+      ).catch((error) =>
+        snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
+      );
+    },
+    [auth.token, businessId, snackbar, workspace.tenantId],
+  );
+
   function setPreset(kind: 'month' | 'quarter' | 'year' | 'all') {
     if (kind === 'all') {
       setDateFrom('');
@@ -412,18 +539,100 @@ export function ShopBooksReportsPage() {
 
   function downloadCsv() {
     if (!data || invalidRange) return;
+    const businessName =
+      String(workspace.activeBusiness?.display_name || workspace.activeBusiness?.business_name || '').trim() ||
+      'Business';
     const csv = buildReportCsv({
       report: activeReport?.label ?? slug,
       period: periodLabel,
       summary: exportSummary,
       records: filteredRecords,
+      businessName,
+      businessGstin: String(workspace.activeBusiness?.gst_tax_number || '').trim(),
+      businessAddress: businessAddressLine(workspace.activeBusiness),
     });
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${slug}-${dateFrom || 'all'}-${dateTo || 'today'}.csv`;
+    const biz = (
+      workspace.activeBusiness?.business_code ||
+      workspace.activeBusiness?.display_name ||
+      businessName ||
+      'business'
+    )
+      .toString()
+      .replace(/[^\w.-]+/g, '_')
+      .slice(0, 40);
+    anchor.download = `${biz}_${slug}_${dateFrom || 'all'}_${dateTo || 'today'}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function downloadCaPack() {
+    if (invalidRange || !businessId) return;
+    const packSlugs: ShopBooksReportSlug[] = ['gstr1', 'gstr3b', 'sales'];
+    const businessName =
+      String(workspace.activeBusiness?.display_name || workspace.activeBusiness?.business_name || '').trim() ||
+      'Business';
+    const businessGstin = String(workspace.activeBusiness?.gst_tax_number || '').trim();
+    const businessAddress = businessAddressLine(workspace.activeBusiness);
+    const biz = (
+      workspace.activeBusiness?.business_code ||
+      workspace.activeBusiness?.display_name ||
+      businessName ||
+      'business'
+    )
+      .toString()
+      .replace(/[^\w.-]+/g, '_')
+      .slice(0, 40);
+    setCaPackBusy(true);
+    try {
+      for (const packSlug of packSlugs) {
+        const response = await client.shop.booksReport(packSlug, {
+          business_id: businessId,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          ...(packSlug === 'gstr1' ? { limit: 500, offset: 0 } : {}),
+        });
+        const payload = response.data;
+        const tab = REPORT_TABS.find((item) => item.slug === packSlug);
+        let summary: Array<{ metric: string; value: string }> = [];
+        let records: ReportRecord[] = [];
+        if (packSlug === 'gstr1' && Array.isArray(payload)) {
+          const gstrRows = payload.filter(isRecord);
+          records = gstrRows.map(toGstr1Record);
+          const total = gstrRows.reduce((sum, row) => sum + num(row.total), 0);
+          summary = [
+            { metric: 'Invoices', value: String(gstrRows.length) },
+            { metric: 'Taxable value', value: formatMoney(gstrRows.reduce((s, r) => s + num(r.taxable_value), 0), currency) },
+            { metric: 'Grand total', value: formatMoney(total, currency) },
+          ];
+        } else if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+          const record = payload as Record<string, unknown>;
+          summary = Object.entries(METRIC_LABELS)
+            .filter(([key]) => key in record)
+            .map(([key, label]) => ({ metric: label, value: formatMoney(num(record[key]), currency) }));
+        }
+        const csv = buildReportCsv({
+          report: tab?.label ?? packSlug,
+          period: periodLabel,
+          summary,
+          records,
+          businessName,
+          businessGstin,
+          businessAddress,
+        });
+        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${biz}_${packSlug}_${dateFrom || 'all'}_${dateTo || 'today'}.csv`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+      }
+    } finally {
+      setCaPackBusy(false);
+    }
   }
 
   return (
@@ -436,12 +645,20 @@ export function ShopBooksReportsPage() {
               Review performance, verify GST figures, and export filing-ready data.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Button type="button" variant="neutral" onClick={() => void report.refetch()} disabled={report.isFetching || invalidRange}>
               <RefreshCw size={15} aria-hidden="true" /> {report.isFetching ? 'Refreshing…' : 'Refresh'}
             </Button>
             <Button type="button" variant="neutral" onClick={downloadCsv} disabled={!data || invalidRange}>
-              <Download size={15} aria-hidden="true" /> Export CSV
+              <Download size={15} aria-hidden="true" /> CSV for CA
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => void downloadCaPack()}
+              disabled={caPackBusy || invalidRange || !businessId}
+            >
+              <Download size={15} aria-hidden="true" /> {caPackBusy ? 'Preparing…' : 'CA pack (GSTR-1 · 3B · Sales)'}
             </Button>
             <Button type="button" variant="neutral" onClick={() => window.print()} disabled={!data}>
               <Printer size={15} aria-hidden="true" /> Print
@@ -685,7 +902,15 @@ export function ShopBooksReportsPage() {
           ) : null}
 
           {filteredRecords.length ? (
-            <RecordTable records={filteredRecords} limit={visibleCount} totals={filteredTotals} currency={currency} />
+            <RecordTable
+              records={filteredRecords}
+              limit={visibleCount}
+              totals={filteredTotals}
+              currency={currency}
+              onOpenRecord={(record) => void openRecord(record)}
+              onView={viewDocument}
+              onShare={(record) => openDocActions(record)}
+            />
           ) : (
             <p>{records.length ? 'No records match the current filters.' : 'No vouchers were posted in this period.'}</p>
           )}
@@ -699,6 +924,103 @@ export function ShopBooksReportsPage() {
           ) : null}
         </Card>
       ) : null}
+
+      <Dialog
+        open={detailDialog.open}
+        onClose={() => {
+          detailDialog.hide();
+          setSelectedRecord(null);
+          setSelectedVoucher(null);
+        }}
+        title={selectedRecord ? selectedRecord.number : 'Voucher'}
+        labelledBy="report-record-detail-dialog"
+        busy={detailLoading}
+      >
+        {selectedRecord ? (
+          <div style={{ display: 'grid', gap: 14, marginTop: 12, minWidth: 320 }}>
+            <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
+              {formatVoucherDate(selectedRecord.date)} · {selectedRecord.typeLabel} ·{' '}
+              {selectedVoucher?.customer_name ||
+                selectedVoucher?.supplier_name ||
+                selectedVoucher?.cash_account_name ||
+                selectedRecord.party}
+            </div>
+            {detailLoading ? (
+              <p role="status">Loading record…</p>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {((selectedVoucher?.line_items as Array<Record<string, unknown>> | undefined) ?? []).map(
+                    (line, index) => (
+                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                        <span>
+                          {String(line.name || line.product_name || `Item ${index + 1}`)}
+                          {line.qty != null || line.quantity != null
+                            ? ` × ${line.qty ?? line.quantity}`
+                            : ''}
+                        </span>
+                        <strong>{formatMoney(Number(line.total ?? 0), currency)}</strong>
+                      </div>
+                    ),
+                  )}
+                  {selectedVoucher && !selectedVoucher.line_items?.length ? (
+                    <p style={{ margin: 0 }}>No line items.</p>
+                  ) : null}
+                </div>
+                <div style={{ display: 'grid', gap: 4, borderTop: '1px solid #eee', paddingTop: 10, fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Subtotal</span>
+                    <span>{formatMoney(Number(selectedVoucher?.subtotal ?? 0), currency)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Tax</span>
+                    <span>{formatMoney(Number(selectedVoucher?.tax_total ?? 0), currency)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                    <span>Total</span>
+                    <span>{formatMoney(Number(selectedVoucher?.total ?? selectedRecord.total), currency)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Amount paid</span>
+                    <span>{formatMoney(Number(selectedVoucher?.amount_paid ?? 0), currency)}</span>
+                  </div>
+                </div>
+                {selectedVoucher?.notes ? (
+                  <p style={{ margin: 0, fontSize: 13 }}>Notes: {selectedVoucher.notes}</p>
+                ) : null}
+              </>
+            )}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              {selectedRecord.docKind && businessId ? (
+                <Button
+                  type="button"
+                  onClick={() => openDocActions(selectedRecord, selectedVoucher)}
+                >
+                  View / Print / Share
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  detailDialog.hide();
+                  setSelectedRecord(null);
+                  setSelectedVoucher(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Dialog>
+
+      <DocumentActionsSheet
+        open={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? documentTitle(String(docActions.kind), docActions.number) : 'Document'}
+      />
     </div>
   );
 }
@@ -728,11 +1050,17 @@ function RecordTable({
   limit,
   totals,
   currency,
+  onOpenRecord,
+  onView,
+  onShare,
 }: {
   records: ReportRecord[];
   limit: number;
   totals: { taxable: number; gst: number; total: number; due: number };
   currency?: string | null;
+  onOpenRecord: (record: ReportRecord) => void;
+  onView: (record: ReportRecord) => void;
+  onShare: (record: ReportRecord) => void;
 }) {
   /** Column visibility is derived from the whole filtered set so paging never shifts columns. */
   const showStatus = records.some((record) => record.status);
@@ -740,9 +1068,11 @@ function RecordTable({
   const showGstin = records.some((record) => record.gstin);
   const showPos = records.some((record) => record.placeOfSupply);
   const showPayment = records.some((record) => paymentState(record) != null);
+  const showActions = records.some((record) => Boolean(record.id && record.docKind));
   const visible = records.slice(0, limit);
   const cell: React.CSSProperties = { padding: '8px 6px', verticalAlign: 'top' };
   const numeric: React.CSSProperties = { ...cell, textAlign: 'right', whiteSpace: 'nowrap' };
+  const actionCell: React.CSSProperties = { ...cell, whiteSpace: 'nowrap' };
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -760,6 +1090,7 @@ function RecordTable({
             {showGst ? <th style={numeric}>GST</th> : null}
             <th style={numeric}>Total</th>
             {showPayment ? <th style={numeric}>Due</th> : null}
+            {showActions ? <th style={actionCell}>Actions</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -768,12 +1099,28 @@ function RecordTable({
             const payment = paymentState(record);
             const due = record.paid == null ? 0 : Math.max(record.total - record.paid, 0);
             const gst = (record.cgst ?? 0) + (record.sgst ?? 0) + (record.igst ?? 0);
+            const canOpen = Boolean(record.id);
+            const canShare = Boolean(record.id && record.docKind);
             return (
               <tr
                 key={record.key}
+                onClick={canOpen ? () => onOpenRecord(record) : undefined}
+                onKeyDown={
+                  canOpen
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          onOpenRecord(record);
+                        }
+                      }
+                    : undefined
+                }
+                tabIndex={canOpen ? 0 : undefined}
+                role={canOpen ? 'button' : undefined}
                 style={{
                   borderBottom: '1px solid #f1f1f1',
                   color: isVoid ? 'var(--muted-foreground)' : undefined,
+                  cursor: canOpen ? 'pointer' : undefined,
                 }}
               >
                 <td style={{ ...cell, whiteSpace: 'nowrap' }}>{formatVoucherDate(record.date)}</td>
@@ -799,6 +1146,60 @@ function RecordTable({
                     {payment === 'paid' ? 'Paid' : payment ? formatMoney(due, currency) : '—'}
                   </td>
                 ) : null}
+                {showActions ? (
+                  <td style={actionCell} onClick={(event) => event.stopPropagation()}>
+                    {canShare ? (
+                      <div style={{ display: 'inline-flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          title="View invoice"
+                          aria-label={`View ${record.number}`}
+                          onClick={() => onView(record)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            border: '1px solid var(--border, #e5e7eb)',
+                            background: 'var(--card, #fff)',
+                            borderRadius: 8,
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--primary)',
+                          }}
+                        >
+                          <Eye size={14} aria-hidden="true" />
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          title="Share invoice"
+                          aria-label={`Share ${record.number}`}
+                          onClick={() => onShare(record)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            border: '1px solid var(--border, #e5e7eb)',
+                            background: 'var(--card, #fff)',
+                            borderRadius: 8,
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--primary)',
+                          }}
+                        >
+                          <Share2 size={14} aria-hidden="true" />
+                          Share
+                        </button>
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                ) : null}
               </tr>
             );
           })}
@@ -812,6 +1213,7 @@ function RecordTable({
             {showGst ? <td style={numeric}>{formatMoney(totals.gst, currency)}</td> : null}
             <td style={numeric}>{formatMoney(totals.total, currency)}</td>
             {showPayment ? <td style={numeric}>{formatMoney(totals.due, currency)}</td> : null}
+            {showActions ? <td style={actionCell} /> : null}
           </tr>
         </tfoot>
       </table>

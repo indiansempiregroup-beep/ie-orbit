@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,7 +41,7 @@ import {
 import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 
-const EXPENSE_CATEGORIES = [
+const FALLBACK_EXPENSE_CATEGORIES = [
   'Rent',
   'Utilities',
   'Salaries',
@@ -52,7 +52,7 @@ const EXPENSE_CATEGORIES = [
   'Other',
 ];
 
-const INCOME_CATEGORIES = ['Interest', 'Commission', 'Rent income', 'Scrap sale', 'Other'];
+const FALLBACK_INCOME_CATEGORIES = ['Interest', 'Commission', 'Rent income', 'Scrap sale', 'Other'];
 
 type EntryKind = 'expense' | 'other_income';
 
@@ -68,6 +68,27 @@ export function ShopBooksExpenseScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [expenseCats, setExpenseCats] = useState<string[]>(FALLBACK_EXPENSE_CATEGORIES);
+  const [incomeCats, setIncomeCats] = useState<string[]>(FALLBACK_INCOME_CATEGORIES);
+
+  useEffect(() => {
+    if (!client || !businessId) return;
+    void (async () => {
+      try {
+        const [expenseRes, incomeRes] = await Promise.all([
+          client.shop.listMasterRecords('expense_category', { business_id: businessId }),
+          client.shop.listMasterRecords('income_category', { business_id: businessId }),
+        ]);
+        const expense = (expenseRes.data.items ?? []).map((row) => row.label).filter(Boolean);
+        const income = (incomeRes.data.items ?? []).map((row) => row.label).filter(Boolean);
+        if (expense.length) setExpenseCats(expense);
+        if (income.length) setIncomeCats(income);
+      } catch {
+        /* keep fallbacks */
+      }
+    })();
+  }, [client, businessId]);
+
   const [busy, setBusy] = useState(false);
   const [listKind, setListKind] = useState<EntryKind>('expense');
   const [search, setSearch] = useState('');
@@ -150,7 +171,7 @@ export function ShopBooksExpenseScreen() {
   const summary = useMemo(() => summarizeVouchers(visibleVouchers), [visibleVouchers]);
 
   const categoryOptions = useMemo(() => {
-    const source = entryKind === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+    const source = entryKind === 'expense' ? expenseCats : incomeCats;
     return source.map((value) => ({ value, label: value }));
   }, [entryKind]);
 

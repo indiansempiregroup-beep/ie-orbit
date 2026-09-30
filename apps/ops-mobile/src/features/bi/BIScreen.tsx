@@ -29,6 +29,7 @@ import {
 import { getSubscribedProductIds } from '../../utils/products';
 import { colors, fonts, iconTones, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
+import { formatMoney } from '../shop/posPayment';
 import { InsightPanel } from './InsightPanel';
 
 type Tab = 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports';
@@ -59,7 +60,7 @@ function changeLabel(value?: number | null) {
 
 function money(amount?: number | null, currency?: string | null) {
   if (amount == null) return '—';
-  return `${currency ?? ''} ${Number(amount).toFixed(2)}`.trim();
+  return formatMoney(Number(amount), currency);
 }
 
 function appointieFromOverview(data: ReturnType<typeof useBIOverview>['data']) {
