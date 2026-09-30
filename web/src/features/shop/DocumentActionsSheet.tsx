@@ -97,11 +97,13 @@ export function DocumentActionsSheet({
   }, [open, target?.id, target?.kind, target?.businessId, target?.phone, target?.email, client]);
 
   if (!target) return null;
+  // Narrow for nested handlers — TS does not keep the prop guard inside closures.
+  const doc = target;
 
   async function ensureShare(): Promise<{ url: string; text: string }> {
     if (publicUrl) return { url: publicUrl, text: message || publicUrl };
-    const share = await client.shop.createShopDocumentShareLink(target!.kind, target!.id, {
-      business_id: target!.businessId,
+    const share = await client.shop.createShopDocumentShareLink(doc.kind, doc.id, {
+      business_id: doc.businessId,
     });
     setPublicUrl(share.data.public_url);
     setMessage(share.data.message || '');
@@ -113,7 +115,7 @@ export function DocumentActionsSheet({
 
   async function onDownload(layout: 'a4' | 'thermal') {
     try {
-      await downloadShopDocumentPdf(target, auth.token, layout, workspace.tenantId);
+      await downloadShopDocumentPdf(doc, auth.token, layout, workspace.tenantId);
       snackbar.push('PDF downloaded', 'success');
     } catch (error) {
       snackbar.push(error instanceof Error ? error.message : 'Download failed', 'error');
@@ -155,7 +157,7 @@ export function DocumentActionsSheet({
       const share = await ensureShare();
       window.location.href = deviceMailtoUrl(
         email,
-        `${title || 'Document'} ${target.number || ''}`.trim(),
+        `${title || 'Document'} ${doc.number || ''}`.trim(),
         share.text,
       );
     } catch (error) {
@@ -166,8 +168,8 @@ export function DocumentActionsSheet({
   async function onServerSend(channels: Array<'email' | 'whatsapp'>, remind = false) {
     setSending(true);
     try {
-      const result = await client.shop.sendShopDocument(target.kind, target.id, {
-        business_id: target.businessId,
+      const result = await client.shop.sendShopDocument(doc.kind, doc.id, {
+        business_id: doc.businessId,
         channels,
         to_phone: phone || undefined,
         to_email: email || undefined,
@@ -191,7 +193,7 @@ export function DocumentActionsSheet({
     <Dialog
       open={open}
       onClose={onClose}
-      title={title || `Document ${target.number || ''}`.trim()}
+      title={title || `Document ${doc.number || ''}`.trim()}
       labelledBy="shop-document-actions"
       busy={sending}
       busyMessage="Sending…"
@@ -230,7 +232,7 @@ export function DocumentActionsSheet({
               icon={<Eye size={16} />}
               label="View"
               onClick={() =>
-                void openShopDocumentView(target, auth.token, 'a4', workspace.tenantId).catch((error) =>
+                void openShopDocumentView(doc, auth.token, 'a4', workspace.tenantId).catch((error) =>
                   snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
                 )
               }
@@ -296,7 +298,7 @@ export function DocumentActionsSheet({
               type="button"
               variant="ghost"
               onClick={() =>
-                void printShopDocument(target, auth.token, 'a4', workspace.tenantId).catch((error) =>
+                void printShopDocument(doc, auth.token, 'a4', workspace.tenantId).catch((error) =>
                   snackbar.push(error instanceof Error ? error.message : 'Print failed', 'error'),
                 )
               }

@@ -94,7 +94,7 @@ export function ShopMasterKindPage() {
         await queryClient.invalidateQueries({ queryKey: ['shop-product-categories', businessId] });
       }
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, 'Unable to save master file.'), 'error'),
   });
 
   const patchMutation = useMutation({
@@ -104,7 +104,7 @@ export function ShopMasterKindPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['shop-master', kind, businessId] });
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, 'Unable to update master file.'), 'error'),
   });
 
   const rows = useMemo(() => listQuery.data ?? [], [listQuery.data]);
