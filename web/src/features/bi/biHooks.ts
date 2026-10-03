@@ -9,42 +9,33 @@ import type {
 } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 
-function defaultRange() {
-  const endDate = new Date().toISOString().slice(0, 10);
-  const startDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 29).toISOString().slice(0, 10);
-  return { startDate, endDate };
+function rangeQuery(startDate?: string, endDate?: string) {
+  return startDate && endDate ? { start_date: startDate, end_date: endDate } : undefined;
 }
 
-export function useBIOverviewQuery(startDate?: string, endDate?: string) {
+export function useBIOverviewQuery(startDate?: string, endDate?: string, enabled = true) {
   const client = useApiClient();
-  const range = defaultRange();
-  const start = startDate ?? range.startDate;
-  const end = endDate ?? range.endDate;
   return useQuery({
-    queryKey: ['bi', 'overview', start, end],
-    queryFn: async () => (await client.bi.overview({ start_date: start, end_date: end })).data,
+    queryKey: ['bi', 'overview', startDate ?? 'default', endDate ?? 'default'],
+    enabled,
+    queryFn: async () =>
+      (await client.bi.overview(rangeQuery(startDate, endDate))).data,
   });
 }
 
 export function useBIRevenueQuery(startDate?: string, endDate?: string) {
   const client = useApiClient();
-  const range = defaultRange();
-  const start = startDate ?? range.startDate;
-  const end = endDate ?? range.endDate;
   return useQuery({
-    queryKey: ['bi', 'revenue', start, end],
-    queryFn: async () => (await client.bi.revenue({ start_date: start, end_date: end })).data as BIRevenueReport,
+    queryKey: ['bi', 'revenue', startDate ?? 'default', endDate ?? 'default'],
+    queryFn: async () => (await client.bi.revenue(rangeQuery(startDate, endDate))).data as BIRevenueReport,
   });
 }
 
 export function useBITrendsQuery(startDate?: string, endDate?: string) {
   const client = useApiClient();
-  const range = defaultRange();
-  const start = startDate ?? range.startDate;
-  const end = endDate ?? range.endDate;
   return useQuery({
-    queryKey: ['bi', 'trends', start, end],
-    queryFn: async () => (await client.bi.trends({ start_date: start, end_date: end })).data as BITrendsReport,
+    queryKey: ['bi', 'trends', startDate ?? 'default', endDate ?? 'default'],
+    queryFn: async () => (await client.bi.trends(rangeQuery(startDate, endDate))).data as BITrendsReport,
   });
 }
 
@@ -58,34 +49,25 @@ export function useBIForecastQuery(horizonDays = 30) {
 
 export function useBIGrowthQuery(startDate?: string, endDate?: string) {
   const client = useApiClient();
-  const range = defaultRange();
-  const start = startDate ?? range.startDate;
-  const end = endDate ?? range.endDate;
   return useQuery({
-    queryKey: ['bi', 'growth', start, end],
-    queryFn: async () => (await client.bi.growth({ start_date: start, end_date: end })).data as BIGrowthReport,
+    queryKey: ['bi', 'growth', startDate ?? 'default', endDate ?? 'default'],
+    queryFn: async () => (await client.bi.growth(rangeQuery(startDate, endDate))).data as BIGrowthReport,
   });
 }
 
 export function useBIOperationsQuery(startDate?: string, endDate?: string) {
   const client = useApiClient();
-  const range = defaultRange();
-  const start = startDate ?? range.startDate;
-  const end = endDate ?? range.endDate;
   return useQuery({
-    queryKey: ['bi', 'operations', start, end],
+    queryKey: ['bi', 'operations', startDate ?? 'default', endDate ?? 'default'],
     queryFn: async () =>
-      (await client.bi.operations({ start_date: start, end_date: end })).data as BIOperationsReport,
+      (await client.bi.operations(rangeQuery(startDate, endDate))).data as BIOperationsReport,
   });
 }
 
 export function useBIReportsQuery(startDate?: string, endDate?: string) {
   const client = useApiClient();
-  const range = defaultRange();
-  const start = startDate ?? range.startDate;
-  const end = endDate ?? range.endDate;
   return useQuery({
-    queryKey: ['bi', 'reports', start, end],
-    queryFn: async () => (await client.bi.reports({ start_date: start, end_date: end })).data as BIReportsBundle,
+    queryKey: ['bi', 'reports', startDate ?? 'default', endDate ?? 'default'],
+    queryFn: async () => (await client.bi.reports(rangeQuery(startDate, endDate))).data as BIReportsBundle,
   });
 }

@@ -176,14 +176,30 @@ export function applyEnrichmentToRow(
     sku: data.sku || data.code || (wipe ? '' : row.sku),
     name: data.name || (wipe ? '' : row.name),
     brand: data.brand || (wipe ? '' : row.brand),
-    pack_size: data.pack_size || data.serving_size || (wipe ? '' : row.pack_size),
+    pack_size: (() => {
+      const direct = String(data.pack_size || data.serving_size || '').trim();
+      if (direct && /[a-zA-Z]/.test(direct)) return direct;
+      const fromName = String(data.name || '').match(
+        /(\d+(?:[.,]\d+)?\s*(?:ml|mL|l|L|g|kg|gm|oz|pcs?|pack|caps?|tabs?))\b/i,
+      );
+      if (fromName?.[1]) return fromName[1].trim();
+      return direct || (wipe ? '' : row.pack_size);
+    })(),
     barcode: code,
     category,
     image_url:
       data.front_image_url || data.local_image_url || data.image_url || (wipe ? '' : row.image_url),
     hsn_sac: data.hsn_sac || (wipe ? defaults.hsn_sac : row.hsn_sac),
     gst_rate: data.gst_rate || (wipe ? defaults.gst_rate : row.gst_rate),
-    price: data.mrp && data.mrp !== '0' && data.mrp !== '0.00' ? String(data.mrp) : wipe ? '' : row.price,
+    price: (() => {
+      const raw = String(data.mrp ?? '')
+        .trim()
+        .replace(/,/g, '')
+        .replace(/₹/g, '');
+      const amount = Number(raw);
+      if (raw && Number.isFinite(amount) && amount > 0) return raw;
+      return wipe ? '' : row.price;
+    })(),
     error: '',
     lookingUp: false,
   };

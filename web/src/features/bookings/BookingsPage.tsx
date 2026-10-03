@@ -92,15 +92,19 @@ export function BookingsPage() {
   const filteredBookings = useMemo(() => {
     const bookings = bookingsQuery.data ?? [];
     const lower = searchTerm.trim().toLowerCase();
-    if (!lower) return bookings;
-    return bookings.filter((booking) => {
-      const customerName = customerMap.get(String(booking.customer_id)) ?? '';
-      const serviceName = bookingServiceLabel(booking, serviceMap);
-      const staffName = booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '' : '';
-      return [booking.booking_number, customerName, serviceName, staffName, booking.status]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(lower));
-    });
+    const filtered = !lower
+      ? [...bookings]
+      : bookings.filter((booking) => {
+          const customerName = customerMap.get(String(booking.customer_id)) ?? '';
+          const serviceName = bookingServiceLabel(booking, serviceMap);
+          const staffName = booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '' : '';
+          return [booking.booking_number, customerName, serviceName, staffName, booking.status]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(lower));
+        });
+    return filtered.sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+    );
   }, [bookingsQuery.data, searchTerm, customerMap, serviceMap, staffMap]);
 
   const todayCount = useMemo(() => {

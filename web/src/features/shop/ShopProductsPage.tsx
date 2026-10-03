@@ -106,6 +106,28 @@ function wipeIdentity(current: FormState, code: string): FormState {
   };
 }
 
+function usableEnrichmentAmount(raw?: string | null): string {
+  const value = String(raw ?? '')
+    .trim()
+    .replace(/,/g, '')
+    .replace(/₹/g, '');
+  if (!value) return '';
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  return value;
+}
+
+function packSizeFromEnrichment(data: ShopBarcodeEnrichment): string {
+  const direct = String(data.pack_size || data.serving_size || '').trim();
+  if (direct && /[a-zA-Z]/.test(direct)) return direct;
+  const quantity = String((data.metadata as { quantity?: string } | undefined)?.quantity || '').trim();
+  const fromText = `${quantity} ${data.name || ''}`.match(
+    /(\d+(?:[.,]\d+)?\s*(?:ml|mL|l|L|g|kg|gm|oz|pcs?|pack|caps?|tabs?))\b/i,
+  );
+  if (fromText?.[1]) return fromText[1].trim();
+  return direct;
+}
+
 function applyEnrichment(current: FormState, data: ShopBarcodeEnrichment): FormState {
   const gallery = ensureProductImageSlots(
     normalizeProductGallery([
@@ -117,20 +139,13 @@ function applyEnrichment(current: FormState, data: ShopBarcodeEnrichment): FormS
       ...current.images,
     ]),
   );
-  const mrp = String(data.mrp || '').trim();
-  const gst = String(data.gst_rate || '').trim();
-  const usableMrp = mrp && mrp !== '0' && mrp !== '0.00' ? mrp : '';
-  const usableGst = gst && gst !== '0' && gst !== '0.00' ? gst : '';
+  const usableMrp = usableEnrichmentAmount(data.mrp);
+  const usableGst = usableEnrichmentAmount(data.gst_rate);
   const categorySlug = (data.category || '').trim();
   const isOther = categorySlug === 'other';
-  const detailsHtml =
-    (data.details_html || '').trim() ||
-    (data.description
-      ? `<p>${String(data.description)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')}</p>`
-      : current.details_html);
+  // Do not copy description into product details — they are separate fields.
+  const detailsHtml = (data.details_html || '').trim() || current.details_html;
+  const packSize = packSizeFromEnrichment(data);
   return {
     ...current,
     sku: data.sku || data.code || current.sku,
@@ -138,7 +153,7 @@ function applyEnrichment(current: FormState, data: ShopBarcodeEnrichment): FormS
     brand: data.brand || '',
     description: data.description || '',
     details_html: detailsHtml,
-    pack_size: data.pack_size || data.serving_size || '',
+    pack_size: packSize || current.pack_size,
     images: gallery,
     barcode: data.code || current.barcode,
     barcode_type: data.code ? 'manufacturer' : current.barcode_type,

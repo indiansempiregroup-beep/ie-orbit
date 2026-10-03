@@ -81,6 +81,11 @@ export const REGISTER_WIZARD_STEPS = [
 
 export type RegisterWizardStepId = (typeof REGISTER_WIZARD_STEPS)[number]['id'];
 
+/** User-facing steps only — provision is a loading state, not a wizard page. */
+export const REGISTER_WIZARD_VISIBLE_STEPS = REGISTER_WIZARD_STEPS.filter(
+  (step) => step.id !== 'provision',
+);
+
 export const GETTING_STARTED_ITEMS = [
   { id: 'profile', label: 'Complete business profile', path: '/settings/business' },
   { id: 'hours', label: 'Set weekly business hours', path: '/settings/business' },

@@ -33,11 +33,43 @@ export function defaultWeeklyHours(): WeeklyHours {
   };
 }
 
+export function summarizeWeeklyHours(hours: WeeklyHours): string {
+  const groups: string[] = [];
+  let index = 0;
+  while (index < HOUR_DAYS.length) {
+    const day = HOUR_DAYS[index];
+    const current = hours[day.value];
+    if (!current?.open) {
+      index += 1;
+      continue;
+    }
+    let endIndex = index;
+    while (endIndex + 1 < HOUR_DAYS.length) {
+      const next = HOUR_DAYS[endIndex + 1];
+      const nextHours = hours[next.value];
+      if (!nextHours?.open || nextHours.start !== current.start || nextHours.end !== current.end) {
+        break;
+      }
+      endIndex += 1;
+    }
+    const startLabel = HOUR_DAYS[index].label.slice(0, 3);
+    const endLabel = HOUR_DAYS[endIndex].label.slice(0, 3);
+    const range = index === endIndex ? startLabel : `${startLabel}–${endLabel}`;
+    groups.push(`${range} ${current.start}–${current.end}`);
+    index = endIndex + 1;
+  }
+  return groups.length ? groups.join(', ') : 'Closed every day';
+}
+
 export type RegisterWizardValues = {
   businessName: string;
-  displayName: string;
+  businessCategory: string;
+  businessCategoryOther: string;
+  industry: string;
+  industryOther: string;
   businessEmail: string;
   businessPhone: string;
+  website: string;
   city: string;
   country: string;
   state: string;
@@ -48,12 +80,18 @@ export type RegisterWizardValues = {
   longitude: number | null;
   firstName: string;
   lastName: string;
+  displayName: string;
   email: string;
   mobile: string;
   ownerOtpCode: string;
+  acceptTerms: boolean;
+  acceptPrivacy: boolean;
   timezone: string;
   currency: string;
   language: string;
+  weekStartDay: 'monday' | 'sunday';
+  dateFormat: string;
+  timeFormat: '12h' | '24h';
   selectedProducts: string[];
   planCodes: Record<string, string>;
   skipHours: boolean;
@@ -82,17 +120,38 @@ function normalizeAffiliateCode(value: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
+function normalizeWebsite(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 function serializeHours(values: RegisterWizardValues) {
   if (values.skipHours) {
-    return { week_start_day: 'monday' };
+    return { week_start_day: values.weekStartDay };
   }
   const openDay = HOUR_DAYS.map((day) => values.businessHours[day.value]).find((row) => row.open);
   return {
-    week_start_day: 'monday',
+    week_start_day: values.weekStartDay,
     start: openDay?.start ?? '09:00',
     end: openDay?.end ?? '18:00',
     days: values.businessHours,
   };
+}
+
+function resolveCategory(values: RegisterWizardValues) {
+  if (values.businessCategory === 'Other' && values.businessCategoryOther.trim()) {
+    return `Other: ${values.businessCategoryOther.trim()}`;
+  }
+  return values.businessCategory;
+}
+
+function resolveIndustry(values: RegisterWizardValues) {
+  if (values.industry === 'Other' && values.industryOther.trim()) {
+    return `Other: ${values.industryOther.trim()}`;
+  }
+  return values.industry;
 }
 
 export async function provisionWorkspace(values: RegisterWizardValues): Promise<WorkspaceProvisionResponse> {
@@ -116,14 +175,17 @@ export async function provisionWorkspace(values: RegisterWizardValues): Promise<
     business_name: values.businessName,
     display_name: values.displayName || values.businessName,
     business_code: slug,
+    business_type: resolveCategory(values),
+    industry_category: resolveIndustry(values),
     business_email: values.businessEmail,
     primary_contact: values.businessPhone,
+    website: normalizeWebsite(values.website),
     country: values.country,
     state: values.state,
     city: values.city,
     postal_code: values.postalCode,
     address_line1: values.address,
-    address_line2: values.addressLine2 || undefined,
+    address_line2: values.addressLine2.trim(),
     latitude: values.latitude,
     longitude: values.longitude,
     timezone: values.timezone,
@@ -144,6 +206,17 @@ export async function provisionWorkspace(values: RegisterWizardValues): Promise<
         timezone: values.timezone,
         currency: values.currency,
         language: values.language,
+        date_format: values.dateFormat,
+        time_format: values.timeFormat,
+      },
+      notification_preferences: {
+        email: true,
+        sms: false,
+      },
+      theme_overrides: {
+        primary_color: values.primaryColor,
+        secondary_color: values.secondaryColor,
+        theme_mode: 'light',
       },
     },
   };

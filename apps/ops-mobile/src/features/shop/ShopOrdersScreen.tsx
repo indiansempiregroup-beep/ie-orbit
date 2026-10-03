@@ -32,6 +32,7 @@ import {
   shopOrderBadgeStyle,
 } from './posPayment';
 import { deliveryMethodForOrder } from './deliveryTracking';
+import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 
 /** Online shopping only — counter Sale (POS) lives in Books as GST invoices. */
 const ONLINE_MODES = new Set(['pickup', 'delivery']);
@@ -87,6 +88,7 @@ export function ShopOrdersScreen() {
   const [sortBy, setSortBy] = useState('newest');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -337,7 +339,51 @@ export function ShopOrdersScreen() {
                         </Pressable>
                       ) : null}
                     </View>
-                    <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                    <View style={styles.rowActions}>
+                      {String(item.books_voucher_id || '').trim() && businessId ? (
+                        <>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Print invoice"
+                            hitSlop={8}
+                            onPress={(event) => {
+                              event.stopPropagation?.();
+                              setDocActions({
+                                kind: 'sale',
+                                id: String(item.books_voucher_id),
+                                number: String(item.books_voucher_number || item.order_number || ''),
+                                businessId,
+                                phone: deliveryPhone || customerPhone || undefined,
+                                email: customerRow?.email?.trim() || undefined,
+                              });
+                            }}
+                            style={styles.iconBtn}
+                          >
+                            <Feather name="printer" size={16} color={colors.primary} />
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Share invoice"
+                            hitSlop={8}
+                            onPress={(event) => {
+                              event.stopPropagation?.();
+                              setDocActions({
+                                kind: 'sale',
+                                id: String(item.books_voucher_id),
+                                number: String(item.books_voucher_number || item.order_number || ''),
+                                businessId,
+                                phone: deliveryPhone || customerPhone || undefined,
+                                email: customerRow?.email?.trim() || undefined,
+                              });
+                            }}
+                            style={styles.iconBtn}
+                          >
+                            <Feather name="share-2" size={16} color={colors.primary} />
+                          </Pressable>
+                        </>
+                      ) : null}
+                      <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                    </View>
                   </View>
                 </Pressable>
               );
@@ -345,6 +391,12 @@ export function ShopOrdersScreen() {
           </View>
         ) : null}
       </RefreshableScrollView>
+      <DocumentActionsSheet
+        visible={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Invoice ${docActions.number || ''}`.trim() : 'Sale invoice'}
+      />
     </DesktopPage>
   );
 }
@@ -408,6 +460,15 @@ const styles = StyleSheet.create({
   body: { ...typography.caption, color: colors.mutedForeground, marginTop: 4, lineHeight: 18 },
   address: { ...typography.caption, color: colors.foreground, marginTop: 2, lineHeight: 18 },
   action: { color: colors.primary, fontSize: 13, fontFamily: fonts.bodySemi, marginTop: 8 },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingTop: 2 },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.tint,
+  },
   pressed: { opacity: 0.92 },
   error: { color: colors.destructive },
 });

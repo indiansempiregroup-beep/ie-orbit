@@ -168,6 +168,9 @@ const PlatformHelpCmsPage = lazy(() =>
 const PlatformUsersPage = lazy(() =>
   import('./features/admin/PlatformUsersPage').then((m) => ({ default: m.PlatformUsersPage })),
 );
+const PlatformProductCatalogPage = lazy(() =>
+  import('./features/admin/PlatformProductCatalogPage').then((m) => ({ default: m.PlatformProductCatalogPage })),
+);
 const HelpCenterPage = lazy(() =>
   import('./features/help/HelpCenterPage').then((m) => ({ default: m.HelpCenterPage })),
 );
@@ -252,6 +255,7 @@ function App() {
                 <Route path="help" element={<PlatformHelpCmsPage />} />
                 <Route path="branding" element={<PlatformBrandingPage />} />
                 <Route path="auth-settings" element={<PlatformAuthSettingsPage />} />
+                <Route path="product-catalog" element={<PlatformProductCatalogPage />} />
                 <Route path="monitoring" element={<PlatformMonitoringPage />} />
                 <Route path="audit" element={<PlatformAuditPage />} />
                 <Route path="profile" element={<ProfilePage />} />

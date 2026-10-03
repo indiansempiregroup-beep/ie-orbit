@@ -314,8 +314,8 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
     ].filter((slice) => slice.value > 0);
   }, [shopie]);
   const highlights = useMemo(
-    () => [...(appointieBundle?.insights ?? []), ...(shopie?.insights ?? [])],
-    [appointieBundle?.insights, shopie?.insights],
+    () => [...(appointieBundle?.insights ?? []), ...(shopie?.insights ?? []), ...(pets?.insights ?? [])],
+    [appointieBundle?.insights, shopie?.insights, pets?.insights],
   );
 
   if (loading && !data) return <ScreenState loading />;
@@ -392,6 +392,28 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
         subtitle="Signals from the last 30 days — what to act on next."
         insights={highlights}
       />
+
+      {data?.forecast ? (
+        <ChartCard
+          title={`Next ${data.forecast.horizon_days ?? 30} days`}
+          subtitle={data.forecast.note || 'Projected from the recent booking pace.'}
+        >
+          <TileGrid gap={spacing.md}>
+            <StatTile
+              label="Projected bookings"
+              value={String(data.forecast.projected_bookings ?? 0)}
+              icon="calendar"
+              iconTone="blue"
+            />
+            <StatTile
+              label="Projected revenue"
+              value={money(data.forecast.projected_revenue, data.forecast.currency ?? currency)}
+              icon="trending-up"
+              iconTone="green"
+            />
+          </TileGrid>
+        </ChartCard>
+      ) : null}
 
       {appointieBundle ? (
         <>
@@ -610,7 +632,8 @@ function BIForecast({
       <View>
         <Text style={styles.heroTitle}>{`Next ${data?.horizon_days ?? 30} days`}</Text>
         <Text style={styles.heroHint}>
-          Based on the last {data?.based_on_days ?? 30} days ({data?.based_on_bookings ?? 0} bookings).
+          {data?.note ||
+            `Based on the last ${data?.based_on_days ?? 30} days (${data?.based_on_bookings ?? 0} bookings).`}
         </Text>
       </View>
       <TileGrid gap={spacing.md}>

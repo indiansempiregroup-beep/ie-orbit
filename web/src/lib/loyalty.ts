@@ -33,3 +33,33 @@ export function redeemDiscountAmount(points: number, prefs: LoyaltyPrefs): numbe
   if (points <= 0) return 0;
   return points / Math.max(1, prefs.points_per_currency_unit);
 }
+
+/** Single-line loyalty callout for bills. Empty when loyalty is off or nothing earned. */
+export function loyaltyBillHighlight(options: {
+  enabled: boolean;
+  pointsEarned?: number;
+  pointsToEarn?: number;
+  /** Omit or null when balance is unknown — earned line still shows. */
+  pointsBalance?: number | null;
+}): string {
+  if (!options.enabled) return '';
+  const earned = Math.max(0, Math.floor(Number(options.pointsEarned) || 0));
+  const pending = Math.max(0, Math.floor(Number(options.pointsToEarn) || 0));
+  if (earned <= 0 && pending <= 0) return '';
+  const hasBalance =
+    options.pointsBalance != null && Number.isFinite(Number(options.pointsBalance));
+  const balance = hasBalance ? Math.max(0, Math.floor(Number(options.pointsBalance) || 0)) : null;
+  const tag = 'Enjoy rewards on next visit!';
+  if (earned > 0) {
+    const head =
+      balance != null && balance > 0
+        ? `+${earned} points earned · ${balance} pts total`
+        : `+${earned} points earned`;
+    return `${head} · ${tag}`;
+  }
+  const head =
+    balance != null && balance > 0
+      ? `+${pending} points to earn · ${balance} pts total`
+      : `+${pending} points to earn`;
+  return `${head} · ${tag}`;
+}

@@ -43,6 +43,14 @@ class OrderService:
     catalog = CatalogService()
     zones = DeliveryZoneService()
 
+    @staticmethod
+    def _default_customer_address(customer: Customer):
+        """Default (or oldest) address from customer details — used for POS bills."""
+        return (
+            customer.addresses.filter(is_default=True).first()
+            or customer.addresses.order_by("created_at").first()
+        )
+
     def list_orders(
         self,
         *,
@@ -87,6 +95,56 @@ class OrderService:
             return min(gross, value).quantize(Decimal("0.01"))
         raise ValidationError({"discount": "discount_type must be percent or amount."})
 
+    @staticmethod
+    def _resolve_pos_payment_split(
+        *,
+        order_total: Decimal,
+        payment_method: str,
+        fulfillment_mode: str,
+        amount_paid: Decimal | str | int | float | None,
+        customer,
+    ) -> tuple[Decimal, Decimal, str]:
+        """Return (amount_paid, amount_due, payment_status) for POS / till checkout."""
+        total = Decimal(str(order_total or "0")).quantize(Decimal("0.01"))
+        payment = str(payment_method or "").strip().lower()
+        mode = str(fulfillment_mode or "").strip().lower()
+
+        # Online gateways collect later — ignore till amount_paid.
+        if payment in {"razorpay", "cashfree"}:
+            return Decimal("0.00"), total, "due"
+
+        if payment == "borrow":
+            default_paid = Decimal("0.00")
+        elif mode == FulfillmentMode.POS and payment in {"cash", "upi", "card"}:
+            default_paid = total
+        else:
+            default_paid = Decimal("0.00")
+
+        if amount_paid is None or amount_paid == "":
+            paid = default_paid
+        else:
+            paid = Decimal(str(amount_paid)).quantize(Decimal("0.01"))
+        if paid < 0:
+            raise ValidationError({"amount_paid": "Amount paid cannot be negative."})
+        if paid > total:
+            raise ValidationError({"amount_paid": "Amount paid cannot exceed the bill total."})
+
+        due = (total - paid).quantize(Decimal("0.01"))
+        if due > 0 and customer is None:
+            raise ValidationError(
+                {
+                    "customer_id": (
+                        "Select a customer when the bill is not fully paid "
+                        "(partial payment or credit)."
+                    )
+                }
+            )
+        if due <= 0:
+            return paid, Decimal("0.00"), "paid"
+        if paid > 0:
+            return paid, due, "partially_paid"
+        return paid, due, "due"
+
     @transaction.atomic
     def create_order(
         self,
@@ -110,11 +168,14 @@ class OrderService:
         bill_discount_type: str = "",
         bill_discount_value: Decimal | str | int | float = "0",
         payment_method: str = "",
+        amount_paid: Decimal | str | int | float | None = None,
         coupon_code: str = "",
         points_to_redeem: int = 0,
         metadata_extra: dict[str, Any] | None = None,
         delivery_address_line2: str = "",
         delivery_phone: str = "",
+        upi_utr: str = "",
+        payment_proof_url: str = "",
     ) -> ShopOrder:
         if not lines:
             raise ValidationError({"lines": "At least one line item is required."})
@@ -126,6 +187,26 @@ class OrderService:
         delivery_contact_phone = format_contact_phone(delivery_phone)
         if not delivery_contact_phone and customer is not None:
             delivery_contact_phone = resolve_customer_phone(customer)
+
+        # POS bills use the address on customer details (default), not online/map
+        # checkout addresses. Online delivery keeps the selected delivery address.
+        if mode == FulfillmentMode.POS and customer is not None:
+            default_addr = self._default_customer_address(customer)
+            if default_addr is not None:
+                delivery_address = str(default_addr.line1 or "").strip()
+                delivery_address_line2 = str(default_addr.line2 or "").strip()
+                delivery_city = str(default_addr.city or "").strip()
+                delivery_state = str(default_addr.state or "").strip()
+                delivery_postal_code = str(default_addr.postal_code or "").strip()
+                if delivery_city:
+                    metadata["delivery_city"] = delivery_city
+                if delivery_state:
+                    metadata["delivery_state"] = delivery_state
+                if delivery_postal_code:
+                    metadata["delivery_postal_code"] = delivery_postal_code
+                if delivery_address_line2:
+                    metadata["delivery_address_line2"] = delivery_address_line2
+
         if mode == FulfillmentMode.DELIVERY:
             from apps.shopie.services.delivery import DeliveryService
 
@@ -580,12 +661,50 @@ class OrderService:
         order.discount_total = (line_discount_total + bill_discount).quantize(Decimal("0.01"))
         order.tax_total = tax_total
         order.total = (subtotal + tax_total + delivery_fee).quantize(Decimal("0.01"))
+        award_loyalty_points = metadata.pop("award_loyalty_points", True)
+        if not isinstance(award_loyalty_points, bool):
+            award_loyalty_points = bool(award_loyalty_points)
+        points_to_earn = 0
+        if award_loyalty_points and customer is not None:
+            try:
+                from apps.customers.services.loyalty import LoyaltyService
+
+                points_to_earn = int(
+                    LoyaltyService().earn_points_for_spend(
+                        business=business,
+                        amount=order.total,
+                    )
+                    or 0
+                )
+            except Exception:
+                points_to_earn = 0
+        # When a coupon is applied it is the bill-level reduction. Keep it out of
+        # pos.bill_discount_* so invoices do not show bill + coupon for the same ₹.
+        loyalty_discount_part = (
+            Decimal(str(loyalty_snapshot["discount_amount"]))
+            if loyalty_snapshot is not None
+            else Decimal("0.00")
+        )
+        coupon_applied = (
+            (bill_discount - loyalty_discount_part).quantize(Decimal("0.01"))
+            if quoted_coupon is not None
+            else Decimal("0.00")
+        )
+        if coupon_applied < 0:
+            coupon_applied = Decimal("0.00")
+        manual_bill_discount = (
+            Decimal("0.00")
+            if quoted_coupon is not None
+            else max(Decimal("0.00"), (bill_discount - loyalty_discount_part).quantize(Decimal("0.01")))
+        )
         pos_meta = {
             **metadata.get("pos", {}),
             "line_discount_total": str(line_discount_total),
-            "bill_discount_type": bill_dtype,
-            "bill_discount_value": str(bill_dvalue),
-            "bill_discount_amount": str(bill_discount),
+            "bill_discount_type": "" if quoted_coupon is not None else bill_dtype,
+            "bill_discount_value": "0" if quoted_coupon is not None else str(bill_dvalue),
+            "bill_discount_amount": str(manual_bill_discount),
+            "award_loyalty_points": award_loyalty_points,
+            "points_to_earn": points_to_earn,
         }
         if quoted_coupon is not None:
             coupon = quoted_coupon["coupon"]
@@ -595,7 +714,7 @@ class OrderService:
                 "name": coupon.name,
                 "discount_type": coupon.discount_type,
                 "discount_value": str(coupon.discount_value),
-                "discount_amount": str(quoted_coupon["discount_amount"]),
+                "discount_amount": str(coupon_applied or quoted_coupon["discount_amount"]),
             }
         if loyalty_snapshot is not None:
             metadata["loyalty"] = loyalty_snapshot
@@ -622,15 +741,50 @@ class OrderService:
         }
         if supply["customer_gstin"]:
             metadata["customer_gstin"] = supply["customer_gstin"]
-        if payment == "borrow":
+        paid_now = Decimal("0.00")
+        due_now = Decimal("0.00")
+        if payment in {"borrow", "cash", "upi", "card", "razorpay", "cashfree"}:
+            paid_now, due_now, pay_status = self._resolve_pos_payment_split(
+                order_total=order.total,
+                payment_method=payment,
+                fulfillment_mode=mode,
+                amount_paid=amount_paid,
+                customer=customer,
+            )
+            pos_meta["amount_paid"] = str(paid_now)
+            pos_meta["amount_due"] = str(due_now)
+            pos_meta["payment_status"] = pay_status
+
+        # Online UPI: require a payment screenshot or UTR/reference before accepting the order.
+        if payment == "upi" and mode in {FulfillmentMode.PICKUP, FulfillmentMode.DELIVERY}:
+            proof = str(payment_proof_url or "").strip()
+            utr = str(upi_utr or "").strip()
+            if not proof and not utr:
+                raise ValidationError(
+                    {
+                        "payment_proof_url": (
+                            "Upload a payment screenshot or enter a UPI / UTR reference."
+                        )
+                    }
+                )
+            pos_meta["payment_method"] = "upi"
+            pos_meta["payment_status"] = "awaiting_confirmation"
+            if proof:
+                from apps.billing.services.upi_proof import resolve_payment_proof_url
+
+                stored_proof, media_id = resolve_payment_proof_url(payment_proof_url=proof)
+                pos_meta["payment_proof_url"] = stored_proof or proof
+                if media_id:
+                    pos_meta["payment_proof_media_id"] = media_id
+            if utr:
+                pos_meta["upi_utr"] = utr
+            pos_meta["claimed_at"] = timezone.now().isoformat()
+            # Keep full amount due until the shop confirms; do not open borrow yet.
+            paid_now = Decimal("0.00")
+            due_now = Decimal(str(order.total or "0")).quantize(Decimal("0.01"))
             pos_meta["amount_paid"] = "0.00"
-            pos_meta["amount_due"] = str(order.total)
-            pos_meta["payment_status"] = "due"
-        elif mode == FulfillmentMode.POS and payment in {"cash", "upi", "card"}:
-            # Counter checkout is collected at the till — mark paid for books posting.
-            pos_meta["amount_paid"] = str(order.total)
-            pos_meta["amount_due"] = "0.00"
-            pos_meta["payment_status"] = "paid"
+            pos_meta["amount_due"] = str(due_now)
+
         order.metadata = {
             **metadata,
             "pos": pos_meta,
@@ -658,7 +812,12 @@ class OrderService:
                 customer=customer,
             )
 
-        if payment == "borrow" and customer is not None:
+        if (
+            due_now > 0
+            and customer is not None
+            and payment in {"borrow", "cash", "upi", "card"}
+            and str(pos_meta.get("payment_status") or "").strip().lower() != "awaiting_confirmation"
+        ):
             from apps.customers.services.borrow import BorrowService
 
             BorrowService().charge_from_order(
@@ -667,7 +826,7 @@ class OrderService:
                 customer=customer,
                 order_id=order.id,
                 order_number=order.order_number,
-                amount=order.total,
+                amount=due_now,
                 currency=order.currency or getattr(business, "currency", "") or "INR",
             )
 
@@ -684,6 +843,18 @@ class OrderService:
                 self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
                 self._maybe_award_referral_on_paid(order=refreshed)
                 self._maybe_award_loyalty_on_paid(order=refreshed)
+                # Fully collected till sales are done at the counter — not "preparing pickup".
+                pos_meta = (refreshed.metadata or {}).get("pos") or {}
+                pay_status = str(pos_meta.get("payment_status") or "").strip().lower()
+                due = Decimal(str(pos_meta.get("amount_due") or "0"))
+                if pay_status in {"paid", "settled"} or due <= 0:
+                    refreshed = self.transition(
+                        tenant=tenant,
+                        business=business,
+                        order=refreshed,
+                        status=OrderStatus.COMPLETED,
+                        notify=False,
+                    )
                 return refreshed
         order = self.get_order(tenant=tenant, business=business, order_id=order.id)
         self._maybe_award_referral_on_paid(order=order)
@@ -787,6 +958,7 @@ class OrderService:
                 )
         refreshed = self.get_order(tenant=tenant, business=business, order_id=order.id)
         if status == OrderStatus.COMPLETED:
+            refreshed = self._sync_shipment_delivered(order=refreshed)
             refreshed = self._maybe_auto_mark_cash_paid(
                 tenant=tenant,
                 business=business,
@@ -797,6 +969,27 @@ class OrderService:
         if notify:
             self._notify_online(refreshed, status)
         return refreshed
+
+    def _sync_shipment_delivered(self, *, order: ShopOrder) -> ShopOrder:
+        """Keep courier shipment metadata in sync when ops marks the order delivered."""
+        if order.fulfillment_mode != FulfillmentMode.DELIVERY:
+            return order
+        from apps.shopie.models import ShipmentStatus
+        from apps.shopie.services.shipment import ShipmentService
+
+        shipment_svc = ShipmentService()
+        shipment = shipment_svc.get_shipment(order=order)
+        if shipment is None or shipment.status == ShipmentStatus.DELIVERED:
+            return order
+        try:
+            shipment_svc.update_milestone(
+                order=order,
+                status=ShipmentStatus.DELIVERED,
+                notify_customer=False,
+            )
+        except ValidationError:
+            return order
+        return self.get_order(tenant=order.tenant, business=order.business, order_id=order.id)
 
     @transaction.atomic
     def _maybe_auto_mark_cash_paid(
@@ -956,8 +1149,15 @@ class OrderService:
             )
         pos["payment_method"] = "upi"
         pos["payment_status"] = "awaiting_confirmation"
-        pos["upi_utr"] = utr
-        pos["payment_proof_url"] = proof
+        if utr:
+            pos["upi_utr"] = utr
+        if proof:
+            from apps.billing.services.upi_proof import resolve_payment_proof_url
+
+            stored_proof, media_id = resolve_payment_proof_url(payment_proof_url=proof)
+            pos["payment_proof_url"] = stored_proof or proof
+            if media_id:
+                pos["payment_proof_media_id"] = media_id
         pos["claimed_at"] = timezone.now().isoformat()
         metadata["pos"] = pos
         locked.metadata = metadata
@@ -1105,20 +1305,82 @@ class OrderService:
         if order.customer_id is None:
             return
         pos = (order.metadata or {}).get("pos") if isinstance(order.metadata, dict) else {}
+        if isinstance(pos, dict) and pos.get("award_loyalty_points") is False:
+            return
         status_value = str((pos or {}).get("payment_status") or "").strip().lower()
         if status_value not in {"paid", "settled"}:
             return
         try:
             from apps.customers.services.loyalty import LoyaltyService
 
-            LoyaltyService().award_for_paid_order(
-                tenant=order.tenant,
-                business=order.business,
-                customer=order.customer,
-                order_id=order.id,
-                amount=order.total,
-                order_number=order.order_number,
+            points = int(
+                LoyaltyService().award_for_paid_order(
+                    tenant=order.tenant,
+                    business=order.business,
+                    customer=order.customer,
+                    order_id=order.id,
+                    amount=order.total,
+                    order_number=order.order_number,
+                )
+                or 0
             )
+        except Exception:
+            return
+        if points <= 0:
+            # Already awarded earlier — keep any stored earn figure / expected earn.
+            meta = dict(order.metadata or {})
+            loyalty = dict(meta.get("loyalty") or {}) if isinstance(meta.get("loyalty"), dict) else {}
+            if int(loyalty.get("points_earned") or 0) > 0:
+                return
+            expected = int((pos or {}).get("points_to_earn") or 0)
+            if expected <= 0:
+                return
+            points = expected
+        meta = dict(order.metadata or {})
+        loyalty = dict(meta.get("loyalty") or {}) if isinstance(meta.get("loyalty"), dict) else {}
+        loyalty["points_earned"] = int(points)
+        meta["loyalty"] = loyalty
+        order.metadata = meta
+        order.save(update_fields=["metadata", "updated_at", "version"])
+        # Keep Books invoice summary in sync when the voucher was posted first.
+        voucher_id = meta.get("books_voucher_id") or getattr(order, "books_voucher_id", None)
+        if not voucher_id and isinstance(meta.get("books"), dict):
+            voucher_id = meta["books"].get("voucher_id")
+        try:
+            from apps.shopie.models import ShopBooksVoucher
+
+            voucher = None
+            if voucher_id:
+                voucher = ShopBooksVoucher.objects.filter(
+                    tenant=order.tenant, business=order.business, id=voucher_id
+                ).first()
+            if voucher is None and getattr(order, "id", None):
+                voucher = (
+                    ShopBooksVoucher.objects.filter(
+                        tenant=order.tenant,
+                        business=order.business,
+                        linked_order_id=order.id,
+                    )
+                    .order_by("-created_at")
+                    .first()
+                )
+            if voucher is None:
+                return
+            v_meta = dict(voucher.metadata or {})
+            v_loyalty = dict(v_meta.get("loyalty") or {}) if isinstance(v_meta.get("loyalty"), dict) else {}
+            v_loyalty["points_earned"] = int(points)
+            if loyalty.get("points_redeemed") and not v_loyalty.get("points_redeemed"):
+                v_loyalty["points_redeemed"] = loyalty.get("points_redeemed")
+                v_loyalty["discount_amount"] = loyalty.get("discount_amount")
+            v_meta["loyalty"] = v_loyalty
+            billing = dict(v_meta.get("billing") or {}) if isinstance(v_meta.get("billing"), dict) else {}
+            billing["points_earned"] = int(points)
+            billing["reward_points"] = int(
+                billing.get("reward_points") or loyalty.get("points_redeemed") or 0
+            )
+            v_meta["billing"] = billing
+            voucher.metadata = v_meta
+            voucher.save(update_fields=["metadata", "updated_at", "version"])
         except Exception:
             return
 
@@ -1139,6 +1401,16 @@ class OrderService:
                 order_id=order.id,
                 points_redeemed=points_redeemed,
             )
+            meta = dict(order.metadata or {})
+            loyalty = dict(meta.get("loyalty") or {}) if isinstance(meta.get("loyalty"), dict) else {}
+            earned = int(loyalty.get("points_earned") or 0)
+            if earned > 0:
+                loyalty["points_revoked"] = int(loyalty.get("points_revoked") or 0) + earned
+                loyalty["points_earned"] = 0
+            loyalty["refunded"] = True
+            meta["loyalty"] = loyalty
+            order.metadata = meta
+            order.save(update_fields=["metadata", "updated_at", "version"])
         except Exception:
             return
 

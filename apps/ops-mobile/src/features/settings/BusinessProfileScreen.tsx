@@ -27,7 +27,17 @@ export function BusinessProfileScreen() {
     [activeBusiness?.city, activeBusiness?.state, activeBusiness?.country].filter(Boolean).join(', ') || '—';
 
   return (
-    <FormScreen>
+    <FormScreen
+      footer={
+        <Button
+          label="Edit business profile"
+          icon="edit-3"
+          fullWidth
+          size="lg"
+          onPress={() => navigation.navigate('BusinessEdit')}
+        />
+      }
+    >
       <Card elevated>
         <View style={styles.hero}>
           <Avatar name={name} size="xl" src={activeBusiness?.logo} />
@@ -60,7 +70,6 @@ export function BusinessProfileScreen() {
         <DetailRow label="Billing provider" value={billing?.provider ?? '—'} />
         <DetailRow label="Billing configured" value={billing?.configured ? 'Yes' : 'No'} />
       </Card>
-      <Button label="Edit business profile" fullWidth size="lg" onPress={() => navigation.navigate('BusinessEdit')} />
     </FormScreen>
   );
 }

@@ -289,6 +289,12 @@ class ReturnService:
             borrow_applied=borrow_applied,
             books_credit_note=books_cn,
         )
+        self._clawback_loyalty_for_return(
+            tenant=tenant,
+            business=business,
+            order=order,
+            shop_return=shop_return,
+        )
         self._notify_online_return(shop_return, completed=True)
         return shop_return
 
@@ -651,6 +657,101 @@ class ReturnService:
         order.metadata = metadata
         order.save(update_fields=["metadata", "updated_at", "version"])
         return apply
+
+    def _clawback_loyalty_for_return(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+        shop_return: ShopReturn,
+    ) -> None:
+        """Revoke earned loyalty points for returned merchandise (POS / online)."""
+        if order.customer_id is None:
+            return
+        try:
+            from apps.customers.models import Customer
+            from apps.customers.services.loyalty import LoyaltyService
+            from apps.shopie.models import ShopBooksVoucher
+
+            customer = (
+                Customer.objects.filter(
+                    id=order.customer_id, tenant=tenant, business=business
+                ).first()
+            )
+            if customer is None:
+                return
+
+            returned = self.returned_qty_by_line(order)
+            lines = list(ShopOrderLine.objects.filter(order=order))
+            fully_returned = bool(lines) and all(
+                returned.get(str(line.id), Decimal("0")) >= Decimal(str(line.quantity or "0"))
+                for line in lines
+            )
+
+            loyalty = LoyaltyService()
+            revoked = loyalty.clawback_earn_for_spend(
+                tenant=tenant,
+                business=business,
+                customer=customer,
+                amount=shop_return.refund_total,
+                order_id=order.id,
+                reason=f"Reversed earn for return {shop_return.return_number}",
+                reverse_all_remaining=fully_returned,
+            )
+            if revoked <= 0:
+                return
+
+            metadata = dict(order.metadata or {})
+            loyalty_meta = (
+                dict(metadata.get("loyalty") or {})
+                if isinstance(metadata.get("loyalty"), dict)
+                else {}
+            )
+            earned = int(loyalty_meta.get("points_earned") or 0)
+            prior_revoked = int(loyalty_meta.get("points_revoked") or 0)
+            loyalty_meta["points_revoked"] = prior_revoked + int(revoked)
+            if earned > 0:
+                loyalty_meta["points_earned"] = max(0, earned - int(revoked))
+            metadata["loyalty"] = loyalty_meta
+            order.metadata = metadata
+            order.save(update_fields=["metadata", "updated_at", "version"])
+
+            voucher = (
+                ShopBooksVoucher.objects.filter(
+                    tenant=tenant,
+                    business=business,
+                    linked_order_id=order.id,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if voucher is None:
+                return
+            v_meta = dict(voucher.metadata or {})
+            v_loyalty = (
+                dict(v_meta.get("loyalty") or {}) if isinstance(v_meta.get("loyalty"), dict) else {}
+            )
+            v_earned = int(v_loyalty.get("points_earned") or earned or 0)
+            v_loyalty["points_earned"] = max(0, v_earned - int(revoked))
+            v_loyalty["points_revoked"] = int(v_loyalty.get("points_revoked") or 0) + int(revoked)
+            v_meta["loyalty"] = v_loyalty
+            billing = (
+                dict(v_meta.get("billing") or {}) if isinstance(v_meta.get("billing"), dict) else {}
+            )
+            if "points_earned" in billing or v_earned > 0:
+                billing["points_earned"] = max(
+                    0, int(billing.get("points_earned") or v_earned) - int(revoked)
+                )
+                v_meta["billing"] = billing
+            voucher.metadata = v_meta
+            voucher.save(update_fields=["metadata", "updated_at", "version"])
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Failed to claw back loyalty for return %s", shop_return.return_number
+            )
 
     @staticmethod
     def _record_return_on_order(

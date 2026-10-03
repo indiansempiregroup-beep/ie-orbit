@@ -515,7 +515,9 @@ class ShopOrderSerializer(serializers.ModelSerializer):
         return str(self._pos(obj).get("upi_utr") or "")
 
     def get_payment_proof_url(self, obj: ShopOrder) -> str:
-        return str(self._pos(obj).get("payment_proof_url") or "")
+        from apps.billing.services.upi_proof import proof_url_from_meta
+
+        return proof_url_from_meta(self._pos(obj))
 
     def get_razorpay_order_id(self, obj: ShopOrder) -> str:
         return str(self._pos(obj).get("razorpay_order_id") or "")
@@ -755,8 +757,15 @@ class ShopOrderCreateSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
     )
+    amount_paid = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
+    )
     coupon_code = serializers.CharField(required=False, allow_blank=True, max_length=40)
     points_to_redeem = serializers.IntegerField(required=False, min_value=0, default=0)
+    award_loyalty_points = serializers.BooleanField(required=False, default=True)
     whatsapp_opt_in = serializers.BooleanField(required=False)
     lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 

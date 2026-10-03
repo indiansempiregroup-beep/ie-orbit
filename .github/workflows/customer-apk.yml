@@ -173,6 +173,22 @@ jobs:
           print(build_id, status, url)
           PY
 
+      - name: Report Expo build id
+        if: ${{ steps.eas.outputs.build_id != '' }}
+        env:
+          CUSTOMER_APK_MACHINE_TOKEN: ${{ secrets.CUSTOMER_APK_MACHINE_TOKEN }}
+          BUSINESS_ID: ${{ inputs.business_id }}
+          TRACK: ${{ inputs.track }}
+          BUILD_ID: ${{ steps.eas.outputs.build_id }}
+          URL: ${{ steps.eas.outputs.url }}
+        run: |
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer ${CUSTOMER_APK_MACHINE_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${CUSTOMER_APK_API_BASE}/platform/white-label/${BUSINESS_ID}/customer-app/machine" \
+            -d "{\"track\":\"${TRACK}\",\"status\":\"in_progress\",\"build_id\":\"${BUILD_ID}\",\"url\":\"${URL}\"}" || true
+        working-directory: .
+
       - name: Wait for EAS build
         id: wait
         env:

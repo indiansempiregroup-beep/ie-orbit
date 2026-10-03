@@ -62,6 +62,14 @@ from apps.platform_admin.affiliate_api import (
     PlatformAffiliateReferralsView,
     PlatformAffiliatesView,
 )
+from apps.shopie.api.platform_catalog_views import (
+    PlatformProductCatalogBarcodeView,
+    PlatformProductCatalogDetailView,
+    PlatformProductCatalogImportView,
+    PlatformProductCatalogImportsView,
+    PlatformProductCatalogListView,
+    PlatformProductCatalogQualityView,
+)
 
 urlpatterns = [
     path("platform/tenants/create", PlatformCreateTenantView.as_view(), name="platform-tenant-create"),
@@ -264,6 +272,36 @@ urlpatterns = [
         "platform/smart-lookup-history",
         PlatformSmartLookupHistoryView.as_view(),
         name="platform-smart-lookup-history",
+    ),
+    path(
+        "platform/product-catalog",
+        PlatformProductCatalogListView.as_view(),
+        name="platform-product-catalog-list",
+    ),
+    path(
+        "platform/product-catalog/quality",
+        PlatformProductCatalogQualityView.as_view(),
+        name="platform-product-catalog-quality",
+    ),
+    path(
+        "platform/product-catalog/import",
+        PlatformProductCatalogImportView.as_view(),
+        name="platform-product-catalog-import",
+    ),
+    path(
+        "platform/product-catalog/imports",
+        PlatformProductCatalogImportsView.as_view(),
+        name="platform-product-catalog-imports",
+    ),
+    path(
+        "platform/product-catalog/barcode/<str:barcode>",
+        PlatformProductCatalogBarcodeView.as_view(),
+        name="platform-product-catalog-barcode",
+    ),
+    path(
+        "platform/product-catalog/<uuid:product_id>",
+        PlatformProductCatalogDetailView.as_view(),
+        name="platform-product-catalog-detail",
     ),
     path(
         "platform/auth-settings",

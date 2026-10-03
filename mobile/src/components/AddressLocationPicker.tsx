@@ -88,8 +88,6 @@ export function AddressLocationPicker({
         longitude={longitude}
       />
       <AddressMapPicker
-        value={value}
-        onChangeText={onChangeText}
         latitude={latitude}
         longitude={longitude}
         onLocationChange={(lat, lng) => void reverse(lat, lng)}

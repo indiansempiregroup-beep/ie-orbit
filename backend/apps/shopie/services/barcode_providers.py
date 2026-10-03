@@ -4,8 +4,10 @@ Configured via env (disabled when no key):
   BARCODE_API_PROVIDER = barcodelookup | upcitemdb | go_upc
   BARCODE_API_KEY      = provider API key / user key / bearer token
 
-Free fallback (no key): public Go-UPC product page scrape for retail GTINs
-that Open*Facts and trial UPC APIs often miss (common for Indian EANs).
+Free providers (no key):
+  - Datakick / gtinsearch.org open product API (GTIN-14 lookup)
+  - public Go-UPC product page scrape for retail GTINs that Open*Facts
+    and trial UPC APIs often miss (common for Indian EANs)
 """
 
 from __future__ import annotations
@@ -105,6 +107,95 @@ def lookup_commercial_barcode(code: str) -> dict[str, Any] | None:
             "metadata": {"enrichment_source": f"commercial_{provider}", "provider": provider},
         }
     return None
+
+
+def lookup_datakick_barcode(code: str) -> dict[str, Any] | None:
+    """Free Datakick (gtinsearch.org) lookup. No API key required.
+
+    Datakick stores GTIN-14 (zero-padded). Returns enrich-style dict or None.
+    """
+    tried: set[str] = set()
+    for digits in gtin_variants(code):
+        candidates = [digits]
+        if len(digits) < 14:
+            candidates.append(digits.zfill(14))
+        for candidate in candidates:
+            if candidate in tried or len(candidate) not in {8, 12, 13, 14}:
+                continue
+            tried.add(candidate)
+            try:
+                raw = _fetch_datakick(candidate)
+            except Exception as exc:  # noqa: BLE001 — never break enrich on provider failure
+                logger.info("Datakick lookup failed for %s: %s", candidate, exc)
+                continue
+            if not raw or not str(raw.get("name") or "").strip():
+                continue
+            gtin14 = str(raw.get("gtin14") or candidate)
+            # Prefer a non-padded retail form for the shop form when possible.
+            display_code = digits if len(digits) in {8, 12, 13} else gtin14.lstrip("0") or gtin14
+            if len(display_code) < 8:
+                display_code = gtin14
+            pack = str(raw.get("size") or raw.get("pack_size") or "")[:80]
+            ingredients = str(raw.get("ingredients") or "")[:5000]
+            serving = str(raw.get("serving_size") or "")[:80]
+            # Keep attributes in details; pack size has its own field — don't duplicate.
+            details = ""
+            if serving and serving.lower() != pack.lower():
+                details = f"Serving size: {serving}"
+            return {
+                "found": True,
+                "code": display_code,
+                "source": "datakick",
+                "sku": display_code,
+                "name": str(raw.get("name") or "")[:200],
+                "brand": str(raw.get("brand_name") or raw.get("brand") or "")[:120],
+                "pack_size": pack,
+                "serving_size": serving,
+                "description": ingredients,
+                "details_html": details[:2000],
+                "categories": str(raw.get("categories") or "")[:500],
+                "category": "",
+                "category_label": "",
+                "hsn_sac": "",
+                "gst_rate": None,
+                "mrp": "0",
+                "currency": "",
+                "image_url": "",
+                "front_image_url": "",
+                "back_image_url": "",
+                "images": {"front": "", "back": "", "gallery": []},
+                "confidence": "medium",
+                "needs_pack_photo": True,
+                "message": (
+                    "Filled from Datakick (open product database). "
+                    "Review details — add a pack photo if available — then save."
+                ),
+                "metadata": {
+                    "enrichment_source": "datakick",
+                    "source_product_id": str(raw.get("id") or ""),
+                    "gtin14": gtin14,
+                },
+            }
+    return None
+
+
+def _fetch_datakick(code: str) -> dict[str, Any] | None:
+    """GET https://www.gtinsearch.org/api/items/{gtin} — returns list or object."""
+    url = f"https://www.gtinsearch.org/api/items/{urllib.parse.quote(code)}"
+    payload = _http_json(url)
+    item: dict[str, Any] | None = None
+    if isinstance(payload, list):
+        for row in payload:
+            if isinstance(row, dict) and str(row.get("name") or "").strip():
+                item = row
+                break
+    elif isinstance(payload, dict):
+        # Some hosts return {message, exception} on miss.
+        if payload.get("exception") or payload.get("error"):
+            return None
+        if str(payload.get("name") or "").strip():
+            item = payload
+    return item
 
 
 def lookup_public_barcode(code: str) -> dict[str, Any] | None:

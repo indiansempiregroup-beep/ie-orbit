@@ -19,7 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { mobileClient } from '../../api/client';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
-import { Chip } from '../../components/ui/Chip';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
@@ -32,7 +31,6 @@ import {
   formatShopQty,
   shopOrderNeedsAppPayment,
   shopOrderNeedsGatewayPayment,
-  shopOrderIsCashOnHandover,
   shopFulfillmentLabel,
   shopOrderDeliverySummary,
   shopOrderHeadline,
@@ -47,7 +45,28 @@ import { DeliveryProgressStepper } from './DeliveryProgressStepper';
 import type { ShopOrder, ShopOrderLine } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
-type FilterMenu = 'period' | 'fulfillment' | null;
+type FilterSection = 'status' | 'period' | 'fulfillment' | 'payment';
+
+type OrderFilterDraft = {
+  status: ShopOrderStatusFilter;
+  period: ShopOrderPeriodFilter;
+  fulfillment: ShopOrderFulfillmentFilter;
+  payment: ShopOrderPaymentFilter;
+};
+
+const PAYMENT_FILTERS: Array<{ id: ShopOrderPaymentFilter; label: string }> = [
+  { id: 'all', label: 'Any payment' },
+  { id: 'unpaid', label: 'Needs payment' },
+];
+
+function countActiveOrderFilters(filters: OrderFilterDraft): number {
+  let count = 0;
+  if (filters.status !== 'all') count += 1;
+  if (filters.period !== 'all') count += 1;
+  if (filters.fulfillment !== 'all') count += 1;
+  if (filters.payment !== 'all') count += 1;
+  return count;
+}
 
 function ProductThumb({ uri }: { uri?: string | null }) {
   const resolved = resolveMediaUrl(uri);
@@ -75,14 +94,24 @@ export function ShopOrderHistoryScreen() {
   const [period, setPeriod] = useState<ShopOrderPeriodFilter>('all');
   const [fulfillment, setFulfillment] = useState<ShopOrderFulfillmentFilter>('all');
   const [payment, setPayment] = useState<ShopOrderPaymentFilter>('all');
-  const [menuOpen, setMenuOpen] = useState<FilterMenu>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<FilterSection>('status');
+  const [valueQuery, setValueQuery] = useState('');
+  const [draft, setDraft] = useState<OrderFilterDraft>({
+    status: 'all',
+    period: 'all',
+    fulfillment: 'all',
+    payment: 'all',
+  });
   const hasLoadedRef = useRef(false);
   const primary = branding?.primaryColor ?? colors.primary;
 
   const load = useCallback(
-    async (mode: 'initial' | 'refresh' = 'initial') => {
+    async (mode: 'initial' | 'refresh' | 'silent' = 'initial') => {
+      // Only drive the native RefreshControl from an explicit pull. Setting
+      // `refreshing` on focus often leaves the top spinner stuck on iOS.
       if (mode === 'refresh') setRefreshing(true);
-      else if (!hasLoadedRef.current) setLoading(true);
+      else if (mode === 'initial' && !hasLoadedRef.current) setLoading(true);
       try {
         const res = await mobileClient.mobile.listShopOrders({
           tenant_slug: tenantSlug,
@@ -100,26 +129,101 @@ export function ShopOrderHistoryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void load(hasLoadedRef.current ? 'refresh' : 'initial');
+      void load(hasLoadedRef.current ? 'silent' : 'initial');
     }, [load]),
   );
 
+  const appliedFilters: OrderFilterDraft = useMemo(
+    () => ({ status, period, fulfillment, payment }),
+    [fulfillment, payment, period, status],
+  );
+  const activeFilterCount = countActiveOrderFilters(appliedFilters);
+
   const visibleOrders = useMemo(
     () =>
-      orders.filter((order) =>
-        shopOrderMatchesFilters(order, { query: search, status, period, fulfillment, payment }),
-      ),
+      orders
+        .filter((order) =>
+          shopOrderMatchesFilters(order, { query: search, status, period, fulfillment, payment }),
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+        ),
     [fulfillment, orders, payment, period, search, status],
   );
 
-  const filtersActive = status !== 'all' || period !== 'all' || fulfillment !== 'all' || payment !== 'all';
+  const statusLabel = SHOP_ORDER_STATUS_FILTERS.find((item) => item.id === status)?.label ?? 'All';
   const periodLabel = SHOP_ORDER_PERIOD_FILTERS.find((item) => item.id === period)?.label ?? 'All time';
   const fulfillmentLabel =
     SHOP_ORDER_FULFILLMENT_FILTERS.find((item) => item.id === fulfillment)?.label ?? 'Any type';
-  const menuOptions = menuOpen === 'period' ? SHOP_ORDER_PERIOD_FILTERS : SHOP_ORDER_FULFILLMENT_FILTERS;
-  const menuSelected = menuOpen === 'period' ? period : fulfillment;
+  const paymentLabel = PAYMENT_FILTERS.find((item) => item.id === payment)?.label ?? 'Any payment';
 
-  function resetFilters() {
+  const filterSections = useMemo(
+    () => [
+      { id: 'status' as const, label: 'Status', count: draft.status !== 'all' ? 1 : 0 },
+      { id: 'period' as const, label: 'Order date', count: draft.period !== 'all' ? 1 : 0 },
+      { id: 'fulfillment' as const, label: 'Order type', count: draft.fulfillment !== 'all' ? 1 : 0 },
+      { id: 'payment' as const, label: 'Payment', count: draft.payment !== 'all' ? 1 : 0 },
+    ],
+    [draft.fulfillment, draft.payment, draft.period, draft.status],
+  );
+
+  const sectionValues = useMemo(() => {
+    if (activeSection === 'status') return SHOP_ORDER_STATUS_FILTERS;
+    if (activeSection === 'period') return SHOP_ORDER_PERIOD_FILTERS;
+    if (activeSection === 'fulfillment') return SHOP_ORDER_FULFILLMENT_FILTERS;
+    return PAYMENT_FILTERS;
+  }, [activeSection]);
+
+  const filteredSectionValues = useMemo(() => {
+    const needle = valueQuery.trim().toLowerCase();
+    if (!needle) return sectionValues;
+    return sectionValues.filter((item) => item.label.toLowerCase().includes(needle));
+  }, [sectionValues, valueQuery]);
+
+  function openFilters(section: FilterSection = 'status') {
+    setDraft(appliedFilters);
+    setActiveSection(section);
+    setValueQuery('');
+    setFilterOpen(true);
+  }
+
+  function closeFilters() {
+    setFilterOpen(false);
+    setValueQuery('');
+  }
+
+  function isValueSelected(id: string): boolean {
+    if (activeSection === 'status') return draft.status === id;
+    if (activeSection === 'period') return draft.period === id;
+    if (activeSection === 'fulfillment') return draft.fulfillment === id;
+    return draft.payment === id;
+  }
+
+  function selectValue(id: string) {
+    setDraft((current) => {
+      if (activeSection === 'status') return { ...current, status: id as ShopOrderStatusFilter };
+      if (activeSection === 'period') return { ...current, period: id as ShopOrderPeriodFilter };
+      if (activeSection === 'fulfillment') {
+        return { ...current, fulfillment: id as ShopOrderFulfillmentFilter };
+      }
+      return { ...current, payment: id as ShopOrderPaymentFilter };
+    });
+  }
+
+  function applyFilters() {
+    setStatus(draft.status);
+    setPeriod(draft.period);
+    setFulfillment(draft.fulfillment);
+    setPayment(draft.payment);
+    closeFilters();
+  }
+
+  function clearDraftFilters() {
+    setDraft({ status: 'all', period: 'all', fulfillment: 'all', payment: 'all' });
+  }
+
+  function clearAppliedFilters() {
     setStatus('all');
     setPeriod('all');
     setFulfillment('all');
@@ -133,7 +237,6 @@ export function ShopOrderHistoryScreen() {
     const lines = item.lines ?? [];
     const preview = lines.slice(0, 2);
     const extra = Math.max(0, lines.length - preview.length);
-    const firstProductId = lines[0]?.product;
     const deliverySummary = shopOrderDeliverySummary(item);
 
     return (
@@ -150,32 +253,19 @@ export function ShopOrderHistoryScreen() {
             <Text style={styles.metaKicker}>TOTAL</Text>
             <Text style={styles.metaValue}>{formatShopMoney(item.total, item.currency)}</Text>
           </View>
-          <View style={[styles.cardMeta, { flex: 1 }]}>
-            <Text style={styles.metaKicker}>
-              {String(item.fulfillment_mode).toLowerCase() === 'delivery' ? 'SHIP TO' : 'FULFILLMENT'}
+          <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+            <View style={[styles.statusDot, { backgroundColor: tone.dot }]} />
+            <Text style={[styles.statusText, { color: tone.text }]} numberOfLines={1}>
+              {deliverySummary?.statusLabel || headline.title}
+              {deliverySummary?.etaLabel ? ` · ETA ${deliverySummary.etaLabel}` : ''}
             </Text>
-            <Text style={styles.metaValue} numberOfLines={1}>
-              {String(item.fulfillment_mode).toLowerCase() === 'delivery'
-                ? item.delivery_address || 'Delivery'
-                : shopFulfillmentLabel(item.fulfillment_mode)}
-            </Text>
+            {shopOrderNeedsAppPayment(item) || shopOrderNeedsGatewayPayment(item) ? (
+              <Text style={styles.unpaidHint}> · Pay now</Text>
+            ) : null}
           </View>
         </View>
 
         <Text style={styles.orderNo}>Order #{item.order_number}</Text>
-
-        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          <View style={[styles.statusDot, { backgroundColor: tone.dot }]} />
-          <Text style={[styles.statusText, { color: tone.text }]}>
-            {deliverySummary?.statusLabel || headline.title}
-          </Text>
-          {deliverySummary?.etaLabel ? (
-            <Text style={[styles.statusText, { color: tone.text }]}> · ETA {deliverySummary.etaLabel}</Text>
-          ) : null}
-          {shopOrderNeedsAppPayment(item) || shopOrderNeedsGatewayPayment(item) ? (
-            <Text style={styles.unpaidHint}> · Pay now</Text>
-          ) : null}
-        </View>
 
         {deliverySummary?.active ? (
           <DeliveryProgressStepper order={item} primary={primary} compact />
@@ -204,25 +294,6 @@ export function ShopOrderHistoryScreen() {
           </View>
         ) : null}
         {extra > 0 ? <Text style={styles.moreItems}>+{extra} more item{extra === 1 ? '' : 's'}</Text> : null}
-
-        <View style={styles.actions}>
-          <Pressable
-            style={styles.actionBtn}
-            onPress={() => navigation.navigate('ShopOrderDetail', { orderId: item.id })}
-          >
-            <Text style={styles.actionBtnText}>
-              {deliverySummary?.active ? `${deliverySummary.actionLabel} delivery` : 'View details'}
-            </Text>
-          </Pressable>
-          {firstProductId ? (
-            <Pressable
-              style={[styles.actionBtn, styles.actionBtnPrimary, { borderColor: primary, backgroundColor: `${primary}12` }]}
-              onPress={() => navigation.navigate('ShopProductDetail', { productId: String(firstProductId) })}
-            >
-              <Text style={[styles.actionBtnText, { color: primary }]}>Buy again</Text>
-            </Pressable>
-          ) : null}
-        </View>
       </Pressable>
     );
   }
@@ -232,67 +303,59 @@ export function ShopOrderHistoryScreen() {
       <ScreenHeader title={t('shop.myOrders')} onBack={() => navigation.goBack()} />
 
       <View style={styles.toolbar}>
-        <View style={styles.searchWrap}>
-          <Feather name="search" size={16} color={colors.mutedForeground} />
-          <TextInput
-            style={styles.search}
-            placeholder="Search orders or products"
-            placeholderTextColor={colors.mutedForeground}
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {search ? (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <Feather name="x" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ) : null}
+        <View style={styles.searchRow}>
+          <View style={styles.searchWrap}>
+            <Feather name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              style={styles.search}
+              placeholder="Search orders or products"
+              placeholderTextColor={colors.mutedForeground}
+              value={search}
+              onChangeText={setSearch}
+              returnKeyType="search"
+              autoCorrect={false}
+            />
+            {search ? (
+              <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                <Feather name="x" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            ) : null}
+          </View>
+          <Pressable
+            style={[styles.filterIconBtn, activeFilterCount > 0 && { borderColor: primary, backgroundColor: `${primary}12` }]}
+            onPress={() => openFilters()}
+            accessibilityLabel="Filters"
+          >
+            <Feather name="sliders" size={18} color={activeFilterCount > 0 ? primary : colors.foreground} />
+            {activeFilterCount > 0 ? (
+              <View style={[styles.filterBadge, { backgroundColor: primary }]}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
+            ) : null}
+          </Pressable>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-        >
-          {SHOP_ORDER_STATUS_FILTERS.map((item) => (
-            <Chip
-              key={item.id}
-              label={item.label}
-              active={status === item.id}
-              onPress={() => setStatus(item.id)}
-              primaryColor={primary}
-            />
-          ))}
-        </ScrollView>
-
-        <View style={styles.filterRow}>
-          <Pressable style={styles.filterBtn} onPress={() => setMenuOpen('period')}>
-            <Feather name="calendar" size={14} color={colors.foreground} />
-            <Text style={styles.filterBtnText} numberOfLines={1}>
-              {periodLabel}
-            </Text>
-            <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
-          </Pressable>
-          <Pressable style={styles.filterBtn} onPress={() => setMenuOpen('fulfillment')}>
-            <Feather name="truck" size={14} color={colors.foreground} />
-            <Text style={styles.filterBtnText} numberOfLines={1}>
-              {fulfillmentLabel}
-            </Text>
-            <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
-          </Pressable>
-          <Pressable
-            style={[styles.payChip, payment === 'unpaid' && { backgroundColor: primary, borderColor: primary }]}
-            onPress={() => setPayment((value) => (value === 'unpaid' ? 'all' : 'unpaid'))}
-          >
-            <Text style={[styles.payChipText, payment === 'unpaid' && styles.payChipTextOn]}>Needs payment</Text>
-          </Pressable>
-          {filtersActive || search ? (
-            <Pressable onPress={resetFilters}>
+        {activeFilterCount > 0 ? (
+          <View style={styles.activeFilterBar}>
+            <Pressable style={styles.activeFilterSummary} onPress={() => openFilters()}>
+              <Feather name="filter" size={12} color={primary} />
+              <Text style={[styles.activeFilterSummaryText, { color: primary }]} numberOfLines={1}>
+                {[
+                  status !== 'all' ? statusLabel : null,
+                  period !== 'all' ? periodLabel : null,
+                  fulfillment !== 'all' ? fulfillmentLabel : null,
+                  payment !== 'all' ? paymentLabel : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </Pressable>
+            <Pressable onPress={clearAppliedFilters} hitSlop={8}>
               <Text style={[styles.clearFilters, { color: primary }]}>Clear</Text>
             </Pressable>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
+
         {!loading ? (
           <Text style={styles.count}>
             {visibleOrders.length} {visibleOrders.length === 1 ? 'order' : 'orders'}
@@ -325,9 +388,9 @@ export function ShopOrderHistoryScreen() {
           !loading ? (
             <EmptyState
               icon="package"
-              title={orders.length ? 'No matching orders' : 'No orders yet'}
+              title={orders.length || search || activeFilterCount ? 'No matching orders' : 'No orders yet'}
               description={
-                orders.length
+                orders.length || search || activeFilterCount
                   ? 'Try another search or clear the filters.'
                   : 'When you place an order in the shop, it will show up here.'
               }
@@ -336,31 +399,117 @@ export function ShopOrderHistoryScreen() {
         }
       />
 
-      <Modal visible={menuOpen != null} transparent animationType="fade" onRequestClose={() => setMenuOpen(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setMenuOpen(null)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{menuOpen === 'period' ? 'Order date' : 'Order type'}</Text>
-            {menuOptions.map((option) => {
-              const selected = menuSelected === option.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  style={styles.modalRow}
-                  onPress={() => {
-                    if (menuOpen === 'period') setPeriod(option.id as ShopOrderPeriodFilter);
-                    else setFulfillment(option.id as ShopOrderFulfillmentFilter);
-                    setMenuOpen(null);
-                  }}
+      <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={closeFilters}>
+        <View style={styles.filterModalRoot}>
+          <Pressable style={styles.filterBackdrop} onPress={closeFilters} />
+          <View style={[styles.filterSheet, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>Filters</Text>
+              <Pressable onPress={closeFilters} hitSlop={8} accessibilityLabel="Close filters">
+                <Feather name="x" size={22} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <View style={styles.filterBody}>
+              <View style={styles.filterLeft}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {filterSections.map((section) => {
+                    const selected = activeSection === section.id;
+                    return (
+                      <Pressable
+                        key={section.id}
+                        style={[
+                          styles.filterNavItem,
+                          selected && [styles.filterNavItemOn, { borderLeftColor: primary }],
+                        ]}
+                        onPress={() => {
+                          setActiveSection(section.id);
+                          setValueQuery('');
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.filterNavText,
+                            selected && { color: primary, fontWeight: '700' },
+                          ]}
+                        >
+                          {section.label}
+                        </Text>
+                        {section.count > 0 ? (
+                          <View style={[styles.sectionDot, { backgroundColor: primary }]} />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              <View style={styles.filterRight}>
+                <View style={styles.valueSearchWrap}>
+                  <Feather name="search" size={14} color={colors.mutedForeground} />
+                  <TextInput
+                    style={styles.valueSearch}
+                    placeholder={`Search ${filterSections.find((item) => item.id === activeSection)?.label ?? 'filters'}`}
+                    placeholderTextColor={colors.mutedForeground}
+                    value={valueQuery}
+                    onChangeText={setValueQuery}
+                    autoCorrect={false}
+                    returnKeyType="search"
+                  />
+                  {valueQuery ? (
+                    <Pressable onPress={() => setValueQuery('')} hitSlop={8}>
+                      <Feather name="x" size={14} color={colors.mutedForeground} />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <ScrollView
+                  style={styles.valueList}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
                 >
-                  <Text style={[styles.modalRowText, selected && { color: primary, fontWeight: '700' }]}>
-                    {option.label}
-                  </Text>
-                  {selected ? <Feather name="check" size={16} color={primary} /> : null}
-                </Pressable>
-              );
-            })}
+                  {filteredSectionValues.length ? (
+                    filteredSectionValues.map((option) => {
+                      const selected = isValueSelected(option.id);
+                      return (
+                        <Pressable
+                          key={option.id}
+                          style={styles.valueRow}
+                          onPress={() => selectValue(option.id)}
+                        >
+                          <View style={[styles.radio, selected && { borderColor: primary }]}>
+                            {selected ? <View style={[styles.radioDot, { backgroundColor: primary }]} /> : null}
+                          </View>
+                          <Text
+                            style={[
+                              styles.valueText,
+                              selected && { color: primary, fontWeight: '700' },
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })
+                  ) : (
+                    <Text style={styles.valueEmpty}>No matching options</Text>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+
+            <View style={styles.filterFooter}>
+              <Pressable style={styles.clearBtn} onPress={clearDraftFilters}>
+                <Text style={styles.clearBtnText}>Clear filters</Text>
+              </Pressable>
+              <Pressable style={[styles.applyBtn, { backgroundColor: primary }]} onPress={applyFilters}>
+                <Text style={styles.applyBtnText}>
+                  Apply{countActiveOrderFilters(draft) ? ` (${countActiveOrderFilters(draft)})` : ''}
+                </Text>
+              </Pressable>
+            </View>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </View>
   );
@@ -372,12 +521,15 @@ const styles = StyleSheet.create({
   toolbar: {
     backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     gap: spacing.sm,
   },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -387,36 +539,163 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: spacing.md,
     minHeight: 44,
-    marginTop: spacing.sm,
   },
   search: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
-  chipRow: { gap: spacing.sm, paddingVertical: 2 },
-  filterRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  filterBtn: {
+  filterIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  filterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  activeFilterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 28,
+  },
+  activeFilterSummary: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    maxWidth: '46%',
+    minWidth: 0,
   },
-  filterBtnText: { ...typography.caption, color: colors.foreground, fontWeight: '600', flexShrink: 1 },
-  payChip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.card,
-  },
-  payChipText: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
-  payChipTextOn: { color: '#fff' },
-  clearFilters: { ...typography.caption, fontWeight: '700' },
+  activeFilterSummaryText: { ...typography.tiny, fontWeight: '700', flexShrink: 1 },
+  clearFilters: { ...typography.tiny, fontWeight: '800' },
   count: { ...typography.caption, color: colors.mutedForeground },
+  filterModalRoot: { flex: 1, justifyContent: 'flex-end' },
+  filterBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,22,35,0.4)' },
+  filterSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    maxHeight: '88%',
+    minHeight: '72%',
+    overflow: 'hidden',
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  filterTitle: { ...typography.title, color: colors.foreground, fontSize: 20 },
+  filterBody: { flex: 1, flexDirection: 'row', minHeight: 320 },
+  filterLeft: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: '40%',
+    width: '40%',
+    maxWidth: '40%',
+    backgroundColor: colors.muted,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+  },
+  filterNavItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
+  },
+  filterNavItemOn: {
+    backgroundColor: colors.card,
+  },
+  filterNavText: { ...typography.caption, color: colors.foreground, fontWeight: '600', flex: 1 },
+  sectionDot: { width: 7, height: 7, borderRadius: 4 },
+  filterRight: { flexGrow: 1, flexShrink: 1, flexBasis: '60%', width: '60%', backgroundColor: colors.card },
+  valueSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    minHeight: 40,
+    backgroundColor: colors.background,
+  },
+  valueSearch: { flex: 1, ...typography.caption, color: colors.foreground, paddingVertical: 8 },
+  valueList: { flex: 1, paddingHorizontal: spacing.md },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  valueText: { ...typography.body, color: colors.foreground, flex: 1 },
+  valueEmpty: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    paddingVertical: spacing.xl,
+    textAlign: 'center',
+  },
+  filterFooter: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  clearBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+  },
+  clearBtnText: { ...typography.label, color: colors.foreground, fontWeight: '700' },
+  applyBtn: {
+    flex: 1.3,
+    minHeight: 46,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyBtnText: { ...typography.label, color: '#fff', fontWeight: '800' },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
@@ -424,7 +703,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
   },
-  cardMetaRow: { flexDirection: 'row', gap: spacing.md },
+  cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' },
   cardMeta: { minWidth: 78 },
   metaKicker: {
     ...typography.tiny,
@@ -433,20 +712,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   metaValue: { ...typography.caption, color: colors.foreground, fontWeight: '700', marginTop: 2 },
-  orderNo: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.md },
+  orderNo: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm, marginBottom: spacing.sm },
   statusPill: {
-    alignSelf: 'flex-start',
+    marginLeft: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
+    maxWidth: '48%',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.full,
   },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { ...typography.caption, fontWeight: '800' },
+  statusText: { ...typography.caption, fontWeight: '800', flexShrink: 1 },
   unpaidHint: { ...typography.caption, color: colors.warning, fontWeight: '700' },
   lineRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
   thumb: { width: 56, height: 56, borderRadius: radius.md, backgroundColor: colors.muted },
@@ -455,38 +733,4 @@ const styles = StyleSheet.create({
   lineName: { ...typography.label, color: colors.foreground, fontWeight: '700' },
   lineMeta: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
   moreItems: { ...typography.caption, color: colors.mutedForeground, marginBottom: spacing.sm },
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  actionBtn: {
-    flex: 1,
-    minHeight: 40,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  actionBtnPrimary: {},
-  actionBtnText: { ...typography.caption, fontWeight: '700', color: colors.foreground },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15,22,35,0.35)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    padding: spacing.xl,
-    paddingBottom: spacing.xxxl,
-    gap: 4,
-  },
-  modalTitle: { ...typography.title, color: colors.foreground, marginBottom: spacing.md },
-  modalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-  },
-  modalRowText: { ...typography.body, color: colors.foreground },
 });

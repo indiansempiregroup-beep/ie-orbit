@@ -8,7 +8,68 @@ from apps.shopie.models import ShopBooksVoucher, ShopDocumentShareLink, ShopProd
 from apps.shopie.services.books import BooksService
 from apps.shopie.services.documents import DocumentsService
 from apps.shopie.services.orders import OrderService
-from apps.shopie.services.shop_documents import LAYOUT_THERMAL, ShopDocumentService
+from apps.shopie.services.shop_documents import (
+    LAYOUT_THERMAL,
+    ShopDocumentService,
+    _format_address_parts,
+    _pos_bill_summary_from_payload,
+    _reconcile_discount_parts,
+)
+
+
+def test_format_address_strips_plus_code_and_avoids_duplicates():
+    formatted = _format_address_parts(
+        line1="FR5W+JFH, Shivsai Colony, Shiv Colony, Dhankawadi, Pune, Maharashtra 411043, India",
+        line2="Flat 701",
+        city="Pune",
+        state="Maharashtra",
+        postal_code="411043",
+        country="India",
+    )
+    assert "FR5W+JFH" not in formatted
+    assert formatted.startswith("Flat 701")
+    assert "Shivsai Colony" in formatted
+    assert "Pune" in formatted
+    # City/state/PIN/country already in the street line — no duplicated tail.
+    assert formatted.count("Pune") == 1
+    assert formatted.count("India") == 1
+    assert "…" not in formatted
+
+
+def test_discount_summary_does_not_double_count_coupon_and_bill():
+    """Coupon applied at POS is also stored in bill_discount_* on older orders."""
+    line, bill, coupon, reward = _reconcile_discount_parts(
+        merchandise_gross=Decimal("3117.00"),
+        line_total_sum=Decimal("2805.31"),
+        line_discount_total=Decimal("0"),
+        bill_discount_total=Decimal("264.15"),
+        coupon_discount=Decimal("311.70"),
+        coupon_code="SAVE10",
+        reward_discount=Decimal("0"),
+        voucher_discount_total=Decimal("311.69"),
+    )
+    assert line == Decimal("0.00")
+    assert bill == Decimal("0.00")
+    assert coupon == Decimal("311.69")
+    assert reward == Decimal("0.00")
+
+    summary = _pos_bill_summary_from_payload(
+        {
+            "merchandise_gross": "3117.00",
+            "line_discount_total": "0",
+            "bill_discount_total": "264.15",
+            "coupon_discount": "311.70",
+            "coupon_code": "SAVE10",
+            "discount_total": "311.69",
+            "taxable_value": "2377.38",
+            "total": "2805.31",
+            "lines": [{"total": "2805.31"}],
+        }
+    )
+    assert summary["line_discount"] == Decimal("0.00")
+    assert summary["bill_discount"] == Decimal("0.00")
+    assert summary["coupon_discount"] == Decimal("311.69")
+    assert summary["after_line"] == Decimal("3117.00")
 
 
 def _product(business, *, name: str, price: str, gst_rate: str) -> ShopProduct:
@@ -50,6 +111,7 @@ def test_sale_document_payload_pdf_and_share(shop_business, customer, cash_accou
     assert payload["number"] == voucher.voucher_number
     assert payload["kind"] == "sale"
     assert Decimal(payload["amount_due"]) > 0
+    assert Decimal(payload["amount_paid"]) == Decimal("50.00")
     assert payload["upi_pay_url"]
     assert payload["lines"]
     assert "taxable_value" in payload
@@ -60,17 +122,23 @@ def test_sale_document_payload_pdf_and_share(shop_business, customer, cash_accou
     assert Decimal(payload["merchandise_gross"]) == Decimal("100.00")
     html = docs.render_html(payload)
     assert "TAX INVOICE" in html
-    assert "Taxable value" in html
+    assert "Taxable" in html
+    assert "Product discount" in html
+    assert "Subtotal" in html
+    assert "Received" in html
+    assert "Balance due" in html
+    assert "Amt" in html
     assert voucher.voucher_number in html
     assert "Amount in words" in html
-    # Old confusing Subtotal/Discount-with-zero layout removed.
-    assert "Taxable value" in html
     assert docs.build_pdf(payload, layout="a4").startswith(b"%PDF")
     assert docs.build_pdf(payload, layout=LAYOUT_THERMAL).startswith(b"%PDF")
     thermal_html = docs.render_html(payload, layout=LAYOUT_THERMAL)
     assert "thermal-items" in thermal_html
     assert "Bill to" in thermal_html
     assert "thermal-head" in thermal_html
+    assert "Amt" in thermal_html
+    assert "Received" in thermal_html
+    assert "Product discount" in thermal_html
 
     link = docs.create_share_link(
         tenant=shop_business.tenant,
@@ -90,6 +158,8 @@ def test_sale_document_payload_pdf_and_share(shop_business, customer, cash_accou
     )
     assert result["channels"]["sms"]["status"] == "device_only"
     assert "View:" in result["channels"]["sms"]["message"]
+    assert "Received" in result["channels"]["sms"]["message"]
+    assert "Due" in result["channels"]["sms"]["message"]
 
 
 @pytest.mark.django_db

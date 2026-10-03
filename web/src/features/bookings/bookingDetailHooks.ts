@@ -68,9 +68,16 @@ export function useBookingActions(bookingId: string | undefined) {
   });
 
   const complete = useMutation({
-    mutationFn: (reason?: string) => {
+    mutationFn: (body?: {
+      reason?: string;
+      payment_method?: 'cash' | 'upi' | 'card' | 'borrow';
+      amount_paid?: string | number;
+      cash_account_id?: string | null;
+      payment_proof_url?: string;
+      payment_proof_media_id?: string;
+    }) => {
       if (!bookingId) throw new Error('Booking id is required.');
-      return completeBooking(client, bookingId, reason);
+      return completeBooking(client, bookingId, body);
     },
     onSuccess: invalidate,
   });

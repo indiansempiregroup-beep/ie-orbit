@@ -5,6 +5,7 @@ import { opsStackScreenOptions } from './OpsStackHeader';
 import { LoginScreen } from '../features/auth/LoginScreen';
 import { AcceptInvitationScreen } from '../features/auth/AcceptInvitationScreen';
 import { RegisterWizardScreen } from '../features/onboarding/RegisterWizardScreen';
+import { colors } from '../theme/tokens';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
@@ -15,7 +16,11 @@ export function AuthStack() {
       <Stack.Screen
         name="RegisterWizard"
         component={RegisterWizardScreen}
-        options={{ ...opsStackScreenOptions, title: 'Register business' }}
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          contentStyle: { backgroundColor: colors.card },
+        }}
       />
       <Stack.Screen
         name="AcceptInvitation"

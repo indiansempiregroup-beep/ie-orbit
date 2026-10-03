@@ -45,6 +45,7 @@
     "expo-blur": "~15.0.8",
     "expo-clipboard": "^8.0.8",
     "expo-crypto": "~15.0.9",
+    "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.11",
     "expo-linear-gradient": "~15.0.8",
     "expo-local-authentication": "~17.0.8",

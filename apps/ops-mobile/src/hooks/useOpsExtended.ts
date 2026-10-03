@@ -170,9 +170,7 @@ export function useBIOverview(enabled = true) {
     if (!enabled || !client || !ready) return;
     setLoading(true);
     try {
-      const end = new Date().toISOString().slice(0, 10);
-      const start = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-      const response = await client.bi.overview({ start_date: start, end_date: end });
+      const response = await client.bi.overview();
       setData(response.data);
     } catch {
       setData(null);
@@ -198,9 +196,7 @@ export function useBIRevenue() {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const end = new Date().toISOString().slice(0, 10);
-      const start = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-      const response = await client.bi.revenue({ start_date: start, end_date: end });
+      const response = await client.bi.revenue();
       setData(response.data);
     } finally {
       setLoading(false);
@@ -248,9 +244,7 @@ export function useBIGrowth() {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const end = new Date().toISOString().slice(0, 10);
-      const start = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-      const response = await client.bi.growth({ start_date: start, end_date: end });
+      const response = await client.bi.growth();
       setData(response.data);
     } finally {
       setLoading(false);
@@ -274,9 +268,7 @@ export function useBIReports() {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const end = new Date().toISOString().slice(0, 10);
-      const start = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-      const response = await client.bi.reports({ start_date: start, end_date: end });
+      const response = await client.bi.reports();
       setData(response.data);
     } finally {
       setLoading(false);
@@ -694,9 +686,19 @@ export function useBookingMutations() {
       if (!client) throw new Error('Not ready');
       return (await client.bookings.checkIn(id, { reason })).data;
     },
-    complete: async (id: string, reason?: string) => {
+    complete: async (
+      id: string,
+      body?: {
+        reason?: string;
+        payment_method?: 'cash' | 'upi' | 'card' | 'borrow';
+        amount_paid?: string | number;
+        cash_account_id?: string | null;
+        payment_proof_url?: string;
+        payment_proof_media_id?: string;
+      },
+    ) => {
       if (!client) throw new Error('Not ready');
-      return (await client.bookings.complete(id, { reason })).data;
+      return (await client.bookings.complete(id, body)).data;
     },
     cancel: async (id: string, reason?: string) => {
       if (!client) throw new Error('Not ready');

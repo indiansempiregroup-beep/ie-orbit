@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { colors, typography } from '../../theme/tokens';
+import { colors, spacing, typography } from '../../theme/tokens';
 import { confirmAction } from '../../utils/confirmAction';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -130,9 +130,24 @@ export function WhatsAppNotificationTemplateDetailScreen({ route }: Props) {
         </View>
       </FormSection>
       <FormSection title="Actions">
-        <Button label="Sync this template" loading={busy} onPress={() => void sync()} />
         <Input label="Test number" value={to} onChangeText={setTo} keyboardType="phone-pad" />
-        <Button label="Send test" variant="outline" loading={busy} onPress={() => void sendTest()} />
+        <View style={styles.actionRow}>
+          <Button
+            label="Sync"
+            icon="cloud-upload"
+            loading={busy}
+            style={styles.actionButton}
+            onPress={() => void sync()}
+          />
+          <Button
+            label="Send test"
+            variant="outline"
+            icon="send"
+            loading={busy}
+            style={styles.actionButton}
+            onPress={() => void sendTest()}
+          />
+        </View>
       </FormSection>
     </FormScreen>
   );
@@ -145,4 +160,6 @@ const styles = StyleSheet.create({
   hint: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: { ...typography.body, color: colors.foreground },
+  actionRow: { flexDirection: 'row', gap: spacing.sm },
+  actionButton: { flex: 1 },
 });

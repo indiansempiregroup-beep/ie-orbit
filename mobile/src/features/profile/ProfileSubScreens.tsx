@@ -20,6 +20,7 @@ import type { HelpArticleSummary, MobileBranch, MobileReview, SupportTicketSumma
 import { mobileClient } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { AmazonFilterSheet, SearchFilterToolbar } from '../../components/AmazonFilterSheet';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { GroupedList } from '../../components/ui/GroupedList';
@@ -72,14 +73,27 @@ export function NotificationPreferencesScreen() {
   }
 
   return (
-    <ProfileMenuScreen title="Notification Preferences" onBack={() => navigation.goBack()}>
+    <ProfileMenuScreen
+      title="Notification Preferences"
+      onBack={() => navigation.goBack()}
+      footer={
+        <Button
+          label="Save preferences"
+          icon="check"
+          size="lg"
+          fullWidth
+          loading={loading}
+          primaryColor={primary}
+          onPress={onSave}
+        />
+      }
+    >
       <PrefRow label="Email notifications" value={email} onChange={setEmail} />
       <PrefRow label="Push notifications" value={push} onChange={setPush} />
       {whatsappAvailable ? (
         <PrefRow label="WhatsApp notifications" value={whatsapp} onChange={setWhatsapp} />
       ) : null}
       {smsAvailable ? <PrefRow label="SMS reminders" value={sms} onChange={setSms} /> : null}
-      <Button label="Save preferences" size="lg" fullWidth loading={loading} primaryColor={primary} onPress={onSave} />
     </ProfileMenuScreen>
   );
 }
@@ -247,6 +261,30 @@ export function PaymentMethodsScreen() {
 
 const RATING_FILTERS = [5, 4, 3, 2, 1] as const;
 
+type ReviewFilterDraft = {
+  rating: string;
+  content: string;
+};
+
+const REVIEW_RATING_OPTIONS = [
+  { id: 'all', label: 'Any rating' },
+  ...RATING_FILTERS.map((rating) => ({ id: String(rating), label: `${rating}★` })),
+];
+
+const REVIEW_CONTENT_OPTIONS = [
+  { id: 'all', label: 'Any reviews' },
+  { id: 'with_comment', label: 'With comment' },
+];
+
+function countActiveReviewFilters(filters: ReviewFilterDraft): number {
+  let count = 0;
+  if (filters.rating !== 'all') count += 1;
+  if (filters.content !== 'all') count += 1;
+  return count;
+}
+
+const EMPTY_REVIEW_FILTERS: ReviewFilterDraft = { rating: 'all', content: 'all' };
+
 type FaqCategory = 'bookings' | 'shop' | 'pets' | 'account';
 
 function customerFaqs(options: {
@@ -388,8 +426,10 @@ export function ReviewsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [ratingFilter, setRatingFilter] = useState<number | null>(null);
-  const [commentsOnly, setCommentsOnly] = useState(false);
+  const [ratingFilter, setRatingFilter] = useState<string>('all');
+  const [contentFilter, setContentFilter] = useState<string>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draft, setDraft] = useState<ReviewFilterDraft>(EMPTY_REVIEW_FILTERS);
 
   const loadReviews = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -418,80 +458,62 @@ export function ReviewsScreen() {
     }, [loadReviews]),
   );
 
+  const appliedFilters: ReviewFilterDraft = useMemo(
+    () => ({ rating: ratingFilter, content: contentFilter }),
+    [contentFilter, ratingFilter],
+  );
+  const activeFilterCount = countActiveReviewFilters(appliedFilters);
+
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return reviews.filter((review) => {
-      if (ratingFilter != null && Math.round(review.rating) !== ratingFilter) return false;
-      if (commentsOnly && !review.comment?.trim()) return false;
+      if (ratingFilter !== 'all' && Math.round(review.rating) !== Number(ratingFilter)) return false;
+      if (contentFilter === 'with_comment' && !review.comment?.trim()) return false;
       if (!needle) return true;
       return [review.service_name, review.booking_number, review.comment]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(needle));
     });
-  }, [reviews, search, ratingFilter, commentsOnly]);
+  }, [contentFilter, ratingFilter, reviews, search]);
 
-  const filtersActive = Boolean(search.trim()) || ratingFilter != null || commentsOnly;
+  const activeSummary = [
+    ratingFilter !== 'all' ? `${ratingFilter}★` : null,
+    contentFilter !== 'all' ? 'With comment' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  function openFilters() {
+    setDraft(appliedFilters);
+    setFilterOpen(true);
+  }
+
+  function clearAppliedFilters() {
+    setRatingFilter('all');
+    setContentFilter('all');
+    setSearch('');
+  }
 
   return (
     <View style={styles.reviewScreen}>
       <ScreenHeader title="My Reviews" onBack={() => navigation.goBack()} />
-      <View style={styles.reviewToolbar}>
-        <View style={styles.reviewSearchWrap}>
-          <Feather name="search" size={16} color={colors.mutedForeground} />
-          <TextInput
-            style={styles.reviewSearch}
-            placeholder="Search service, booking #, or comment"
-            placeholderTextColor={colors.mutedForeground}
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {search ? (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <Feather name="x" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ) : null}
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewChips}>
-          <Chip label="All" active={ratingFilter == null} primaryColor={primary} onPress={() => setRatingFilter(null)} />
-          {RATING_FILTERS.map((rating) => (
-            <Chip
-              key={rating}
-              label={`${rating}★`}
-              active={ratingFilter === rating}
-              primaryColor={primary}
-              onPress={() => setRatingFilter(rating)}
-            />
-          ))}
-          <Chip
-            label="With comment"
-            active={commentsOnly}
-            primaryColor={primary}
-            onPress={() => setCommentsOnly((value) => !value)}
-          />
-        </ScrollView>
-        {!loading ? (
-          <View style={styles.reviewCountRow}>
-            <Text style={styles.meta}>
-              {visible.length} {visible.length === 1 ? 'review' : 'reviews'}
-              {filtersActive ? ` of ${reviews.length}` : ''}
-            </Text>
-            {filtersActive ? (
-              <Pressable
-                onPress={() => {
-                  setSearch('');
-                  setRatingFilter(null);
-                  setCommentsOnly(false);
-                }}
-                hitSlop={8}
-              >
-                <Text style={[styles.clearFilters, { color: primary }]}>Clear</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
+      <SearchFilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search service, booking #, or comment"
+        primaryColor={primary}
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={openFilters}
+        activeSummary={activeSummary || undefined}
+        onClearFilters={clearAppliedFilters}
+        countLabel={
+          loading
+            ? null
+            : `${visible.length} ${visible.length === 1 ? 'review' : 'reviews'}${
+                activeFilterCount || search.trim() ? ` of ${reviews.length}` : ''
+              }`
+        }
+      />
 
       {loading && !reviews.length ? <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} /> : null}
 
@@ -504,10 +526,10 @@ export function ReviewsScreen() {
         {!loading && !visible.length ? (
           <EmptyState
             icon="star"
-            title={reviews.length ? 'No matching reviews' : 'No reviews yet'}
+            title={reviews.length || search || activeFilterCount ? 'No matching reviews' : 'No reviews yet'}
             description={
-              reviews.length
-                ? 'Try another search or star rating.'
+              reviews.length || search || activeFilterCount
+                ? 'Try another search or clear the filters.'
                 : 'After a completed appointment, open it from My Appointments and leave a rating.'
             }
           />
@@ -542,6 +564,27 @@ export function ReviewsScreen() {
           </GroupedList>
         ) : null}
       </RefreshableScrollView>
+
+      <AmazonFilterSheet
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        primaryColor={primary}
+        sections={[
+          { id: 'rating', label: 'Rating', options: REVIEW_RATING_OPTIONS },
+          { id: 'content', label: 'Content', options: REVIEW_CONTENT_OPTIONS },
+        ]}
+        values={draft}
+        onSelect={(sectionId, optionId) =>
+          setDraft((current) => ({ ...current, [sectionId]: optionId }))
+        }
+        onClear={() => setDraft(EMPTY_REVIEW_FILTERS)}
+        applyCount={countActiveReviewFilters(draft)}
+        onApply={() => {
+          setRatingFilter(draft.rating);
+          setContentFilter(draft.content);
+          setFilterOpen(false);
+        }}
+      />
     </View>
   );
 }
@@ -947,30 +990,8 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
   },
   reviewScreen: { flex: 1, backgroundColor: colors.background },
-  reviewToolbar: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: spacing.sm,
-    backgroundColor: colors.background,
-  },
-  reviewSearchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    minHeight: 44,
-    marginTop: spacing.sm,
-  },
   reviewSearch: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
   reviewChips: { gap: spacing.sm, paddingVertical: 2 },
-  reviewCountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  clearFilters: { ...typography.caption, fontWeight: '700' },
   reviewCard: {
     gap: spacing.sm,
     backgroundColor: colors.card,

@@ -1,20 +1,23 @@
 import type { CSSProperties } from 'react';
 import type { RegisterWizardStepId } from '../../../config/onboarding';
-import { REGISTER_WIZARD_STEPS } from '../../../config/onboarding';
+import { REGISTER_WIZARD_VISIBLE_STEPS } from '../../../config/onboarding';
 
 type WizardStepperProps = {
   currentStep: RegisterWizardStepId;
 };
 
 export function WizardStepper({ currentStep }: WizardStepperProps) {
-  const currentIndex = REGISTER_WIZARD_STEPS.findIndex((step) => step.id === currentStep);
+  const displayStep = currentStep === 'provision' ? 'review' : currentStep;
+  const currentIndex = REGISTER_WIZARD_VISIBLE_STEPS.findIndex((step) => step.id === displayStep);
+  const stepCount = REGISTER_WIZARD_VISIBLE_STEPS.length;
+  const progressIndex = currentStep === 'provision' ? stepCount : currentIndex + 1;
 
   return (
     <nav aria-label="Registration progress" className="wizard-stepper">
       <ol className="wizard-stepper-list">
-        {REGISTER_WIZARD_STEPS.map((step, index) => {
-          const isComplete = index < currentIndex;
-          const isCurrent = step.id === currentStep;
+        {REGISTER_WIZARD_VISIBLE_STEPS.map((step, index) => {
+          const isComplete = index < currentIndex || currentStep === 'provision';
+          const isCurrent = step.id === displayStep && currentStep !== 'provision';
           return (
             <li
               key={step.id}
@@ -33,12 +36,12 @@ export function WizardStepper({ currentStep }: WizardStepperProps) {
         className="wizard-stepper-progress"
         role="progressbar"
         aria-valuemin={0}
-        aria-valuemax={REGISTER_WIZARD_STEPS.length}
-        aria-valuenow={currentIndex + 1}
-        aria-label={`Step ${currentIndex + 1} of ${REGISTER_WIZARD_STEPS.length}`}
+        aria-valuemax={stepCount}
+        aria-valuenow={progressIndex}
+        aria-label={`Step ${progressIndex} of ${stepCount}`}
         style={
           {
-            '--wizard-progress': `${((currentIndex + 1) / REGISTER_WIZARD_STEPS.length) * 100}%`,
+            '--wizard-progress': `${(progressIndex / stepCount) * 100}%`,
           } as CSSProperties
         }
       >

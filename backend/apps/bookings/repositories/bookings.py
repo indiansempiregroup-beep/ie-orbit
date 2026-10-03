@@ -237,7 +237,7 @@ class BookingRepository:
             queryset = queryset.filter(appointment_date__gte=params["date_from"])
         if params.get("date_to"):
             queryset = queryset.filter(appointment_date__lte=params["date_to"])
-        return queryset
+        return queryset.order_by("-created_at")
 
     def daily_count(self, *, tenant: Any, business: Any, appointment_date: date) -> int:
         return (

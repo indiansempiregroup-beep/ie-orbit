@@ -5,7 +5,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
-import { ScreenHeader } from '../../components/ProfileMenuScreen';
+import { ScreenHeader, StickyFooter } from '../../components/ProfileMenuScreen';
+import { Button } from '../../components/ui/Button';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
@@ -65,7 +66,7 @@ export function PetDetailScreen({ navigation, route }: Props) {
           </Pressable>
         }
       />
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, gap: spacing.md }}>
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100, gap: spacing.md }}>
         {photo ? (
           <Image source={{ uri: photo }} style={styles.hero} />
         ) : (
@@ -76,13 +77,6 @@ export function PetDetailScreen({ navigation, route }: Props) {
         <View style={styles.card}>
           <Text style={styles.title}>{pet.name}</Text>
           <Text style={styles.meta}>{details || 'Add species, breed, and sex'}</Text>
-          <Pressable
-            style={[styles.editBtn, { borderColor: primary }]}
-            onPress={() => navigation.navigate('PetForm', { petId: pet.id })}
-          >
-            <Feather name="edit-3" size={14} color={primary} />
-            <Text style={[styles.editText, { color: primary }]}>Edit profile</Text>
-          </Pressable>
         </View>
 
         <View style={styles.card}>
@@ -112,6 +106,15 @@ export function PetDetailScreen({ navigation, route }: Props) {
           <Text style={styles.body}>{pet.medical_notes?.trim() || 'No medical notes yet.'}</Text>
         </View>
       </ScrollView>
+      <StickyFooter>
+        <Button
+          label="Edit profile"
+          icon="edit-2"
+          fullWidth
+          primaryColor={primary}
+          onPress={() => navigation.navigate('PetForm', { petId: pet.id })}
+        />
+      </StickyFooter>
     </View>
   );
 }
@@ -129,18 +132,6 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 26, fontWeight: '800', color: colors.foreground },
   meta: { marginTop: 8, color: colors.mutedForeground },
-  editBtn: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.md,
-    minHeight: 40,
-    paddingHorizontal: 12,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  editText: { fontWeight: '700', fontSize: 13 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
   section: { fontWeight: '700', color: colors.foreground, fontSize: 16 },
   body: { color: colors.foreground, lineHeight: 22 },

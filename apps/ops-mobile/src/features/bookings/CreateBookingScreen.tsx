@@ -24,6 +24,7 @@ import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { requiredMessage } from '../../utils/formValidation';
+import { bumpBookingsListRevision } from '../../utils/bookingsListRefresh';
 import {
   servicesSummaryLabel,
   servicesTotalDurationMinutes,
@@ -346,6 +347,7 @@ export function CreateBookingScreen() {
                   channel: 'mobile',
                 });
                 toast.push('Booking created.', 'success');
+                bumpBookingsListRevision();
                 navigation.replace('BookingDetail', {
                   bookingId: booking.id,
                   initialBooking: booking,

@@ -57,6 +57,106 @@ def test_fit_to_product_canvas_respects_crop_box():
 
 
 @pytest.mark.django_db
+def test_master_deactivate_and_reactivate(shop_business: Business):
+    service = MasterService()
+    tenant = shop_business.tenant
+    row = service.create(
+        tenant=tenant,
+        business=shop_business,
+        kind=ShopMasterKind.BRAND,
+        label="Acme Pets",
+    )
+    assert row.is_active is True
+
+    deactivated = service.update(
+        tenant=tenant,
+        business=shop_business,
+        record=row,
+        data={"is_active": False},
+    )
+    assert deactivated.is_active is False
+
+    reactivated = service.update(
+        tenant=tenant,
+        business=shop_business,
+        record=deactivated,
+        data={"is_active": True},
+    )
+    assert reactivated.is_active is True
+
+    service.seed_defaults(tenant=tenant, business=shop_business)
+    builtin = (
+        service.list_records(
+            tenant=tenant,
+            business=shop_business,
+            kind=ShopMasterKind.UNIT,
+            include_inactive=True,
+        )[0]
+    )
+    from apps.shopie.models import ShopMasterRecord
+
+    builtin_row = ShopMasterRecord.all_objects.get(id=builtin["id"])
+    deactivated_builtin = service.update(
+        tenant=tenant,
+        business=shop_business,
+        record=builtin_row,
+        data={"is_active": False},
+    )
+    assert deactivated_builtin.is_active is False
+    assert deactivated_builtin.is_builtin is True
+
+    # Inactive rows still appear when include_inactive=True.
+    listed = service.list_records(
+        tenant=tenant,
+        business=shop_business,
+        kind=ShopMasterKind.UNIT,
+        include_inactive=True,
+    )
+    assert any(item["id"] == str(builtin_row.id) and item["is_active"] is False for item in listed)
+
+    service.delete(tenant=tenant, business=shop_business, record=deactivated_builtin)
+    remaining_ids = {
+        item["id"]
+        for item in service.list_records(
+            tenant=tenant,
+            business=shop_business,
+            kind=ShopMasterKind.UNIT,
+            include_inactive=True,
+        )
+    }
+    assert str(builtin_row.id) not in remaining_ids
+
+    # Seeding must not resurrect a deleted built-in.
+    service.seed_defaults(tenant=tenant, business=shop_business)
+    resurrected = ShopMasterRecord.all_objects.filter(
+        tenant=tenant,
+        business=shop_business,
+        kind=ShopMasterKind.UNIT,
+        slug=builtin_row.slug,
+        deleted_at__isnull=True,
+    ).exists()
+    assert resurrected is False
+
+
+@pytest.mark.django_db
+def test_master_create_keeps_custom_category_label(shop_business: Business):
+    service = MasterService()
+    row = service.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        kind=ShopMasterKind.CATEGORY,
+        label="Dry dog food",
+    )
+    items = service.list_records(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        kind=ShopMasterKind.CATEGORY,
+        include_inactive=True,
+    )
+    assert any(item["id"] == str(row.id) and item["label"] == "Dry dog food" for item in items)
+
+
+@pytest.mark.django_db
 def test_master_ensure_category_is_business_scoped(shop_business: Business):
     service = MasterService()
     tenant = shop_business.tenant

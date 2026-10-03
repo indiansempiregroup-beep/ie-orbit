@@ -164,7 +164,7 @@ def customer_app_recipe(profile: WhiteLabelProfile) -> dict[str, Any]:
         "preview": meta.get("preview") or {},
         "production": meta.get("production") or {},
         "live": meta.get("live") or {},
-        "builds": meta.get("builds") or [],
+        "builds": _normalize_build_history(meta.get("builds") or []),
     }
 
 
@@ -317,12 +317,18 @@ def update_customer_app_settings(
         meta["splash_background"] = _normalize_hex_color(splash_background, primary)
     if mark_live:
         production = meta.get("production") if isinstance(meta.get("production"), dict) else {}
+        if str(production.get("status") or "") != "finished":
+            raise RuntimeError(
+                "Store AAB must finish successfully before marking live. "
+                "Build a store AAB, refresh status until finished, then mark live."
+            )
         meta["live"] = {
             "version_name": production.get("version_name"),
             "version_code": production.get("version_code"),
             "marked_live_at": timezone.now().isoformat(),
             "build_id": production.get("build_id"),
             "url": production.get("url"),
+            "apk_url": production.get("apk_url"),
         }
     profile.build_metadata = meta
     profile.save()
@@ -632,9 +638,43 @@ def machine_build_payload(*, profile: WhiteLabelProfile, track: str) -> dict[str
     }
 
 
+def _normalize_build_history(builds: object) -> list[dict[str, Any]]:
+    """Ensure history rows always expose `at` for admin UI."""
+    rows: list[dict[str, Any]] = []
+    if not isinstance(builds, list):
+        return rows
+    for item in builds:
+        if not isinstance(item, dict):
+            continue
+        row = dict(item)
+        if not row.get("at"):
+            row["at"] = row.get("started_at") or row.get("updated_at") or row.get("refreshed_at") or ""
+        rows.append(row)
+    return rows
+
+
 def _append_build_history(meta: dict[str, Any], entry: dict[str, Any]) -> None:
     history = list(meta.get("builds") or [])
-    history.insert(0, entry)
+    normalized = dict(entry)
+    if not normalized.get("at"):
+        normalized["at"] = (
+            normalized.get("started_at")
+            or normalized.get("updated_at")
+            or timezone.now().isoformat()
+        )
+    # Collapse duplicate refresh noise: same track + status + build_id as newest row.
+    if history:
+        head = history[0] if isinstance(history[0], dict) else {}
+        same = (
+            str(head.get("track") or "") == str(normalized.get("track") or "")
+            and str(head.get("status") or "") == str(normalized.get("status") or "")
+            and str(head.get("build_id") or "") == str(normalized.get("build_id") or "")
+        )
+        if same:
+            history[0] = {**head, **normalized}
+            meta["builds"] = history[:10]
+            return
+    history.insert(0, normalized)
     meta["builds"] = history[:10]
 
 
@@ -653,6 +693,7 @@ def dispatch_customer_app_build(
         "status": "queued",
         "bump": bump,
         "started_at": now,
+        "at": now,
         "eas_profile": payload["eas_profile"],
     }
     meta[track_key] = {**(meta.get(track_key) if isinstance(meta.get(track_key), dict) else {}), **entry}
@@ -720,14 +761,19 @@ def record_build_callback(
     version_name: str | None = None,
     version_code: int | None = None,
     error: str | None = None,
+    append_history: bool = True,
 ) -> dict[str, Any]:
     track_key = "preview" if track == "preview" else "production"
     meta = _metadata(profile)
     current = dict(meta.get(track_key) if isinstance(meta.get(track_key), dict) else {})
+    previous_status = str(current.get("status") or "")
+    previous_build_id = str(current.get("build_id") or "")
+    previous_apk = str(current.get("apk_url") or "")
+    now = timezone.now().isoformat()
     current.update(
         {
             "status": status,
-            "updated_at": timezone.now().isoformat(),
+            "updated_at": now,
         }
     )
     if build_id:
@@ -742,41 +788,44 @@ def record_build_callback(
         current["version_code"] = version_code
     if error:
         current["error"] = error
+    elif status == "finished":
+        current.pop("error", None)
     meta[track_key] = current
-    _append_build_history(
-        meta,
-        {
-            "track": track,
-            "status": status,
-            "build_id": build_id,
-            "url": url,
-            "apk_url": apk_url,
-            "version_name": version_name,
-            "version_code": version_code,
-            "at": timezone.now().isoformat(),
-            "error": error,
-        },
+    changed = (
+        previous_status != str(status)
+        or (build_id and str(build_id) != previous_build_id)
+        or (apk_url and str(apk_url) != previous_apk)
     )
+    if append_history and changed:
+        _append_build_history(
+            meta,
+            {
+                "track": track,
+                "status": status,
+                "build_id": build_id or current.get("build_id"),
+                "url": url or current.get("url"),
+                "apk_url": apk_url or current.get("apk_url"),
+                "version_name": version_name or current.get("version_name"),
+                "version_code": version_code if version_code is not None else current.get("version_code"),
+                "at": now,
+                "error": error,
+            },
+        )
     _save_metadata(profile, meta)
     return current
 
 
-def refresh_build_status_from_expo(*, profile: WhiteLabelProfile, track: str) -> dict[str, Any]:
-    """Optional poll using EXPO_TOKEN / EXPO_ACCESS_TOKEN when a build_id is known."""
-    track_key = "preview" if track == "preview" else "production"
-    meta = _metadata(profile)
-    current = dict(meta.get(track_key) if isinstance(meta.get(track_key), dict) else {})
-    build_id = str(current.get("build_id") or "").strip()
-    token = (os.getenv("EXPO_TOKEN") or getattr(settings, "EXPO_ACCESS_TOKEN", "") or "").strip()
-    if not build_id or not token:
-        return current
-    query = (
-        "query ($id: ID!) { builds { byId(buildId: $id) { id status "
-        "appVersion appBuildVersion platform "
-        "artifacts { buildUrl } } } }"
-    )
-    # Expo GraphQL shape varies; keep this best-effort.
-    body = {"query": query, "variables": {"id": build_id}}
+def _expo_access_token() -> str:
+    return (
+        os.getenv("EXPO_TOKEN")
+        or os.getenv("EXPO_ACCESS_TOKEN")
+        or getattr(settings, "EXPO_ACCESS_TOKEN", "")
+        or ""
+    ).strip()
+
+
+def _expo_graphql(token: str, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+    body = {"query": query, "variables": variables}
     request = urllib.request.Request(
         "https://api.expo.dev/graphql",
         data=json.dumps(body).encode("utf-8"),
@@ -786,14 +835,11 @@ def refresh_build_status_from_expo(*, profile: WhiteLabelProfile, track: str) ->
             "Content-Type": "application/json",
         },
     )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
-        return current
-    build = (((payload.get("data") or {}).get("builds") or {}).get("byId")) or {}
-    if not build:
-        return current
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _map_expo_status(raw: object, fallback: object = "in_progress") -> str:
     status_map = {
         "NEW": "queued",
         "IN_QUEUE": "queued",
@@ -802,15 +848,161 @@ def refresh_build_status_from_expo(*, profile: WhiteLabelProfile, track: str) ->
         "ERRORED": "errored",
         "CANCELED": "errored",
     }
-    mapped = status_map.get(str(build.get("status") or "").upper(), current.get("status"))
+    return status_map.get(str(raw or "").upper(), str(fallback or "in_progress"))
+
+
+def _recover_build_id_from_expo(
+    *,
+    token: str,
+    package_name: str,
+) -> dict[str, Any] | None:
+    """Find the newest Android build for this package when admin never stored build_id."""
+    package = (package_name or "").strip()
+    if not package:
+        return None
+    queries = (
+        """
+        query ($appId: String!) {
+          app {
+            byId(appId: $appId) {
+              buildsPaginated(offset: 0, limit: 25, filter: { platforms: [ANDROID] }) {
+                edges {
+                  node {
+                    id status platform appVersion appBuildVersion appIdentifier
+                    artifacts { buildUrl }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """,
+        """
+        query ($appId: String!) {
+          app {
+            byId(appId: $appId) {
+              buildsPaginated(offset: 0, limit: 25) {
+                edges {
+                  node {
+                    id status platform appVersion appBuildVersion appIdentifier
+                    artifacts { buildUrl }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """,
+    )
+    edges: list[Any] = []
+    for query in queries:
+        try:
+            payload = _expo_graphql(token, query, {"appId": EAS_CUSTOMER_PROJECT_ID})
+        except Exception as exc:
+            logger.info("Expo build recovery request failed: %s", exc)
+            continue
+        if payload.get("errors"):
+            logger.info("Expo build recovery GraphQL errors: %s", payload.get("errors"))
+            continue
+        edges = (
+            (((payload.get("data") or {}).get("app") or {}).get("byId") or {})
+            .get("buildsPaginated")
+            or {}
+        ).get("edges") or []
+        if edges:
+            break
+    matches: list[dict[str, Any]] = []
+    for edge in edges:
+        node = (edge or {}).get("node") if isinstance(edge, dict) else None
+        if not isinstance(node, dict):
+            continue
+        platform = str(node.get("platform") or "").upper()
+        if platform and platform != "ANDROID":
+            continue
+        if str(node.get("appIdentifier") or "").strip() != package:
+            continue
+        matches.append(node)
+    if not matches:
+        return None
+    # Prefer finished builds, then newest listed order from Expo.
+    matches.sort(key=lambda row: 0 if str(row.get("status") or "").upper() == "FINISHED" else 1)
+    return matches[0]
+
+
+def refresh_build_status_from_expo(*, profile: WhiteLabelProfile, track: str) -> dict[str, Any]:
+    """Poll Expo when build_id + token exist; recover build_id by package when missing."""
+    track_key = "preview" if track == "preview" else "production"
+    meta = _metadata(profile)
+    current = dict(meta.get(track_key) if isinstance(meta.get(track_key), dict) else {})
+    build_id = str(current.get("build_id") or "").strip()
+    token = _expo_access_token()
+    refreshed_at = timezone.now().isoformat()
+
+    def _persist_note(note: str) -> dict[str, Any]:
+        row = dict(current)
+        row["refresh_note"] = note
+        row["refreshed_at"] = refreshed_at
+        meta[track_key] = row
+        _save_metadata(profile, meta)
+        return row
+
+    if not token:
+        return _persist_note(
+            "EXPO_TOKEN / EXPO_ACCESS_TOKEN is not configured on the API server, so status cannot be polled."
+        )
+
+    recovered_note = ""
+    if not build_id:
+        recovered = _recover_build_id_from_expo(
+            token=token,
+            package_name=str(profile.bundle_id_android or ""),
+        )
+        if not recovered:
+            return _persist_note(
+                "No Expo build id recorded yet, and no matching Android build was found for this package. "
+                "Start a build (or wait until CI reports the Expo id), then refresh."
+            )
+        build_id = str(recovered.get("id") or "").strip()
+        if not build_id:
+            return _persist_note("Expo returned a matching build without an id.")
+        current["build_id"] = build_id
+        meta[track_key] = current
+        _save_metadata(profile, meta)
+        recovered_note = "Recovered Expo build id from package match. "
+
+    query = (
+        "query ($id: ID!) { builds { byId(buildId: $id) { id status "
+        "appVersion appBuildVersion platform "
+        "artifacts { buildUrl } } } }"
+    )
+    try:
+        payload = _expo_graphql(token, query, {"id": build_id})
+    except Exception as exc:
+        return _persist_note(f"Expo status poll failed: {exc}")
+    if payload.get("errors"):
+        return _persist_note(f"Expo GraphQL error: {payload.get('errors')}")
+    build = (((payload.get("data") or {}).get("builds") or {}).get("byId")) or {}
+    if not build:
+        return _persist_note(f"Expo returned no build for id {build_id}.")
+    mapped = _map_expo_status(build.get("status"), current.get("status"))
     artifacts = build.get("artifacts") or {}
-    return record_build_callback(
+    apk_url = artifacts.get("buildUrl") or artifacts.get("applicationArchiveUrl")
+    record_build_callback(
         profile=profile,
         track=track,
         status=str(mapped),
         build_id=str(build.get("id") or build_id),
         url=f"https://expo.dev/accounts/indians-empire/projects/ie-orbit-customer/builds/{build_id}",
-        apk_url=artifacts.get("buildUrl"),
+        apk_url=apk_url,
         version_name=build.get("appVersion"),
         version_code=int(build["appBuildVersion"]) if str(build.get("appBuildVersion") or "").isdigit() else None,
+        append_history=True,
     )
+    profile.refresh_from_db()
+    meta_after = _metadata(profile)
+    row = dict(meta_after.get(track_key) if isinstance(meta_after.get(track_key), dict) else {})
+    row["refresh_note"] = f"{recovered_note}Synced from Expo · status {mapped}."
+    row["refreshed_at"] = refreshed_at
+    meta_after[track_key] = row
+    _save_metadata(profile, meta_after)
+    return row

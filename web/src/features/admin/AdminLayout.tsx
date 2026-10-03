@@ -12,6 +12,7 @@ import {
   LifeBuoy,
   Megaphone,
   Package,
+  PackageSearch,
   ScrollText,
   Shield,
   TicketPercent,
@@ -55,6 +56,7 @@ const navGroups: Array<{
   {
     label: 'Platform',
     items: [
+      { to: '/admin/product-catalog', label: 'Product Catalog', icon: <PackageSearch size={16} /> },
       { to: '/admin/auth-settings', label: 'WhatsApp', icon: <Shield size={16} /> },
       { to: '/admin/monitoring', label: 'Monitoring', icon: <Activity size={16} /> },
       { to: '/admin/audit', label: 'Audit', icon: <ScrollText size={16} /> },

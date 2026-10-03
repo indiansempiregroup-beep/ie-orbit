@@ -151,7 +151,9 @@ class StaffManagementService:
             raise ValidationError({"email": "A staff member with this email already exists for this business."})
 
         phone = (staff.phone_number or "").strip()
-        if phone and qs.filter(phone_number=phone).exclude(phone_number="").exists():
+        if not phone:
+            raise ValidationError({"phone_number": "Phone number is required."})
+        if qs.filter(phone_number=phone).exclude(phone_number="").exists():
             raise ValidationError(
                 {"phone_number": "A staff member with this phone number already exists for this business."}
             )

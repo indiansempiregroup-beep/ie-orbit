@@ -28,6 +28,8 @@ export type PosTotals = {
     id: string;
     gross: number;
     discountAmount: number;
+    /** Price × qty − line discount (same basis as unit price; tax not added). */
+    amount: number;
     subtotal: number;
     tax: number;
     total: number;
@@ -99,12 +101,13 @@ export function computePosTotals(
     const taxInclusive = Boolean(line.taxInclusive);
     const gross = money(unitPrice * qty);
     const discountAmount = applyDiscount(gross, line.discountType, line.discountValue);
-    const afterDiscount = money(gross - discountAmount);
-    const split = splitTax(afterDiscount, taxRate, taxInclusive);
+    const amount = money(gross - discountAmount);
+    const split = splitTax(amount, taxRate, taxInclusive);
     return {
       id: line.id,
       gross,
       discountAmount,
+      amount,
       subtotal: split.taxable,
       tax: split.tax,
       total: split.total,
@@ -114,6 +117,7 @@ export function computePosTotals(
 
   const lineDiscountTotal = money(built.reduce((sum, row) => sum + row.discountAmount, 0));
   const merchandiseGross = money(built.reduce((sum, row) => sum + row.gross, 0));
+  const merchandiseAfterLineDiscount = money(merchandiseGross - lineDiscountTotal);
   const payableBefore = money(built.reduce((sum, row) => sum + row.total, 0));
 
   const billOnly = applyDiscount(payableBefore, billDiscountType, billDiscountValue);
@@ -154,16 +158,17 @@ export function computePosTotals(
   return {
     merchandiseGross,
     lineDiscountTotal,
-    merchandiseAfterLineDiscount: subtotal,
+    merchandiseAfterLineDiscount,
     billDiscountAmount: billOnly,
     loyaltyDiscountAmount: loyaltyOnly,
     subtotal,
     taxTotal,
     payable: money(subtotal + taxTotal),
-    lines: built.map(({ id, gross, discountAmount, subtotal: lineSubtotal, tax, total }) => ({
+    lines: built.map(({ id, gross, discountAmount, amount, subtotal: lineSubtotal, tax, total }) => ({
       id,
       gross,
       discountAmount,
+      amount,
       subtotal: lineSubtotal,
       tax,
       total,

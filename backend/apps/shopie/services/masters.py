@@ -52,6 +52,13 @@ DEFAULT_TAX_RATES: tuple[tuple[str, str, str, int], ...] = (
     ("gst_28", "GST 28%", "28", 50),
 )
 
+DEFAULT_PET_SPECIES: tuple[str, ...] = (
+    "Dog",
+    "Cat",
+    "Bird",
+    "Rabbit",
+)
+
 
 class MasterService:
     """Shop-scoped master files (categories, brands, units, ledger cats, tax rates)."""
@@ -107,6 +114,15 @@ class MasterService:
                 for slug, label, value, sort_order in DEFAULT_TAX_RATES
             ],
         )
+        self._seed_kind(
+            tenant=tenant,
+            business=business,
+            kind=ShopMasterKind.PET_SPECIES,
+            rows=[
+                (self.normalize_slug(label), label, "", 100 + index, True)
+                for index, label in enumerate(DEFAULT_PET_SPECIES)
+            ],
+        )
 
     def _seed_kind(
         self,
@@ -119,18 +135,26 @@ class MasterService:
         for slug, label, value, sort_order, is_builtin in rows:
             if not slug:
                 continue
-            ShopMasterRecord.objects.get_or_create(
+            # Use all_objects so soft-deleted / inactive rows are visible to seeding.
+            # Never resurrect a row the shop deleted.
+            existing = ShopMasterRecord.all_objects.filter(
                 tenant=tenant,
                 business=business,
                 kind=kind,
                 slug=slug,
-                defaults={
-                    "label": label[:120],
-                    "value": value[:64],
-                    "is_builtin": is_builtin,
-                    "sort_order": sort_order,
-                    "is_active": True,
-                },
+            ).first()
+            if existing is not None:
+                continue
+            ShopMasterRecord.all_objects.create(
+                tenant=tenant,
+                business=business,
+                kind=kind,
+                slug=slug,
+                label=label[:120],
+                value=value[:64],
+                is_builtin=is_builtin,
+                sort_order=sort_order,
+                is_active=True,
             )
 
     def list_records(
@@ -142,7 +166,8 @@ class MasterService:
         include_inactive: bool = False,
     ) -> list[dict[str, Any]]:
         self.seed_defaults(tenant=tenant, business=business)
-        qs = ShopMasterRecord.objects.filter(
+        # objects manager hides inactive rows; include_inactive needs all non-deleted.
+        qs = ShopMasterRecord.all_objects.filter(
             tenant=tenant,
             business=business,
             kind=kind,
@@ -166,7 +191,7 @@ class MasterService:
 
     def category_labels_map(self, *, tenant: Tenant, business: Business) -> dict[str, str]:
         self.seed_defaults(tenant=tenant, business=business)
-        rows = ShopMasterRecord.objects.filter(
+        rows = ShopMasterRecord.all_objects.filter(
             tenant=tenant,
             business=business,
             kind=ShopMasterKind.CATEGORY,
@@ -199,14 +224,14 @@ class MasterService:
         for category in used_categories:
             self.ensure(tenant=tenant, business=business, kind=ShopMasterKind.CATEGORY, slug=category, label=category)
 
-        category_rows = ShopMasterRecord.objects.filter(
+        category_rows = ShopMasterRecord.all_objects.filter(
             tenant=tenant,
             business=business,
             kind=ShopMasterKind.CATEGORY,
             is_active=True,
             deleted_at__isnull=True,
         ).order_by("sort_order", "label")
-        brand_rows = ShopMasterRecord.objects.filter(
+        brand_rows = ShopMasterRecord.all_objects.filter(
             tenant=tenant,
             business=business,
             kind=ShopMasterKind.BRAND,
@@ -236,6 +261,24 @@ class MasterService:
         ]
         return {"categories": categories, "brands": brands}
 
+    def _revive(self, row: ShopMasterRecord, *, label: str = "", value: str = "") -> ShopMasterRecord:
+        if row.deleted_at is not None:
+            row.restore()
+        updates: list[str] = []
+        if not row.is_active:
+            row.is_active = True
+            updates.append("is_active")
+        if label and row.label != label[:120]:
+            row.label = label[:120]
+            updates.append("label")
+        if value and row.value != value[:64]:
+            row.value = value[:64]
+            updates.append("value")
+        if updates:
+            updates.append("updated_at")
+            row.save(update_fields=list(dict.fromkeys(updates)))
+        return row
+
     @transaction.atomic
     def ensure(
         self,
@@ -246,6 +289,7 @@ class MasterService:
         label: str = "",
         slug: str = "",
         value: str = "",
+        allow_builtin_guess: bool = True,
     ) -> ShopMasterRecord | None:
         self.seed_defaults(tenant=tenant, business=business)
         text = (label or slug or "").strip()
@@ -256,32 +300,32 @@ class MasterService:
         if not candidate_slug:
             return None
 
-        existing = ShopMasterRecord.objects.filter(
+        existing = ShopMasterRecord.all_objects.filter(
             tenant=tenant, business=business, kind=kind, slug=candidate_slug
         ).first()
         if existing:
-            if not existing.is_active:
-                existing.is_active = True
-                existing.save(update_fields=["is_active", "updated_at"])
-            return existing
+            return self._revive(existing, label=text if label else "", value=value)
 
-        by_label = ShopMasterRecord.objects.filter(
-            tenant=tenant, business=business, kind=kind, label__iexact=text
+        by_label = ShopMasterRecord.all_objects.filter(
+            tenant=tenant, business=business, kind=kind, label__iexact=text, deleted_at__isnull=True
         ).first()
         if by_label:
-            if not by_label.is_active:
-                by_label.is_active = True
-                by_label.save(update_fields=["is_active", "updated_at"])
-            return by_label
+            return self._revive(by_label, label=text if label else "", value=value)
 
-        if kind == ShopMasterKind.CATEGORY:
+        # Auto-map free-text product categories onto builtins. Explicit "Add" in
+        # Master Files should keep the shop's own label, so create() disables this.
+        if allow_builtin_guess and kind == ShopMasterKind.CATEGORY:
             guessed = self.categories.guess_builtin(text)
             if guessed:
-                row = ShopMasterRecord.objects.filter(
-                    tenant=tenant, business=business, kind=kind, slug=guessed
+                row = ShopMasterRecord.all_objects.filter(
+                    tenant=tenant,
+                    business=business,
+                    kind=kind,
+                    slug=guessed,
+                    deleted_at__isnull=True,
                 ).first()
                 if row:
-                    return row
+                    return self._revive(row)
             if candidate_slug == ProductCategory.OTHER and text.lower() not in {
                 "other",
                 "misc",
@@ -298,20 +342,24 @@ class MasterService:
                 value = text
 
         display = text if label else text.replace("_", " ").strip().title()
-        row, _ = ShopMasterRecord.objects.get_or_create(
+        # Race-safe create: soft-deleted rows still hold the unique slug.
+        existing = ShopMasterRecord.all_objects.filter(
+            tenant=tenant, business=business, kind=kind, slug=candidate_slug
+        ).first()
+        if existing:
+            return self._revive(existing, label=display, value=value or "")
+
+        return ShopMasterRecord.all_objects.create(
             tenant=tenant,
             business=business,
             kind=kind,
             slug=candidate_slug,
-            defaults={
-                "label": display[:120],
-                "value": (value or "")[:64],
-                "is_builtin": False,
-                "sort_order": 200,
-                "is_active": True,
-            },
+            label=display[:120],
+            value=(value or "")[:64],
+            is_builtin=False,
+            sort_order=200,
+            is_active=True,
         )
-        return row
 
     @transaction.atomic
     def create(
@@ -331,6 +379,7 @@ class MasterService:
             label=label,
             slug=slug,
             value=value,
+            allow_builtin_guess=False,
         )
         if not row:
             raise ValueError("Provide a name.")
@@ -355,16 +404,29 @@ class MasterService:
             record.is_active = bool(data["is_active"])
         if "sort_order" in data and data["sort_order"] is not None:
             record.sort_order = int(data["sort_order"])
-        if "slug" in data and data["slug"] and not record.is_builtin:
+        if "slug" in data and data["slug"]:
             new_slug = self.normalize_slug(str(data["slug"]))
             if new_slug and new_slug != record.slug:
-                clash = ShopMasterRecord.objects.filter(
+                clash = ShopMasterRecord.all_objects.filter(
                     tenant=tenant,
                     business=business,
                     kind=record.kind,
                     slug=new_slug,
+                    deleted_at__isnull=True,
                 ).exclude(id=record.id)
                 if not clash.exists():
                     record.slug = new_slug
         record.save()
         return record
+
+    @transaction.atomic
+    def delete(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        record: ShopMasterRecord,
+    ) -> None:
+        if record.tenant_id != tenant.id or record.business_id != business.id:
+            raise ValueError("Master record not found.")
+        record.delete()

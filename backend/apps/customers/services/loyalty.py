@@ -323,6 +323,54 @@ class LoyaltyService:
             qs = qs.filter(voucher_id=voucher_id)
         return qs
 
+    def expected_earn_for_booking_services(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        service_ids: list[Any],
+    ) -> int:
+        """Sum of per-service loyalty_points_earn (booking earn model, not shop spend)."""
+        if not self.is_program_active(business=business):
+            return 0
+        ids = [sid for sid in service_ids if sid]
+        if not ids:
+            return 0
+        total = 0
+        for service in Service.objects.require_tenant(tenant).filter(
+            id__in=ids, business=business
+        ):
+            total += max(0, int(service.loyalty_points_earn or 0))
+        return int(total)
+
+    def expected_earn_for_booking(self, *, tenant: Any, business: Any, booking: Any) -> int:
+        line_manager = getattr(booking, "line_items", None)
+        if line_manager is not None and hasattr(line_manager, "all"):
+            line_items = list(line_manager.all())
+        else:
+            line_items = list(line_manager or [])
+        if line_items:
+            return self.expected_earn_for_booking_services(
+                tenant=tenant,
+                business=business,
+                service_ids=[item.service_id for item in line_items],
+            )
+        service_id = getattr(booking, "service_id", None)
+        if service_id:
+            return self.expected_earn_for_booking_services(
+                tenant=tenant, business=business, service_ids=[service_id]
+            )
+        return 0
+
+    def credited_earn_for_booking(self, *, tenant: Any, booking_id: Any) -> int:
+        row = (
+            self._ledger_qs(tenant=tenant, booking_id=booking_id)
+            .filter(points_delta__gt=0, metadata__type="earn")
+            .order_by("-created_at")
+            .first()
+        )
+        return int(row.points_delta) if row is not None else 0
+
     @transaction.atomic
     def award_for_completed_booking(
         self,
@@ -335,7 +383,11 @@ class LoyaltyService:
     ) -> CustomerLoyaltyAccount | None:
         if not self.is_program_active(business=business):
             return None
-        points = 0
+        points = self.expected_earn_for_booking_services(
+            tenant=tenant,
+            business=business,
+            service_ids=[service_id] if service_id else [],
+        )
         service_name = ""
         if service_id:
             service = (
@@ -344,7 +396,6 @@ class LoyaltyService:
                 .first()
             )
             if service is not None:
-                points = int(service.loyalty_points_earn or 0)
                 service_name = service.display_name or service.name
         if points <= 0:
             return None
@@ -392,24 +443,24 @@ class LoyaltyService:
             return None
 
         service_ids = [item.service_id for item in line_items]
+        total_points = self.expected_earn_for_booking_services(
+            tenant=tenant, business=business, service_ids=service_ids
+        )
+        if total_points <= 0:
+            return None
         services = {
             str(service.id): service
             for service in Service.objects.require_tenant(tenant).filter(
                 id__in=service_ids, business=business
             )
         }
-        total_points = 0
         service_names: list[str] = []
         for item in line_items:
             service = services.get(str(item.service_id))
             if service is None:
                 continue
-            points = int(service.loyalty_points_earn or 0)
-            if points > 0:
-                total_points += points
+            if int(service.loyalty_points_earn or 0) > 0:
                 service_names.append(service.display_name or service.name)
-        if total_points <= 0:
-            return None
 
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
         account.points_balance = int(account.points_balance) + total_points
@@ -546,6 +597,28 @@ class LoyaltyService:
         )
         return account
 
+    def remaining_earned_points(
+        self,
+        *,
+        tenant: Any,
+        booking_id: Any = None,
+        order_id: Any = None,
+        voucher_id: Any = None,
+    ) -> int:
+        """Earn points still on the ledger after prior reversals for this document."""
+        qs = self._ledger_qs(
+            tenant=tenant, booking_id=booking_id, order_id=order_id, voucher_id=voucher_id
+        )
+        earned = sum(
+            int(row.points_delta)
+            for row in qs.filter(points_delta__gt=0, metadata__type="earn")
+        )
+        reversed_pts = sum(
+            abs(int(row.points_delta))
+            for row in qs.filter(points_delta__lt=0, metadata__type="earn_reversal")
+        )
+        return max(0, int(earned) - int(reversed_pts))
+
     def _reverse_earn(
         self,
         *,
@@ -556,21 +629,31 @@ class LoyaltyService:
         booking_id: Any = None,
         order_id: Any = None,
         voucher_id: Any = None,
-    ) -> CustomerLoyaltyAccount | None:
-        qs = self._ledger_qs(
-            tenant=tenant, booking_id=booking_id, order_id=order_id, voucher_id=voucher_id
+        points: int | None = None,
+    ) -> int:
+        """
+        Reverse earned points for a document.
+
+        ``points=None`` reverses all remaining earn. Partial returns pass a positive
+        ``points`` amount (capped at remaining earn and current balance).
+        Returns the points actually deducted.
+        """
+        remaining = self.remaining_earned_points(
+            tenant=tenant,
+            booking_id=booking_id,
+            order_id=order_id,
+            voucher_id=voucher_id,
         )
-        if qs.filter(points_delta__lt=0, metadata__type="earn_reversal").exists():
-            return None
-        earn = qs.filter(points_delta__gt=0, metadata__type="earn").first()
-        if earn is None:
-            return None
-        points = int(earn.points_delta)
-        if points <= 0:
-            return None
+        if remaining <= 0:
+            return 0
+        target = remaining if points is None else min(remaining, max(0, int(points)))
+        if target <= 0:
+            return 0
         account = self._lock_account(tenant=tenant, business=business, customer=customer)
         current = int(account.points_balance)
-        deduct = min(current, points)
+        deduct = min(current, target)
+        if deduct <= 0:
+            return 0
         CustomerLoyaltyAccount.objects.filter(id=account.id).update(
             points_balance=F("points_balance") - deduct
         )
@@ -587,7 +670,45 @@ class LoyaltyService:
             voucher_id=voucher_id,
             metadata={"type": "earn_reversal", "feature": FEATURE_REWARD_POINTS},
         )
-        return account
+        return int(deduct)
+
+    def clawback_earn_for_spend(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        customer: Customer,
+        amount: Decimal | str | int | float,
+        reason: str,
+        booking_id: Any = None,
+        order_id: Any = None,
+        voucher_id: Any = None,
+        reverse_all_remaining: bool = False,
+    ) -> int:
+        """Revoke earn points for a refunded spend amount (or all remaining if full return)."""
+        if reverse_all_remaining:
+            return self._reverse_earn(
+                tenant=tenant,
+                business=business,
+                customer=customer,
+                reason=reason,
+                booking_id=booking_id,
+                order_id=order_id,
+                voucher_id=voucher_id,
+            )
+        points = self.earn_points_for_spend(business=business, amount=amount)
+        if points <= 0:
+            return 0
+        return self._reverse_earn(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            reason=reason,
+            booking_id=booking_id,
+            order_id=order_id,
+            voucher_id=voucher_id,
+            points=points,
+        )
 
     @transaction.atomic
     def redeem_for_order(
@@ -654,17 +775,18 @@ class LoyaltyService:
         order_id: Any,
         amount: Decimal | str | int | float,
         order_number: str = "",
-    ) -> CustomerLoyaltyAccount | None:
+    ) -> int:
+        """Credit earn points for a paid order. Returns points awarded (0 if none/already)."""
         points = self.earn_points_for_spend(business=business, amount=amount)
         if points <= 0:
-            return None
+            return 0
         already = (
             self._ledger_qs(tenant=tenant, order_id=order_id)
             .filter(points_delta__gt=0, metadata__type="earn")
             .exists()
         )
         if already:
-            return None
+            return 0
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
         account.points_balance = int(account.points_balance) + points
         account.save(update_fields=["points_balance", "updated_at"])
@@ -679,7 +801,7 @@ class LoyaltyService:
             order_id=order_id,
             metadata={"type": "earn", "feature": FEATURE_REWARD_POINTS},
         )
-        return account
+        return int(points)
 
     @transaction.atomic
     def refund_for_order(
@@ -772,17 +894,18 @@ class LoyaltyService:
         voucher_id: Any,
         amount: Decimal | str | int | float,
         voucher_number: str = "",
-    ) -> CustomerLoyaltyAccount | None:
+    ) -> int:
+        """Credit earn points for a confirmed sale voucher. Returns points awarded."""
         points = self.earn_points_for_spend(business=business, amount=amount)
         if points <= 0:
-            return None
+            return 0
         already = (
             self._ledger_qs(tenant=tenant, voucher_id=voucher_id)
             .filter(points_delta__gt=0, metadata__type="earn")
             .exists()
         )
         if already:
-            return None
+            return 0
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
         account.points_balance = int(account.points_balance) + points
         account.save(update_fields=["points_balance", "updated_at"])
@@ -797,7 +920,7 @@ class LoyaltyService:
             voucher_id=voucher_id,
             metadata={"type": "earn", "feature": FEATURE_REWARD_POINTS},
         )
-        return account
+        return int(points)
 
     @transaction.atomic
     def refund_for_voucher(
@@ -823,4 +946,31 @@ class LoyaltyService:
             customer=customer,
             voucher_id=voucher_id,
             reason="Reversed voided sale earn",
+        )
+
+    @transaction.atomic
+    def refund_for_booking(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        customer: Customer,
+        booking_id: Any,
+        points_redeemed: int = 0,
+    ) -> None:
+        """Restore redeemed points and reverse any earn for a cancelled/no-show booking."""
+        self._refund_redemption(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            points_redeemed=points_redeemed,
+            booking_id=booking_id,
+            reason="Refunded cancelled booking redemption",
+        )
+        self._reverse_earn(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            booking_id=booking_id,
+            reason="Reversed cancelled booking earn",
         )

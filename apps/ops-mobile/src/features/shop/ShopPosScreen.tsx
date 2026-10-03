@@ -6,12 +6,16 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import {
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -26,15 +30,11 @@ import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
 import { DesktopPage } from '../../components/DesktopPage';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { DateField } from '../../components/DateField';
-import { PickerSheet } from '../../components/PickerSheet';
 import { SelectField } from '../../components/SelectField';
-import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { FormAlert } from '../../components/ui/FormAlert';
-import { FormSection } from '../../components/ui/FormSection';
-import { IconBadge } from '../../components/ui/IconBadge';
 import { Input } from '../../components/ui/Input';
 import { StickyFooterBar } from '../../components/ui/StickyFooterBar';
 import { fieldStyles, inputReset } from '../../components/ui/fieldStyles';
@@ -53,13 +53,18 @@ import {
 import { gstinStateCode, isInterstateGstin, normalizeGstin, validateGstin } from '../../utils/gstin';
 import { getApiErrorMessage } from '../../utils/format';
 import { hasShopie } from '../../utils/products';
-import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../../utils/loyalty';
+import {
+  earnPointsForSpend,
+  maxRedeemablePoints,
+  readLoyaltyPrefs,
+  redeemDiscountAmount,
+} from '../../utils/loyalty';
+import { PlanFeature } from '../../utils/planFeatures';
 import { RemoteImage } from '../../components/RemoteImage';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { primaryProductImageUrl } from './productImages';
 import { formatMoney } from './shopBooksHelpers';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';
-import { PlanFeature } from '../../utils/planFeatures';
 
 type BasketLine = {
   product: ShopProduct;
@@ -108,7 +113,6 @@ function modeTitle(mode: PosMode) {
   return 'Sale';
 }
 
-const LINE_PERCENT_PRESETS = [5, 10, 15, 20, 25, 50];
 const SCAN_SUGGESTION_LIMIT = 12;
 
 function productScanCodes(product: ShopProduct): string[] {
@@ -144,7 +148,132 @@ function scanMatchRank(product: ShopProduct, term: string): number | null {
   if (codes.some((code) => code === needle)) return 0;
   if (codes.some((code) => code.startsWith(needle))) return 1;
   if (codes.some((code) => code.includes(needle))) return 2;
+
+  const name = String(product.name || '').trim().toLowerCase();
+  const brand = String(product.brand || '').trim().toLowerCase();
+  if (name === needle) return 3;
+  if (name.startsWith(needle)) return 4;
+  if (name.includes(needle)) return 5;
+  if (brand.startsWith(needle) || brand.includes(needle)) return 6;
   return null;
+}
+
+function sanitizeDecimalInput(raw: string): string {
+  const cleaned = raw.replace(/[^0-9.]/g, '');
+  if ((cleaned.match(/\./g) || []).length > 1) {
+    const first = cleaned.indexOf('.');
+    return cleaned.slice(0, first + 1) + cleaned.slice(first + 1).replace(/\./g, '');
+  }
+  return cleaned;
+}
+
+function formatDiscountNumber(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '';
+  return String(Math.round((value + Number.EPSILON) * 100) / 100);
+}
+
+/** Vyapar-style dual discount: edit % or ₹; the other field mirrors the computed value. */
+function DualDiscountFields({
+  lineGross,
+  discountType,
+  discountValue,
+  onChange,
+}: {
+  lineGross: number;
+  discountType: DiscountType;
+  discountValue: number;
+  onChange: (type: DiscountType, value: number) => void;
+}) {
+  const discAmount = applyDiscount(lineGross, discountType, discountValue);
+  const discPercent =
+    discountType === 'percent'
+      ? Math.max(0, Number(discountValue) || 0)
+      : lineGross > 0 && discAmount > 0
+        ? Math.round(((discAmount / lineGross) * 100 + Number.EPSILON) * 100) / 100
+        : 0;
+
+  const [pctDraft, setPctDraft] = useState(() => formatDiscountNumber(discPercent));
+  const [amtDraft, setAmtDraft] = useState(() => formatDiscountNumber(discAmount));
+  const [focusField, setFocusField] = useState<'percent' | 'amount' | null>(null);
+
+  useEffect(() => {
+    if (focusField === 'percent') return;
+    setPctDraft(formatDiscountNumber(discPercent));
+  }, [discPercent, focusField]);
+
+  useEffect(() => {
+    if (focusField === 'amount') return;
+    setAmtDraft(formatDiscountNumber(discAmount));
+  }, [discAmount, focusField]);
+
+  const percentInput = (
+    <View style={[styles.dualDiscCell, styles.dualDiscCellPct]}>
+      <TextInput
+        style={styles.dualDiscInput}
+        value={pctDraft}
+        onFocus={() => setFocusField('percent')}
+        onBlur={() => {
+          setFocusField(null);
+          const next = Number(pctDraft) || 0;
+          setPctDraft(formatDiscountNumber(next));
+          onChange(next > 0 ? 'percent' : '', next);
+        }}
+        onChangeText={(raw) => {
+          const cleaned = sanitizeDecimalInput(raw);
+          setPctDraft(cleaned);
+          if (cleaned === '' || cleaned.endsWith('.')) {
+            onChange(cleaned === '' ? '' : 'percent', cleaned === '' ? 0 : Number(cleaned) || 0);
+            return;
+          }
+          const next = Number(cleaned) || 0;
+          onChange(next > 0 ? 'percent' : '', next);
+        }}
+        keyboardType="decimal-pad"
+        placeholder="0"
+        placeholderTextColor={colors.mutedForeground}
+        accessibilityLabel="Discount percent"
+      />
+      <Text style={styles.dualDiscSuffix}>%</Text>
+    </View>
+  );
+
+  const amountInput = (
+    <View style={[styles.dualDiscCell, styles.dualDiscCellAmt]}>
+      <Text style={styles.dualDiscPrefix}>₹</Text>
+      <TextInput
+        style={styles.dualDiscInput}
+        value={amtDraft}
+        onFocus={() => setFocusField('amount')}
+        onBlur={() => {
+          setFocusField(null);
+          const next = Number(amtDraft) || 0;
+          setAmtDraft(formatDiscountNumber(next));
+          onChange(next > 0 ? 'amount' : '', next);
+        }}
+        onChangeText={(raw) => {
+          const cleaned = sanitizeDecimalInput(raw);
+          setAmtDraft(cleaned);
+          if (cleaned === '' || cleaned.endsWith('.')) {
+            onChange(cleaned === '' ? '' : 'amount', cleaned === '' ? 0 : Number(cleaned) || 0);
+            return;
+          }
+          const next = Number(cleaned) || 0;
+          onChange(next > 0 ? 'amount' : '', next);
+        }}
+        keyboardType="decimal-pad"
+        placeholder="0"
+        placeholderTextColor={colors.mutedForeground}
+        accessibilityLabel="Discount amount"
+      />
+    </View>
+  );
+
+  return (
+    <View style={styles.dualDiscRow}>
+      {percentInput}
+      {amountInput}
+    </View>
+  );
 }
 
 function ProductThumb({ product, size = 36 }: { product: ShopProduct; size?: number }) {
@@ -175,7 +304,9 @@ function ProductThumb({ product, size = 36 }: { product: ShopProduct; size?: num
 }
 
 export function ShopPosScreen() {
-  const { isDesktop } = useBreakpoint();
+  const { isDesktop, width: viewportWidth } = useBreakpoint();
+  /** Side-by-side Payment | Bill summary on OPS web / wide desktop. */
+  const checkoutSideBySide = isDesktop || viewportWidth >= 720;
   const { lift, maxHeight, bottomPad, keyboardOpen } = useSheetKeyboardLayout(0.72);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
@@ -223,9 +354,11 @@ export function ShopPosScreen() {
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>(
     () => (skipSaleSession ? '' : initialSession.billDiscountType),
   );
-  const [billDiscountValue, setBillDiscountValue] = useState(
-    () => (skipSaleSession ? '0' : initialSession.billDiscountValue),
-  );
+  const [billDiscountValue, setBillDiscountValue] = useState(() => {
+    if (skipSaleSession) return '';
+    const raw = String(initialSession.billDiscountValue ?? '').trim();
+    return raw === '0' ? '' : raw;
+  });
   const [automationOffers, setAutomationOffers] = useState<
     Array<{
       label: string;
@@ -240,6 +373,9 @@ export function ShopPosScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
     () => (isPurchase ? 'borrow' : initialSession.paymentMethod),
   );
+  /** Amount collected now (sales till). Empty = default full pay / full credit. */
+  const [amountReceived, setAmountReceived] = useState('');
+  const [amountReceivedTouched, setAmountReceivedTouched] = useState(false);
   const [validUntil, setValidUntil] = useState('');
   const [noteSettlement, setNoteSettlement] = useState<NoteSettlement>('adjust');
   const [documentNotes, setDocumentNotes] = useState('');
@@ -247,9 +383,7 @@ export function ShopPosScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
-  const [discountLineId, setDiscountLineId] = useState<string | null>(null);
-  const [draftDiscType, setDraftDiscType] = useState<DiscountType>('percent');
-  const [draftDiscValue, setDraftDiscValue] = useState('');
+  const [awardLoyaltyPoints, setAwardLoyaltyPoints] = useState(true);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const catalogLoadedRef = React.useRef(false);
@@ -470,7 +604,10 @@ export function ShopPosScreen() {
         setCustomerId(session.customerId);
         setBasket(session.basket);
         setBillDiscountType(session.billDiscountType);
-        setBillDiscountValue(session.billDiscountValue);
+        {
+          const raw = String(session.billDiscountValue ?? '').trim();
+          setBillDiscountValue(raw === '0' ? '' : raw);
+        }
         setPartyGstin(session.partyGstin ?? '');
         setPaymentMethod(session.paymentMethod);
       }
@@ -653,65 +790,50 @@ export function ShopPosScreen() {
     [basket],
   );
 
-  const baseTotals = useMemo(
-    () => computePosTotals(posLineInputs, billDiscountType, Number(billDiscountValue) || 0, 0),
-    [posLineInputs, billDiscountType, billDiscountValue],
+  /** Product-level only — used for line Amount / Disc columns (bill discount must not leak into rows). */
+  const lineLevelTotals = useMemo(
+    () => computePosTotals(posLineInputs, '', 0, 0),
+    [posLineInputs],
   );
-
-  const discountLine = basket.find((line) => line.product.id === discountLineId) ?? null;
-  const discountPriced = discountLine
-    ? baseTotals.lines.find((row) => row.id === discountLine.product.id)
-    : undefined;
-  const draftDiscAmount = applyDiscount(
-    discountPriced?.gross ?? 0,
-    draftDiscType,
-    Number(draftDiscValue) || 0,
-  );
-
-  useEffect(() => {
-    if (!discountLineId) return;
-    const line = basket.find((row) => row.product.id === discountLineId);
-    if (!line) {
-      setDiscountLineId(null);
-      return;
-    }
-    setDraftDiscType(line.discountType || 'percent');
-    setDraftDiscValue(line.discountValue ? String(line.discountValue) : '');
-    // Sync only when the sheet opens for a line.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discountLineId]);
 
   const loyaltyPrefs = useMemo(
     () => readLoyaltyPrefs((activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined),
     [activeBusiness?.settings],
   );
+  /** Visible when the business owner turned reward points on in shop settings. */
+  const loyaltyProgramOn = mode === 'sale' && loyaltyPrefs.enabled;
   const selectedPosCustomer = useMemo(
     () => customers.find((row) => row.id === customerId) ?? null,
     [customers, customerId],
   );
   const loyaltyMaxPoints = useMemo(() => {
-    if (mode !== 'sale' || !customerId) return 0;
+    if (!loyaltyProgramOn || !customerId) return 0;
     return maxRedeemablePoints(
-      baseTotals.subtotal,
+      lineLevelTotals.subtotal,
       loyaltyPrefs,
       Number(selectedPosCustomer?.loyalty_points ?? 0),
     );
-  }, [mode, customerId, baseTotals.subtotal, loyaltyPrefs, selectedPosCustomer?.loyalty_points]);
+  }, [
+    loyaltyProgramOn,
+    customerId,
+    lineLevelTotals.subtotal,
+    loyaltyPrefs,
+    selectedPosCustomer?.loyalty_points,
+  ]);
   const loyaltyDiscount = useMemo(
     () => redeemDiscountAmount(Math.min(pointsToRedeem, loyaltyMaxPoints), loyaltyPrefs),
     [pointsToRedeem, loyaltyMaxPoints, loyaltyPrefs],
   );
+  /** Full bill — bill discount + loyalty applied only here (totals panel / Save). */
   const totals = useMemo(
     () =>
-      loyaltyDiscount > 0
-        ? computePosTotals(
-            posLineInputs,
-            billDiscountType,
-            Number(billDiscountValue) || 0,
-            loyaltyDiscount,
-          )
-        : baseTotals,
-    [baseTotals, posLineInputs, billDiscountType, billDiscountValue, loyaltyDiscount],
+      computePosTotals(
+        posLineInputs,
+        billDiscountType,
+        Number(billDiscountValue) || 0,
+        loyaltyDiscount,
+      ),
+    [posLineInputs, billDiscountType, billDiscountValue, loyaltyDiscount],
   );
 
   useEffect(() => {
@@ -768,8 +890,32 @@ export function ShopPosScreen() {
 
   async function checkout() {
     if (!client || !businessId || !basket.length) return;
-    if (mode === 'sale' && paymentMethod === 'borrow' && !customerId) {
-      const text = 'Select a customer for borrow / credit bills.';
+    const tillSale =
+      mode === 'sale' &&
+      !isDocument &&
+      !isNote &&
+      (paymentMethod === 'cash' ||
+        paymentMethod === 'upi' ||
+        paymentMethod === 'card' ||
+        paymentMethod === 'borrow');
+    const payableNow = totals.payable;
+    let paidNow = payableNow;
+    if (tillSale) {
+      if (paymentMethod === 'borrow' && !amountReceivedTouched && amountReceived === '') {
+        paidNow = 0;
+      } else if (!amountReceivedTouched && amountReceived === '' && paymentMethod !== 'borrow') {
+        paidNow = payableNow;
+      } else {
+        const parsed = Number(amountReceived);
+        paidNow =
+          !Number.isFinite(parsed) || parsed < 0
+            ? 0
+            : Math.min(payableNow, Math.round((parsed + Number.EPSILON) * 100) / 100);
+      }
+    }
+    const dueNow = Math.max(0, Math.round((payableNow - paidNow + Number.EPSILON) * 100) / 100);
+    if (mode === 'sale' && tillSale && dueNow > 0 && !customerId) {
+      const text = 'Select a customer when the bill is not fully paid (partial or credit).';
       setMessage(text);
       toast.push(text, 'error');
       return;
@@ -866,7 +1012,7 @@ export function ShopPosScreen() {
         });
         setBasket([]);
         setBillDiscountType('');
-        setBillDiscountValue('0');
+        setBillDiscountValue('');
         setSupplierId('');
         const label = isPurchaseOrder ? 'Purchase order' : isChallan ? 'Delivery challan' : 'Sale order';
         toast.push(
@@ -904,7 +1050,7 @@ export function ShopPosScreen() {
         });
         setBasket([]);
         setBillDiscountType('');
-        setBillDiscountValue('0');
+        setBillDiscountValue('');
         setValidUntil('');
         toast.push(
           `Quotation ${response.data.quotation_number} created · ${formatMoney(totals.payable)}`,
@@ -940,7 +1086,7 @@ export function ShopPosScreen() {
         });
         setBasket([]);
         setBillDiscountType('');
-        setBillDiscountValue('0');
+        setBillDiscountValue('');
         setSupplierId('');
         setDocumentNotes('');
         setNoteSettlement('adjust');
@@ -982,7 +1128,7 @@ export function ShopPosScreen() {
         });
         setBasket([]);
         setBillDiscountType('');
-        setBillDiscountValue('0');
+        setBillDiscountValue('');
         setSupplierId('');
         setPartyGstin('');
         toast.push(
@@ -1000,13 +1146,18 @@ export function ShopPosScreen() {
         fulfillment_mode: 'pos',
         confirm: true,
         payment_method: paymentMethod,
+        amount_paid: paidNow,
         bill_discount_type: billDiscountType,
         bill_discount_value: Number(billDiscountValue) || 0,
         points_to_redeem: customerId && pointsToRedeem > 0 ? pointsToRedeem : undefined,
+        award_loyalty_points:
+          loyaltyProgramOn && customerId ? Boolean(awardLoyaltyPoints) : true,
         notes:
-          paymentMethod === 'borrow'
-            ? 'Sale · BORROW (due)'
-            : `Sale · ${paymentMethod.toUpperCase()}`,
+          dueNow > 0 && paidNow > 0
+            ? `Sale · ${paymentMethod.toUpperCase()} · partial · paid ${paidNow} · due ${dueNow}`
+            : paymentMethod === 'borrow'
+              ? 'Sale · BORROW (due)'
+              : `Sale · ${paymentMethod.toUpperCase()}`,
         lines: basket.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
@@ -1020,18 +1171,23 @@ export function ShopPosScreen() {
       });
       setBasket([]);
       setBillDiscountType('');
-      setBillDiscountValue('0');
-      setPointsToRedeem(0);
+        setBillDiscountValue('');
+        setPointsToRedeem(0);
+      setAmountReceived('');
+      setAmountReceivedTouched(false);
       clearPosBillKeepCustomer();
       writePosSession({
         customerId,
         basket: [],
         billDiscountType: '',
-        billDiscountValue: '0',
+        billDiscountValue: '',
         partyGstin: resolvedGstin,
         paymentMethod,
       });
-      const dueLabel = paymentMethod === 'borrow' ? ' · Due' : '';
+      const dueLabel =
+        dueNow > 0
+          ? ` · Paid ${formatMoney(paidNow)} · Due ${formatMoney(dueNow)}`
+          : '';
       const gstLabel = resolvedGstin ? ' · B2B' : '';
       toast.push(
         `Sale invoice ${response.data.order_number} posted to Books${dueLabel}${gstLabel} · ${formatMoney(totals.payable)}`,
@@ -1072,8 +1228,46 @@ export function ShopPosScreen() {
   }
 
   const payableShown = totals.payable;
+  const tillPayment =
+    mode === 'sale' &&
+    !isDocument &&
+    !isNote &&
+    (paymentMethod === 'cash' ||
+      paymentMethod === 'upi' ||
+      paymentMethod === 'card' ||
+      paymentMethod === 'borrow');
+  const receivedAmount = useMemo(() => {
+    if (!tillPayment) return payableShown;
+    if (paymentMethod === 'borrow' && !amountReceivedTouched && amountReceived === '') return 0;
+    if (!amountReceivedTouched && amountReceived === '' && paymentMethod !== 'borrow') {
+      return payableShown;
+    }
+    const parsed = Number(amountReceived);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    return Math.min(payableShown, Math.round((parsed + Number.EPSILON) * 100) / 100);
+  }, [tillPayment, paymentMethod, amountReceived, amountReceivedTouched, payableShown]);
+  const balanceDue = useMemo(
+    () => Math.max(0, Math.round((payableShown - receivedAmount + Number.EPSILON) * 100) / 100),
+    [payableShown, receivedAmount],
+  );
+
+  useEffect(() => {
+    if (!tillPayment || amountReceivedTouched) return;
+    if (paymentMethod === 'borrow') {
+      setAmountReceived('');
+      return;
+    }
+    setAmountReceived(
+      payableShown > 0 ? String(Math.round((payableShown + Number.EPSILON) * 100) / 100) : '',
+    );
+  }, [tillPayment, paymentMethod, payableShown, amountReceivedTouched]);
+
   const billCgst = Math.round((totals.taxTotal / 2) * 100) / 100;
   const billSgst = Math.round((totals.taxTotal - billCgst) * 100) / 100;
+  const pointsToEarn = useMemo(() => {
+    if (!loyaltyProgramOn || !customerId) return 0;
+    return earnPointsForSpend(payableShown, loyaltyPrefs);
+  }, [loyaltyProgramOn, customerId, payableShown, loyaltyPrefs]);
   const checkoutLabel = busy
     ? isSaleOrder
       ? 'Saving sale order…'
@@ -1104,12 +1298,12 @@ export function ShopPosScreen() {
                   ? paymentMethod === 'borrow'
                     ? `Record purchase · Due ${formatMoney(totals.payable)}`
                     : `Record purchase · ${formatMoney(totals.payable)}`
-                  : paymentMethod === 'borrow'
-                    ? `Save bill · Due ${formatMoney(payableShown)}`
+                  : balanceDue > 0
+                    ? `Save · Pay ${formatMoney(receivedAmount)} · Due ${formatMoney(balanceDue)}`
                     : `Charge ${formatMoney(payableShown)}`;
 
   return (
-    <DesktopPage maxWidth={960}>
+    <DesktopPage maxWidth={1100}>
     <DocumentActionsSheet
       visible={Boolean(docActions)}
       onClose={() => {
@@ -1135,34 +1329,20 @@ export function ShopPosScreen() {
       allowNewBill={docActions?.kind === 'sale'}
       onNewBill={() => setDocActions(null)}
     />
-    <View style={[styles.screen, { paddingTop: spacing.md }]}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.lg }}
+    <View style={[styles.screen, !isDesktop && styles.screenMobile, { paddingTop: spacing.sm }]}>
+      <View style={[styles.invoice, !isDesktop && styles.invoiceMobile]}>
+      <KeyboardAwareScrollView
+        style={styles.billScroll}
+        contentContainerStyle={[styles.invoiceContent, !isDesktop && styles.invoiceContentMobile]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        bottomOffset={isDesktop ? spacing.xl : 96}
+        showsVerticalScrollIndicator={false}
         refreshControl={shopListRefreshControl(refreshing, onRefresh)}
       >
-        <FormHero
-          title={modeTitle(mode)}
-          subtitle={
-            isCreditNote
-              ? 'Add returned items, choose settlement, then save the credit note.'
-              : isDebitNote
-                ? 'Add returned purchase items, choose settlement, then save the debit note.'
-                : isDocument
-                  ? 'Add products, then save the document.'
-                  : isPurchase
-                    ? 'Scan supplier items and record the bill.'
-                    : 'Scan or search products, then take payment.'
-          }
-        />
-
-        <FormSection
-          title={usesSupplier ? 'Supplier' : 'Customer'}
-          subtitle={usesSupplier ? 'Who are you buying from?' : 'Walk-in or a saved customer'}
-        >
-          <View style={styles.customerRow}>
-            {usesSupplier ? (
+        <View style={styles.invoiceTop}>
+          {usesSupplier ? (
+            <View style={styles.customerRow}>
               <View style={styles.customerField}>
                 <SelectField
                   label="Supplier"
@@ -1174,131 +1354,37 @@ export function ShopPosScreen() {
                   placeholder={isPurchase ? 'No supplier' : 'Select supplier'}
                 />
               </View>
-            ) : (
-              <>
-                <View style={styles.customerField}>
-                  <SelectField
-                    label="Customer"
-                    required={isCreditNote || (!isSaleOrder && !isChallan && !isQuotation)}
-                    value={customerId}
-                    options={customerOptions}
-                    onChange={updateCustomerId}
-                    searchable
-                    placeholder={
-                      isCreditNote
-                        ? 'Select customer'
-                        : isSaleOrder || isChallan
-                          ? 'Customer (optional)'
-                          : 'Walk-in customer'
-                    }
-                  />
-                </View>
-                {!isDocument || isQuotation || isCreditNote || isSaleOrder || isChallan ? (
-                  <Pressable
-                    style={styles.sideAddBtn}
-                    onPress={openAddCustomer}
-                    accessibilityLabel="Add customer"
-                  >
-                    <Feather name="user-plus" size={20} color="#fff" />
-                  </Pressable>
-                ) : null}
-              </>
-            )}
-          </View>
-        </FormSection>
-
-        <FormSection
-          title="Bill"
-          subtitle={`${basket.length} item${basket.length === 1 ? '' : 's'} · scan, search, or add`}
-        >
-        <View>
-        <View style={styles.scanRow}>
-          <View style={[fieldStyles.control, styles.scanField]}>
-            <Feather name="maximize" size={16} color={colors.primary} />
-            <TextInput
-              style={[inputReset, fieldStyles.value]}
-              value={scan}
-              onChangeText={(value) => {
-                setScan(value);
-                if (value.trim()) setMessage(null);
-              }}
-              onSubmitEditing={() => void resolveCode(scan)}
-              placeholder="Scan / type barcode"
-              placeholderTextColor={colors.mutedForeground}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-            />
-          </View>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={() => void resolveCode(scan)}
-            disabled={busy}
-            accessibilityLabel="Add scanned barcode"
-          >
-            <Feather name="check" size={20} color="#fff" />
-          </Pressable>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('BarcodeScanner', { target: 'pos' })}
-            accessibilityLabel="Scan with camera"
-          >
-            <Feather name="camera" size={20} color="#fff" />
-          </Pressable>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={() => setProductPickerOpen(true)}
-            accessibilityLabel="Search products"
-          >
-            <Feather name="search" size={20} color="#fff" />
-          </Pressable>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={openAddProduct}
-            accessibilityLabel="Add new product"
-          >
-            <Feather name="plus" size={20} color="#fff" />
-          </Pressable>
-        </View>
-        {scan.trim() ? (
-          <ScrollView
-            style={styles.scanSuggestions}
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
-          >
-            {scanSuggestions.length ? (
-              scanSuggestions.map((product) => {
-                const matched = matchedScanCode(product, scan);
-                return (
-                  <Pressable
-                    key={product.id}
-                    style={styles.scanSuggestionRow}
-                    onPress={() => {
-                      addProduct(product, matched || scan.trim());
-                      setScan('');
-                      setMessage(`Added ${product.name}`);
-                    }}
-                    accessibilityLabel={`Add ${product.name}`}
-                  >
-                    <ProductThumb product={product} size={36} />
-                    <View style={styles.productCopy}>
-                      <Text style={styles.name} numberOfLines={1}>
-                        {product.name}
-                      </Text>
-                      <Text style={styles.meta} numberOfLines={1}>
-                        {matched ? `${matched} · ` : ''}
-                        {formatMoney(product.price)} · stock {product.stock_on_hand}
-                      </Text>
-                    </View>
-                    <Feather name="plus" size={16} color={colors.primary} />
-                  </Pressable>
-                );
-              })
-            ) : (
-              <Text style={styles.scanEmpty}>No products match this barcode. Search the catalog or add a product.</Text>
-            )}
-          </ScrollView>
-        ) : null}
+            </View>
+          ) : (
+            <View style={styles.customerRow}>
+              <View style={styles.customerField}>
+                <SelectField
+                  label="Customer"
+                  required={isCreditNote || (!isSaleOrder && !isChallan && !isQuotation)}
+                  value={customerId}
+                  options={customerOptions}
+                  onChange={updateCustomerId}
+                  searchable
+                  placeholder={
+                    isCreditNote
+                      ? 'Select customer'
+                      : isSaleOrder || isChallan
+                        ? 'Customer (optional)'
+                        : 'Walk-in / Cash sale'
+                  }
+                />
+              </View>
+              {!isDocument || isQuotation || isCreditNote || isSaleOrder || isChallan ? (
+                <Pressable
+                  style={styles.sideAddBtn}
+                  onPress={openAddCustomer}
+                  accessibilityLabel="Add customer"
+                >
+                  <Feather name="plus" size={18} color="#fff" />
+                </Pressable>
+              ) : null}
+            </View>
+          )}
         </View>
 
         {message ? (
@@ -1307,587 +1393,717 @@ export function ShopPosScreen() {
             tone={message.toLowerCase().includes('posted') || message.toLowerCase().includes('saved') ? 'success' : 'error'}
           />
         ) : null}
-        {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
 
-        {!basket.length ? (
-          <View style={styles.emptyBill}>
-            <IconBadge icon="shopping-bag" tone="navy" />
-            <Text style={styles.name}>Basket is empty</Text>
-            <Text style={styles.meta}>
-              {isSaleOrder
-                ? 'Scan or search products to build the sale order. Stock and payment wait until you convert it.'
-                : isPurchaseOrder
-                  ? 'Scan or search products to build the purchase order. Stock waits until you convert it.'
-                  : isQuotation
-                    ? 'Scan or search products to build the quotation.'
-                    : isPurchase
-                      ? 'Scan or search products from the supplier bill.'
-                      : isNote
-                        ? 'Scan or search products for this adjustment note.'
-                        : 'Scan a barcode or search the catalog to start billing.'}
-            </Text>
-            <Button label="Search products" variant="soft" onPress={() => setProductPickerOpen(true)} />
-          </View>
-        ) : (
-          <View style={styles.lineList}>
-          {basket.map((line) => {
-            const priced = totals.lines.find((row) => row.id === line.product.id);
-            const hasDiscount = Boolean(line.discountType && line.discountValue > 0);
-            const discountLabel =
-              line.discountType === 'percent'
-                ? `−${line.discountValue}%`
-                : line.discountType === 'amount'
-                  ? `−${formatMoney(line.discountValue)}`
-                  : '';
-            return (
-              <View key={line.product.id} style={styles.lineCard}>
-                <Pressable
-                  style={styles.lineHit}
-                  onPress={() => setDiscountLineId(line.product.id)}
-                  accessibilityLabel={`Discount for ${line.product.name}`}
-                >
-                  <ProductThumb product={line.product} size={36} />
-                  <View style={styles.lineCopy}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {line.product.name}
-                    </Text>
-                    <Text style={hasDiscount ? styles.discBadge : styles.lineHint} numberOfLines={1}>
-                      {hasDiscount ? discountLabel : 'Tap to add discount'}
-                    </Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  style={styles.qtyBtn}
-                  onPress={() => updateLine(line.product.id, { quantity: line.quantity - 1 })}
-                  accessibilityLabel="Decrease quantity"
-                >
-                  <Text style={styles.qtyBtnText}>−</Text>
-                </Pressable>
-                <Text style={styles.qty}>{line.quantity}</Text>
-                <Pressable
-                  style={styles.qtyBtn}
-                  onPress={() => updateLine(line.product.id, { quantity: line.quantity + 1 })}
-                  accessibilityLabel="Increase quantity"
-                >
-                  <Text style={styles.qtyBtnText}>+</Text>
-                </Pressable>
-                <View style={styles.lineAmount}>
-                  {hasDiscount ? (
-                    <Text style={styles.lineStrike}>{formatMoney(priced?.gross ?? 0)}</Text>
-                  ) : null}
-                  <Text style={styles.lineTotal}>{formatMoney(priced?.total ?? 0)}</Text>
-                </View>
-                <Pressable
-                  onPress={() => updateLine(line.product.id, { quantity: 0 })}
-                  hitSlop={8}
-                  accessibilityLabel="Remove line"
-                >
-                  <Feather name="x" size={16} color={colors.mutedForeground} />
-                </Pressable>
-              </View>
-            );
-          })}
-          </View>
-        )}
-        </FormSection>
-
-        <PickerSheet
-          visible={Boolean(discountLine)}
-          title="Item discount"
-          preview={
-            discountLine
-              ? draftDiscAmount > 0
-                ? `Saves ${formatMoney(draftDiscAmount)}`
-                : discountLine.product.name
-              : ''
-          }
-          icon="percent"
-          onClose={() => setDiscountLineId(null)}
-          actionLabel="Apply discount"
-          onAction={() => {
-            if (!discountLine) return;
-            const value = Number(draftDiscValue) || 0;
-            updateLine(discountLine.product.id, {
-              discountType: value > 0 ? draftDiscType : '',
-              discountValue: value > 0 ? value : 0,
-            });
-            setDiscountLineId(null);
-          }}
-        >
-          {discountLine ? (
-            <View style={styles.discSheet}>
-              <Text style={styles.discProduct} numberOfLines={2}>
-                {discountLine.product.name}
-              </Text>
-              <View style={styles.discTypeRow}>
-                <Pressable
-                  style={[styles.discTypeCard, draftDiscType === 'percent' && styles.discTypeCardOn]}
-                  onPress={() => setDraftDiscType('percent')}
-                >
-                  <Text style={[styles.discTypeTitle, draftDiscType === 'percent' && styles.discTypeTitleOn]}>
-                    Percent
-                  </Text>
-                  <Text style={[styles.discTypeMeta, draftDiscType === 'percent' && styles.discTypeMetaOn]}>
-                    e.g. 10% off
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.discTypeCard, draftDiscType === 'amount' && styles.discTypeCardOn]}
-                  onPress={() => setDraftDiscType('amount')}
-                >
-                  <Text style={[styles.discTypeTitle, draftDiscType === 'amount' && styles.discTypeTitleOn]}>
-                    Amount
-                  </Text>
-                  <Text style={[styles.discTypeMeta, draftDiscType === 'amount' && styles.discTypeMetaOn]}>
-                    e.g. ₹20 off
-                  </Text>
-                </Pressable>
-              </View>
-              {draftDiscType === 'percent' ? (
-                <View style={styles.discPresetRow}>
-                  {LINE_PERCENT_PRESETS.map((preset) => (
-                    <Pressable
-                      key={preset}
-                      style={[
-                        styles.discPreset,
-                        draftDiscValue === String(preset) && styles.discPresetOn,
-                      ]}
-                      onPress={() => setDraftDiscValue(String(preset))}
-                    >
-                      <Text
-                        style={[
-                          styles.discPresetText,
-                          draftDiscValue === String(preset) && styles.discPresetTextOn,
-                        ]}
-                      >
-                        {preset}%
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
-              <Input
-                label={draftDiscType === 'amount' ? 'Rupees off' : 'Percent off'}
-                optional
-                value={draftDiscValue}
-                onChangeText={(value) => setDraftDiscValue(value.replace(/[^0-9.]/g, ''))}
-                keyboardType="decimal-pad"
-                placeholder="0"
-              />
-              <Button
-                label="Remove discount"
-                variant="ghost"
-                fullWidth
-                onPress={() => {
-                  updateLine(discountLine.product.id, { discountType: '', discountValue: 0 });
-                  setDiscountLineId(null);
-                }}
-              />
-            </View>
-          ) : null}
-        </PickerSheet>
-
-        {showGstFields ? (
-          <FormSection title="GST" subtitle={usesSupplier ? 'Supplier GSTIN' : 'Customer GSTIN'}>
-            <Input
-              label="GSTIN"
-              optional
-              value={partyGstin}
-              onChangeText={updatePartyGstin}
-              autoCapitalize="characters"
+        <View style={styles.itemSearchRow}>
+          <Pressable
+            style={styles.scanIconBtn}
+            onPress={() => navigation.navigate('BarcodeScanner', { target: 'pos' })}
+            accessibilityLabel="Scan barcode"
+          >
+            <Feather name="maximize" size={18} color={colors.primary} />
+          </Pressable>
+          <View style={[styles.itemSearchField, !isDesktop && styles.itemSearchFieldMobile]}>
+            <Feather name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              style={styles.itemSearchInput}
+              value={scan}
+              onChangeText={(value) => {
+                setScan(value);
+                setProductQuery(value);
+                if (value.trim()) setMessage(null);
+              }}
+              onSubmitEditing={() => void resolveCode(scan)}
+              placeholder="Item name or barcode"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
               autoCorrect={false}
-              maxLength={15}
-              placeholder="29AABCU9603R1ZJ (optional for B2C)"
-              error={partyGstin.length > 0 && !billGstinCheck.ok ? billGstinCheck.message : undefined}
-              hint={
-                partyGstin.length === 0
-                  ? 'Leave blank for B2C. Enter a valid 15-character GSTIN for a B2B invoice.'
-                  : billGstinCheck.ok
-                    ? 'Valid GSTIN — this bill will be posted as B2B.'
-                    : undefined
-              }
+              returnKeyType="search"
+              autoFocus={Platform.OS === 'web'}
             />
-          </FormSection>
-        ) : null}
+            {scan ? (
+              <Pressable
+                onPress={() => {
+                  setScan('');
+                  setProductQuery('');
+                }}
+                hitSlop={8}
+              >
+                <Feather name="x" size={14} color={colors.mutedForeground} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
 
-        {mode === 'sale' && customerId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
-          <View style={styles.perkCard}>
-            <View style={styles.perkHeader}>
-              <IconBadge icon="award" tone="amber" size="sm" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.perkEyebrow}>Customer rewards</Text>
-                <Text style={styles.perkTitle}>Reward points</Text>
-              </View>
-              <View style={styles.perkBalancePill}>
-                <Text style={styles.perkBalanceValue}>{selectedPosCustomer?.loyalty_points ?? 0}</Text>
-                <Text style={styles.perkBalanceUnit}>pts</Text>
-              </View>
-            </View>
-            <Text style={styles.perkHint}>
-              {loyaltyPrefs.points_per_currency_unit} pts = {formatMoney(1)} · redeem up to {loyaltyMaxPoints} pts
-            </Text>
-            <View style={styles.redeemRow}>
-              <Pressable
-                style={styles.redeemBtn}
-                onPress={() =>
-                  setPointsToRedeem((current) => {
-                    if (current <= 0) return 0;
-                    const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
-                    return next < loyaltyPrefs.min_redeem_points ? 0 : next;
-                  })
-                }
-              >
-                <Feather name="minus" size={16} color={colors.foreground} />
-              </Pressable>
-              <View style={styles.redeemValueWrap}>
-                <Text style={styles.redeemValue}>{pointsToRedeem}</Text>
-                <Text style={styles.redeemValueUnit}>pts</Text>
-              </View>
-              <Pressable
-                style={styles.redeemBtn}
-                onPress={() =>
-                  setPointsToRedeem((current) => {
-                    const stepAmount = Math.max(1, loyaltyPrefs.min_redeem_points);
-                    if (current <= 0) return Math.min(loyaltyMaxPoints, stepAmount);
-                    return Math.min(loyaltyMaxPoints, current + stepAmount);
-                  })
-                }
-              >
-                <Feather name="plus" size={16} color={colors.foreground} />
-              </Pressable>
-              <Pressable
-                style={styles.redeemMaxBtn}
-                onPress={() => setPointsToRedeem(loyaltyMaxPoints)}
-              >
-                <Text style={styles.redeemMaxText}>Max</Text>
-              </Pressable>
-            </View>
-            {pointsToRedeem > 0 ? (
-              <View style={styles.perkSaveBanner}>
-                <Feather name="check-circle" size={14} color={colors.success} />
-                <Text style={styles.perkSaveText}>Saves {formatMoney(loyaltyDiscount)} on this bill</Text>
-              </View>
+        {scan.trim() ? (
+          <View style={styles.suggestBlock}>
+            {scanSuggestions.length ? (
+              scanSuggestions.map((product) => {
+                const inBasket = basket.find((line) => line.product.id === product.id);
+                return (
+                  <Pressable
+                    key={product.id}
+                    style={({ pressed }) => [styles.suggestRow, pressed && styles.suggestRowPressed]}
+                    onPress={() => {
+                      addProduct(product, matchedScanCode(product, scan));
+                      setScan('');
+                      setProductQuery('');
+                    }}
+                  >
+                    <ProductThumb product={product} size={36} />
+                    <View style={styles.productCopy}>
+                      <Text style={styles.suggestName} numberOfLines={1}>
+                        {product.name}
+                      </Text>
+                      <Text style={styles.meta}>{formatMoney(product.price)}</Text>
+                    </View>
+                    {inBasket ? (
+                      <Text style={styles.inBasketPillText}>×{inBasket.quantity}</Text>
+                    ) : (
+                      <Feather name="plus" size={16} color={colors.primary} />
+                    )}
+                  </Pressable>
+                );
+              })
             ) : (
-              <Text style={styles.perkHint}>Tap + to redeem points on this bill</Text>
+              <View style={styles.suggestEmpty}>
+                <Text style={styles.meta}>No match found.</Text>
+                <View style={styles.suggestEmptyActions}>
+                  <Button label="Browse" variant="soft" icon="grid" onPress={() => setProductPickerOpen(true)} />
+                  <Button label="Add product" icon="plus" onPress={openAddProduct} />
+                </View>
+              </View>
             )}
           </View>
         ) : null}
 
-        {mode === 'sale' && customerId && automationOffers.length > 0 ? (
-          <View style={styles.perkCard}>
-            <View style={styles.perkHeader}>
-              <IconBadge icon="gift" tone="cyan" size="sm" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.perkEyebrow}>Special for this customer</Text>
-                <Text style={styles.perkTitle}>Automation offers</Text>
+        <View style={[styles.table, !isDesktop && styles.tableMobile]}>
+          {isDesktop ? (
+            <View style={styles.tableHead}>
+              <Text style={[styles.th, styles.colItem]}>#  ITEM</Text>
+              <Text style={[styles.th, styles.colQty, styles.thCenter]}>QTY</Text>
+              <Text style={[styles.th, styles.colPrice, styles.thRight]}>PRICE</Text>
+              <View style={styles.colDiscPair}>
+                <Text style={[styles.th, styles.thCenter, { flex: 1 }]}>DISC %</Text>
+                <Text style={[styles.th, styles.thCenter, { flex: 1 }]}>DISC ₹</Text>
               </View>
+              <Text style={[styles.th, styles.colAmt, styles.thRight]}>AMOUNT</Text>
+              <View style={styles.colAction} />
             </View>
-            <View style={styles.offerList}>
-              {automationOffers.map((offer) => {
-                const dtype = offer.discount_type === 'amount' ? 'amount' : 'percent';
-                const active =
-                  billDiscountType === dtype &&
-                  String(Number(billDiscountValue) || 0) === String(Number(offer.discount_value) || 0);
-                const badge =
-                  dtype === 'amount'
-                    ? `${formatMoney(Number(offer.discount_value) || 0)} off`
-                    : `${Number(offer.discount_value) || 0}% off`;
+          ) : null}
+
+          {basket.length === 0 ? (
+            <View style={styles.tableEmpty}>
+              <Text style={styles.meta}>No items yet. Search or add a row.</Text>
+            </View>
+          ) : (
+            basket.map((line, index) => {
+              const priced = lineLevelTotals.lines.find((row) => row.id === line.product.id);
+              const lineGross = Math.round((Number(line.product.price) * line.quantity + Number.EPSILON) * 100) / 100;
+              const setLineDiscount = (type: DiscountType, value: number) => {
+                updateLine(line.product.id, {
+                  discountType: type === 'amount' || type === 'percent' ? type : '',
+                  discountValue: Number.isFinite(value) && value > 0 ? value : 0,
+                });
+              };
+
+              if (!isDesktop) {
                 return (
-                  <Pressable
-                    key={`${offer.label}-${offer.discount_value}`}
-                    style={[styles.offerCard, active && styles.offerCardActive]}
-                    onPress={() => {
-                      setBillDiscountType(dtype);
-                      setBillDiscountValue(offer.discount_value);
-                      writePosSession({
-                        billDiscountType: dtype,
-                        billDiscountValue: offer.discount_value,
-                      });
-                    }}
-                  >
-                    <View style={[styles.offerBadge, active && styles.offerBadgeActive]}>
-                      <Text style={[styles.offerBadgeText, active && styles.offerBadgeTextActive]}>{badge}</Text>
+                  <View key={line.product.id} style={styles.mobileLine}>
+                    <View style={styles.mobileLineTop}>
+                      <Text style={styles.rowIndex}>{index + 1}.</Text>
+                      <ProductThumb product={line.product} size={48} />
+                      <View style={styles.mobileLineCopy}>
+                        <Text style={styles.rowItemName} numberOfLines={2}>
+                          {line.product.name}
+                        </Text>
+                        <Text style={styles.meta}>{formatMoney(line.product.price)} each</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => updateLine(line.product.id, { quantity: 0 })}
+                        hitSlop={8}
+                        accessibilityLabel="Remove item"
+                      >
+                        <Feather name="x" size={18} color={colors.mutedForeground} />
+                      </Pressable>
                     </View>
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.offerLabel} numberOfLines={2}>
-                        {offer.label}
-                      </Text>
-                      <Text style={styles.offerMeta}>{active ? 'Applied to bill' : 'Tap to apply'}</Text>
-                    </View>
-                    <Feather
-                      name={active ? 'check-circle' : 'chevron-right'}
-                      size={18}
-                      color={active ? colors.success : colors.mutedForeground}
-                    />
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ) : null}
 
-        {!isChallan ? (
-        <FormSection title="Bill discount" subtitle="Optional off the whole bill">
-          <View style={styles.discountRow}>
-            {(
-              [
-                { value: '', label: 'None' },
-                { value: 'percent', label: '%' },
-                { value: 'amount', label: '₹' },
-              ] as const
-            ).map((option) => (
-              <Chip
-                key={option.value || 'none'}
-                label={option.label}
-                active={billDiscountType === option.value}
-                onPress={() => {
-                  setBillDiscountType(option.value);
-                  if (!option.value) setBillDiscountValue('0');
-                  writePosSession({
-                    billDiscountType: option.value,
-                    billDiscountValue: option.value ? billDiscountValue : '0',
-                  });
-                }}
-              />
-            ))}
-            {billDiscountType ? (
-              <TextInput
-                style={[styles.input, styles.discountInput]}
-                value={billDiscountValue}
-                onChangeText={(value) => {
-                  setBillDiscountValue(value);
-                  writePosSession({ billDiscountValue: value });
-                }}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={colors.mutedForeground}
-              />
+                    <View style={styles.mobileFieldRow}>
+                      <View style={styles.mobileColQty}>
+                        <Text style={styles.mobileFieldLabel}>QTY</Text>
+                        <View style={styles.qtyCluster}>
+                          <Pressable
+                            style={styles.qtyBtnMobile}
+                            onPress={() => updateLine(line.product.id, { quantity: line.quantity - 1 })}
+                          >
+                            <Text style={styles.qtyBtnText}>−</Text>
+                          </Pressable>
+                          <Text style={styles.qtyMobile}>{line.quantity}</Text>
+                          <Pressable
+                            style={styles.qtyBtnMobile}
+                            onPress={() => updateLine(line.product.id, { quantity: line.quantity + 1 })}
+                          >
+                            <Text style={styles.qtyBtnText}>+</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+
+                      <View style={styles.mobileColDisc}>
+                        <Text style={styles.mobileFieldLabel}>DISC</Text>
+                        <DualDiscountFields
+                          lineGross={lineGross}
+                          discountType={line.discountType}
+                          discountValue={line.discountValue}
+                          onChange={setLineDiscount}
+                        />
+                      </View>
+
+                      <View style={styles.mobileColAmt}>
+                        <Text style={styles.mobileFieldLabel}>AMOUNT</Text>
+                        <Text style={styles.mobileAmountValue} numberOfLines={1}>
+                          {formatMoney(priced?.amount ?? lineGross)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              }
+
+              return (
+                <View key={line.product.id} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
+                  <View style={styles.colItem}>
+                    <Text style={styles.rowIndex}>{index + 1}.</Text>
+                    <ProductThumb product={line.product} size={40} />
+                    <View style={styles.rowItemCopy}>
+                      <Text style={styles.rowItemName} numberOfLines={2}>
+                        {line.product.name}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.colQty}>
+                    <View style={styles.qtyCluster}>
+                      <Pressable
+                        style={styles.qtyBtn}
+                        onPress={() => updateLine(line.product.id, { quantity: line.quantity - 1 })}
+                      >
+                        <Text style={styles.qtyBtnText}>−</Text>
+                      </Pressable>
+                      <Text style={styles.qty}>{line.quantity}</Text>
+                      <Pressable
+                        style={styles.qtyBtn}
+                        onPress={() => updateLine(line.product.id, { quantity: line.quantity + 1 })}
+                      >
+                        <Text style={styles.qtyBtnText}>+</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <Text style={[styles.rowNum, styles.colPrice]} numberOfLines={1}>
+                    {formatMoney(line.product.price)}
+                  </Text>
+                  <View style={styles.colDiscPair}>
+                    <DualDiscountFields
+                      lineGross={lineGross}
+                      discountType={line.discountType}
+                      discountValue={line.discountValue}
+                      onChange={setLineDiscount}
+                    />
+                  </View>
+                  <View style={styles.colAmt}>
+                    <Text style={styles.rowAmt} numberOfLines={1}>
+                      {formatMoney(priced?.amount ?? lineGross)}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={styles.colAction}
+                    onPress={() => updateLine(line.product.id, { quantity: 0 })}
+                    hitSlop={6}
+                    accessibilityLabel="Remove item"
+                  >
+                    <Feather name="x" size={14} color={colors.mutedForeground} />
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+
+          <View style={styles.addRowBar}>
+            <Pressable style={styles.addRowBtn} onPress={() => setProductPickerOpen(true)}>
+              <Feather name="plus" size={14} color={colors.primary} />
+              <Text style={styles.addRowText}>ADD ROW</Text>
+            </Pressable>
+            {basket.length > 0 ? (
+              <View style={styles.tableFoot}>
+                <Text style={styles.tableFootLabel}>Qty {basket.reduce((n, l) => n + l.quantity, 0)}</Text>
+                {lineLevelTotals.lineDiscountTotal > 0 ? (
+                  <Text style={styles.tableFootLabel}>Disc {formatMoney(lineLevelTotals.lineDiscountTotal)}</Text>
+                ) : null}
+                <Text style={styles.tableFootAmt}>
+                  {formatMoney(lineLevelTotals.merchandiseAfterLineDiscount)}
+                </Text>
+              </View>
             ) : null}
           </View>
-        </FormSection>
-        ) : null}
+        </View>
 
-        {isNote ? (
-          <>
-            <FormSection
-              title="Settlement"
-              subtitle={
-                isCreditNote
-                  ? 'Adjust the customer balance, or refund cash now'
-                  : 'Adjust what you owe, or receive cash now'
-              }
-            >
-              <View style={styles.discountRow}>
-                <Chip
-                  label={isCreditNote ? 'Adjust balance' : 'Adjust payable'}
-                  active={noteSettlement === 'adjust'}
-                  onPress={() => setNoteSettlement('adjust')}
-                />
-                <Chip
-                  label={isCreditNote ? 'Refund cash' : 'Receive cash'}
-                  active={noteSettlement === 'cash'}
-                  onPress={() => setNoteSettlement('cash')}
+        <View style={[styles.checkoutSplit, checkoutSideBySide && styles.checkoutSplitDesktop]}>
+          <View style={[styles.paymentPane, checkoutSideBySide && styles.paymentPaneDesktop]}>
+            <Text style={styles.summaryHeading}>
+              {!isDocument && !isNote ? 'Payment' : isNote ? 'Settlement' : 'Details'}
+            </Text>
+
+            {!isDocument && !isNote ? (
+              <View style={styles.summaryPaymentBlock}>
+                <Text style={styles.fieldLabel}>Payment type</Text>
+                <View style={styles.discountRow}>
+                  {(
+                    [
+                      { value: 'cash', label: 'Cash' },
+                      { value: 'upi', label: 'UPI' },
+                      { value: 'card', label: 'Card' },
+                      { value: 'borrow', label: isPurchase ? 'Unpaid' : 'Credit' },
+                    ] as const
+                  ).map((method) => (
+                    <Chip
+                      key={method.value}
+                      label={method.label}
+                      active={paymentMethod === method.value}
+                      onPress={() => {
+                        setPaymentMethod(method.value);
+                        setAmountReceivedTouched(false);
+                        if (!isPurchase) writePosSession({ paymentMethod: method.value });
+                      }}
+                    />
+                  ))}
+                </View>
+                {isPurchase && paymentMethod !== 'borrow' ? (
+                  <SelectField
+                    label="Paid from"
+                    required
+                    value={cashAccountId}
+                    options={cashAccountOptions}
+                    onChange={setCashAccountId}
+                    placeholder="Select account"
+                  />
+                ) : null}
+                {tillPayment ? (
+                  <View style={{ gap: 6 }}>
+                    <Text style={styles.fieldLabel}>
+                      {paymentMethod === 'borrow' ? 'Amount paid now (optional)' : 'Amount received'}
+                    </Text>
+                    <TextInput
+                      style={styles.billDiscInput}
+                      value={
+                        amountReceivedTouched || amountReceived !== ''
+                          ? amountReceived
+                          : paymentMethod === 'borrow'
+                            ? ''
+                            : payableShown > 0
+                              ? String(Math.round((payableShown + Number.EPSILON) * 100) / 100)
+                              : ''
+                      }
+                      onChangeText={(value) => {
+                        setAmountReceivedTouched(true);
+                        setAmountReceived(sanitizeDecimalInput(value));
+                      }}
+                      keyboardType="decimal-pad"
+                      placeholder={paymentMethod === 'borrow' ? '0' : String(payableShown || '')}
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                    <Text style={styles.hint}>
+                      {balanceDue > 0
+                        ? `Balance due ${formatMoney(balanceDue)} goes to the customer’s credit.`
+                        : 'Bill will be marked fully paid.'}
+                    </Text>
+                  </View>
+                ) : null}
+                {(paymentMethod === 'borrow' || balanceDue > 0) && !isPurchase ? (
+                  <Text style={styles.hint}>Customer required when any amount is due (not Walk-in).</Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            {isNote ? (
+              <View style={styles.summaryPaymentBlock}>
+                <View style={styles.discountRow}>
+                  <Chip
+                    label={isCreditNote ? 'Adjust balance' : 'Adjust payable'}
+                    active={noteSettlement === 'adjust'}
+                    onPress={() => setNoteSettlement('adjust')}
+                  />
+                  <Chip
+                    label={isCreditNote ? 'Refund cash' : 'Receive cash'}
+                    active={noteSettlement === 'cash'}
+                    onPress={() => setNoteSettlement('cash')}
+                  />
+                </View>
+                {noteSettlement === 'cash' ? (
+                  <SelectField
+                    label={isCreditNote ? 'Refund from' : 'Receive into'}
+                    required
+                    value={cashAccountId}
+                    options={cashAccountOptions}
+                    onChange={setCashAccountId}
+                    placeholder="Select account"
+                  />
+                ) : null}
+                <Input
+                  label="Notes"
+                  optional
+                  value={documentNotes}
+                  onChangeText={setDocumentNotes}
+                  placeholder={isCreditNote ? 'e.g. Return of damaged goods' : 'e.g. Rate difference'}
+                  multiline
                 />
               </View>
-              {noteSettlement === 'cash' ? (
-                <SelectField
-                  label={isCreditNote ? 'Refund from' : 'Receive into'}
-                  required
-                  value={cashAccountId}
-                  options={cashAccountOptions}
-                  onChange={setCashAccountId}
-                  placeholder="Select account"
-                />
-              ) : (
-                <Text style={styles.hint}>
-                  {isCreditNote
-                    ? 'Reduces what the customer owes. Use Refund cash if they already paid and need money back.'
-                    : 'Reduces what you owe the supplier. Use Receive cash if the supplier is paying you back now.'}
-                </Text>
-              )}
-            </FormSection>
-            <FormSection title="Reason" subtitle="Shown on the note (optional)">
-              <Input
-                label="Notes"
-                optional
-                value={documentNotes}
-                onChangeText={setDocumentNotes}
-                placeholder={
-                  isCreditNote
-                    ? 'e.g. Return of damaged goods'
-                    : 'e.g. Purchase return / rate difference'
-                }
-                multiline
-              />
-            </FormSection>
-          </>
-        ) : isDocument ? (
-          isQuotation ? (
-            <DateField
-              label="Valid until"
-              optional
-              value={validUntil}
-              onChange={setValidUntil}
-              helperText="Optional expiry date for this quotation."
-            />
-          ) : isOrder || isChallan ? (
-            <Text style={styles.hint}>
-              {isPurchaseOrder
-                ? 'No payment and no stock change yet. Convert this purchase order to a purchase bill when goods arrive.'
-                : isChallan
-                  ? 'No invoice and no payment. Dispatch this challan when goods leave — stock is deducted then.'
-                  : 'No payment and no stock change yet. Convert this sale order to a sale invoice when you deliver.'}
-            </Text>
-          ) : null
-        ) : (
-          <FormSection title="Payment" subtitle="How this bill is settled">
-            <View style={styles.discountRow}>
-              {(
-                [
-                  { value: 'cash', label: 'Cash' },
-                  { value: 'upi', label: 'UPI' },
-                  { value: 'card', label: 'Card' },
-                  { value: 'borrow', label: isPurchase ? 'Unpaid' : 'Borrow' },
-                ] as const
-              ).map((method) => (
-                <Chip
-                  key={method.value}
-                  label={method.label}
-                  active={paymentMethod === method.value}
-                  onPress={() => {
-                    setPaymentMethod(method.value);
-                    if (!isPurchase) {
-                      writePosSession({ paymentMethod: method.value });
-                    }
-                  }}
-                />
-              ))}
-            </View>
-            {isPurchase && paymentMethod !== 'borrow' ? (
-              <SelectField
-                label="Paid from"
-                required
-                value={cashAccountId}
-                options={cashAccountOptions}
-                onChange={setCashAccountId}
-                placeholder="Select account"
-              />
             ) : null}
-            {paymentMethod === 'borrow' ? (
-              <Text style={styles.hint}>
-                {isPurchase
-                  ? 'Unpaid: record the supplier bill now and pay later from Cash / Parties.'
-                  : 'Borrow / credit: customer takes goods now and pays later. A customer is required (not Walk-in).'}
-              </Text>
-            ) : null}
-          </FormSection>
-        )}
 
-        <View style={styles.totalsCard}>
-          <Text style={styles.summaryTitle}>
-            {isSaleOrder
-              ? 'Sale order summary'
-              : isPurchaseOrder
-                ? 'Purchase order summary'
-                : isChallan
-                  ? 'Delivery challan summary'
-                  : isQuotation
-                  ? 'Estimate summary'
-                  : isPurchase
-                    ? 'Purchase summary'
-                    : isCreditNote
-                      ? 'Credit note summary'
-                      : isDebitNote
-                        ? 'Debit note summary'
-                        : 'Bill summary'}
-          </Text>
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>Items</Text>
-            <Text style={styles.meta}>{formatMoney(totals.merchandiseGross)}</Text>
-          </View>
-          {totals.lineDiscountTotal > 0 ? (
-            <View style={styles.totalRow}>
-              <Text style={styles.meta}>Product discounts</Text>
-              <Text style={styles.meta}>-{formatMoney(totals.lineDiscountTotal)}</Text>
-            </View>
-          ) : null}
-          {totals.billDiscountAmount > 0 ? (
-            <View style={styles.totalRow}>
-              <Text style={styles.meta}>Bill discount</Text>
-              <Text style={styles.meta}>-{formatMoney(totals.billDiscountAmount)}</Text>
-            </View>
-          ) : null}
-          {totals.loyaltyDiscountAmount > 0 ? (
-            <View style={styles.totalRow}>
-              <Text style={styles.meta}>
-                Reward points{pointsToRedeem > 0 ? ` (${pointsToRedeem} pts)` : ''}
+            {isQuotation ? (
+              <DateField
+                label="Valid until"
+                optional
+                value={validUntil}
+                onChange={setValidUntil}
+                helperText="Optional expiry date for this quotation."
+              />
+            ) : null}
+
+            {(isOrder || isChallan) && !isNote ? (
+              <Text style={styles.hint}>
+                {isPurchaseOrder
+                  ? 'No payment and no stock change yet. Convert to a purchase bill when goods arrive.'
+                  : isChallan
+                    ? 'No invoice and no payment. Stock is deducted when dispatched.'
+                    : 'No payment and no stock change yet. Convert to a sale invoice when you deliver.'}
               </Text>
-              <Text style={styles.meta}>-{formatMoney(totals.loyaltyDiscountAmount)}</Text>
-            </View>
-          ) : null}
-          <View style={styles.totalRow}>
-            <Text style={styles.meta}>Taxable value</Text>
-            <Text style={styles.meta}>{formatMoney(totals.subtotal)}</Text>
+            ) : null}
+
+            {showGstFields ? (
+              <Input
+                label="GSTIN"
+                optional
+                value={partyGstin}
+                onChangeText={updatePartyGstin}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={15}
+                placeholder="Optional for B2C"
+                error={partyGstin.length > 0 && !billGstinCheck.ok ? billGstinCheck.message : undefined}
+              />
+            ) : null}
+
+            {mode === 'sale' && customerId && automationOffers.length > 0 ? (
+              <View style={styles.offerList}>
+                {automationOffers.map((offer) => {
+                  const dtype = offer.discount_type === 'amount' ? 'amount' : 'percent';
+                  const active =
+                    billDiscountType === dtype &&
+                    String(Number(billDiscountValue) || 0) === String(Number(offer.discount_value) || 0);
+                  const badge =
+                    dtype === 'amount'
+                      ? `${formatMoney(Number(offer.discount_value) || 0)} off`
+                      : `${Number(offer.discount_value) || 0}% off`;
+                  return (
+                    <Pressable
+                      key={`${offer.label}-${offer.discount_value}`}
+                      style={[styles.offerChip, active && styles.offerChipOn]}
+                      onPress={() => {
+                        setBillDiscountType(dtype);
+                        setBillDiscountValue(offer.discount_value);
+                        writePosSession({
+                          billDiscountType: dtype,
+                          billDiscountValue: offer.discount_value,
+                        });
+                      }}
+                    >
+                      <Text style={[styles.offerChipText, active && styles.offerChipTextOn]}>
+                        {badge} · {offer.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
           </View>
-          {totals.taxTotal > 0 ? (
-            billIsInterstate ? (
+
+          <View style={[styles.summaryPane, checkoutSideBySide && styles.summaryPaneDesktop]}>
+            <Text style={styles.summaryHeading}>Bill summary</Text>
+
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Items</Text>
+              <Text style={styles.summaryMoney}>{formatMoney(lineLevelTotals.merchandiseGross)}</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Product discount</Text>
+              <Text
+                style={[
+                  styles.summaryMoney,
+                  lineLevelTotals.lineDiscountTotal > 0 && styles.summaryDisc,
+                ]}
+              >
+                {lineLevelTotals.lineDiscountTotal > 0
+                  ? `-${formatMoney(lineLevelTotals.lineDiscountTotal)}`
+                  : formatMoney(0)}
+              </Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Subtotal</Text>
+              <Text style={styles.summaryMoney}>
+                {formatMoney(lineLevelTotals.merchandiseAfterLineDiscount)}
+              </Text>
+            </View>
+            {!isChallan ? (
+              <View style={styles.totalRow}>
+                <Text style={styles.meta}>Bill discount</Text>
+                <View style={styles.billDiscRight}>
+                  <View style={styles.billDiscTypeTrack}>
+                    <Pressable
+                      style={[
+                        styles.billDiscTypeBtn,
+                        billDiscountType === 'percent' && styles.billDiscTypeBtnOn,
+                      ]}
+                      onPress={() => {
+                        const next: DiscountType = billDiscountType === 'percent' ? '' : 'percent';
+                        setBillDiscountType(next);
+                        if (!next) setBillDiscountValue('');
+                        writePosSession({
+                          billDiscountType: next,
+                          billDiscountValue: next ? billDiscountValue : '',
+                        });
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.billDiscTypeText,
+                          billDiscountType === 'percent' && styles.billDiscTypeTextOn,
+                        ]}
+                      >
+                        %
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.billDiscTypeBtn,
+                        billDiscountType === 'amount' && styles.billDiscTypeBtnOn,
+                      ]}
+                      onPress={() => {
+                        const next: DiscountType = billDiscountType === 'amount' ? '' : 'amount';
+                        setBillDiscountType(next);
+                        if (!next) setBillDiscountValue('');
+                        writePosSession({
+                          billDiscountType: next,
+                          billDiscountValue: next ? billDiscountValue : '',
+                        });
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.billDiscTypeText,
+                          billDiscountType === 'amount' && styles.billDiscTypeTextOn,
+                        ]}
+                      >
+                        ₹
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <TextInput
+                    style={styles.billDiscInput}
+                    value={billDiscountType ? billDiscountValue : ''}
+                    editable={Boolean(billDiscountType)}
+                    onChangeText={(value) => {
+                      const cleaned = sanitizeDecimalInput(value);
+                      setBillDiscountValue(cleaned);
+                      writePosSession({ billDiscountValue: cleaned });
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder=""
+                    placeholderTextColor={colors.mutedForeground}
+                  />
+                  <Text
+                    style={[
+                      styles.summaryMoney,
+                      totals.billDiscountAmount > 0 && styles.summaryDisc,
+                    ]}
+                  >
+                    {totals.billDiscountAmount > 0
+                      ? `-${formatMoney(totals.billDiscountAmount)}`
+                      : formatMoney(0)}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            {loyaltyProgramOn && customerId && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+              <View style={styles.loyaltyInline}>
+                <Text style={styles.fieldLabel}>
+                  Redeem points · balance {selectedPosCustomer?.loyalty_points ?? 0}
+                </Text>
+                <View style={styles.redeemRow}>
+                  <Pressable
+                    style={styles.qtyBtn}
+                    onPress={() =>
+                      setPointsToRedeem((current) => {
+                        if (current <= 0) return 0;
+                        const next = current - Math.max(1, loyaltyPrefs.min_redeem_points);
+                        return next < loyaltyPrefs.min_redeem_points ? 0 : next;
+                      })
+                    }
+                  >
+                    <Text style={styles.qtyBtnText}>−</Text>
+                  </Pressable>
+                  <Text style={styles.qty}>{pointsToRedeem}</Text>
+                  <Pressable
+                    style={styles.qtyBtn}
+                    onPress={() =>
+                      setPointsToRedeem((current) => {
+                        const stepAmount = Math.max(1, loyaltyPrefs.min_redeem_points);
+                        if (current <= 0) return Math.min(loyaltyMaxPoints, stepAmount);
+                        return Math.min(loyaltyMaxPoints, current + stepAmount);
+                      })
+                    }
+                  >
+                    <Text style={styles.qtyBtnText}>+</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setPointsToRedeem(loyaltyMaxPoints)}>
+                    <Text style={styles.addRowText}>Max</Text>
+                  </Pressable>
+                  {pointsToRedeem > 0 ? (
+                    <Text style={styles.meta}>−{formatMoney(loyaltyDiscount)}</Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {totals.loyaltyDiscountAmount > 0 ? (
               <View style={styles.totalRow}>
                 <Text style={styles.meta}>
-                  IGST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
+                  Points redeemed{pointsToRedeem > 0 ? ` (${pointsToRedeem})` : ''}
                 </Text>
-                <Text style={styles.meta}>{formatMoney(totals.taxTotal)}</Text>
+                <Text style={[styles.summaryMoney, styles.summaryDisc]}>
+                  -{formatMoney(totals.loyaltyDiscountAmount)}
+                </Text>
               </View>
+            ) : null}
+
+            {loyaltyProgramOn && customerId ? (
+              <View style={styles.totalRow}>
+                <View style={styles.loyaltyAwardLeft}>
+                  <Switch
+                    value={awardLoyaltyPoints}
+                    disabled={pointsToEarn <= 0}
+                    onValueChange={setAwardLoyaltyPoints}
+                    trackColor={{ false: colors.borderStrong, true: colors.tintStrong }}
+                    thumbColor={awardLoyaltyPoints && pointsToEarn > 0 ? colors.primary : '#f4f3f4'}
+                  />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.meta}>Give loyalty points</Text>
+                    <Text style={styles.loyaltyAwardHint}>
+                      {pointsToEarn > 0
+                        ? `${loyaltyPrefs.earn_points_per_100} pt per ₹100 · based on bill total`
+                        : 'No points on this bill amount'}
+                      {paymentMethod === 'borrow' && pointsToEarn > 0 ? ' · credited when paid' : ''}
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.summaryMoney,
+                    awardLoyaltyPoints && pointsToEarn > 0 && styles.loyaltyAwardValue,
+                  ]}
+                >
+                  {pointsToEarn > 0 ? `+${pointsToEarn}` : '0'}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Taxable</Text>
+              <Text style={styles.summaryMoney}>{formatMoney(totals.subtotal)}</Text>
+            </View>
+            {totals.taxTotal > 0 ? (
+              billIsInterstate ? (
+                <View style={styles.totalRow}>
+                  <Text style={styles.meta}>IGST</Text>
+                  <Text style={styles.summaryMoney}>{formatMoney(totals.taxTotal)}</Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.meta}>CGST</Text>
+                    <Text style={styles.summaryMoney}>{formatMoney(billCgst)}</Text>
+                  </View>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.meta}>SGST</Text>
+                    <Text style={styles.summaryMoney}>{formatMoney(billSgst)}</Text>
+                  </View>
+                </>
+              )
             ) : (
+              <View style={styles.totalRow}>
+                <Text style={styles.meta}>Tax</Text>
+                <Text style={styles.summaryMoney}>{formatMoney(totals.taxTotal)}</Text>
+              </View>
+            )}
+
+            <View style={[styles.totalRow, styles.totalRowStrong]}>
+              <Text style={styles.payableLabel}>Total</Text>
+              <Text style={styles.payableValue}>{formatMoney(payableShown)}</Text>
+            </View>
+            {tillPayment ? (
               <>
                 <View style={styles.totalRow}>
-                  <Text style={styles.meta}>
-                    CGST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
-                  </Text>
-                  <Text style={styles.meta}>{formatMoney(billCgst)}</Text>
+                  <Text style={styles.meta}>Received</Text>
+                  <Text style={styles.summaryMoney}>{formatMoney(receivedAmount)}</Text>
                 </View>
                 <View style={styles.totalRow}>
-                  <Text style={styles.meta}>SGST</Text>
-                  <Text style={styles.meta}>{formatMoney(billSgst)}</Text>
+                  <Text style={[styles.meta, balanceDue > 0 && { color: colors.warning }]}>
+                    Balance due
+                  </Text>
+                  <Text
+                    style={[
+                      styles.summaryMoney,
+                      balanceDue > 0 && { color: colors.warning, fontFamily: fonts.bodyBold },
+                    ]}
+                  >
+                    {formatMoney(balanceDue)}
+                  </Text>
                 </View>
               </>
-            )
-          ) : (
-            <View style={styles.totalRow}>
-              <Text style={styles.meta}>
-                GST{partyGstin && billGstinCheck.ok ? ' · B2B' : ''}
-              </Text>
-              <Text style={styles.meta}>{formatMoney(totals.taxTotal)}</Text>
-            </View>
-          )}
-          <View style={styles.totalRow}>
-            <Text style={styles.payableLabel}>
-              {isQuotation || isNote || isOrder || isChallan
-                ? 'Total'
-                : paymentMethod === 'borrow'
-                  ? 'Amount due'
-                  : isPurchase
-                    ? 'Amount to pay'
-                    : 'Payable'}
-            </Text>
-            <Text style={styles.payableValue}>{formatMoney(payableShown)}</Text>
+            ) : null}
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
-      <StickyFooterBar>
-        <View style={styles.chargeMeta}>
-          <Text style={styles.chargeHint}>{basket.length} item{basket.length === 1 ? '' : 's'}</Text>
-          <Text style={styles.chargeAmount}>{formatMoney(payableShown)}</Text>
-        </View>
-        <Button
-          label={checkoutLabel}
-          size="lg"
-          fullWidth
-          loading={busy}
-          disabled={!basket.length || busy}
-          onPress={() => void checkout()}
-        />
-      </StickyFooterBar>
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+        <StickyFooterBar style={styles.saveBar}>
+          <View style={styles.chargeMeta}>
+            <Text style={styles.chargeHint}>
+              {isDocument || isNote
+                ? checkoutLabel
+                : paymentMethod === 'borrow'
+                  ? isPurchase
+                    ? 'Unpaid'
+                    : 'Credit'
+                  : paymentMethod === 'upi'
+                    ? 'UPI'
+                    : paymentMethod === 'card'
+                      ? 'Card'
+                      : 'Cash'}
+              {' · '}
+              {basket.length} item{basket.length === 1 ? '' : 's'}
+            </Text>
+            <Text style={styles.chargeAmount}>{formatMoney(payableShown)}</Text>
+          </View>
+          <Button
+            label={busy ? 'Saving…' : isDocument || isNote || isPurchase ? checkoutLabel : 'Save'}
+            icon="save"
+            size="lg"
+            fullWidth
+            loading={busy}
+            disabled={!basket.length || busy}
+            onPress={() => void checkout()}
+          />
+        </StickyFooterBar>
+      </KeyboardStickyView>
+      </View>
 
       <Modal
         visible={productPickerOpen}
@@ -2055,149 +2271,403 @@ export function ShopPosScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
-  scroll: { flex: 1 },
-  customerRow: {    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  customerField: { flex: 1 },
-  loyaltyBox: { marginTop: spacing.sm, gap: 6 },
-  perkCard: {
-    padding: spacing.md,
-    borderRadius: radius.lg,
+  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.md },
+  screenMobile: { paddingHorizontal: spacing.sm },
+  invoice: {
+    flex: 1,
     backgroundColor: colors.card,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: spacing.sm,
+    overflow: 'hidden',
   },
-  perkHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  perkEyebrow: {
-    ...typography.caption,
-    color: colors.primary,
-    fontFamily: fonts.bodySemi,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    fontSize: 11,
+  invoiceMobile: {
+    borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: colors.background,
   },
-  perkTitle: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodySemi },
-  perkHint: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
-  perkBalancePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.warningSoft,
-    alignItems: 'center',
-    minWidth: 64,
-  },
-  perkBalanceValue: { fontFamily: fonts.bodySemi, fontSize: 18, color: colors.foreground },
-  perkBalanceUnit: { ...typography.caption, color: colors.mutedForeground },
-  perkSaveBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.successSoft,
-  },
-  perkSaveText: { ...typography.caption, color: colors.success, fontFamily: fonts.bodySemi, flex: 1 },
-  redeemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  redeemBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+  invoiceContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
+  invoiceContentMobile: { paddingHorizontal: spacing.xs, paddingTop: spacing.xs, gap: spacing.sm },
+  invoiceTop: { gap: spacing.sm },
+  customerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  customerField: { flex: 1 },
+  sideAddBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.secondary,
+    marginBottom: 2,
   },
-  redeemValueWrap: { alignItems: 'center', minWidth: 64 },
-  redeemValue: { fontFamily: fonts.bodySemi, fontSize: 22, color: colors.foreground },
-  redeemValueUnit: { ...typography.caption, color: colors.mutedForeground },
-  redeemMaxBtn: {
-    marginLeft: 'auto',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
-  },
-  redeemMaxText: { ...typography.caption, color: colors.primaryForeground, fontFamily: fonts.bodySemi },
-  offerList: { gap: 8, marginTop: 4 },
-  offerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 12,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
-  },
-  offerCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: '#D8E8ED',
-  },
-  offerBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: radius.sm,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minWidth: 72,
-    alignItems: 'center',
-  },
-  offerBadgeActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  offerBadgeText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
-  offerBadgeTextActive: { color: colors.primaryForeground },
-  offerLabel: { ...typography.label, color: colors.foreground, fontFamily: fonts.bodySemi },
-  offerMeta: { ...typography.caption, color: colors.mutedForeground },
-  sideAddBtn: {
+  itemSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scanIconBtn: {
     width: 48,
     height: 48,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  section: {
-    fontFamily: fonts.bodyMedium,
-    fontSize: 15,
-    color: colors.foreground,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  scanRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  scanField: { flex: 1, gap: spacing.sm },
-  scanSuggestions: {
-    marginTop: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.card,
-    overflow: 'hidden',
-    maxHeight: 260,
   },
-  scanSuggestionRow: {
+  itemSearchField: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 40,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.card,
+  },
+  itemSearchFieldMobile: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+  },
+  itemSearchInput: {
+    flex: 1,
+    ...typography.body,
+    fontSize: 15,
+    color: colors.foreground,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+  },
+  suggestBlock: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    maxHeight: 200,
+    backgroundColor: colors.card,
+  },
+  suggestRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: 8,
     paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  scanEmpty: {
-    ...typography.caption,
-    color: colors.mutedForeground,
-    padding: spacing.md,
-    lineHeight: 18,
+  suggestRowPressed: { backgroundColor: colors.tint },
+  suggestName: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.foreground },
+  suggestEmpty: { padding: spacing.md, gap: spacing.sm },
+  suggestEmptyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  inBasketPillText: { color: colors.primary, fontFamily: fonts.bodyBold, fontSize: 12 },
+  table: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.card,
   },
+  tableMobile: {
+    borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    gap: 8,
+  },
+  mobileLine: {
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  mobileLineTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  mobileLineCopy: { flex: 1, minWidth: 0, gap: 2 },
+  mobileFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  mobileColQty: {
+    gap: 4,
+    flexShrink: 0,
+  },
+  mobileColDisc: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  mobileColAmt: {
+    width: 72,
+    flexShrink: 0,
+    gap: 4,
+    alignItems: 'flex-end',
+  },
+  mobileFieldLabel: {
+    fontSize: 10,
+    fontFamily: fonts.bodySemi,
+    color: colors.mutedForeground,
+    letterSpacing: 0.4,
+  },
+  qtyMobile: {
+    minWidth: 22,
+    textAlign: 'center',
+    color: colors.foreground,
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+  },
+  mobileAmountValue: {
+    fontSize: 15,
+    fontFamily: fonts.bodyBold,
+    color: colors.foreground,
+    letterSpacing: -0.2,
+    textAlign: 'right',
+    minHeight: 40,
+    textAlignVertical: 'center',
+    paddingTop: 10,
+  },
+  qtyBtnMobile: {
+    width: 34,
+    height: 40,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+  dualDiscRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
+  },
+  dualDiscCell: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    backgroundColor: colors.background,
+    paddingHorizontal: 6,
+    gap: 2,
+  },
+  dualDiscCellPct: {},
+  dualDiscCellAmt: {},
+  dualDiscInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 38,
+    paddingVertical: Platform.OS === 'web' ? 6 : 4,
+    paddingHorizontal: 2,
+    textAlign: 'right',
+    color: colors.foreground,
+    fontSize: 13,
+    fontFamily: fonts.bodyMedium,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null),
+  },
+  dualDiscSuffix: { fontSize: 11, color: colors.mutedForeground, fontFamily: fonts.bodySemi },
+  dualDiscPrefix: { fontSize: 11, color: colors.mutedForeground, fontFamily: fonts.bodySemi },
+  tableHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    backgroundColor: '#F3F4F6',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderStrong,
+    gap: 8,
+  },
+  th: {
+    fontSize: 10,
+    fontFamily: fonts.bodySemi,
+    color: colors.mutedForeground,
+    letterSpacing: 0.3,
+  },
+  thCenter: { textAlign: 'center' },
+  thRight: { textAlign: 'right' },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    gap: 8,
+  },
+  tableRowAlt: { backgroundColor: '#FAFBFC' },
+  tableEmpty: { padding: spacing.lg, alignItems: 'center' },
+  colItem: { flex: 1.8, minWidth: 140, flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  colQty: { width: 100, alignItems: 'center', flexShrink: 0 },
+  colPrice: { width: 72, textAlign: 'right', flexShrink: 0 },
+  colDiscPair: { width: 168, flexShrink: 0 },
+  colAmt: { width: 88, alignItems: 'flex-end', flexShrink: 0 },
+  colAction: { width: 24, alignItems: 'center', flexShrink: 0 },
+  rowIndex: { fontSize: 12, color: colors.mutedForeground, width: 18 },
+  rowItemCopy: { flex: 1, minWidth: 0 },
+  rowItemName: { fontFamily: fonts.bodySemi, fontSize: 13, color: colors.foreground },
+  rowNum: { fontSize: 13, color: colors.foreground, fontFamily: fonts.bodyMedium },
+  rowAmt: { fontSize: 14, color: colors.foreground, fontFamily: fonts.bodyBold, textAlign: 'right' },
+  addRowBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  addRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  addRowText: { fontSize: 12, fontFamily: fonts.bodyBold, color: colors.primary, letterSpacing: 0.4 },
+  tableFoot: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tableFootLabel: { fontSize: 11, color: colors.mutedForeground, fontFamily: fonts.bodySemi },
+  tableFootAmt: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.foreground },
+  fieldLabel: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemi,
+    color: colors.mutedForeground,
+  },
+  summaryHeading: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 15,
+    color: colors.foreground,
+    marginBottom: 2,
+  },
+  checkoutSplit: {
+    width: '100%',
+    gap: spacing.sm,
+    flexDirection: 'column-reverse',
+  },
+  checkoutSplitDesktop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  paymentPane: {
+    width: '100%',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+  },
+  paymentPaneDesktop: {
+    flex: 1.1,
+    minWidth: 280,
+  },
+  summaryPane: {
+    width: '100%',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+  },
+  summaryPaneDesktop: {
+    flex: 0.9,
+    minWidth: 260,
+  },
+  summaryPaymentBlock: {
+    gap: 8,
+  },
+  loyaltyInline: { gap: 6 },
+  loyaltyAwardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minWidth: 0,
+  },
+  loyaltyAwardHint: {
+    fontSize: 11,
+    color: colors.mutedForeground,
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  loyaltyAwardValue: {
+    color: colors.success,
+    fontFamily: fonts.bodySemi,
+  },
+  offerList: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  offerChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  offerChipOn: { borderColor: colors.primary, backgroundColor: colors.tint },
+  offerChipText: { fontSize: 12, color: colors.foreground },
+  offerChipTextOn: { color: colors.primary, fontFamily: fonts.bodySemi },
+  billDiscRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  billDiscTypeTrack: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: colors.background,
+  },
+  billDiscTypeBtn: {
+    minWidth: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  billDiscTypeBtnOn: { backgroundColor: colors.primary },
+  billDiscTypeText: { fontSize: 12, fontFamily: fonts.bodySemi, color: colors.mutedForeground },
+  billDiscTypeTextOn: { color: colors.primaryForeground },
+  billDiscInput: {
+    width: 64,
+    minHeight: 32,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    textAlign: 'right',
+    color: colors.foreground,
+    backgroundColor: colors.card,
+    fontSize: 13,
+    fontFamily: fonts.bodyMedium,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null),
+  },
+  summaryMoney: {
+    minWidth: 72,
+    textAlign: 'right',
+    color: colors.mutedForeground,
+    fontSize: 13,
+    fontFamily: fonts.bodyMedium,
+  },
+  totalRowStrong: {
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderStrong,
+  },
+  summaryDisc: { color: '#B45309', fontFamily: fonts.bodySemi },
+  saveBar: { borderTopWidth: 1, borderTopColor: colors.border },
+  billScroll: { flex: 1 },
+  qtyCluster: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  redeemRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: {
     flex: 1,
     borderWidth: 1,
@@ -2209,65 +2679,19 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     backgroundColor: colors.inputBackground,
   },
-  inputError: {
-    borderColor: colors.destructive,
-  },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  message: { color: colors.mutedForeground, marginBottom: spacing.sm },
   hint: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
     color: colors.mutedForeground,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
   },
-  hintError: {
-    color: colors.destructive,
-  },
-  summaryTitle: {
-    fontFamily: fonts.bodyMedium,
-    fontSize: 14,
-    color: colors.foreground,
-    marginBottom: 4,
-  },
-  emptyBill: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    backgroundColor: colors.inputBackground,
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  lineList: { gap: 8 },
-  lineCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingVertical: 6,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.inputBackground,
-    minHeight: 44,
-  },
-  lineHit: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lineCopy: { flex: 1, minWidth: 0, gap: 1 },
   name: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.foreground },
-  lineHint: { fontSize: 11, color: colors.mutedForeground },
   discBadge: { fontSize: 11, fontWeight: '700', color: '#B45309' },
   meta: { color: colors.mutedForeground, fontSize: 13 },
   qtyBtn: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
@@ -2275,14 +2699,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   qtyBtnText: { fontSize: 16, color: colors.primary, fontWeight: '700', lineHeight: 18 },
-  qty: { minWidth: 18, textAlign: 'center', color: colors.foreground, fontWeight: '700', fontSize: 14 },
-  lineAmount: { alignItems: 'flex-end', minWidth: 56 },
-  lineStrike: {
-    fontSize: 11,
-    color: colors.mutedForeground,
-    textDecorationLine: 'line-through',
-  },
-  lineTotal: { fontWeight: '700', color: colors.foreground, fontSize: 14 },
+  qty: { minWidth: 20, textAlign: 'center', color: colors.foreground, fontWeight: '700', fontSize: 14 },
   discSheet: { gap: spacing.md },
   discProduct: { ...typography.body, color: colors.foreground, fontWeight: '600' },
   discTypeRow: { flexDirection: 'row', gap: spacing.sm },
@@ -2328,14 +2745,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     backgroundColor: colors.tint,
-    gap: 8,
+    gap: 10,
   },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  payableLabel: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.foreground },
-  payableValue: { fontFamily: fonts.bodyBold, fontSize: 20, color: colors.primary },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  payableLabel: { fontFamily: fonts.bodyBold, fontSize: 17, color: colors.foreground },
+  payableValue: { fontFamily: fonts.bodyBold, fontSize: 24, color: colors.primary, letterSpacing: -0.4 },
   chargeBar: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,

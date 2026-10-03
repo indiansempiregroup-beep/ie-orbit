@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import type { BookingStatus } from '@ie-orbit/sdk';
+import type { Booking, BookingStatus } from '@ie-orbit/sdk';
 import { BookingRow } from '../../components/BookingRow';
 import { GroupedList } from '../../components/ui/GroupedList';
 import { DesktopPage } from '../../components/DesktopPage';
@@ -15,15 +15,29 @@ import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { ScreenState } from '../../components/ScreenState';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useEntityMaps } from '../../hooks/useOpsExtended';
+import { DocumentActionsSheet, type ShopDocTarget } from '../shop/DocumentActionsSheet';
+import { formatMoney } from '../shop/posPayment';
+import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
 import { entityLabel } from '../../utils/entities';
-import { bookingCustomerLabel, bookingCustomerPhone, bookingServiceLabel, bookingStaffLabel } from '../../utils/bookingDisplay';
+import {
+  bookingCustomerLabel,
+  bookingCustomerPhone,
+  bookingPriceTotal,
+  bookingServiceLabel,
+  bookingStaffLabel,
+} from '../../utils/bookingDisplay';
+import { formatServicePrice } from '../../utils/services';
 import { canAccessStaffDirectory } from '../../utils/roles';
+import { subscribeBookingsListRevision } from '../../utils/bookingsListRefresh';
 import { colors, spacing } from '../../theme/tokens';
-import { formatDateKey } from '../../utils/format';
+import { formatDateKey, getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
 const STATUS_OPTIONS: Array<{ value: '' | BookingStatus; label: string }> = [
@@ -38,31 +52,63 @@ const STATUS_OPTIONS: Array<{ value: '' | BookingStatus; label: string }> = [
 ];
 
 const SORT_OPTIONS = [
-  { value: 'start_asc', label: 'Earliest' },
-  { value: 'start_desc', label: 'Latest' },
+  { value: 'created_desc', label: 'Newest created' },
+  { value: 'created_asc', label: 'Oldest created' },
+  { value: 'start_asc', label: 'Earliest start' },
+  { value: 'start_desc', label: 'Latest start' },
   { value: 'status', label: 'Status' },
   { value: 'customer', label: 'Customer' },
 ] as const;
 
 type SortKey = (typeof SORT_OPTIONS)[number]['value'];
 
+function canShowBookingInvoice(booking: Booking): boolean {
+  const status = String(booking.status || '').toLowerCase();
+  if (status === 'completed') return true;
+  return Boolean(String(booking.books_voucher_id || '').trim());
+}
+
 export function BookingsScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const toast = useToast();
+  const client = useOpsClient();
+  const { businessId, tenantId, activeBusiness } = useWorkspace();
+  const currency = activeBusiness?.currency;
   const showStaffFilter = canAccessStaffDirectory(user);
   const [range, setRange] = useState<'today' | 'all'>('today');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
   const [staffFilter, setStaffFilter] = useState('');
-  const [sortBy, setSortBy] = useState<SortKey>('start_asc');
+  const [sortBy, setSortBy] = useState<SortKey>('created_desc');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
+  const [invoiceBusyId, setInvoiceBusyId] = useState<string | null>(null);
   const date = range === 'today' ? formatDateKey(new Date()) : undefined;
   const { bookings, loading, error, reload } = useBookings(date);
-  const { customerMap, serviceMap, staffMap } = useEntityMaps();
+  const { customers, customerMap, serviceMap, staffMap, services } = useEntityMaps();
   const { staff } = useStaffMembers();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const { contentInset } = useTabBarLayout();
+
+  useFocusEffect(
+    useCallback(() => {
+      void reload({ silent: true });
+    }, [reload]),
+  );
+
+  useEffect(() => {
+    return subscribeBookingsListRevision(() => {
+      void reload({ silent: true });
+    });
+  }, [reload]);
+
+  const customersById = useMemo(() => {
+    const map = new Map<string, (typeof customers)[number]>();
+    for (const row of customers) map.set(row.id, row);
+    return map;
+  }, [customers]);
 
   const staffOptions = useMemo(
     () => [
@@ -78,7 +124,7 @@ export function BookingsScreen() {
   const activeFilterCount =
     Number(Boolean(statusFilter)) +
     Number(Boolean(showStaffFilter && staffFilter)) +
-    Number(sortBy !== 'start_asc');
+    Number(sortBy !== 'created_desc');
 
   const sorted = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -107,6 +153,12 @@ export function BookingsScreen() {
     }
 
     list.sort((a, b) => {
+      if (sortBy === 'created_asc') {
+        return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime();
+      }
+      if (sortBy === 'start_asc') {
+        return new Date(a.start_at ?? 0).getTime() - new Date(b.start_at ?? 0).getTime();
+      }
       if (sortBy === 'start_desc') {
         return new Date(b.start_at ?? 0).getTime() - new Date(a.start_at ?? 0).getTime();
       }
@@ -116,11 +168,101 @@ export function BookingsScreen() {
       if (sortBy === 'customer') {
         return entityLabel(customerMap, a.customer_id).localeCompare(entityLabel(customerMap, b.customer_id));
       }
-      return new Date(a.start_at ?? 0).getTime() - new Date(b.start_at ?? 0).getTime();
+      // created_desc (default)
+      return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
     });
 
     return list;
   }, [bookings, search, statusFilter, staffFilter, showStaffFilter, sortBy, customerMap, serviceMap, staffMap]);
+
+  function priceLabelFor(booking: Booking): string | undefined {
+    const total = bookingPriceTotal(booking);
+    if (total > 0) return formatMoney(total, currency);
+    const service = services.find((item) => String(item.id) === String(booking.service_id));
+    const fallback = formatServicePrice(service);
+    return fallback || undefined;
+  }
+
+  function contactFor(booking: Booking): { phone?: string; email?: string } {
+    const customer = booking.customer_id ? customersById.get(booking.customer_id) : undefined;
+    return {
+      phone: bookingCustomerPhone(booking, customersById) || undefined,
+      email: customer?.email?.trim() || undefined,
+    };
+  }
+
+  function targetFromVoucher(
+    booking: Booking,
+    voucherId: string,
+    voucherNumber?: string | null,
+  ): ShopDocTarget | null {
+    if (!businessId || !voucherId) return null;
+    const contact = contactFor(booking);
+    return {
+      kind: 'sale',
+      id: voucherId,
+      number: String(voucherNumber || booking.books_voucher_number || booking.booking_number || ''),
+      businessId,
+      phone: contact.phone,
+      email: contact.email,
+    };
+  }
+
+  async function resolveInvoiceTarget(booking: Booking): Promise<ShopDocTarget | null> {
+    if (!businessId) {
+      toast.push('Select a business to open invoices.', 'error');
+      return null;
+    }
+    const existingId = String(booking.books_voucher_id || '').trim();
+    if (existingId) {
+      return targetFromVoucher(booking, existingId, booking.books_voucher_number);
+    }
+    if (!client) {
+      toast.push('Sign in again to open this invoice', 'error');
+      return null;
+    }
+    setInvoiceBusyId(booking.id);
+    try {
+      const response = await client.bookings.invoice(booking.id);
+      if (!response.data.available || !response.data.voucher_id) {
+        toast.push(response.data.reason || 'Tax invoice is not available yet.', 'error');
+        return null;
+      }
+      void reload();
+      return targetFromVoucher(
+        booking,
+        response.data.voucher_id,
+        response.data.voucher_number || response.data.invoice_number,
+      );
+    } catch (err) {
+      toast.push(getApiErrorMessage(err, 'Could not open tax invoice.'), 'error');
+      return null;
+    } finally {
+      setInvoiceBusyId(null);
+    }
+  }
+
+  async function viewInvoice(booking: Booking) {
+    if (invoiceBusyId) return;
+    if (!token) {
+      toast.push('Sign in again to view this invoice', 'error');
+      return;
+    }
+    const target = await resolveInvoiceTarget(booking);
+    if (!target) return;
+    try {
+      await openShopDocumentHtmlView({ target, token, tenantId });
+    } catch (err) {
+      toast.push(getApiErrorMessage(err, 'View failed'), 'error');
+    }
+  }
+
+  async function shareInvoice(booking: Booking) {
+    if (invoiceBusyId) return;
+    const target = await resolveInvoiceTarget(booking);
+    if (!target) return;
+    setDocActions(target);
+  }
 
   return (
     <DesktopPage>
@@ -141,7 +283,7 @@ export function BookingsScreen() {
         onReset={() => {
           setStatusFilter('');
           setStaffFilter('');
-          setSortBy('start_asc');
+          setSortBy('created_desc');
         }}
       >
         <FilterChoiceGroup
@@ -162,7 +304,7 @@ export function BookingsScreen() {
       </FilterSheet>
 
       <RefreshableScrollView
-        refreshing={refreshing || loading}
+        refreshing={refreshing}
         onRefresh={onRefresh}
         contentContainerStyle={[styles.content, { paddingBottom: contentInset }]}
       >
@@ -176,25 +318,38 @@ export function BookingsScreen() {
           onAction={() => navigation.navigate('CreateBooking', {})}
         />
         <GroupedList>
-          {sorted.map((booking) => (
-            <BookingRow
-              key={booking.id}
-              attached
-              serviceName={bookingServiceLabel(booking, serviceMap)}
-              customerName={bookingCustomerLabel(booking, customerMap)}
-              customerPhone={bookingCustomerPhone(booking)}
-              staffName={bookingStaffLabel(booking, staffMap)}
-              startAt={booking.start_at}
-              endAt={booking.end_at}
-              durationMinutes={booking.duration_minutes}
-              serviceCount={booking.line_items?.length || undefined}
-              bookingNumber={booking.booking_number}
-              status={booking.status}
-              onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
-            />
-          ))}
+          {sorted.map((booking) => {
+            const showInvoice = Boolean(businessId && canShowBookingInvoice(booking));
+            return (
+              <BookingRow
+                key={booking.id}
+                attached
+                serviceName={bookingServiceLabel(booking, serviceMap)}
+                customerName={bookingCustomerLabel(booking, customerMap)}
+                customerPhone={bookingCustomerPhone(booking, customersById)}
+                staffName={bookingStaffLabel(booking, staffMap)}
+                startAt={booking.start_at}
+                endAt={booking.end_at}
+                durationMinutes={booking.duration_minutes}
+                serviceCount={booking.line_items?.length || undefined}
+                bookingNumber={booking.booking_number}
+                status={booking.status}
+                priceLabel={priceLabelFor(booking)}
+                onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
+                onViewInvoice={showInvoice ? () => void viewInvoice(booking) : undefined}
+                onShareInvoice={showInvoice ? () => void shareInvoice(booking) : undefined}
+              />
+            );
+          })}
         </GroupedList>
       </RefreshableScrollView>
+
+      <DocumentActionsSheet
+        visible={Boolean(docActions)}
+        onClose={() => setDocActions(null)}
+        target={docActions}
+        title={docActions ? `Invoice ${docActions.number || ''}`.trim() : 'Sale invoice'}
+      />
     </DesktopPage>
   );
 }

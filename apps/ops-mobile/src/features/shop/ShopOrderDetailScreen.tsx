@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,11 +27,13 @@ import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';
 import { confirmAction } from '../../utils/confirmAction';
-import { DesktopPage } from '../../components/DesktopPage';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { FormScreen } from '../../components/FormScreen';
 import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ImageLightbox } from '../../components/ImageLightbox';
 import {
   formatMoney,
   formatShopOrderFulfillment,
@@ -49,6 +53,7 @@ import {
   groupDeliveryEvents,
 } from './deliveryTracking';
 import { shopOrderBillBreakdown } from '../../utils/shopOrderBill';
+import { loyaltyBillHighlight, readLoyaltyPrefs } from '../../utils/loyalty';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { orderCallPhone, orderDeliveryPhone } from '../../utils/shopOrderDisplay';
 
@@ -98,7 +103,7 @@ export function ShopOrderDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
   const client = useOpsClient();
-  const { businessId } = useWorkspace();
+  const { businessId, activeBusiness } = useWorkspace();
   const toast = useToast();
   const { customers } = useCustomers();
   const orderId = route.params.orderId;
@@ -120,6 +125,7 @@ export function ShopOrderDetailScreen() {
   const [shipEta, setShipEta] = useState('');
   const [shipNotify, setShipNotify] = useState(true);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
+  const [proofLightboxOpen, setProofLightboxOpen] = useState(false);
 
   const refreshOrderData = useCallback(async () => {
     if (!client || !orderId || !businessId) return;
@@ -464,21 +470,21 @@ export function ShopOrderDetailScreen() {
 
   if (loading && !order) {
     return (
-      <DesktopPage>
+      <FormScreen>
         <View style={[styles.screen, styles.centered]}>
           <ActivityIndicator color={colors.primary} />
         </View>
-      </DesktopPage>
+      </FormScreen>
     );
   }
 
   if (!order) {
     return (
-      <DesktopPage>
+      <FormScreen>
         <View style={[styles.screen, styles.centered, { paddingHorizontal: spacing.lg }]}>
           <Text style={styles.error}>{error || 'Order not found.'}</Text>
         </View>
-      </DesktopPage>
+      </FormScreen>
     );
   }
 
@@ -486,6 +492,17 @@ export function ShopOrderDetailScreen() {
   const payment = formatShopOrderPayment(order);
   const paymentStatusValue = String(order.payment_status || pos.payment_status || '').toLowerCase();
   const paymentMethodValue = String(order.payment_method || pos.payment_method || '').toLowerCase();
+  const upiUtr = String(order.upi_utr || pos.upi_utr || '').trim();
+  const paymentProofUri = resolveMediaUrl(
+    String(
+      order.payment_proof_url ||
+        pos.payment_proof_url ||
+        (pos.payment_proof_media_id
+          ? `/api/v1/media/${String(pos.payment_proof_media_id).trim()}/file`
+          : ''),
+    ).trim() || null,
+  );
+  const hasUpiProof = Boolean(upiUtr || paymentProofUri);
   const due = isShopOrderBorrowDue(order);
   const fulfillment =
     order.metadata && typeof order.metadata === 'object'
@@ -520,6 +537,15 @@ export function ShopOrderDetailScreen() {
   const deliveryAddress = String(order.delivery_address || '').trim();
   const isOnlineOrder = ['pickup', 'delivery'].includes(String(order.fulfillment_mode || '').toLowerCase());
   const bill = shopOrderBillBreakdown(order);
+  const loyaltyPrefs = readLoyaltyPrefs(
+    (activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined,
+  );
+  const loyaltyHighlight = loyaltyBillHighlight({
+    enabled: loyaltyPrefs.enabled,
+    pointsEarned: bill.pointsEarned,
+    pointsToEarn: bill.pointsToEarn,
+    pointsBalance: customer ? Number(customer.loyalty_points ?? 0) : null,
+  });
   const invoiceVoucherId = String(order.books_voucher_id || '').trim();
   const invoiceVoucherNumber = String(
     order.books_voucher_number || bill.booksVoucherNumber || order.order_number,
@@ -560,24 +586,151 @@ export function ShopOrderDetailScreen() {
       .reverse()
       .find((attempt) => attempt.reason)?.reason;
 
+  const awaitingUpi = paymentStatusValue === 'awaiting_confirmation';
+
+  function runPaymentAction(action: 'confirm' | 'reject', successMessage: string) {
+    if (!client) return;
+    setBusy(true);
+    void client.shop
+      .confirmOrderPayment(orderId, { action })
+      .then(() => {
+        toast.push(successMessage, 'success');
+        return refreshOrder();
+      })
+      .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
+      .finally(() => setBusy(false));
+  }
+
+  const showFooter =
+    awaitingUpi ||
+    cashPaymentDue ||
+    canCancel ||
+    canInstantDispatch ||
+    canStandardShip ||
+    canStandardMarkDelivered ||
+    Boolean(nextAction && !canStandardShip && !canInstantDispatch) ||
+    Boolean(isInstantDelivery && order.status === 'delivery_failed' && nextAction);
+
+  const footer = !showFooter ? undefined : (
+    <View style={styles.footer}>
+      {awaitingUpi ? (
+        <>
+          <Button
+            label="Reject"
+            variant="soft"
+            icon="x"
+            disabled={busy}
+            style={styles.footerBtn}
+            onPress={() => runPaymentAction('reject', 'Payment rejected')}
+          />
+          <Button
+            label="Confirm paid"
+            icon="check-circle"
+            loading={busy}
+            style={styles.footerPrimary}
+            onPress={() => runPaymentAction('confirm', 'Payment confirmed')}
+          />
+        </>
+      ) : cashPaymentDue ? (
+        <Button
+          label="Cash received"
+          icon="dollar-sign"
+          loading={busy}
+          style={styles.footerPrimary}
+          onPress={() => runPaymentAction('confirm', 'Cash payment recorded')}
+        />
+      ) : (
+        <>
+          {canCancel ? (
+            <Button
+              label="Cancel"
+              variant="soft"
+              icon="x"
+              disabled={busy}
+              style={styles.footerBtn}
+              onPress={() => void confirmCancelOrder()}
+            />
+          ) : null}
+          {canInstantDispatch ? (
+            <Button
+              label={
+                busy
+                  ? 'Requesting…'
+                  : order.status === 'delivery_failed'
+                    ? 'Retry rider'
+                    : 'Dispatch'
+              }
+              icon="truck"
+              loading={busy}
+              style={styles.footerPrimary}
+              onPress={() => void dispatchOrder()}
+            />
+          ) : null}
+          {canStandardShip && shiprocketConfigured ? (
+            <Button
+              label={busy ? 'Booking…' : 'Shiprocket'}
+              icon="package"
+              loading={busy}
+              style={styles.footerBtn}
+              onPress={() => void bookWithShiprocket()}
+            />
+          ) : null}
+          {canStandardShip ? (
+            <Button
+              label="Mark shipped"
+              icon="send"
+              disabled={busy}
+              style={shiprocketConfigured ? styles.footerBtn : styles.footerPrimary}
+              onPress={() => {
+                setShipOpen(true);
+                setError(null);
+              }}
+            />
+          ) : null}
+          {canStandardMarkDelivered ? (
+            <Button
+              label={busy ? 'Updating…' : 'Mark delivered'}
+              icon="check-circle"
+              loading={busy}
+              style={styles.footerPrimary}
+              onPress={() => void markStandardDelivered()}
+            />
+          ) : null}
+          {nextAction && !canStandardShip && !canInstantDispatch && !canStandardMarkDelivered ? (
+            <Button
+              label={busy ? 'Updating…' : nextAction.label}
+              icon="arrow-right"
+              loading={busy}
+              style={styles.footerPrimary}
+              onPress={() => void confirmAdvance(nextAction)}
+            />
+          ) : null}
+          {isInstantDelivery && order.status === 'delivery_failed' && nextAction && !canInstantDispatch ? (
+            <Button
+              label={nextAction.label}
+              variant="soft"
+              icon="refresh-cw"
+              disabled={busy}
+              style={styles.footerBtn}
+              onPress={() => void confirmAdvance(nextAction)}
+            />
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+
   return (
-    <DesktopPage>
+    <FormScreen
+      footer={footer}
+      contentContainerStyle={{ gap: 12, paddingHorizontal: spacing.lg, paddingTop: spacing.md }}
+    >
       <DocumentActionsSheet
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
         title={docActions ? `Invoice ${docActions.number || ''}`.trim() : 'Sale invoice'}
       />
-      <ScrollView
-        style={styles.screen}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.md,
-          paddingBottom: insets.bottom + spacing.xl,
-          gap: 12,
-        }}
-      >
         <View style={styles.headerCard}>
           <View style={styles.headerTop}>
             <Text style={styles.orderNumber}>{order.order_number}</Text>
@@ -750,81 +903,14 @@ export function ShopOrderDetailScreen() {
               </Text>
             ) : null}
             {canInstantDispatch ? (
-              <Pressable
-                style={[styles.primaryBtn, busy && styles.btnDisabled]}
-                disabled={busy}
-                onPress={() => void dispatchOrder()}
-              >
-                <Text style={styles.primaryBtnText}>
-                  {busy
-                    ? 'Requesting rider…'
-                    : order.status === 'delivery_failed'
-                      ? 'Retry · request another rider'
-                      : 'Dispatch · request rider'}
-                </Text>
-              </Pressable>
-            ) : null}
-            {canStandardShip ? (
-              <>
-                {shiprocketConfigured ? (
-                  <Pressable
-                    style={[styles.primaryBtn, busy && styles.btnDisabled]}
-                    disabled={busy}
-                    onPress={() => void bookWithShiprocket()}
-                  >
-                    <Text style={styles.primaryBtnText}>
-                      {busy ? 'Booking…' : 'Book with Shiprocket'}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                <Pressable
-                  style={[
-                    shiprocketConfigured ? styles.secondaryBtn : styles.primaryBtn,
-                    busy && styles.btnDisabled,
-                  ]}
-                  disabled={busy}
-                  onPress={() => {
-                    setShipOpen(true);
-                    setError(null);
-                  }}
-                >
-                  <Text style={shiprocketConfigured ? styles.secondaryBtnText : styles.primaryBtnText}>
-                    Mark shipped
-                  </Text>
-                </Pressable>
-              </>
-            ) : null}
-            {nextAction && !canStandardShip && !canInstantDispatch ? (
-              <Pressable
-                style={[styles.primaryBtn, busy && styles.btnDisabled]}
-                disabled={busy}
-                onPress={() => void confirmAdvance(nextAction)}
-              >
-                <Text style={styles.primaryBtnText}>{busy ? 'Updating…' : nextAction.label}</Text>
-              </Pressable>
-            ) : null}
-            {canStandardMarkDelivered ? (
-              <Pressable
-                style={[styles.primaryBtn, busy && styles.btnDisabled]}
-                disabled={busy}
-                onPress={() => void markStandardDelivered()}
-              >
-                <Text style={styles.primaryBtnText}>{busy ? 'Updating…' : 'Mark delivered'}</Text>
-              </Pressable>
-            ) : null}
-            {isInstantDelivery && order.status === 'delivery_failed' && nextAction ? (
-              <Pressable
-                style={[styles.secondaryBtn, busy && styles.btnDisabled]}
-                disabled={busy}
-                onPress={() => void confirmAdvance(nextAction)}
-              >
-                <Text style={styles.secondaryBtnText}>{nextAction.label}</Text>
-              </Pressable>
+              <Text style={styles.meta}>
+                {order.status === 'delivery_failed'
+                  ? 'Retry delivery from the actions below to request another rider.'
+                  : 'Request a rider from the actions below when the order is packed.'}
+              </Text>
             ) : null}
             {canCancel ? (
-              <Pressable style={styles.cancelOrderBtn} disabled={busy} onPress={() => void confirmCancelOrder()}>
-                <Text style={styles.cancelOrderText}>Cancel order</Text>
-              </Pressable>
+              <Text style={styles.meta}>You can cancel this order from the bottom actions.</Text>
             ) : null}
           </View>
         ) : null}
@@ -833,74 +919,40 @@ export function ShopOrderDetailScreen() {
           <View style={styles.headerCard}>
             <Text style={styles.section}>Cash payment pending</Text>
             <Text style={styles.meta}>
-              Mark cash received when the customer pays on delivery or at pickup.
+              Mark cash received from the bottom actions when the customer pays on delivery or at pickup.
             </Text>
-            <Pressable
-              style={[styles.actionBtn, { backgroundColor: colors.success, marginTop: 10 }]}
-              disabled={busy}
-              onPress={() => {
-                if (!client) return;
-                setBusy(true);
-                void client.shop
-                  .confirmOrderPayment(orderId, { action: 'confirm' })
-                  .then(() => {
-                    toast.push('Cash payment recorded', 'success');
-                    return refreshOrder();
-                  })
-                  .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              <Text style={styles.actionBtnText}>Cash received</Text>
-            </Pressable>
           </View>
         ) : null}
 
-        {paymentStatusValue === 'awaiting_confirmation' ? (
+        {hasUpiProof || paymentStatusValue === 'awaiting_confirmation' ? (
           <View style={styles.headerCard}>
-            <Text style={styles.section}>Customer UPI claim</Text>
-            <Text style={styles.meta}>UTR: {String(order.upi_utr || pos.upi_utr || '—')}</Text>
-            {order.payment_proof_url || pos.payment_proof_url ? (
-              <Text style={styles.meta}>Screenshot attached</Text>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <Pressable
-                style={[styles.actionBtn, { backgroundColor: colors.success }]}
-                disabled={busy}
-                onPress={() => {
-                  if (!client) return;
-                  setBusy(true);
-                  void client.shop
-                    .confirmOrderPayment(orderId, { action: 'confirm' })
-                    .then(() => {
-                      toast.push('Payment confirmed', 'success');
-                      return refreshOrder();
-                    })
-                    .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                <Text style={styles.actionBtnText}>Confirm paid</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.actionBtn, { backgroundColor: colors.destructive }]}
-                disabled={busy}
-                onPress={() => {
-                  if (!client) return;
-                  setBusy(true);
-                  void client.shop
-                    .confirmOrderPayment(orderId, { action: 'reject' })
-                    .then(() => {
-                      toast.push('Payment rejected', 'success');
-                      return refreshOrder();
-                    })
-                    .catch((err) => toast.push(err instanceof Error ? err.message : 'Failed', 'error'))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                <Text style={styles.actionBtnText}>Reject</Text>
-              </Pressable>
-            </View>
+            <Text style={styles.section}>Customer UPI payment</Text>
+            <Text style={styles.meta}>
+              {paymentStatusValue === 'awaiting_confirmation'
+                ? 'Awaiting confirmation — review the reference / screenshot, then confirm or reject below.'
+                : paymentStatusValue === 'paid' || paymentStatusValue === 'settled'
+                  ? 'Payment confirmed.'
+                  : 'UPI payment details submitted by the customer.'}
+            </Text>
+            {upiUtr ? (
+              <View style={styles.upiDetailRow}>
+                <Text style={styles.meta}>UTR / reference</Text>
+                <Text style={styles.upiValue}>{upiUtr}</Text>
+              </View>
+            ) : (
+              <Text style={styles.meta}>No UTR / reference provided.</Text>
+            )}
+            {paymentProofUri ? (
+              <Button
+                label="View screenshot"
+                variant="soft"
+                icon="eye"
+                onPress={() => setProofLightboxOpen(true)}
+                style={{ marginTop: spacing.sm }}
+              />
+            ) : (
+              <Text style={styles.meta}>No screenshot uploaded.</Text>
+            )}
           </View>
         ) : null}
 
@@ -952,12 +1004,18 @@ export function ShopOrderDetailScreen() {
             <Text style={styles.meta}>Items</Text>
             <Text style={styles.meta}>{formatMoney(bill.merchandiseGross)}</Text>
           </View>
-          {bill.lineDiscountTotal > 0 ? (
-            <View style={styles.totalRow}>
-              <Text style={styles.meta}>Product discounts</Text>
-              <Text style={styles.meta}>-{formatMoney(bill.lineDiscountTotal)}</Text>
-            </View>
-          ) : null}
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Product discount</Text>
+            <Text style={styles.meta}>
+              {bill.lineDiscountTotal > 0
+                ? `-${formatMoney(bill.lineDiscountTotal)}`
+                : formatMoney(0)}
+            </Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Subtotal</Text>
+            <Text style={styles.meta}>{formatMoney(bill.merchandiseAfterLineDiscount)}</Text>
+          </View>
           {bill.billDiscount > 0 ? (
             <View style={styles.totalRow}>
               <Text style={styles.meta}>Bill discount</Text>
@@ -972,16 +1030,18 @@ export function ShopOrderDetailScreen() {
               <Text style={styles.meta}>-{formatMoney(bill.couponDiscount)}</Text>
             </View>
           ) : null}
-          {bill.rewardDiscount > 0 ? (
+          {bill.rewardDiscount > 0 || (loyaltyPrefs.enabled && bill.rewardPoints > 0) ? (
             <View style={styles.totalRow}>
               <Text style={styles.meta}>
-                Reward points{bill.rewardPoints > 0 ? ` (${bill.rewardPoints} pts)` : ''}
+                {loyaltyPrefs.enabled
+                  ? `Points used${bill.rewardPoints > 0 ? ` (${bill.rewardPoints})` : ''}`
+                  : 'Discount'}
               </Text>
               <Text style={styles.meta}>-{formatMoney(bill.rewardDiscount)}</Text>
             </View>
           ) : null}
           <View style={styles.totalRow}>
-            <Text style={styles.meta}>Taxable value</Text>
+            <Text style={styles.meta}>Taxable</Text>
             <Text style={styles.meta}>{formatMoney(bill.taxableSubtotal)}</Text>
           </View>
           {bill.deliveryFee > 0 ? (
@@ -1010,14 +1070,53 @@ export function ShopOrderDetailScreen() {
             )
           ) : (
             <View style={styles.totalRow}>
-              <Text style={styles.meta}>GST</Text>
+              <Text style={styles.meta}>Tax</Text>
               <Text style={styles.meta}>{formatMoney(bill.taxTotal)}</Text>
             </View>
           )}
           <View style={styles.totalRow}>
-            <Text style={styles.payableLabel}>{due ? 'Amount due' : 'Payable'}</Text>
-            <Text style={styles.payableValue}>
-              {formatMoney(due ? pos.amount_due ?? order.total : bill.total)}
+            <Text style={styles.payableLabel}>Total</Text>
+            <Text style={styles.payableValue}>{formatMoney(bill.total)}</Text>
+          </View>
+          {loyaltyHighlight ? (
+            <View
+              style={[
+                styles.loyaltyHighlight,
+                bill.pointsEarned <= 0 && styles.loyaltyHighlightPending,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.loyaltyValue,
+                  bill.pointsEarned <= 0 && styles.loyaltyValuePending,
+                ]}
+                numberOfLines={1}
+              >
+                {loyaltyHighlight}
+              </Text>
+            </View>
+          ) : null}
+          {bill.paymentLabel ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.meta}>Payment</Text>
+              <Text style={styles.meta}>{bill.paymentLabel}</Text>
+            </View>
+          ) : null}
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Received</Text>
+            <Text style={styles.meta}>{formatMoney(bill.amountPaid)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={[styles.meta, bill.amountDue > 0 && { color: colors.warning }]}>
+              Balance due
+            </Text>
+            <Text
+              style={[
+                styles.meta,
+                bill.amountDue > 0 && { color: colors.warning, fontFamily: fonts.bodyBold },
+              ]}
+            >
+              {formatMoney(bill.amountDue)}
             </Text>
           </View>
           <Text style={styles.currencyNote}>{bill.currency || 'INR'}</Text>
@@ -1206,60 +1305,113 @@ export function ShopOrderDetailScreen() {
             <Text style={styles.meta}>No returns yet on this bill.</Text>
           ) : null}
         </View>
-      </ScrollView>
 
-      <Modal visible={shipOpen} transparent animationType="slide" onRequestClose={() => setShipOpen(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setShipOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.modalTitle}>Ship order</Text>
-            <Text style={styles.meta}>
-              Add courier tracking so customers can follow the shipment like Amazon.
-            </Text>
-            <SelectField
-              label="Carrier"
-              required
-              value={shipCarrier}
-              options={SHIP_CARRIERS}
-              onChange={setShipCarrier}
-              searchable={false}
-            />
-            <Input
-              label="AWB / tracking number"
-              required
-              value={shipAwb}
-              onChangeText={setShipAwb}
-              placeholder="1234567890123"
-              autoCapitalize="characters"
-            />
-            <Input
-              label="Estimated delivery (optional)"
-              value={shipEta}
-              onChangeText={setShipEta}
-              placeholder="YYYY-MM-DD"
-            />
-            <View style={styles.switchRow}>
+      {proofLightboxOpen && paymentProofUri ? (
+        <ImageLightbox
+          uri={paymentProofUri}
+          visible
+          title="Payment screenshot"
+          onClose={() => setProofLightboxOpen(false)}
+        />
+      ) : null}
+
+      <Modal
+        visible={shipOpen}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setShipOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.shipRoot}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable
+            style={styles.shipBackdrop}
+            onPress={() => setShipOpen(false)}
+            accessibilityLabel="Close ship order"
+          />
+          <View style={[styles.shipSheet, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+            <View style={styles.shipGrab}>
+              <View style={styles.shipHandle} />
+            </View>
+            <View style={styles.shipHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.switchLabel}>Notify customer</Text>
-                <Text style={styles.meta}>Send push and email with tracking link</Text>
+                <Text style={styles.shipTitle}>Ship order</Text>
+                <Text style={styles.shipSubtitle}>
+                  Add courier tracking so the customer can follow the package
+                </Text>
               </View>
-              <Switch value={shipNotify} onValueChange={setShipNotify} />
-            </View>
-            <View style={styles.modalActions}>
-              <Pressable style={styles.secondaryBtn} onPress={() => setShipOpen(false)} disabled={busy}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </Pressable>
               <Pressable
-                style={[styles.primaryBtn, (busy || !shipAwb.trim()) && styles.btnDisabled]}
-                disabled={busy || !shipAwb.trim()}
-                onPress={() => void submitShipOrder()}
+                style={styles.shipClose}
+                onPress={() => setShipOpen(false)}
+                hitSlop={8}
+                accessibilityLabel="Close"
               >
-                <Text style={styles.primaryBtnText}>{busy ? 'Saving…' : 'Mark shipped'}</Text>
+                <Feather name="x" size={18} color={colors.foreground} />
               </Pressable>
             </View>
-          </Pressable>
-        </Pressable>
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              contentContainerStyle={styles.shipBody}
+            >
+              <SelectField
+                label="Carrier"
+                required
+                value={shipCarrier}
+                options={SHIP_CARRIERS}
+                onChange={setShipCarrier}
+                searchable={false}
+              />
+              <Input
+                label="AWB / tracking number"
+                required
+                value={shipAwb}
+                onChangeText={setShipAwb}
+                placeholder="1234567890123"
+                autoCapitalize="characters"
+              />
+              <Input
+                label="Estimated delivery (optional)"
+                value={shipEta}
+                onChangeText={setShipEta}
+                placeholder="YYYY-MM-DD"
+              />
+              <View style={styles.shipNotifyCard}>
+                <View style={{ flex: 1, paddingRight: spacing.md }}>
+                  <Text style={styles.switchLabel}>Notify customer</Text>
+                  <Text style={styles.meta}>Send push and email with the tracking link</Text>
+                </View>
+                <Switch value={shipNotify} onValueChange={setShipNotify} trackColor={{ true: colors.primary }} />
+              </View>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+            </ScrollView>
+
+            <View style={styles.shipFooter}>
+              <Button
+                label="Cancel"
+                variant="soft"
+                icon="x"
+                disabled={busy}
+                style={styles.footerBtn}
+                onPress={() => setShipOpen(false)}
+              />
+              <Button
+                label={busy ? 'Saving…' : 'Mark shipped'}
+                icon="send"
+                loading={busy}
+                disabled={!shipAwb.trim()}
+                style={styles.footerPrimary}
+                onPress={() => void submitShipOrder()}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
-    </DesktopPage>
+    </FormScreen>
   );
 }
 
@@ -1426,6 +1578,11 @@ const styles = StyleSheet.create({
   lineHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   name: { fontFamily: fonts.bodyMedium, fontSize: 16, color: colors.foreground },
   meta: { color: colors.mutedForeground, fontSize: 13, flexShrink: 1, lineHeight: 18 },
+  upiDetailRow: { gap: 2, marginTop: spacing.sm },
+  upiValue: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
+  footer: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
+  footerBtn: { flex: 1 },
+  footerPrimary: { flex: 1.35 },
   backorder: { color: colors.warning, fontSize: 13, marginTop: 4 },
   returnedHint: { color: colors.primary, fontSize: 12, fontWeight: '600', marginTop: 2 },
   qty: { color: colors.foreground, fontWeight: '600', fontSize: 14 },
@@ -1443,6 +1600,25 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   payableLabel: { fontFamily: fonts.bodySemi, fontSize: 16, color: colors.foreground },
   payableValue: { fontFamily: fonts.bodySemi, fontSize: 18, color: colors.foreground },
+  loyaltyHighlight: {
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: colors.successSoft,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  loyaltyHighlightPending: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  loyaltyValue: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 13,
+    color: colors.success,
+  },
+  loyaltyValuePending: { color: '#92400E' },
   currencyNote: { color: colors.mutedForeground, fontSize: 12, marginTop: 2 },
   notesCard: {
     borderWidth: 1,
@@ -1559,21 +1735,72 @@ const styles = StyleSheet.create({
   priorReturns: { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 10 },
   priorRow: { gap: 2 },
   error: { color: colors.destructive },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.45)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
+  shipRoot: { flex: 1, justifyContent: 'flex-end' },
+  shipBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,22,35,0.4)' },
+  shipSheet: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: spacing.lg,
-    gap: spacing.md,
-    maxHeight: '90%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '92%',
+    width: '100%',
   },
-  modalTitle: { fontFamily: fonts.display, fontSize: 22, color: colors.foreground },
-  modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  shipGrab: {
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  shipHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: radius.full,
+    backgroundColor: colors.muted,
+  },
+  shipHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  shipTitle: { fontFamily: fonts.display, fontSize: 22, color: colors.foreground },
+  shipSubtitle: {
+    marginTop: 4,
+    color: colors.mutedForeground,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  shipClose: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shipBody: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  shipNotifyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  shipFooter: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'stretch',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',

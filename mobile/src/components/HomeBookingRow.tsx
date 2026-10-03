@@ -33,6 +33,8 @@ function dateParts(iso: string) {
 
 export function HomeBookingRow({ booking, variant, primaryColor, attached = false, onPress }: Props) {
   const status = mapBookingStatus(booking.status);
+  const statusKey = String(booking.status || '').toLowerCase();
+  const isTerminal = ['completed', 'cancelled', 'rejected', 'no_show', 'expired'].includes(statusKey);
   const serviceName = bookingServiceLabel(booking);
   const staffLabel = bookingStaffLabel(booking);
   const timeRange = bookingTimeRangeLabel(booking.start_at, booking.end_at);
@@ -40,6 +42,7 @@ export function HomeBookingRow({ booking, variant, primaryColor, attached = fals
 
   if (variant === 'upcoming') {
     const timing = bookingStartsInLabel(booking.start_at, booking.end_at);
+    const showTimingChip = Boolean(timing.label) && timing.tone !== 'done' && !isTerminal;
     const timingTone =
       timing.tone === 'now'
         ? { bg: '#DCFCE7', text: '#166534' }
@@ -56,18 +59,24 @@ export function HomeBookingRow({ booking, variant, primaryColor, attached = fals
         ]}
         onPress={onPress}
       >
-        <View style={[styles.dateTile, { backgroundColor: `${primaryColor}12` }]}>
-          <Text style={[styles.dateMonth, { color: primaryColor }]}>{parts.month}</Text>
-          <Text style={[styles.dateDay, { color: primaryColor }]}>{parts.day}</Text>
+        <View style={[styles.dateTile, { backgroundColor: isTerminal ? colors.muted : `${primaryColor}12` }]}>
+          <Text style={[styles.dateMonth, { color: isTerminal ? colors.mutedForeground : primaryColor }]}>
+            {parts.month}
+          </Text>
+          <Text style={[styles.dateDay, { color: isTerminal ? colors.mutedForeground : primaryColor }]}>
+            {parts.day}
+          </Text>
         </View>
         <View style={styles.upcomingBody}>
           <View style={styles.upcomingTitleRow}>
             <Text style={styles.upcomingTitle} numberOfLines={1}>
               {serviceName}
             </Text>
-            <View style={[styles.timingChip, { backgroundColor: timingTone.bg }]}>
-              <Text style={[styles.timingText, { color: timingTone.text }]}>{timing.label}</Text>
-            </View>
+            {showTimingChip ? (
+              <View style={[styles.timingChip, { backgroundColor: timingTone.bg }]}>
+                <Text style={[styles.timingText, { color: timingTone.text }]}>{timing.label}</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={styles.upcomingMeta} numberOfLines={1}>
             {timeRange}
@@ -85,16 +94,19 @@ export function HomeBookingRow({ booking, variant, primaryColor, attached = fals
   }
 
   const timing = bookingStartsInLabel(booking.start_at, booking.end_at);
+  const timingTone = isTerminal ? 'done' : timing.tone;
   const timingColors =
-    timing.tone === 'now'
+    timingTone === 'now'
       ? { bg: '#DCFCE7', text: '#166534' }
-      : timing.tone === 'soon'
+      : timingTone === 'soon'
         ? { bg: `${primaryColor}18`, text: primaryColor }
-        : timing.tone === 'later'
+        : timingTone === 'later'
           ? { bg: `${primaryColor}12`, text: primaryColor }
           : { bg: colors.muted, text: colors.mutedForeground };
   const startLabel = booking.start_at ? formatTime(booking.start_at) : '—';
   const dateLabel = booking.start_at ? formatDate(booking.start_at) : '';
+  const showRelativeTiming =
+    !isTerminal && timingTone !== 'done' && Boolean(timing.label) && timing.label !== startLabel;
   const serviceCount = booking.items?.length ?? 0;
   const servicesLabel =
     serviceCount > 1 ? `${serviceCount} services` : booking.duration_minutes ? `${booking.duration_minutes} min` : '';
@@ -105,9 +117,16 @@ export function HomeBookingRow({ booking, variant, primaryColor, attached = fals
       <View style={[styles.card, attached && styles.cardAttached]}>
         <View style={[styles.timeBlock, { backgroundColor: timingColors.bg }]}>
           <Text style={[styles.time, { color: timingColors.text }]}>{startLabel}</Text>
-          <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={1}>
-            {timing.label}
-          </Text>
+          {showRelativeTiming ? (
+            <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={1}>
+              {timing.label}
+            </Text>
+          ) : null}
+          {dateLabel ? (
+            <Text style={[styles.dateBelow, { color: timingColors.text }]} numberOfLines={2}>
+              {dateLabel}
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.body}>
@@ -135,7 +154,6 @@ export function HomeBookingRow({ booking, variant, primaryColor, attached = fals
           {booking.booking_number ? (
             <Text style={styles.ref} numberOfLines={1}>
               #{booking.booking_number}
-              {dateLabel ? ` · ${dateLabel}` : ''}
             </Text>
           ) : null}
         </View>
@@ -186,6 +204,13 @@ const styles = StyleSheet.create({
     ...typography.tiny,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  dateBelow: {
+    ...typography.tiny,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 14,
+    marginTop: 1,
   },
   body: { flex: 1, gap: 6, minWidth: 0 },
   titleRow: {

@@ -30,13 +30,14 @@ import { colors } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopPet } from '@ie-orbit/sdk';
 
-const SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other'];
+const FALLBACK_SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit'];
 const SEX_OPTIONS = ['Male', 'Female', 'Unknown'];
 
 type FormState = {
   customerId: string;
   name: string;
-  species: string;
+  speciesChoice: string;
+  speciesOther: string;
   breed: string;
   sex: string;
   birthday: string;
@@ -47,7 +48,8 @@ type FormState = {
 const EMPTY: FormState = {
   customerId: '',
   name: '',
-  species: 'Dog',
+  speciesChoice: 'Dog',
+  speciesOther: '',
   breed: '',
   sex: '',
   birthday: '',
@@ -55,11 +57,14 @@ const EMPTY: FormState = {
   medicalNotes: '',
 };
 
-function petToForm(pet: ShopPet): FormState {
+function petToForm(pet: ShopPet, masterLabels: string[]): FormState {
+  const species = (pet.species || 'Dog').trim();
+  const inMaster = masterLabels.some((label) => label.toLowerCase() === species.toLowerCase());
   return {
     customerId: pet.customer,
     name: pet.name,
-    species: pet.species || 'Dog',
+    speciesChoice: inMaster ? species : 'Other',
+    speciesOther: inMaster ? '' : species,
     breed: pet.breed || '',
     sex: pet.sex || '',
     birthday: pet.birthday || '',
@@ -89,6 +94,27 @@ export function ShopPetFormScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(!isEdit);
+  const [speciesOptions, setSpeciesOptions] = useState<string[]>(FALLBACK_SPECIES);
+
+  useEffect(() => {
+    if (!client || !businessId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await client.shop.listMasterRecords('pet_species', { business_id: businessId });
+        const labels = (response.data.items ?? [])
+          .filter((row) => row.is_active)
+          .map((row) => row.label)
+          .filter(Boolean);
+        if (!cancelled && labels.length) setSpeciesOptions(labels);
+      } catch {
+        // Keep fallback species list.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId, client]);
 
   useEffect(() => {
     if (!isEdit || !client || !petId) return;
@@ -97,7 +123,7 @@ export function ShopPetFormScreen() {
       try {
         const response = await client.shop.getPet(petId);
         if (!cancelled) {
-          const next = petToForm(response.data);
+          const next = petToForm(response.data, speciesOptions);
           setForm(next);
           setPhotoPreview(next.photoUrl || null);
           setPhotoAsset(null);
@@ -113,7 +139,7 @@ export function ShopPetFormScreen() {
     return () => {
       cancelled = true;
     };
-  }, [client, isEdit, petId]);
+  }, [client, isEdit, petId, speciesOptions]);
 
   useEffect(() => {
     const selectId = route.params?.selectCustomerId;
@@ -159,6 +185,18 @@ export function ShopPetFormScreen() {
       setMessage('Pet name is required.');
       return;
     }
+    const speciesValue =
+      form.speciesChoice === 'Other' ? form.speciesOther.trim() : form.speciesChoice.trim();
+    if (form.speciesChoice === 'Other' && !speciesValue) {
+      setFieldErrors({ speciesOther: 'Enter the species.' });
+      setMessage('Enter the species.');
+      return;
+    }
+    if (!speciesValue) {
+      setFieldErrors({ speciesChoice: 'Select a species.' });
+      setMessage('Select a species.');
+      return;
+    }
     setFieldErrors({});
     if (form.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(form.birthday.trim())) {
       setMessage('Birthday must be YYYY-MM-DD.');
@@ -185,7 +223,7 @@ export function ShopPetFormScreen() {
         business_id: businessId,
         customer_id: form.customerId,
         name: form.name.trim(),
-        species: form.species.trim(),
+        species: speciesValue,
         breed: form.breed.trim(),
         sex: form.sex.trim(),
         birthday: form.birthday.trim() || null,
@@ -218,6 +256,7 @@ export function ShopPetFormScreen() {
         <>
           <Button
             label={saving ? 'Saving…' : isEdit ? 'Update pet' : 'Save pet'}
+            icon="save"
             loading={saving}
             fullWidth
             size="lg"
@@ -313,16 +352,33 @@ export function ShopPetFormScreen() {
         />
         <FieldLabel label="Species" required />
         <View style={styles.chipWrap}>
-          {SPECIES.map((value) => (
+          {[...speciesOptions, 'Other'].map((value) => (
             <Pressable
               key={value}
-              style={[styles.chip, form.species === value && styles.chipActive]}
-              onPress={() => setField('species', value)}
+              style={[styles.chip, form.speciesChoice === value && styles.chipActive]}
+              onPress={() => {
+                setField('speciesChoice', value);
+                if (value !== 'Other') setField('speciesOther', '');
+                setFieldErrors((current) => ({ ...current, speciesOther: '', speciesChoice: '' }));
+              }}
             >
-              <Text style={[styles.chipText, form.species === value && styles.chipTextActive]}>{value}</Text>
+              <Text style={[styles.chipText, form.speciesChoice === value && styles.chipTextActive]}>{value}</Text>
             </Pressable>
           ))}
         </View>
+        {form.speciesChoice === 'Other' ? (
+          <Input
+            label="Species name"
+            required
+            value={form.speciesOther}
+            onChangeText={(value) => {
+              setField('speciesOther', value);
+              setFieldErrors((current) => ({ ...current, speciesOther: '' }));
+            }}
+            error={fieldErrors.speciesOther}
+            placeholder="e.g. Hamster"
+          />
+        ) : null}
         <Input label="Breed" optional value={form.breed} onChangeText={(value) => setField('breed', value)} />
         <FieldLabel label="Sex" optional />
         <View style={styles.chipWrap}>

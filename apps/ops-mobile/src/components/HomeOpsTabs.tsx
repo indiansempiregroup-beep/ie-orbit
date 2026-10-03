@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 
 export type HomeOpsTab = 'bookings' | 'orders';
@@ -30,15 +31,17 @@ export function HomeOpsTabs({ bookingsCount, ordersCount, bookingsPanel, ordersP
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.tabRow}>
+      <View style={styles.tabTrack}>
         <TabButton
           label="Bookings"
+          icon="calendar"
           count={bookingsCount}
           active={activeTab === 'bookings'}
           onPress={() => setActiveTab('bookings')}
         />
         <TabButton
           label="Online orders"
+          icon="shopping-bag"
           count={ordersCount}
           active={activeTab === 'orders'}
           onPress={() => setActiveTab('orders')}
@@ -51,23 +54,29 @@ export function HomeOpsTabs({ bookingsCount, ordersCount, bookingsPanel, ordersP
 
 function TabButton({
   label,
+  icon,
   count,
   active,
   onPress,
 }: {
   label: string;
+  icon: keyof typeof Feather.glyphMap;
   count: number;
   active: boolean;
   onPress: () => void;
 }) {
+  const iconColor = active ? colors.primary : colors.mutedForeground;
   return (
     <Pressable
-      style={[styles.tab, active && styles.tabActive]}
+      style={({ pressed }) => [styles.tab, active && styles.tabActive, pressed && styles.tabPressed]}
       onPress={onPress}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
     >
-      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+      <Feather name={icon} size={14} color={iconColor} />
+      <Text style={[styles.tabLabel, active && styles.tabLabelActive]} numberOfLines={1}>
+        {label}
+      </Text>
       {count > 0 ? (
         <View style={[styles.tabBadge, active && styles.tabBadgeActive]}>
           <Text style={[styles.tabBadgeText, active && styles.tabBadgeTextActive]}>{count}</Text>
@@ -79,46 +88,56 @@ function TabButton({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
-  tabRow: {
+  tabTrack: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 4,
+    padding: 4,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   tab: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    minHeight: 40,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.full,
-    backgroundColor: colors.muted,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: 'transparent',
   },
   tabActive: {
-    backgroundColor: colors.primary,
-    borderWidth: 0,
-    borderColor: colors.primary,
+    backgroundColor: colors.tint,
+  },
+  tabPressed: {
+    opacity: 0.88,
   },
   tabLabel: {
     ...typography.caption,
     fontFamily: fonts.bodyMedium,
     color: colors.mutedForeground,
+    flexShrink: 1,
   },
   tabLabelActive: {
     fontFamily: fonts.bodySemi,
-    color: colors.primaryForeground,
+    color: colors.primary,
   },
   tabBadge: {
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 5,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
     borderRadius: radius.full,
-    backgroundColor: colors.card,
+    backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: colors.primary,
   },
   tabBadgeText: {
     ...typography.tiny,

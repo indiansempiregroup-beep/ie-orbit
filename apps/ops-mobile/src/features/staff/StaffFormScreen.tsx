@@ -119,6 +119,7 @@ export function StaffFormScreen() {
       footer={
         <Button
           label={isEdit ? 'Save' : 'Create staff'}
+          icon={isEdit ? 'save' : 'user-plus'}
           loading={submitting}
           fullWidth
           size="lg"
@@ -133,7 +134,7 @@ export function StaffFormScreen() {
               }
               const emailError = emailFieldError(email, sendInvite);
               if (emailError) nextErrors.email = emailError;
-              const phoneError = indianMobileError(phone, false);
+              const phoneError = indianMobileError(phone, true);
               if (phoneError) nextErrors.phone = phoneError;
               if (Object.keys(nextErrors).length) {
                 setFieldErrors(nextErrors);
@@ -266,7 +267,7 @@ export function StaffFormScreen() {
         />
         <Input
           label="Phone"
-          optional
+          required
           value={phone}
           onChangeText={(value) => {
             setPhone(value);

@@ -46,6 +46,63 @@ export function deviceMailtoUrl(email: string, subject: string, body: string): s
   return `mailto:${encodeURIComponent(email || '')}?${params.toString()}`;
 }
 
+async function responseToBytes(response: Response): Promise<Uint8Array> {
+  // Prefer arrayBuffer — RN / Expo web often break on response.blob() + blob.arrayBuffer().
+  if (typeof response.arrayBuffer === 'function') {
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  if (typeof response.blob === 'function') {
+    const blob = await response.blob();
+    if (typeof blob.arrayBuffer === 'function') {
+      return new Uint8Array(await blob.arrayBuffer());
+    }
+  }
+  throw new Error('Unable to read PDF bytes on this device');
+}
+
+function isMobileWebBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+}
+
+async function openOrDownloadPdfBytes(bytes: Uint8Array, filename: string): Promise<void> {
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const objectUrl = URL.createObjectURL(blob);
+    // Mobile Safari / Chrome ignore <a download> for blob URLs and surface a blob error.
+    // Open the PDF in a tab instead so the user can view / share from the browser.
+    if (isMobileWebBrowser()) {
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        window.location.assign(objectUrl);
+      }
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    return;
+  }
+
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error('File sharing is not available on this device');
+  }
+  const file = new File(Paths.cache, filename);
+  file.create({ overwrite: true, intermediates: true });
+  file.write(bytes);
+  await Sharing.shareAsync(file.uri, {
+    mimeType: 'application/pdf',
+    UTI: 'com.adobe.pdf',
+    dialogTitle: `Share ${filename}`,
+  });
+}
+
 export async function downloadAndShareShopDocumentPdf(args: {
   target: ShopDocTarget;
   token: string;
@@ -64,37 +121,19 @@ export async function downloadAndShareShopDocumentPdf(args: {
       Authorization: `Bearer ${token}`,
       'X-Tenant-ID': tenantId,
       'X-Business-ID': target.businessId,
-      Accept: '*/*',
+      Accept: 'application/pdf,*/*',
     },
   });
   if (!response.ok) {
     throw new Error(`Could not download PDF (${response.status})`);
   }
-  const filename = `${(target.number || target.id).replace(/[^\w.-]+/g, '_')}.pdf`;
-  const blob = await response.blob();
-
-  if (Platform.OS === 'web' && typeof document !== 'undefined') {
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(objectUrl);
-    return;
+  const suffix = layout === 'thermal' ? '_thermal' : '';
+  const filename = `${(target.number || target.id).replace(/[^\w.-]+/g, '_')}${suffix}.pdf`;
+  const bytes = await responseToBytes(response);
+  if (!bytes.byteLength) {
+    throw new Error('PDF download was empty');
   }
-
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error('File sharing is not available on this device');
-  }
-  const buffer = await blob.arrayBuffer();
-  const file = new File(Paths.cache, filename);
-  file.create({ overwrite: true, intermediates: true });
-  file.write(new Uint8Array(buffer));
-  await Sharing.shareAsync(file.uri, {
-    mimeType: 'application/pdf',
-    UTI: 'com.adobe.pdf',
-    dialogTitle: `Share ${filename}`,
-  });
+  await openOrDownloadPdfBytes(bytes, filename);
 }
 
 export async function openUrl(url: string): Promise<void> {

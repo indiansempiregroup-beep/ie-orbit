@@ -97,6 +97,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      'expo-image-picker',
+      {
+        cameraPermission: CAMERA_USAGE,
+        photosPermission: PHOTOS_USAGE,
+      },
+    ],
+    [
       'expo-location',
       {
         locationWhenInUsePermission:

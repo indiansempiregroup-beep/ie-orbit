@@ -182,9 +182,12 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
             staff_name = staff.display_name
 
     serialized_items = []
+    points_to_earn = 0
     for item in line_items:
         service = services.get(str(item.service_id))
         item_staff = staff_map.get(str(item.staff_id)) if item.staff_id else None
+        item_earn = int(getattr(service, "loyalty_points_earn", 0) or 0) if service else 0
+        points_to_earn += max(0, item_earn)
         serialized_items.append(
             {
                 "id": str(item.id),
@@ -197,10 +200,38 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
                 "duration_minutes": item.duration_minutes,
                 "sort_order": item.sort_order,
                 "price_snapshot": item.price_snapshot,
+                "loyalty_points_earn": item_earn,
             }
         )
+    if not line_items and primary_service is not None:
+        points_to_earn = int(getattr(primary_service, "loyalty_points_earn", 0) or 0)
 
     metadata = booking.metadata or {}
+    loyalty_meta = metadata.get("loyalty") if isinstance(metadata.get("loyalty"), dict) else {}
+    payment_meta = metadata.get("payment") if isinstance(metadata.get("payment"), dict) else {}
+    points_redeemed = int(loyalty_meta.get("points_redeemed") or 0)
+    if loyalty_meta.get("refunded"):
+        points_redeemed = 0
+    discount_amount = loyalty_meta.get("discount_amount")
+    completed = booking.status == BookingStatus.COMPLETED
+    cancelled_like = booking.status in {
+        BookingStatus.CANCELLED,
+        BookingStatus.NO_SHOW,
+        BookingStatus.REJECTED,
+    }
+    loyalty_payload = {
+        "points_to_earn": max(0, points_to_earn),
+        "points_earned": max(0, points_to_earn) if completed else 0,
+        "points_pending": max(0, points_to_earn) if not completed and not cancelled_like else 0,
+        "points_redeemed": max(0, points_redeemed),
+        "discount_amount": str(discount_amount) if discount_amount not in (None, "") else None,
+        "currency": loyalty_meta.get("currency") or getattr(booking.business, "currency", None) or "INR",
+    }
+    from apps.billing.services.upi_proof import proof_url_from_meta
+
+    payment_proof_url = proof_url_from_meta(payment_meta)
+    payment_proof_media_id = str(payment_meta.get("payment_proof_media_id") or "").strip() or None
+    payment_method = str(payment_meta.get("method") or "").strip() or None
     review_payload = None
     try:
         review = booking.review
@@ -241,7 +272,7 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
             "latitude": float(branch.latitude) if branch.latitude is not None else None,
             "longitude": float(branch.longitude) if branch.longitude is not None else None,
         }
-    return {
+    payload = {
         "id": booking.id,
         "booking_number": booking.booking_number,
         "status": booking.status,
@@ -258,9 +289,27 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
         "duration_minutes": booking.duration_minutes,
         "notes": booking.notes or "",
         "payment_mode": metadata.get("payment_mode") or "pay_at_venue",
+        "payment_method": payment_method,
+        "payment_proof_url": payment_proof_url or None,
+        "payment_proof_media_id": payment_proof_media_id,
         "created_at": booking.created_at,
         "review": review_payload,
+        "loyalty": loyalty_payload,
+        "books_voucher_id": None,
+        "books_voucher_number": None,
     }
+    try:
+        from apps.shopie.services.books import BooksService
+
+        voucher = BooksService.books_voucher_for_booking(
+            tenant=tenant, business=booking.business, booking_id=booking.id
+        )
+        if voucher is not None:
+            payload["books_voucher_id"] = str(voucher.id)
+            payload["books_voucher_number"] = voucher.voucher_number or ""
+    except Exception:
+        pass
+    return payload
 
 
 def _serialize_mobile_service(*, tenant: Tenant, business: Business, service: Service, request: Request | None = None) -> dict:
@@ -831,7 +880,7 @@ class MobileBookingListView(APIView):
             Booking.objects.require_tenant(tenant)
             .filter(business=business, customer_id__in=customers.values_list("id", flat=True))
             .prefetch_related("line_items")
-            .order_by("-start_at")
+            .order_by("-created_at")
         )
         status_filter = serializer.validated_data.get("status", "").strip()
         if status_filter:
@@ -842,9 +891,9 @@ class MobileBookingListView(APIView):
             bookings = bookings.filter(
                 start_at__gte=timezone.now(),
                 status__in=UPCOMING_BOOKING_STATUSES,
-            ).order_by("start_at")
+            ).order_by("-created_at")
         elif upcoming is False:
-            bookings = bookings.filter(start_at__lt=timezone.now()).order_by("-start_at")
+            bookings = bookings.filter(start_at__lt=timezone.now()).order_by("-created_at")
 
         rows = [_serialize_mobile_booking(booking=booking, tenant=tenant) for booking in bookings]
         return success_response(rows, request_id=getattr(request, "request_id", None))
@@ -1056,6 +1105,100 @@ class MobileBookingDetailView(APIView):
             return Response({"error": {"message": "Booking not found."}}, status=status.HTTP_404_NOT_FOUND)
         return success_response(
             _serialize_mobile_booking(booking=booking, tenant=tenant),
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+class MobileBookingInvoiceView(APIView):
+    """Customer tax invoice for an owned booking (Books sale document, same as shop)."""
+
+    permission_classes = MOBILE_CUSTOMER_PERMISSIONS
+
+    @extend_schema(tags=["Mobile"], request=MobileScopedQuerySerializer)
+    def get(self, request: Request, booking_id: uuid.UUID) -> Response:
+        from apps.shopie.api.document_views import books_voucher_for_booking
+        from apps.shopie.services.books import BooksService
+        from apps.shopie.services.shop_documents import LAYOUT_A4, ShopDocumentKind, ShopDocumentService
+
+        serializer = MobileScopedQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant, business = _resolve_tenant_business(
+                tenant_slug=serializer.validated_data["tenant_slug"],
+                business_code=serializer.validated_data["business_code"],
+            )
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        booking = get_customer_booking(
+            tenant=tenant,
+            business=business,
+            user=request.user,
+            booking_id=booking_id,
+        )
+        if booking is None:
+            return Response({"error": {"message": "Booking not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        voucher = books_voucher_for_booking(tenant=tenant, business=business, booking=booking)
+        if voucher is None and booking.status == BookingStatus.COMPLETED:
+            try:
+                voucher = BooksService().create_sale_from_booking(
+                    tenant=tenant, business=business, booking=booking
+                )
+            except Exception:
+                voucher = None
+
+        if voucher is None:
+            reason = (
+                "Tax invoice will be available after this appointment is completed."
+                if booking.status != BookingStatus.COMPLETED
+                else "Tax invoice could not be generated for this appointment yet."
+            )
+            return success_response(
+                {"available": False, "reason": reason},
+                request_id=getattr(request, "request_id", None),
+            )
+
+        docs = ShopDocumentService()
+        try:
+            link = docs.create_share_link(
+                tenant=tenant,
+                business=business,
+                kind=ShopDocumentKind.SALE,
+                document_id=voucher.id,
+                created_by_user_id=getattr(request.user, "id", None),
+            )
+        except DjangoValidationError as exc:
+            message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+            return Response({"error": {"message": message}}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_url = request.build_absolute_uri(f"/api/v1/public/shop-docs/{link.token}").rstrip("/")
+        public_url = api_url
+        payload = docs.build_payload(
+            tenant=tenant,
+            business=business,
+            kind=ShopDocumentKind.SALE,
+            document_id=voucher.id,
+            public_url=public_url,
+        )
+        view_url = f"{api_url}?format=html&layout={LAYOUT_A4}"
+        pdf_url = f"{api_url}?format=pdf&layout={LAYOUT_A4}"
+        return success_response(
+            {
+                "available": True,
+                "invoice_number": str(payload.get("number") or voucher.voucher_number or ""),
+                "voucher_id": str(voucher.id),
+                "token": link.token,
+                "public_url": public_url,
+                "view_url": view_url,
+                "pdf_url": pdf_url,
+                "message": docs.share_message({**payload, "public_url": view_url}),
+                "total": payload.get("total"),
+                "amount_paid": payload.get("amount_paid"),
+                "amount_due": payload.get("amount_due"),
+                "payment_method": payload.get("payment_method") or "",
+                "payment_label": payload.get("payment_label") or "",
+                "payment_status": payload.get("payment_status") or "",
+            },
             request_id=getattr(request, "request_id", None),
         )
 

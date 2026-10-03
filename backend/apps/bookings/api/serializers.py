@@ -157,6 +157,8 @@ class BookingSerializer(serializers.ModelSerializer):
     customer_phone = serializers.SerializerMethodField()
     staff_name = serializers.SerializerMethodField()
     service_label = serializers.SerializerMethodField()
+    books_voucher_id = serializers.SerializerMethodField()
+    books_voucher_number = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -194,6 +196,8 @@ class BookingSerializer(serializers.ModelSerializer):
             "booking_notes",
             "attachments",
             "review",
+            "books_voucher_id",
+            "books_voucher_number",
             "created_at",
             "updated_at",
             "is_active",
@@ -213,10 +217,37 @@ class BookingSerializer(serializers.ModelSerializer):
             "booking_notes",
             "attachments",
             "review",
+            "books_voucher_id",
+            "books_voucher_number",
             "created_at",
             "updated_at",
             "is_active",
         ]
+
+    def _books_voucher(self, obj: Booking):
+        cache = self.context.setdefault("_books_voucher_cache", {})
+        key = str(obj.id)
+        if key in cache:
+            return cache[key]
+        voucher = None
+        try:
+            from apps.shopie.services.books import BooksService
+
+            voucher = BooksService.books_voucher_for_booking(
+                tenant=obj.tenant, business=obj.business, booking_id=obj.id
+            )
+        except Exception:
+            voucher = None
+        cache[key] = voucher
+        return voucher
+
+    def get_books_voucher_id(self, obj: Booking) -> str | None:
+        voucher = self._books_voucher(obj)
+        return str(voucher.id) if voucher is not None else None
+
+    def get_books_voucher_number(self, obj: Booking) -> str | None:
+        voucher = self._books_voucher(obj)
+        return voucher.voucher_number if voucher is not None else None
 
     def get_customer_name(self, obj: Booking) -> str:
         customer_map = self.context.get("customer_map") or {}
@@ -293,6 +324,21 @@ class BookingPatchSerializer(serializers.Serializer):
 
 class BookingActionSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)
+
+
+class BookingCompleteSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True)
+    payment_method = serializers.ChoiceField(
+        choices=["cash", "upi", "card", "borrow"],
+        required=False,
+        allow_blank=True,
+    )
+    amount_paid = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+    payment_proof_url = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+    payment_proof_media_id = serializers.CharField(required=False, allow_blank=True, max_length=64)
 
 
 class BookingRescheduleSerializer(serializers.Serializer):

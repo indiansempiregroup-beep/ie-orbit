@@ -27,6 +27,7 @@ from apps.shopie.models import (
 )
 from apps.shopie.services.books import BooksService
 from apps.shopie.services.orders import OrderService
+from apps.shopie.services.returns import ReturnService
 from apps.tenancy.models import Organization, SubscriptionPlan, Tenant
 
 
@@ -180,6 +181,30 @@ def test_pos_paid_order_does_not_double_earn_on_books_voucher(shop_loyalty_ctx):
     assert account.points_balance == 200 - 100 + 19
 
 
+@pytest.mark.django_db
+def test_pos_can_skip_loyalty_earn(shop_loyalty_ctx):
+    ctx = shop_loyalty_ctx
+    _seed_balance(ctx, 50)
+    orders = OrderService()
+    order = orders.create_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        lines=[{"product_id": str(ctx["product"].id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="cash",
+        confirm=True,
+        metadata_extra={"award_loyalty_points": False},
+    )
+    assert order.status == OrderStatus.CONFIRMED
+    assert (order.metadata or {}).get("pos", {}).get("award_loyalty_points") is False
+    assert not CustomerLoyaltyLedger.objects.filter(
+        customer=ctx["customer"], metadata__type="earn"
+    ).exists()
+    account = CustomerLoyaltyAccount.objects.get(customer=ctx["customer"])
+    assert account.points_balance == 50
+
+
 def _sale_line(ctx) -> dict:
     return {"product_id": ctx["product"].id, "qty": "1", "rate": "200", "gst_rate": "0"}
 
@@ -250,3 +275,92 @@ def test_walk_in_cannot_redeem(shop_loyalty_ctx):
                 "points_to_redeem": 10,
             },
         )
+
+
+@pytest.mark.django_db
+def test_return_revokes_earned_loyalty_points(shop_loyalty_ctx):
+    ctx = shop_loyalty_ctx
+    _seed_balance(ctx, 0)
+    orders = OrderService()
+    order = orders.create_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        lines=[{"product_id": str(ctx["product"].id), "quantity": 2}],
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="cash",
+        confirm=True,
+    )
+    # 400 total → earn 40 (10 pts / ₹100)
+    account = CustomerLoyaltyAccount.objects.get(customer=ctx["customer"])
+    assert account.points_balance == 40
+    assert CustomerLoyaltyLedger.objects.filter(order_id=order.id, metadata__type="earn").exists()
+
+    line = order.lines.first()
+    shop_return = ReturnService().create_return(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        order=order,
+        lines=[{"order_line_id": str(line.id), "quantity": 1}],
+        reason="Damaged",
+        restock=True,
+        complete=True,
+    )
+    assert shop_return.refund_total == Decimal("200.00")
+    account.refresh_from_db()
+    # Half returned → revoke 20
+    assert account.points_balance == 20
+    assert CustomerLoyaltyLedger.objects.filter(
+        order_id=order.id, metadata__type="earn_reversal"
+    ).exists()
+    order.refresh_from_db()
+    assert int((order.metadata or {}).get("loyalty", {}).get("points_earned") or 0) == 20
+    assert int((order.metadata or {}).get("loyalty", {}).get("points_revoked") or 0) == 20
+
+    # Full remaining return clears the rest
+    ReturnService().create_return(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        order=order,
+        lines=[{"order_line_id": str(line.id), "quantity": 1}],
+        reason="Rest",
+        restock=True,
+        complete=True,
+    )
+    account.refresh_from_db()
+    assert account.points_balance == 0
+    order.refresh_from_db()
+    assert int((order.metadata or {}).get("loyalty", {}).get("points_earned") or 0) == 0
+
+
+@pytest.mark.django_db
+def test_void_linked_pos_sale_revokes_order_loyalty(shop_loyalty_ctx):
+    ctx = shop_loyalty_ctx
+    _seed_balance(ctx, 200)
+    orders = OrderService()
+    order = orders.create_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        lines=[{"product_id": str(ctx["product"].id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="cash",
+        confirm=True,
+        points_to_redeem=100,
+    )
+    voucher = ShopBooksVoucher.objects.filter(linked_order=order).first()
+    assert voucher is not None
+    account = CustomerLoyaltyAccount.objects.get(customer=ctx["customer"])
+    assert account.points_balance == 200 - 100 + 19
+
+    BooksService().void_voucher(
+        tenant=ctx["tenant"], business=ctx["business"], voucher=voucher
+    )
+    account.refresh_from_db()
+    assert account.points_balance == 200
+    assert CustomerLoyaltyLedger.objects.filter(
+        order_id=order.id, metadata__type="earn_reversal"
+    ).exists()
+    assert CustomerLoyaltyLedger.objects.filter(
+        order_id=order.id, metadata__type="redeem_refund"
+    ).exists()

@@ -118,6 +118,20 @@ export function formatDateKey(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+/** Calendar date in the business timezone, falling back to the device date. */
+export function businessDateKey(timeZone?: string | null, date = new Date()) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || undefined,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    return formatDateKey(date);
+  }
+}
+
 /** Keep only slots that start strictly after now (hides past times for today). */
 export function filterFutureSlots<T extends { start_at: string }>(
   slots: T[],
@@ -129,12 +143,16 @@ export function filterFutureSlots<T extends { start_at: string }>(
   });
 }
 
-export function mapBookingStatus(status: string): 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'noshow' {
-  switch (status) {
+export function mapBookingStatus(
+  status: string,
+): 'confirmed' | 'checked_in' | 'in_progress' | 'pending' | 'cancelled' | 'completed' | 'noshow' {
+  switch (String(status || '').toLowerCase()) {
     case 'confirmed':
-    case 'checked_in':
-    case 'in_progress':
       return 'confirmed';
+    case 'checked_in':
+      return 'checked_in';
+    case 'in_progress':
+      return 'in_progress';
     case 'cancelled':
     case 'rejected':
       return 'cancelled';

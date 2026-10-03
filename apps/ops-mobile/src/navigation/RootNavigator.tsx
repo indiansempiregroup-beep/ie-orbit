@@ -58,6 +58,7 @@ import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopPosScreen } from '../features/shop/ShopPosScreen';
 import { ShopReturnsScreen } from '../features/shop/ShopReturnsScreen';
 import { ShopDeliveryZonesScreen } from '../features/shop/ShopDeliveryZonesScreen';
+import { ShopDeliveryZoneFormScreen } from '../features/shop/ShopDeliveryZoneFormScreen';
 import { ShopDeliverySettingsScreen } from '../features/shop/ShopDeliverySettingsScreen';
 import { ShopCouponsScreen } from '../features/shop/ShopCouponsScreen';
 import { ShopPetsScreen } from '../features/shop/ShopPetsScreen';
@@ -129,6 +130,10 @@ function lazyNamedScreen<TProps extends object>(
 const LazyBarcodeScanner = lazyNamedScreen(
   () => import('../features/shop/BarcodeScannerScreen'),
   'BarcodeScannerScreen',
+);
+const LazyPaymentProofCamera = lazyNamedScreen(
+  () => import('../features/bookings/PaymentProofCameraScreen'),
+  'PaymentProofCameraScreen',
 );
 
 /** Lazy so a Product Settings parse error cannot take down Expo Go on first open. */
@@ -283,8 +288,14 @@ export function RootNavigator() {
             {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
             {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}
             {stackScreen('BarcodeScanner', LazyBarcodeScanner, t('nav.scanBarcode'))}
+            <Stack.Screen
+              name="PaymentProofCamera"
+              component={LazyPaymentProofCamera}
+              options={{ headerShown: false, title: 'Payment proof', animation: 'slide_from_bottom' }}
+            />
             {stackScreen('ShopReturns', ShopReturnsScreen, t('nav.shopReturns'))}
             {stackScreen('ShopDeliveryZones', ShopDeliveryZonesScreen, t('nav.shopDeliveryZones'))}
+            {stackScreen('ShopDeliveryZoneForm', ShopDeliveryZoneFormScreen, 'Delivery zone')}
             {stackScreen(
               'ShopDeliverySettings',
               ShopDeliverySettingsScreen,

@@ -37,7 +37,7 @@ export function bookingStartsInLabel(
   if (Number.isNaN(start.getTime())) return { label: '—', tone: 'later' };
 
   if (end && !Number.isNaN(end.getTime()) && end <= now) {
-    return { label: 'Finished', tone: 'done' };
+    return { label: '', tone: 'done' };
   }
   if (start <= now && (!end || end > now)) {
     return { label: 'In progress', tone: 'now' };

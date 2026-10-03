@@ -7,7 +7,7 @@ import type { ShopProduct, ShopProductReview } from '@ie-orbit/sdk';
 import { mobileClient } from '../../api/client';
 import { HtmlContent } from '../../components/HtmlContent';
 import { ImageLightbox } from '../../components/ImageLightbox';
-import { ScreenHeader } from '../../components/ProfileMenuScreen';
+import { ScreenHeader, StickyFooter } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { GroupedList } from '../../components/ui/GroupedList';
@@ -350,7 +350,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
         </View>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      <StickyFooter>
         {added ? (
           <Pressable style={styles.addedBanner} onPress={() => navigation.navigate('Cart')}>
             <Feather name="check-circle" size={16} color={colors.success} />
@@ -363,6 +363,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
           <View style={styles.footerActions}>
             <Button
               label={outOfStock ? 'Out of stock' : 'Add to cart'}
+              icon="shopping-cart"
               variant="outline"
               disabled={outOfStock}
               onPress={() => addToCart(false)}
@@ -370,6 +371,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
             />
             <Button
               label="Buy now"
+              icon="arrow-right"
               primaryColor={primary}
               disabled={outOfStock}
               onPress={() => addToCart(true)}
@@ -377,7 +379,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
             />
           </View>
         </View>
-      </View>
+      </StickyFooter>
 
       <ImageLightbox
         uri={imageUri || null}
@@ -486,14 +488,6 @@ const styles = StyleSheet.create({
   verifiedHint: { ...typography.caption, color: colors.success, fontWeight: '700' },
   writeCard: { gap: spacing.md },
   writeTitle: { ...typography.label, fontWeight: '700', color: colors.foreground },
-  footer: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.card,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    gap: spacing.sm,
-  },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   footerActions: { flex: 1, flexDirection: 'row', gap: spacing.sm },
   footerBtn: { flex: 1 },

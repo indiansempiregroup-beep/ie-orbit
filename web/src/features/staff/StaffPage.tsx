@@ -10,6 +10,7 @@ import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { indianMobileError } from '../../lib/phoneValidation';
 
 export function StaffPage() {
   const snackbar = useSnackbar();
@@ -203,6 +204,11 @@ export function StaffPage() {
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
+            const phoneError = indianMobileError(formState.phone_number, true);
+            if (phoneError) {
+              setCreationError(phoneError);
+              return;
+            }
             const displayName = formState.display_name.trim();
             createStaff.mutate(
               {
@@ -252,9 +258,10 @@ export function StaffPage() {
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
             <input
+              required
               value={formState.phone_number}
               onChange={(event) => setFormState({ ...formState, phone_number: event.target.value })}
-              placeholder="Phone number"
+              placeholder="Phone number *"
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
           </div>

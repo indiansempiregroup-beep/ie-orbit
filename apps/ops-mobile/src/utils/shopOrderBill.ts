@@ -1,4 +1,4 @@
-import type { ShopOrder, ShopOrderLine } from '@ie-orbit/sdk';
+import type { ShopBooksVoucher, ShopOrder, ShopOrderLine } from '@ie-orbit/sdk';
 
 function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -15,15 +15,37 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+const PAYMENT_LABELS: Record<string, string> = {
+  cash: 'Cash',
+  upi: 'UPI',
+  card: 'Card',
+  borrow: 'Credit',
+  razorpay: 'Online (Razorpay)',
+  cashfree: 'Online (Cashfree)',
+};
+
+function paymentLabelFor(method: string): string {
+  const key = method.trim().toLowerCase();
+  if (!key) return '';
+  return PAYMENT_LABELS[key] || key.toUpperCase();
+}
+
 export type ShopOrderBillBreakdown = {
   merchandiseGross: number;
   lineDiscountTotal: number;
+  /** Items − product discounts. */
+  merchandiseAfterLineDiscount: number;
   /** Manual bill discount (excludes coupon + reward points). */
   billDiscount: number;
   couponCode: string;
   couponDiscount: number;
+  /** Points redeemed / used on this bill. */
   rewardPoints: number;
   rewardDiscount: number;
+  /** Points credited (or expected on a paid bill). */
+  pointsEarned: number;
+  /** Points that will credit when the bill is paid. */
+  pointsToEarn: number;
   deliveryFee: number;
   /** Taxable value after all discounts. */
   taxableSubtotal: number;
@@ -39,6 +61,10 @@ export type ShopOrderBillBreakdown = {
   booksVoucherNumber: string;
   total: number;
   currency: string;
+  amountPaid: number;
+  amountDue: number;
+  paymentMethod: string;
+  paymentLabel: string;
 };
 
 /** Prefer stored CGST/SGST/IGST; otherwise split a single GST total half/half (intra-state). */
@@ -87,6 +113,10 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
 
   const rewardDiscount = money(num(loyalty.discount_amount));
   const rewardPoints = Math.max(0, Math.floor(num(loyalty.points_redeemed)));
+  const awardLoyalty = pos.award_loyalty_points !== false;
+  let pointsEarned = Math.max(0, Math.floor(num(loyalty.points_earned)));
+  const expectedEarn = Math.max(0, Math.floor(num(pos.points_to_earn)));
+  let pointsToEarn = 0;
 
   const couponCode = String(order.coupon_code || coupon.code || '').trim();
   const couponDiscount = money(num(order.coupon_discount) || num(coupon.discount_amount));
@@ -119,14 +149,49 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
     order.invoice_type || (customerGstin ? 'B2B' : 'B2C'),
   ).toUpperCase();
 
+  const total = money(num(order.total));
+  const paymentMethod = String(order.payment_method || pos.payment_method || '')
+    .trim()
+    .toLowerCase();
+  const paymentStatus = String(order.payment_status || pos.payment_status || '')
+    .trim()
+    .toLowerCase();
+  let amountPaid = money(num(pos.amount_paid));
+  let amountDue = money(num(pos.amount_due));
+  if (amountPaid <= 0 && amountDue <= 0) {
+    if (paymentMethod === 'borrow' || paymentStatus === 'due') {
+      amountDue = total;
+      amountPaid = 0;
+    } else if (paymentStatus === 'partially_paid') {
+      amountPaid = money(num(pos.amount_paid));
+      amountDue = money(Math.max(0, total - amountPaid));
+    } else {
+      amountPaid = total;
+      amountDue = 0;
+    }
+  } else if (amountDue <= 0 && amountPaid > 0) {
+    amountDue = money(Math.max(0, total - amountPaid));
+  } else if (amountPaid <= 0 && amountDue > 0) {
+    amountPaid = money(Math.max(0, total - amountDue));
+  }
+
+  const isPaid = paymentStatus === 'paid' || paymentStatus === 'settled' || amountDue <= 0.009;
+  if (awardLoyalty && expectedEarn > 0) {
+    if (pointsEarned <= 0 && isPaid) pointsEarned = expectedEarn;
+    if (pointsEarned <= 0 && !isPaid) pointsToEarn = expectedEarn;
+  }
+
   return {
     merchandiseGross,
     lineDiscountTotal,
+    merchandiseAfterLineDiscount: money(Math.max(0, merchandiseGross - lineDiscountTotal)),
     billDiscount,
     couponCode,
     couponDiscount,
     rewardPoints,
     rewardDiscount,
+    pointsEarned,
+    pointsToEarn,
     deliveryFee,
     taxableSubtotal,
     taxTotal,
@@ -139,7 +204,138 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
     sellerGstin,
     invoiceType,
     booksVoucherNumber: String(order.books_voucher_number || '').trim(),
-    total: money(num(order.total)),
+    total,
     currency: String(order.currency || 'INR'),
+    amountPaid,
+    amountDue,
+    paymentMethod,
+    paymentLabel: paymentLabelFor(paymentMethod),
+  };
+}
+
+/**
+ * POS-style bill summary for a Books sale voucher.
+ * Prefers linked order when present; otherwise uses voucher metadata.billing.
+ */
+export function voucherBillBreakdown(
+  voucher: ShopBooksVoucher,
+  order?: ShopOrder | null,
+): ShopOrderBillBreakdown {
+  if (order) {
+    const fromOrder = shopOrderBillBreakdown(order);
+    const meta = asRecord(voucher.metadata);
+    const payment = asRecord(meta.payment);
+    const method = String(payment.method || fromOrder.paymentMethod || '').trim().toLowerCase();
+    const paid = money(num(voucher.amount_paid) || num(payment.amount_paid) || fromOrder.amountPaid);
+    const due = money(
+      Math.max(0, num(payment.amount_due) || num(voucher.total) - paid || fromOrder.amountDue),
+    );
+    return {
+      ...fromOrder,
+      amountPaid: paid,
+      amountDue: due,
+      paymentMethod: method || fromOrder.paymentMethod,
+      paymentLabel: paymentLabelFor(method) || fromOrder.paymentLabel,
+      booksVoucherNumber: String(voucher.voucher_number || fromOrder.booksVoucherNumber).trim(),
+      currency: String(voucher.currency || fromOrder.currency || 'INR'),
+    };
+  }
+
+  const meta = asRecord(voucher.metadata);
+  const billing = asRecord(meta.billing);
+  const payment = asRecord(meta.payment);
+  const loyalty = asRecord(meta.loyalty);
+  const coupon = asRecord(meta.coupon);
+  const gstMeta = asRecord(meta.gst);
+
+  const lines = Array.isArray(voucher.line_items) ? voucher.line_items : [];
+  const lineGross = money(
+    lines.reduce((sum, raw) => {
+      const row = asRecord(raw);
+      const qty = num(row.quantity);
+      const rate = num(row.rate ?? row.unit_price);
+      const gross = num(row.gross);
+      return sum + (gross > 0 ? gross : money(qty * rate));
+    }, 0),
+  );
+  const lineDiscFromLines = money(
+    lines.reduce((sum, raw) => sum + num(asRecord(raw).discount_amount), 0),
+  );
+
+  const merchandiseGross = money(num(billing.merchandise_gross) || lineGross || num(voucher.subtotal));
+  const rewardDiscount = money(num(billing.reward_discount) || num(loyalty.discount_amount));
+  const rewardPoints = Math.max(
+    0,
+    Math.floor(num(billing.reward_points) || num(loyalty.points_redeemed)),
+  );
+  const awardLoyalty = billing.award_loyalty_points !== false;
+  let pointsEarned = Math.max(
+    0,
+    Math.floor(num(loyalty.points_earned) || num(billing.points_earned)),
+  );
+  const expectedEarn = Math.max(0, Math.floor(num(billing.points_to_earn)));
+  let pointsToEarn = 0;
+  let lineDiscountTotal = money(num(billing.line_discount_total) || lineDiscFromLines);
+  let billDiscount = money(num(billing.bill_discount_amount));
+  const voucherDiscount = money(num(voucher.discount_total));
+  if (lineDiscountTotal <= 0 && billDiscount <= 0 && voucherDiscount > 0) {
+    lineDiscountTotal = money(Math.max(0, voucherDiscount - rewardDiscount));
+  }
+  const couponCode = String(coupon.code || '').trim();
+  const couponDiscount = money(num(coupon.discount_amount));
+  const taxableSubtotal = money(
+    num(billing.taxable_value) || Math.max(0, num(voucher.subtotal) - voucherDiscount),
+  );
+  const taxTotal = money(num(billing.tax_total) || num(voucher.tax_total));
+  const isInterstate = Boolean(voucher.is_interstate || gstMeta.is_interstate || num(voucher.igst_total) > 0);
+  const gst = splitGstDisplay(taxTotal, {
+    cgst: num(voucher.cgst_total),
+    sgst: num(voucher.sgst_total),
+    igst: num(voucher.igst_total),
+    isInterstate,
+  });
+  const customerGstin = String(meta.customer_gstin || gstMeta.customer_gstin || '')
+    .trim()
+    .toUpperCase();
+  const total = money(num(voucher.total));
+  const paymentMethod = String(payment.method || '').trim().toLowerCase();
+  const amountPaid = money(num(voucher.amount_paid) || num(payment.amount_paid));
+  const amountDue = money(Math.max(0, num(payment.amount_due) || total - amountPaid));
+  const payStatus = String(payment.status || '').trim().toLowerCase();
+  const isPaid = payStatus === 'paid' || payStatus === 'settled' || amountDue <= 0.009;
+  if (awardLoyalty && expectedEarn > 0) {
+    if (pointsEarned <= 0 && isPaid) pointsEarned = expectedEarn;
+    if (pointsEarned <= 0 && !isPaid) pointsToEarn = expectedEarn;
+  }
+
+  return {
+    merchandiseGross,
+    lineDiscountTotal,
+    merchandiseAfterLineDiscount: money(Math.max(0, merchandiseGross - lineDiscountTotal)),
+    billDiscount,
+    couponCode,
+    couponDiscount,
+    rewardPoints,
+    rewardDiscount,
+    pointsEarned,
+    pointsToEarn,
+    deliveryFee: 0,
+    taxableSubtotal,
+    taxTotal,
+    cgst: gst.cgst,
+    sgst: gst.sgst,
+    igst: gst.igst,
+    isInterstate,
+    placeOfSupply: String(voucher.place_of_supply || gstMeta.place_of_supply || '').trim(),
+    customerGstin,
+    sellerGstin: '',
+    invoiceType: customerGstin ? 'B2B' : 'B2C',
+    booksVoucherNumber: String(voucher.voucher_number || '').trim(),
+    total,
+    currency: String(voucher.currency || 'INR'),
+    amountPaid,
+    amountDue,
+    paymentMethod,
+    paymentLabel: paymentLabelFor(paymentMethod),
   };
 }

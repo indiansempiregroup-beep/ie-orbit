@@ -288,6 +288,8 @@ export type Booking = {
   attachments?: Array<Record<string, unknown>>;
   review?: BookingReviewSummary | null;
   line_items?: BookingLineItem[];
+  books_voucher_id?: string | null;
+  books_voucher_number?: string | null;
   created_at?: string;
   updated_at?: string;
   is_active?: boolean;
@@ -954,6 +956,16 @@ export type MobileAvailabilityResponse = {
 export type MobileBookingLineItem = BookingLineItem & {
   service_name?: string;
   staff_name?: string;
+  loyalty_points_earn?: number;
+};
+
+export type MobileBookingLoyalty = {
+  points_to_earn?: number;
+  points_earned?: number;
+  points_pending?: number;
+  points_redeemed?: number;
+  discount_amount?: string | number | null;
+  currency?: string;
 };
 
 export type MobileBookingRequestInput = {
@@ -1024,8 +1036,14 @@ export type MobileBooking = {
   duration_minutes: number;
   notes?: string;
   payment_mode?: string;
+  payment_method?: string | null;
+  payment_proof_url?: string | null;
+  payment_proof_media_id?: string | null;
   created_at: string;
   review?: BookingReviewSummary | null;
+  loyalty?: MobileBookingLoyalty | null;
+  books_voucher_id?: string | null;
+  books_voucher_number?: string | null;
 };
 
 export type MobileBootstrapBranding = {
@@ -1787,6 +1805,60 @@ export type PlatformAssistantSettings = {
   suggested_top_up_inr: number[];
 };
 
+export type PlatformProductCatalogItem = {
+  id: string;
+  product_name: string;
+  brand: string;
+  barcode: string;
+  pack_size: string;
+  category: string;
+  category_slug?: string;
+  price: string;
+  gst_percent: string | null;
+  currency: string;
+  description_ingredients: string;
+  product_details: string;
+  image_url: string;
+  images: string[];
+  source?: string;
+  hsn_sac?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type PlatformProductCatalogQuality = {
+  total_products: number;
+  barcode_available_pct: number;
+  price_available_pct: number;
+  gst_available_pct: number;
+  image_available_pct: number;
+  description_available_pct: number;
+  brand_available_pct: number;
+  pack_size_available_pct: number;
+};
+
+export type PlatformProductCatalogImportRun = {
+  id: string;
+  source: string;
+  status: string;
+  limit: number;
+  total_source: number;
+  valid: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+  duplicates: number;
+  invalid_barcodes: number;
+  missing_barcodes: number;
+  missing_images: number;
+  missing_prices: number;
+  missing_gst: number;
+  error_sample?: Array<{ code?: string; reason?: string }>;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at?: string | null;
+};
+
 export type PlatformWhatsAppCatalogEntry = {
   event_type: string;
   title: string;
@@ -1992,6 +2064,8 @@ export type BIForecastReport = {
   currency: string;
   based_on_days: number;
   based_on_bookings?: number;
+  momentum_pct?: number | null;
+  note?: string;
 };
 
 export type BIGrowthReport = {
@@ -2070,6 +2144,7 @@ export type DashboardPetsSummary = {
   birthdays_next_7d: number;
   birthdays_next_30d: number;
   with_photo: number;
+  insights?: BIInsight[];
 };
 
 export type DashboardSummary = {
@@ -2103,9 +2178,10 @@ export type BIOverviewResponse = {
   pets_pack_enabled: boolean;
   currency?: string | null;
   period?: { start_date?: string | null; end_date?: string | null };
-  appointie?: BIReportsBundle;
+  appointie?: BIReportsBundle & { forecast?: BIForecastReport };
   shopie?: BIShopieOverview;
   pets?: DashboardPetsSummary;
+  forecast?: BIForecastReport;
   /** Present when Orbit Appoint is subscribed (backward-compatible aliases). */
   summary?: AnalyticsSummary;
   revenue?: BIRevenueReport;
@@ -2449,7 +2525,8 @@ export type ShopMasterKind =
   | 'unit'
   | 'expense_category'
   | 'income_category'
-  | 'tax_rate';
+  | 'tax_rate'
+  | 'pet_species';
 
 export type ShopMasterRecord = {
   id: string;
@@ -2799,8 +2876,12 @@ export type ShopOrderCreateInput = {
   bill_discount_type?: '' | 'percent' | 'amount' | string;
   bill_discount_value?: string | number;
   payment_method?: '' | 'cash' | 'upi' | 'card' | 'borrow' | 'razorpay' | 'cashfree' | string;
+  /** Amount collected now. Omit for full pay (cash/upi/card) or full credit (borrow). */
+  amount_paid?: string | number | null;
   coupon_code?: string;
   points_to_redeem?: number;
+  /** When false, skip awarding earn points on a paid POS/online order. Default true. */
+  award_loyalty_points?: boolean;
   lines: Array<{
     product_id: string;
     quantity?: string | number;
@@ -3399,6 +3480,9 @@ export type ShopDocumentPayload = {
   total?: string | number;
   amount_paid?: string | number;
   amount_due?: string | number;
+  payment_method?: string;
+  payment_label?: string;
+  payment_status?: string;
   notes?: string;
   irn?: string;
   upi_pay_url?: string;
@@ -3416,13 +3500,41 @@ export type ShopDocumentShareLinkResult = {
   message?: string;
   customer_phone?: string;
   customer_email?: string;
+  total?: string | number;
+  amount_paid?: string | number;
   amount_due?: string | number;
+  payment_method?: string;
+  payment_label?: string;
+  payment_status?: string;
 };
 
 export type ShopDocumentSendResult = {
   public_url: string;
   channels: Record<string, { status?: string; detail?: string; message?: string; phone?: string; to?: string }>;
 };
+
+/** Customer-app tax invoice for an owned shop order (same document as POS share). */
+export type MobileShopOrderInvoice = {
+  available: boolean;
+  reason?: string;
+  invoice_number?: string;
+  voucher_id?: string;
+  token?: string;
+  public_url?: string;
+  /** Device-openable HTML tax invoice (API public docs). */
+  view_url?: string;
+  pdf_url?: string;
+  message?: string;
+  total?: string | number;
+  amount_paid?: string | number;
+  amount_due?: string | number;
+  payment_method?: string;
+  payment_label?: string;
+  payment_status?: string;
+};
+
+/** Customer-app tax invoice for a completed booking (Books sale, same as shop). */
+export type MobileBookingInvoice = MobileShopOrderInvoice;
 
 export type ShopBooksVoucherCreateInput = {
   voucher_type: ShopBooksVoucherType | string;
@@ -4679,6 +4791,8 @@ class ApiClient {
       recordId: string,
       body: { label?: string; slug?: string; value?: string; is_active?: boolean; sort_order?: number },
     ) => this.request<ShopMasterRecord>(`/shop/master/${kind}/${recordId}`, { method: 'PATCH', body }),
+    deleteMasterRecord: (kind: ShopMasterKind | string, recordId: string) =>
+      this.request<{ deleted: boolean }>(`/shop/master/${kind}/${recordId}`, { method: 'DELETE' }),
     getSmartLookup: (query: { business_id: string }) =>
       this.request<ShopSmartLookupDashboard>('/shop/smart-lookup', { method: 'GET', query }),
     updateSmartLookup: (body: { business_id: string; enabled?: boolean }) =>
@@ -5129,6 +5243,14 @@ class ApiClient {
     list: (query?: Record<string, string | number | boolean | undefined | null>) => this.request<Booking[]>('/bookings', { method: 'GET', query }),
     create: (body: BookingCreateInput) => this.request<Booking>('/bookings', { method: 'POST', body }),
     get: (bookingId: string) => this.request<Booking>(`/bookings/${bookingId}`, { method: 'GET' }),
+    invoice: (bookingId: string) =>
+      this.request<{
+        available: boolean;
+        reason?: string;
+        voucher_id?: string;
+        voucher_number?: string;
+        invoice_number?: string;
+      }>(`/bookings/${bookingId}/invoice`, { method: 'GET' }),
     patch: (bookingId: string, body: BookingPatchInput) => this.request<Booking>(`/bookings/${bookingId}`, { method: 'PATCH', body }),
     eligibleOffers: (body: {
       business_id: string;
@@ -5149,7 +5271,14 @@ class ApiClient {
     confirm: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/confirm`, { method: 'POST', body }),
     cancel: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/cancel`, { method: 'POST', body }),
     checkIn: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/check-in`, { method: 'POST', body }),
-    complete: (bookingId: string, body?: { reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/complete`, { method: 'POST', body }),
+    complete: (bookingId: string, body?: {
+      reason?: string;
+      payment_method?: 'cash' | 'upi' | 'card' | 'borrow';
+      amount_paid?: string | number;
+      cash_account_id?: string | null;
+      payment_proof_url?: string;
+      payment_proof_media_id?: string;
+    }) => this.request<Booking>(`/bookings/${bookingId}/complete`, { method: 'POST', body }),
     reschedule: (bookingId: string, body: { start_at: string; reason?: string }) => this.request<Booking>(`/bookings/${bookingId}/reschedule`, { method: 'POST', body }),
     reassignableStaff: (bookingId: string) =>
       this.request<BookingReassignableStaffResponse>(`/bookings/${bookingId}/reassignable-staff`, {
@@ -5818,6 +5947,43 @@ class ApiClient {
       }),
     smartLookupHistory: (query?: ShopSmartLookupHistoryQuery) =>
       this.request<ShopSmartLookupHistory>('/platform/smart-lookup-history', { method: 'GET', query }),
+    productCatalog: (query?: { q?: string; category?: string; limit?: number; offset?: number }) =>
+      this.request<{
+        products: PlatformProductCatalogItem[];
+        total: number;
+        limit: number;
+        offset: number;
+      }>('/platform/product-catalog', { method: 'GET', query }),
+    productCatalogDetail: (productId: string) =>
+      this.request<{ found: boolean; product?: PlatformProductCatalogItem }>(
+        `/platform/product-catalog/${productId}`,
+        { method: 'GET' },
+      ),
+    productCatalogByBarcode: (barcode: string) =>
+      this.request<{ found: boolean; product?: PlatformProductCatalogItem; live?: boolean; message?: string }>(
+        `/platform/product-catalog/barcode/${encodeURIComponent(barcode)}`,
+        { method: 'GET' },
+      ),
+    productCatalogQuality: () =>
+      this.request<{ quality: PlatformProductCatalogQuality; last_import: PlatformProductCatalogImportRun | null }>(
+        '/platform/product-catalog/quality',
+        { method: 'GET' },
+      ),
+    productCatalogImport: (body?: {
+      source?: 'openmrp' | 'off' | 'open_food_facts' | 'both';
+      limit?: number;
+      require_image?: boolean;
+      dry_run?: boolean;
+      dump_dir?: string;
+    }) =>
+      this.request<{ import: PlatformProductCatalogImportRun; quality: PlatformProductCatalogQuality }>(
+        '/platform/product-catalog/import',
+        { method: 'POST', body: body ?? { source: 'both', limit: 1000 } },
+      ),
+    productCatalogImports: () =>
+      this.request<{ imports: PlatformProductCatalogImportRun[] }>('/platform/product-catalog/imports', {
+        method: 'GET',
+      }),
     authSettings: () =>
       this.request<PlatformAuthSettings>('/platform/auth-settings', { method: 'GET' }),
     updateAuthSettings: (body: {
@@ -6145,6 +6311,11 @@ class ApiClient {
     }) => this.request<MobileBooking[]>('/mobile/bookings', { method: 'GET', query }),
     getBooking: (bookingId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<MobileBooking>(`/mobile/bookings/${bookingId}`, { method: 'GET', query }),
+    getBookingInvoice: (bookingId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileBookingInvoice>(`/mobile/bookings/${bookingId}/invoice`, {
+        method: 'GET',
+        query,
+      }),
     cancelBooking: (
       bookingId: string,
       body: { tenant_slug: string; business_code: string; reason?: string },
@@ -6287,6 +6458,8 @@ class ApiClient {
       bill_discount_value?: string | number;
       points_to_redeem?: number;
       whatsapp_opt_in?: boolean;
+      upi_utr?: string;
+      payment_proof_url?: string;
       lines: Array<{ product_id: string; quantity?: string | number; barcode_scanned?: string }>;
     }) => this.request<ShopOrder>('/mobile/shop/orders', { method: 'POST', body }),
     validateShopCoupon: (body: {
@@ -6309,6 +6482,11 @@ class ApiClient {
     }) => this.request<ShopCouponOffer[]>('/mobile/shop/coupons/available', { method: 'GET', query }),
     getShopOrder: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopOrder>(`/mobile/shop/orders/${orderId}`, { method: 'GET', query }),
+    getShopOrderInvoice: (orderId: string, query: { tenant_slug: string; business_code: string }) =>
+      this.request<MobileShopOrderInvoice>(`/mobile/shop/orders/${orderId}/invoice`, {
+        method: 'GET',
+        query,
+      }),
     getShopOrderDeliveryLive: (
       orderId: string,
       query: { tenant_slug: string; business_code: string; refresh?: boolean },

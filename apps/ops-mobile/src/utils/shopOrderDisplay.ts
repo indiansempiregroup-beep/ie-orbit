@@ -18,14 +18,6 @@ export const OPEN_ORDER_STATUSES = new Set([
   'out_for_delivery',
 ]);
 
-const HOME_ORDER_STATUS_PRIORITY: Record<string, number> = {
-  pending: 0,
-  delivery_failed: 1,
-  confirmed: 2,
-  ready: 3,
-  out_for_delivery: 4,
-};
-
 export function isOnlineShopOrder(order: ShopOrder): boolean {
   return ONLINE_FULFILLMENT_MODES.has(String(order.fulfillment_mode || '').toLowerCase());
 }
@@ -40,9 +32,6 @@ export function filterOpenOnlineOrders(orders: ShopOrder[]): ShopOrder[] {
 
 export function sortHomeOrders(orders: ShopOrder[]): ShopOrder[] {
   return [...orders].sort((a, b) => {
-    const aPriority = HOME_ORDER_STATUS_PRIORITY[String(a.status || '').toLowerCase()] ?? 99;
-    const bPriority = HOME_ORDER_STATUS_PRIORITY[String(b.status || '').toLowerCase()] ?? 99;
-    if (aPriority !== bPriority) return aPriority - bPriority;
     const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
     const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
     return bTime - aTime;

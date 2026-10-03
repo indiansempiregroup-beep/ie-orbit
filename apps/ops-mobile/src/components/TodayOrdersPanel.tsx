@@ -4,7 +4,7 @@ import type { ShopOrder } from '@ie-orbit/sdk';
 import { HorizontalCarouselPanel } from './HorizontalCarouselPanel';
 import { OrderRow } from './OrderRow';
 import { Button } from './ui/Button';
-import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
 
 type Props = {
   orders: ShopOrder[];
@@ -65,12 +65,13 @@ export function TodayOrdersPanel({
 
 const styles = StyleSheet.create({
   emptyCard: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.tint,
+    marginTop: spacing.sm,
+    backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
+    ...shadows.soft,
   },
   emptyLabel: {
     ...typography.caption,

@@ -21,6 +21,7 @@ type Props = {
   footer?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  footerStyle?: StyleProp<ViewStyle>;
   refreshing?: boolean;
   onRefresh?: () => void | Promise<void>;
 };
@@ -29,6 +30,7 @@ export function FormScreen({
   children,
   footer,
   contentContainerStyle,
+  footerStyle,
   style,
   refreshing = false,
   onRefresh,
@@ -72,7 +74,8 @@ export function FormScreen({
             style={[
               styles.footer,
               isDesktop && styles.footerDesktop,
-              { paddingBottom: Math.max(insets.bottom, spacing.md) },
+              { paddingBottom: Math.max(insets.bottom, spacing.sm) },
+              footerStyle,
             ]}
           >
             {isDesktop ? <View style={styles.formColumn}>{footer}</View> : footer}

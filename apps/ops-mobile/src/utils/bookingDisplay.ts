@@ -25,8 +25,16 @@ export function sortBookingsByStart<T extends { start_at?: string | null }>(book
   });
 }
 
+export function sortBookingsByCreatedDesc<T extends { created_at?: string | null }>(bookings: T[]): T[] {
+  return [...bookings].sort((a, b) => {
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
 export function filterUpcomingBookings(bookings: Booking[], now = new Date()): Booking[] {
-  return sortBookingsByStart(
+  return sortBookingsByCreatedDesc(
     bookings.filter((booking) => {
       if (!isUpcomingBookingStatus(booking.status)) return false;
       const endAt = booking.end_at ? new Date(booking.end_at) : null;
@@ -60,7 +68,7 @@ export function bookingStartsInLabel(
   if (Number.isNaN(start.getTime())) return { label: '—', tone: 'later' };
 
   if (end && !Number.isNaN(end.getTime()) && end <= now) {
-    return { label: 'Finished', tone: 'done' };
+    return { label: '', tone: 'done' };
   }
   if (start <= now && (!end || end > now)) {
     return { label: 'In progress', tone: 'now' };
@@ -120,4 +128,12 @@ export function bookingStaffLabel(
 ): string {
   if (booking.staff_name?.trim()) return booking.staff_name;
   return entityLabel(staffMap, booking.staff_id, '');
+}
+
+/** Sum of line `price_snapshot` values (GST-inclusive snapshots from booking create). */
+export function bookingPriceTotal(
+  booking: Pick<Booking, 'line_items'>,
+): number {
+  if (!booking.line_items?.length) return 0;
+  return booking.line_items.reduce((sum, item) => sum + (Number(item.price_snapshot) || 0), 0);
 }

@@ -12,10 +12,11 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, typography } from '../../theme/tokens';
+import { brand, colors, fonts, radius } from '../../theme/tokens';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'destructive' | 'soft' | 'cta';
 type Size = 'sm' | 'md' | 'lg';
+type IconName = keyof typeof Feather.glyphMap;
 
 type Props = PressableProps & {
   label: string;
@@ -23,10 +24,58 @@ type Props = PressableProps & {
   size?: Size;
   loading?: boolean;
   fullWidth?: boolean;
-  icon?: keyof typeof Feather.glyphMap;
+  /** Leading icon. Omit to auto-infer on primary/cta; pass `null` to force no icon. */
+  icon?: IconName | null;
+  /** Feather glyph rendered after the label (e.g. share / external-link). */
+  trailingIcon?: IconName;
   /** Opens in a new tab on web (native `<a>`), or via Linking on native. */
   href?: string;
 };
+
+function inferPrimaryIcon(label: string): IconName | undefined {
+  const raw = label.trim().toLowerCase();
+  if (!raw) return undefined;
+  const text = raw.replace(/…$/, '').replace(/\.\.\.$/, '').trim();
+
+  if (/^(add|new)\b/.test(text) || /\bcreate\b/.test(text)) return 'plus';
+  if (/\b(save|update|record|apply|confirm|done|got it)\b/.test(text)) return 'check';
+  if (/\b(continue|next|open)\b/.test(text)) return 'arrow-right';
+  if (/\bedit\b/.test(text)) return 'edit-2';
+  if (/\b(share|print|view)\b/.test(text)) return 'share-2';
+  if (/\bgenerate\b/.test(text)) return 'file-text';
+  if (/\b(send|submit|reply)\b/.test(text)) return 'send';
+  if (/\bwhatsapp\b/.test(text)) return 'message-circle';
+  if (/\b(payment|paid|qr)\b/.test(text)) return 'credit-card';
+  if (/\bassign\b/.test(text)) return 'link';
+  if (/\bcomplete\b/.test(text)) return 'check-circle';
+  if (/\breactivat/.test(text) || /\brefresh\b/.test(text)) return 'refresh-cw';
+  if (/\bdeactivat/.test(text)) return 'slash';
+  if (/\bbuild\b/.test(text)) return 'package';
+  if (/\b(sign in|verify|accept)\b/.test(text)) return 'log-in';
+  if (/\binvit/.test(text)) return 'mail';
+  if (/\badjust\b/.test(text)) return 'sliders';
+  if (/\btransfer\b/.test(text)) return 'repeat';
+  if (/\bstart\b/.test(text)) return 'play';
+  if (/\b(preview|see how)\b/.test(text)) return 'eye';
+  if (/\breschedule\b/.test(text) || /\breassignment\b/.test(text)) return 'calendar';
+  if (/\bnote\b/.test(text)) return 'edit-3';
+  if (/\bcoupon\b/.test(text)) return 'tag';
+  if (/\bproduct\b/.test(text)) return 'package';
+  if (/\bstock\b/.test(text)) return 'layers';
+  if (/\breturn\b/.test(text)) return 'rotate-ccw';
+  if (/\bbill\b/.test(text) || /\binvoice\b/.test(text)) return 'file-text';
+  if (/\btemplate/.test(text)) return 'layout';
+  if (/\bschedule\b/.test(text) || /\bleave\b/.test(text) || /\bwindow\b/.test(text) || /\bblock\b/.test(text) || /\bemergency\b/.test(text)) {
+    return 'calendar';
+  }
+  if (/\bextras?\b/.test(text) || /\breward\b/.test(text) || /\bcompliance\b/.test(text) || /\bdelivery\b/.test(text) || /\bpreferences\b/.test(text)) {
+    return 'check';
+  }
+  if (/\bworking\b/.test(text) || /\bsaving\b/.test(text) || /\bprocessing\b/.test(text) || /\bgenerating\b/.test(text) || /\bsubmitting\b/.test(text)) {
+    return 'check';
+  }
+  return 'check';
+}
 
 export function Button({
   label,
@@ -35,6 +84,7 @@ export function Button({
   loading,
   fullWidth,
   icon,
+  trailingIcon,
   disabled,
   style,
   href,
@@ -42,13 +92,18 @@ export function Button({
   ...rest
 }: Props) {
   const isDisabled = disabled || loading;
+  const isPrimary = variant === 'primary' || variant === 'cta';
   const variantStyle = getVariantStyle(variant);
+  const iconSize = size === 'sm' ? 14 : size === 'lg' ? 18 : 16;
+  const resolvedIcon =
+    icon === null ? undefined : icon ?? (isPrimary ? inferPrimaryIcon(label) : undefined);
   const inner = loading ? (
     <ActivityIndicator color={variantStyle.spinner} size="small" />
   ) : (
     <View style={styles.content}>
-      {icon ? <Feather name={icon} size={size === 'sm' ? 14 : 16} color={variantStyle.icon} /> : null}
+      {resolvedIcon ? <Feather name={resolvedIcon} size={iconSize} color={variantStyle.icon} /> : null}
       <Text style={[styles.label, variantStyle.label, sizeStyles[size]]}>{label}</Text>
+      {trailingIcon ? <Feather name={trailingIcon} size={iconSize} color={variantStyle.icon} /> : null}
     </View>
   );
   const visualStyle = [
@@ -86,7 +141,10 @@ export function Button({
     <Pressable
       accessibilityRole={href ? 'link' : 'button'}
       disabled={isDisabled}
-      style={({ pressed }) => [...visualStyle, pressed && !isDisabled && styles.pressed]}
+      style={({ pressed }) => [
+        ...visualStyle,
+        pressed && !isDisabled && (isPrimary ? styles.pressedPrimary : styles.pressed),
+      ]}
       onPress={(event) => {
         if (href) {
           void Linking.openURL(href);
@@ -125,14 +183,18 @@ function getVariantStyle(variant: Variant) {
       };
     case 'outline':
       return {
-        container: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+        container: {
+          backgroundColor: colors.card,
+          borderWidth: StyleSheet.hairlineWidth * 2,
+          borderColor: colors.borderStrong,
+        },
         label: { color: colors.foreground },
         spinner: colors.foreground,
         icon: colors.foreground,
       };
     case 'cta':
       return {
-        container: { backgroundColor: colors.primary },
+        container: styles.primaryFill,
         label: { color: colors.primaryForeground },
         spinner: colors.primaryForeground,
         icon: colors.primaryForeground,
@@ -146,7 +208,7 @@ function getVariantStyle(variant: Variant) {
       };
     default:
       return {
-        container: { backgroundColor: colors.primary },
+        container: styles.primaryFill,
         label: { color: colors.primaryForeground },
         spinner: colors.primaryForeground,
         icon: colors.primaryForeground,
@@ -155,15 +217,15 @@ function getVariantStyle(variant: Variant) {
 }
 
 const sizes: Record<Size, ViewStyle> = {
-  sm: { minHeight: 32, paddingHorizontal: 14 },
-  md: { minHeight: 40, paddingHorizontal: 16 },
-  lg: { minHeight: 48, paddingHorizontal: 20 },
+  sm: { minHeight: 36, paddingHorizontal: 14 },
+  md: { minHeight: 44, paddingHorizontal: 16 },
+  lg: { minHeight: 50, paddingHorizontal: 20 },
 };
 
 const sizeStyles: Record<Size, TextStyle> = {
-  sm: { fontSize: 12 },
-  md: { fontSize: 14 },
-  lg: { fontSize: 16 },
+  sm: { fontSize: 13, lineHeight: 18 },
+  md: { fontSize: 15, lineHeight: 20 },
+  lg: { fontSize: 16, lineHeight: 22 },
 };
 
 const styles = StyleSheet.create({
@@ -173,9 +235,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
   },
-  content: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  primaryFill: {
+    backgroundColor: colors.primary,
+    shadowColor: '#0e2f3a',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  content: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fullWidth: { width: '100%' },
-  label: { ...typography.label, fontFamily: fonts.bodySemi },
-  pressed: { opacity: 0.92 },
-  disabled: { opacity: 0.45 },
+  label: {
+    fontFamily: fonts.body,
+    fontWeight: '400',
+    letterSpacing: -0.2,
+    includeFontPadding: false,
+  },
+  pressed: { opacity: 0.88 },
+  pressedPrimary: {
+    backgroundColor: brand.primaryHover,
+    opacity: 1,
+    transform: [{ scale: 0.98 }],
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  disabled: { opacity: 0.4 },
 });

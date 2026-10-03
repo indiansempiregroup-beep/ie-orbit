@@ -4,6 +4,7 @@ from apps.api.mobile_views import (
     MobileAvailabilityView,
     MobileBookingCancelView,
     MobileBookingDetailView,
+    MobileBookingInvoiceView,
     MobileBookingListView,
     MobileBookingRequestView,
     MobileBookingRescheduleView,
@@ -43,8 +44,10 @@ from apps.shopie.api.mobile_views import (
     MobileShopOrderCashfreeVerifyView,
     MobileShopOrderClaimPaymentView,
     MobileShopOrderDetailView,
+    MobileShopOrderInvoiceView,
     MobileShopOrderListCreateView,
     MobileShopOrderPaymentProofView,
+    MobileShopPaymentProofUploadView,
     MobileShopOrderRazorpayCheckoutView,
     MobileShopOrderRazorpayVerifyView,
     MobileShopPetDetailView,
@@ -96,6 +99,11 @@ urlpatterns = [
     path("mobile/availability", MobileAvailabilityView.as_view(), name="mobile-availability"),
     path("mobile/bookings", MobileBookingListView.as_view(), name="mobile-booking-list"),
     path("mobile/bookings/<uuid:booking_id>", MobileBookingDetailView.as_view(), name="mobile-booking-detail"),
+    path(
+        "mobile/bookings/<uuid:booking_id>/invoice",
+        MobileBookingInvoiceView.as_view(),
+        name="mobile-booking-invoice",
+    ),
     path("mobile/bookings/<uuid:booking_id>/cancel", MobileBookingCancelView.as_view(), name="mobile-booking-cancel"),
     path(
         "mobile/bookings/<uuid:booking_id>/reschedule",
@@ -152,6 +160,11 @@ urlpatterns = [
         name="mobile-shop-order-detail",
     ),
     path(
+        "mobile/shop/orders/<uuid:order_id>/invoice",
+        MobileShopOrderInvoiceView.as_view(),
+        name="mobile-shop-order-invoice",
+    ),
+    path(
         "mobile/shop/orders/<uuid:order_id>/delivery-live",
         MobileShopOrderDeliveryLiveView.as_view(),
         name="mobile-shop-order-delivery-live",
@@ -190,6 +203,11 @@ urlpatterns = [
         "mobile/shop/orders/<uuid:order_id>/payment-proof",
         MobileShopOrderPaymentProofView.as_view(),
         name="mobile-shop-order-payment-proof",
+    ),
+    path(
+        "mobile/shop/payment-proof",
+        MobileShopPaymentProofUploadView.as_view(),
+        name="mobile-shop-payment-proof",
     ),
     path(
         "mobile/shop/delivery-hint",

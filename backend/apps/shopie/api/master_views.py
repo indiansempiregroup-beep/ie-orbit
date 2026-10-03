@@ -75,15 +75,18 @@ class ShopMasterDetailView(APIView):
     permission_classes = [ShopAccessPermission]
     masters = MasterService()
 
-    def patch(self, request: Request, kind: str, record_id) -> Response:
+    def _get_record(self, request: Request, kind: str, record_id) -> ShopMasterRecord:
         kind = _kind_or_400(kind)
         record = get_object_or_404(
-            ShopMasterRecord,
+            ShopMasterRecord.all_objects.filter(deleted_at__isnull=True),
             tenant=request.current_tenant,
             kind=kind,
             id=record_id,
-            deleted_at__isnull=True,
         )
+        return record
+
+    def patch(self, request: Request, kind: str, record_id) -> Response:
+        record = self._get_record(request, kind, record_id)
         business = require_business(request, record.business_id, features=CATALOG_FEATURES)
         serializer = ShopMasterWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -94,6 +97,23 @@ class ShopMasterDetailView(APIView):
                 record=record,
                 data=serializer.validated_data,
             )
-        except (ValueError, DjangoValidationError) as exc:
-            raise ValidationError(str(exc)) from exc
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        except DjangoValidationError as exc:
+            if hasattr(exc, "message_dict"):
+                raise ValidationError(exc.message_dict) from exc
+            raise ValidationError({"detail": "; ".join(exc.messages)}) from exc
         return success_response(self.masters.serialize(row))
+
+    def delete(self, request: Request, kind: str, record_id) -> Response:
+        record = self._get_record(request, kind, record_id)
+        business = require_business(request, record.business_id, features=CATALOG_FEATURES)
+        try:
+            self.masters.delete(
+                tenant=request.current_tenant,
+                business=business,
+                record=record,
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        return success_response({"deleted": True})

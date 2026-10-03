@@ -1,58 +1,22 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { FormScreen } from '../../components/FormScreen';
 import { SearchBar } from '../../components/SearchBar';
-import { SelectField } from '../../components/SelectField';
-import { Button } from '../../components/ui/Button';
+import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
-import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
-import { colors, fonts, radius, spacing } from '../../theme/tokens';
+import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopDeliveryZone } from '@ie-orbit/sdk';
 import { shopListRefreshControl } from './shopRefreshControl';
-
-type ZoneForm = {
-  name: string;
-  cities: string;
-  prefixes: string;
-  fee: string;
-  minOrder: string;
-  notes: string;
-  sameDay: boolean;
-  instantDelivery: boolean;
-  enabled: boolean;
-};
-
-const EMPTY_FORM: ZoneForm = {
-  name: '',
-  cities: '',
-  prefixes: '',
-  fee: '0',
-  minOrder: '0',
-  notes: '',
-  sameDay: true,
-  instantDelivery: false,
-  enabled: true,
-};
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All zones' },
@@ -60,81 +24,33 @@ const STATUS_OPTIONS = [
   { value: 'disabled', label: 'Disabled' },
 ];
 
-function splitCsv(value: string): string[] {
-  return value
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function zoneToForm(zone: ShopDeliveryZone): ZoneForm {
-  return {
-    name: zone.name,
-    cities: (zone.cities ?? []).join(', '),
-    prefixes: (zone.postal_prefixes ?? []).join(', '),
-    fee: String(zone.fee ?? '0'),
-    minOrder: String(zone.min_order_total ?? '0'),
-    notes: zone.notes ?? '',
-    sameDay: zone.same_day !== false,
-    instantDelivery: zone.instant_delivery_enabled === true,
-    enabled: zone.enabled !== false,
-  };
-}
-
 export function ShopDeliveryZonesScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
-  const toast = useToast();
   const { businessId } = useWorkspace();
   const [zones, setZones] = useState<ShopDeliveryZone[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<ZoneForm>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [enabledFilter, setEnabledFilter] = useState('');
-
-  const closeForm = useCallback(() => {
-    setShowForm(false);
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-  }, []);
-
-  const openCreate = useCallback(() => {
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-    setShowForm(true);
-    setError(null);
-  }, []);
-
-  const openEdit = useCallback((zone: ShopDeliveryZone) => {
-    setEditingId(zone.id);
-    setForm(zoneToForm(zone));
-    setShowForm(true);
-    setError(null);
-  }, []);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <Pressable
-          onPress={() => {
-            if (showForm) closeForm();
-            else openCreate();
-          }}
+          onPress={() => navigation.navigate('ShopDeliveryZoneForm', {})}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : 'Add zone'}
+          accessibilityLabel="Add zone"
           hitSlop={8}
           style={styles.headerBtn}
         >
-          <Feather name={showForm ? 'x' : 'plus'} size={20} color={colors.primary} />
+          <Feather name="plus" size={20} color={colors.primary} />
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm, openCreate]);
+  }, [navigation]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -164,165 +80,43 @@ export function ShopDeliveryZonesScreen() {
       if (enabledFilter === 'enabled' && !zone.enabled) return false;
       if (enabledFilter === 'disabled' && zone.enabled) return false;
       if (!term) return true;
-      return [
-        zone.name,
-        ...(zone.cities ?? []),
-        ...(zone.postal_prefixes ?? []),
-        zone.notes ?? '',
-      ]
+      return [zone.name, ...(zone.cities ?? []), ...(zone.postal_prefixes ?? []), zone.notes ?? '']
         .join(' ')
         .toLowerCase()
         .includes(term);
     });
   }, [zones, search, enabledFilter]);
 
-  function setField<K extends keyof ZoneForm>(key: K, value: ZoneForm[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  async function save() {
-    if (!client || !businessId || !form.name.trim()) {
-      setError('Zone name is required');
-      toast.push('Zone name is required', 'error');
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    const payload = {
-      business_id: businessId,
-      name: form.name.trim(),
-      cities: splitCsv(form.cities),
-      postal_prefixes: splitCsv(form.prefixes),
-      fee: form.fee.trim() || '0',
-      min_order_total: form.minOrder.trim() || '0',
-      notes: form.notes.trim(),
-      same_day: form.sameDay,
-      instant_delivery_enabled: form.instantDelivery,
-      enabled: form.enabled,
-    };
-    try {
-      if (editingId) {
-        await client.shop.patchDeliveryZone(editingId, payload);
-        toast.push('Zone updated.', 'success');
-      } else {
-        await client.shop.createDeliveryZone(payload);
-        toast.push('Zone saved.', 'success');
-      }
-      closeForm();
-      await load();
-    } catch (err) {
-      const text = err instanceof Error ? err.message : 'Unable to save zone';
-      setError(text);
-      toast.push(text, 'error');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (showForm) {
-    return (
-      <FormScreen
-        footer={
-          <Button
-            label={saving ? 'Saving…' : editingId ? 'Update zone' : 'Save zone'}
-            loading={saving}
-            fullWidth
-            size="lg"
-            onPress={() => void save()}
-          />
-        }
-      >
-        <Text style={styles.formTitle}>{editingId ? 'Edit delivery zone' : 'Add delivery zone'}</Text>
-        <Text style={styles.help}>
-          Match checkout addresses by city name and/or postal prefix. Fee is added when the zone
-          matches. Deliver now appears only in zones where it is explicitly allowed.
-        </Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Input
-          label="Zone name"
-          required
-          value={form.name}
-          onChangeText={(value) => setField('name', value)}
-          placeholder="e.g. Nashik city"
-          error={!form.name.trim() && error === 'Zone name is required' ? error : undefined}
-        />
-        <Input
-          label="Cities"
-          optional
-          value={form.cities}
-          onChangeText={(value) => setField('cities', value)}
-          placeholder="Nashik, Nasik"
-          hint="Comma-separated"
-        />
-        <Input
-          label="Postal prefixes"
-          optional
-          value={form.prefixes}
-          onChangeText={(value) => setField('prefixes', value)}
-          placeholder="422"
-          hint="Comma-separated"
-        />
-        <Input
-          label="Delivery fee"
-          required
-          value={form.fee}
-          onChangeText={(value) => setField('fee', value)}
-          keyboardType="decimal-pad"
-        />
-        <Input
-          label="Minimum order"
-          optional
-          value={form.minOrder}
-          onChangeText={(value) => setField('minOrder', value)}
-          keyboardType="decimal-pad"
-        />
-        <Input
-          label="Notes"
-          optional
-          value={form.notes}
-          onChangeText={(value) => setField('notes', value)}
-          placeholder="Optional"
-          multiline
-        />
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Same-day delivery</Text>
-          <Switch value={form.sameDay} onValueChange={(value) => setField('sameDay', value)} />
-        </View>
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Allow Deliver now</Text>
-          <Switch
-            value={form.instantDelivery}
-            onValueChange={(value) => setField('instantDelivery', value)}
-          />
-        </View>
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Enabled</Text>
-          <Switch value={form.enabled} onValueChange={(value) => setField('enabled', value)} />
-        </View>
-      </FormScreen>
-    );
-  }
-
   return (
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
-        <SearchBar
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search zone, city, postal…"
-          style={styles.search}
-        />
-        <SelectField
-          label="Availability"
-          value={enabledFilter}
-          options={STATUS_OPTIONS}
-          onChange={setEnabledFilter}
-        />
+        <View style={styles.topBar}>
+          <SearchBar
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search zone, city, postal…"
+            style={styles.searchFlex}
+          />
+          <FilterButton count={Number(Boolean(enabledFilter))} onPress={() => setFiltersOpen(true)} />
+        </View>
         {enabledFilter ? (
           <Pressable onPress={() => setEnabledFilter('')} style={styles.clearFilters}>
             <Text style={styles.clearFiltersText}>Clear filters</Text>
           </Pressable>
         ) : null}
+
+        <FilterSheet
+          visible={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          onReset={() => setEnabledFilter('')}
+        >
+          <FilterChoiceGroup
+            label="Availability"
+            value={enabledFilter}
+            options={STATUS_OPTIONS}
+            onChange={setEnabledFilter}
+          />
+        </FilterSheet>
 
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -331,7 +125,7 @@ export function ShopDeliveryZonesScreen() {
           data={filtered}
           keyExtractor={(item) => item.id}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, marginTop: spacing.sm }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
           renderItem={({ item }) => (
             <BooksDocumentRow
               title={item.name}
@@ -342,7 +136,7 @@ export function ShopDeliveryZonesScreen() {
               icon="map-pin"
               iconTone="coral"
               dimmed={!item.enabled}
-              onPress={() => openEdit(item)}
+              onPress={() => navigation.navigate('ShopDeliveryZoneForm', { zoneId: item.id })}
             />
           )}
           ListEmptyComponent={
@@ -356,7 +150,7 @@ export function ShopDeliveryZonesScreen() {
                     : 'Add a delivery zone so checkout can match city and postal codes.'
                 }
                 actionLabel={zones.length ? undefined : 'Add zone'}
-                onAction={zones.length ? undefined : openCreate}
+                onAction={zones.length ? undefined : () => navigation.navigate('ShopDeliveryZoneForm', {})}
               />
             ) : null
           }
@@ -368,6 +162,8 @@ export function ShopDeliveryZonesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
+  searchFlex: { flex: 1 },
   headerBtn: {
     width: 40,
     height: 40,
@@ -376,33 +172,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.tint,
   },
-  search: { marginBottom: spacing.sm },
-  clearFilters: { alignSelf: 'flex-start', marginTop: spacing.sm, marginBottom: spacing.sm },
+  clearFilters: { alignSelf: 'flex-start', marginBottom: spacing.sm },
   clearFiltersText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
-  formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
-  help: { color: colors.mutedForeground, marginBottom: spacing.sm },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  switchLabel: { color: colors.foreground, fontWeight: '500' },
-  row: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  rowInner: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  thumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.muted },
-  thumbEmpty: {
-    backgroundColor: colors.tint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
-  meta: { marginTop: 4, color: colors.mutedForeground, fontSize: 13 },
   error: { color: colors.destructive, marginBottom: spacing.sm },
 });

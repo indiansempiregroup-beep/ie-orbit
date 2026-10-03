@@ -39,10 +39,17 @@ export function ImageLightbox({
     <Modal
       visible={visible && Boolean(uri)}
       animationType="fade"
-      presentationStyle="fullScreen"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.root, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      <View
+        style={[
+          styles.root,
+          StyleSheet.absoluteFillObject,
+          { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, spacing.md) },
+        ]}
+      >
         <View style={styles.header}>
           <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn} accessibilityLabel="Close">
             <Feather name="x" size={24} color={colors.foreground} />

@@ -17,6 +17,7 @@ from apps.bookings.api.serializers import (
     AvailabilityQuerySerializer,
     AvailabilitySlotSerializer,
     BookingActionSerializer,
+    BookingCompleteSerializer,
     BookingCreateSerializer,
     BookingPatchSerializer,
     BookingRescheduleSerializer,
@@ -336,6 +337,57 @@ class BookingDetailView(APIView):
         return booking
 
 
+class BookingInvoiceView(BookingDetailView):
+    """Ensure Books sale tax invoice exists for a completed booking (ops View / Share)."""
+
+    @extend_schema(tags=["Bookings"])
+    def get(self, request: Request, booking_id: str) -> Response:
+        from apps.common.api.responses import success_response
+        from apps.shopie.api.document_views import books_voucher_for_booking
+        from apps.shopie.services.books import BooksService
+
+        booking = self._booking(request, booking_id)
+        voucher = books_voucher_for_booking(
+            tenant=request.current_tenant, business=booking.business, booking=booking
+        )
+        if voucher is None and booking.status == BookingStatus.COMPLETED:
+            try:
+                voucher = BooksService().create_sale_from_booking(
+                    tenant=request.current_tenant,
+                    business=booking.business,
+                    booking=booking,
+                )
+            except DjangoValidationError as exc:
+                message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+                return success_response(
+                    {"available": False, "reason": message},
+                    request_id=getattr(request, "request_id", None),
+                )
+            except Exception:
+                voucher = None
+
+        if voucher is None:
+            reason = (
+                "Tax invoice will be available after this appointment is completed."
+                if booking.status != BookingStatus.COMPLETED
+                else "Tax invoice could not be generated for this appointment yet."
+            )
+            return success_response(
+                {"available": False, "reason": reason},
+                request_id=getattr(request, "request_id", None),
+            )
+
+        return success_response(
+            {
+                "available": True,
+                "voucher_id": str(voucher.id),
+                "voucher_number": voucher.voucher_number or "",
+                "invoice_number": voucher.voucher_number or "",
+            },
+            request_id=getattr(request, "request_id", None),
+        )
+
+
 class BookingActionView(BookingDetailView):
     action_status: str = BookingStatus.CONFIRMED
     action_description = "Change booking status."
@@ -380,6 +432,48 @@ class BookingCheckInView(BookingActionView):
 
 class BookingCompleteView(BookingActionView):
     action_status = BookingStatus.COMPLETED
+
+    @extend_schema(
+        tags=["Bookings"],
+        request=BookingCompleteSerializer,
+        responses={200: BookingSerializer},
+    )
+    def post(self, request: Request, booking_id: str) -> Response:
+        booking = self._booking(request, booking_id)
+        serializer = BookingCompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        payment = None
+        if (
+            data.get("payment_method")
+            or data.get("amount_paid") is not None
+            or data.get("cash_account_id")
+            or data.get("payment_proof_url")
+            or data.get("payment_proof_media_id")
+        ):
+            payment = {
+                "payment_method": data.get("payment_method") or "",
+                "amount_paid": data.get("amount_paid"),
+                "cash_account_id": data.get("cash_account_id"),
+                "payment_proof_url": data.get("payment_proof_url") or "",
+                "payment_proof_media_id": data.get("payment_proof_media_id") or "",
+            }
+        try:
+            booking = self.service.transition(
+                booking=booking,
+                to_status=self.action_status,
+                actor=request.user,
+                reason=data.get("reason", ""),
+                payment=payment,
+            )
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc)) from exc
+        booking = self.repository.get_for_request(
+            booking_id=booking.id,
+            tenant=request.current_tenant,
+            user=request.user,
+        )
+        return _serialize_booking(tenant=request.current_tenant, booking=booking, request=request)
 
 
 class BookingRescheduleView(BookingDetailView):

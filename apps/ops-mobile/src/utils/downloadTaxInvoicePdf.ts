@@ -47,15 +47,30 @@ export async function downloadTaxInvoicePdf({
   }
 
   const filename = `${(invoiceNumber || invoiceId).replace(/[^\w.-]+/g, '_')}.pdf`;
-  const blob = await response.blob();
+  // Prefer arrayBuffer — response.blob() is unreliable on Expo mobile / RN.
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.byteLength) {
+    throw new Error('PDF download was empty');
+  }
 
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const blob = new Blob([bytes], { type: 'application/pdf' });
     const objectUrl = URL.createObjectURL(blob);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+    if (isMobile) {
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) window.location.assign(objectUrl);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
     const anchor = document.createElement('a');
     anchor.href = objectUrl;
     anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(objectUrl);
+    document.body.removeChild(anchor);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
     return;
   }
 
@@ -63,10 +78,9 @@ export async function downloadTaxInvoicePdf({
     throw new Error('File sharing is not available on this device');
   }
 
-  const buffer = await blob.arrayBuffer();
   const file = new File(Paths.cache, filename);
   file.create({ overwrite: true, intermediates: true });
-  file.write(new Uint8Array(buffer));
+  file.write(bytes);
   await Sharing.shareAsync(file.uri, {
     mimeType: 'application/pdf',
     UTI: 'com.adobe.pdf',

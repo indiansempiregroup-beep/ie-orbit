@@ -41,9 +41,9 @@ export function EmptyState({
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {actionLabel && onAction ? (
         <View style={styles.actions}>
-          <Button label={actionLabel} onPress={onAction} style={styles.btn} />
+          <Button label={actionLabel} icon="plus" onPress={onAction} style={styles.btn} />
           {secondaryLabel && onSecondary ? (
-            <Button label={secondaryLabel} variant="secondary" onPress={onSecondary} style={styles.btn} />
+            <Button label={secondaryLabel} variant="soft" onPress={onSecondary} style={styles.btn} />
           ) : null}
         </View>
       ) : null}

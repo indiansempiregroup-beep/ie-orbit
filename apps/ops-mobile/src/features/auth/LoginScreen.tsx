@@ -215,12 +215,14 @@ export function LoginScreen() {
         <View style={styles.channelRow}>
           <Button
             label="Email OTP"
+            icon={null}
             variant={loginChannel === 'email' ? 'primary' : 'outline'}
             size="sm"
             onPress={() => setLoginChannel('email')}
           />
           <Button
             label="Mobile OTP"
+            icon={null}
             variant={loginChannel === 'whatsapp' ? 'primary' : 'outline'}
             size="sm"
             onPress={() => setLoginChannel('whatsapp')}

@@ -1896,6 +1896,7 @@ class ShopMasterKind(models.TextChoices):
     EXPENSE_CATEGORY = "expense_category", "Expense category"
     INCOME_CATEGORY = "income_category", "Income category"
     TAX_RATE = "tax_rate", "Tax rate"
+    PET_SPECIES = "pet_species", "Pet species"
 
 
 class ShopMasterRecord(TenantModel):
@@ -1954,8 +1955,9 @@ class PlatformGtinCatalog(BaseModel):
     category = models.CharField(max_length=64, blank=True, help_text="Resolved ShopProductCategory slug")
     category_label = models.CharField(max_length=120, blank=True)
     hsn_sac = models.CharField(max_length=16, blank=True)
-    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, default=None)
     mrp = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    currency = models.CharField(max_length=3, blank=True, default="")
     image_url = models.CharField(max_length=1024, blank=True)
     images = models.JSONField(default=dict, blank=True)
     source = models.CharField(max_length=64, blank=True)
@@ -1965,9 +1967,57 @@ class PlatformGtinCatalog(BaseModel):
     class Meta:
         db_table = "platform_gtin_catalog"
         ordering = ["code"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["brand"]),
+            models.Index(fields=["category"]),
+            models.Index(fields=["source"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.code} {self.name}".strip()
+
+
+class PlatformGtinImportRunStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    RUNNING = "running", "Running"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
+class PlatformGtinImportRun(BaseModel):
+    """Platform-admin / management-command seed import summary."""
+
+    source = models.CharField(max_length=32, blank=True, db_index=True)
+    status = models.CharField(
+        max_length=16,
+        choices=PlatformGtinImportRunStatus.choices,
+        default=PlatformGtinImportRunStatus.PENDING,
+        db_index=True,
+    )
+    limit = models.PositiveIntegerField(default=1000)
+    total_source = models.PositiveIntegerField(default=0)
+    valid = models.PositiveIntegerField(default=0)
+    imported = models.PositiveIntegerField(default=0)
+    updated = models.PositiveIntegerField(default=0)
+    skipped = models.PositiveIntegerField(default=0)
+    duplicates = models.PositiveIntegerField(default=0)
+    invalid_barcodes = models.PositiveIntegerField(default=0)
+    missing_barcodes = models.PositiveIntegerField(default=0)
+    missing_images = models.PositiveIntegerField(default=0)
+    missing_prices = models.PositiveIntegerField(default=0)
+    missing_gst = models.PositiveIntegerField(default=0)
+    error_sample = models.JSONField(default=list, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "platform_gtin_import_runs"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.source} {self.status} +{self.imported}/~{self.updated}"
 
 
 class SmartLookupWallet(TenantModel):

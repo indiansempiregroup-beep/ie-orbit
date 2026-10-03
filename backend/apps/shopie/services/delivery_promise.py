@@ -61,6 +61,11 @@ def compute_delivery_promise(
 
 
 def promise_from_shipment(*, estimated_delivery_at: date | None, status: str) -> dict[str, Any]:
+    normalized = str(status or "").strip().lower()
+    if normalized in {"delivered", "completed"}:
+        return {"label": "Delivered", "detail": "Your order has been delivered.", "arrives_by": None}
+    if normalized in {"failed", "cancelled"}:
+        return {"label": "Delivery needs attention", "detail": "", "arrives_by": None}
     if estimated_delivery_at is None:
         return {"label": "On the way", "detail": "", "arrives_by": None}
     today = timezone.localdate()

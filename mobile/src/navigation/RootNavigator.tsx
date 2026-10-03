@@ -88,7 +88,15 @@ export function RootNavigator() {
       <NotificationNavigationHandler />
       <NavigationContainer ref={navigationRef}>
         {user && !needsVerification ? (
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
+              // Prevent a native "<" back chevron from leaking into the status-bar corner
+              // (common with Expo Go / nested native stacks even when headers are off).
+              headerBackVisible: false,
+              headerLeft: () => null,
+            }}
+          >
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="BookingHistory" component={BookingHistoryScreen} />
             <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
@@ -104,11 +112,7 @@ export function RootNavigator() {
             <Stack.Screen name="MyPets" component={MyPetsScreen} />
             <Stack.Screen name="PetDetail" component={PetDetailScreen} />
             <Stack.Screen name="PetForm" component={PetFormScreen} />
-            <Stack.Screen
-              name="ProfileEdit"
-              component={ProfileEditScreen}
-              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-            />
+            <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
             <Stack.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
             <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
             <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />

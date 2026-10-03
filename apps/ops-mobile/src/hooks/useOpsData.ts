@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiClientError,
   type Booking,
@@ -30,26 +30,34 @@ export function useBookings(date?: string) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const bookingsRef = useRef(bookings);
+  const requestIdRef = useRef(0);
+  bookingsRef.current = bookings;
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
     if (!client || !ready) return;
-    setLoading(true);
+    const requestId = ++requestIdRef.current;
+    const silent = opts?.silent ?? bookingsRef.current.length > 0;
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const response = await client.bookings.list(date ? { date } : undefined);
+      if (requestId !== requestIdRef.current) return;
       setBookings(asList<Booking>(response.data));
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load bookings');
-      setBookings([]);
+      // Keep existing rows on refresh failure so returning to the tab isn't blank.
+      if (!bookingsRef.current.length) setBookings([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [client, ready, date]);
 
   useEffect(() => {
-    void reload();
+    void reload({ silent: false });
   }, [reload]);
 
   return { bookings, loading, error, reload };

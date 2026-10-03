@@ -195,7 +195,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               key: 'zones',
               label: t('nav.shopDeliveryZones'),
               icon: 'map-pin',
-              match: ['ShopDeliveryZones'],
+              match: ['ShopDeliveryZones', 'ShopDeliveryZoneForm'],
               onPress: () => go('ShopDeliveryZones'),
             },
             {

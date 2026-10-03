@@ -35,8 +35,12 @@ const TIMING_COLORS = {
 export function BookingCard({ booking, onPress, primaryColor = colors.primary }: Props) {
   const mapped = mapBookingStatus(booking.status);
   const tone = STATUS_COPY[mapped] ?? STATUS_COPY.pending;
+  const statusKey = String(booking.status || '').toLowerCase();
+  const isTerminal = ['completed', 'cancelled', 'rejected', 'no_show', 'expired'].includes(statusKey);
   const timing = bookingStartsInLabel(booking.start_at, booking.end_at);
-  const timingColors = TIMING_COLORS[timing.tone];
+  const timingTone = isTerminal ? 'done' : timing.tone;
+  const timingColors = TIMING_COLORS[timingTone];
+  const showTimingChip = Boolean(timing.label) && timingTone !== 'done';
   const serviceName = bookingServiceLabel(booking);
   const staffLabel = bookingStaffLabel(booking);
   const timeRange = bookingTimeRangeLabel(booking.start_at, booking.end_at);
@@ -50,14 +54,18 @@ export function BookingCard({ booking, onPress, primaryColor = colors.primary }:
   const content = (
     <View style={styles.card}>
       <View style={styles.topRow}>
-        <View style={[styles.timingChip, { backgroundColor: timingColors.bg }]}>
-          <Feather
-            name={timing.tone === 'now' ? 'activity' : 'clock'}
-            size={12}
-            color={timingColors.text}
-          />
-          <Text style={[styles.timingText, { color: timingColors.text }]}>{timing.label}</Text>
-        </View>
+        {showTimingChip ? (
+          <View style={[styles.timingChip, { backgroundColor: timingColors.bg }]}>
+            <Feather
+              name={timingTone === 'now' ? 'activity' : 'clock'}
+              size={12}
+              color={timingColors.text}
+            />
+            <Text style={[styles.timingText, { color: timingColors.text }]}>{timing.label}</Text>
+          </View>
+        ) : (
+          <View />
+        )}
         <View style={[styles.pill, { backgroundColor: tone.bg }]}>
           <View style={[styles.dot, { backgroundColor: tone.text }]} />
           <Text style={[styles.pillText, { color: tone.text }]}>{tone.title}</Text>

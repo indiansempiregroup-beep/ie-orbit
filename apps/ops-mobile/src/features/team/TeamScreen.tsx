@@ -88,8 +88,8 @@ export function TeamScreen() {
           error={error && (error.startsWith('Email') || error.startsWith('Invalid email')) ? error : undefined}
         />
         <View style={styles.roleRow}>
-          <Button label="Staff" variant={role === 'staff' ? 'primary' : 'outline'} onPress={() => setRole('staff')} />
-          <Button label="Manager" variant={role === 'manager' ? 'primary' : 'outline'} onPress={() => setRole('manager')} />
+          <Button label="Staff" icon={null} variant={role === 'staff' ? 'primary' : 'outline'} onPress={() => setRole('staff')} />
+          <Button label="Manager" icon={null} variant={role === 'manager' ? 'primary' : 'outline'} onPress={() => setRole('manager')} />
         </View>
         <Text style={styles.helper}>
           {role === 'manager'

@@ -10,6 +10,9 @@ export type PosMeta = {
   bill_discount_value?: string | number;
   bill_discount_amount?: string | number;
   line_discount_total?: string | number;
+  upi_utr?: string;
+  payment_proof_url?: string;
+  payment_proof_media_id?: string;
 };
 
 export function getShopOrderPosMeta(order: ShopOrder): PosMeta {

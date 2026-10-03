@@ -525,6 +525,7 @@ def test_customer_return_requires_delivered(shop_ctx: tuple[Tenant, Business, Cu
         lines=[{"product_id": str(product.id), "quantity": 1}],
         confirm=True,
         payment_method="upi",
+        payment_proof_url="https://cdn.example.com/upi-proof.png",
     )
     assert order.status == OrderStatus.CONFIRMED
     with pytest.raises(ValidationError):

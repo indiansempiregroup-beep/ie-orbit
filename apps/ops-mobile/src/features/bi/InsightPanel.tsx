@@ -21,13 +21,25 @@ const BY_TYPE: Record<string, Meta> = {
   commerce: { icon: 'shopping-bag', tone: 'green', label: 'Sales' },
   returns: { icon: 'rotate-ccw', tone: 'coral', label: 'Returns' },
   delivery: { icon: 'truck', tone: 'blue', label: 'Delivery' },
+  pets: { icon: 'heart', tone: 'rose', label: 'Pets' },
+  customer: { icon: 'user', tone: 'cyan', label: 'Follow-up' },
+  staff: { icon: 'users', tone: 'violet', label: 'Staff' },
+  forecast: { icon: 'trending-up', tone: 'blue', label: 'Outlook' },
 };
 
 function metaFor(insight: BIInsight): Meta {
   const base = BY_TYPE[insight.type] ?? { icon: 'zap', tone: 'navy' as IconTone, label: 'Insight' };
-  const down = /down|drop|fall|risk|watch/i.test(`${insight.title} ${insight.type}`);
-  if ((insight.type === 'trend' || insight.type === 'revenue') && down) {
+  const down = /down|drop|fall|zero|losing|pending|quiet|below|shrank|thin/i.test(
+    `${insight.title} ${insight.detail}`,
+  );
+  if ((insight.type === 'trend' || insight.type === 'revenue' || insight.type === 'commerce') && down) {
     return { ...base, icon: 'trending-down', tone: 'rose' };
+  }
+  if (insight.type === 'forecast' && down) {
+    return { ...base, icon: 'trending-down', tone: 'amber' };
+  }
+  if (insight.type === 'demand' && /quietest/i.test(insight.title)) {
+    return { ...base, icon: 'moon', tone: 'navy' };
   }
   if (insight.type === 'risk') return { ...base, tone: 'coral' };
   return base;

@@ -4,7 +4,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,12 +11,11 @@ import {
 } from 'react-native';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
 import { uploadPetPhoto } from '../../api/media';
 import { DateField } from '../../components/DateField';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
-import { ScreenHeader } from '../../components/ProfileMenuScreen';
+import { ScreenHeader, StickyFooter } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
 import { Chip } from '../../components/ui/Chip';
 import { Input } from '../../components/ui/Input';
@@ -31,7 +29,6 @@ import type { RootStackParamList } from '../../navigation/types';
 type Props = NativeStackScreenProps<RootStackParamList, 'PetForm'>;
 
 export function PetFormScreen({ navigation, route }: Props) {
-  const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
@@ -41,7 +38,8 @@ export function PetFormScreen({ navigation, route }: Props) {
   const primary = branding?.primaryColor ?? colors.primary;
 
   const [name, setName] = useState('');
-  const [species, setSpecies] = useState('Dog');
+  const [speciesChoice, setSpeciesChoice] = useState('Dog');
+  const [speciesOther, setSpeciesOther] = useState('');
   const [breed, setBreed] = useState('');
   const [sex, setSex] = useState('');
   const [birthday, setBirthday] = useState('');
@@ -51,6 +49,7 @@ export function PetFormScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState('');
+  const [speciesError, setSpeciesError] = useState('');
 
   useEffect(() => {
     if (!isEdit || !petId) return;
@@ -62,7 +61,12 @@ export function PetFormScreen({ navigation, route }: Props) {
         });
         const pet = res.data;
         setName(pet.name || '');
-        setSpecies(pet.species || 'Dog');
+        const species = (pet.species || 'Dog').trim();
+        const inList = (PET_SPECIES as readonly string[])
+          .filter((item) => item !== 'Other')
+          .some((item) => item.toLowerCase() === species.toLowerCase());
+        setSpeciesChoice(inList ? species : 'Other');
+        setSpeciesOther(inList ? '' : species);
         setBreed(pet.breed || '');
         setSex(pet.sex || '');
         setBirthday(pet.birthday || '');
@@ -82,6 +86,12 @@ export function PetFormScreen({ navigation, route }: Props) {
       return;
     }
     setNameError('');
+    const speciesValue = speciesChoice === 'Other' ? speciesOther.trim() : speciesChoice.trim();
+    if (speciesChoice === 'Other' && !speciesValue) {
+      setSpeciesError('Enter the species.');
+      return;
+    }
+    setSpeciesError('');
     setSaving(true);
     try {
       let nextPhoto = photoUrl;
@@ -96,7 +106,7 @@ export function PetFormScreen({ navigation, route }: Props) {
       }
       const payload = {
         name: name.trim(),
-        species: species.trim(),
+        species: speciesValue,
         breed: breed.trim(),
         sex: sex.trim(),
         birthday: birthday || null,
@@ -137,7 +147,7 @@ export function PetFormScreen({ navigation, route }: Props) {
         >
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 48, gap: spacing.lg }}
+            contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120, gap: spacing.lg }}
           >
             <ImagePickerButton
               label="Pet photo"
@@ -164,12 +174,29 @@ export function PetFormScreen({ navigation, route }: Props) {
                   <Chip
                     key={item}
                     label={item}
-                    active={species === item}
+                    active={speciesChoice === item}
                     primaryColor={primary}
-                    onPress={() => setSpecies(item)}
+                    onPress={() => {
+                      setSpeciesChoice(item);
+                      if (item !== 'Other') setSpeciesOther('');
+                      setSpeciesError('');
+                    }}
                   />
                 ))}
               </View>
+              {speciesChoice === 'Other' ? (
+                <Input
+                  label="Species name"
+                  required
+                  value={speciesOther}
+                  onChangeText={(value) => {
+                    setSpeciesOther(value);
+                    setSpeciesError('');
+                  }}
+                  error={speciesError}
+                  placeholder="e.g. Hamster"
+                />
+              ) : null}
             </View>
             <Input label="Breed" optional value={breed} onChangeText={setBreed} placeholder="Indie, Labrador…" />
             <View>
@@ -205,17 +232,17 @@ export function PetFormScreen({ navigation, route }: Props) {
               textAlignVertical="top"
               style={styles.notes}
             />
+          </ScrollView>
+          <StickyFooter>
             <Button
-              label={saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add pet'}
+              label={isEdit ? 'Save changes' : 'Add pet'}
+              icon={isEdit ? 'check' : 'plus'}
               fullWidth
               loading={saving}
               primaryColor={primary}
               onPress={() => void onSave()}
             />
-            <Pressable onPress={() => navigation.goBack()}>
-              <Text style={styles.cancel}>Cancel</Text>
-            </Pressable>
-          </ScrollView>
+          </StickyFooter>
         </KeyboardAvoidingView>
       )}
     </View>
@@ -227,5 +254,4 @@ const styles = StyleSheet.create({
   label: { ...typography.label, color: colors.foreground, fontWeight: '700', marginBottom: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   notes: { minHeight: 96, paddingTop: spacing.sm },
-  cancel: { ...typography.body, color: colors.mutedForeground, textAlign: 'center', fontWeight: '600' },
 });

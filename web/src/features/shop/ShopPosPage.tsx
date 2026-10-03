@@ -89,6 +89,9 @@ export function ShopPosPage() {
     Array<{ label: string; discount_type: string; discount_value: string }>
   >([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  /** Amount collected at the till. Empty string while user is typing; defaults sync from payable. */
+  const [amountReceived, setAmountReceived] = useState('');
+  const [amountReceivedTouched, setAmountReceivedTouched] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [razorpayConnected, setRazorpayConnected] = useState(false);
@@ -312,6 +315,47 @@ export function ShopPosPage() {
     [baseTotals, posLineInputs, billDiscountType, billDiscountValue, loyaltyDiscount],
   );
   const payableAfterLoyalty = totals.payable;
+  const tillPayment =
+    !isChallan &&
+    (paymentMethod === 'cash' ||
+      paymentMethod === 'upi' ||
+      paymentMethod === 'card' ||
+      paymentMethod === 'borrow');
+  const receivedAmount = useMemo(() => {
+    if (!tillPayment) return 0;
+    if (paymentMethod === 'borrow' && !amountReceivedTouched && amountReceived === '') {
+      return 0;
+    }
+    if (!amountReceivedTouched && amountReceived === '' && paymentMethod !== 'borrow') {
+      return payableAfterLoyalty;
+    }
+    const parsed = Number(amountReceived);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    return Math.min(payableAfterLoyalty, Math.round((parsed + Number.EPSILON) * 100) / 100);
+  }, [
+    tillPayment,
+    paymentMethod,
+    amountReceived,
+    amountReceivedTouched,
+    payableAfterLoyalty,
+  ]);
+  const balanceDue = useMemo(
+    () => Math.max(0, Math.round((payableAfterLoyalty - receivedAmount + Number.EPSILON) * 100) / 100),
+    [payableAfterLoyalty, receivedAmount],
+  );
+
+  useEffect(() => {
+    if (!tillPayment || amountReceivedTouched) return;
+    if (paymentMethod === 'borrow') {
+      setAmountReceived('');
+      return;
+    }
+    setAmountReceived(
+      payableAfterLoyalty > 0
+        ? String(Math.round((payableAfterLoyalty + Number.EPSILON) * 100) / 100)
+        : '',
+    );
+  }, [tillPayment, paymentMethod, payableAfterLoyalty, amountReceivedTouched]);
 
   function addProduct(product: ShopProduct, barcode?: string) {
     setBasket((current) => {
@@ -388,8 +432,8 @@ export function ShopPosPage() {
 
   async function checkout() {
     if (!basket.length) return;
-    if (!isChallan && paymentMethod === 'borrow' && !customerId) {
-      const text = 'Select a customer for borrow / credit bills.';
+    if (!isChallan && tillPayment && balanceDue > 0 && !customerId) {
+      const text = 'Select a customer when the bill is not fully paid (partial or credit).';
       setMessage(text);
       snackbar.push(text, 'error');
       return;
@@ -444,17 +488,22 @@ export function ShopPosPage() {
         customer_id: customerId || null,
         customer_gstin: resolvedGstin || undefined,
         payment_method: paymentMethod,
+        ...(tillPayment ? { amount_paid: receivedAmount } : {}),
         bill_discount_type: billDiscountType,
         bill_discount_value: Number(billDiscountValue) || 0,
         points_to_redeem: customerId && pointsToRedeem > 0 ? pointsToRedeem : undefined,
         notes:
           paymentMethod === 'borrow'
-            ? 'POS · BORROW (due)'
+            ? balanceDue > 0 && receivedAmount > 0
+              ? `POS · PARTIAL · paid ${receivedAmount} · due ${balanceDue}`
+              : 'POS · BORROW (due)'
             : paymentMethod === 'razorpay'
               ? 'POS · RAZORPAY (awaiting payment)'
               : paymentMethod === 'cashfree'
                 ? 'POS · CASHFREE (awaiting payment)'
-                : `POS · ${paymentMethod.toUpperCase()}`,
+                : balanceDue > 0
+                  ? `POS · ${paymentMethod.toUpperCase()} · partial · due ${balanceDue}`
+                  : `POS · ${paymentMethod.toUpperCase()}`,
         lines: basket.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
@@ -489,11 +538,13 @@ export function ShopPosPage() {
       setBillDiscountType('');
       setBillDiscountValue('0');
       setPointsToRedeem(0);
+      setAmountReceivedTouched(false);
+      setAmountReceived('');
       const dueLabel =
-        paymentMethod === 'borrow'
-          ? ' · Due'
-          : paymentMethod === 'razorpay' || paymentMethod === 'cashfree'
-            ? ' · Paid online'
+        paymentMethod === 'razorpay' || paymentMethod === 'cashfree'
+          ? ' · Paid online'
+          : balanceDue > 0
+            ? ` · Paid ${money(receivedAmount)} · Due ${money(balanceDue)}`
             : '';
       snackbar.push(
         `Bill ${order.order_number} created${dueLabel} · ${money(totals.payable)}`,
@@ -525,6 +576,7 @@ export function ShopPosPage() {
         allowNewBill={docActions?.kind === 'sale'}
         onNewBill={() => setDocActions(null)}
       />
+      <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0,1.1fr) minmax(320px,0.9fr)' }}>
         <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
           <Card>
@@ -669,7 +721,14 @@ export function ShopPosPage() {
                           : ''}
                       </div>
                     </div>
-                    <strong>{money(priced?.total ?? 0)}</strong>
+                    <strong>
+                      {money(
+                        priced?.amount ??
+                          Math.round(
+                            (Number(line.product.price) * line.quantity + Number.EPSILON) * 100,
+                          ) / 100,
+                      )}
+                    </strong>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <Button
@@ -946,53 +1005,111 @@ export function ShopPosPage() {
                 ) : null}
               </div>
             </div>
-            {!isChallan ? (
-            <>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {(
-                [
-                  { value: 'cash', label: 'Cash' },
-                  { value: 'upi', label: 'UPI' },
-                  { value: 'card', label: 'Card' },
-                  { value: 'borrow', label: 'Borrow' },
-                  ...(razorpayConnected ? [{ value: 'razorpay' as const, label: 'Pay with Razorpay' }] : []),
-                  ...(cashfreeConnected ? [{ value: 'cashfree' as const, label: 'Pay with Cashfree' }] : []),
-                ] as const
-              ).map((method) => (
-                <Button
-                  key={method.value}
-                  type="button"
-                  variant={paymentMethod === method.value ? 'primary' : 'neutral'}
-                  onClick={() => setPaymentMethod(method.value)}
-                >
-                  {method.label}
-                </Button>
-              ))}
-            </div>
-            {paymentMethod === 'borrow' ? (
-              <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
-                Borrow / credit: customer takes goods now and pays later. A customer is required (not
-                Walk-in).
-              </p>
-            ) : null}
-            {paymentMethod === 'razorpay' ? (
-              <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
-                Secure Razorpay Checkout opens after the bill is created. The bill stays unpaid until Razorpay confirms it.
-              </p>
-            ) : null}
-            {paymentMethod === 'cashfree' ? (
-              <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
-                Cashfree Checkout opens after the bill is created. The bill stays unpaid until Cashfree confirms it.
-              </p>
-            ) : null}
-            </>
-            ) : (
-              <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
-                No payment now. Dispatch the challan from the list when goods leave — stock is deducted then.
-              </p>
-            )}
           </div>
+        </Card>
+      </div>
 
+      <div
+        style={{
+          display: 'grid',
+          gap: 16,
+          gridTemplateColumns: 'minmax(0, 1.1fr) minmax(280px, 0.9fr)',
+          alignItems: 'start',
+        }}
+      >
+        <Card>
+          <h2 style={{ marginTop: 0 }}>{isChallan ? 'Challan' : 'Payment'}</h2>
+          {!isChallan ? (
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(
+                  [
+                    { value: 'cash', label: 'Cash' },
+                    { value: 'upi', label: 'UPI' },
+                    { value: 'card', label: 'Card' },
+                    { value: 'borrow', label: 'Borrow' },
+                    ...(razorpayConnected
+                      ? [{ value: 'razorpay' as const, label: 'Pay with Razorpay' }]
+                      : []),
+                    ...(cashfreeConnected
+                      ? [{ value: 'cashfree' as const, label: 'Pay with Cashfree' }]
+                      : []),
+                  ] as const
+                ).map((method) => (
+                  <Button
+                    key={method.value}
+                    type="button"
+                    variant={paymentMethod === method.value ? 'primary' : 'neutral'}
+                    onClick={() => {
+                      setPaymentMethod(method.value);
+                      setAmountReceivedTouched(false);
+                    }}
+                  >
+                    {method.label}
+                  </Button>
+                ))}
+              </div>
+              {tillPayment ? (
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>
+                    {paymentMethod === 'borrow' ? 'Amount paid now (optional)' : 'Amount received'}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    max={payableAfterLoyalty || undefined}
+                    value={
+                      amountReceivedTouched || amountReceived !== ''
+                        ? amountReceived
+                        : paymentMethod === 'borrow'
+                          ? ''
+                          : payableAfterLoyalty > 0
+                            ? String(Math.round((payableAfterLoyalty + Number.EPSILON) * 100) / 100)
+                            : ''
+                    }
+                    onChange={(event) => {
+                      setAmountReceivedTouched(true);
+                      setAmountReceived(event.target.value);
+                    }}
+                    placeholder={paymentMethod === 'borrow' ? '0.00' : money(payableAfterLoyalty)}
+                    style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                  />
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>
+                    {balanceDue > 0
+                      ? `Balance due ${money(balanceDue)} will be added to the customer’s credit.`
+                      : 'Bill will be marked fully paid.'}
+                  </span>
+                </label>
+              ) : null}
+              {paymentMethod === 'borrow' ? (
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
+                  Borrow / credit: unpaid balance stays on the customer account. Customer required (not
+                  Walk-in) when anything is due.
+                </p>
+              ) : null}
+              {paymentMethod === 'razorpay' ? (
+                <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
+                  Secure Razorpay Checkout opens after the bill is created. The bill stays unpaid until
+                  Razorpay confirms it.
+                </p>
+              ) : null}
+              {paymentMethod === 'cashfree' ? (
+                <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
+                  Cashfree Checkout opens after the bill is created. The bill stays unpaid until
+                  Cashfree confirms it.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
+              No payment now. Dispatch the challan from the list when goods leave — stock is deducted
+              then.
+            </p>
+          )}
+        </Card>
+
+        <Card>
           <div style={{ display: 'grid', gap: 6, marginBottom: 16 }}>
             <strong>{isChallan ? 'Challan summary' : 'Bill summary'}</strong>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1005,6 +1122,10 @@ export function ShopPosPage() {
                 <span>-{money(totals.lineDiscountTotal)}</span>
               </div>
             ) : null}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Subtotal</span>
+              <span>{money(totals.merchandiseAfterLineDiscount)}</span>
+            </div>
             {totals.billDiscountAmount > 0 ? (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Bill discount</span>
@@ -1017,6 +1138,10 @@ export function ShopPosPage() {
                 <span>-{money(totals.loyaltyDiscountAmount)}</span>
               </div>
             ) : null}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Taxable</span>
+              <span>{money(totals.subtotal)}</span>
+            </div>
             {totals.taxTotal > 0 ? (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1035,11 +1160,29 @@ export function ShopPosPage() {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 18 }}>
-              <span>{isChallan ? 'Total' : paymentMethod === 'borrow' ? 'Amount due' : 'Payable'}</span>
+              <span>Total</span>
               <span>{money(payableAfterLoyalty)}</span>
             </div>
+            {!isChallan && tillPayment ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Received</span>
+                  <span>{money(receivedAmount)}</span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontWeight: balanceDue > 0 ? 700 : 500,
+                    color: balanceDue > 0 ? '#b45309' : undefined,
+                  }}
+                >
+                  <span>Balance due</span>
+                  <span>{money(balanceDue)}</span>
+                </div>
+              </>
+            ) : null}
           </div>
-
           <Button
             type="button"
             variant="primary"
@@ -1049,18 +1192,19 @@ export function ShopPosPage() {
             {createDocument.isPending
               ? 'Saving challan…'
               : createOrder.isPending
-              ? 'Creating bill…'
-              : isChallan
-                ? `Save challan · ${money(totals.payable)}`
-              : paymentMethod === 'borrow'
-                ? `Create Bill · Due ${money(payableAfterLoyalty)}`
-                : paymentMethod === 'razorpay'
-                  ? `Pay with Razorpay · ${money(payableAfterLoyalty)}`
-                : paymentMethod === 'cashfree'
-                  ? `Pay with Cashfree · ${money(payableAfterLoyalty)}`
-                : `Create Bill · ${money(payableAfterLoyalty)}`}
+                ? 'Creating bill…'
+                : isChallan
+                  ? `Save challan · ${money(totals.payable)}`
+                  : paymentMethod === 'razorpay'
+                    ? `Pay with Razorpay · ${money(payableAfterLoyalty)}`
+                    : paymentMethod === 'cashfree'
+                      ? `Pay with Cashfree · ${money(payableAfterLoyalty)}`
+                      : balanceDue > 0
+                        ? `Create Bill · Pay ${money(receivedAmount)} · Due ${money(balanceDue)}`
+                        : `Create Bill · ${money(payableAfterLoyalty)}`}
           </Button>
         </Card>
+      </div>
       </div>
       {paymentSheet ? (
         <div

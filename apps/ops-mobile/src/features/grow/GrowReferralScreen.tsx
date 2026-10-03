@@ -101,7 +101,16 @@ export function GrowReferralScreen() {
     <FormScreen
       refreshing={refreshing}
       onRefresh={onRefresh}
-      footer={<Button label={busy ? 'Saving…' : 'Save settings'} loading={busy} fullWidth size="lg" onPress={() => void save()} />}
+      footer={
+        <Button
+          label={busy ? 'Saving…' : 'Save settings'}
+          icon="save"
+          loading={busy}
+          fullWidth
+          size="lg"
+          onPress={() => void save()}
+        />
+      }
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.help}>

@@ -581,7 +581,57 @@ class BooksService:
                     notes=f"Refund for {voucher.voucher_number}",
                 )
                 self._adjust_cash_balance(account=cash_account, delta=-amount_paid)
+            self._clawback_loyalty_for_credit_note(
+                tenant=tenant,
+                business=business,
+                voucher=voucher,
+                customer=customer,
+            )
         return voucher
+
+    def _clawback_loyalty_for_credit_note(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        voucher: ShopBooksVoucher,
+        customer: Customer | None,
+    ) -> None:
+        """Revoke earned points when a books credit note refunds a sale (non-order returns)."""
+        if customer is None:
+            return
+        meta = voucher.metadata if isinstance(voucher.metadata, dict) else {}
+        # Order returns claw back via ReturnService against the order ledger.
+        if meta.get("source") == "return" or meta.get("source_return_id") or voucher.linked_order_id:
+            return
+        against_id = meta.get("against_sale_voucher_id")
+        if not against_id:
+            return
+        try:
+            from apps.customers.services.loyalty import LoyaltyService
+
+            sale = (
+                ShopBooksVoucher.objects.filter(
+                    tenant=tenant,
+                    business=business,
+                    id=against_id,
+                    voucher_type=VoucherType.SALE,
+                )
+                .select_related("customer")
+                .first()
+            )
+            if sale is None or sale.customer_id is None or sale.linked_order_id is not None:
+                return
+            LoyaltyService().clawback_earn_for_spend(
+                tenant=tenant,
+                business=business,
+                customer=sale.customer,
+                amount=voucher.total,
+                voucher_id=sale.id,
+                reason=f"Reversed earn for credit note {voucher.voucher_number}",
+            )
+        except Exception:
+            return
 
     @transaction.atomic
     def create_debit_note(
@@ -1099,6 +1149,11 @@ class BooksService:
     ) -> None:
         if linked_order is not None or customer is None:
             return
+        # Booking completion already awards/redeems loyalty against the booking ledger.
+        # Do not also apply shop spend-based earn/redeem on the books sale.
+        meta = voucher.metadata if isinstance(voucher.metadata, dict) else {}
+        if meta.get("source_booking_id") or str(meta.get("source") or "") == "booking":
+            return
         from apps.customers.services.loyalty import LoyaltyService
 
         loyalty = LoyaltyService()
@@ -1117,28 +1172,72 @@ class BooksService:
             voucher.metadata = metadata
             voucher.save(update_fields=["metadata", "updated_at", "version"])
         if status == VoucherStatus.CONFIRMED:
-            loyalty.award_for_voucher(
-                tenant=tenant,
-                business=business,
-                customer=customer,
-                voucher_id=voucher.id,
-                amount=voucher.total,
-                voucher_number=voucher.voucher_number,
+            earned = int(
+                loyalty.award_for_voucher(
+                    tenant=tenant,
+                    business=business,
+                    customer=customer,
+                    voucher_id=voucher.id,
+                    amount=voucher.total,
+                    voucher_number=voucher.voucher_number,
+                )
+                or 0
             )
+            if earned > 0:
+                metadata = dict(voucher.metadata or {})
+                snap = dict(metadata.get("loyalty") or {}) if isinstance(metadata.get("loyalty"), dict) else {}
+                snap["points_earned"] = earned
+                metadata["loyalty"] = snap
+                billing = dict(metadata.get("billing") or {}) if isinstance(metadata.get("billing"), dict) else {}
+                billing["points_earned"] = earned
+                metadata["billing"] = billing
+                voucher.metadata = metadata
+                voucher.save(update_fields=["metadata", "updated_at", "version"])
 
     def _refund_sale_loyalty(self, *, voucher: ShopBooksVoucher) -> None:
         if voucher.voucher_type != VoucherType.SALE:
             return
-        if voucher.customer_id is None or voucher.linked_order_id is not None:
+        if voucher.customer_id is None:
             return
-        loyalty_meta = (
-            (voucher.metadata or {}).get("loyalty") if isinstance(voucher.metadata, dict) else {}
-        )
-        points_redeemed = int((loyalty_meta or {}).get("points_redeemed") or 0)
         try:
             from apps.customers.services.loyalty import LoyaltyService
 
-            LoyaltyService().refund_for_voucher(
+            loyalty = LoyaltyService()
+            # POS / online sales post earn+redeem on the order ledger — reverse there.
+            if voucher.linked_order_id is not None:
+                order = voucher.linked_order
+                if order is None or order.customer_id is None:
+                    return
+                order_loyalty = (
+                    (order.metadata or {}).get("loyalty")
+                    if isinstance(order.metadata, dict)
+                    else {}
+                )
+                points_redeemed = int((order_loyalty or {}).get("points_redeemed") or 0)
+                loyalty.refund_for_order(
+                    tenant=voucher.tenant,
+                    business=voucher.business,
+                    customer=order.customer,
+                    order_id=order.id,
+                    points_redeemed=points_redeemed,
+                )
+                meta = dict(order.metadata or {})
+                snap = dict(meta.get("loyalty") or {}) if isinstance(meta.get("loyalty"), dict) else {}
+                earned = int(snap.get("points_earned") or 0)
+                if earned > 0:
+                    snap["points_revoked"] = int(snap.get("points_revoked") or 0) + earned
+                    snap["points_earned"] = 0
+                snap["refunded"] = True
+                meta["loyalty"] = snap
+                order.metadata = meta
+                order.save(update_fields=["metadata", "updated_at", "version"])
+                return
+
+            loyalty_meta = (
+                (voucher.metadata or {}).get("loyalty") if isinstance(voucher.metadata, dict) else {}
+            )
+            points_redeemed = int((loyalty_meta or {}).get("points_redeemed") or 0)
+            loyalty.refund_for_voucher(
                 tenant=voucher.tenant,
                 business=voucher.business,
                 customer=voucher.customer,
@@ -1333,11 +1432,11 @@ class BooksService:
         pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
         payment_method = str(pos.get("payment_method") or "").strip().lower()
         payment_status = str(pos.get("payment_status") or "").lower()
-        amount_paid = Decimal("0.00")
-        if payment_status in {"paid", "settled"}:
-            amount_paid = order.total
-        elif pos.get("amount_paid") not in (None, ""):
+        # Prefer explicit till amount (supports partial payments).
+        if pos.get("amount_paid") not in (None, ""):
             amount_paid = Decimal(str(pos.get("amount_paid") or "0"))
+        elif payment_status in {"paid", "settled"}:
+            amount_paid = order.total
         elif payment_method == "borrow":
             amount_paid = Decimal("0.00")
         elif (
@@ -1346,6 +1445,8 @@ class BooksService:
         ):
             # Counter till payment — treat as collected even if metadata was incomplete.
             amount_paid = order.total
+        else:
+            amount_paid = Decimal("0.00")
 
         lines = [
             self._books_line_from_order_line(line)
@@ -1381,17 +1482,93 @@ class BooksService:
             delivery_state=delivery_state,
             place_of_supply=str(gst_meta.get("place_of_supply") or ""),
         )
+        amount_due = max(Decimal("0.00"), _q(order.total) - _q(amount_paid))
+        payment_status = str(pos.get("payment_status") or "").strip().lower()
+        if not payment_status:
+            if amount_due <= 0:
+                payment_status = "paid"
+            elif amount_paid > 0:
+                payment_status = "partially_paid"
+            else:
+                payment_status = "due"
+        order_loyalty = metadata.get("loyalty") if isinstance(metadata.get("loyalty"), dict) else None
+        reward_discount = _q((order_loyalty or {}).get("discount_amount") or "0")
+        coupon_meta = metadata.get("coupon") if isinstance(metadata.get("coupon"), dict) else None
+        coupon_discount = _q((coupon_meta or {}).get("discount_amount") or "0")
+        combined_bill = _q(pos.get("bill_discount_amount") or "0")
+        # Manual bill discount only. Coupons are stored under metadata.coupon — when a
+        # coupon is present, older orders may have duplicated the amount into bill_*.
+        if coupon_meta:
+            bill_discount_only = Decimal("0.00")
+        else:
+            bill_discount_only = max(Decimal("0.00"), combined_bill - reward_discount)
+        order_lines = list(order.lines.all())
+        line_discount_total = _q(pos.get("line_discount_total") or "0")
+        if line_discount_total <= 0:
+            line_discount_total = sum(
+                (_q(line.discount_amount) for line in order_lines),
+                Decimal("0.00"),
+            ).quantize(Decimal("0.01"))
+        merchandise_gross = sum(
+            (_q(line.unit_price) * _q(line.quantity) for line in order_lines),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        # Prefer the actual inclusive fold when coupon meta disagrees with shelf math.
+        if coupon_meta and merchandise_gross > 0:
+            line_total_sum = sum(
+                (_q(line.line_total) for line in order_lines),
+                Decimal("0.00"),
+            ).quantize(Decimal("0.01"))
+            actual_save = max(Decimal("0.00"), merchandise_gross - line_total_sum)
+            coupon_from_actual = max(
+                Decimal("0.00"),
+                actual_save - line_discount_total - reward_discount,
+            )
+            if coupon_from_actual > 0:
+                coupon_discount = coupon_from_actual
+                coupon_meta = {**coupon_meta, "discount_amount": str(coupon_discount)}
         voucher_meta: dict[str, Any] = {
             "source_order_id": str(order.id),
             "source": "sale",
             "customer_name": customer_name,
             "gst": dict(supply),
+            "payment": {
+                "method": payment_method,
+                "status": payment_status,
+                "amount_paid": str(_q(amount_paid)),
+                "amount_due": str(_q(amount_due)),
+            },
+            "billing": {
+                "merchandise_gross": str(_q(merchandise_gross)),
+                "line_discount_total": str(line_discount_total),
+                "bill_discount_type": "" if coupon_meta else str(pos.get("bill_discount_type") or ""),
+                "bill_discount_value": "0" if coupon_meta else str(pos.get("bill_discount_value") or "0"),
+                "bill_discount_amount": str(bill_discount_only),
+                "coupon_discount": str(coupon_discount),
+                "reward_discount": str(reward_discount),
+                "reward_points": int((order_loyalty or {}).get("points_redeemed") or 0),
+                "points_earned": int((order_loyalty or {}).get("points_earned") or 0),
+                "points_to_earn": int(pos.get("points_to_earn") or 0),
+                "award_loyalty_points": pos.get("award_loyalty_points") is not False,
+                "taxable_value": str(_q(order.subtotal)),
+                "tax_total": str(_q(order.tax_total)),
+                "total": str(_q(order.total)),
+            },
         }
         if supply["customer_gstin"]:
             voucher_meta["customer_gstin"] = supply["customer_gstin"]
-        order_loyalty = metadata.get("loyalty") if isinstance(metadata.get("loyalty"), dict) else None
         if order_loyalty:
-            voucher_meta["loyalty"] = order_loyalty
+            voucher_meta["loyalty"] = dict(order_loyalty)
+        if coupon_meta:
+            voucher_meta["coupon"] = coupon_meta
+
+        pay_note = ""
+        if payment_method:
+            pay_note = f" · {payment_method.upper()}"
+        if amount_due > 0 and amount_paid > 0:
+            pay_note += f" · paid {_q(amount_paid)} · due {_q(amount_due)}"
+        elif amount_due > 0:
+            pay_note += f" · due {_q(amount_due)}"
 
         voucher = self.create_sale_voucher(
             tenant=tenant,
@@ -1400,10 +1577,344 @@ class BooksService:
                 "customer": order.customer,
                 "lines": lines,
                 "voucher_date": order.created_at.date(),
-                "notes": f"Sale {order.order_number}",
+                "notes": f"Sale {order.order_number}{pay_note}",
                 "amount_paid": amount_paid,
                 "cash_account_id": resolved_cash_id,
                 "linked_order": order,
+                "adjust_stock": False,
+                "is_interstate": supply["is_interstate"],
+                "place_of_supply": supply["place_of_supply"],
+                "metadata": voucher_meta,
+            },
+        )
+        return voucher
+
+    @staticmethod
+    def books_voucher_for_booking(*, tenant: Tenant, business: Business, booking_id: Any) -> ShopBooksVoucher | None:
+        return (
+            ShopBooksVoucher.objects.filter(
+                tenant=tenant,
+                business=business,
+                voucher_type=VoucherType.SALE,
+                metadata__source_booking_id=str(booking_id),
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+    def _service_pricing_for_books(self, *, tenant: Tenant, service_id: Any):
+        from apps.services.models import ServicePricing
+
+        if not service_id:
+            return None
+        pricing = (
+            ServicePricing.objects.require_tenant(tenant)
+            .filter(service_id=service_id, is_default=True)
+            .order_by("-created_at")
+            .first()
+        )
+        if pricing is None:
+            pricing = (
+                ServicePricing.objects.require_tenant(tenant)
+                .filter(service_id=service_id)
+                .order_by("-created_at")
+                .first()
+            )
+        return pricing
+
+    def _books_line_from_booking_item(self, *, tenant: Tenant, item: Any) -> dict[str, Any]:
+        from apps.services.models import Service, TaxConfiguration
+
+        service_id = getattr(item, "service_id", None)
+        service = (
+            Service.objects.require_tenant(tenant).filter(id=service_id).first()
+            if service_id
+            else None
+        )
+        rate = _q(getattr(item, "price_snapshot", None) or "0")
+        name = ""
+        if service is not None:
+            name = service.display_name or service.name
+        if not name:
+            name = "Service"
+        tax_rate = Decimal("0")
+        hsn_sac = ""
+        tax_inclusive = False
+        pricing = self._service_pricing_for_books(tenant=tenant, service_id=service_id)
+        # Older / migrated line items often have price_snapshot=0 — use catalog price.
+        if rate <= 0 and pricing is not None:
+            if pricing.sale_price is not None:
+                rate = _q(pricing.sale_price)
+            else:
+                rate = _q(pricing.base_price)
+        if pricing is not None:
+            tax_inclusive = bool(pricing.tax_inclusive)
+        if service is not None:
+            tax = (
+                TaxConfiguration.objects.require_tenant(tenant)
+                .filter(service=service, is_active_tax=True)
+                .order_by("-updated_at")
+                .first()
+            )
+            if tax is not None:
+                tax_rate = _q(tax.tax_rate)
+                hsn_sac = str(tax.tax_identifier or "").strip()
+            meta = service.metadata if isinstance(service.metadata, dict) else {}
+            if not hsn_sac:
+                hsn_sac = str(meta.get("hsn_sac") or meta.get("hsn") or meta.get("sac") or "").strip()
+        return {
+            "name": name,
+            "qty": Decimal("1"),
+            "rate": rate,
+            "discount": Decimal("0.00"),
+            "gst_rate": tax_rate,
+            "tax_inclusive": tax_inclusive,
+            "hsn_sac": hsn_sac,
+        }
+
+    def resolve_booking_payment_split(
+        self,
+        *,
+        total: Decimal,
+        payment_method: str,
+        amount_paid: Decimal | str | int | float | None,
+        customer: Any | None,
+    ) -> tuple[Decimal, Decimal, str]:
+        """POS-style paid/due split for booking completion (cash/upi/card/borrow)."""
+        bill = _q(total)
+        method = str(payment_method or "").strip().lower()
+        if method == "borrow":
+            default_paid = Decimal("0.00")
+        elif method in {"cash", "upi", "card"}:
+            default_paid = bill
+        else:
+            raise ValidationError(
+                {"payment_method": "payment_method must be cash, upi, card, or borrow."}
+            )
+
+        if amount_paid is None or amount_paid == "":
+            paid = default_paid
+        else:
+            paid = _q(amount_paid)
+        if paid < 0:
+            raise ValidationError({"amount_paid": "Amount paid cannot be negative."})
+        if paid > bill:
+            raise ValidationError({"amount_paid": "Amount paid cannot exceed the bill total."})
+
+        due = (bill - paid).quantize(Decimal("0.01"))
+        if due > 0 and customer is None:
+            raise ValidationError(
+                {
+                    "customer_id": (
+                        "A customer is required when the booking bill is not fully paid "
+                        "(partial payment or credit)."
+                    )
+                }
+            )
+        if due <= 0:
+            return paid, Decimal("0.00"), "paid"
+        if paid > 0:
+            return paid, due, "partially_paid"
+        return paid, due, "due"
+
+    def preview_booking_sale_total(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        booking: Any,
+    ) -> Decimal:
+        """Invoice total for a booking (same line/GST math as create_sale_from_booking)."""
+        lines, _reward, supply = self._booking_sale_lines_and_supply(
+            tenant=tenant, business=business, booking=booking
+        )
+        resolved_preview = [
+            self._resolve_line(tenant=tenant, business=business, raw=row) for row in lines
+        ]
+        preview_totals = compute_voucher_totals(
+            resolved_preview, interstate=bool(supply["is_interstate"])
+        )
+        return _q(preview_totals.get("total"))
+
+    def _booking_sale_lines_and_supply(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        booking: Any,
+    ) -> tuple[list[dict[str, Any]], Decimal, dict[str, Any]]:
+        line_items = list(booking.line_items.order_by("sort_order", "start_at"))
+        if line_items:
+            lines = [self._books_line_from_booking_item(tenant=tenant, item=item) for item in line_items]
+        else:
+
+            class _Pseudo:
+                service_id = booking.service_id
+                price_snapshot = Decimal("0.00")
+
+            lines = [self._books_line_from_booking_item(tenant=tenant, item=_Pseudo())]
+
+        if not lines or all(_q(row.get("rate")) <= 0 for row in lines):
+            raise ValidationError({"booking": "Booking has no priced services to invoice."})
+
+        metadata = booking.metadata if isinstance(getattr(booking, "metadata", None), dict) else {}
+        loyalty_meta = metadata.get("loyalty") if isinstance(metadata.get("loyalty"), dict) else {}
+        reward_discount = _q(loyalty_meta.get("discount_amount") or "0")
+        if loyalty_meta.get("refunded"):
+            reward_discount = Decimal("0.00")
+        if reward_discount > 0 and lines:
+            lines[0]["discount"] = _q(lines[0].get("discount") or 0) + reward_discount
+
+        customer = None
+        if getattr(booking, "customer_id", None):
+            customer = (
+                Customer.objects.require_tenant(tenant)
+                .filter(id=booking.customer_id, business=business)
+                .first()
+            )
+
+        from apps.shopie.services.gst import resolve_sale_supply
+
+        customer_gstin = str(
+            getattr(customer, "gstin", None) if customer is not None else ""
+        ).strip().upper()
+        supply = resolve_sale_supply(
+            business=business,
+            customer_gstin=customer_gstin,
+            delivery_state="",
+            place_of_supply="",
+        )
+        return lines, reward_discount, supply
+
+    @transaction.atomic
+    def create_sale_from_booking(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        booking: Any,
+        cash_account_id: UUID | str | None = None,
+    ) -> ShopBooksVoucher:
+        """Post a completed booking as a Books sale (GST tax invoice), idempotent per booking."""
+        from apps.bookings.models import BookingStatus
+
+        existing = self.books_voucher_for_booking(
+            tenant=tenant, business=business, booking_id=booking.id
+        )
+        if existing is not None:
+            return existing
+
+        if str(getattr(booking, "status", "") or "") != BookingStatus.COMPLETED:
+            raise ValidationError({"booking": "Only completed bookings can be posted to books."})
+
+        lines, reward_discount, supply = self._booking_sale_lines_and_supply(
+            tenant=tenant, business=business, booking=booking
+        )
+
+        metadata = booking.metadata if isinstance(getattr(booking, "metadata", None), dict) else {}
+        loyalty_meta = metadata.get("loyalty") if isinstance(metadata.get("loyalty"), dict) else {}
+        payment_meta = metadata.get("payment") if isinstance(metadata.get("payment"), dict) else {}
+
+        from apps.customers.services.loyalty import LoyaltyService
+
+        loyalty_svc = LoyaltyService()
+        booking_earn = int(
+            loyalty_svc.credited_earn_for_booking(tenant=tenant, booking_id=booking.id)
+            or loyalty_svc.expected_earn_for_booking(
+                tenant=tenant, business=business, booking=booking
+            )
+            or 0
+        )
+
+        customer = None
+        if getattr(booking, "customer_id", None):
+            customer = (
+                Customer.objects.require_tenant(tenant)
+                .filter(id=booking.customer_id, business=business)
+                .first()
+            )
+
+        resolved_preview = [
+            self._resolve_line(tenant=tenant, business=business, raw=row) for row in lines
+        ]
+        preview_totals = compute_voucher_totals(
+            resolved_preview, interstate=bool(supply["is_interstate"])
+        )
+        bill_total = _q(preview_totals["total"])
+
+        # Prefer stamped completion payment (POS-style); legacy completes fall back to full paid.
+        method = str(payment_meta.get("method") or metadata.get("payment_mode") or "pay_at_venue").strip().lower()
+        if payment_meta.get("amount_paid") not in (None, ""):
+            amount_paid = _q(payment_meta.get("amount_paid"))
+            amount_due = _q(payment_meta.get("amount_due") or max(Decimal("0.00"), bill_total - amount_paid))
+            pay_status = str(payment_meta.get("status") or ("paid" if amount_due <= 0 else "partially_paid" if amount_paid > 0 else "due"))
+        else:
+            amount_paid = bill_total
+            amount_due = Decimal("0.00")
+            pay_status = "paid"
+
+        if amount_paid > bill_total:
+            amount_paid = bill_total
+            amount_due = Decimal("0.00")
+            pay_status = "paid"
+
+        resolved_cash_id = cash_account_id or payment_meta.get("cash_account_id")
+        if amount_paid > 0 and not resolved_cash_id:
+            resolved_cash_id = self._ensure_cash_account(tenant=tenant, business=business).id
+        if amount_paid <= 0:
+            resolved_cash_id = None
+
+        customer_name = (
+            customer.display_name
+            if customer is not None and getattr(customer, "display_name", None)
+            else "Customer"
+        )
+        voucher_loyalty = dict(loyalty_meta) if loyalty_meta else {}
+        if booking_earn > 0:
+            voucher_loyalty["points_earned"] = booking_earn
+        method_label = {
+            "cash": "cash",
+            "upi": "UPI",
+            "card": "card",
+            "borrow": "credit",
+        }.get(method, method or "pay at venue")
+        voucher_meta: dict[str, Any] = {
+            "source_booking_id": str(booking.id),
+            "source": "booking",
+            "customer_name": customer_name,
+            "gst": dict(supply),
+            "payment": {
+                "method": method,
+                "status": pay_status,
+                "amount_paid": str(amount_paid),
+                "amount_due": str(amount_due),
+            },
+            "billing": {
+                "reward_discount": str(reward_discount),
+                "reward_points": int(loyalty_meta.get("points_redeemed") or 0),
+                "points_earned": booking_earn,
+                "points_to_earn": booking_earn,
+                "taxable_value": str(_q(preview_totals.get("subtotal"))),
+                "tax_total": str(_q(preview_totals.get("tax_total"))),
+                "total": str(bill_total),
+            },
+        }
+        if supply["customer_gstin"]:
+            voucher_meta["customer_gstin"] = supply["customer_gstin"]
+        if voucher_loyalty:
+            voucher_meta["loyalty"] = voucher_loyalty
+
+        booking_number = str(getattr(booking, "booking_number", "") or booking.id)
+        voucher = self.create_sale_voucher(
+            tenant=tenant,
+            business=business,
+            data={
+                "customer": customer,
+                "lines": lines,
+                "voucher_date": getattr(booking, "appointment_date", None) or timezone.localdate(),
+                "notes": f"Booking {booking_number} · {method_label}",
+                "amount_paid": amount_paid,
+                "cash_account_id": resolved_cash_id,
                 "adjust_stock": False,
                 "is_interstate": supply["is_interstate"],
                 "place_of_supply": supply["place_of_supply"],

@@ -123,7 +123,12 @@ class ShopDocumentShareLinkView(APIView):
                 "message": self.docs.share_message(payload),
                 "customer_phone": payload.get("customer_phone") or "",
                 "customer_email": payload.get("customer_email") or "",
+                "total": payload.get("total"),
+                "amount_paid": payload.get("amount_paid"),
                 "amount_due": payload.get("amount_due"),
+                "payment_method": payload.get("payment_method") or "",
+                "payment_label": payload.get("payment_label") or "",
+                "payment_status": payload.get("payment_status") or "",
             },
             status_code=status.HTTP_201_CREATED,
         )
@@ -236,4 +241,12 @@ def books_voucher_for_order(*, tenant, order) -> ShopBooksVoucher | None:
         )
         .order_by("-created_at")
         .first()
+    )
+
+
+def books_voucher_for_booking(*, tenant, business, booking) -> ShopBooksVoucher | None:
+    from apps.shopie.services.books import BooksService
+
+    return BooksService.books_voucher_for_booking(
+        tenant=tenant, business=business, booking_id=booking.id
     )

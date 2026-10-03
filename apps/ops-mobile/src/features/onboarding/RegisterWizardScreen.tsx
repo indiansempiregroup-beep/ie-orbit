@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  Image,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { BillingPlanCatalogItem } from '@ie-orbit/sdk';
+import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
@@ -17,43 +26,46 @@ import { SelectField } from '../../components/SelectField';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import { brand, colors, radius, shadows, spacing, typography } from '../../theme/tokens';
+import { colors, radius, shadows, spacing, typography } from '../../theme/tokens';
 import { layout } from '../../theme/layout';
+import {
+  BUSINESS_CATEGORIES,
+  CURRENCIES,
+  DATE_FORMATS,
+  detectDefaultCurrency,
+  detectDefaultTimezone,
+  INDUSTRIES,
+  LANGUAGES,
+  TIME_FORMATS,
+  TIMEZONES,
+  WEEK_START_DAYS,
+} from '../../constants/options';
 import { getApiErrorMessage } from '../../utils/format';
 import { emailFieldError } from '../../utils/emailValidation';
 import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../utils/googleAuth';
-import { PRODUCT_CATALOG, formatInrFromPaise, formatPlanDisplayName, getProductName, getRecommendedPlanCode, isRecommendedPlanCode, planSeatLine } from '../../utils/products';
+import { defaultPublicSiteUrl } from '../../utils/impersonationHandoff';
+import {
+  PRODUCT_CATALOG,
+  formatInrFromPaise,
+  formatPlanDisplayName,
+  getProductName,
+  getRecommendedPlanCode,
+  isRecommendedPlanCode,
+  planSeatLine,
+} from '../../utils/products';
 import { opsClient } from '../../api/client';
 import {
   defaultWeeklyHours,
   HOUR_DAYS,
   provisionWorkspace,
+  summarizeWeeklyHours,
   type RegisterWizardValues,
   type WeeklyHours,
 } from '../../utils/provisionWorkspace';
 import type { AuthStackParamList } from '../../navigation/types';
 
-const STEPS = ['Account', 'Business', 'Preferences', 'Branding'] as const;
-
-const TIMEZONES = [
-  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },
-  { value: 'America/New_York', label: 'America/New_York (EST)' },
-  { value: 'Europe/London', label: 'Europe/London (GMT)' },
-  { value: 'UTC', label: 'UTC' },
-];
-
-const CURRENCIES = [
-  { value: 'INR', label: 'INR' },
-  { value: 'USD', label: 'USD' },
-  { value: 'GBP', label: 'GBP' },
-  { value: 'EUR', label: 'EUR' },
-];
-
-const LANGUAGES = [
-  { value: 'en', label: 'English' },
-  { value: 'hi', label: 'Hindi' },
-];
+const STEPS = ['Business', 'Owner', 'Preferences', 'Branding', 'Review'] as const;
 
 const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
   appointie: [
@@ -61,7 +73,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       product_code: 'appointie',
       plan_code: 'appointie-starter',
       name: 'Orbit Appoint Starter',
-      description: 'Scheduling and bookings for a single location.',
+      description: 'White-label customer app plus scheduling for a single location.',
       billing_interval: 'monthly',
       trial_days: 45,
       is_default: true,
@@ -75,7 +87,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       product_code: 'appointie',
       plan_code: 'appointie-pro',
       name: 'Orbit Appoint Pro',
-      description: 'Multi-location scheduling with full business intelligence.',
+      description: 'Ad-free white-label customer app, WhatsApp reminders, and full BI.',
       billing_interval: 'monthly',
       trial_days: 45,
       is_default: false,
@@ -91,7 +103,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       product_code: 'shopie',
       plan_code: 'shopie-starter',
       name: 'Orbit Mart Starter',
-      description: 'Catalog, POS, inventory, and billing for a single location.',
+      description: 'White-label customer app plus counter POS, online orders, and returns.',
       billing_interval: 'monthly',
       trial_days: 45,
       is_default: true,
@@ -105,7 +117,7 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
       product_code: 'shopie',
       plan_code: 'shopie-pro',
       name: 'Orbit Mart Pro',
-      description: 'Multi-location commerce with advanced inventory and billing.',
+      description: 'Ad-free white-label customer app, Instant Delivery with Porter/Shiprocket, GST books, and Grow.',
       billing_interval: 'monthly',
       trial_days: 45,
       is_default: false,
@@ -118,14 +130,33 @@ const FALLBACK_PACKAGES: Record<string, BillingPlanCatalogItem[]> = {
   ],
 };
 
+function websiteError(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(normalized);
+    if (!parsed.hostname.includes('.')) {
+      return 'Enter a valid website URL (for example, https://yoursalon.com)';
+    }
+    return undefined;
+  } catch {
+    return 'Enter a valid website URL (for example, https://yoursalon.com)';
+  }
+}
+
 function defaultValues(): RegisterWizardValues {
   return {
     businessName: '',
-    displayName: '',
+    businessCategory: '',
+    businessCategoryOther: '',
+    industry: '',
+    industryOther: '',
     businessEmail: '',
     businessPhone: '',
+    website: '',
     city: '',
-    country: 'IN',
+    country: '',
     state: '',
     address: '',
     addressLine2: '',
@@ -134,18 +165,24 @@ function defaultValues(): RegisterWizardValues {
     longitude: null,
     firstName: '',
     lastName: '',
+    displayName: '',
     email: '',
     mobile: '',
     ownerOtpCode: '',
-    timezone: 'Asia/Kolkata',
-    currency: 'INR',
+    acceptTerms: false,
+    acceptPrivacy: false,
+    timezone: detectDefaultTimezone(),
+    currency: detectDefaultCurrency(),
     language: 'en',
+    weekStartDay: 'monday',
+    dateFormat: 'DD/MM/YYYY',
+    timeFormat: '12h',
     selectedProducts: ['appointie'],
     planCodes: { appointie: 'appointie-pro' },
     skipHours: false,
     businessHours: defaultWeeklyHours(),
-    primaryColor: '#0f766e',
-    secondaryColor: '#14b8a6',
+    primaryColor: '#1A56DB',
+    secondaryColor: '#111827',
     logoAsset: null,
     affiliateCode: '',
     googleIdToken: '',
@@ -155,14 +192,21 @@ function defaultValues(): RegisterWizardValues {
 function initialValues(params?: AuthStackParamList['RegisterWizard']): RegisterWizardValues {
   const values = defaultValues();
   if (!params?.googleIdToken) return values;
+  const displayName = [params.firstName, params.lastName].filter(Boolean).join(' ');
   return {
     ...values,
     googleIdToken: params.googleIdToken,
     email: params.email || '',
     firstName: params.firstName || '',
     lastName: params.lastName || '',
+    displayName,
     businessEmail: params.email || '',
   };
+}
+
+function openLegalPage(path: '/terms' | '/privacy') {
+  const base = defaultPublicSiteUrl().replace(/\/$/, '');
+  void Linking.openURL(`${base}${path}`);
 }
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'RegisterWizard'>;
@@ -240,8 +284,39 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
   function validateStep(): Record<string, string> {
     const next: Record<string, string> = {};
     if (step === 0) {
+      if (!values.businessName.trim() || values.businessName.trim().length < 2) {
+        next.businessName = 'Business name is required';
+      }
+      if (!values.businessCategory.trim()) next.businessCategory = 'Select a category';
+      if (values.businessCategory === 'Other' && !values.businessCategoryOther.trim()) {
+        next.businessCategoryOther = 'Describe your business category';
+      }
+      if (!values.industry.trim()) next.industry = 'Select an industry';
+      if (values.industry === 'Other' && !values.industryOther.trim()) {
+        next.industryOther = 'Describe your industry';
+      }
+      const businessEmailError = emailFieldError(values.businessEmail);
+      if (businessEmailError) next.businessEmail = businessEmailError;
+      const phoneError = indianMobileError(values.businessPhone, true);
+      if (phoneError) next.businessPhone = phoneError;
+      const siteError = websiteError(values.website);
+      if (siteError) next.website = siteError;
+      if (!values.address.trim()) next.address = requiredMessage('Address');
+      if (!values.addressLine2.trim()) {
+        next.addressLine2 = requiredMessage('Flat, floor, building or landmark');
+      }
+      if (!values.city.trim()) next.city = requiredMessage('City');
+      if (!values.state.trim()) next.state = requiredMessage('State');
+      if (!values.country.trim()) next.country = requiredMessage('Country');
+      if (!values.postalCode.trim()) next.postalCode = requiredMessage('Postal code');
+      if (values.latitude == null || values.longitude == null) {
+        next.address = next.address || 'Select a map location for this address.';
+      }
+    }
+    if (step === 1) {
       if (!values.firstName.trim()) next.firstName = requiredMessage('First name');
       if (!values.lastName.trim()) next.lastName = requiredMessage('Last name');
+      if (!values.displayName.trim()) next.displayName = requiredMessage('Display name');
       const emailError = emailFieldError(values.email);
       if (emailError) next.email = emailError;
       const mobileError = indianMobileError(values.mobile, true);
@@ -249,21 +324,8 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
       if (!values.googleIdToken && !/^\d{6}$/.test(values.ownerOtpCode.trim())) {
         next.ownerOtpCode = 'Enter the 6-digit code from your email';
       }
-    }
-    if (step === 1) {
-      if (!values.businessName.trim()) next.businessName = requiredMessage('Business name');
-      if (!values.displayName.trim()) next.displayName = requiredMessage('Display name');
-      const businessEmailError = emailFieldError(values.businessEmail);
-      if (businessEmailError) next.businessEmail = businessEmailError;
-      const phoneError = indianMobileError(values.businessPhone, true);
-      if (phoneError) next.businessPhone = phoneError;
-      if (!values.address.trim()) next.address = requiredMessage('Address');
-      if (!values.city.trim()) next.city = requiredMessage('City');
-      if (!values.country.trim()) next.country = requiredMessage('Country');
-      if (!values.postalCode.trim()) next.postalCode = requiredMessage('Postal code');
-      if (values.latitude == null || values.longitude == null) {
-        next.address = next.address || 'Select a map location for this address.';
-      }
+      if (!values.acceptTerms) next.acceptTerms = 'Accept the terms to continue';
+      if (!values.acceptPrivacy) next.acceptPrivacy = 'Accept the privacy policy to continue';
     }
     if (step === 2) {
       if (!values.selectedProducts.length) next.products = 'Select at least one product.';
@@ -272,7 +334,9 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
       if (!values.skipHours) {
         const openDays = HOUR_DAYS.filter((day) => values.businessHours[day.value].open);
         if (!openDays.length) next.hours = 'Open at least one day, or skip hours for now.';
-        const invalid = openDays.some((day) => values.businessHours[day.value].start >= values.businessHours[day.value].end);
+        const invalid = openDays.some(
+          (day) => values.businessHours[day.value].start >= values.businessHours[day.value].end,
+        );
         if (invalid) next.hours = 'Closing time must be after opening time.';
       }
     }
@@ -283,40 +347,50 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
     const defaults = defaultValues();
     if (step === 0) {
       patch({
-        firstName: '',
-        lastName: '',
-        email: values.googleIdToken ? values.email : '',
-        mobile: '',
-        ownerOtpCode: '',
-        affiliateCode: '',
-      });
-      setOwnerOtpSent(false);
-    } else if (step === 1) {
-      patch({
         businessName: '',
-        displayName: '',
+        businessCategory: '',
+        businessCategoryOther: '',
+        industry: '',
+        industryOther: '',
         businessEmail: '',
         businessPhone: '',
+        website: '',
         address: '',
         addressLine2: '',
         city: '',
         state: '',
-        country: defaults.country,
+        country: '',
         postalCode: '',
         latitude: null,
         longitude: null,
       });
+    } else if (step === 1) {
+      patch({
+        firstName: '',
+        lastName: '',
+        displayName: '',
+        email: values.googleIdToken ? values.email : '',
+        mobile: '',
+        ownerOtpCode: '',
+        acceptTerms: false,
+        acceptPrivacy: false,
+        affiliateCode: '',
+      });
+      setOwnerOtpSent(false);
     } else if (step === 2) {
       patch({
         timezone: defaults.timezone,
         currency: defaults.currency,
         language: defaults.language,
+        weekStartDay: defaults.weekStartDay,
+        dateFormat: defaults.dateFormat,
+        timeFormat: defaults.timeFormat,
         selectedProducts: defaults.selectedProducts,
         planCodes: defaults.planCodes,
         skipHours: defaults.skipHours,
         businessHours: defaultWeeklyHours(),
       });
-    } else {
+    } else if (step === 3) {
       patch({
         primaryColor: defaults.primaryColor,
         secondaryColor: defaults.secondaryColor,
@@ -346,34 +420,170 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
     }
   }
 
+  const categoryLabel =
+    values.businessCategory === 'Other' && values.businessCategoryOther.trim()
+      ? `Other (${values.businessCategoryOther.trim()})`
+      : values.businessCategory;
+  const industryLabel =
+    values.industry === 'Other' && values.industryOther.trim()
+      ? `Other (${values.industryOther.trim()})`
+      : values.industry;
+
   const stepFields = (
     <>
       {step === 0 ? (
         <>
-          {!values.googleIdToken ? (
-            <GoogleSignInButton
-              onIdToken={async (idToken) => {
-                try {
-                  await loginWithGoogle(idToken);
-                } catch (err) {
-                  if (!isGoogleAccountNotRegistered(err)) throw err;
-                  const claims = decodeGoogleIdToken(idToken);
-                  patch({
-                    googleIdToken: idToken,
-                    email: claims.email || values.email,
-                    firstName: claims.given_name || values.firstName,
-                    lastName: claims.family_name || values.lastName,
-                    businessEmail: values.businessEmail || claims.email || '',
-                  });
-                }
-              }}
+          <Text style={styles.sectionLabel}>Business profile</Text>
+          <Text style={styles.hint}>Tell customers who you are. You can edit this later in Settings.</Text>
+          <Input
+            label="Business name"
+            required
+            value={values.businessName}
+            onChangeText={(v) => patch({ businessName: v })}
+            error={fieldErrors.businessName}
+          />
+          <SelectField
+            label="Business category"
+            required
+            value={values.businessCategory}
+            options={[
+              { value: '', label: 'Select category' },
+              ...BUSINESS_CATEGORIES.map((item) => ({ value: item, label: item })),
+            ]}
+            onChange={(v) => patch({ businessCategory: v, businessCategoryOther: v === 'Other' ? values.businessCategoryOther : '' })}
+            error={fieldErrors.businessCategory}
+          />
+          {values.businessCategory === 'Other' ? (
+            <Input
+              label="Describe your category"
+              required
+              value={values.businessCategoryOther}
+              onChangeText={(v) => patch({ businessCategoryOther: v })}
+              error={fieldErrors.businessCategoryOther}
             />
-          ) : (
-            <View style={styles.googleLinked}>
-              <Text style={styles.googleLinkedTitle}>Continuing with Google</Text>
-              <Text style={styles.googleLinkedCopy}>{values.email}</Text>
-            </View>
-          )}
+          ) : null}
+          <SelectField
+            label="Industry"
+            required
+            value={values.industry}
+            options={[
+              { value: '', label: 'Select industry' },
+              ...INDUSTRIES.map((item) => ({ value: item, label: item })),
+            ]}
+            onChange={(v) => patch({ industry: v, industryOther: v === 'Other' ? values.industryOther : '' })}
+            error={fieldErrors.industry}
+          />
+          {values.industry === 'Other' ? (
+            <Input
+              label="Describe your industry"
+              required
+              value={values.industryOther}
+              onChangeText={(v) => patch({ industryOther: v })}
+              error={fieldErrors.industryOther}
+            />
+          ) : null}
+          <Input
+            label="Business email"
+            required
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={values.businessEmail}
+            onChangeText={(v) => patch({ businessEmail: v })}
+            error={fieldErrors.businessEmail}
+          />
+          <Input
+            label="Business phone"
+            required
+            keyboardType="phone-pad"
+            value={values.businessPhone}
+            onChangeText={(v) => patch({ businessPhone: v })}
+            error={fieldErrors.businessPhone}
+          />
+          <Input
+            label="Website"
+            optional
+            autoCapitalize="none"
+            keyboardType="url"
+            value={values.website}
+            onChangeText={(v) => patch({ website: v })}
+            error={fieldErrors.website}
+          />
+
+          <Text style={styles.sectionLabel}>Location</Text>
+          <Text style={styles.hint}>Search or pin your address so customers and staff share the same place.</Text>
+          <AddressLocationPicker
+            required
+            fieldError={fieldErrors.address}
+            value={values.address}
+            latitude={values.latitude}
+            longitude={values.longitude}
+            onChangeText={(address) => patch({ address })}
+            onPlaceSelected={(place) => {
+              const cleared =
+                !place.line1 &&
+                !place.formattedAddress &&
+                place.latitude == null &&
+                place.longitude == null;
+              patch({
+                address: place.line1 || place.formattedAddress,
+                ...(cleared ? { addressLine2: '' } : {}),
+                city: place.city || '',
+                state: place.state || '',
+                country: place.country || '',
+                postalCode: place.postalCode || '',
+                latitude: place.latitude ?? null,
+                longitude: place.longitude ?? null,
+              });
+            }}
+          />
+          <Input
+            label="Flat, floor, building or landmark"
+            required
+            hint="Add door-level detail here — Google search only fills the street / area."
+            placeholder="Shop 12, Ground floor, near City Mall"
+            value={values.addressLine2}
+            onChangeText={(v) => patch({ addressLine2: v })}
+            error={fieldErrors.addressLine2}
+          />
+          <Input
+            label="Country"
+            required
+            value={values.country}
+            onChangeText={(v) => patch({ country: v })}
+            editable={!(values.latitude != null && values.longitude != null)}
+            error={fieldErrors.country}
+          />
+          <Input
+            label="State"
+            required
+            value={values.state}
+            onChangeText={(v) => patch({ state: v })}
+            editable={!(values.latitude != null && values.longitude != null)}
+            error={fieldErrors.state}
+          />
+          <Input
+            label="City"
+            required
+            value={values.city}
+            onChangeText={(v) => patch({ city: v })}
+            editable={!(values.latitude != null && values.longitude != null)}
+            error={fieldErrors.city}
+          />
+          <Input
+            label="Postal code"
+            required
+            value={values.postalCode}
+            onChangeText={(v) => patch({ postalCode: v })}
+            editable={!(values.latitude != null && values.longitude != null)}
+            error={fieldErrors.postalCode}
+          />
+        </>
+      ) : null}
+
+      {step === 1 ? (
+        <>
+          <Text style={styles.sectionLabel}>Owner account</Text>
+          <Text style={styles.hint}>This person will manage the workspace and receive billing emails.</Text>
           <Input
             label="First name"
             required
@@ -389,28 +599,40 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
             error={fieldErrors.lastName}
           />
           <Input
+            label="Display name"
+            required
+            value={values.displayName}
+            onChangeText={(v) => patch({ displayName: v })}
+            error={fieldErrors.displayName}
+            hint="How your name should appear in the workspace."
+          />
+          <Input
             label="Email"
             required
             autoCapitalize="none"
             keyboardType="email-address"
             value={values.email}
             editable={!values.googleIdToken}
-            onChangeText={(v) => patch({ email: v })}
+            onChangeText={(v) => {
+              patch({ email: v });
+              if (ownerOtpSent) setOwnerOtpSent(false);
+            }}
             error={fieldErrors.email}
           />
-          <Input
-            label="Mobile"
-            required
-            keyboardType="phone-pad"
-            value={values.mobile}
-            onChangeText={(v) => patch({ mobile: v })}
-            error={fieldErrors.mobile}
-          />
-          {!values.googleIdToken ? (
-            <>
+          {values.googleIdToken ? (
+            <View style={styles.googleLinked}>
+              <Text style={styles.googleLinkedTitle}>Continuing with Google</Text>
+              <Text style={styles.googleLinkedCopy}>
+                {values.email}. Email verification is not required.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.otpBlock}>
               <Button
-                label={sendingOtp ? 'Sending…' : ownerOtpSent ? 'Resend email code' : 'Send email verification code'}
+                label={sendingOtp ? 'Sending…' : ownerOtpSent ? 'Resend code' : 'Send email code'}
                 variant="outline"
+                size="sm"
+                icon="mail"
                 disabled={sendingOtp || !values.email.trim()}
                 onPress={() => {
                   void (async () => {
@@ -437,17 +659,84 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
                   })();
                 }}
               />
+              <Text style={styles.otpHint}>
+                {ownerOtpSent
+                  ? `Code sent to ${values.email}`
+                  : 'We will email a 6-digit code to verify this address.'}
+              </Text>
               <Input
                 label="Email verification code"
                 required
                 keyboardType="number-pad"
+                placeholder="6-digit code"
                 value={values.ownerOtpCode}
                 onChangeText={(v) => patch({ ownerOtpCode: v })}
                 error={fieldErrors.ownerOtpCode}
-                hint={ownerOtpSent ? `Code sent to ${values.email}` : 'Send a code first, then enter it here.'}
+              />
+            </View>
+          )}
+          <Input
+            label="Mobile"
+            required
+            keyboardType="phone-pad"
+            value={values.mobile}
+            onChangeText={(v) => patch({ mobile: v })}
+            error={fieldErrors.mobile}
+          />
+          {!values.googleIdToken ? (
+            <>
+              <Text style={styles.googleDivider}>Or continue with Google</Text>
+              <GoogleSignInButton
+                onIdToken={async (idToken) => {
+                  try {
+                    await loginWithGoogle(idToken);
+                  } catch (err) {
+                    if (!isGoogleAccountNotRegistered(err)) throw err;
+                    const claims = decodeGoogleIdToken(idToken);
+                    const nextDisplay =
+                      values.displayName ||
+                      [claims.given_name, claims.family_name].filter(Boolean).join(' ');
+                    patch({
+                      googleIdToken: idToken,
+                      email: claims.email || values.email,
+                      firstName: claims.given_name || values.firstName,
+                      lastName: claims.family_name || values.lastName,
+                      displayName: nextDisplay,
+                      businessEmail: values.businessEmail || claims.email || '',
+                      ownerOtpCode: '',
+                    });
+                    setOwnerOtpSent(false);
+                  }
+                }}
               />
             </>
           ) : null}
+
+          <Text style={styles.sectionLabel}>Agreements</Text>
+          <Pressable style={styles.checkRow} onPress={() => patch({ acceptTerms: !values.acceptTerms })}>
+            <View style={[styles.checkbox, values.acceptTerms && styles.checkboxOn]}>
+              {values.acceptTerms ? <Text style={styles.checkMark}>✓</Text> : null}
+            </View>
+            <Text style={styles.checkLabel}>
+              I accept the{' '}
+              <Text style={styles.link} onPress={() => openLegalPage('/terms')}>
+                Terms & Conditions
+              </Text>
+            </Text>
+          </Pressable>
+          {fieldErrors.acceptTerms ? <Text style={styles.error}>{fieldErrors.acceptTerms}</Text> : null}
+          <Pressable style={styles.checkRow} onPress={() => patch({ acceptPrivacy: !values.acceptPrivacy })}>
+            <View style={[styles.checkbox, values.acceptPrivacy && styles.checkboxOn]}>
+              {values.acceptPrivacy ? <Text style={styles.checkMark}>✓</Text> : null}
+            </View>
+            <Text style={styles.checkLabel}>
+              I accept the{' '}
+              <Text style={styles.link} onPress={() => openLegalPage('/privacy')}>
+                Privacy Policy
+              </Text>
+            </Text>
+          </Pressable>
+          {fieldErrors.acceptPrivacy ? <Text style={styles.error}>{fieldErrors.acceptPrivacy}</Text> : null}
           <Input
             label="Affiliate code"
             optional
@@ -459,110 +748,10 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
         </>
       ) : null}
 
-      {step === 1 ? (
-        <>
-          <Input
-            label="Business name"
-            required
-            value={values.businessName}
-            onChangeText={(v) => patch({ businessName: v, displayName: values.displayName || v })}
-            error={fieldErrors.businessName}
-          />
-          <Input
-            label="Display name"
-            required
-            value={values.displayName}
-            onChangeText={(v) => patch({ displayName: v })}
-            error={fieldErrors.displayName}
-          />
-          <Input
-            label="Business email"
-            required
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={values.businessEmail}
-            onChangeText={(v) => patch({ businessEmail: v })}
-            error={fieldErrors.businessEmail}
-          />
-          <Input
-            label="Phone"
-            required
-            keyboardType="phone-pad"
-            value={values.businessPhone}
-            onChangeText={(v) => patch({ businessPhone: v })}
-            error={fieldErrors.businessPhone}
-          />
-          <AddressLocationPicker
-            required
-            fieldError={fieldErrors.address}
-            value={values.address}
-            latitude={values.latitude}
-            longitude={values.longitude}
-            onChangeText={(address) => patch({ address })}
-            onPlaceSelected={(place) => {
-              const cleared =
-                !place.line1 &&
-                !place.formattedAddress &&
-                place.latitude == null &&
-                place.longitude == null;
-              patch({
-                address: place.line1 || place.formattedAddress,
-                ...(cleared ? { addressLine2: '' } : {}),
-                city: place.city || '',
-                state: place.state || '',
-                country: place.country || '',
-                postalCode: place.postalCode || '',
-                latitude: place.latitude ?? null,
-                longitude: place.longitude ?? null,
-              });
-            }}
-          />
-        <Input
-          label="Flat, floor, building or landmark"
-          optional
-          hint="Add door-level detail here — Google search only fills the street / area."
-          placeholder="Shop 12, Ground floor, near City Mall"
-          value={values.addressLine2}
-          onChangeText={(v) => patch({ addressLine2: v })}
-        />
-        <Input
-          label="City"
-          required
-          value={values.city}
-          onChangeText={(v) => patch({ city: v })}
-          editable={!(values.latitude != null && values.longitude != null)}
-          error={fieldErrors.city}
-        />
-        <Input label="State" value={values.state} onChangeText={(v) => patch({ state: v })} editable={!(values.latitude != null && values.longitude != null)} />
-        <Input
-          label="Country code"
-          required
-          value={values.country}
-          onChangeText={(v) => patch({ country: v })}
-          autoCapitalize="characters"
-          editable={!(values.latitude != null && values.longitude != null)}
-          error={fieldErrors.country}
-        />
-        <Input
-          label="Postal code"
-          required
-          value={values.postalCode}
-          onChangeText={(v) => patch({ postalCode: v })}
-          editable={!(values.latitude != null && values.longitude != null)}
-          error={fieldErrors.postalCode}
-        />
-        </>
-      ) : null}
-
       {step === 2 ? (
         <>
-          <SelectField
-            label="Timezone"
-            required
-            value={values.timezone}
-            options={TIMEZONES}
-            onChange={(v) => patch({ timezone: v })}
-          />
+          <Text style={styles.sectionLabel}>Workspace preferences</Text>
+          <Text style={styles.hint}>Currency, time, and language for invoices and schedules.</Text>
           <SelectField
             label="Currency"
             required
@@ -571,12 +760,89 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
             onChange={(v) => patch({ currency: v })}
           />
           <SelectField
+            label="Timezone"
+            required
+            value={values.timezone}
+            options={TIMEZONES}
+            onChange={(v) => patch({ timezone: v })}
+          />
+          <SelectField
             label="Language"
             required
             value={values.language}
             options={LANGUAGES}
             onChange={(v) => patch({ language: v })}
           />
+          <SelectField
+            label="Week starts on"
+            required
+            value={values.weekStartDay}
+            options={WEEK_START_DAYS.map((item) => ({ value: item.value, label: item.label }))}
+            onChange={(v) => patch({ weekStartDay: v as 'monday' | 'sunday' })}
+          />
+          <SelectField
+            label="Date format"
+            required
+            value={values.dateFormat}
+            options={DATE_FORMATS.map((item) => ({ value: item.value, label: item.label }))}
+            onChange={(v) => patch({ dateFormat: v })}
+          />
+          <SelectField
+            label="Time format"
+            required
+            value={values.timeFormat}
+            options={TIME_FORMATS.map((item) => ({ value: item.value, label: item.label }))}
+            onChange={(v) => patch({ timeFormat: v as '12h' | '24h' })}
+          />
+
+          <View style={styles.hoursHeader}>
+            <Text style={styles.sectionLabel}>Business hours</Text>
+            <View style={styles.skipRow}>
+              <Text style={styles.hint}>Skip for now</Text>
+              <Switch
+                value={values.skipHours}
+                trackColor={{ true: colors.primary }}
+                onValueChange={(skipHours) => patch({ skipHours })}
+              />
+            </View>
+          </View>
+          {values.skipHours ? (
+            <Text style={styles.hint}>You can set hours later in Settings.</Text>
+          ) : (
+            <>
+              {fieldErrors.hours ? <Text style={styles.error}>{fieldErrors.hours}</Text> : null}
+              {HOUR_DAYS.map((day) => {
+                const row = values.businessHours[day.value];
+                return (
+                  <View key={day.value} style={styles.hoursCard}>
+                    <View style={styles.hoursRow}>
+                      <Text style={styles.dayLabel}>{day.label}</Text>
+                      <Switch
+                        value={row.open}
+                        trackColor={{ true: colors.primary }}
+                        onValueChange={(open) => updateHours(day.value, { open })}
+                      />
+                    </View>
+                    {row.open ? (
+                      <View style={styles.times}>
+                        <TimeField
+                          label="Opens"
+                          value={row.start}
+                          onChange={(start) => updateHours(day.value, { start })}
+                        />
+                        <TimeField
+                          label="Closes"
+                          value={row.end}
+                          onChange={(end) => updateHours(day.value, { end })}
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </>
+          )}
+
           <Text style={styles.sectionLabel}>Products</Text>
           {fieldErrors.products ? <Text style={styles.error}>{fieldErrors.products}</Text> : null}
           <Text style={styles.hint}>Select one or both. Packages stay inside the product card.</Text>
@@ -593,7 +859,10 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
                     patch({ selectedProducts });
                   }}
                 >
-                  <Text style={styles.packageTitle}>{selected ? '✓  ' : ''}{product.name}</Text>
+                  <Text style={styles.packageTitle}>
+                    {selected ? '✓  ' : ''}
+                    {product.name}
+                  </Text>
                   <Text style={styles.hint}>{product.description}</Text>
                 </Pressable>
                 <Text style={styles.packageLabel}>Choose a package</Text>
@@ -618,65 +887,18 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
                         {isRecommendedPlanCode(plan.plan_code) ? ' · Recommended' : ''}
                       </Text>
                       <Text style={styles.packageMeta}>
-                        {formatInrFromPaise(plan.amount_paise) ? `${formatInrFromPaise(plan.amount_paise)}/month` : 'Trial first'}
+                        {formatInrFromPaise(plan.amount_paise)
+                          ? `${formatInrFromPaise(plan.amount_paise)}/month`
+                          : 'Trial first'}
                       </Text>
                       <Text style={styles.hint}>{plan.description}</Text>
-                      <Text style={styles.packageMeta}>
-                        {planSeatLine(plan)}
-                      </Text>
+                      <Text style={styles.packageMeta}>{planSeatLine(plan)}</Text>
                     </Pressable>
                   );
                 })}
               </View>
             );
           })}
-          <View style={styles.hoursHeader}>
-            <Text style={styles.sectionLabel}>Business hours</Text>
-            <View style={styles.skipRow}>
-              <Text style={styles.hint}>Skip for now</Text>
-              <Switch
-                value={values.skipHours}
-                trackColor={{ true: colors.primary }}
-                onValueChange={(skipHours) => patch({ skipHours })}
-              />
-            </View>
-          </View>
-          {values.skipHours ? (
-            <Text style={styles.hint}>You can set hours later in Settings.</Text>
-          ) : (
-            <>
-              {fieldErrors.hours ? <Text style={styles.error}>{fieldErrors.hours}</Text> : null}
-              {HOUR_DAYS.map((day) => {
-              const row = values.businessHours[day.value];
-              return (
-                <View key={day.value} style={styles.hoursCard}>
-                  <View style={styles.hoursRow}>
-                    <Text style={styles.dayLabel}>{day.label}</Text>
-                    <Switch
-                      value={row.open}
-                      trackColor={{ true: colors.primary }}
-                      onValueChange={(open) => updateHours(day.value, { open })}
-                    />
-                  </View>
-                  {row.open ? (
-                    <View style={styles.times}>
-                      <TimeField
-                        label="Opens"
-                        value={row.start}
-                        onChange={(start) => updateHours(day.value, { start })}
-                      />
-                      <TimeField
-                        label="Closes"
-                        value={row.end}
-                        onChange={(end) => updateHours(day.value, { end })}
-                      />
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })}
-            </>
-          )}
         </>
       ) : null}
 
@@ -705,83 +927,277 @@ export function RegisterWizardScreen({ navigation, route }: Props) {
         </>
       ) : null}
 
-      {error ? <FormAlert message={error} /> : null}
+      {step === 4 ? (
+        <>
+          {error ? <FormAlert message={error} /> : null}
+          <View style={styles.reviewCard}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.sectionLabel}>Business</Text>
+              <Button label="Edit" variant="ghost" onPress={() => setStep(0)} />
+            </View>
+            <Text style={styles.reviewLine}>
+              {values.businessName} · {categoryLabel} · {industryLabel}
+            </Text>
+            <Text style={styles.reviewLine}>
+              {values.businessEmail} · {values.businessPhone}
+            </Text>
+            {values.website.trim() ? <Text style={styles.reviewLine}>{values.website.trim()}</Text> : null}
+            <Text style={styles.reviewLine}>
+              {[values.addressLine2, values.address, values.city, values.state, values.country, values.postalCode]
+                .filter(Boolean)
+                .join(', ')}
+            </Text>
+          </View>
+          <View style={styles.reviewCard}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.sectionLabel}>Owner</Text>
+              <Button label="Edit" variant="ghost" onPress={() => setStep(1)} />
+            </View>
+            <Text style={styles.reviewLine}>
+              {values.firstName} {values.lastName} ({values.displayName})
+            </Text>
+            <Text style={styles.reviewLine}>
+              {values.email} · {values.mobile}
+            </Text>
+            {values.googleIdToken ? <Text style={styles.reviewLine}>Continuing with Google</Text> : null}
+            {values.affiliateCode ? (
+              <Text style={styles.reviewLine}>Affiliate code: {values.affiliateCode}</Text>
+            ) : null}
+          </View>
+          <View style={styles.reviewCard}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.sectionLabel}>Preferences</Text>
+              <Button label="Edit" variant="ghost" onPress={() => setStep(2)} />
+            </View>
+            <Text style={styles.reviewLine}>
+              {values.currency} · {values.timezone} · {values.language}
+            </Text>
+            <Text style={styles.reviewLine}>
+              {values.dateFormat} · {values.timeFormat} · Week starts {values.weekStartDay}
+            </Text>
+            {values.selectedProducts.map((productId) => {
+              const plan = plansForProduct(productId).find((item) => item.plan_code === values.planCodes[productId]);
+              return (
+                <Text key={productId} style={styles.reviewLine}>
+                  {getProductName(productId)} ·{' '}
+                  {plan ? formatPlanDisplayName(plan.name, plan.plan_code) : values.planCodes[productId]}
+                </Text>
+              );
+            })}
+            <Text style={styles.reviewLine}>
+              Hours: {values.skipHours ? 'Skipped for now' : summarizeWeeklyHours(values.businessHours)}
+            </Text>
+          </View>
+          <View style={styles.reviewCard}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.sectionLabel}>Branding</Text>
+              <Button label="Edit" variant="ghost" onPress={() => setStep(3)} />
+            </View>
+            <Text style={styles.reviewLine}>
+              {values.primaryColor} / {values.secondaryColor}
+            </Text>
+            {values.logoAsset?.uri ? (
+              <Image source={{ uri: values.logoAsset.uri }} style={styles.reviewLogo} />
+            ) : null}
+          </View>
+        </>
+      ) : null}
 
-      <View style={styles.actions}>
-        {step > 0 ? <Button label="Back" variant="outline" onPress={() => setStep((s) => s - 1)} /> : null}
-        <Button label="Clear" variant="ghost" onPress={clearCurrentStep} />
-        {step < STEPS.length - 1 ? (
-          <Button
-            label="Continue"
-            fullWidth
-            onPress={() => {
-              const nextErrors = validateStep();
-              if (Object.keys(nextErrors).length) {
-                setFieldErrors(nextErrors);
-                setError(Object.values(nextErrors)[0]);
-                return;
-              }
-              setFieldErrors({});
-              setError(null);
-              setStep((s) => s + 1);
-            }}
-          />
-        ) : (
-          <Button label="Create workspace" loading={submitting} fullWidth onPress={() => void finish()} />
-        )}
-        <Button label="Already have an account?" variant="ghost" onPress={() => navigation.navigate('Login')} />
-      </View>
+      {step !== 4 && error ? <FormAlert message={error} /> : null}
     </>
   );
 
-  return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {isDesktop ? (
-        <View style={styles.desktopCanvas}>
-          <RefreshableScrollView contentContainerStyle={styles.desktopScroll}>
-            <View style={styles.desktopCard}>
-              <Text style={styles.desktopKicker}>New workspace</Text>
-              <Text style={styles.desktopTitle}>Register your business</Text>
-              <Text style={styles.desktopStep}>
-                Step {step + 1} of {STEPS.length}: {STEPS[step]}
-              </Text>
-              <View style={styles.desktopBody}>{stepFields}</View>
-            </View>
-          </RefreshableScrollView>
-        </View>
+  function goNext() {
+    const nextErrors = validateStep();
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setError(Object.values(nextErrors)[0]);
+      return;
+    }
+    setFieldErrors({});
+    setError(null);
+    setStep((s) => s + 1);
+  }
+
+  const footerActions = (
+    <View style={styles.footerRow}>
+      {step > 0 ? (
+        <Button
+          label="Back"
+          variant="outline"
+          size="sm"
+          icon="arrow-left"
+          style={styles.footerBtn}
+          onPress={() => setStep((s) => s - 1)}
+        />
       ) : (
-        <>
-          <LinearGradient
-            colors={[brand.gradientStart, brand.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.header, { paddingTop: insets.top + spacing.lg }]}
-          >
-            <Text style={styles.kicker}>New workspace</Text>
-            <Text style={styles.title}>Register your business</Text>
-            <Text style={styles.stepLabel}>
+        <Button
+          label="Sign in"
+          variant="outline"
+          size="sm"
+          icon="log-in"
+          style={styles.footerBtn}
+          onPress={() => navigation.navigate('Login')}
+        />
+      )}
+      {step < STEPS.length - 1 ? (
+        <Button
+          label="Clear"
+          variant="outline"
+          size="sm"
+          icon="rotate-ccw"
+          style={styles.footerBtn}
+          onPress={clearCurrentStep}
+        />
+      ) : null}
+      {step < STEPS.length - 1 ? (
+        <Button label="Continue" size="sm" icon="arrow-right" style={styles.footerPrimary} onPress={goNext} />
+      ) : (
+        <Button
+          label={submitting ? 'Creating…' : 'Create account'}
+          loading={submitting}
+          size="sm"
+          icon="check"
+          style={styles.footerPrimary}
+          onPress={() => void finish()}
+        />
+      )}
+    </View>
+  );
+
+  if (isDesktop) {
+    return (
+      <View style={styles.desktopCanvas}>
+        <RefreshableScrollView contentContainerStyle={styles.desktopScroll}>
+          <View style={styles.desktopCard}>
+            <Text style={styles.desktopKicker}>New workspace</Text>
+            <Text style={styles.desktopTitle}>Create your workspace</Text>
+            <Text style={styles.desktopStep}>
               Step {step + 1} of {STEPS.length}: {STEPS[step]}
             </Text>
-          </LinearGradient>
-          <RefreshableScrollView contentContainerStyle={styles.content}>{stepFields}</RefreshableScrollView>
-        </>
-      )}
-    </KeyboardAvoidingView>
+            <View style={styles.desktopBody}>
+              {stepFields}
+              <View style={styles.actions}>{footerActions}</View>
+            </View>
+          </View>
+        </RefreshableScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.mobileRoot}>
+      <View style={[styles.progressHeader, { paddingTop: insets.top }]}>
+        <View style={styles.progressMeta}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={styles.progressBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <Feather name="arrow-left" size={20} color={colors.foreground} />
+          </Pressable>
+          <Text style={styles.progressStepName}>{STEPS[step]}</Text>
+          <Text style={styles.progressCount}>
+            {step + 1} / {STEPS.length}
+          </Text>
+        </View>
+        <View
+          style={styles.progressSegments}
+          accessibilityRole="progressbar"
+          accessibilityValue={{ min: 1, max: STEPS.length, now: step + 1 }}
+        >
+          {STEPS.map((label, index) => {
+            const filled = index <= step;
+            const current = index === step;
+            return (
+              <View
+                key={label}
+                style={[
+                  styles.progressSegment,
+                  filled ? styles.progressSegmentFilled : null,
+                  current ? styles.progressSegmentCurrent : null,
+                ]}
+              />
+            );
+          })}
+        </View>
+      </View>
+      <FormScreen
+        contentContainerStyle={styles.content}
+        footer={footerActions}
+        footerStyle={styles.footerChrome}
+      >
+        {stepFields}
+      </FormScreen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  header: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.lg, backgroundColor: brand.primary },
-  kicker: {
-    ...typography.caption,
-    color: 'rgba(255,255,255,0.8)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  mobileRoot: { flex: 1, backgroundColor: colors.card },
+  progressHeader: {
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+    zIndex: 2,
   },
-  title: { ...typography.heading, fontSize: 24, color: colors.primaryForeground, marginTop: spacing.sm },
-  stepLabel: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginTop: spacing.sm },
-  content: { padding: spacing.xxl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  progressMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 32,
+  },
+  progressBack: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressStepName: {
+    ...typography.body,
+    color: colors.foreground,
+    fontWeight: '700',
+    flex: 1,
+  },
+  progressCount: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    fontWeight: '700',
+  },
+  progressSegments: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  progressSegment: {
+    flex: 1,
+    height: 7,
+    borderRadius: radius.full,
+    backgroundColor: colors.muted,
+  },
+  progressSegmentFilled: {
+    backgroundColor: colors.primary,
+  },
+  progressSegmentCurrent: {
+    backgroundColor: colors.primary,
+    height: 9,
+  },
+  content: { gap: spacing.md, paddingTop: spacing.md },
+  footerChrome: {
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  footerRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
+  footerBtn: { flex: 1 },
+  footerPrimary: { flex: 1.6 },
   hint: { ...typography.caption, color: colors.mutedForeground },
   error: { ...typography.caption, color: colors.destructive },
   googleLinked: {
@@ -794,7 +1210,37 @@ const styles = StyleSheet.create({
   },
   googleLinkedTitle: { ...typography.label, color: colors.foreground },
   googleLinkedCopy: { ...typography.caption, color: colors.mutedForeground },
+  otpBlock: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.muted,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  otpHint: { ...typography.caption, color: colors.mutedForeground },
+  googleDivider: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
   sectionLabel: { ...typography.body, color: colors.foreground, fontWeight: '600', marginTop: spacing.sm },
+  checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  checkMark: { color: colors.primaryForeground, fontSize: 14, fontWeight: '700', lineHeight: 16 },
+  checkLabel: { ...typography.body, color: colors.foreground, flex: 1 },
+  link: { color: colors.primary, fontWeight: '600', textDecorationLine: 'underline' },
   productCard: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -839,6 +1285,29 @@ const styles = StyleSheet.create({
   hoursRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dayLabel: { ...typography.body, color: colors.foreground, fontWeight: '600' },
   times: { gap: spacing.sm },
+  reviewCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    gap: spacing.xs,
+    ...shadows.soft,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  reviewLine: { ...typography.body, color: colors.foreground },
+  reviewLogo: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+    backgroundColor: colors.muted,
+  },
   actions: { gap: spacing.md, marginTop: spacing.lg },
   desktopCanvas: { flex: 1, backgroundColor: colors.background },
   desktopScroll: {

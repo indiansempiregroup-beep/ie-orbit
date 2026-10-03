@@ -296,7 +296,11 @@ class MediaFileView(APIView):
     )
     def get(self, request: Request, media_id: str) -> Response:
         media = get_object_or_404(Media.objects.all(), id=media_id)
-        if media.visibility == MediaVisibility.PRIVATE:
+        tags = {str(tag).strip().lower() for tag in (media.tags or [])}
+        # Payment screenshots are shown in native <Image> (no auth headers). Treat the
+        # UUID file URL as a capability link for shop_payment_proof media.
+        payment_proof = "shop_payment_proof" in tags or "pre_order" in tags
+        if media.visibility == MediaVisibility.PRIVATE and not payment_proof:
             if not request.user or not request.user.is_authenticated:
                 raise NotAuthenticated()
             tenant = getattr(request, "current_tenant", None)

@@ -7,10 +7,12 @@ import { Button } from './ui/Button';
 import {
   bookingCustomerLabel,
   bookingCustomerPhone,
+  bookingPriceTotal,
   bookingServiceLabel,
   bookingStaffLabel,
 } from '../utils/bookingDisplay';
-import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
+import { formatMoney } from '../features/shop/posPayment';
+import { colors, fonts, radius, shadows, spacing, typography } from '../theme/tokens';
 
 type Props = {
   bookings: Booking[];
@@ -18,6 +20,7 @@ type Props = {
   serviceMap: Map<string, string>;
   customerMap: Map<string, string>;
   staffMap: Map<string, string>;
+  currency?: string | null;
   onPressBooking: (bookingId: string) => void;
   onSeeAll: () => void;
   onCreateBooking: () => void;
@@ -31,6 +34,7 @@ export function TodayBookingsPanel({
   serviceMap,
   customerMap,
   staffMap,
+  currency,
   onPressBooking,
   onSeeAll,
   onCreateBooking,
@@ -57,6 +61,7 @@ export function TodayBookingsPanel({
       renderItem={(index, activeIndex) => {
         const booking = bookings[index];
         if (!booking) return null;
+        const total = bookingPriceTotal(booking);
         return (
           <BookingRow
             compact
@@ -71,6 +76,7 @@ export function TodayBookingsPanel({
             serviceCount={booking.line_items?.length || undefined}
             bookingNumber={booking.booking_number}
             status={booking.status}
+            priceLabel={total > 0 ? formatMoney(total, currency) : undefined}
             onPress={() => onPressBooking(booking.id)}
           />
         );
@@ -81,12 +87,13 @@ export function TodayBookingsPanel({
 
 const styles = StyleSheet.create({
   emptyCard: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.tint,
+    marginTop: spacing.sm,
+    backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
+    ...shadows.soft,
   },
   emptyLabel: {
     ...typography.caption,

@@ -74,8 +74,21 @@ export function WhatsAppNotificationTemplatesScreen() {
       onRefresh={load}
       footer={
         <View style={styles.footer}>
-          <Button label="Refresh status" variant="outline" loading={busy} onPress={() => void run('refresh')} />
-          <Button label="Sync missing" loading={busy} onPress={() => void run('sync')} />
+          <Button
+            label="Refresh status"
+            variant="outline"
+            icon="refresh-cw"
+            loading={busy}
+            style={styles.footerButton}
+            onPress={() => void run('refresh')}
+          />
+          <Button
+            label="Sync missing"
+            icon="cloud-upload"
+            loading={busy}
+            style={styles.footerButton}
+            onPress={() => void run('sync')}
+          />
         </View>
       }
     >
@@ -128,7 +141,8 @@ function TemplateGroup({
 }
 
 const styles = StyleSheet.create({
-  footer: { gap: spacing.sm },
+  footer: { flexDirection: 'row', gap: spacing.sm },
+  footerButton: { flex: 1 },
   error: { ...typography.body, color: colors.destructive },
   chips: { flexDirection: 'row', gap: spacing.sm },
   group: { gap: spacing.sm },

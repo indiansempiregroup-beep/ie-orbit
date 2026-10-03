@@ -246,12 +246,18 @@
 
 .public-layout .button.primary {
   background: var(--pub-blue);
-  box-shadow: none;
+  box-shadow: 0 4px 14px rgba(28, 113, 143, 0.28);
 }
 
 .public-layout .button.primary:hover {
+  background: #1c718f;
+  box-shadow: 0 6px 18px rgba(28, 113, 143, 0.32);
+}
+
+.public-layout .button.primary:active {
   background: #165f78;
-  box-shadow: 0 10px 25px #1c718f55;
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(28, 113, 143, 0.2);
 }
 
 .public-layout .button.neutral {

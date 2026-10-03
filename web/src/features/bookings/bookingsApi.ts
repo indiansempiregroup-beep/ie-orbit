@@ -49,8 +49,19 @@ export async function checkInBooking(client: IEOrbitClient, bookingId: string, r
   return response.data;
 }
 
-export async function completeBooking(client: IEOrbitClient, bookingId: string, reason?: string) {
-  const response = await client.bookings.complete(bookingId, reason ? { reason } : undefined);
+export async function completeBooking(
+  client: IEOrbitClient,
+  bookingId: string,
+  body?: {
+    reason?: string;
+    payment_method?: 'cash' | 'upi' | 'card' | 'borrow';
+    amount_paid?: string | number;
+    cash_account_id?: string | null;
+    payment_proof_url?: string;
+    payment_proof_media_id?: string;
+  },
+) {
+  const response = await client.bookings.complete(bookingId, body);
   return response.data;
 }
 

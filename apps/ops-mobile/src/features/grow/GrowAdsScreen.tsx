@@ -208,11 +208,17 @@ export function GrowAdsScreen() {
       footer={
         showForm ? (
           <View style={styles.footer}>
-            <Button label={busy ? 'Saving…' : editingId ? 'Update ad' : 'Create ad'} fullWidth loading={busy} onPress={() => void save()} />
-            <Button label="Cancel" variant="outline" fullWidth onPress={resetForm} />
+            <Button label="Cancel" variant="outline" style={styles.footerButton} onPress={resetForm} />
+            <Button
+              label={busy ? 'Saving…' : editingId ? 'Update ad' : 'Create ad'}
+              icon="save"
+              loading={busy}
+              style={styles.footerButton}
+              onPress={() => void save()}
+            />
           </View>
         ) : (
-          <Button label="Add ad" fullWidth onPress={startCreate} disabled={activeCount >= MAX_ADS} />
+          <Button label="Add ad" icon="plus" fullWidth onPress={startCreate} disabled={activeCount >= MAX_ADS} />
         )
       }
     >
@@ -322,7 +328,8 @@ const styles = StyleSheet.create({
   formTitle: { fontWeight: '700', color: colors.foreground, fontSize: 20 },
   help: { ...typography.body, color: colors.mutedForeground },
   error: { color: colors.destructive },
-  footer: { gap: spacing.sm },
+  footer: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
+  footerButton: { flex: 1 },
   card: {
     borderWidth: 1,
     borderColor: colors.border,

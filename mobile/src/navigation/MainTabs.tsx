@@ -72,6 +72,7 @@ export function MainTabs() {
       )}
       screenOptions={({ route }) => ({
         headerShown: false,
+        headerBackVisible: false,
         sceneStyle: showGoogleAds ? { paddingBottom: GOOGLE_AD_BANNER_HEIGHT } : undefined,
         tabBarActiveTintColor: primary,
         tabBarInactiveTintColor: colors.mutedForeground,

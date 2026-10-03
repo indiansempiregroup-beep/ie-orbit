@@ -16,6 +16,7 @@ import { Dialog } from '../../components/Dialog';
 import { formatTimestamp } from '../../lib/datetime';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { indianMobileError } from '../../lib/phoneValidation';
 
 export function StaffDetailPage() {
   const snackbar = useSnackbar();
@@ -150,6 +151,11 @@ export function StaffDetailPage() {
             event.preventDefault();
             setEditError(null);
             if (!staffId) return;
+            const phoneError = indianMobileError(formState.phone_number ?? '', true);
+            if (phoneError) {
+              setEditError(phoneError);
+              return;
+            }
             updateStaff.mutate(
               {
                 staffId,
@@ -189,9 +195,10 @@ export function StaffDetailPage() {
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
             <input
+              required
               value={formState.phone_number ?? ''}
               onChange={(event) => setFormState({ ...formState, phone_number: event.target.value })}
-              placeholder="Phone number"
+              placeholder="Phone number *"
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
           </div>

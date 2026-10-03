@@ -206,20 +206,38 @@ export function applyEnrichmentToRow(
   data: ShopBarcodeEnrichment,
   defaults: BulkProductDefaults,
 ): BulkProductRow {
-  const mrp = String(data.mrp || '').trim();
-  const gst = String(data.gst_rate || '').trim();
+  const mrpRaw = String(data.mrp || '')
+    .trim()
+    .replace(/,/g, '')
+    .replace(/₹/g, '');
+  const mrpAmount = Number(mrpRaw);
+  const usableMrp = mrpRaw && Number.isFinite(mrpAmount) && mrpAmount > 0 ? mrpRaw : '';
+  const gstRaw = String(data.gst_rate || '')
+    .trim()
+    .replace(/,/g, '');
+  const gstAmount = Number(gstRaw);
+  const usableGst = gstRaw && Number.isFinite(gstAmount) && gstAmount > 0 ? gstRaw : '';
+  const directPack = String(data.pack_size || data.serving_size || '').trim();
+  const packFromName = String(data.name || '').match(
+    /(\d+(?:[.,]\d+)?\s*(?:ml|mL|l|L|g|kg|gm|oz|pcs?|pack|caps?|tabs?))\b/i,
+  );
+  const packSize =
+    (directPack && /[a-zA-Z]/.test(directPack) ? directPack : '') ||
+    packFromName?.[1]?.trim() ||
+    directPack ||
+    row.pack_size;
   const next: BulkProductRow = {
     ...row,
     sku: data.sku || data.code || row.sku,
     name: data.name || row.name,
     brand: data.brand || row.brand,
-    pack_size: data.pack_size || data.serving_size || row.pack_size,
+    pack_size: packSize,
     barcode: data.code || row.barcode,
     category: data.category || guessShopProductCategory(data.categories) || row.category,
     image_url: data.front_image_url || data.local_image_url || data.image_url || row.image_url,
     hsn_sac: data.hsn_sac || row.hsn_sac,
-    gst_rate: gst && gst !== '0' && gst !== '0.00' ? gst : row.gst_rate,
-    price: mrp && mrp !== '0' && mrp !== '0.00' ? mrp : row.price,
+    gst_rate: usableGst || row.gst_rate,
+    price: usableMrp || row.price,
     error: '',
     lookingUp: false,
   };

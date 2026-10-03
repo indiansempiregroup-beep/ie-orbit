@@ -21,22 +21,27 @@ export function ShopOrdersPage() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return (orders.data ?? []).filter((order) => {
-      if (fulfillment && order.fulfillment_mode !== fulfillment) return false;
-      if (!term) return true;
-      const payment = formatShopOrderPayment(order).toLowerCase();
-      const haystack = [
-        order.order_number,
-        order.status,
-        order.fulfillment_mode,
-        String(order.total),
-        payment,
-        ...(order.lines ?? []).map((line) => line.product_name),
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(term);
-    });
+    return (orders.data ?? [])
+      .filter((order) => {
+        if (fulfillment && order.fulfillment_mode !== fulfillment) return false;
+        if (!term) return true;
+        const payment = formatShopOrderPayment(order).toLowerCase();
+        const haystack = [
+          order.order_number,
+          order.status,
+          order.fulfillment_mode,
+          String(order.total),
+          payment,
+          ...(order.lines ?? []).map((line) => line.product_name),
+        ]
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(term);
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+      );
   }, [orders.data, search, fulfillment]);
 
   return (

@@ -307,12 +307,19 @@ export function WhatsAppScreen() {
       onRefresh={onRefresh}
       footer={
         <View style={styles.footer}>
-          <Button label={busy ? 'Working…' : 'Open WhatsApp'} fullWidth onPress={() => void openWhatsApp()} />
+          <Button
+            label={busy ? 'Working…' : 'Open WhatsApp'}
+            variant="outline"
+            icon="message-circle"
+            style={styles.footerButton}
+            onPress={() => void openWhatsApp()}
+          />
           <Button
             label={busy ? 'Saving…' : 'Save defaults'}
+            icon="save"
             loading={busy}
-            fullWidth
             size="lg"
+            style={styles.footerButton}
             onPress={() => void save()}
           />
         </View>
@@ -486,6 +493,7 @@ const styles = StyleSheet.create({
   attachImage: { width: '100%', height: 180, borderRadius: radius.md, backgroundColor: colors.muted },
   removeAttach: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   removeAttachText: { color: colors.destructive, fontWeight: '600' },
-  footer: { gap: spacing.sm },
+  footer: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
+  footerButton: { flex: 1 },
   error: { color: colors.destructive },
 });

@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +23,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
 import { useBookings, useDashboardSummary } from '../../hooks/useOpsData';
+import { subscribeBookingsListRevision } from '../../utils/bookingsListRefresh';
 import { useShopOrders } from '../../hooks/useShopOrders';
 import { useBIOverview, useEntityMaps, usePlanFeatures } from '../../hooks/useOpsExtended';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -30,17 +31,19 @@ import {
   bookingCustomerLabel,
   bookingServiceLabel,
   filterUpcomingBookings,
+  sortBookingsByStart,
 } from '../../utils/bookingDisplay';
 import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/products';
 import { homeOrdersFromList } from '../../utils/shopOrderDisplay';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
 import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
-import { formatDateKey, formatTime } from '../../utils/format';
+import { businessDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksDashboard } from '@ie-orbit/sdk';
+import type { BIInsight, ShopBooksDashboard } from '@ie-orbit/sdk';
 import { formatMoney } from '../shop/shopBooksHelpers';
 import { DashboardAnalytics } from './DashboardAnalytics';
+import { InsightPanel } from '../bi/InsightPanel';
 
 export function DashboardScreen() {
   const { t } = useTranslation();
@@ -54,13 +57,12 @@ export function DashboardScreen() {
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const { has, hasAny } = usePlanFeatures();
-  const today = formatDateKey(new Date());
+  const today = businessDateKey(activeBusiness?.timezone);
   const { summary, todayCount, reload: reloadSummary } = useDashboardSummary();
   const { bookings, loading, reload: reloadBookings } = useBookings(today);
   const { data: bi, reload: reloadBi } = useBIOverview(showReports);
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
   const [books, setBooks] = useState<ShopBooksDashboard | null>(null);
-  const [fabOpen, setFabOpen] = useState(false);
 
   const subscribedIds = useMemo(
     () => getSubscribedProductIds(activeBusiness?.product_subscriptions),
@@ -97,10 +99,17 @@ export function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadBooks();
+      void reloadBookings({ silent: true });
       void reloadOrders();
       void reloadNotifications();
-    }, [loadBooks, reloadOrders, reloadNotifications]),
+    }, [loadBooks, reloadBookings, reloadOrders, reloadNotifications]),
   );
+
+  useEffect(() => {
+    return subscribeBookingsListRevision(() => {
+      void reloadBookings({ silent: true });
+    });
+  }, [reloadBookings]);
 
   const reload = async () => {
     await Promise.all([
@@ -114,9 +123,10 @@ export function DashboardScreen() {
   };
   const { refreshing, onRefresh } = usePullToRefresh(reload);
 
-  const upcoming = useMemo(() => filterUpcomingBookings(bookings).slice(0, 5), [bookings]);
+  const upcomingAll = useMemo(() => filterUpcomingBookings(bookings), [bookings]);
+  const upcoming = useMemo(() => upcomingAll.slice(0, 5), [upcomingAll]);
   const openOrders = useMemo(() => homeOrdersFromList(shopOrders), [shopOrders]);
-  const nextBooking = upcoming[0];
+  const nextBooking = useMemo(() => sortBookingsByStart(upcomingAll)[0], [upcomingAll]);
   const completedToday = useMemo(
     () => bookings.filter((b) => String(b.status || '').toLowerCase() === 'completed').length,
     [bookings],
@@ -130,7 +140,7 @@ export function DashboardScreen() {
   const insightLines = useMemo(() => {
     const lines: Array<{ icon: keyof typeof Feather.glyphMap; text: string }> = [];
     if (hasAppointie) {
-      const remaining = upcoming.length;
+      const remaining = upcomingAll.length;
       lines.push({
         icon: 'calendar',
         text:
@@ -184,7 +194,7 @@ export function DashboardScreen() {
     return lines.slice(0, 4);
   }, [
     hasAppointie,
-    upcoming.length,
+    upcomingAll,
     completedToday,
     todayCount,
     nextBooking,
@@ -197,26 +207,36 @@ export function DashboardScreen() {
     pets,
   ]);
 
+  const periodInsights = useMemo(() => {
+    const groups = [
+      bi?.appointie?.insights ?? bi?.insights ?? [],
+      bi?.shopie?.insights ?? [],
+      bi?.pets?.insights ?? [],
+    ];
+    const picked: BIInsight[] = [];
+    const queues = groups.map((group) => [...group]);
+    while (picked.length < 3 && queues.some((queue) => queue.length > 0)) {
+      for (const queue of queues) {
+        const next = queue.shift();
+        if (!next) continue;
+        picked.push(next);
+        if (picked.length >= 3) break;
+      }
+    }
+    return picked;
+  }, [bi]);
+
   const showFab = hasAppointie || showPos;
-  const fabNeedsMenu = hasAppointie && showPos;
+  const fabActionCount = (hasAppointie ? 1 : 0) + (showPos ? 1 : 0);
+  const fabStackOffset =
+    fabActionCount > 0 ? fabActionCount * 56 + (fabActionCount - 1) * 10 + 12 : 0;
 
   function openCreateBooking() {
-    setFabOpen(false);
     navigation.navigate('CreateBooking', {});
   }
 
   function openSale() {
-    setFabOpen(false);
     navigation.navigate('ShopPos');
-  }
-
-  function onFabPress() {
-    if (fabNeedsMenu) {
-      setFabOpen(true);
-      return;
-    }
-    if (hasAppointie) openCreateBooking();
-    else openSale();
   }
 
   const showHomeTabs = hasAppointie && showOrders;
@@ -228,6 +248,7 @@ export function DashboardScreen() {
       serviceMap={serviceMap}
       customerMap={customerMap}
       staffMap={staffMap}
+      currency={activeBusiness?.currency ?? summary?.currency}
       hideHeader={showHomeTabs}
       hidePanelMargin={showHomeTabs}
       onPressBooking={(bookingId) => navigation.navigate('BookingDetail', { bookingId })}
@@ -284,7 +305,7 @@ export function DashboardScreen() {
                 <Text style={styles.sectionTitle}>Today</Text>
                 {showHomeTabs ? (
                   <HomeOpsTabs
-                    bookingsCount={upcoming.length}
+                    bookingsCount={upcomingAll.length}
                     ordersCount={openOrders.length}
                     bookingsPanel={bookingsPanel}
                     ordersPanel={ordersPanel}
@@ -333,13 +354,21 @@ export function DashboardScreen() {
                 </View>
               ) : null}
 
+              {showReports && periodInsights.length ? (
+                <InsightPanel
+                  title="What to act on"
+                  subtitle="The strongest signals from the last 30 days."
+                  insights={periodInsights}
+                />
+              ) : null}
+
               {hasAppointie || shopieEnabled ? (
                 <TileGrid gap={spacing.md}>
                   {hasAppointie ? (
                     <StatTile
                       label="Today"
                       value={String(appointie?.today_bookings ?? todayCount)}
-                      hint={`${upcoming.length} still ahead`}
+                      hint={`${upcomingAll.length} still ahead`}
                       icon="calendar"
                       iconTone="blue"
                     />
@@ -347,7 +376,7 @@ export function DashboardScreen() {
                   {hasAppointie ? (
                     <StatTile
                       label="Month revenue"
-                      value={formatMoney(appointie?.estimated_revenue_month)}
+                      value={formatMoney(appointie?.estimated_revenue_month, revenueCurrency)}
                       hint={revenueCurrency || 'Est.'}
                       icon="trending-up"
                       iconTone="green"
@@ -367,7 +396,7 @@ export function DashboardScreen() {
                   {shopieEnabled ? (
                     <StatTile
                       label="GMV this month"
-                      value={formatMoney(shopie?.gmv_month)}
+                      value={formatMoney(shopie?.gmv_month, summary?.currency)}
                       hint={summary?.currency ?? ''}
                       icon="bar-chart-2"
                       iconTone="violet"
@@ -489,51 +518,48 @@ export function DashboardScreen() {
           style={[
             styles.assistantFab,
             {
-              bottom: isDesktop
-                ? spacing.xxl
-                : contentInset + (showFab ? 68 : 0),
+              bottom:
+                (isDesktop ? spacing.xxl : contentInset) + (showFab ? fabStackOffset : 0),
               right: isDesktop ? spacing.xxl : spacing.xl,
             },
           ]}
         />
       ) : null}
 
-      {showFab && !isDesktop ? (
-        <Pressable
-          style={[styles.fab, { bottom: contentInset, right: spacing.xl }]}
-          onPress={onFabPress}
-          accessibilityLabel={fabNeedsMenu ? 'Create booking or sale' : hasAppointie ? 'New booking' : 'New sale'}
+      {showFab ? (
+        <View
+          style={[
+            styles.fabStack,
+            {
+              bottom: isDesktop ? spacing.xxl : contentInset,
+              right: isDesktop ? spacing.xxl : spacing.xl,
+            },
+          ]}
         >
-          <Feather name="plus" size={24} color="#fff" />
-        </Pressable>
+          {hasAppointie ? (
+            <Pressable
+              style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+              onPress={openCreateBooking}
+              accessibilityRole="button"
+              accessibilityLabel="New booking"
+            >
+              <Feather name="calendar" size={18} color="#fff" />
+              <Text style={styles.fabLabel}>Book</Text>
+            </Pressable>
+          ) : null}
+          {showPos ? (
+            <Pressable
+              style={({ pressed }) => [styles.fab, styles.fabSale, pressed && styles.fabPressed]}
+              onPress={openSale}
+              accessibilityRole="button"
+              accessibilityLabel="New sale"
+            >
+              <Feather name="shopping-cart" size={18} color="#fff" />
+              <Text style={styles.fabLabel}>Sale</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
-
-      <Modal visible={fabOpen} transparent animationType="fade" onRequestClose={() => setFabOpen(false)}>
-        <Pressable style={styles.fabBackdrop} onPress={() => setFabOpen(false)}>
-          <View style={styles.fabSheet}>
-            <Text style={styles.fabSheetTitle}>Create</Text>
-            {hasAppointie ? (
-              <Pressable style={styles.fabOption} onPress={openCreateBooking}>
-                <IconBadge icon="calendar" tone="blue" />
-                <View style={styles.fabOptionCopy}>
-                  <Text style={styles.fabOptionLabel}>Booking</Text>
-                  <Text style={styles.fabOptionHint}>New appointment</Text>
-                </View>
-              </Pressable>
-            ) : null}
-            {showPos ? (
-              <Pressable style={styles.fabOption} onPress={openSale}>
-                <IconBadge icon="shopping-cart" tone="green" />
-                <View style={styles.fabOptionCopy}>
-                  <Text style={styles.fabOptionLabel}>Sale</Text>
-                  <Text style={styles.fabOptionHint}>POS checkout</Text>
-                </View>
-              </Pressable>
-            ) : null}
-            <Button label="Cancel" variant="outline" fullWidth onPress={() => setFabOpen(false)} />
-          </View>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -596,11 +622,12 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nextCard: {
-    backgroundColor: colors.tint,
+    backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
+    ...shadows.soft,
   },
   nextLabel: {
     ...typography.caption,
@@ -683,41 +710,35 @@ const styles = StyleSheet.create({
     position: 'absolute',
     zIndex: 20,
   },
-  fab: {
+  fabStack: {
     position: 'absolute',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 19,
+  },
+  fab: {
     width: 56,
     height: 56,
     borderRadius: 28,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 1,
     shadowColor: '#0B1F3A',
     shadowOpacity: 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
-    zIndex: 19,
   },
-  fabBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    justifyContent: 'flex-end',
-    padding: spacing.xl,
+  fabSale: {
+    backgroundColor: '#059669',
   },
-  fabSheet: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
+  fabPressed: { opacity: 0.92 },
+  fabLabel: {
+    fontSize: 9,
+    lineHeight: 10,
+    fontFamily: fonts.bodyBold,
+    color: '#fff',
+    letterSpacing: 0.4,
   },
-  fabSheetTitle: { ...typography.title, color: colors.foreground },
-  fabOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  fabOptionCopy: { flex: 1 },
-  fabOptionLabel: { ...typography.body, fontFamily: fonts.bodySemi, color: colors.foreground },
-  fabOptionHint: { ...typography.caption, color: colors.mutedForeground, marginTop: 2 },
 });

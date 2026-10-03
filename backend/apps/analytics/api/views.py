@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.exceptions import PermissionDenied
@@ -41,6 +40,15 @@ def _parse_dates(request: Request) -> tuple[date | None, date | None]:
     parsed_start = date.fromisoformat(start_date) if start_date else None
     parsed_end = date.fromisoformat(end_date) if end_date else None
     return parsed_start, parsed_end
+
+
+def _default_period(business: Business | None, start_date: date | None, end_date: date | None) -> tuple[date, date]:
+    if start_date is not None and end_date is not None:
+        return start_date, end_date
+    today = AnalyticsService().business_local_date(business)
+    resolved_end = end_date or today
+    resolved_start = start_date or (resolved_end - timedelta(days=29))
+    return resolved_start, resolved_end
 
 
 def _require_manager_reports_access(request: Request) -> None:
@@ -93,9 +101,7 @@ class BIViewSet(viewsets.ViewSet):
     def overview(self, request: Request) -> Response:
         parsed_start, parsed_end = _parse_dates(request)
         business = self._require_bi_feature(request, BI_FEATURE_OVERVIEW)
-        if parsed_start is None or parsed_end is None:
-            parsed_end = timezone.now().date()
-            parsed_start = parsed_end - timedelta(days=29)
+        parsed_start, parsed_end = _default_period(business, parsed_start, parsed_end)
         result = self.service.product_aware_overview(
             tenant=request.current_tenant,
             business=business,
@@ -108,6 +114,7 @@ class BIViewSet(viewsets.ViewSet):
     def revenue(self, request: Request) -> Response:
         parsed_start, parsed_end = _parse_dates(request)
         business = self._require_bi_feature(request, BI_FEATURE_REVENUE)
+        parsed_start, parsed_end = _default_period(business, parsed_start, parsed_end)
         result = self.service.revenue(
             tenant=request.current_tenant,
             business=business,
@@ -120,9 +127,7 @@ class BIViewSet(viewsets.ViewSet):
     def trends(self, request: Request) -> Response:
         parsed_start, parsed_end = _parse_dates(request)
         business = self._require_bi_feature(request, BI_FEATURE_REVENUE)
-        if parsed_start is None or parsed_end is None:
-            parsed_end = timezone.now().date()
-            parsed_start = parsed_end - timedelta(days=29)
+        parsed_start, parsed_end = _default_period(business, parsed_start, parsed_end)
         result = self.service.trends(
             tenant=request.current_tenant,
             business=business,
@@ -146,9 +151,7 @@ class BIViewSet(viewsets.ViewSet):
     def growth(self, request: Request) -> Response:
         parsed_start, parsed_end = _parse_dates(request)
         business = self._require_bi_feature(request, BI_FEATURE_GROWTH)
-        if parsed_start is None or parsed_end is None:
-            parsed_end = timezone.now().date()
-            parsed_start = parsed_end - timedelta(days=29)
+        parsed_start, parsed_end = _default_period(business, parsed_start, parsed_end)
         result = self.service.growth(
             tenant=request.current_tenant,
             business=business,
@@ -161,9 +164,7 @@ class BIViewSet(viewsets.ViewSet):
     def operations(self, request: Request) -> Response:
         parsed_start, parsed_end = _parse_dates(request)
         business = self._require_bi_feature(request, BI_FEATURE_REPORTS)
-        if parsed_start is None or parsed_end is None:
-            parsed_end = timezone.now().date()
-            parsed_start = parsed_end - timedelta(days=29)
+        parsed_start, parsed_end = _default_period(business, parsed_start, parsed_end)
         result = self.service.operations(
             tenant=request.current_tenant,
             business=business,
@@ -176,6 +177,7 @@ class BIViewSet(viewsets.ViewSet):
     def reports(self, request: Request) -> Response:
         parsed_start, parsed_end = _parse_dates(request)
         business = self._require_bi_feature(request, BI_FEATURE_REPORTS)
+        parsed_start, parsed_end = _default_period(business, parsed_start, parsed_end)
         result = self.service.reports(
             tenant=request.current_tenant,
             business=business,
@@ -194,7 +196,7 @@ class DashboardViewSet(viewsets.ViewSet):
         if not getattr(request, "current_tenant", None):
             raise PermissionDenied("A tenant context is required.")
         business = _resolve_business(request)
-        today = timezone.now().date()
+        today = self.service.business_local_date(business)
         today_count = 0
         if business is not None:
             queryset = Booking.objects.require_tenant(request.current_tenant).filter(

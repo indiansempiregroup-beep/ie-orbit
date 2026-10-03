@@ -148,6 +148,7 @@ def test_award_uses_service_points(loyalty_setup):
         to_status=BookingStatus.COMPLETED,
         actor=setup["owner"],
         reason="Done",
+        payment={"payment_method": "cash"},
     )
     account = CustomerLoyaltyAccount.objects.get(customer=setup["customer"])
     assert account.points_balance == 50
@@ -191,6 +192,65 @@ def test_redeem_and_cancel_refund(loyalty_setup):
 
 
 @pytest.mark.django_db
+def test_completed_booking_earn_reversed_on_refund_for_booking(loyalty_setup):
+    setup = loyalty_setup
+    booking = _make_booking(setup, number="BK-LOYAL-REV", status=BookingStatus.CONFIRMED)
+    BookingService().transition(
+        booking=booking,
+        to_status=BookingStatus.COMPLETED,
+        actor=setup["owner"],
+        reason="Done",
+        payment={"payment_method": "cash"},
+    )
+    account = CustomerLoyaltyAccount.objects.get(customer=setup["customer"])
+    assert account.points_balance == 50
+    LoyaltyService().refund_for_booking(
+        tenant=setup["tenant"],
+        business=setup["business"],
+        customer=setup["customer"],
+        booking_id=booking.id,
+        points_redeemed=0,
+    )
+    account.refresh_from_db()
+    assert account.points_balance == 0
+    assert CustomerLoyaltyLedger.objects.filter(
+        booking_id=booking.id, metadata__type="earn_reversal"
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_no_show_refunds_redeemed_points(loyalty_setup):
+    setup = loyalty_setup
+    loyalty = LoyaltyService()
+    loyalty.ensure_account(
+        tenant=setup["tenant"],
+        business=setup["business"],
+        customer=setup["customer"],
+    )
+    CustomerLoyaltyAccount.objects.filter(customer=setup["customer"]).update(points_balance=800)
+    booking = _make_booking(setup, number="BK-LOYAL-NOSHOW", status=BookingStatus.CONFIRMED)
+    snapshot = loyalty.redeem_for_booking(
+        tenant=setup["tenant"],
+        business=setup["business"],
+        customer=setup["customer"],
+        booking_id=booking.id,
+        service_id=setup["service"].id,
+        points_to_redeem=500,
+    )
+    booking.metadata = {"loyalty": snapshot}
+    booking.save(update_fields=["metadata", "updated_at"])
+
+    BookingService().transition(
+        booking=booking,
+        to_status=BookingStatus.NO_SHOW,
+        actor=setup["owner"],
+        reason="Did not arrive",
+    )
+    account = CustomerLoyaltyAccount.objects.get(customer=setup["customer"])
+    assert account.points_balance == 800
+
+
+@pytest.mark.django_db
 def test_redeem_respects_max_percent(loyalty_setup):
     setup = loyalty_setup
     with pytest.raises(ValidationError):
@@ -219,6 +279,7 @@ def test_disabled_program_skips_award(loyalty_setup):
         to_status=BookingStatus.COMPLETED,
         actor=setup["owner"],
         reason="Done",
+        payment={"payment_method": "cash"},
     )
     assert not CustomerLoyaltyAccount.objects.filter(customer=setup["customer"]).exists()
 

@@ -4,13 +4,16 @@ import {
   Alert,
   Image,
   Linking,
+  Platform,
   Pressable,
+  Share,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -28,7 +31,7 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateTime } from '../../utils/format';
-import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { resolveMediaUrl, resolveShopPaymentProofUrl } from '../../utils/mediaUrl';
 import { DeliveryTrackerMap } from './DeliveryTrackerMap';
 import { DeliveryProgressStepper } from './DeliveryProgressStepper';
 import * as Clipboard from 'expo-clipboard';
@@ -62,6 +65,7 @@ import {
 import type {
   MerchantCashfreeCheckout,
   MerchantRazorpayCheckout,
+  MobileShopOrderInvoice,
   ShopDeliveryLive,
   ShopOrder,
   ShopOrderLine,
@@ -127,6 +131,15 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
   const failureReason = live.subtitle || activeAttempt?.reason;
   const headline = String(live.headline || 'Delivery update').replace(/\s*·\s*\d+\s*min(?:utes?)?$/i, '');
   const promiseLabel = live.delivery_promise?.label;
+  const delivered =
+    live.terminal ||
+    ['delivered', 'completed'].includes(String(live.partner_status || '').toLowerCase()) ||
+    ['delivered', 'completed'].includes(String(live.order_status || '').toLowerCase());
+  const trackingTitle = delivered
+    ? headline || 'Delivered'
+    : isCourier && promiseLabel
+      ? promiseLabel
+      : headline;
   const showMap = live.show_map !== false && !isCourier && Boolean(live.dispatched);
 
   const renderEvents = (rows: typeof events) => (
@@ -163,8 +176,8 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
           <Text style={styles.trackingEyebrow}>
             {live.terminal ? 'DELIVERY STATUS' : isCourier ? 'SHIPMENT STATUS' : 'LIVE DELIVERY'}
           </Text>
-          <Text style={styles.trackingTitle}>{isCourier && promiseLabel ? promiseLabel : headline}</Text>
-          {isCourier && shipment?.carrier_label ? (
+          <Text style={styles.trackingTitle}>{trackingTitle}</Text>
+          {isCourier && shipment?.carrier_label && !delivered ? (
             <Text style={styles.trackingSubtitle}>Shipped with {shipment.carrier_label}</Text>
           ) : null}
           {failureReason ? <Text style={styles.trackingSubtitle}>{failureReason}</Text> : null}
@@ -284,8 +297,10 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [utr, setUtr] = useState('');
   const [proofUrl, setProofUrl] = useState('');
   const [proofLightboxOpen, setProofLightboxOpen] = useState(false);
+  const [lightboxMode, setLightboxMode] = useState<'claim' | 'view'>('view');
   const [paymentError, setPaymentError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [deliveryLive, setDeliveryLive] = useState<ShopDeliveryLive | null>(null);
@@ -388,6 +403,8 @@ export function ShopOrderDetailScreen({ route }: Props) {
   ]);
 
   const paymentStatus = order?.payment_status || '';
+  const submittedProofUri = resolveShopPaymentProofUrl(order) || '';
+  const lightboxUri = lightboxMode === 'claim' ? proofUrl || submittedProofUri : submittedProofUri || proofUrl;
   const needsAppPayment = order ? shopOrderNeedsAppPayment(order) : false;
   const needsGatewayPayment = order ? shopOrderNeedsGatewayPayment(order) : false;
   const cashOnHandover = order ? shopOrderIsCashOnHandover(order) : false;
@@ -416,12 +433,136 @@ export function ShopOrderDetailScreen({ route }: Props) {
     [business?.address_line1, business?.city, business?.postal_code].filter(Boolean).join(', ');
 
   const bill = order ? shopOrderBillBreakdown(order) : null;
+  const loyaltyEnabled = Boolean(bootstrap?.loyalty?.enabled);
+  const loyaltyLine =
+    bill && (loyaltyEnabled || bill.pointsEarned > 0 || bill.pointsToEarn > 0 || bill.rewardPoints > 0)
+      ? bill.pointsEarned > 0
+        ? `+${bill.pointsEarned} points earned · Enjoy rewards on next visit!`
+        : bill.pointsToEarn > 0
+          ? `+${bill.pointsToEarn} points to earn when paid · Enjoy rewards on next visit!`
+          : bill.rewardPoints > 0
+            ? `${bill.rewardPoints} points used on this bill`
+            : ''
+      : '';
+  const invoiceVoucherId = String(order?.books_voucher_id || '').trim();
+  const invoiceNumber = String(order?.books_voucher_number || order?.order_number || '').trim();
+  const invoicePendingStatuses = new Set(['cancelled', 'draft', 'cart']);
+  const showInvoicePending =
+    !invoiceVoucherId &&
+    Boolean(order) &&
+    !invoicePendingStatuses.has(String(order?.status || '').toLowerCase());
 
-  async function uploadProof() {
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
+  function invoiceViewUrl(invoice: MobileShopOrderInvoice): string {
+    // Always prefer the app’s API host (LAN IP on device). Backend view_url can be
+    // localhost/relative when API_BASE_URL is unset in local Docker.
+    const token = String(invoice.token || '').trim();
+    if (token) {
+      return `${getApiBaseUrl()}/public/shop-docs/${encodeURIComponent(token)}?format=html`;
+    }
+    const raw = String(invoice.view_url || invoice.public_url || invoice.pdf_url || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('/')) return `${getApiBaseUrl().replace(/\/api\/v1\/?$/, '')}${raw}`;
+    if (raw.includes('/open/shop-doc/')) {
+      const shareToken = raw.split('/open/shop-doc/')[1]?.split(/[?#]/)[0] || '';
+      if (shareToken) {
+        return `${getApiBaseUrl()}/public/shop-docs/${encodeURIComponent(shareToken)}?format=html`;
+      }
+    }
+    if (raw.includes('/public/shop-docs/') && !raw.includes('format=')) {
+      return `${raw}${raw.includes('?') ? '&' : '?'}format=html`;
+    }
+    return raw;
+  }
+
+  async function fetchOrderInvoice(): Promise<MobileShopOrderInvoice | null> {
+    const response = await mobileClient.mobile.getShopOrderInvoice(route.params.orderId, {
+      tenant_slug: tenantSlug,
+      business_code: businessCode,
     });
+    return response.data;
+  }
+
+  async function openInvoiceUrl(url: string) {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch {
+      const can = await Linking.canOpenURL(url);
+      if (!can) throw new Error('Cannot open invoice link on this device');
+      await Linking.openURL(url);
+    }
+  }
+
+  async function viewInvoice() {
+    setInvoiceBusy(true);
+    try {
+      const invoice = await fetchOrderInvoice();
+      if (!invoice?.available) {
+        toast.push(invoice?.reason || 'Tax invoice is not available yet.', 'error');
+        return;
+      }
+      const url = invoiceViewUrl(invoice);
+      if (!url) {
+        toast.push('Could not open tax invoice.', 'error');
+        return;
+      }
+      await openInvoiceUrl(url);
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Could not open tax invoice.', 'error');
+    } finally {
+      setInvoiceBusy(false);
+    }
+  }
+
+  async function shareInvoice() {
+    setInvoiceBusy(true);
+    try {
+      const invoice = await fetchOrderInvoice();
+      if (!invoice?.available) {
+        toast.push(invoice?.reason || 'Tax invoice is not available yet.', 'error');
+        return;
+      }
+      const url = invoiceViewUrl(invoice);
+      const text = String(invoice.message || '').trim();
+      const message = text.includes('http') ? text : [text, url].filter(Boolean).join('\n');
+      if (!message) {
+        toast.push('Could not prepare invoice share link.', 'error');
+        return;
+      }
+      await Share.share({ message, url: url || undefined });
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : 'Could not share tax invoice.', 'error');
+    } finally {
+      setInvoiceBusy(false);
+    }
+  }
+
+  async function uploadProof(source: 'camera' | 'library' = 'library') {
+    if (Platform.OS !== 'web') {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission needed', 'Allow camera access to capture the payment screenshot.');
+          return;
+        }
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission needed', 'Allow photo library access to upload a screenshot.');
+          return;
+        }
+      }
+    }
+
+    const picked =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+          });
     if (picked.canceled || !picked.assets[0] || !token) return;
     const asset = picked.assets[0];
     const form = new FormData();
@@ -438,7 +579,27 @@ export function ShopOrderDetailScreen({ route }: Props) {
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error?.message || 'Upload failed');
-    setProofUrl(String(json?.data?.payment_proof_url || ''));
+    const mediaId = String(json?.data?.media_id || '').trim();
+    const uploaded =
+      String(json?.data?.payment_proof_url || '').trim() ||
+      (mediaId ? `/api/v1/media/${mediaId}/file` : '');
+    setProofUrl(uploaded ? resolveMediaUrl(uploaded) : asset.uri);
+    if (paymentError) setPaymentError('');
+  }
+
+  function pickProofSource() {
+    if (Platform.OS === 'web') {
+      void uploadProof('library').catch((e) => setMessage(String(e)));
+      return;
+    }
+    Alert.alert('Payment screenshot', 'Capture the UPI success screen after you pay.', [
+      { text: 'Take photo', onPress: () => void uploadProof('camera').catch((e) => setMessage(String(e))) },
+      {
+        text: Platform.OS === 'ios' ? 'Photo Library' : 'Gallery',
+        onPress: () => void uploadProof('library').catch((e) => setMessage(String(e))),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   async function claimPayment() {
@@ -539,6 +700,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
     );
   }
 
+  const fulfillmentMode = String(order.fulfillment_mode || '').toLowerCase();
+  const isDelivery = fulfillmentMode === 'delivery';
+  const isPos = fulfillmentMode === 'pos';
   const slotLabel = [
     meta.preferredDate ? formatShopDateLabel(meta.preferredDate) : '',
     meta.preferredTime ? formatShopTimeLabel(meta.preferredTime) : '',
@@ -547,7 +711,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
     .join(' · ');
   const autoNote = [
     meta.preferredDate || meta.preferredTime
-      ? `${String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'Delivery' : 'Pickup'} preferred: ${[meta.preferredDate, meta.preferredTime].filter(Boolean).join(' ')}`
+      ? `${isDelivery ? 'Delivery' : 'Pickup'} preferred: ${[meta.preferredDate, meta.preferredTime].filter(Boolean).join(' ')}`
       : '',
     meta.fulfillmentNote,
   ]
@@ -566,7 +730,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
     })
     .filter((row) => row.remaining > 0);
   const canCancel = shopOrderCanCancel(order.status);
-  const delivered = shopOrderCanReturn(order.status);
+  const delivered = shopOrderCanReturn(order.status, order.fulfillment_mode);
   const canReturn =
     RETURNABLE_FULFILLMENT.has(String(order.fulfillment_mode).toLowerCase()) &&
     delivered &&
@@ -666,9 +830,10 @@ export function ShopOrderDetailScreen({ route }: Props) {
               name={
                 String(order.status).toLowerCase() === 'cancelled'
                   ? 'x-circle'
-                  : String(order.status).toLowerCase() === 'completed'
+                  : isPos ||
+                      ['completed', 'delivered'].includes(String(order.status).toLowerCase())
                     ? 'check-circle'
-                    : String(order.fulfillment_mode).toLowerCase() === 'delivery'
+                    : isDelivery
                       ? 'truck'
                       : 'package'
               }
@@ -702,7 +867,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
           </View>
         ) : null}
 
-        {!deliveryLive?.available && timeline.length ? (
+        {!isPos && !deliveryLive?.available && timeline.length ? (
           <View style={styles.card}>
             <View style={styles.timeline}>
               {timeline.map((step, index) => (
@@ -767,27 +932,29 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
         <View style={styles.card}>
           <Text style={styles.section}>
-            {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'Delivery address' : 'Pickup details'}
+            {isDelivery ? 'Delivery address' : isPos ? 'Purchase' : 'Pickup details'}
           </Text>
           <View style={styles.infoRow}>
             <Feather
-              name={String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'map-pin' : 'home'}
+              name={isDelivery ? 'map-pin' : isPos ? 'shopping-bag' : 'home'}
               size={16}
               color={primary}
             />
             <Text style={styles.infoText}>
-              {String(order.fulfillment_mode).toLowerCase() === 'delivery'
+              {isDelivery
                 ? order.delivery_address || 'Address on file'
-                : pickupAddress || shopFulfillmentLabel(order.fulfillment_mode)}
+                : isPos
+                  ? `${shopFulfillmentLabel(order.fulfillment_mode)} · ${business?.display_name || business?.business_name || 'Shop counter'}`
+                  : pickupAddress || shopFulfillmentLabel(order.fulfillment_mode)}
             </Text>
           </View>
           {meta.deliveryZone ? <Text style={styles.meta}>Zone · {meta.deliveryZone}</Text> : null}
-          {String(order.fulfillment_mode).toLowerCase() === 'delivery' && meta.deliveryMethod ? (
+          {isDelivery && meta.deliveryMethod ? (
             <Text style={styles.meta}>
               {meta.deliveryMethod === 'instant' ? 'Deliver now · rider after packing' : 'Standard delivery'}
             </Text>
           ) : null}
-          {slotLabel ? (
+          {!isPos && slotLabel ? (
             <View style={styles.infoRow}>
               <Feather name="clock" size={16} color={primary} />
               <Text style={styles.infoText}>Preferred {slotLabel}</Text>
@@ -822,18 +989,30 @@ export function ShopOrderDetailScreen({ route }: Props) {
           </View>
           {order.upi_utr ? (
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>UTR</Text>
+              <Text style={styles.summaryLabel}>UTR / reference</Text>
               <Text style={styles.summaryValue}>{order.upi_utr}</Text>
             </View>
           ) : null}
+          {submittedProofUri ? (
+            <Pressable
+              style={[styles.secondaryBtn, { borderColor: primary, marginTop: spacing.sm }]}
+              onPress={() => {
+                setLightboxMode('view');
+                setProofLightboxOpen(true);
+              }}
+              accessibilityLabel="View payment screenshot"
+            >
+              <Text style={{ color: primary, fontWeight: '700' }}>View screenshot</Text>
+            </Pressable>
+          ) : null}
         </View>
 
-        {cashOnHandover ? (
+        {cashOnHandover && !isPos ? (
           <View style={styles.card}>
             <Text style={styles.section}>Cash payment</Text>
             <Text style={styles.meta}>
               You will pay {formatShopMoney(order.total, order.currency)} in cash when you{' '}
-              {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'receive' : 'collect'} your order.
+              {isDelivery ? 'receive' : 'collect'} your order.
             </Text>
           </View>
         ) : null}
@@ -842,11 +1021,12 @@ export function ShopOrderDetailScreen({ route }: Props) {
           <Text style={styles.section}>Bill summary</Text>
           {bill ? (
             <>
-              {(bill.invoiceType === 'B2B' || bill.customerGstin) ? (
+              {bill.invoiceType === 'B2B' || bill.customerGstin || bill.booksVoucherNumber ? (
                 <Text style={styles.meta}>
-                  {bill.invoiceType}
+                  {bill.invoiceType || 'B2C'}
                   {bill.customerGstin ? ` · GSTIN ${bill.customerGstin}` : ''}
                   {bill.placeOfSupply ? ` · Place of supply ${bill.placeOfSupply}` : ''}
+                  {bill.booksVoucherNumber ? ` · ${bill.booksVoucherNumber}` : ''}
                 </Text>
               ) : null}
               <View style={styles.summaryRow}>
@@ -856,12 +1036,20 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 </Text>
               </View>
               {bill.lineDiscountTotal > 0 ? (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Item discounts</Text>
-                  <Text style={[styles.summaryValue, { color: colors.success }]}>
-                    −{formatShopMoney(bill.lineDiscountTotal, order.currency)}
-                  </Text>
-                </View>
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Product discount</Text>
+                    <Text style={[styles.summaryValue, { color: colors.success }]}>
+                      −{formatShopMoney(bill.lineDiscountTotal, order.currency)}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Subtotal</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatShopMoney(bill.merchandiseAfterLineDiscount, order.currency)}
+                    </Text>
+                  </View>
+                </>
               ) : null}
               {bill.billDiscount > 0 ? (
                 <View style={styles.summaryRow}>
@@ -881,10 +1069,10 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   </Text>
                 </View>
               ) : null}
-              {bill.rewardDiscount > 0 ? (
+              {bill.rewardDiscount > 0 || bill.rewardPoints > 0 ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
-                    Reward points{bill.rewardPoints > 0 ? ` (${bill.rewardPoints} pts)` : ''}
+                    Points used{bill.rewardPoints > 0 ? ` (${bill.rewardPoints})` : ''}
                   </Text>
                   <Text style={[styles.summaryValue, { color: colors.success }]}>
                     −{formatShopMoney(bill.rewardDiscount, order.currency)}
@@ -892,7 +1080,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 </View>
               ) : null}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Taxable value</Text>
+                <Text style={styles.summaryLabel}>Taxable</Text>
                 <Text style={styles.summaryValue}>
                   {formatShopMoney(bill.taxableSubtotal, order.currency)}
                 </Text>
@@ -929,15 +1117,96 @@ export function ShopOrderDetailScreen({ route }: Props) {
                     </View>
                   </>
                 )
-              ) : null}
+              ) : (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Tax</Text>
+                  <Text style={styles.summaryValue}>
+                    {formatShopMoney(bill.taxTotal, order.currency)}
+                  </Text>
+                </View>
+              )}
               <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text style={styles.totalLabel}>Payable</Text>
+                <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValue}>{formatShopMoney(bill.total, order.currency)}</Text>
+              </View>
+              {loyaltyLine ? (
+                <View style={styles.loyaltyHighlight}>
+                  <Text style={styles.loyaltyHighlightText}>{loyaltyLine}</Text>
+                </View>
+              ) : null}
+              {bill.paymentLabel ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Payment</Text>
+                  <Text style={styles.summaryValue}>{bill.paymentLabel}</Text>
+                </View>
+              ) : null}
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Received</Text>
+                <Text style={styles.summaryValue}>
+                  {formatShopMoney(bill.amountPaid, order.currency)}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text
+                  style={[styles.summaryLabel, bill.amountDue > 0 && { color: colors.warning }]}
+                >
+                  Balance due
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    bill.amountDue > 0 && { color: colors.warning, fontWeight: '700' },
+                  ]}
+                >
+                  {formatShopMoney(bill.amountDue, order.currency)}
+                </Text>
               </View>
             </>
           ) : null}
           <Text style={styles.placedAt}>Placed {formatDateTime(order.created_at)}</Text>
         </View>
+
+        {invoiceVoucherId ? (
+          <View style={styles.card}>
+            <Text style={styles.section}>Tax invoice</Text>
+            <Text style={styles.meta}>
+              {invoiceNumber ? `Invoice ${invoiceNumber}` : 'GST tax invoice for this order'}
+            </Text>
+            <View style={styles.invoiceActionsRow}>
+              <Pressable
+                style={[
+                  styles.invoiceActionBtn,
+                  styles.invoiceActionPrimary,
+                  { backgroundColor: primary },
+                  invoiceBusy && { opacity: 0.6 },
+                ]}
+                disabled={invoiceBusy}
+                onPress={() => void viewInvoice()}
+              >
+                <Text style={styles.buttonText}>{invoiceBusy ? 'Opening…' : 'View invoice'}</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.invoiceActionBtn,
+                  styles.invoiceActionSecondary,
+                  { borderColor: primary },
+                  invoiceBusy && { opacity: 0.6 },
+                ]}
+                disabled={invoiceBusy}
+                onPress={() => void shareInvoice()}
+              >
+                <Text style={{ color: primary, fontWeight: '700' }}>Share</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : showInvoicePending ? (
+          <View style={styles.card}>
+            <Text style={styles.section}>Tax invoice</Text>
+            <Text style={styles.meta}>
+              Tax invoice will appear here after the shop confirms and posts this order.
+            </Text>
+          </View>
+        ) : null}
 
         {needsGatewayPayment ? (
           <View style={styles.card}>
@@ -960,17 +1229,52 @@ export function ShopOrderDetailScreen({ route }: Props) {
             <Text style={styles.section}>Pay with UPI</Text>
             <View style={styles.qrWrap}>
               <QRCode value={order.upi_pay_url || ''} size={180} />
-              <Text style={styles.meta}>Pay the exact amount, then submit your UTR or screenshot below.</Text>
+              <Text style={styles.meta}>
+                Scan the QR, pay the exact amount, then upload the payment screenshot below.
+              </Text>
               {bootstrap?.business?.upi_vpa ? (
                 <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
               ) : null}
-              <Pressable
-                style={[styles.secondaryBtn, { borderColor: primary }]}
-                onPress={() => void Linking.openURL(order.upi_pay_url || '')}
-              >
-                <Text style={{ color: primary, fontWeight: '700' }}>Open UPI app</Text>
-              </Pressable>
             </View>
+            <Text style={[styles.section, { marginTop: spacing.md }]}>I’ve paid</Text>
+            <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
+            <Input
+              label="UTR / UPI reference"
+              value={utr}
+              onChangeText={(value) => {
+                setUtr(value);
+                if (paymentError) setPaymentError('');
+              }}
+              placeholder="UTR / UPI reference"
+              autoCapitalize="characters"
+              error={paymentError || undefined}
+            />
+            <Pressable
+              style={[styles.secondaryBtn, { borderColor: primary }]}
+              onPress={pickProofSource}
+            >
+              <Text style={{ color: primary, fontWeight: '700' }}>
+                {proofUrl ? 'Change payment screenshot' : 'Take / upload payment screenshot'}
+              </Text>
+            </Pressable>
+            {proofUrl ? (
+              <Pressable
+                onPress={() => {
+                  setLightboxMode('claim');
+                  setProofLightboxOpen(true);
+                }}
+                accessibilityLabel="View payment screenshot"
+              >
+                <Image source={{ uri: proofUrl }} style={styles.proof} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              style={[styles.button, { backgroundColor: primary }]}
+              disabled={busy}
+              onPress={() => void claimPayment()}
+            >
+              <Text style={styles.buttonText}>{busy ? 'Submitting…' : 'Submit for confirmation'}</Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -979,15 +1283,56 @@ export function ShopOrderDetailScreen({ route }: Props) {
             <Text style={styles.section}>Pay with UPI</Text>
             <View style={styles.qrWrap}>
               <Image source={{ uri: staticQrUrl }} style={styles.staticQr} />
-              <Text style={styles.meta}>Scan the shop QR, pay the exact amount, then submit your UTR or screenshot below.</Text>
+              <Text style={styles.meta}>
+                Scan the shop QR, pay the exact amount, then upload the payment screenshot below.
+              </Text>
               {bootstrap?.business?.upi_vpa ? (
                 <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
               ) : null}
             </View>
+            <Text style={[styles.section, { marginTop: spacing.md }]}>I’ve paid</Text>
+            <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
+            <Input
+              label="UTR / UPI reference"
+              value={utr}
+              onChangeText={(value) => {
+                setUtr(value);
+                if (paymentError) setPaymentError('');
+              }}
+              placeholder="UTR / UPI reference"
+              autoCapitalize="characters"
+              error={paymentError || undefined}
+            />
+            <Pressable
+              style={[styles.secondaryBtn, { borderColor: primary }]}
+              onPress={pickProofSource}
+            >
+              <Text style={{ color: primary, fontWeight: '700' }}>
+                {proofUrl ? 'Change payment screenshot' : 'Take / upload payment screenshot'}
+              </Text>
+            </Pressable>
+            {proofUrl ? (
+              <Pressable
+                onPress={() => {
+                  setLightboxMode('claim');
+                  setProofLightboxOpen(true);
+                }}
+                accessibilityLabel="View payment screenshot"
+              >
+                <Image source={{ uri: proofUrl }} style={styles.proof} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              style={[styles.button, { backgroundColor: primary }]}
+              disabled={busy}
+              onPress={() => void claimPayment()}
+            >
+              <Text style={styles.buttonText}>{busy ? 'Submitting…' : 'Submit for confirmation'}</Text>
+            </Pressable>
           </View>
         ) : null}
 
-        {needsAppPayment ? (
+        {needsAppPayment && !showQr && !staticQrUrl ? (
           <View style={styles.card}>
             <Text style={styles.section}>I’ve paid</Text>
             <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
@@ -1004,14 +1349,20 @@ export function ShopOrderDetailScreen({ route }: Props) {
             />
             <Pressable
               style={[styles.secondaryBtn, { borderColor: primary }]}
-              onPress={() => void uploadProof().catch((e) => setMessage(String(e)))}
+              onPress={pickProofSource}
             >
               <Text style={{ color: primary, fontWeight: '700' }}>
-                {proofUrl ? 'Change payment screenshot' : 'Upload payment screenshot'}
+                {proofUrl ? 'Change payment screenshot' : 'Take / upload payment screenshot'}
               </Text>
             </Pressable>
             {proofUrl ? (
-              <Pressable onPress={() => setProofLightboxOpen(true)} accessibilityLabel="View payment screenshot">
+              <Pressable
+                onPress={() => {
+                  setLightboxMode('claim');
+                  setProofLightboxOpen(true);
+                }}
+                accessibilityLabel="View payment screenshot"
+              >
                 <Image source={{ uri: proofUrl }} style={styles.proof} />
               </Pressable>
             ) : null}
@@ -1029,7 +1380,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
           <View style={[styles.card, { backgroundColor: '#FFFBEB' }]}>
             <Text style={[styles.section, { color: colors.warning }]}>Awaiting confirmation</Text>
             <Text style={styles.meta}>
-              The shop is confirming your payment{order.upi_utr ? ` · UTR ${order.upi_utr}` : ''}.
+              The shop is confirming your payment
+              {order.upi_utr ? ` · UTR ${order.upi_utr}` : ''}
+              {submittedProofUri ? ' · screenshot attached' : ''}.
             </Text>
           </View>
         ) : null}
@@ -1057,7 +1410,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
           </View>
         ) : null}
 
-        {canReturn || returns.length ? (
+        {!isPos && (canReturn || returns.length) ? (
           <View style={styles.card}>
             <View style={styles.returnHeader}>
               <Text style={styles.section}>Returns & refund</Text>
@@ -1168,17 +1521,23 @@ export function ShopOrderDetailScreen({ route }: Props) {
         {message ? <Text style={styles.message}>{message}</Text> : null}
       </RefreshableScrollView>
 
-      <ImageLightbox
-        uri={proofUrl || null}
-        visible={proofLightboxOpen}
-        title="Payment screenshot"
-        onClose={() => setProofLightboxOpen(false)}
-        replaceLabel="Change screenshot"
-        onReplace={() => {
-          setProofLightboxOpen(false);
-          void uploadProof().catch((e) => setMessage(String(e)));
-        }}
-      />
+      {proofLightboxOpen && lightboxUri ? (
+        <ImageLightbox
+          uri={lightboxUri}
+          visible
+          title="Payment screenshot"
+          onClose={() => setProofLightboxOpen(false)}
+          replaceLabel={lightboxMode === 'claim' ? 'Change screenshot' : undefined}
+          onReplace={
+            lightboxMode === 'claim'
+              ? () => {
+                  setProofLightboxOpen(false);
+                  void uploadProof().catch((e) => setMessage(String(e)));
+                }
+              : undefined
+          }
+        />
+      ) : null}
 
       {gatewayModal?.provider === 'razorpay' ? (
         <GatewayCheckoutModal
@@ -1441,6 +1800,37 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 16, fontWeight: '800', color: colors.foreground },
   totalValue: { fontSize: 18, fontWeight: '800', color: colors.foreground },
   placedAt: { ...typography.caption, color: colors.mutedForeground, marginTop: spacing.sm },
+  loyaltyHighlight: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: '#ECFDF5',
+  },
+  loyaltyHighlightText: {
+    ...typography.caption,
+    color: '#047857',
+    fontWeight: '700',
+  },
+  invoiceActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  invoiceActionBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  invoiceActionPrimary: {},
+  invoiceActionSecondary: {
+    borderWidth: 1,
+    backgroundColor: '#fff',
+  },
   qrWrap: { alignItems: 'center', gap: 8 },
   staticQr: { width: 220, height: 220, borderRadius: radius.md, backgroundColor: colors.muted },
   vpa: { ...typography.label, color: colors.foreground, fontWeight: '700' },

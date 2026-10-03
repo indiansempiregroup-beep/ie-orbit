@@ -140,6 +140,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       ...config.ios?.infoPlist,
       NSFaceIDUsageDescription: FACE_ID_USAGE,
+      // Needed so Linking.canOpenURL / UPI app chooser can see installed UPI apps.
+      LSApplicationQueriesSchemes: [
+        'upi',
+        'phonepe',
+        'gpay',
+        'tez',
+        'paytmmp',
+        'bhim',
+        'amazonpay',
+      ],
+      // iOS 26 Liquid Glass can leave a native "<" back chip in the status-bar corner.
+      // Opt into the pre-iOS-26 UI until screens/nav catch up (dev/prod builds only).
+      UIDesignRequiresCompatibility: true,
     },
   },
   android: {

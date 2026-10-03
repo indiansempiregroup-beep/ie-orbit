@@ -20,6 +20,9 @@ import { formatMoney } from '../../lib/currency';
 import { GettingStartedChecklist } from '../onboarding/GettingStartedChecklist';
 import { getProductName, getSubscribedProductIds } from '../../config/products';
 import { useShopOrders } from '../shop/shopHooks';
+import { useBIOverviewQuery } from '../bi/biHooks';
+import { canAccessReports } from '../../utils/roles';
+import type { BIInsight } from '@ie-orbit/sdk';
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -28,6 +31,41 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
       <p style={{ margin: 0, fontSize: 28, fontWeight: 500, fontFamily: 'var(--serif)' }}>{value}</p>
     </Card>
   );
+}
+
+function localDateKey(timeZone?: string | null, plusDays = 0) {
+  let today: string;
+  try {
+    today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || undefined,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    const date = new Date();
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    today = `${y}-${m}-${d}`;
+  }
+  if (!plusDays) return today;
+  const [year, month, day] = today.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + plusDays)).toISOString().slice(0, 10);
+}
+
+function pickInsights(groups: Array<BIInsight[] | undefined>, limit = 4): BIInsight[] {
+  const picked: BIInsight[] = [];
+  const queues = groups.map((group) => [...(group ?? [])]);
+  while (picked.length < limit && queues.some((queue) => queue.length > 0)) {
+    for (const queue of queues) {
+      const next = queue.shift();
+      if (!next) continue;
+      picked.push(next);
+      if (picked.length >= limit) break;
+    }
+  }
+  return picked;
 }
 
 function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -66,6 +104,8 @@ export function DashboardPage() {
   });
   const settings = useDashboardSettings();
   const business = useBusinessProfile();
+  const showReports = canAccessReports(auth.user);
+  const overviewQuery = useBIOverviewQuery(undefined, undefined, showReports);
   const summaryQuery = useDashboardSummary();
   const summary = summaryQuery.data;
   const hasAppointie = Boolean(summary?.appointie) || (summary ? summary.products.includes('appointie') : subscribedIds.includes('appointie'));
@@ -73,9 +113,11 @@ export function DashboardPage() {
   const hasPets = Boolean(summary?.pets) || Boolean(summary?.pets_pack_enabled);
 
   const { customers, staff, notifications, availability } = useBusinessLists();
-  const { todayBookings, refresh } = useBookingLists(new Date().toISOString().slice(0, 10), {
-    from: new Date().toISOString().slice(0, 10),
-    to: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 6).toISOString().slice(0, 10),
+  const todayKey = localDateKey(workspace.activeBusiness?.timezone);
+  const weekKey = localDateKey(workspace.activeBusiness?.timezone, 6);
+  const { todayBookings, refresh } = useBookingLists(todayKey, {
+    from: todayKey,
+    to: weekKey,
   });
   const shopOrders = useShopOrders();
   const searchResults = useSearchResults(searchTerm);
@@ -164,6 +206,12 @@ export function DashboardPage() {
       ]
     : [];
 
+  const homeInsights = pickInsights([
+    overviewQuery.data?.appointie?.insights ?? overviewQuery.data?.insights,
+    overviewQuery.data?.shopie?.insights,
+    overviewQuery.data?.pets?.insights,
+  ]);
+
   const petsKpis = summary?.pets
     ? [
         { label: 'Pets enrolled', value: summary.pets.total },
@@ -224,6 +272,23 @@ export function DashboardPage() {
             {summaryQuery.isLoading && !summary ? (
               <Card style={{ marginBottom: 24, padding: 20 }}>
                 <p style={{ margin: 0, color: '#6b7280' }}>Loading dashboard metrics…</p>
+              </Card>
+            ) : null}
+
+            {showReports && homeInsights.length ? (
+              <Card style={{ marginBottom: 24, padding: 20 }}>
+                <SectionHeading title="What to act on" subtitle="The strongest signals from the last 30 days." />
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {homeInsights.map((insight) => (
+                    <div key={`${insight.type}-${insight.title}`}>
+                      <div style={{ fontWeight: 700 }}>{insight.title}</div>
+                      <div style={{ color: '#6b7280', fontSize: 14 }}>{insight.detail}</div>
+                    </div>
+                  ))}
+                </div>
+                <Button variant="ghost" onClick={() => navigate('/bi/overview')} style={{ marginTop: 12 }}>
+                  Open Business Intelligence
+                </Button>
               </Card>
             ) : null}
 
@@ -348,7 +413,7 @@ export function DashboardPage() {
                     <div style={{ display: 'grid', gap: 8 }}>
                       {(availability.data ?? []).slice(0, 4).map((slot, index) => (
                         <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                          <span>{new Date().toISOString().slice(0, 10)}</span>
+                          <span>{todayKey}</span>
                           <span>{slot.capacity} capacity</span>
                         </div>
                       ))}

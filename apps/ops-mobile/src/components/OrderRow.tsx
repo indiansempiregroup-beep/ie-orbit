@@ -7,12 +7,12 @@ import {
   orderCallPhone,
   orderCustomerLabel,
   orderDeliveryNote,
-  orderDeliveryPhone,
   orderMetaSummary,
   orderNextActionLabel,
   orderCreatedDateLabel,
   orderRefLabel,
   orderRelativeTimeLabel,
+  orderTimeLabel,
   orderTitle,
   orderTotalLabel,
 } from '../utils/shopOrderDisplay';
@@ -58,10 +58,14 @@ export function OrderRow({
   const badge = shopOrderBadgeStyle(order);
   const customerName = orderCustomerLabel(order, customerMap);
   const callPhone = orderCallPhone(order);
-  const deliveryPhone = orderDeliveryPhone(order);
   const deliveryNote = orderDeliveryNote(order);
   const nextAction = orderNextActionLabel(order);
   const createdDate = orderCreatedDateLabel(order.created_at);
+  const placed = orderTimeLabel(order.created_at);
+  const relative = orderRelativeTimeLabel(order.created_at);
+  const showRelative = Boolean(relative && relative !== '—' && relative !== placed.time);
+  const amount = orderTotalLabel(order);
+  const showActionRail = Boolean(callPhone);
 
   const content = (
     <View
@@ -73,14 +77,14 @@ export function OrderRow({
       ]}
     >
       <View style={[styles.timeBlock, compact && styles.timeBlockCompact, { backgroundColor: timingColors.bg }]}>
-        <Text style={[styles.amount, { color: timingColors.text }]} numberOfLines={1}>
-          {orderTotalLabel(order)}
-        </Text>
-        <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={2}>
-          {orderRelativeTimeLabel(order.created_at)}
-        </Text>
+        <Text style={[styles.time, { color: timingColors.text }]}>{placed.time}</Text>
+        {showRelative ? (
+          <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={1}>
+            {relative}
+          </Text>
+        ) : null}
         {createdDate ? (
-          <Text style={[styles.date, { color: timingColors.text }]} numberOfLines={2}>
+          <Text style={[styles.dateUnder, { color: timingColors.text }]} numberOfLines={2}>
             {createdDate}
           </Text>
         ) : null}
@@ -88,9 +92,13 @@ export function OrderRow({
 
       <View style={[styles.body, compact && styles.bodyCompact]}>
         <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={styles.title} numberOfLines={1}>
             {orderTitle(order)}
           </Text>
+          {amount ? <Text style={styles.amount}>{amount}</Text> : null}
+        </View>
+
+        <View style={styles.badgeRow}>
           <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
             <Text style={[styles.statusBadgeText, { color: badge.text }]} numberOfLines={1}>
               {badge.label}
@@ -102,36 +110,16 @@ export function OrderRow({
           <Feather name="user" size={12} color={colors.mutedForeground} />
           <Text style={styles.meta} numberOfLines={1}>
             {customerName}
+            {callPhone ? ` · ${callPhone}` : ''}
           </Text>
-          {callPhone ? (
-            <Pressable
-              style={styles.inlineCall}
-              hitSlop={8}
-              onPress={(event) => {
-                event.stopPropagation?.();
-                void Linking.openURL(`tel:${callPhone}`);
-              }}
-            >
-              <Feather name="phone" size={13} color={colors.primary} />
-            </Pressable>
-          ) : null}
         </View>
 
         <View style={styles.metaRow}>
           <Feather name={fulfillmentIcon(order)} size={12} color={colors.mutedForeground} />
           <Text style={styles.subMeta} numberOfLines={1}>
-            {orderMetaSummary(order)}
+            {[orderMetaSummary(order), nextAction ? `Next: ${nextAction}` : null].filter(Boolean).join(' · ')}
           </Text>
         </View>
-
-        {deliveryPhone ? (
-          <View style={styles.metaRow}>
-            <Feather name="phone" size={12} color={colors.mutedForeground} />
-            <Text style={styles.subMeta} numberOfLines={1}>
-              Delivery · {deliveryPhone}
-            </Text>
-          </View>
-        ) : null}
 
         {deliveryNote ? (
           <View style={styles.metaRow}>
@@ -142,14 +130,27 @@ export function OrderRow({
           </View>
         ) : null}
 
-        {nextAction ? (
-          <Text style={styles.actionHint} numberOfLines={1}>
-            Next: {nextAction}
-          </Text>
-        ) : null}
-
-        <Text style={styles.ref}>{orderRefLabel(order)}</Text>
+        <Text style={styles.ref} numberOfLines={1}>
+          {orderRefLabel(order)}
+        </Text>
       </View>
+
+      {showActionRail ? (
+        <View style={styles.iconRail}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Call customer"
+            hitSlop={6}
+            onPress={(event) => {
+              event.stopPropagation?.();
+              void Linking.openURL(`tel:${callPhone}`);
+            }}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+          >
+            <Feather name="phone" size={16} color={colors.primary} />
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 
@@ -188,7 +189,8 @@ const styles = StyleSheet.create({
   },
   cardHighlight: {
     borderColor: colors.primary,
-    backgroundColor: colors.tint,
+    backgroundColor: colors.card,
+    shadowOpacity: 0.12,
   },
   pressable: { width: '100%', maxWidth: '100%' },
   pressed: { opacity: 0.92 },
@@ -199,66 +201,73 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     gap: 2,
-    alignSelf: 'stretch',
-    justifyContent: 'center',
   },
   timeBlockCompact: {
     minWidth: 64,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.xs,
   },
-  amount: {
+  time: {
     fontFamily: fonts.bodyBold,
-    fontSize: 13,
-    textAlign: 'center',
+    fontSize: 14,
   },
   relative: {
     ...typography.tiny,
     fontFamily: fonts.bodySemi,
     textAlign: 'center',
-    lineHeight: 14,
   },
-  date: {
+  dateUnder: {
     ...typography.tiny,
     fontFamily: fonts.bodyMedium,
     textAlign: 'center',
-    lineHeight: 13,
-    marginTop: 1,
+    marginTop: 2,
+    lineHeight: 14,
   },
-  body: { flex: 1, gap: 5, minWidth: 0 },
+  body: { flex: 1, gap: 6, minWidth: 0 },
   bodyCompact: { gap: 3 },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  title: {
-    ...typography.label,
-    fontFamily: fonts.bodySemi,
+  title: { ...typography.label, color: colors.foreground, flex: 1 },
+  amount: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
     color: colors.foreground,
-    flex: 1,
-    lineHeight: 18,
+    flexShrink: 0,
   },
+  badgeRow: { flexDirection: 'row', alignItems: 'center' },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radius.full,
-    maxWidth: '42%',
   },
   statusBadgeText: {
     ...typography.tiny,
     fontFamily: fonts.bodySemi,
-    textAlign: 'center',
   },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   meta: { ...typography.caption, color: colors.foreground, flex: 1 },
-  subMeta: { ...typography.tiny, color: colors.mutedForeground, flex: 1, lineHeight: 15 },
-  actionHint: {
-    ...typography.tiny,
-    fontFamily: fonts.bodySemi,
-    color: colors.primary,
-  },
+  subMeta: { ...typography.tiny, color: colors.mutedForeground, flex: 1, lineHeight: 16 },
   ref: { ...typography.tiny, color: colors.mutedForeground },
-  inlineCall: { padding: 2 },
+  iconRail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+    alignSelf: 'center',
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.tint,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iconBtnPressed: { opacity: 0.75 },
 });

@@ -42,6 +42,28 @@ export const menuIconTones: Partial<Record<IconName, IconTone>> = {
   gift: 'rose',
   'life-buoy': 'coral',
   'log-out': 'rose',
+  // Primary button CTAs (same badge language as nav)
+  plus: 'green',
+  check: 'green',
+  'check-circle': 'green',
+  'arrow-right': 'blue',
+  'edit-2': 'violet',
+  'edit-3': 'violet',
+  send: 'cyan',
+  'log-in': 'blue',
+  mail: 'cyan',
+  eye: 'blue',
+  play: 'green',
+  link: 'cyan',
+  slash: 'rose',
+  'refresh-cw': 'coral',
+  sliders: 'navy',
+  repeat: 'violet',
+  layout: 'blue',
+  grid: 'violet',
+  copy: 'cyan',
+  download: 'blue',
+  maximize: 'navy',
 };
 
 export function toneForMenuIcon(icon: IconName, destructive?: boolean): IconTone {

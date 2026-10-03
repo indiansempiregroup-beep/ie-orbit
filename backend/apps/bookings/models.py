@@ -307,7 +307,7 @@ class Booking(TenantModel):
 
     class Meta(TenantModel.Meta):
         db_table = "bookings"
-        ordering = ["-start_at"]
+        ordering = ["-created_at"]
         indexes = [
             *TenantModel.Meta.indexes,
             models.Index(fields=["tenant", "business", "appointment_date"]),

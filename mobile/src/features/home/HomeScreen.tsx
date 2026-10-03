@@ -169,16 +169,29 @@ export function HomeScreen() {
     void loadLoyalty();
   }, [loadCatalog, loadLoyalty]);
 
-  const upcomingBookings = useMemo(
-    () =>
-      bookings
-        .filter((booking) => isUpcomingBooking(booking.status, booking.start_at, booking.end_at))
-        .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-        .slice(0, 5),
+  const upcomingPool = useMemo(
+    () => bookings.filter((booking) => isUpcomingBooking(booking.status, booking.start_at, booking.end_at)),
     [bookings],
   );
-  const nextBooking = upcomingBookings[0];
-  const moreUpcoming = upcomingBookings.slice(1);
+  // Hero "next" stays appointment-time ordered; list rows use newest created first.
+  const nextBooking = useMemo(
+    () =>
+      [...upcomingPool].sort(
+        (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
+      )[0] ?? null,
+    [upcomingPool],
+  );
+  const moreUpcoming = useMemo(
+    () =>
+      upcomingPool
+        .filter((booking) => booking.id !== nextBooking?.id)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+        )
+        .slice(0, 4),
+    [upcomingPool, nextBooking],
+  );
   const nextParts = nextBooking ? bookingDateParts(nextBooking.start_at) : null;
   const nextTiming = nextBooking ? bookingStartsInLabel(nextBooking.start_at, nextBooking.end_at) : null;
   const nextStaffLabel = nextBooking ? bookingStaffLabel(nextBooking) : '';
@@ -187,7 +200,10 @@ export function HomeScreen() {
     () =>
       bookings
         .filter((booking) => !isUpcomingBooking(booking.status, booking.start_at, booking.end_at))
-        .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+        )
         .slice(0, 3),
     [bookings],
   );
@@ -237,7 +253,7 @@ export function HomeScreen() {
               >
                 <View style={styles.nextHeaderRow}>
                   <Text style={styles.nextLabel}>Next appointment</Text>
-                  {nextTiming ? (
+                  {nextTiming?.label ? (
                     <View style={styles.nextTimingChip}>
                       <Feather
                         name={nextTiming.tone === 'now' ? 'activity' : 'clock'}

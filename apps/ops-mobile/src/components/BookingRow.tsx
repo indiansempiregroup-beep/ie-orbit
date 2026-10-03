@@ -17,10 +17,16 @@ type Props = {
   serviceCount?: number;
   bookingNumber?: string | null;
   status?: string | null;
+  /** Formatted total, e.g. from line price snapshots. */
+  priceLabel?: string | null;
   highlight?: boolean;
   compact?: boolean;
   attached?: boolean;
   onPress?: () => void;
+  /** Opens HTML tax invoice (Sale-list View). */
+  onViewInvoice?: () => void;
+  /** Opens DocumentActionsSheet (Sale-list Share). */
+  onShareInvoice?: () => void;
 };
 
 const TIMING_COLORS = {
@@ -41,18 +47,28 @@ export function BookingRow({
   serviceCount,
   bookingNumber,
   status,
+  priceLabel,
   highlight = false,
   compact = false,
   attached = false,
   onPress,
+  onViewInvoice,
+  onShareInvoice,
 }: Props) {
+  const statusKey = String(status || '').toLowerCase();
+  const isTerminal = ['completed', 'cancelled', 'rejected', 'no_show', 'expired'].includes(statusKey);
   const timing = bookingStartsInLabel(startAt, endAt);
-  const timingColors = TIMING_COLORS[timing.tone];
+  const timingTone = isTerminal ? 'done' : timing.tone;
+  const timingColors = TIMING_COLORS[timingTone];
+  const timingLabel = isTerminal || timingTone === 'done' ? '' : timing.label;
   const timeRange = bookingTimeRangeLabel(startAt, endAt);
   const startLabel = startAt ? formatTime(startAt) : '—';
   const dateLabel = startAt ? formatDate(startAt) : '';
   const servicesLabel =
     serviceCount && serviceCount > 1 ? `${serviceCount} services` : durationMinutes ? `${durationMinutes} min` : '';
+  const phone = String(customerPhone || '').trim();
+  const showActionRail = Boolean(phone || onViewInvoice || onShareInvoice);
+  const amount = String(priceLabel || '').trim();
 
   const content = (
     <View
@@ -65,9 +81,16 @@ export function BookingRow({
     >
       <View style={[styles.timeBlock, compact && styles.timeBlockCompact, { backgroundColor: timingColors.bg }]}>
         <Text style={[styles.time, { color: timingColors.text }]}>{startLabel}</Text>
-        <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={1}>
-          {timing.label}
-        </Text>
+        {timingLabel ? (
+          <Text style={[styles.relative, { color: timingColors.text }]} numberOfLines={1}>
+            {timingLabel}
+          </Text>
+        ) : null}
+        {dateLabel ? (
+          <Text style={[styles.dateUnder, { color: timingColors.text }]} numberOfLines={2}>
+            {dateLabel}
+          </Text>
+        ) : null}
       </View>
 
       <View style={[styles.body, compact && styles.bodyCompact]}>
@@ -75,6 +98,10 @@ export function BookingRow({
           <Text style={styles.title} numberOfLines={1}>
             {serviceName}
           </Text>
+          {amount ? <Text style={styles.amount}>{amount}</Text> : null}
+        </View>
+
+        <View style={styles.badgeRow}>
           <Badge status={mapBookingStatus(status ?? 'pending')} />
         </View>
 
@@ -83,20 +110,8 @@ export function BookingRow({
             <Feather name="user" size={12} color={colors.mutedForeground} />
             <Text style={styles.meta} numberOfLines={1}>
               {customerName}
-              {customerPhone ? ` · ${customerPhone}` : ''}
+              {phone ? ` · ${phone}` : ''}
             </Text>
-            {customerPhone ? (
-              <Pressable
-                style={styles.inlineCall}
-                hitSlop={8}
-                onPress={(event) => {
-                  event.stopPropagation?.();
-                  void Linking.openURL(`tel:${customerPhone}`);
-                }}
-              >
-                <Feather name="phone" size={13} color={colors.primary} />
-              </Pressable>
-            ) : null}
           </View>
         ) : null}
 
@@ -112,10 +127,56 @@ export function BookingRow({
         {bookingNumber ? (
           <Text style={styles.ref} numberOfLines={1}>
             #{bookingNumber}
-            {!compact && dateLabel ? ` · ${dateLabel}` : ''}
           </Text>
         ) : null}
       </View>
+
+      {showActionRail ? (
+        <View style={styles.iconRail}>
+          {phone ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Call customer"
+              hitSlop={6}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                void Linking.openURL(`tel:${phone}`);
+              }}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Feather name="phone" size={16} color={colors.primary} />
+            </Pressable>
+          ) : null}
+          {onViewInvoice ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View invoice"
+              hitSlop={6}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                onViewInvoice();
+              }}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Feather name="eye" size={16} color={colors.primary} />
+            </Pressable>
+          ) : null}
+          {onShareInvoice ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share invoice"
+              hitSlop={6}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                onShareInvoice();
+              }}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Feather name="share-2" size={16} color={colors.primary} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -154,7 +215,8 @@ const styles = StyleSheet.create({
   },
   cardHighlight: {
     borderColor: colors.primary,
-    backgroundColor: colors.tint,
+    backgroundColor: colors.card,
+    shadowOpacity: 0.12,
   },
   pressable: { width: '100%', maxWidth: '100%' },
   pressed: { opacity: 0.92 },
@@ -180,18 +242,49 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemi,
     textAlign: 'center',
   },
+  dateUnder: {
+    ...typography.tiny,
+    fontFamily: fonts.bodyMedium,
+    textAlign: 'center',
+    marginTop: 2,
+    lineHeight: 14,
+  },
   body: { flex: 1, gap: 6, minWidth: 0 },
   bodyCompact: { gap: 3 },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
   title: { ...typography.label, color: colors.foreground, flex: 1 },
+  amount: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+    color: colors.foreground,
+    flexShrink: 0,
+  },
+  badgeRow: { flexDirection: 'row', alignItems: 'center' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   meta: { ...typography.caption, color: colors.foreground, flex: 1 },
   subMeta: { ...typography.tiny, color: colors.mutedForeground, flex: 1, lineHeight: 16 },
   ref: { ...typography.tiny, color: colors.mutedForeground },
-  inlineCall: { padding: 2 },
+  iconRail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+    alignSelf: 'center',
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.tint,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iconBtnPressed: { opacity: 0.75 },
 });

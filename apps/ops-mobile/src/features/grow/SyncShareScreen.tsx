@@ -313,34 +313,31 @@ export function SyncShareScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
-        <View style={styles.footer}>
+        <View style={styles.footerRow}>
           <Button
             icon="share-2"
-            label={busy ? 'Working…' : 'Share snapshot'}
+            label="Share"
             loading={busy}
-            fullWidth
-            size="lg"
             disabled={!selected.length}
+            style={styles.footerBtn}
             onPress={() => void shareExport()}
           />
-          <View style={styles.footerRow}>
-            <Button
-              icon="copy"
-              label="Copy"
-              variant="outline"
-              disabled={busy || !selected.length}
-              style={styles.footerHalf}
-              onPress={() => void copyExport()}
-            />
-            <Button
-              icon="download"
-              label="CSV"
-              variant="soft"
-              disabled={busy || !selected.length}
-              style={styles.footerHalf}
-              onPress={() => void exportCsv()}
-            />
-          </View>
+          <Button
+            icon="copy"
+            label="Copy"
+            variant="outline"
+            disabled={busy || !selected.length}
+            style={styles.footerBtn}
+            onPress={() => void copyExport()}
+          />
+          <Button
+            icon="download"
+            label="CSV"
+            variant="soft"
+            disabled={busy || !selected.length}
+            style={styles.footerBtn}
+            onPress={() => void exportCsv()}
+          />
         </View>
       }
     >
@@ -491,9 +488,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 16,
   },
-  footer: { gap: spacing.sm },
-  footerRow: { flexDirection: 'row', gap: spacing.sm },
-  footerHalf: { flex: 1 },
+  footerRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
+  footerBtn: { flex: 1, minWidth: 0 },
   pressed: { opacity: 0.92 },
   error: { color: colors.destructive },
 });

@@ -430,6 +430,8 @@ class MobileShopOrderListCreateView(APIView):
                 points_to_redeem=points_to_redeem,
                 confirm=False,
                 metadata_extra=metadata_extra or None,
+                upi_utr=str(request.data.get("upi_utr") or ""),
+                payment_proof_url=str(request.data.get("payment_proof_url") or ""),
             )
         except (DjangoValidationError, ShopProduct.DoesNotExist) as exc:
             if isinstance(exc, DjangoValidationError) and hasattr(exc, "message_dict"):
@@ -695,6 +697,76 @@ class MobileShopOrderCashfreeVerifyView(APIView):
         return success_response(MobileShopOrderSerializer(order).data)
 
 
+class MobileShopOrderInvoiceView(APIView):
+    """Customer tax invoice for an owned shop order (same PDF/HTML as POS share)."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Mobile Shop"])
+    def get(self, request: Request, order_id) -> Response:
+        from apps.shopie.api.document_views import books_voucher_for_order
+        from apps.shopie.services.shop_documents import LAYOUT_A4, ShopDocumentKind, ShopDocumentService
+
+        detail = MobileShopOrderDetailView()
+        try:
+            tenant, business, _, order = detail._owned_order(request, order_id)
+        except Exception as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+
+        voucher = books_voucher_for_order(tenant=tenant, order=order)
+        if voucher is None:
+            return success_response(
+                {
+                    "available": False,
+                    "reason": "Tax invoice will be available after the shop confirms and posts this order.",
+                }
+            )
+
+        docs = ShopDocumentService()
+        try:
+            link = docs.create_share_link(
+                tenant=tenant,
+                business=business,
+                kind=ShopDocumentKind.SALE,
+                document_id=voucher.id,
+                created_by_user_id=getattr(request.user, "id", None),
+            )
+        except DjangoValidationError as exc:
+            raise _django_validation(exc) from exc
+
+        # Prefer the host the customer app already reached (LAN IP in Expo Go),
+        # not settings.API_BASE_URL which is often localhost / relative.
+        api_url = request.build_absolute_uri(f"/api/v1/public/shop-docs/{link.token}").rstrip("/")
+        public_url = api_url
+        payload = docs.build_payload(
+            tenant=tenant,
+            business=business,
+            kind=ShopDocumentKind.SALE,
+            document_id=voucher.id,
+            public_url=public_url,
+        )
+        view_url = f"{api_url}?format=html&layout={LAYOUT_A4}"
+        pdf_url = f"{api_url}?format=pdf&layout={LAYOUT_A4}"
+        return success_response(
+            {
+                "available": True,
+                "invoice_number": str(payload.get("number") or voucher.voucher_number or ""),
+                "voucher_id": str(voucher.id),
+                "token": link.token,
+                "public_url": public_url,
+                "view_url": view_url,
+                "pdf_url": pdf_url,
+                "message": docs.share_message({**payload, "public_url": view_url}),
+                "total": payload.get("total"),
+                "amount_paid": payload.get("amount_paid"),
+                "amount_due": payload.get("amount_due"),
+                "payment_method": payload.get("payment_method") or "",
+                "payment_label": payload.get("payment_label") or "",
+                "payment_status": payload.get("payment_status") or "",
+            }
+        )
+
+
 class MobileShopOrderPaymentProofView(APIView):
     permission_classes = [IsAuthenticated]
     media_service = MediaService()
@@ -715,16 +787,53 @@ class MobileShopOrderPaymentProofView(APIView):
             business=business,
             uploaded_by=request.user,
             folder_type=MediaFolderType.DOCUMENTS,
-            visibility=MediaVisibility.PRIVATE,
+            # Apps render proofs in <Image> without auth headers — must be fetchable by URL.
+            visibility=MediaVisibility.PUBLIC,
             tags=["shop_payment_proof", str(order.id)],
             display_name=f"Payment proof {order.order_number}",
         )
-        public_url = str(result.media.metadata.get("public_url") or "")
+        public_url = str(result.media.metadata.get("public_url") or f"/api/v1/media/{result.media.id}/file")
         return success_response(
             {
                 "payment_proof_url": public_url,
                 "media_id": str(result.media.id),
                 "order_id": str(order.id),
+            }
+        )
+
+
+class MobileShopPaymentProofUploadView(APIView):
+    """Upload a UPI payment screenshot before the order exists (cart checkout)."""
+
+    permission_classes = [IsAuthenticated]
+    media_service = MediaService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request) -> Response:
+        try:
+            tenant, business = _scope_from_request(request)
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            raise ValidationError({"file": "Payment screenshot is required."})
+        result = self.media_service.upload(
+            uploaded_file=uploaded,
+            tenant=tenant,
+            business=business,
+            uploaded_by=request.user,
+            folder_type=MediaFolderType.DOCUMENTS,
+            # Apps render proofs in <Image> without auth headers — must be fetchable by URL.
+            visibility=MediaVisibility.PUBLIC,
+            tags=["shop_payment_proof", "pre_order"],
+            display_name="Payment proof pre-order",
+        )
+        public_url = str(result.media.metadata.get("public_url") or f"/api/v1/media/{result.media.id}/file")
+        return success_response(
+            {
+                "payment_proof_url": public_url,
+                "media_id": str(result.media.id),
             }
         )
 

@@ -305,20 +305,24 @@ class PlatformCustomerAppView(APIView):
         business = self._get_business(business_id)
         profile = ensure_customer_app_profile(business=business)
         data = request.data if isinstance(request.data, dict) else {}
-        update_customer_app_settings(
-            profile=profile,
-            app_name=data.get("app_name"),
-            bundle_id_android=data.get("bundle_id_android"),
-            bundle_id_ios=data.get("bundle_id_ios"),
-            google_oauth_android_client_id=data.get("google_oauth_android_client_id"),
-            play_signing_sha1=data.get("play_signing_sha1"),
-            app_icon_url=data.get("app_icon_url") if "app_icon_url" in data else None,
-            icon_mode=data.get("icon_mode") if "icon_mode" in data else None,
-            icon_background=data.get("icon_background") if "icon_background" in data else None,
-            icon_padding=data.get("icon_padding") if "icon_padding" in data else None,
-            splash_background=data.get("splash_background") if "splash_background" in data else None,
-            mark_live=bool(data.get("mark_live")),
-        )
+        try:
+            update_customer_app_settings(
+                profile=profile,
+                app_name=data.get("app_name"),
+                bundle_id_android=data.get("bundle_id_android"),
+                bundle_id_ios=data.get("bundle_id_ios"),
+                google_oauth_android_client_id=data.get("google_oauth_android_client_id"),
+                play_signing_sha1=data.get("play_signing_sha1"),
+                app_icon_url=data.get("app_icon_url") if "app_icon_url" in data else None,
+                icon_mode=data.get("icon_mode") if "icon_mode" in data else None,
+                icon_background=data.get("icon_background") if "icon_background" in data else None,
+                icon_padding=data.get("icon_padding") if "icon_padding" in data else None,
+                splash_background=data.get("splash_background") if "splash_background" in data else None,
+                mark_live=bool(data.get("mark_live")),
+            )
+        except RuntimeError as exc:
+            status, code, message = customer_app_action_error(exc)
+            return error_response(code=code, message=message, status_code=status)
         # Also allow classic white-label fields via existing serializer when present.
         wl_fields = {
             key: data[key]

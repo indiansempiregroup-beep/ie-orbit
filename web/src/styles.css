@@ -66,40 +66,50 @@ h6 {
   align-items: center;
   justify-content: center;
   gap: 9px;
-  transition: background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease;
 }
 
 .button:hover,
 .icon-button:hover {
-  transform: translateY(-1px);
+  opacity: 0.94;
 }
 
 .button:active,
 .icon-button:active {
-  transform: translateY(0);
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
-  opacity: 0.95;
+  opacity: 0.88;
 }
 
 .button:focus-visible,
 .icon-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(28, 113, 143, 0.32);
+  box-shadow: 0 0 0 3px rgba(28, 113, 143, 0.28);
 }
 
 .button.ghost:hover,
 .icon-button.ghost:hover {
-  background: rgba(28, 113, 143, 0.12);
+  background: rgba(28, 113, 143, 0.1);
+  opacity: 1;
 }
 
 .button.neutral:hover,
 .icon-button.neutral:hover {
   background: #f3f4f6;
+  opacity: 1;
 }
 
 .button.primary:hover,
 .icon-button.primary:hover {
+  background: #1c718f;
+  box-shadow: 0 6px 18px rgba(28, 113, 143, 0.32);
+  opacity: 1;
+}
+
+.button.primary:active,
+.icon-button.primary:active {
   background: #165f78;
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(28, 113, 143, 0.2);
+  opacity: 1;
 }
 
 .sr-only {
@@ -1974,16 +1984,99 @@ h6 {
   min-width: 0;
 }
 
-.wizard-otp-row {
+.wizard-input-group {
   display: flex;
-  gap: 12px;
+  align-items: stretch;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.wizard-input-group:focus-within {
+  border-color: #1c718f;
+  box-shadow: 0 0 0 3px rgba(28, 113, 143, 0.16);
+}
+
+.wizard-input-group.is-error {
+  border-color: #dc2626;
+}
+
+.wizard-input-group.is-error:focus-within {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+
+.wizard-input-group.is-readonly {
+  background: #f8fafc;
+}
+
+.wizard-input-group .ui-control {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 42px;
+}
+
+.wizard-input-group .ui-control:focus {
+  box-shadow: none;
+}
+
+.wizard-input-group-btn {
+  flex: 0 0 auto;
+  border: 0;
+  border-left: 1px solid #dbe3ee;
+  background: #f8fafc;
+  padding: 0 14px;
+  color: #1c718f;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wizard-input-group-btn:hover:not(:disabled) {
+  background: #eef6f9;
+}
+
+.wizard-input-group-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wizard-input-group-note {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  border-left: 1px solid #dbe3ee;
+  padding: 0 12px;
+  color: #059669;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #f8fafc;
 }
 
 .wizard-otp-sent {
-  color: var(--reg-muted, #64748b);
-  font-size: 14px;
+  margin: 0;
+  color: #059669;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.wizard-google-slot {
+  margin-top: 8px;
+}
+
+.wizard-google-slot .google-signin {
+  margin-top: 0;
+}
+
+.wizard-google-slot .google-signin-divider {
+  margin: 0 0 8px;
 }
 
 .wizard-password-field {

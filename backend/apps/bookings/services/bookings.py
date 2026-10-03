@@ -566,9 +566,12 @@ class BookingService:
         actor: Any,
         reason: str = "",
         extra: dict[str, Any] | None = None,
+        payment: dict[str, Any] | None = None,
     ) -> Booking:
         from_status = booking.status
         validate_booking_transition(from_status, to_status)
+        if to_status == BookingStatus.COMPLETED and from_status != BookingStatus.COMPLETED:
+            self._stamp_completion_payment(booking=booking, payment=payment)
         booking.status = to_status
         if to_status == BookingStatus.CANCELLED:
             booking.cancellation_reason = reason
@@ -596,9 +599,114 @@ class BookingService:
         )
         if to_status == BookingStatus.COMPLETED and from_status != BookingStatus.COMPLETED:
             self._award_loyalty_on_complete(booking=booking)
-        if to_status == BookingStatus.CANCELLED and from_status != BookingStatus.CANCELLED:
+            self._post_booking_to_books(booking=booking)
+        if to_status in {
+            BookingStatus.CANCELLED,
+            BookingStatus.NO_SHOW,
+            BookingStatus.REJECTED,
+        } and from_status not in {
+            BookingStatus.CANCELLED,
+            BookingStatus.NO_SHOW,
+            BookingStatus.REJECTED,
+        }:
             self._refund_loyalty_on_cancel(booking=booking)
         return booking
+
+    def _stamp_completion_payment(self, *, booking: Booking, payment: dict[str, Any] | None) -> None:
+        """Resolve POS-style payment and stamp booking.metadata before Books post."""
+        from decimal import Decimal
+
+        from apps.shopie.services.books import BooksService
+
+        books = BooksService()
+        try:
+            total = books.preview_booking_sale_total(
+                tenant=booking.tenant, business=booking.business, booking=booking
+            )
+        except ValidationError:
+            # Unpriced / no invoiceable lines — skip payment gate.
+            return
+
+        total = Decimal(str(total or "0")).quantize(Decimal("0.01"))
+        if total <= 0:
+            return
+
+        payload = payment if isinstance(payment, dict) else {}
+        method = str(payload.get("payment_method") or "").strip().lower()
+        if method not in {"cash", "upi", "card", "borrow"}:
+            raise ValidationError(
+                {"payment_method": "Select Cash, UPI, Card, or Credit to complete this booking."}
+            )
+
+        customer = self._resolve_loyalty_customer(booking=booking)
+        paid, due, status = books.resolve_booking_payment_split(
+            total=total,
+            payment_method=method,
+            amount_paid=payload.get("amount_paid"),
+            customer=customer,
+        )
+        cash_account_id = payload.get("cash_account_id")
+        if paid > 0:
+            account = books._ensure_cash_account(
+                tenant=booking.tenant,
+                business=booking.business,
+                cash_account_id=cash_account_id,
+            )
+            cash_account_id = str(account.id)
+        else:
+            cash_account_id = None
+
+        proof_url = ""
+        proof_media_id = ""
+        if method == "upi" and paid > 0:
+            from apps.billing.services.upi_proof import resolve_payment_proof_url
+
+            proof_url, proof_media_id = resolve_payment_proof_url(
+                payment_proof_url=str(payload.get("payment_proof_url") or ""),
+                payment_proof_media_id=str(payload.get("payment_proof_media_id") or ""),
+            )
+            if not proof_url and not proof_media_id:
+                raise ValidationError(
+                    {
+                        "payment_proof_url": "Capture and upload a UPI payment screenshot before completing."
+                    }
+                )
+
+        metadata = dict(booking.metadata or {}) if isinstance(booking.metadata, dict) else {}
+        metadata["payment"] = {
+            "method": method,
+            "status": status,
+            "amount_paid": str(paid),
+            "amount_due": str(due),
+            "total": str(total),
+        }
+        if cash_account_id:
+            metadata["payment"]["cash_account_id"] = cash_account_id
+        if proof_url:
+            metadata["payment"]["payment_proof_url"] = proof_url
+        if proof_media_id:
+            metadata["payment"]["payment_proof_media_id"] = proof_media_id
+        booking.metadata = metadata
+        booking.save(update_fields=["metadata", "updated_at"])
+
+    def _post_booking_to_books(self, *, booking: Booking) -> None:
+        try:
+            from apps.shopie.services.books import BooksService
+
+            metadata = booking.metadata if isinstance(booking.metadata, dict) else {}
+            payment = metadata.get("payment") if isinstance(metadata.get("payment"), dict) else {}
+            cash_account_id = payment.get("cash_account_id")
+            BooksService().create_sale_from_booking(
+                tenant=booking.tenant,
+                business=booking.business,
+                booking=booking,
+                cash_account_id=cash_account_id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to post booking to books",
+                extra={"booking_id": str(booking.id)},
+            )
 
     def _resolve_loyalty_customer(self, *, booking: Booking):
         from apps.customers.models import Customer
@@ -674,14 +782,12 @@ class BookingService:
         try:
             from apps.customers.services.loyalty import LoyaltyService
 
-            loyalty_meta = (booking.metadata or {}).get("loyalty") or {}
-            points_redeemed = int(loyalty_meta.get("points_redeemed") or 0)
-            if points_redeemed <= 0:
-                return
             customer = self._resolve_loyalty_customer(booking=booking)
             if customer is None:
                 return
-            LoyaltyService().refund_redemption(
+            loyalty_meta = (booking.metadata or {}).get("loyalty") or {}
+            points_redeemed = int(loyalty_meta.get("points_redeemed") or 0)
+            LoyaltyService().refund_for_booking(
                 tenant=booking.tenant,
                 business=booking.business,
                 customer=customer,
@@ -691,12 +797,13 @@ class BookingService:
             metadata = dict(booking.metadata or {})
             loyalty_meta = dict(metadata.get("loyalty") or {})
             loyalty_meta["refunded"] = True
+            loyalty_meta["earn_reversed"] = True
             metadata["loyalty"] = loyalty_meta
             booking.metadata = metadata
             booking.save(update_fields=["metadata", "updated_at"])
         except Exception:
             logger.exception(
-                "Failed to refund loyalty redemption",
+                "Failed to refund loyalty on booking cancel",
                 extra={"booking_id": str(booking.id)},
             )
 

@@ -7,7 +7,13 @@ const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 export function VerifyEmailStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        headerBackVisible: false,
+        headerLeft: () => null,
+      }}
+    >
       <Stack.Screen
         name="VerifyEmail"
         component={VerifyEmailScreen}

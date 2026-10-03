@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { AmazonFilterSheet, SearchFilterToolbar } from '../../components/AmazonFilterSheet';
+import { EmptyState } from '../../components/ProfileMenuScreen';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { GroupedList } from '../../components/ui/GroupedList';
 import { useBootstrap } from '../../contexts/BootstrapContext';
@@ -25,6 +27,34 @@ const iconMap = {
   pet: 'gift',
 } as const;
 
+const STATUS_OPTIONS = [
+  { id: 'all', label: 'All' },
+  { id: 'unread', label: 'Unread' },
+  { id: 'read', label: 'Read' },
+] as const;
+
+const TYPE_OPTIONS = [
+  { id: 'all', label: 'All types' },
+  { id: 'booking', label: 'Appointments' },
+  { id: 'reminder', label: 'Reminders' },
+  { id: 'order', label: 'Orders' },
+  { id: 'return', label: 'Returns' },
+  { id: 'payment', label: 'Payments' },
+  { id: 'review', label: 'Reviews' },
+  { id: 'cancel', label: 'Cancellations' },
+  { id: 'pet', label: 'Pets' },
+] as const;
+
+type StatusFilter = (typeof STATUS_OPTIONS)[number]['id'];
+type TypeFilter = (typeof TYPE_OPTIONS)[number]['id'];
+type FilterDraft = { status: StatusFilter; type: TypeFilter };
+
+const EMPTY_FILTERS: FilterDraft = { status: 'all', type: 'all' };
+
+function countActiveFilters(filters: FilterDraft) {
+  return (filters.status !== 'all' ? 1 : 0) + (filters.type !== 'all' ? 1 : 0);
+}
+
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Alerts'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -38,12 +68,52 @@ export function NotificationsScreen() {
   const primary = branding?.primaryColor ?? colors.primary;
   const { notifications, loading, error, reload, markAllRead, markRead } = useMobileNotifications();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<StatusFilter>('all');
+  const [type, setType] = useState<TypeFilter>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draft, setDraft] = useState<FilterDraft>(EMPTY_FILTERS);
 
   useFocusEffect(
     React.useCallback(() => {
       void reload();
     }, [reload]),
   );
+
+  const appliedFilters = useMemo(() => ({ status, type }), [status, type]);
+  const activeFilterCount = countActiveFilters(appliedFilters);
+
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return notifications.filter((item) => {
+      if (status === 'unread' && item.is_read) return false;
+      if (status === 'read' && !item.is_read) return false;
+      const itemType = (item.notification_type || 'booking').toLowerCase();
+      if (type !== 'all' && itemType !== type) return false;
+      if (!needle) return true;
+      return [item.subject, item.body, item.notification_type]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle));
+    });
+  }, [notifications, search, status, type]);
+
+  const activeSummary = [
+    status !== 'all' ? STATUS_OPTIONS.find((item) => item.id === status)?.label : null,
+    type !== 'all' ? TYPE_OPTIONS.find((item) => item.id === type)?.label : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  function openFilters() {
+    setDraft(appliedFilters);
+    setFilterOpen(true);
+  }
+
+  function clearAppliedFilters() {
+    setStatus('all');
+    setType('all');
+    setSearch('');
+  }
 
   return (
     <View style={styles.root}>
@@ -54,12 +124,30 @@ export function NotificationsScreen() {
         </Pressable>
       </View>
 
+      <SearchFilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search notifications"
+        primaryColor={primary}
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={openFilters}
+        activeSummary={activeSummary || undefined}
+        onClearFilters={clearAppliedFilters}
+        countLabel={
+          loading
+            ? null
+            : `${visible.length} ${visible.length === 1 ? 'alert' : 'alerts'}${
+                activeFilterCount || search.trim() ? ` of ${notifications.length}` : ''
+              }`
+        }
+      />
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <RefreshableScrollView
         style={styles.list}
         contentContainerStyle={[
-          !notifications.length ? styles.emptyContainer : styles.listContent,
+          !visible.length ? styles.emptyContainer : styles.listContent,
           { paddingBottom: contentInset },
         ]}
         refreshing={refreshing}
@@ -72,69 +160,112 @@ export function NotificationsScreen() {
           </View>
         ) : null}
 
-        {!loading && !notifications.length ? (
-          <View style={styles.empty}>
-            <Feather name="bell" size={24} color={colors.mutedForeground} />
-            <Text style={styles.emptyText}>No notifications yet. Order, appointment, and shop updates will appear here.</Text>
-          </View>
+        {!loading && !visible.length ? (
+          <EmptyState
+            icon="bell"
+            title={
+              notifications.length || search || activeFilterCount
+                ? 'No matching alerts'
+                : 'No notifications yet'
+            }
+            description={
+              notifications.length || search || activeFilterCount
+                ? 'Try another search or clear the filters.'
+                : 'Order, appointment, and shop updates will appear here.'
+            }
+          />
         ) : null}
 
         <GroupedList>
-          {notifications.map((item) => {
-          const type = (item.notification_type || 'booking') as keyof typeof iconMap;
-          const icon = iconMap[type] ?? 'bell';
-          return (
-            <Pressable
-              key={item.id}
-              style={[styles.row, !item.is_read && styles.unread]}
-              onPress={() => {
-                if (!item.is_read) void markRead(item.id);
-                if (item.return_id) {
-                  navigation.navigate('ReturnDetail', { returnId: String(item.return_id) });
-                  return;
-                }
-                if (item.order_id) {
-                  navigation.navigate('ShopOrderDetail', { orderId: String(item.order_id) });
-                  return;
-                }
-                if (item.booking_id) {
-                  navigation.navigate('BookingDetail', { bookingId: item.booking_id });
-                  return;
-                }
-                const petId = String(item.pet_id || '');
-                if (petId) navigation.navigate('PetDetail', { petId });
-              }}
-            >
-              <View style={[styles.iconWrap, type === 'review' ? styles.iconAmber : type === 'cancel' ? styles.iconRed : type === 'order' || type === 'return' ? styles.iconGreen : type === 'pet' ? styles.iconPink : styles.iconBlue]}>
-                <Feather
-                  name={icon}
-                  size={16}
-                  color={
-                    type === 'review'
-                      ? colors.warning
-                      : type === 'cancel'
-                        ? colors.destructive
-                        : type === 'order' || type === 'return'
-                          ? colors.success
-                          : type === 'pet'
-                            ? '#DB2777'
-                          : primary
+          {visible.map((item) => {
+            const itemType = (item.notification_type || 'booking') as keyof typeof iconMap;
+            const icon = iconMap[itemType] ?? 'bell';
+            return (
+              <Pressable
+                key={item.id}
+                style={[styles.row, !item.is_read && styles.unread]}
+                onPress={() => {
+                  if (!item.is_read) void markRead(item.id);
+                  if (item.return_id) {
+                    navigation.navigate('ReturnDetail', { returnId: String(item.return_id) });
+                    return;
                   }
-                />
-              </View>
-              <View style={styles.body}>
-                <View style={styles.titleRow}>
-                  <Text style={styles.rowTitle}>{item.subject || 'Notification'}</Text>
-                  {!item.is_read ? <View style={[styles.dot, { backgroundColor: primary }]} /> : null}
+                  if (item.order_id) {
+                    navigation.navigate('ShopOrderDetail', { orderId: String(item.order_id) });
+                    return;
+                  }
+                  if (item.booking_id) {
+                    navigation.navigate('BookingDetail', { bookingId: item.booking_id });
+                    return;
+                  }
+                  const petId = String(item.pet_id || '');
+                  if (petId) navigation.navigate('PetDetail', { petId });
+                }}
+              >
+                <View
+                  style={[
+                    styles.iconWrap,
+                    itemType === 'review'
+                      ? styles.iconAmber
+                      : itemType === 'cancel'
+                        ? styles.iconRed
+                        : itemType === 'order' || itemType === 'return'
+                          ? styles.iconGreen
+                          : itemType === 'pet'
+                            ? styles.iconPink
+                            : styles.iconBlue,
+                  ]}
+                >
+                  <Feather
+                    name={icon}
+                    size={16}
+                    color={
+                      itemType === 'review'
+                        ? colors.warning
+                        : itemType === 'cancel'
+                          ? colors.destructive
+                          : itemType === 'order' || itemType === 'return'
+                            ? colors.success
+                            : itemType === 'pet'
+                              ? '#DB2777'
+                              : primary
+                    }
+                  />
                 </View>
-                <Text style={styles.rowBody}>{item.body || ''}</Text>
-                <Text style={styles.time}>{formatRelativeTime(item.created_at)}</Text>
-              </View>
-            </Pressable>
-          );
-        })}
+                <View style={styles.body}>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.rowTitle}>{item.subject || 'Notification'}</Text>
+                    {!item.is_read ? <View style={[styles.dot, { backgroundColor: primary }]} /> : null}
+                  </View>
+                  <Text style={styles.rowBody}>{item.body || ''}</Text>
+                  <Text style={styles.time}>{formatRelativeTime(item.created_at)}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </GroupedList>
       </RefreshableScrollView>
+
+      <AmazonFilterSheet
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        primaryColor={primary}
+        sections={[
+          { id: 'status', label: 'Status', options: [...STATUS_OPTIONS] },
+          { id: 'type', label: 'Type', options: [...TYPE_OPTIONS] },
+        ]}
+        values={draft}
+        onSelect={(sectionId, optionId) =>
+          setDraft((current) => ({ ...current, [sectionId]: optionId }))
+        }
+        onClear={() => setDraft(EMPTY_FILTERS)}
+        applyCount={countActiveFilters(draft)}
+        onApply={() => {
+          setStatus(draft.status);
+          setType(draft.type);
+          setFilterOpen(false);
+        }}
+      />
     </View>
   );
 }
@@ -143,7 +274,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.md,
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -158,7 +289,6 @@ const styles = StyleSheet.create({
   error: { ...typography.caption, color: colors.destructive, padding: spacing.lg },
   emptyContainer: { flexGrow: 1 },
   empty: { alignItems: 'center', padding: spacing.xxxl, gap: spacing.md },
-  emptyText: { ...typography.body, color: colors.mutedForeground, textAlign: 'center' },
   row: {
     flexDirection: 'row',
     gap: spacing.md,

@@ -47,6 +47,7 @@ function BuildLinks({
   const apkUrl = String(data?.apk_url || '');
   const versionName = String(data?.version_name || '');
   const error = String(data?.error || '');
+  const refreshNote = String(data?.refresh_note || '');
   return (
     <View style={styles.buildCard}>
       <Text style={styles.businessName}>{title}</Text>
@@ -55,6 +56,7 @@ function BuildLinks({
         {versionName ? ` · ${versionName}` : ''}
       </Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {refreshNote ? <Text style={styles.meta}>{refreshNote}</Text> : null}
       {url ? (
         <Button
           label="Open Expo build"
@@ -150,6 +152,8 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
     const successCopy: Record<string, string> = {
       'Save brand & setup': 'Brand identity saved.',
       'Create Firebase app': 'Firebase Android app is ready. google-services.json is saved on this tenant.',
+      'Refresh preview status': 'Preview status updated.',
+      'Refresh store status': 'Store status updated.',
     };
     try {
       const response = await fn();
@@ -159,8 +163,15 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
         toast.push(detail, 'error');
         Alert.alert(`${label} failed`, detail);
       } else {
-        const okText = successCopy[label] ?? `${label} succeeded`;
-        setNotice({ tone: 'ok', title: okText });
+        const trackKey = label.includes('store') ? 'production' : 'preview';
+        const refreshNote =
+          label.startsWith('Refresh')
+            ? String(
+                (response.data.recipe?.[trackKey] as { refresh_note?: string } | undefined)?.refresh_note || '',
+              )
+            : '';
+        const okText = refreshNote || successCopy[label] || `${label} succeeded`;
+        setNotice({ tone: 'ok', title: successCopy[label] ?? `${label} succeeded`, detail: refreshNote || undefined });
         toast.push(okText, 'success');
       }
       setState(response.data);
@@ -207,6 +218,7 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
             <Button
               key={business.id}
               label={business.display_name}
+              icon={null}
               variant={business.id === businessId ? 'primary' : 'ghost'}
               onPress={() => setBusinessId(business.id)}
             />
@@ -315,12 +327,14 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
         <View style={styles.modeRow}>
           <Button
             label="Logo on background"
+            icon={null}
             variant={!asIsIcon ? 'primary' : 'ghost'}
             onPress={() => setIconMode('plate')}
             disabled={hasIconOverride}
           />
           <Button
             label="Full icon"
+            icon={null}
             variant={asIsIcon ? 'primary' : 'ghost'}
             onPress={() => setIconMode('as-is')}
           />
@@ -491,7 +505,7 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
           }
         />
         <Button
-          label="Mark live on Play"
+          label="Mark live in Orbit"
           variant="ghost"
           fullWidth
           disabled={Boolean(busy) || !checklist?.store_aab}
@@ -500,18 +514,60 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
           }
         />
         <Button
-          label="Refresh status"
+          label="Refresh preview status"
           variant="ghost"
           fullWidth
           disabled={Boolean(busy)}
-          onPress={() => void load()}
+          onPress={() =>
+            void run('Refresh preview status', () =>
+              client!.platform.customerAppBuildStatus(businessId, 'preview'),
+            )
+          }
         />
+        <Button
+          label="Refresh store status"
+          variant="ghost"
+          fullWidth
+          disabled={Boolean(busy)}
+          onPress={() =>
+            void run('Refresh store status', () =>
+              client!.platform.customerAppBuildStatus(businessId, 'production'),
+            )
+          }
+        />
+        <Text style={styles.meta}>
+          Use Refresh status to poll Expo. Mark live records the finished store version in Orbit; Play upload stays
+          manual.
+        </Text>
       </View>
 
       {recipe ? (
         <>
           <BuildLinks title="Latest preview" track="preview" data={recipe.preview as Record<string, unknown>} />
           <BuildLinks title="Latest store" track="production" data={recipe.production as Record<string, unknown>} />
+          {Array.isArray(recipe.builds) && recipe.builds.length ? (
+            <View style={styles.card}>
+              <Text style={styles.section}>Build history</Text>
+              {(recipe.builds as Record<string, unknown>[]).slice(0, 10).map((row, index) => {
+                const when = String(row.at || row.started_at || row.updated_at || '');
+                return (
+                  <Text
+                    key={`${String(row.track)}-${when}-${String(row.build_id || '')}-${index}`}
+                    style={styles.meta}
+                  >
+                    {String(row.track || '—')} · {String(row.status || '—')}
+                    {row.version_name ? ` · ${String(row.version_name)}` : ''}
+                    {when ? ` · ${new Date(when).toLocaleString()}` : ''}
+                  </Text>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.section}>Build history</Text>
+              <Text style={styles.meta}>No builds recorded yet.</Text>
+            </View>
+          )}
         </>
       ) : null}
     </View>

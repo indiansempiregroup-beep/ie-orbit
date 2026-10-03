@@ -68,6 +68,9 @@ import {
 import { shopListRefreshControl } from './shopRefreshControl';
 import { SearchBar } from '../../components/SearchBar';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
+import { voucherBillBreakdown } from '../../utils/shopOrderBill';
+import { loyaltyBillHighlight, readLoyaltyPrefs } from '../../utils/loyalty';
+import { useCustomers } from '../../hooks/useOpsData';
 
 const EWAY_TRANSPORT_MODES = [
   { value: '1', label: 'Road' },
@@ -407,7 +410,8 @@ function SaleInvoiceDetailModal({
   const { lift, maxHeight } = useSheetKeyboardLayout(0.88);
   const client = useOpsClient();
   const toast = useToast();
-  const { businessId } = useWorkspace();
+  const { businessId, activeBusiness } = useWorkspace();
+  const { customers: loyaltyCustomers } = useCustomers();
 
   const [order, setOrder] = useState<ShopOrder | null>(null);
   const [returns, setReturns] = useState<ShopReturn[]>([]);
@@ -582,6 +586,19 @@ function SaleInvoiceDetailModal({
   const balance = voucherBalanceDue(localVoucher);
   const displayPaid = voucherDisplayPaid(localVoucher);
   const displayTotal = voucherDisplayTotal(localVoucher);
+  const bill = voucherBillBreakdown(localVoucher, order);
+  const loyaltyPrefs = readLoyaltyPrefs(
+    (activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined,
+  );
+  const saleCustomer = localVoucher.customer
+    ? loyaltyCustomers.find((row) => row.id === String(localVoucher.customer))
+    : null;
+  const loyaltyHighlight = loyaltyBillHighlight({
+    enabled: loyaltyPrefs.enabled,
+    pointsEarned: bill.pointsEarned,
+    pointsToEarn: bill.pointsToEarn,
+    pointsBalance: saleCustomer ? Number(saleCustomer.loyalty_points ?? 0) : null,
+  });
   const lines = Array.isArray(localVoucher.line_items) ? localVoucher.line_items : [];
   const meta =
     localVoucher.metadata && typeof localVoucher.metadata === 'object' ? localVoucher.metadata : {};
@@ -611,18 +628,57 @@ function SaleInvoiceDetailModal({
           <View style={detailStyles.hero}>
             <View style={detailStyles.handle} />
             <View style={detailStyles.heroTop}>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={detailStyles.heroKicker}>
-                  {[formatVoucherDateTime(localVoucher.voucher_date, localVoucher.created_at), voucherPartyLabel(localVoucher)]
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={detailStyles.heroNumber}>{localVoucher.voucher_number}</Text>
+                <Text style={detailStyles.heroAmount}>{formatMoney(displayTotal)}</Text>
+                <Text style={detailStyles.heroKicker} numberOfLines={1}>
+                  {[
+                    voucherPartyLabel(localVoucher),
+                    formatVoucherDateTime(localVoucher.voucher_date, localVoucher.created_at),
+                  ]
                     .filter(Boolean)
                     .join(' · ')}
                 </Text>
-                <Text style={detailStyles.heroAmount}>{formatMoney(displayTotal)}</Text>
-                <Text style={detailStyles.heroNumber}>{localVoucher.voucher_number}</Text>
               </View>
               <Pressable style={detailStyles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
                 <Feather name="x" size={18} color={colors.primaryForeground} />
               </Pressable>
+            </View>
+            <View style={detailStyles.heroBadges}>
+              <View style={[detailStyles.heroBadge, paid ? detailStyles.heroBadgePaid : detailStyles.heroBadgeDue]}>
+                <Text
+                  style={[
+                    detailStyles.heroBadgeText,
+                    { color: paid ? '#047857' : '#92400e' },
+                  ]}
+                >
+                  {paid ? 'Paid' : `Due ${formatMoney(balance)}`}
+                </Text>
+              </View>
+              {bill.paymentLabel ? (
+                <View style={detailStyles.heroBadgeMuted}>
+                  <Text style={detailStyles.heroBadgeText}>{bill.paymentLabel}</Text>
+                </View>
+              ) : null}
+              <View style={detailStyles.heroBadgeMuted}>
+                <Text style={detailStyles.heroBadgeText}>
+                  {gstin ? `B2B · ${gstin}` : 'B2C'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={detailStyles.payStrip}>
+            <View style={detailStyles.payCell}>
+              <Text style={detailStyles.payLabel}>Received</Text>
+              <Text style={detailStyles.payValue}>{formatMoney(displayPaid)}</Text>
+            </View>
+            <View style={detailStyles.payDivider} />
+            <View style={detailStyles.payCell}>
+              <Text style={detailStyles.payLabel}>Balance due</Text>
+              <Text style={[detailStyles.payValue, balance > 0 && { color: colors.warning }]}>
+                {formatMoney(balance)}
+              </Text>
             </View>
           </View>
 
@@ -631,28 +687,6 @@ function SaleInvoiceDetailModal({
             contentContainerStyle={detailStyles.stack}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={detailStyles.badgeRow}>
-              <View
-                style={[
-                  detailStyles.badge,
-                  { backgroundColor: paid ? colors.successSoft : colors.destructiveSoft },
-                ]}
-              >
-                <Text style={[detailStyles.badgeText, { color: paid ? '#047857' : '#B91C1C' }]}>
-                  {paid ? 'Paid' : `Due ${formatMoney(balance)}`}
-                </Text>
-              </View>
-              {gstin ? (
-                <View style={[detailStyles.badge, { backgroundColor: colors.tint }]}>
-                  <Text style={[detailStyles.badgeText, { color: colors.primary }]}>B2B · {gstin}</Text>
-                </View>
-              ) : (
-                <View style={[detailStyles.badge, { backgroundColor: colors.background }]}>
-                  <Text style={[detailStyles.badgeText, { color: colors.mutedForeground }]}>B2C</Text>
-                </View>
-              )}
-            </View>
-
             {localVoucher.customer ? (
               <CustomerDetailLinkCard
                 customerId={String(localVoucher.customer)}
@@ -661,7 +695,7 @@ function SaleInvoiceDetailModal({
               />
             ) : null}
 
-            <Text style={detailStyles.section}>Line items</Text>
+            <Text style={detailStyles.section}>Items · {lines.length}</Text>
             {lines.length === 0 ? (
               <Text style={detailStyles.meta}>No line items on this voucher.</Text>
             ) : (
@@ -704,58 +738,75 @@ function SaleInvoiceDetailModal({
             )}
 
             <View style={detailStyles.totals}>
+              <Text style={[detailStyles.section, { marginTop: 0 }]}>Bill summary</Text>
+              <View style={detailStyles.totalRow}>
+                <Text style={detailStyles.meta}>Items</Text>
+                <Text style={detailStyles.meta}>{formatMoney(bill.merchandiseGross)}</Text>
+              </View>
+              <View style={detailStyles.totalRow}>
+                <Text style={detailStyles.meta}>Product discount</Text>
+                <Text style={detailStyles.meta}>
+                  {bill.lineDiscountTotal > 0
+                    ? `-${formatMoney(bill.lineDiscountTotal)}`
+                    : formatMoney(0)}
+                </Text>
+              </View>
               <View style={detailStyles.totalRow}>
                 <Text style={detailStyles.meta}>Subtotal</Text>
-                <Text style={detailStyles.meta}>{formatMoney(localVoucher.subtotal)}</Text>
+                <Text style={detailStyles.meta}>
+                  {formatMoney(bill.merchandiseAfterLineDiscount)}
+                </Text>
               </View>
-              {voucherAmount(localVoucher.discount_total) > 0 ? (
+              {bill.billDiscount > 0 ? (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.meta}>Discount</Text>
-                  <Text style={detailStyles.meta}>-{formatMoney(localVoucher.discount_total)}</Text>
+                  <Text style={detailStyles.meta}>Bill discount</Text>
+                  <Text style={detailStyles.meta}>-{formatMoney(bill.billDiscount)}</Text>
                 </View>
               ) : null}
-              {(() => {
-                const loyaltyMeta =
-                  localVoucher.metadata && typeof localVoucher.metadata === 'object'
-                    ? (localVoucher.metadata as Record<string, unknown>).loyalty
-                    : null;
-                const loyalty =
-                  loyaltyMeta && typeof loyaltyMeta === 'object'
-                    ? (loyaltyMeta as Record<string, unknown>)
-                    : null;
-                const reward = Number(loyalty?.discount_amount || 0);
-                const pts = Number(loyalty?.points_redeemed || 0);
-                if (reward <= 0) return null;
-                return (
-                  <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>
-                      Reward points{pts > 0 ? ` (${pts} pts)` : ''}
-                    </Text>
-                    <Text style={detailStyles.meta}>-{formatMoney(reward)}</Text>
-                  </View>
-                );
-              })()}
-              {voucherAmount(localVoucher.igst_total) > 0 ? (
+              {bill.couponDiscount > 0 ? (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.meta}>IGST</Text>
-                  <Text style={detailStyles.meta}>{formatMoney(localVoucher.igst_total)}</Text>
+                  <Text style={detailStyles.meta}>
+                    Coupon{bill.couponCode ? ` ${bill.couponCode}` : ''}
+                  </Text>
+                  <Text style={detailStyles.meta}>-{formatMoney(bill.couponDiscount)}</Text>
                 </View>
-              ) : voucherAmount(localVoucher.cgst_total) > 0 ||
-                voucherAmount(localVoucher.sgst_total) > 0 ? (
-                <>
+              ) : null}
+              {bill.rewardDiscount > 0 || (loyaltyPrefs.enabled && bill.rewardPoints > 0) ? (
+                <View style={detailStyles.totalRow}>
+                  <Text style={detailStyles.meta}>
+                    {loyaltyPrefs.enabled
+                      ? `Points used${bill.rewardPoints > 0 ? ` (${bill.rewardPoints})` : ''}`
+                      : 'Discount'}
+                  </Text>
+                  <Text style={detailStyles.meta}>-{formatMoney(bill.rewardDiscount)}</Text>
+                </View>
+              ) : null}
+              <View style={detailStyles.totalRow}>
+                <Text style={detailStyles.meta}>Taxable</Text>
+                <Text style={detailStyles.meta}>{formatMoney(bill.taxableSubtotal)}</Text>
+              </View>
+              {bill.taxTotal > 0 ? (
+                bill.isInterstate || bill.igst > 0 ? (
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>CGST</Text>
-                    <Text style={detailStyles.meta}>{formatMoney(localVoucher.cgst_total)}</Text>
+                    <Text style={detailStyles.meta}>IGST</Text>
+                    <Text style={detailStyles.meta}>{formatMoney(bill.igst || bill.taxTotal)}</Text>
                   </View>
-                  <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>SGST</Text>
-                    <Text style={detailStyles.meta}>{formatMoney(localVoucher.sgst_total)}</Text>
-                  </View>
-                </>
+                ) : (
+                  <>
+                    <View style={detailStyles.totalRow}>
+                      <Text style={detailStyles.meta}>CGST</Text>
+                      <Text style={detailStyles.meta}>{formatMoney(bill.cgst)}</Text>
+                    </View>
+                    <View style={detailStyles.totalRow}>
+                      <Text style={detailStyles.meta}>SGST</Text>
+                      <Text style={detailStyles.meta}>{formatMoney(bill.sgst)}</Text>
+                    </View>
+                  </>
+                )
               ) : (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.meta}>GST</Text>
-                  <Text style={detailStyles.meta}>{formatMoney(localVoucher.tax_total)}</Text>
+                  <Text style={detailStyles.meta}>Tax</Text>
+                  <Text style={detailStyles.meta}>{formatMoney(bill.taxTotal)}</Text>
                 </View>
               )}
               {returnedTotal > 0 ? (
@@ -787,18 +838,26 @@ function SaleInvoiceDetailModal({
                 </>
               ) : (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.payableLabel}>Invoice total</Text>
+                  <Text style={detailStyles.payableLabel}>Total</Text>
                   <Text style={detailStyles.payableValue}>{formatMoney(displayTotal)}</Text>
                 </View>
               )}
-              <View style={detailStyles.totalRow}>
-                <Text style={detailStyles.meta}>Amount paid</Text>
-                <Text style={detailStyles.meta}>{formatMoney(displayPaid)}</Text>
-              </View>
-              {balance > 0 ? (
-                <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.dueLabel}>Balance due</Text>
-                  <Text style={detailStyles.dueValue}>{formatMoney(balance)}</Text>
+              {loyaltyHighlight ? (
+                <View
+                  style={[
+                    detailStyles.loyaltyHighlight,
+                    bill.pointsEarned <= 0 && detailStyles.loyaltyHighlightPending,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      detailStyles.loyaltyValue,
+                      bill.pointsEarned <= 0 && detailStyles.loyaltyValuePending,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {loyaltyHighlight}
+                  </Text>
                 </View>
               ) : null}
               {returnMode && pendingReturnTotal > 0 ? (
@@ -809,10 +868,11 @@ function SaleInvoiceDetailModal({
               ) : null}
             </View>
 
-            <Text style={detailStyles.section}>Return history</Text>
             {loadingExtra ? <ActivityIndicator color={colors.primary} /> : null}
-            {!loadingExtra && returns.length === 0 && returnHistory.length === 0 ? (
-              <Text style={detailStyles.meta}>No returns recorded against this invoice.</Text>
+            {!loadingExtra && (returns.length > 0 || returnHistory.length > 0) ? (
+              <Text style={detailStyles.section}>
+                Returns · {returns.length || returnHistory.length}
+              </Text>
             ) : null}
             {returns.map((shopReturn) => {
               const rMeta =
@@ -933,35 +993,34 @@ function SaleInvoiceDetailModal({
 
           <View style={detailStyles.footer}>
             {returnMode ? (
-              <>
-                <Button
-                  label={busy ? 'Processing return…' : 'Confirm return'}
-                  loading={busy}
-                  fullWidth
-                  onPress={() => void submitReturn()}
-                />
-                <Button
-                  label="Cancel"
-                  variant="outline"
-                  fullWidth
-                  disabled={busy}
-                  onPress={() => {
-                    setReturnMode(false);
-                    setQtyByLine({});
-                    setReason('');
-                  }}
-                />
-              </>
-            ) : (
-              <>
-                {canReturn ? (
-                  <Button label="Return items" fullWidth onPress={() => setReturnMode(true)} />
-                ) : null}
-                {businessId && localVoucher ? (
+              <View style={detailStyles.footerPrimaryRow}>
+                <View style={{ flex: 1 }}>
                   <Button
-                    label="View / Print / Share"
-                    variant="secondary"
+                    label="Cancel"
+                    variant="outline"
                     fullWidth
+                    disabled={busy}
+                    onPress={() => {
+                      setReturnMode(false);
+                      setQtyByLine({});
+                      setReason('');
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1.4 }}>
+                  <Button
+                    label={busy ? 'Processing…' : 'Confirm return'}
+                    loading={busy}
+                    fullWidth
+                    onPress={() => void submitReturn()}
+                  />
+                </View>
+              </View>
+            ) : (
+              <View style={detailStyles.actionRow}>
+                {businessId && localVoucher ? (
+                  <Pressable
+                    style={({ pressed }) => [detailStyles.actionTile, pressed && detailStyles.actionTilePressed]}
                     onPress={() =>
                       setDocActions({
                         kind: 'sale',
@@ -972,14 +1031,45 @@ function SaleInvoiceDetailModal({
                         email: localVoucher.customer_email || '',
                       })
                     }
-                  />
+                  >
+                    <View style={[detailStyles.actionIcon, detailStyles.actionIconPrimary]}>
+                      <Feather name="share-2" size={18} color={colors.primaryForeground} />
+                    </View>
+                    <Text style={detailStyles.actionLabel}>Share</Text>
+                  </Pressable>
                 ) : null}
-                <Button label="GST compliance" variant="outline" fullWidth onPress={onOpenCompliance} />
+                {canReturn ? (
+                  <Pressable
+                    style={({ pressed }) => [detailStyles.actionTile, pressed && detailStyles.actionTilePressed]}
+                    onPress={() => setReturnMode(true)}
+                  >
+                    <View style={detailStyles.actionIcon}>
+                      <Feather name="rotate-ccw" size={18} color={colors.primary} />
+                    </View>
+                    <Text style={detailStyles.actionLabel}>Return</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  style={({ pressed }) => [detailStyles.actionTile, pressed && detailStyles.actionTilePressed]}
+                  onPress={onOpenCompliance}
+                >
+                  <View style={detailStyles.actionIcon}>
+                    <Feather name="shield" size={18} color={colors.primary} />
+                  </View>
+                  <Text style={detailStyles.actionLabel}>GST</Text>
+                </Pressable>
                 {onVoid && !isVoidedVoucher(localVoucher.status) ? (
-                  <Button label="Void sale" variant="destructive" fullWidth onPress={() => onVoid(localVoucher)} />
+                  <Pressable
+                    style={({ pressed }) => [detailStyles.actionTile, pressed && detailStyles.actionTilePressed]}
+                    onPress={() => onVoid(localVoucher)}
+                  >
+                    <View style={[detailStyles.actionIcon, detailStyles.actionIconDanger]}>
+                      <Feather name="slash" size={18} color={colors.destructive} />
+                    </View>
+                    <Text style={[detailStyles.actionLabel, { color: colors.destructive }]}>Void</Text>
+                  </Pressable>
                 ) : null}
-                <Button label="Close" variant="ghost" fullWidth onPress={onClose} />
-              </>
+              </View>
             )}
           </View>
         </View>
@@ -1678,18 +1768,24 @@ const detailStyles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
   },
   heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  heroKicker: { ...typography.caption, color: 'rgba(255,255,255,0.78)' },
+  heroKicker: { ...typography.caption, color: 'rgba(255,255,255,0.78)', marginTop: 2 },
   heroAmount: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
     color: colors.primaryForeground,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
+    marginTop: 2,
   },
-  heroNumber: { ...typography.label, color: 'rgba(255,255,255,0.88)' },
+  heroNumber: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 0.2,
+  },
   heroClose: {
     width: 36,
     height: 36,
@@ -1698,6 +1794,17 @@ const detailStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  heroBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
+  heroBadge: {
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  heroBadgePaid: { backgroundColor: 'rgba(220,252,231,0.95)' },
+  heroBadgeDue: { backgroundColor: 'rgba(254,243,199,0.95)' },
+  heroBadgeMuted: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  heroBadgeText: { fontSize: 11, fontWeight: '700', color: colors.primaryForeground },
   handle: {
     alignSelf: 'center',
     width: 40,
@@ -1705,15 +1812,37 @@ const detailStyles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: 'rgba(255,255,255,0.45)',
   },
+  payStrip: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginHorizontal: spacing.lg,
+    marginTop: -10,
+    marginBottom: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  payCell: { flex: 1, gap: 2 },
+  payDivider: { width: 1, backgroundColor: colors.border, marginHorizontal: spacing.sm },
+  payLabel: { ...typography.tiny, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.4 },
+  payValue: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.sm },
   title: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.foreground },
   meta: { color: colors.mutedForeground, fontSize: 13, marginTop: 2 },
   scroll: { flexGrow: 0, flexShrink: 1 },
   stack: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
-  badge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  section: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.foreground, marginTop: spacing.sm },
+  section: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 13,
+    color: colors.mutedForeground,
+    marginTop: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   lineRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1742,6 +1871,25 @@ const detailStyles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
   payableLabel: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.foreground },
   payableValue: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.foreground },
+  loyaltyHighlight: {
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.successSoft,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  loyaltyHighlightPending: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  loyaltyValue: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 13,
+    color: colors.success,
+  },
+  loyaltyValuePending: { color: '#92400E' },
   dueLabel: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.destructive },
   dueValue: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.destructive },
   historyCard: {
@@ -1786,6 +1934,43 @@ const detailStyles = StyleSheet.create({
     backgroundColor: colors.inputBackground,
   },
   restockRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
-  footer: { gap: spacing.sm, paddingTop: spacing.md, paddingHorizontal: spacing.lg },
+  footer: {
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  footerPrimaryRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    gap: spacing.sm,
+    paddingBottom: 2,
+  },
+  actionTile: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  actionTilePressed: { backgroundColor: colors.muted },
+  actionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionIconPrimary: { backgroundColor: colors.primary },
+  actionIconDanger: { backgroundColor: colors.destructiveSoft },
+  actionLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+    color: colors.foreground,
+  },
 });
 

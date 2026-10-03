@@ -15,7 +15,7 @@ const ACTION_OK: Record<string, string> = {
   'Build preview APK': 'Preview APK build started.',
   'Refresh preview status': 'Preview status updated.',
   'Build store AAB': 'Store AAB build started.',
-  'Mark live': 'Marked live on Play.',
+  'Mark live': 'Marked this store version as live in Orbit.',
   'Refresh store status': 'Store status updated.',
 };
 
@@ -112,6 +112,8 @@ function BuildCard({
   const versionName = String(data?.version_name || '');
   const versionCode = data?.version_code;
   const error = String(data?.error || '');
+  const refreshNote = String(data?.refresh_note || '');
+  const refreshedAt = String(data?.refreshed_at || '');
   const running = status === 'queued' || status === 'in_progress';
   return (
     <div className={`admin-build-card tenant-build-card tenant-build-card--${track}${running ? ' is-running' : ''}`}>
@@ -128,6 +130,12 @@ function BuildCard({
         <AdminStatus status={status} />
       </div>
       {error ? <p className="admin-message">{error}</p> : null}
+      {refreshNote ? (
+        <p className="admin-list-row__meta" style={{ marginTop: 8 }}>
+          {refreshNote}
+          {refreshedAt ? ` · ${new Date(refreshedAt).toLocaleString()}` : ''}
+        </p>
+      ) : null}
       <div className="admin-action-bar" style={{ marginTop: 0 }}>
         {url ? (
           <a className="admin-btn admin-btn--primary" href={url} target="_blank" rel="noreferrer">
@@ -140,6 +148,62 @@ function BuildCard({
           </a>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function BuildHistory({ builds }: { builds: Record<string, unknown>[] }) {
+  if (!builds.length) {
+    return <p className="admin-list-row__meta">No builds recorded yet.</p>;
+  }
+  return (
+    <div className="admin-table" style={{ marginTop: 8 }}>
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Track</th>
+            <th>Status</th>
+            <th>Version</th>
+            <th>Links</th>
+          </tr>
+        </thead>
+        <tbody>
+          {builds.map((row, index) => {
+            const at = String(row.at || row.started_at || row.updated_at || '');
+            const track = String(row.track || '—');
+            const status = String(row.status || '—');
+            const version = String(row.version_name || '—');
+            const url = String(row.url || '');
+            const apkUrl = String(row.apk_url || '');
+            return (
+              <tr key={`${track}-${at}-${String(row.build_id || '')}-${index}`}>
+                <td>{at ? new Date(at).toLocaleString() : '—'}</td>
+                <td>{track}</td>
+                <td>
+                  <AdminStatus status={status} />
+                </td>
+                <td>{version}</td>
+                <td>
+                  <div className="admin-action-bar" style={{ margin: 0, gap: 6 }}>
+                    {url ? (
+                      <a className="admin-btn admin-btn--ghost" href={url} target="_blank" rel="noreferrer">
+                        Expo
+                      </a>
+                    ) : null}
+                    {apkUrl ? (
+                      <a className="admin-btn admin-btn--ghost" href={apkUrl} target="_blank" rel="noreferrer">
+                        Artifact
+                      </a>
+                    ) : null}
+                    {!url && !apkUrl ? '—' : null}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -361,9 +425,22 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
         snackbar.push(failed, 'error', 10000);
         return false;
       }
+      const recipeData = result.data?.recipe as
+        | { preview?: { refresh_note?: string }; production?: { refresh_note?: string } }
+        | undefined;
+      const refreshDetail =
+        label === 'Refresh preview status'
+          ? recipeData?.preview?.refresh_note
+          : label === 'Refresh store status'
+            ? recipeData?.production?.refresh_note
+            : undefined;
       const okText = ACTION_OK[label] ?? `${label} succeeded`;
-      setFeedback({ tone: 'ok', title: okText });
-      snackbar.push(okText, 'success');
+      setFeedback({
+        tone: 'ok',
+        title: okText,
+        detail: refreshDetail || undefined,
+      });
+      snackbar.push(refreshDetail || okText, 'success');
       await query.refetch();
       return true;
     } catch (err) {
@@ -807,26 +884,45 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
                 track="preview"
                 data={recipe.preview as Record<string, unknown> | undefined}
               />
+              <p className="admin-list-row__meta" style={{ marginTop: 8 }}>
+                Use Refresh status to poll Expo for the latest build state.
+              </p>
             </AdminSection>
 
             <AdminSection
               title="Go live"
-              description="Store AAB for Play. Add Play signing SHA-1 before customers use Google Sign-In from Play."
+              description="Build a store AAB, refresh until finished, then mark live in Orbit. Play Console upload is still manual until EAS submit is configured."
             >
+              {!checklist?.store_aab ? (
+                <p className="admin-message" style={{ marginBottom: 12 }}>
+                  Mark live stays disabled until a store AAB finishes successfully
+                  {checklist?.ready_for_preview
+                    ? ' — build a store AAB, then use Refresh status.'
+                    : ' — finish brand, Google client, and Firebase first.'}
+                </p>
+              ) : null}
               <div className="tenant-stat-grid" style={{ marginBottom: 12 }}>
                 <div className="tenant-stat tenant-stat--accent">
-                  <span>Live</span>
+                  <span>Live in Orbit</span>
                   <strong>
-                    {(recipe.live as { version_name?: string } | undefined)?.version_name
+                    {(recipe.live as { version_name?: string; marked_live_at?: string } | undefined)?.version_name
                       ? `${(recipe.live as { version_name?: string }).version_name}`
                       : 'Not live'}
                   </strong>
+                  {(recipe.live as { marked_live_at?: string } | undefined)?.marked_live_at ? (
+                    <div className="admin-list-row__meta">
+                      Marked {new Date(String((recipe.live as { marked_live_at?: string }).marked_live_at)).toLocaleString()}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="tenant-stat">
                   <span>Last store build</span>
                   <strong>
-                    {(recipe.production as { version_name?: string } | undefined)?.version_name || '—'}
+                    {(recipe.production as { version_name?: string; status?: string } | undefined)?.version_name || '—'}
                   </strong>
+                  <div className="admin-list-row__meta">
+                    Status {(recipe.production as { status?: string } | undefined)?.status || 'idle'}
+                  </div>
                 </div>
               </div>
               <AdminField label="Version bump for next store build">
@@ -857,7 +953,7 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
                     run('Mark live', () => client.platform.updateCustomerApp(businessId, { mark_live: true }))
                   }
                 >
-                  Mark live on Play
+                  Mark live in Orbit
                 </button>
                 <button
                   type="button"
@@ -875,9 +971,13 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
                 track="production"
                 data={recipe.production as Record<string, unknown> | undefined}
               />
+              <div style={{ marginTop: 16 }}>
+                <strong>Build history</strong>
+                <BuildHistory builds={(recipe.builds as Record<string, unknown>[]) || []} />
+              </div>
               <p className="admin-list-row__meta" style={{ marginTop: 8 }}>
-                Play submit from admin lands after EAS submit credentials are configured on the build worker. Until then,
-                download the AAB from Expo and upload in Play Console.
+                “Mark live in Orbit” records the finished store version for ops tracking. It does not upload to Play.
+                Download the AAB from Expo and upload in Play Console until EAS submit is configured.
               </p>
             </AdminSection>
           </div>

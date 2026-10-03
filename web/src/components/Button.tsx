@@ -20,22 +20,30 @@ export function Button({
 }: ButtonProps) {
   const base: React.CSSProperties = {
     border: 'none',
-    borderRadius: 7,
+    borderRadius: 10,
     padding: '10px 16px',
-    fontWeight: 600,
+    fontSize: 14,
+    lineHeight: 1.25,
+    fontWeight: 400,
+    letterSpacing: '-0.01em',
     cursor: loading || disabled ? 'not-allowed' : 'pointer',
-    transition: 'background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease',
-    boxShadow: '0 1px 2px rgba(15, 22, 35, 0.04)',
+    transition:
+      'background-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 120ms ease, box-shadow 160ms ease',
+    boxShadow: 'none',
     opacity: loading || disabled ? 0.72 : 1,
   };
   const variants: Record<string, React.CSSProperties> = {
-    primary: { background: 'var(--primary)', color: 'var(--primary-foreground)', boxShadow: '0 8px 18px rgba(28, 113, 143, 0.22)' },
+    primary: {
+      background: 'var(--primary)',
+      color: 'var(--primary-foreground)',
+      boxShadow: '0 4px 14px rgba(28, 113, 143, 0.28)',
+    },
     neutral: { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)' },
     ghost: { background: 'transparent', color: 'var(--muted-foreground)', boxShadow: 'none' },
   };
   return (
     <button
-      className={`button ${className ?? ''}`}
+      className={`button ${variant} ${className ?? ''}`.trim()}
       style={{ ...base, ...variants[variant], ...style }}
       disabled={disabled || loading}
       aria-busy={loading || undefined}

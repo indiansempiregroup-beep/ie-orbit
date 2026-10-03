@@ -4,7 +4,13 @@ import { formatMoney } from '../../lib/currency';
 import { StatCard } from './components/StatCard';
 import { TrendChart } from './components/TrendChart';
 import { useBIOverviewQuery } from './biHooks';
-import type { BIOverviewResponse, BIReportsBundle, BIShopieOverview, DashboardPetsSummary } from '@ie-orbit/sdk';
+import type {
+  BIForecastReport,
+  BIOverviewResponse,
+  BIReportsBundle,
+  BIShopieOverview,
+  DashboardPetsSummary,
+} from '@ie-orbit/sdk';
 
 function changeHint(value?: number | null) {
   if (value == null) return undefined;
@@ -174,6 +180,29 @@ function ShopieBlock({ data }: { data: BIShopieOverview }) {
   );
 }
 
+function ForecastBlock({ data }: { data: BIForecastReport }) {
+  return (
+    <Card>
+      <SectionHeading
+        title={`Next ${data.horizon_days ?? 30} days`}
+        subtitle={data.note || 'Projected from the recent booking pace.'}
+      />
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <StatCard label="Projected bookings" value={data.projected_bookings ?? 0} />
+        <StatCard
+          label="Projected revenue"
+          value={formatMoney(Number(data.projected_revenue ?? 0), data.currency)}
+        />
+        <StatCard label="Avg daily bookings" value={data.avg_daily_bookings ?? 0} />
+        <StatCard
+          label="Avg daily revenue"
+          value={formatMoney(Number(data.avg_daily_revenue ?? 0), data.currency)}
+        />
+      </div>
+    </Card>
+  );
+}
+
 function PetsBlock({ data }: { data: DashboardPetsSummary }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -184,6 +213,19 @@ function PetsBlock({ data }: { data: DashboardPetsSummary }) {
         <StatCard label="Birthdays (30 days)" value={data.birthdays_next_30d} />
         <StatCard label="With photo" value={data.with_photo} />
       </div>
+      {(data.insights ?? []).length ? (
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Pet insights</h3>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {(data.insights ?? []).map((insight) => (
+              <div key={`${insight.type}-${insight.title}`}>
+                <div style={{ fontWeight: 700 }}>{insight.title}</div>
+                <div style={{ color: 'var(--muted-foreground)', fontSize: 14 }}>{insight.detail}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -211,6 +253,7 @@ export function BIOverviewPage() {
   const appointie = resolveAppointie(data);
   const shopie = data?.shopie;
   const pets = data?.pets;
+  const forecast = data?.forecast ?? data?.appointie?.forecast;
 
   return (
     <div style={{ display: 'grid', gap: 24 }}>
@@ -226,6 +269,7 @@ export function BIOverviewPage() {
 
       {appointie ? <AppointieBlock data={appointie} /> : null}
       {shopie ? <ShopieBlock data={shopie} /> : null}
+      {forecast ? <ForecastBlock data={forecast} /> : null}
       {pets ? <PetsBlock data={pets} /> : null}
 
       {!overviewQuery.isLoading && !appointie && !shopie && !pets ? (

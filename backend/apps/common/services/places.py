@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -177,8 +178,11 @@ def _normalized_place(
     street = " ".join(part for part in (street_number, route) if part)
     premise = _first_component(components, "premise", "subpremise")
     # A lone house number is not useful to a driver; keep Google's full address
-    # unless we have an actual street/premise label.
-    line1 = street if route else premise or formatted
+    # unless we have an actual street/premise label. Strip plus-codes from the
+    # stored street line so invoices don't show map pins like "FR5W+JFH".
+    raw_line1 = street if route else premise or formatted
+    line1 = re.sub(r"\b[A-Z0-9]{2,8}\+[A-Z0-9]{2,3}\b,?\s*", "", str(raw_line1 or ""), flags=re.I)
+    line1 = re.sub(r"\s*,\s*,+", ", ", line1).strip(" ,") or str(raw_line1 or "").strip()
     city = _first_component(
         components,
         "locality",

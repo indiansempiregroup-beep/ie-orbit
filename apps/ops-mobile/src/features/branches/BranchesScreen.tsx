@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -135,11 +135,11 @@ export function BranchesScreen() {
             !loading ? (
               <EmptyState
                 icon="map-pin"
-                title={branches.length ? 'No offices match' : 'No offices yet'}
+                title={branches.length ? 'No matching offices' : 'No offices yet'}
                 message={
                   branches.length
-                    ? 'Try a different search or status filter.'
-                    : 'Add your first office with a full address and map pin to start taking bookings and orders.'
+                    ? 'Try another search or clear filters.'
+                    : 'Add your first office with a full address and map pin.'
                 }
                 actionLabel={branches.length ? undefined : 'Add office'}
                 onAction={branches.length ? undefined : () => navigation.navigate('BranchForm')}

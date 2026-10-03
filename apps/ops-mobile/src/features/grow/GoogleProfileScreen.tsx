@@ -98,12 +98,19 @@ export function GoogleProfileScreen() {
       onRefresh={onRefresh}
       footer={
         <View style={styles.footer}>
-          <Button label="Open Google profile" fullWidth onPress={() => void openProfile()} />
+          <Button
+            label="Open Google profile"
+            variant="outline"
+            icon="external-link"
+            style={styles.footerButton}
+            onPress={() => void openProfile()}
+          />
           <Button
             label={busy ? 'Saving…' : 'Save'}
+            icon="save"
             loading={busy}
-            fullWidth
             size="lg"
+            style={styles.footerButton}
             onPress={() => void save()}
           />
         </View>
@@ -152,6 +159,7 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     backgroundColor: colors.inputBackground,
   },
-  footer: { gap: spacing.sm },
+  footer: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
+  footerButton: { flex: 1 },
   error: { color: colors.destructive },
 });

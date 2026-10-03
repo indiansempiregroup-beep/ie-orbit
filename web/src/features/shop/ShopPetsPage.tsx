@@ -19,13 +19,14 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 import { resolveMediaAssetUrl, toStoredMediaAssetUrl } from '../../lib/mediaUrl';
 import { uploadPetImage } from './uploadProductImage';
 
-const SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other'];
+const FALLBACK_SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit'];
 const SEX_OPTIONS = ['Male', 'Female', 'Unknown'];
 
 const emptyForm = {
   customerId: '',
   name: '',
-  species: 'Dog',
+  speciesChoice: 'Dog',
+  speciesOther: '',
   breed: '',
   sex: '',
   birthday: '',
@@ -38,11 +39,14 @@ type FormState = typeof emptyForm;
 const fieldLabel: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: '#374151' };
 const fieldInput: React.CSSProperties = { padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' };
 
-function formFromPet(pet: ShopPet): FormState {
+function formFromPet(pet: ShopPet, masterLabels: string[]): FormState {
+  const species = (pet.species || 'Dog').trim();
+  const inMaster = masterLabels.some((label) => label.toLowerCase() === species.toLowerCase());
   return {
     customerId: pet.customer || '',
     name: pet.name || '',
-    species: pet.species || 'Dog',
+    speciesChoice: inMaster ? species : 'Other',
+    speciesOther: inMaster ? '' : species,
     breed: pet.breed || '',
     sex: pet.sex || '',
     birthday: pet.birthday ? String(pet.birthday).slice(0, 10) : '',
@@ -90,6 +94,21 @@ export function ShopPetsPage() {
   const [notifySubject, setNotifySubject] = useState('');
   const [notifyBody, setNotifyBody] = useState('');
   const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
+
+  const masterSpecies = useQuery({
+    queryKey: ['shop-master', 'pet_species', workspace.businessId],
+    enabled: Boolean(workspace.businessId),
+    queryFn: async () => {
+      const response = await client.shop.listMasterRecords('pet_species', {
+        business_id: workspace.businessId!,
+      });
+      return (response.data.items ?? [])
+        .filter((row) => row.is_active)
+        .map((row) => row.label)
+        .filter(Boolean);
+    },
+  });
+  const masterSpeciesLabels = masterSpecies.data?.length ? masterSpecies.data : FALLBACK_SPECIES;
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -178,7 +197,7 @@ export function ShopPetsPage() {
 
   function openEditDialog(pet: ShopPet) {
     setEditingId(pet.id);
-    setForm(formFromPet(pet));
+    setForm(formFromPet(pet, masterSpeciesLabels));
     setMessage(null);
     dialog.show();
   }
@@ -225,11 +244,21 @@ export function ShopPetsPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!form.customerId || !form.name.trim()) return;
+    const speciesValue =
+      form.speciesChoice === 'Other' ? form.speciesOther.trim() : form.speciesChoice.trim();
+    if (form.speciesChoice === 'Other' && !speciesValue) {
+      setMessage('Enter the species.');
+      return;
+    }
+    if (!speciesValue) {
+      setMessage('Select a species.');
+      return;
+    }
     setMessage(null);
     const payload = {
       customer_id: form.customerId,
       name: form.name.trim(),
-      species: form.species,
+      species: speciesValue,
       breed: form.breed,
       sex: form.sex,
       birthday: form.birthday || null,
@@ -515,17 +544,36 @@ export function ShopPetsPage() {
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={fieldLabel}>Species</span>
               <select
-                value={form.species}
-                onChange={(event) => setForm({ ...form, species: event.target.value })}
+                value={form.speciesChoice}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    speciesChoice: event.target.value,
+                    speciesOther: event.target.value === 'Other' ? form.speciesOther : '',
+                  })
+                }
                 style={fieldInput}
+                required
               >
-                {SPECIES.map((value) => (
+                {[...masterSpeciesLabels, 'Other'].map((value) => (
                   <option key={value} value={value}>
                     {value}
                   </option>
                 ))}
               </select>
             </label>
+            {form.speciesChoice === 'Other' ? (
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={fieldLabel}>Species name</span>
+                <input
+                  value={form.speciesOther}
+                  onChange={(event) => setForm({ ...form, speciesOther: event.target.value })}
+                  required
+                  placeholder="e.g. Hamster"
+                  style={fieldInput}
+                />
+              </label>
+            ) : null}
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={fieldLabel}>Breed</span>
               <input

@@ -13,10 +13,9 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
-import { ScreenHeader } from '../../components/ProfileMenuScreen';
+import { ScreenHeader, StickyFooter } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { FormAlert } from '../../components/ui/FormAlert';
@@ -32,7 +31,6 @@ import type { RootStackParamList } from '../../navigation/types';
 type AddressFormRoute = RouteProp<RootStackParamList, 'AddressForm'>;
 
 export function AddressFormScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<AddressFormRoute>();
   const { branding } = useBootstrap();
@@ -105,6 +103,7 @@ export function AddressFormScreen() {
       return;
     }
     const nextErrors: Record<string, string> = {};
+    if (!line2.trim()) nextErrors.line2 = 'Flat, floor or landmark is required';
     if (!city.trim()) nextErrors.city = 'City is required';
     if (!country.trim()) nextErrors.country = 'Country is required';
     const phoneError = indianMobileError(phone, true);
@@ -220,11 +219,15 @@ export function AddressFormScreen() {
           <SectionHead icon="home" title="Address details" primaryColor={primary} />
           <Input
             label="Flat, floor or landmark"
-            optional
-            hint="Optional, but it helps the delivery partner reach your door."
+            required
+            hint="Helps the delivery partner reach your door."
             placeholder="Flat 302, B wing, near City Mall"
             value={line2}
-            onChangeText={setLine2}
+            onChangeText={(value) => {
+              setLine2(value);
+              setDetailErrors((current) => ({ ...current, line2: '' }));
+            }}
+            error={detailErrors.line2}
           />
           <Input
             label="Phone number"
@@ -330,16 +333,17 @@ export function AddressFormScreen() {
         </Card>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+      <StickyFooter>
         <Button
           label={editing ? 'Save changes' : 'Save address'}
+          icon="check"
           size="lg"
           fullWidth
           loading={saving}
           primaryColor={primary}
           onPress={() => void save()}
         />
-      </View>
+      </StickyFooter>
     </KeyboardAvoidingView>
   );
 }
@@ -357,13 +361,13 @@ function SectionHead({
 }) {
   return (
     <View style={styles.sectionHead}>
-      <View style={[styles.sectionIcon, { backgroundColor: `${primaryColor}14` }]}>
-        <Feather name={icon} size={15} color={primaryColor} />
-      </View>
-      <View style={styles.sectionCopy}>
+      <View style={styles.sectionTitleRow}>
+        <View style={[styles.sectionIcon, { backgroundColor: `${primaryColor}14` }]}>
+          <Feather name={icon} size={15} color={primaryColor} />
+        </View>
         <Text style={styles.sectionTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
       </View>
+      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
     </View>
   );
 }
@@ -372,12 +376,29 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   section: { gap: spacing.lg },
-  sectionHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  sectionIcon: { width: 30, height: 30, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  sectionCopy: { flex: 1, gap: 2 },
-  sectionTitle: { ...typography.label, color: colors.foreground, fontWeight: '700' },
-  sectionSubtitle: { ...typography.caption, color: colors.mutedForeground, lineHeight: 17 },
-  fieldError: { ...typography.caption, color: colors.destructive },
+  sectionHead: { gap: spacing.sm },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  sectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    ...typography.label,
+    color: colors.foreground,
+    fontWeight: '700',
+    fontSize: 15,
+    lineHeight: 20,
+    flex: 1,
+  },
+  sectionSubtitle: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    lineHeight: 17,
+    paddingLeft: 32 + spacing.md,
+  },
   row: { flexDirection: 'row', gap: spacing.md },
   rowItem: { flex: 1 },
   typeRow: { flexDirection: 'row', gap: spacing.sm },
@@ -398,11 +419,4 @@ const styles = StyleSheet.create({
   defaultCopy: { flex: 1, gap: 2 },
   defaultTitle: { ...typography.label, color: colors.foreground },
   defaultSubtitle: { ...typography.caption, color: colors.mutedForeground },
-  footer: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.card,
-  },
 });

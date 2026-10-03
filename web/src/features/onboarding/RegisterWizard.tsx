@@ -526,8 +526,10 @@ export function RegisterWizard() {
             </div>
             <Input
               label="Flat, floor, building or landmark"
+              required
               placeholder="Shop 12, Ground floor, near City Mall"
               {...register('addressLine2')}
+              error={errors.addressLine2?.message}
             />
             <Input
               label="Country"
@@ -597,15 +599,69 @@ export function RegisterWizard() {
               autoComplete="nickname"
               error={errors.displayName?.message}
             />
-            <Input
-              label="Email"
-              required
-              type="email"
-              {...register('email')}
-              autoComplete="email"
-              readOnly={Boolean(values.googleIdToken)}
-              error={errors.email?.message}
-            />
+            <label className="ui-field" htmlFor="email">
+              <span className="ui-field-label">
+                Email
+                <span className="ui-field-required" aria-hidden="true">
+                  {' '}
+                  *
+                </span>
+              </span>
+              <div
+                className={[
+                  'wizard-input-group',
+                  errors.email ? 'is-error' : '',
+                  values.googleIdToken ? 'is-readonly' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                <input
+                  id="email"
+                  type="email"
+                  className="ui-control"
+                  autoComplete="email"
+                  aria-invalid={Boolean(errors.email)}
+                  {...register('email', {
+                    onChange: () => {
+                      if (ownerOtpSent) setOwnerOtpSent(false);
+                      if (values.ownerOtpCode) setValue('ownerOtpCode', '', { shouldDirty: true });
+                    },
+                  })}
+                  readOnly={Boolean(values.googleIdToken)}
+                />
+                {values.googleIdToken ? (
+                  <span className="wizard-input-group-note">Verified</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="wizard-input-group-btn"
+                    disabled={!values.email || ownerOtpSending}
+                    onClick={() => void sendOwnerOtp()}
+                  >
+                    {ownerOtpSending ? '…' : ownerOtpSent ? 'Resend' : 'Send'}
+                  </button>
+                )}
+              </div>
+              {errors.email?.message ? (
+                <span role="alert" className="field-error">
+                  {errors.email.message}
+                </span>
+              ) : ownerOtpSent && !values.googleIdToken ? (
+                <span className="wizard-otp-sent">Code sent</span>
+              ) : null}
+            </label>
+            {!values.googleIdToken ? (
+              <Input
+                label="Verification code"
+                required
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                {...register('ownerOtpCode')}
+                error={errors.ownerOtpCode?.message}
+                placeholder="6-digit code"
+              />
+            ) : null}
             <Input
               label="Mobile"
               required
@@ -615,67 +671,43 @@ export function RegisterWizard() {
               autoComplete="tel"
               error={errors.mobile?.message}
             />
-            {values.googleIdToken ? (
-              <p className="wizard-google-note wizard-form-span">
-                Continuing with Google. Email verification is not required.
-              </p>
-            ) : (
-              <>
-                <div className="wizard-otp-row wizard-form-span">
-                  <Button
-                    type="button"
-                    variant="neutral"
-                    disabled={!values.email || ownerOtpSending}
-                    onClick={() => void sendOwnerOtp()}
-                  >
-                    {ownerOtpSending ? 'Sending…' : 'Send email code'}
-                  </Button>
-                  {ownerOtpSent ? (
-                    <span className="wizard-otp-sent">Code sent to {values.email}</span>
-                  ) : null}
-                </div>
-                <Input
-                  label="Email verification code"
-                  required
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  {...register('ownerOtpCode')}
-                  error={errors.ownerOtpCode?.message}
-                />
-                <div className="wizard-form-span">
-                  <GoogleSignInButton
-                    disabled={auth.loading}
-                    onIdToken={async (idToken) => {
-                      try {
-                        await auth.loginWithGoogle(idToken);
-                        navigate('/auth', { replace: true });
-                      } catch (err) {
-                        if (!isGoogleAccountNotRegistered(err)) throw err;
-                        const claims = decodeGoogleIdToken(idToken);
-                        setValue('googleIdToken', idToken, { shouldDirty: true });
-                        if (claims.email) {
-                          setValue('email', claims.email, { shouldDirty: true, shouldValidate: true });
-                        }
-                        if (claims.given_name) {
-                          setValue('firstName', claims.given_name, { shouldDirty: true, shouldValidate: true });
-                        }
-                        if (claims.family_name) {
-                          setValue('lastName', claims.family_name, { shouldDirty: true, shouldValidate: true });
-                        }
-                        if (!values.displayName && (claims.given_name || claims.family_name)) {
-                          setValue(
-                            'displayName',
-                            [claims.given_name, claims.family_name].filter(Boolean).join(' '),
-                            { shouldDirty: true, shouldValidate: true },
-                          );
-                        }
-                      }
-                    }}
-                  />
-                </div>
-              </>
-            )}
           </div>
+          {!values.googleIdToken ? (
+            <div className="wizard-google-slot">
+              <GoogleSignInButton
+                hideOriginHint
+                disabled={auth.loading}
+                onIdToken={async (idToken) => {
+                  try {
+                    await auth.loginWithGoogle(idToken);
+                    navigate('/auth', { replace: true });
+                  } catch (err) {
+                    if (!isGoogleAccountNotRegistered(err)) throw err;
+                    const claims = decodeGoogleIdToken(idToken);
+                    setValue('googleIdToken', idToken, { shouldDirty: true });
+                    if (claims.email) {
+                      setValue('email', claims.email, { shouldDirty: true, shouldValidate: true });
+                    }
+                    if (claims.given_name) {
+                      setValue('firstName', claims.given_name, { shouldDirty: true, shouldValidate: true });
+                    }
+                    if (claims.family_name) {
+                      setValue('lastName', claims.family_name, { shouldDirty: true, shouldValidate: true });
+                    }
+                    if (!values.displayName && (claims.given_name || claims.family_name)) {
+                      setValue(
+                        'displayName',
+                        [claims.given_name, claims.family_name].filter(Boolean).join(' '),
+                        { shouldDirty: true, shouldValidate: true },
+                      );
+                    }
+                    setOwnerOtpSent(false);
+                    setValue('ownerOtpCode', '', { shouldDirty: true });
+                  }
+                }}
+              />
+            </div>
+          ) : null}
         </section>
 
         <section className="wizard-form-section">

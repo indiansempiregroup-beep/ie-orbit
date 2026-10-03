@@ -99,8 +99,10 @@ export type RootStackParamList = {
     productId?: string;
     rowId?: string;
   } | undefined;
+  PaymentProofCamera: undefined;
   ShopReturns: undefined;
   ShopDeliveryZones: undefined;
+  ShopDeliveryZoneForm: { zoneId?: string } | undefined;
   ShopDeliverySettings: undefined;
   ShopCoupons: undefined;
   ShopPets: { selectCustomerId?: string; openAdd?: boolean } | undefined;

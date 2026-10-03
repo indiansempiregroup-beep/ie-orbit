@@ -68,6 +68,9 @@ export function DocumentActionsSheet({
   const [publicUrl, setPublicUrl] = useState('');
   const [message, setMessage] = useState('');
   const [amountDue, setAmountDue] = useState('');
+  const [amountPaid, setAmountPaid] = useState('');
+  const [billTotal, setBillTotal] = useState('');
+  const [paymentLabel, setPaymentLabel] = useState('');
 
   useEffect(() => {
     if (!visible || !target || !client) return;
@@ -76,6 +79,9 @@ export function DocumentActionsSheet({
     setPublicUrl('');
     setMessage('');
     setAmountDue('');
+    setAmountPaid('');
+    setBillTotal('');
+    setPaymentLabel('');
     let cancelled = false;
     (async () => {
       setLoadingShare(true);
@@ -104,6 +110,9 @@ export function DocumentActionsSheet({
         setPublicUrl(share.data.public_url);
         setMessage(share.data.message || '');
         setAmountDue(String(share.data.amount_due || doc?.data?.amount_due || ''));
+        setAmountPaid(String(doc?.data?.amount_paid || share.data.amount_paid || ''));
+        setBillTotal(String(doc?.data?.total || share.data.total || ''));
+        setPaymentLabel(String(doc?.data?.payment_label || share.data.payment_label || ''));
       } catch (err) {
         if (!cancelled) toast.push(getApiErrorMessage(err, 'Could not prepare share link'), 'error');
       } finally {
@@ -126,6 +135,9 @@ export function DocumentActionsSheet({
     setPhone((prev) => firstContact(prev, share.data.customer_phone));
     setEmail((prev) => firstContact(prev, share.data.customer_email));
     setAmountDue(String(share.data.amount_due || ''));
+    setAmountPaid((prev) => prev || String(share.data.amount_paid || ''));
+    setBillTotal((prev) => prev || String(share.data.total || ''));
+    setPaymentLabel((prev) => prev || String(share.data.payment_label || ''));
     return { url: share.data.public_url, text: share.data.message || share.data.public_url };
   }
 
@@ -233,11 +245,22 @@ export function DocumentActionsSheet({
           </Pressable>
         </View>
 
-        {due > 0 ? (
+        {Number(billTotal || 0) > 0 || due > 0 || Number(amountPaid || 0) > 0 ? (
           <View style={styles.dueBox}>
-            <Feather name="alert-circle" size={16} color="#92400e" />
+            <Feather name={due > 0 ? 'alert-circle' : 'check-circle'} size={16} color="#92400e" />
             <Text style={styles.dueText}>
-              Amount due <Text style={styles.dueStrong}>{formatMoney(due, activeBusiness?.currency)}</Text>
+              {paymentLabel ? `${paymentLabel} · ` : ''}
+              Total {formatMoney(Number(billTotal || 0), activeBusiness?.currency)}
+              {' · '}
+              Received {formatMoney(Number(amountPaid || 0), activeBusiness?.currency)}
+              {due > 0 ? (
+                <>
+                  {' · '}
+                  Due <Text style={styles.dueStrong}>{formatMoney(due, activeBusiness?.currency)}</Text>
+                </>
+              ) : (
+                ' · Paid in full'
+              )}
             </Text>
           </View>
         ) : null}

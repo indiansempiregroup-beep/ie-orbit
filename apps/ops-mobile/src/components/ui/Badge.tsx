@@ -4,6 +4,8 @@ import { colors, fonts, radius, typography } from '../../theme/tokens';
 
 const STATUS_STYLES = {
   confirmed: { bg: colors.successSoft, text: '#047857', label: 'Confirmed' },
+  checked_in: { bg: '#CFFAFE', text: '#0E7490', label: 'Checked in' },
+  in_progress: { bg: '#E0E7FF', text: '#3730A3', label: 'In progress' },
   pending: { bg: colors.warningSoft, text: '#B45309', label: 'Pending' },
   cancelled: { bg: colors.destructiveSoft, text: '#B91C1C', label: 'Cancelled' },
   completed: { bg: colors.muted, text: '#475569', label: 'Completed' },

@@ -135,7 +135,7 @@ export function formatShopOrderPlaced(iso?: string | null): string {
 
 export type ShopOrderStatusFilter = 'all' | 'processing' | 'ready' | 'completed' | 'cancelled';
 export type ShopOrderPeriodFilter = '30d' | '3m' | 'year' | 'all';
-export type ShopOrderFulfillmentFilter = 'all' | 'pickup' | 'delivery';
+export type ShopOrderFulfillmentFilter = 'all' | 'pickup' | 'delivery' | 'pos';
 export type ShopOrderPaymentFilter = 'all' | 'unpaid';
 export type ShopOrderStatusTone = 'success' | 'warning' | 'info' | 'danger' | 'muted';
 
@@ -158,7 +158,12 @@ export const SHOP_ORDER_FULFILLMENT_FILTERS: Array<{ id: ShopOrderFulfillmentFil
   { id: 'all', label: 'Any type' },
   { id: 'pickup', label: 'Pickup' },
   { id: 'delivery', label: 'Delivery' },
+  { id: 'pos', label: 'In-store' },
 ];
+
+function isPosFulfillment(mode?: string | null): boolean {
+  return String(mode || '').toLowerCase() === 'pos';
+}
 
 export function shopFulfillmentLabel(mode?: string | null): string {
   const value = String(mode || '').toLowerCase();
@@ -178,6 +183,7 @@ export function shopPaymentMethodLabel(
   if (value === 'card') return 'Card';
   if (value === 'borrow') return 'On account';
   if (value === 'cash') {
+    if (isPosFulfillment(fulfillmentMode)) return 'Cash';
     const mode = String(fulfillmentMode || '').toLowerCase();
     return mode === 'delivery' ? 'Cash on delivery' : 'Pay at pickup';
   }
@@ -193,8 +199,10 @@ export function shopPaymentStatusLabel(
   if (value === 'paid' || value === 'settled') return 'Paid';
   if (value === 'awaiting_confirmation') return 'Awaiting confirmation';
   if (value === 'rejected') return 'Payment rejected';
+  if (value === 'partially_paid') return 'Partially paid';
   const method = String(paymentMethod || '').toLowerCase();
   if (method === 'cash' && (value === 'due' || !value)) {
+    if (isPosFulfillment(fulfillmentMode)) return 'Payment due';
     const mode = String(fulfillmentMode || '').toLowerCase();
     return mode === 'delivery' ? 'Pay on delivery' : 'Pay at pickup';
   }
@@ -365,21 +373,12 @@ export function shopOrderHeadline(
   tone: ShopOrderStatusTone;
 } {
   const status = String(order.status || '').toLowerCase();
-  const delivery = String(order.fulfillment_mode || '').toLowerCase() === 'delivery';
+  const mode = String(order.fulfillment_mode || '').toLowerCase();
+  const delivery = mode === 'delivery';
+  const pos = mode === 'pos';
   const standardCourier = delivery && orderDeliveryMethod(order) !== 'instant';
   const shipment = orderShipmentMeta(order);
   const tone = shopOrderStatusTone(status);
-  if (shipment && standardCourier) {
-    const shipmentStatus = String(shipment.status || 'shipped').toLowerCase();
-    const carrier = String(shipment.carrier_label || 'Courier');
-    const headline = SHIPMENT_HEADLINES[shipmentStatus];
-    if (headline) {
-      return {
-        ...headline,
-        subtitle: `${carrier}${shipment.tracking_number ? ` · ${String(shipment.tracking_number)}` : ''}`,
-      };
-    }
-  }
   if (status === 'cancelled' || status === 'delivery_cancelled') {
     return { title: 'Cancelled', subtitle: 'This order was cancelled.', tone };
   }
@@ -390,6 +389,57 @@ export function shopOrderHeadline(
       tone,
     };
   }
+  // Counter sales are fulfilled at the till. Backend may leave them as
+  // "confirmed" (especially older / partially paid bills) — never show pickup copy.
+  if (pos) {
+    if (['completed', 'delivered', 'confirmed', 'ready', 'packed'].includes(status)) {
+      const posMeta =
+        order.metadata && typeof order.metadata === 'object'
+          ? ((order.metadata as Record<string, unknown>).pos as Record<string, unknown> | undefined)
+          : undefined;
+      const payStatus = String(posMeta?.payment_status || '').toLowerCase();
+      const unpaid = ['due', 'partially_paid'].includes(payStatus);
+      return {
+        title: 'Purchased in store',
+        subtitle: unpaid
+          ? 'Bought at the counter · payment still due on this bill.'
+          : 'Bought at the counter.',
+        tone: unpaid ? 'warning' : 'success',
+      };
+    }
+    return {
+      title: 'In-store purchase',
+      subtitle: 'This sale was recorded at the shop counter.',
+      tone,
+    };
+  }
+  // Order-level completion always wins over stale courier shipment metadata
+  // (ops "Mark delivered" sets status=completed while shipment may still be "shipped").
+  if (status === 'completed' || status === 'delivered') {
+    return {
+      title: delivery ? 'Delivered' : 'Picked up',
+      subtitle: delivery ? 'Your order has been delivered.' : 'Your order has been collected.',
+      tone,
+    };
+  }
+  if (shipment && standardCourier) {
+    const shipmentStatus = String(shipment.status || 'shipped').toLowerCase();
+    if (shipmentStatus === 'delivered') {
+      return {
+        title: 'Delivered',
+        subtitle: 'Your order has been delivered.',
+        tone: 'success',
+      };
+    }
+    const carrier = String(shipment.carrier_label || 'Courier');
+    const headline = SHIPMENT_HEADLINES[shipmentStatus];
+    if (headline) {
+      return {
+        ...headline,
+        subtitle: `${carrier}${shipment.tracking_number ? ` · ${String(shipment.tracking_number)}` : ''}`,
+      };
+    }
+  }
   // A dispatched rider is more specific than the order's own status, which
   // stays on "ready" until the parcel is actually picked up.
   const meta =
@@ -398,16 +448,9 @@ export function shopOrderHeadline(
           | { booking_id?: string; partner_status?: string }
           | undefined)
       : undefined;
-  if (!['completed', 'delivered'].includes(status) && meta?.partner_status) {
+  if (meta?.partner_status) {
     const partner = PARTNER_HEADLINES[String(meta.partner_status || '').toLowerCase()];
     if (partner) return partner;
-  }
-  if (status === 'completed' || status === 'delivered') {
-    return {
-      title: delivery ? 'Delivered' : 'Picked up',
-      subtitle: delivery ? 'Your order has been delivered.' : 'Your order has been collected.',
-      tone,
-    };
   }
   if (status === 'ready' || status === 'packed') {
     return {
@@ -480,8 +523,20 @@ export function shopOrderCanCancel(status?: string | null): boolean {
   return String(status || '').toLowerCase() === 'pending';
 }
 
-export function shopOrderCanReturn(status?: string | null): boolean {
-  return String(status || '').toLowerCase() === 'completed';
+export function shopOrderCanReturn(
+  status?: string | null,
+  fulfillmentMode?: string | null,
+): boolean {
+  const value = String(status || '').toLowerCase();
+  if (value === 'completed' || value === 'delivered') return true;
+  // Older POS bills may remain "confirmed" even though the sale is done.
+  if (
+    String(fulfillmentMode || '').toLowerCase() === 'pos' &&
+    ['confirmed', 'ready', 'packed'].includes(value)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function shopRefundPlan(
@@ -533,7 +588,24 @@ export function shopOrderTimeline(order: Pick<ShopOrder, 'status' | 'fulfillment
   current: boolean;
 }> {
   const status = String(order.status || '').toLowerCase();
-  const delivery = String(order.fulfillment_mode || '').toLowerCase() === 'delivery';
+  const mode = String(order.fulfillment_mode || '').toLowerCase();
+  const delivery = mode === 'delivery';
+  const pos = mode === 'pos';
+
+  // In-store till sales are a single completed purchase — not a pickup journey.
+  if (pos) {
+    if (status === 'cancelled') return [];
+    const done = ['confirmed', 'ready', 'packed', 'completed', 'delivered'].includes(status);
+    return [
+      {
+        key: 'purchased',
+        label: 'Purchased',
+        done,
+        current: done,
+      },
+    ];
+  }
+
   const rankByStatus: Record<string, number> = {
     order_placed: 0,
     pending: 0,
@@ -573,17 +645,26 @@ export function shopOrderMatchesFilters(
   },
 ): boolean {
   const status = String(order.status || '').toLowerCase();
-  if (
-    filters.status === 'processing' &&
-    !['order_placed', 'pending', 'confirmed', 'out_for_delivery', 'delivery_failed'].includes(status)
-  ) {
-    return false;
+  const mode = String(order.fulfillment_mode || '').toLowerCase();
+  const posDone =
+    mode === 'pos' && ['confirmed', 'ready', 'packed', 'completed', 'delivered'].includes(status);
+
+  if (filters.status === 'processing') {
+    // Till sales that are already confirmed are finished purchases, not "processing".
+    if (posDone) return false;
+    if (!['order_placed', 'pending', 'confirmed', 'out_for_delivery', 'delivery_failed'].includes(status)) {
+      return false;
+    }
   }
-  if (filters.status === 'ready' && !['ready', 'packed'].includes(status)) return false;
-  if (filters.status === 'completed' && !['completed', 'delivered'].includes(status)) return false;
+  if (filters.status === 'ready') {
+    if (mode === 'pos') return false;
+    if (!['ready', 'packed'].includes(status)) return false;
+  }
+  if (filters.status === 'completed') {
+    if (!['completed', 'delivered'].includes(status) && !posDone) return false;
+  }
   if (filters.status === 'cancelled' && status !== 'cancelled') return false;
 
-  const mode = String(order.fulfillment_mode || '').toLowerCase();
   if (filters.fulfillment !== 'all' && mode !== filters.fulfillment) return false;
 
   if (

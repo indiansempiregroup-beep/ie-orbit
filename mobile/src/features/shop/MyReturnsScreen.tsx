@@ -4,10 +4,8 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -15,7 +13,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
-import { Chip } from '../../components/ui/Chip';
+import { AmazonFilterSheet, SearchFilterToolbar } from '../../components/AmazonFilterSheet';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
@@ -30,6 +28,8 @@ const STATUS_FILTERS = [
   { id: 'completed', label: 'Completed' },
   { id: 'rejected', label: 'Rejected' },
 ] as const;
+
+type StatusFilter = (typeof STATUS_FILTERS)[number]['id'];
 
 type ReturnLine = { name?: string; quantity?: string | number };
 
@@ -62,6 +62,10 @@ function itemPreview(item: ShopReturn): string {
     .join(' · ');
 }
 
+function countActive(status: StatusFilter) {
+  return status !== 'all' ? 1 : 0;
+}
+
 export function MyReturnsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -71,8 +75,12 @@ export function MyReturnsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]['id']>('all');
+  const [status, setStatus] = useState<StatusFilter>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draft, setDraft] = useState<{ status: StatusFilter }>({ status: 'all' });
   const primary = branding?.primaryColor ?? colors.primary;
+  const activeFilterCount = countActive(status);
+  const statusLabel = STATUS_FILTERS.find((item) => item.id === status)?.label ?? 'All';
 
   const load = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -110,44 +118,32 @@ export function MyReturnsScreen() {
     });
   }, [items, search, status]);
 
+  function openFilters() {
+    setDraft({ status });
+    setFilterOpen(true);
+  }
+
+  function clearAppliedFilters() {
+    setStatus('all');
+    setSearch('');
+  }
+
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Returns" onBack={() => navigation.goBack()} />
-      <View style={styles.toolbar}>
-        <View style={styles.searchWrap}>
-          <Feather name="search" size={16} color={colors.mutedForeground} />
-          <TextInput
-            style={styles.search}
-            placeholder="Search return number or item"
-            placeholderTextColor={colors.mutedForeground}
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {search ? (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <Feather name="x" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ) : null}
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-          {STATUS_FILTERS.map((item) => (
-            <Chip
-              key={item.id}
-              label={item.label}
-              active={status === item.id}
-              primaryColor={primary}
-              onPress={() => setStatus(item.id)}
-            />
-          ))}
-        </ScrollView>
-        {!loading ? (
-          <Text style={styles.count}>
-            {visible.length} {visible.length === 1 ? 'return' : 'returns'}
-          </Text>
-        ) : null}
-      </View>
+      <SearchFilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search return number or item"
+        primaryColor={primary}
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={openFilters}
+        activeSummary={status !== 'all' ? statusLabel : undefined}
+        onClearFilters={clearAppliedFilters}
+        countLabel={
+          loading ? null : `${visible.length} ${visible.length === 1 ? 'return' : 'returns'}`
+        }
+      />
       {loading && !items.length ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
       <FlatList
         data={visible}
@@ -211,15 +207,30 @@ export function MyReturnsScreen() {
           !loading ? (
             <EmptyState
               icon="rotate-ccw"
-              title={items.length ? 'No matching returns' : 'No returns yet'}
+              title={items.length || search || activeFilterCount ? 'No matching returns' : 'No returns yet'}
               description={
-                items.length
-                  ? 'Try another search or status.'
+                items.length || search || activeFilterCount
+                  ? 'Try another search or clear the filters.'
                   : 'Open a completed order and tap Return items if you need to send something back.'
               }
             />
           ) : null
         }
+      />
+
+      <AmazonFilterSheet
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        primaryColor={primary}
+        sections={[{ id: 'status', label: 'Status', options: [...STATUS_FILTERS] }]}
+        values={{ status: draft.status }}
+        onSelect={(_sectionId, optionId) => setDraft({ status: optionId as StatusFilter })}
+        onClear={() => setDraft({ status: 'all' })}
+        applyCount={countActive(draft.status)}
+        onApply={() => {
+          setStatus(draft.status);
+          setFilterOpen(false);
+        }}
       />
     </View>
   );
@@ -228,28 +239,6 @@ export function MyReturnsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   loader: { marginTop: spacing.md },
-  toolbar: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: spacing.sm,
-  },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    minHeight: 44,
-    marginTop: spacing.sm,
-  },
-  search: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
-  filters: { gap: spacing.sm, paddingVertical: 2 },
-  count: { ...typography.caption, color: colors.mutedForeground },
   listGroup: { marginHorizontal: spacing.lg, marginTop: spacing.lg },
   row: {
     flexDirection: 'row',

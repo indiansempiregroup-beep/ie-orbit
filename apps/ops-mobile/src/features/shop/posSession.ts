@@ -28,7 +28,7 @@ function emptySession(): PosSessionState {
     customerId: '',
     basket: [],
     billDiscountType: '',
-    billDiscountValue: '0',
+    billDiscountValue: '',
     partyGstin: '',
     paymentMethod: 'cash',
   };
@@ -99,7 +99,7 @@ export function clearPosBillKeepCustomer() {
     ...session,
     basket: [],
     billDiscountType: '',
-    billDiscountValue: '0',
+    billDiscountValue: '',
     // Keep partyGstin with the customer for the next bill.
   };
 }

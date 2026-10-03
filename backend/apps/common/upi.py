@@ -15,6 +15,9 @@ def build_upi_pay_url(
     pa = str(vpa or "").strip()
     if not pa:
         return ""
+    lowered = pa.lower()
+    if "://" in pa or "wa.me" in lowered or "whatsapp" in lowered:
+        return ""
     am = Decimal(str(amount or "0")).quantize(Decimal("0.01"))
     if am <= 0:
         return ""

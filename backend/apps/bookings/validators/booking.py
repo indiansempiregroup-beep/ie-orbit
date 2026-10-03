@@ -10,6 +10,7 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     BookingStatus.DRAFT: {BookingStatus.PENDING, BookingStatus.CANCELLED, BookingStatus.EXPIRED},
     BookingStatus.PENDING: {
         BookingStatus.CONFIRMED,
+        BookingStatus.CHECKED_IN,
         BookingStatus.REJECTED,
         BookingStatus.CANCELLED,
         BookingStatus.EXPIRED,

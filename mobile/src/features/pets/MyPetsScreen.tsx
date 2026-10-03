@@ -7,7 +7,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -15,14 +14,36 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mobileClient } from '../../api/client';
+import { AmazonFilterSheet, SearchFilterToolbar } from '../../components/AmazonFilterSheet';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { birthdayLabel, upcomingBirthdayPets } from './petHelpers';
+import { PET_SEX, PET_SPECIES, birthdayLabel, daysUntilBirthday, upcomingBirthdayPets } from './petHelpers';
 import type { ShopPet } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
+
+type PetFilterDraft = {
+  species: string;
+  sex: string;
+  birthday: string;
+};
+
+const BIRTHDAY_OPTIONS = [
+  { id: 'all', label: 'Any birthday' },
+  { id: 'upcoming', label: 'Coming up (7 days)' },
+];
+
+function countActivePetFilters(filters: PetFilterDraft): number {
+  let count = 0;
+  if (filters.species !== 'all') count += 1;
+  if (filters.sex !== 'all') count += 1;
+  if (filters.birthday !== 'all') count += 1;
+  return count;
+}
+
+const EMPTY_FILTERS: PetFilterDraft = { species: 'all', sex: 'all', birthday: 'all' };
 
 export function MyPetsScreen() {
   const insets = useSafeAreaInsets();
@@ -33,6 +54,11 @@ export function MyPetsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [species, setSpecies] = useState('all');
+  const [sex, setSex] = useState('all');
+  const [birthday, setBirthday] = useState('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draft, setDraft] = useState<PetFilterDraft>(EMPTY_FILTERS);
   const primary = branding?.primaryColor ?? colors.primary;
 
   const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -56,14 +82,66 @@ export function MyPetsScreen() {
     }, [load]),
   );
 
+  const appliedFilters: PetFilterDraft = useMemo(
+    () => ({ species, sex, birthday }),
+    [birthday, sex, species],
+  );
+  const activeFilterCount = countActivePetFilters(appliedFilters);
+
+  const speciesOptions = useMemo(() => {
+    const fromPets = Array.from(
+      new Set(pets.map((pet) => String(pet.species || '').trim()).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b));
+    const labels = fromPets.length ? fromPets : [...PET_SPECIES];
+    return [{ id: 'all', label: 'Any species' }, ...labels.map((label) => ({ id: label, label }))];
+  }, [pets]);
+
+  const sexOptions = useMemo(
+    () => [{ id: 'all', label: 'Any sex' }, ...PET_SEX.map((label) => ({ id: label, label }))],
+    [],
+  );
+
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return pets;
-    return pets.filter((pet) =>
-      [pet.name, pet.species, pet.breed, pet.sex].filter(Boolean).join(' ').toLowerCase().includes(needle),
-    );
-  }, [pets, search]);
+    return pets.filter((pet) => {
+      if (species !== 'all' && String(pet.species || '').toLowerCase() !== species.toLowerCase()) {
+        return false;
+      }
+      if (sex !== 'all' && String(pet.sex || '').toLowerCase() !== sex.toLowerCase()) return false;
+      if (birthday === 'upcoming') {
+        const days = daysUntilBirthday(pet.birthday);
+        if (days == null || days > 7) return false;
+      }
+      if (!needle) return true;
+      return [pet.name, pet.species, pet.breed, pet.sex]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [birthday, pets, search, sex, species]);
+
   const upcoming = useMemo(() => upcomingBirthdayPets(pets), [pets]);
+
+  const activeSummary = [
+    species !== 'all' ? species : null,
+    sex !== 'all' ? sex : null,
+    birthday !== 'all' ? BIRTHDAY_OPTIONS.find((item) => item.id === birthday)?.label : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  function openFilters() {
+    setDraft(appliedFilters);
+    setFilterOpen(true);
+  }
+
+  function clearAppliedFilters() {
+    setSpecies('all');
+    setSex('all');
+    setBirthday('all');
+    setSearch('');
+  }
 
   return (
     <View style={styles.screen}>
@@ -81,23 +159,18 @@ export function MyPetsScreen() {
           </Pressable>
         }
       />
-      <View style={styles.toolbar}>
-        <View style={styles.searchWrap}>
-          <Feather name="search" size={16} color={colors.mutedForeground} />
-          <TextInput
-            style={styles.search}
-            placeholder="Search pets"
-            placeholderTextColor={colors.mutedForeground}
-            value={search}
-            onChangeText={setSearch}
-          />
-        </View>
-        {!loading ? (
-          <Text style={styles.count}>
-            {visible.length} {visible.length === 1 ? 'pet' : 'pets'}
-          </Text>
-        ) : null}
-      </View>
+      <SearchFilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search pets"
+        primaryColor={primary}
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={openFilters}
+        activeSummary={activeSummary || undefined}
+        onClearFilters={clearAppliedFilters}
+        countLabel={loading ? null : `${visible.length} ${visible.length === 1 ? 'pet' : 'pets'}`}
+        autoCorrect
+      />
       {loading && !pets.length ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
       {upcoming.length ? (
         <Pressable
@@ -135,7 +208,7 @@ export function MyPetsScreen() {
         renderItem={({ item }) => {
           const photo = resolveMediaUrl(item.photo_url);
           const details = [item.species, item.breed, item.sex].filter(Boolean).join(' · ');
-          const birthday = birthdayLabel(item.birthday);
+          const nextBirthday = birthdayLabel(item.birthday);
           return (
             <Pressable style={styles.row} onPress={() => navigation.navigate('PetDetail', { petId: item.id })}>
               {photo ? (
@@ -148,10 +221,10 @@ export function MyPetsScreen() {
               <View style={styles.body}>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.meta}>{details || 'Tap to add breed, birthday, and notes'}</Text>
-                {birthday ? (
+                {nextBirthday ? (
                   <View style={styles.birthdayRow}>
                     <Feather name="gift" size={12} color={primary} />
-                    <Text style={[styles.birthdayText, { color: primary }]}>{birthday}</Text>
+                    <Text style={[styles.birthdayText, { color: primary }]}>{nextBirthday}</Text>
                   </View>
                 ) : null}
               </View>
@@ -163,10 +236,10 @@ export function MyPetsScreen() {
           !loading ? (
             <EmptyState
               icon="heart"
-              title={search ? 'No matching pets' : 'Add your first pet'}
+              title={pets.length || search || activeFilterCount ? 'No matching pets' : 'Add your first pet'}
               description={
-                search
-                  ? 'Try another name or breed.'
+                pets.length || search || activeFilterCount
+                  ? 'Try another search or clear the filters.'
                   : 'Save a profile so the shop knows them, and we’ll remind you 5 days before their birthday.'
               }
             />
@@ -182,6 +255,29 @@ export function MyPetsScreen() {
           <Text style={[styles.addText, { color: primary }]}>Add a pet</Text>
         </Pressable>
       ) : null}
+
+      <AmazonFilterSheet
+        visible={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        primaryColor={primary}
+        sections={[
+          { id: 'species', label: 'Species', options: speciesOptions },
+          { id: 'sex', label: 'Sex', options: sexOptions },
+          { id: 'birthday', label: 'Birthday', options: BIRTHDAY_OPTIONS },
+        ]}
+        values={draft}
+        onSelect={(sectionId, optionId) =>
+          setDraft((current) => ({ ...current, [sectionId]: optionId }))
+        }
+        onClear={() => setDraft(EMPTY_FILTERS)}
+        applyCount={countActivePetFilters(draft)}
+        onApply={() => {
+          setSpecies(draft.species);
+          setSex(draft.sex);
+          setBirthday(draft.birthday);
+          setFilterOpen(false);
+        }}
+      />
     </View>
   );
 }
@@ -189,27 +285,6 @@ export function MyPetsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   loader: { marginTop: spacing.md },
-  toolbar: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: spacing.sm,
-  },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    minHeight: 44,
-    marginTop: spacing.sm,
-  },
-  search: { flex: 1, ...typography.body, color: colors.foreground, paddingVertical: spacing.sm },
-  count: { ...typography.caption, color: colors.mutedForeground },
   listGroup: { marginHorizontal: spacing.lg, marginTop: spacing.lg, flex: 1 },
   birthdayBanner: {
     flexDirection: 'row',

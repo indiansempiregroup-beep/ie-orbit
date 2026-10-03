@@ -1,8 +1,7 @@
 import React, { createElement, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
-import { Button } from './ui/Button';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import {
   loadGoogleMaps,
@@ -16,8 +15,6 @@ import {
 const DEFAULT_CENTER: LatLngLiteral = { lat: 19.076, lng: 72.8777 };
 
 type AddressMapPickerProps = {
-  value: string;
-  onChangeText: (value: string) => void;
   latitude: number | null;
   longitude: number | null;
   onLocationChange: (latitude: number, longitude: number) => void;
@@ -25,8 +22,6 @@ type AddressMapPickerProps = {
 };
 
 export function AddressMapPicker({
-  value,
-  onChangeText,
   latitude,
   longitude,
   onLocationChange,
@@ -133,7 +128,7 @@ export function AddressMapPicker({
   return (
     <View style={styles.wrap}>
       <View style={styles.mapHeader}>
-        <Text style={styles.label}>Address location</Text>
+        <Text style={styles.label}>Confirm map location</Text>
         <Pressable
           style={styles.locationBtn}
           onPress={() => void useCurrentLocation()}
@@ -167,19 +162,12 @@ export function AddressMapPicker({
           </>
         )}
       </View>
-      <Text style={styles.hint}>Click the map or drag the pin to set your location.</Text>
+      <Text style={styles.hint}>Click the map or drag the pin — address details update automatically.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.label}>Full address</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder="House / street / area / city / pin code"
-        multiline
-        numberOfLines={4}
-        textAlignVertical="top"
-        style={styles.textarea}
-      />
-      <Button label="Open in Google Maps" variant="ghost" onPress={() => void openInMaps(markerLat, markerLng)} />
+      <Pressable style={styles.openMaps} onPress={() => void openInMaps(markerLat, markerLng)}>
+        <Feather name="external-link" size={13} color={primaryColor} />
+        <Text style={[styles.openMapsText, { color: primaryColor }]}>Open in Google Maps</Text>
+      </Pressable>
     </View>
   );
 }
@@ -214,14 +202,12 @@ const styles = StyleSheet.create({
   fallbackCoords: { ...typography.caption, color: colors.foreground, fontWeight: '600' },
   hint: { ...typography.caption, color: colors.mutedForeground },
   error: { ...typography.caption, color: colors.destructive },
-  textarea: {
-    minHeight: 110,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    backgroundColor: colors.card,
-    color: colors.foreground,
-    ...typography.body,
+  openMaps: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
   },
+  openMapsText: { ...typography.caption, fontWeight: '700' },
 });

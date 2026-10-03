@@ -15,9 +15,18 @@ from apps.shopie.services.barcode_providers import (
     barcode_api_configured,
     gtin_variants,
     lookup_commercial_barcode,
+    lookup_datakick_barcode,
     lookup_public_barcode,
 )
+from apps.shopie.services.catalog_import.normalize import (
+    build_product_details,
+    collect_images,
+    distinct_product_details,
+    infer_pack_size,
+    pack_size_from_parts,
+)
 from apps.shopie.services.categories import CategoryService
+from apps.shopie.services.openmrp import lookup_openmrp_barcode
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +134,18 @@ class ProductEnrichmentService:
             message = f"Already in your catalog as {name}."
         elif source == "shop_shared":
             message = "Filled from products saved by shops on the platform. Review price and stock, then save."
+        elif source == "openmrp":
+            message = (
+                "Filled from OpenMRP (India product registry). Review price and stock, then save."
+                if found
+                else "No OpenMRP match for this barcode."
+            )
+        elif source == "datakick":
+            message = (
+                "Filled from Datakick (open product database). Review details, then save."
+                if found
+                else "No Datakick match for this barcode."
+            )
         elif source.startswith("commercial_") or source == "public_go_upc":
             message = (
                 "Filled from a barcode data provider. Review price and stock, then save."
@@ -167,42 +188,75 @@ class ProductEnrichmentService:
 
         if normalized_code:
             variants = gtin_variants(normalized_code) or [normalized_code]
+            cached: dict[str, Any] | None = None
             for variant in variants:
                 cached = self._from_platform_gtin(variant)
                 if cached:
-                    # Keep the scanned/typed code on the form when possible.
-                    cached["code"] = normalized_code
-                    cached["sku"] = normalized_code
-                    return self.with_user_message(cached)
-
-            result: dict[str, Any] = {"found": False, "code": normalized_code, "source": "barcode_lookup"}
-            for variant in variants:
-                prefer = prefer_pet or self.looks_like_pet_query(variant)
-                hit = self._fetch_by_barcode(variant, prefer_pet=prefer)
-                if hit.get("found"):
-                    result = hit
-                    result["code"] = normalized_code
                     break
 
-            if not result.get("found") and barcode_api_configured():
+            if cached and not self._needs_commerce_gap_fill(cached):
+                cached["code"] = normalized_code
+                cached["sku"] = normalized_code
+                return self.with_user_message(self._ensure_pack_size(cached))
+
+            result: dict[str, Any] = (
+                dict(cached)
+                if cached
+                else {"found": False, "code": normalized_code, "source": "barcode_lookup"}
+            )
+            result["code"] = normalized_code
+            result["sku"] = normalized_code
+
+            # Free India registry before Open*Facts / Gemini.
+            # Also used to fill MRP gaps on catalog rows seeded from Open*Facts.
+            if self._needs_mrp(result):
+                for variant in variants:
+                    openmrp = lookup_openmrp_barcode(variant)
+                    if openmrp and openmrp.get("found") and openmrp.get("name"):
+                        openmrp["code"] = normalized_code
+                        openmrp["sku"] = normalized_code
+                        result = self._merge_enrichment(result, openmrp)
+                        break
+
+            if not result.get("found"):
+                for variant in variants:
+                    prefer = prefer_pet or self.looks_like_pet_query(variant)
+                    hit = self._fetch_by_barcode(variant, prefer_pet=prefer)
+                    if hit.get("found"):
+                        hit["code"] = normalized_code
+                        result = self._merge_enrichment(result, hit)
+                        break
+
+            # Free Datakick open product DB (GTIN-14) before paid commercial APIs.
+            if not result.get("found"):
+                datakick = lookup_datakick_barcode(normalized_code)
+                if datakick and datakick.get("found") and datakick.get("name"):
+                    datakick["code"] = normalized_code
+                    datakick["sku"] = normalized_code
+                    result = self._merge_enrichment(result, datakick)
+
+            # Commercial APIs sometimes include shelf price — useful when OpenMRP is down.
+            if (not result.get("found") or self._needs_mrp(result)) and barcode_api_configured():
                 commercial = lookup_commercial_barcode(normalized_code)
                 if commercial and commercial.get("found") and commercial.get("name"):
                     commercial["code"] = normalized_code
                     commercial["sku"] = normalized_code
-                    result = commercial
+                    result = self._merge_enrichment(result, commercial)
 
             # Free public pages often cover Indian retail EANs that Open*Facts / trial
             # UPC APIs miss (e.g. Himalaya pet SKUs on Go-UPC).
-            if not result.get("found"):
+            if not result.get("found") or self._needs_pack_size(result):
                 public = lookup_public_barcode(normalized_code)
                 if public and public.get("found") and public.get("name"):
                     public["code"] = normalized_code
                     public["sku"] = normalized_code
-                    result = public
+                    result = self._merge_enrichment(result, public)
 
             if result.get("found"):
+                result = self._ensure_pack_size(result)
                 result = self._attach_category(result)
-                self._upsert_platform_gtin(result)
+                # Shop form may get category-suggested GST; do not invent GST into the master.
+                self._upsert_platform_gtin(self._payload_for_platform_upsert(result))
             else:
                 result.setdefault("needs_pack_photo", True)
                 result.setdefault("confidence", "none")
@@ -214,7 +268,7 @@ class ProductEnrichmentService:
             if result.get("found"):
                 result = self._attach_category(result)
                 if result.get("code"):
-                    self._upsert_platform_gtin(result)
+                    self._upsert_platform_gtin(self._payload_for_platform_upsert(result))
             return self.with_user_message(result)
 
         return self.with_user_message(
@@ -356,6 +410,17 @@ class ProductEnrichmentService:
     def _normalize_code(self, code: str) -> str:
         return "".join(ch for ch in (code or "").strip() if ch.isalnum())
 
+    @staticmethod
+    def _payload_for_platform_upsert(result: dict[str, Any]) -> dict[str, Any]:
+        """Copy enrich payload for master upsert; strip invented GST from open catalogs."""
+        payload = dict(result)
+        source = str(payload.get("source") or "")
+        if source in {"openmrp", "open_food_facts", "public_go_upc", "datakick"} or source.startswith(
+            "open_"
+        ):
+            payload["gst_rate"] = None
+        return payload
+
     def _catalogs(self, *, prefer_pet: bool) -> tuple[dict[str, str], ...]:
         food, pet, products, beauty = self.CATALOGS[1], self.CATALOGS[0], self.CATALOGS[2], self.CATALOGS[3]
         if prefer_pet:
@@ -381,8 +446,20 @@ class ProductEnrichmentService:
             or ""
         )
         brand = product.get("brands") or ""
-        quantity = product.get("quantity") or product.get("product_quantity") or ""
+        quantity = pack_size_from_parts(
+            label=str(product.get("quantity") or ""),
+            size=product.get("product_quantity"),
+            unit=str(product.get("product_quantity_unit") or ""),
+        )
+        if not quantity and product.get("product_quantity") not in (None, "", 0, "0"):
+            quantity = str(product.get("product_quantity")).strip()
         serving = product.get("serving_size") or ""
+        quantity = infer_pack_size(
+            pack_size=str(quantity or ""),
+            serving_size=str(serving or ""),
+            name=str(name or ""),
+            quantity=str(product.get("quantity") or ""),
+        )
         front = (
             product.get("image_front_url")
             or product.get("image_url")
@@ -390,28 +467,34 @@ class ProductEnrichmentService:
             or ""
         )
         back = product.get("image_packaging_url") or product.get("image_ingredients_url") or ""
-        extras = [
-            str(product.get("image_nutrition_url") or "").strip(),
-            str(product.get("image_ingredients_url") or "").strip(),
-            str(product.get("image_packaging_url") or "").strip(),
-        ]
-        gallery = []
-        for url in [front, back, *extras]:
-            cleaned = str(url or "").strip()
-            if cleaned and cleaned not in gallery:
-                gallery.append(cleaned)
-            if len(gallery) >= 5:
-                break
+        gallery = collect_images(
+            front,
+            back,
+            product.get("image_nutrition_url"),
+            product.get("image_ingredients_url"),
+            product.get("image_packaging_url"),
+            product.get("image_front_large_url"),
+        )
 
-        description = (
-            product.get("generic_name")
-            or product.get("ingredients_text")
+        ingredients = (
+            product.get("ingredients_text")
             or product.get("ingredients_text_en")
             or ""
         )
+        description = ingredients or product.get("generic_name") or ""
         categories = product.get("categories") or ""
         if isinstance(categories, list):
             categories = ", ".join(str(item) for item in categories if item)
+        labels = product.get("labels") or ""
+        if isinstance(labels, list):
+            labels = ", ".join(str(item) for item in labels if item)
+        allergens = product.get("allergens") or product.get("allergens_from_ingredients") or ""
+        details = build_product_details(
+            str(labels),
+            f"Allergens: {allergens}" if allergens else "",
+            str(serving),
+            str(categories).split(",")[0].strip() if categories else "",
+        )
 
         mrp = Decimal("0.00")
         for key in ("price", "product_price", "mrp"):
@@ -424,6 +507,9 @@ class ProductEnrichmentService:
             except (InvalidOperation, ValueError):
                 continue
 
+        countries = str(product.get("countries") or "").lower()
+        currency = "INR" if "india" in countries else ""
+
         return {
             "found": True,
             "code": str(code or product.get("code") or "").strip(),
@@ -433,23 +519,29 @@ class ProductEnrichmentService:
             "brand": str(brand).split(",")[0].strip() if brand else "",
             "pack_size": str(quantity).strip(),
             "serving_size": str(serving).strip(),
-            "image_url": str(front).strip(),
-            "front_image_url": str(front).strip(),
-            "back_image_url": str(back).strip(),
-            "images": {"front": str(front).strip(), "back": str(back).strip(), "gallery": gallery},
-            "description": str(description).strip()[:2000],
-            "details_html": "",
+            "image_url": gallery[0] if gallery else str(front).strip(),
+            "front_image_url": gallery[0] if gallery else str(front).strip(),
+            "back_image_url": gallery[1] if len(gallery) > 1 else str(back).strip(),
+            "images": {
+                "front": gallery[0] if gallery else str(front).strip(),
+                "back": gallery[1] if len(gallery) > 1 else str(back).strip(),
+                "gallery": gallery,
+            },
+            "description": str(description).strip()[:5000],
+            "details_html": details,
             "categories": str(categories).strip()[:500],
             "mrp": str(mrp),
+            "currency": currency,
             "hsn_sac": "",
-            "gst_rate": "0",
+            "gst_rate": None,
             "confidence": "high" if source.endswith("_barcode") or "product" in source else "medium",
-            "needs_pack_photo": False,
+            "needs_pack_photo": len(gallery) == 0,
             "metadata": {
                 "enrichment_source": source,
                 "categories": str(categories).strip()[:500],
                 "serving_size": str(serving).strip(),
                 "quantity": str(quantity).strip(),
+                "labels": str(labels).strip()[:300],
             },
         }
 
@@ -600,8 +692,118 @@ class ProductEnrichmentService:
         }
         return self._fill_commerce_defaults(enriched)
 
-    @staticmethod
-    def _fill_commerce_defaults(result: dict[str, Any]) -> dict[str, Any]:
+    @classmethod
+    def _mrp_value(cls, payload: dict[str, Any]) -> Decimal:
+        try:
+            return Decimal(str(payload.get("mrp") or "0") or "0")
+        except (InvalidOperation, ValueError):
+            return Decimal("0.00")
+
+    @classmethod
+    def _needs_mrp(cls, payload: dict[str, Any]) -> bool:
+        return cls._mrp_value(payload) <= 0
+
+    @classmethod
+    def _needs_pack_size(cls, payload: dict[str, Any]) -> bool:
+        pack = str(payload.get("pack_size") or "").strip()
+        if not pack:
+            return True
+        # Digits-only packs are incomplete (OFF often stores quantity without unit).
+        return not re.search(r"[A-Za-z]", pack)
+
+    @classmethod
+    def _needs_commerce_gap_fill(cls, payload: dict[str, Any]) -> bool:
+        return cls._needs_mrp(payload) or cls._needs_pack_size(payload)
+
+    @classmethod
+    def _ensure_pack_size(cls, result: dict[str, Any]) -> dict[str, Any]:
+        metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+        pack = infer_pack_size(
+            pack_size=str(result.get("pack_size") or ""),
+            serving_size=str(result.get("serving_size") or ""),
+            name=str(result.get("name") or ""),
+            quantity=str(metadata.get("quantity") or ""),
+        )
+        if pack:
+            result["pack_size"] = pack[:80]
+        return result
+
+    @classmethod
+    def _merge_enrichment(cls, base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+        """Merge provider hits without wiping known pack/MRP/name with empties."""
+        if not incoming or not incoming.get("found"):
+            return base
+        if not base.get("found"):
+            merged = dict(incoming)
+            return cls._ensure_pack_size(merged)
+
+        out = dict(base)
+        for key in (
+            "name",
+            "brand",
+            "description",
+            "details_html",
+            "categories",
+            "category",
+            "category_label",
+            "hsn_sac",
+            "currency",
+            "image_url",
+            "front_image_url",
+            "back_image_url",
+            "serving_size",
+            "confidence",
+            "message",
+        ):
+            if not str(out.get(key) or "").strip() and str(incoming.get(key) or "").strip():
+                out[key] = incoming[key]
+
+        in_pack = str(incoming.get("pack_size") or "").strip()
+        out_pack = str(out.get("pack_size") or "").strip()
+        if in_pack and (not out_pack or (cls._needs_pack_size(out) and not cls._needs_pack_size(incoming))):
+            out["pack_size"] = in_pack
+
+        if cls._needs_mrp(out) and not cls._needs_mrp(incoming):
+            out["mrp"] = str(incoming.get("mrp") or "")
+            if incoming.get("currency"):
+                out["currency"] = incoming.get("currency")
+            # Prefer the provider that supplied a real MRP for provenance.
+            if incoming.get("source"):
+                out["source"] = incoming.get("source")
+
+        in_images = incoming.get("images") if isinstance(incoming.get("images"), dict) else {}
+        out_images = out.get("images") if isinstance(out.get("images"), dict) else {}
+        gallery = collect_images(
+            out.get("image_url"),
+            out.get("front_image_url"),
+            out_images.get("front"),
+            out_images.get("gallery"),
+            incoming.get("image_url"),
+            incoming.get("front_image_url"),
+            in_images.get("front"),
+            in_images.get("gallery"),
+            out.get("back_image_url"),
+            incoming.get("back_image_url"),
+        )
+        if gallery:
+            out["image_url"] = gallery[0]
+            out["front_image_url"] = gallery[0]
+            out["back_image_url"] = gallery[1] if len(gallery) > 1 else str(out.get("back_image_url") or "")
+            out["images"] = {
+                "front": gallery[0],
+                "back": gallery[1] if len(gallery) > 1 else "",
+                "gallery": gallery[:5],
+            }
+
+        meta_base = out.get("metadata") if isinstance(out.get("metadata"), dict) else {}
+        meta_in = incoming.get("metadata") if isinstance(incoming.get("metadata"), dict) else {}
+        if meta_base or meta_in:
+            out["metadata"] = {**meta_base, **meta_in}
+
+        out["found"] = True
+        return cls._ensure_pack_size(out)
+
+    def _fill_commerce_defaults(self, result: dict[str, Any]) -> dict[str, Any]:
         """Fill GST/HSN/details when catalogs omit them so shop forms get usable values."""
         category_defaults: dict[str, tuple[str, str]] = {
             "pet-food": ("18", "23091000"),
@@ -632,15 +834,12 @@ class ProductEnrichmentService:
         if not hsn and default_hsn:
             result["hsn_sac"] = default_hsn
 
-        details = str(result.get("details_html") or "").strip()
+        # Keep description (ingredients) and product details (attributes) distinct.
+        # Never copy description into details_html — that made both fields look identical.
         description = str(result.get("description") or "").strip()
-        if not details and description:
-            safe = (
-                description.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-            )
-            result["details_html"] = f"<p>{safe}</p>"
+        details = distinct_product_details(description, str(result.get("details_html") or ""))
+        result["details_html"] = details
+        result = self._ensure_pack_size(result)
 
         has_image = bool(
             str(result.get("image_url") or "").strip()
@@ -686,8 +885,9 @@ class ProductEnrichmentService:
             "category": row.category,
             "category_label": row.category_label or self.categories.label_for(row.category),
             "hsn_sac": row.hsn_sac,
-            "gst_rate": str(row.gst_rate),
+            "gst_rate": str(row.gst_rate) if row.gst_rate is not None else None,
             "mrp": str(row.mrp),
+            "currency": row.currency or "",
             "image_url": row.image_url,
             "front_image_url": str(images.get("front") or row.image_url or ""),
             "back_image_url": str(images.get("back") or ""),
@@ -723,19 +923,41 @@ class ProductEnrichmentService:
             mrp = Decimal(str(result.get("mrp") or "0") or "0")
         except (InvalidOperation, ValueError):
             mrp = Decimal("0.00")
-        try:
-            gst = Decimal(str(result.get("gst_rate") or "0") or "0")
-        except (InvalidOperation, ValueError):
-            gst = Decimal("0.00")
+        gst_raw = result.get("gst_rate")
+        gst: Decimal | None
+        if gst_raw in (None, "", "null"):
+            gst = None
+        else:
+            try:
+                gst = Decimal(str(gst_raw))
+                if gst <= 0:
+                    gst = None
+            except (InvalidOperation, ValueError):
+                gst = None
+
+        gallery_urls = collect_images(
+            result.get("image_url"),
+            result.get("front_image_url"),
+            result.get("back_image_url"),
+            gallery,
+            images.get("front"),
+            images.get("back"),
+        )
 
         incoming_confidence = str(result.get("confidence") or "medium")
         confidence_rank = {"high": 3, "medium": 2, "low": 1, "none": 0}
         existing = PlatformGtinCatalog.objects.filter(code=code).first()
         if existing and confidence_rank.get(existing.confidence, 0) > confidence_rank.get(incoming_confidence, 0):
             # Keep higher-confidence row; still refresh empty image slots if helpful.
-            if not existing.image_url and result.get("image_url"):
-                existing.image_url = str(result.get("image_url") or "")[:1024]
-                existing.save(update_fields=["image_url", "updated_at", "version"])
+            if not existing.image_url and gallery_urls:
+                existing.image_url = gallery_urls[0][:1024]
+                existing_images = existing.images if isinstance(existing.images, dict) else {}
+                existing.images = {
+                    "front": gallery_urls[0],
+                    "back": gallery_urls[1] if len(gallery_urls) > 1 else str(existing_images.get("back") or ""),
+                    "gallery": gallery_urls[:5],
+                }
+                existing.save(update_fields=["image_url", "images", "updated_at", "version"])
             return
 
         defaults = {
@@ -744,18 +966,22 @@ class ProductEnrichmentService:
             "pack_size": str(result.get("pack_size") or "")[:80],
             "serving_size": str(result.get("serving_size") or "")[:80],
             "description": str(result.get("description") or "")[:5000],
-            "details_html": str(result.get("details_html") or "")[:10000],
+            "details_html": distinct_product_details(
+                str(result.get("description") or ""),
+                str(result.get("details_html") or ""),
+            )[:10000],
             "categories": str(result.get("categories") or "")[:500],
             "category": str(result.get("category") or "")[:64],
             "category_label": str(result.get("category_label") or "")[:120],
             "hsn_sac": str(result.get("hsn_sac") or "")[:16],
             "gst_rate": gst,
             "mrp": mrp,
-            "image_url": str(result.get("image_url") or result.get("front_image_url") or "")[:1024],
+            "currency": str(result.get("currency") or "")[:3],
+            "image_url": (gallery_urls[0] if gallery_urls else "")[:1024],
             "images": {
-                "front": str(images.get("front") or result.get("front_image_url") or result.get("image_url") or ""),
-                "back": str(images.get("back") or result.get("back_image_url") or ""),
-                "gallery": [str(item) for item in gallery if item][:5],
+                "front": gallery_urls[0] if gallery_urls else "",
+                "back": gallery_urls[1] if len(gallery_urls) > 1 else "",
+                "gallery": gallery_urls[:5],
             },
             "source": str(result.get("source") or "")[:64],
             "confidence": incoming_confidence[:16],
@@ -777,8 +1003,20 @@ class ProductEnrichmentService:
                 }
             if mrp <= 0 and existing.mrp and existing.mrp > 0:
                 defaults["mrp"] = existing.mrp
+            if (not defaults["pack_size"]) and existing.pack_size:
+                defaults["pack_size"] = existing.pack_size
+            elif existing.pack_size and not re.search(r"[A-Za-z]", defaults["pack_size"] or "") and re.search(
+                r"[A-Za-z]", existing.pack_size
+            ):
+                defaults["pack_size"] = existing.pack_size
             if (not defaults["hsn_sac"]) and existing.hsn_sac:
                 defaults["hsn_sac"] = existing.hsn_sac
-            if gst <= 0 and existing.gst_rate and existing.gst_rate > 0:
+            if gst is None and existing.gst_rate is not None:
                 defaults["gst_rate"] = existing.gst_rate
+            if (not defaults["currency"]) and existing.currency:
+                defaults["currency"] = existing.currency
+            if (not defaults["description"]) and existing.description:
+                defaults["description"] = existing.description
+            if (not defaults["details_html"]) and existing.details_html:
+                defaults["details_html"] = existing.details_html
         PlatformGtinCatalog.objects.update_or_create(code=code, defaults=defaults)

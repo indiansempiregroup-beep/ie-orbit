@@ -822,7 +822,12 @@ class DeliveryService:
         shipment = ShipmentService().get_shipment(order=order)
         shipment_data = ShipmentService().serialize(shipment)
         delivery = dict((order.metadata or {}).get("delivery") or {})
-        if shipment is not None and delivery_method == "standard":
+        order_completed = order.status == OrderStatus.COMPLETED
+        if order_completed:
+            status = "delivered"
+            headline = "Delivered"
+            promise = {"label": "Delivered", "detail": "Your order has been delivered.", "arrives_by": None}
+        elif shipment is not None and delivery_method == "standard":
             status = str(shipment.status or "shipped")
             carrier = shipment.carrier_label or "Courier"
             promise = promise_from_shipment(

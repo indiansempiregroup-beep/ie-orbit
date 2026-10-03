@@ -722,6 +722,8 @@ class ShopOrderListCreateView(APIView):
                     or f"{customer.first_name or ''} {customer.last_name or ''}".strip()
                     or str(customer.id)
                 )
+            if "award_loyalty_points" in data:
+                metadata_extra["award_loyalty_points"] = bool(data.get("award_loyalty_points"))
             order = self.orders.create_order(
                 tenant=request.current_tenant,
                 business=business,
@@ -744,6 +746,7 @@ class ShopOrderListCreateView(APIView):
                 bill_discount_type=data.get("bill_discount_type") or "",
                 bill_discount_value=data.get("bill_discount_value") or 0,
                 payment_method=data.get("payment_method") or "",
+                amount_paid=data.get("amount_paid"),
                 coupon_code=data.get("coupon_code") or "",
                 points_to_redeem=int(data.get("points_to_redeem") or 0),
                 metadata_extra=metadata_extra or None,

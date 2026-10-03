@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   PanResponder,
   Platform,
@@ -19,6 +19,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import QRCode from 'react-native-qrcode-svg';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -29,9 +30,12 @@ import { TimePicker } from '../../components/TimePicker';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { Button } from '../../components/ui/Button';
 import { GroupedList } from '../../components/ui/GroupedList';
+import { Input } from '../../components/ui/Input';
+import { getApiBaseUrl } from '../../config/apiBaseUrl';
+import { useAuth } from '../../contexts/AuthContext';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useToast } from '../../contexts/ToastContext';
-import { buildUpiPayUrl } from '../../utils/upi';
+import { buildUpiPayUrl, openUpiInApp } from '../../utils/upi';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { useCart } from './CartContext';
 import { addressSingleLine, addressTypeMeta, deliveryAddressLine } from './addressUtils';
@@ -120,6 +124,7 @@ export function CartScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Cart'>>();
   const { bootstrap, branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
+  const { token } = useAuth();
   const toast = useToast();
   const { lines, setQuantity, clear, total, itemCount } = useCart();
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +148,11 @@ export function CartScreen() {
   const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('standard');
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('cash');
+  const [upiUtr, setUpiUtr] = useState('');
+  const [upiProofUrl, setUpiProofUrl] = useState('');
+  const [upiProofPreview, setUpiProofPreview] = useState('');
+  const [upiProofUploading, setUpiProofUploading] = useState(false);
+  const [upiPaySheetOpen, setUpiPaySheetOpen] = useState(false);
   const [gatewayModal, setGatewayModal] = useState<
     | { provider: 'razorpay'; checkout: MerchantRazorpayCheckout }
     | { provider: 'cashfree'; checkout: MerchantCashfreeCheckout }
@@ -273,7 +283,7 @@ export function CartScreen() {
   }, [maxRedeemablePoints, pointsToRedeem]);
 
   const previewUpiUrl = useMemo(() => {
-    if (!upiVpa || paymentMethod !== 'upi') return '';
+    if (!upiVpa) return '';
     return buildUpiPayUrl({
       vpa: upiVpa,
       payeeName: business?.display_name || 'Shop',
@@ -281,7 +291,92 @@ export function CartScreen() {
       note: 'Shop order',
       currency: business?.currency || 'INR',
     });
-  }, [business?.currency, business?.display_name, grandTotal, paymentMethod, upiVpa]);
+  }, [business?.currency, business?.display_name, grandTotal, upiVpa]);
+
+  useEffect(() => {
+    if (paymentMethod !== 'upi') {
+      setUpiPaySheetOpen(false);
+      setUpiUtr('');
+      setUpiProofUrl('');
+      setUpiProofPreview('');
+    }
+  }, [paymentMethod]);
+
+  async function uploadCheckoutUpiProof(source: 'camera' | 'library') {
+    if (!token || !tenantSlug || !businessCode) {
+      setError('Sign in to upload a payment screenshot.');
+      return;
+    }
+    if (Platform.OS !== 'web') {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission needed', 'Allow camera access to capture the payment screenshot.');
+          return;
+        }
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission needed', 'Allow photo library access to upload a screenshot.');
+          return;
+        }
+      }
+    }
+    const picked =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+    if (picked.canceled || !picked.assets[0]) return;
+    const asset = picked.assets[0];
+    setUpiProofPreview(asset.uri);
+    setUpiProofUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append('file', {
+        uri: asset.uri,
+        name: asset.fileName || 'payment-proof.jpg',
+        type: asset.mimeType || 'image/jpeg',
+      } as unknown as Blob);
+      const url =
+        `${getApiBaseUrl()}/mobile/shop/payment-proof` +
+        `?tenant_slug=${encodeURIComponent(tenantSlug)}&business_code=${encodeURIComponent(businessCode)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error?.message || 'Upload failed');
+      const mediaId = String(json?.data?.media_id || '').trim();
+      const proof =
+        String(json?.data?.payment_proof_url || '').trim() ||
+        (mediaId ? `/api/v1/media/${mediaId}/file` : '');
+      if (!proof) throw new Error('Upload did not return a proof URL.');
+      setUpiProofUrl(proof);
+    } catch (err) {
+      setUpiProofUrl('');
+      setUpiProofPreview('');
+      setError(err instanceof Error ? err.message : 'Unable to upload payment screenshot.');
+    } finally {
+      setUpiProofUploading(false);
+    }
+  }
+
+  function pickCheckoutUpiProof() {
+    if (Platform.OS === 'web') {
+      void uploadCheckoutUpiProof('library');
+      return;
+    }
+    Alert.alert('Payment screenshot', 'Capture the UPI success screen after you pay.', [
+      { text: 'Take photo', onPress: () => void uploadCheckoutUpiProof('camera') },
+      {
+        text: Platform.OS === 'ios' ? 'Photo Library' : 'Gallery',
+        onPress: () => void uploadCheckoutUpiProof('library'),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
 
   useEffect(() => {
     const allowed = new Set<CheckoutPaymentMethod>();
@@ -671,46 +766,65 @@ export function CartScreen() {
     if (!preferredTime || preferredTime < next) setPreferredTime(next);
   }, [fulfillment, preferredDate, preferredTime, today]);
 
-  async function checkout() {
-    if (!lines.length) return;
+  function validateCheckoutBasics(): boolean {
+    if (!lines.length) return false;
     if (fulfillment === 'pickup' && (!preferredDate || !preferredTime || !isPickupTimeAfterNow(preferredDate, preferredTime))) {
       setError('Choose a pickup time after now.');
-      return;
+      return false;
     }
     if (fulfillment === 'delivery' && !selectedAddress) {
       setError('Add or select a delivery address.');
-      return;
+      return false;
     }
     if (fulfillment === 'delivery' && deliveryOptionsLoading) {
       setError('Please wait while we check delivery options.');
-      return;
+      return false;
     }
     if (fulfillment === 'delivery' && !selectedDelivery) {
       setError('The selected delivery option is not available for this address.');
-      return;
+      return false;
     }
     if (fulfillment === 'delivery' && !String(selectedAddress?.phone_number || '').trim()) {
       setError('Add a phone number to this delivery address before ordering.');
-      return;
+      return false;
     }
     if (!canPayCash && !canPayOnline) {
       setError('This shop has not set up online payments yet. Contact the shop to order.');
-      return;
+      return false;
     }
     if (paymentMethod === 'cash' && !canPayCash) {
       setError('Cash on delivery is not available for this shop.');
-      return;
+      return false;
     }
     if (paymentMethod === 'upi' && !canPayQr) {
       setError('Shop has not configured UPI payments yet.');
-      return;
+      return false;
     }
     if (paymentMethod === 'razorpay' && !canPayRazorpay) {
       setError('Online payment is not available for this shop.');
-      return;
+      return false;
     }
     if (paymentMethod === 'cashfree' && !canPayCashfree) {
       setError('Cashfree payment is not available for this shop.');
+      return false;
+    }
+    setError(null);
+    return true;
+  }
+
+  function onPlaceOrderPress() {
+    if (!validateCheckoutBasics()) return;
+    if (paymentMethod === 'upi') {
+      setUpiPaySheetOpen(true);
+      return;
+    }
+    void placeOrder();
+  }
+
+  async function placeOrder() {
+    if (!validateCheckoutBasics()) return;
+    if (paymentMethod === 'upi' && !upiProofUrl.trim() && !upiUtr.trim()) {
+      setError('Upload a payment screenshot or enter a UPI / UTR reference.');
       return;
     }
     setSubmitting(true);
@@ -740,6 +854,8 @@ export function CartScreen() {
         bill_discount_value: appliedAutomation ? Number(appliedAutomation.discount_value) || 0 : undefined,
         points_to_redeem: pointsToRedeem > 0 ? pointsToRedeem : undefined,
         whatsapp_opt_in: whatsappUpdatesAvailable && whatsappOptIn ? true : undefined,
+        upi_utr: paymentMethod === 'upi' ? upiUtr.trim() || undefined : undefined,
+        payment_proof_url: paymentMethod === 'upi' ? upiProofUrl || undefined : undefined,
         lines: lines.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
@@ -750,6 +866,7 @@ export function CartScreen() {
       });
       const response = await Promise.race([orderRequest, timeout]);
       const orderId = response.data.id;
+      setUpiPaySheetOpen(false);
       clear();
       if (paymentMethod === 'razorpay' || paymentMethod === 'cashfree') {
         setPendingGatewayOrderId(orderId);
@@ -1311,25 +1428,14 @@ export function CartScreen() {
                 Secure checkout opens after you place the order. Cards, UPI, and netbanking are supported.
               </Text>
             ) : null}
-
-            {paymentMethod === 'upi' && previewUpiUrl ? (
-              <View style={styles.qrWrap}>
-                <QRCode value={previewUpiUrl} size={180} />
-                <Text style={styles.meta}>
-                  Pay {formatShopMoney(grandTotal, currency)} after placing, then submit your UTR or payment screenshot.
-                </Text>
-                <Text style={styles.meta}>UPI: {upiVpa}</Text>
-                <Pressable
-                  style={[styles.modeBtn, { borderColor: primary, marginTop: spacing.sm }]}
-                  onPress={() => void Linking.openURL(previewUpiUrl)}
-                >
-                  <Feather name="external-link" size={16} color={primary} />
-                  <Text style={[styles.modeText, { color: primary }]}>Open UPI app</Text>
-                </Pressable>
-              </View>
+            {paymentMethod === 'upi' && (previewUpiUrl || business?.payment_qr_url) ? (
+              <Text style={styles.meta}>
+                After you tap Place order, pay {formatShopMoney(grandTotal, currency)}, then add a
+                payment screenshot or UPI reference to confirm.
+              </Text>
             ) : null}
-            {paymentMethod === 'upi' && !previewUpiUrl && business?.payment_qr_url ? (
-              <Text style={styles.meta}>Shop QR will be shown on the order after checkout.</Text>
+            {paymentMethod === 'upi' && !previewUpiUrl && !business?.payment_qr_url ? (
+              <Text style={styles.meta}>Shop UPI is not configured yet.</Text>
             ) : null}
 
             {loyaltyEnabled ? (
@@ -1507,12 +1613,187 @@ export function CartScreen() {
               primaryColor={primary}
               loading={submitting}
               disabled={!lines.length || submitting}
-              onPress={() => void checkout()}
+              onPress={onPlaceOrderPress}
               style={{ minWidth: 160 }}
             />
           </View>
         </>
       )}
+
+      <Modal
+        visible={upiPaySheetOpen}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!submitting && !upiProofUploading) setUpiPaySheetOpen(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.upiPayRoot}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable
+            style={styles.backdrop}
+            onPress={() => {
+              if (!submitting && !upiProofUploading) setUpiPaySheetOpen(false);
+            }}
+            accessibilityLabel="Close UPI payment"
+          />
+          <View
+            style={[
+              styles.upiPaySheet,
+              { paddingBottom: Math.max(insets.bottom, spacing.md) },
+            ]}
+          >
+              <View style={styles.grabArea}>
+                <View style={styles.handle} />
+              </View>
+              <View style={styles.sheetHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sheetTitle}>Pay with UPI</Text>
+                  <Text style={styles.sheetSubtitle}>
+                    Scan, pay, then add a screenshot or UPI reference
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.closeBtn}
+                  disabled={submitting || upiProofUploading}
+                  onPress={() => setUpiPaySheetOpen(false)}
+                  accessibilityLabel="Close"
+                >
+                  <Feather name="x" size={18} color={colors.foreground} />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                contentContainerStyle={styles.upiPayBody}
+              >
+                <View style={styles.upiAmountCard}>
+                  <Text style={styles.upiAmountLabel}>Amount to pay</Text>
+                  <Text style={[styles.upiAmountValue, { color: primary }]}>
+                    {formatShopMoney(grandTotal, currency)}
+                  </Text>
+                  {upiVpa ? <Text style={styles.upiVpa}>{upiVpa}</Text> : null}
+                </View>
+
+                <View style={styles.upiQrCard}>
+                  {previewUpiUrl ? (
+                    <QRCode value={previewUpiUrl} size={168} />
+                  ) : business?.payment_qr_url ? (
+                    <Image
+                      source={{ uri: resolveMediaUrl(business.payment_qr_url) }}
+                      style={styles.upiQrImage}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+                  <Text style={styles.upiQrHint}>Scan with any UPI app, or open one below</Text>
+                  {previewUpiUrl ? (
+                    <View style={styles.upiAppRow}>
+                      <Pressable
+                        style={[styles.upiAppBtn, { borderColor: primary }]}
+                        onPress={() => void openUpiInApp(previewUpiUrl, 'gpay')}
+                      >
+                        <Feather name="smartphone" size={15} color={primary} />
+                        <Text style={[styles.upiAppBtnText, { color: primary }]}>Google Pay</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.upiAppBtn, { borderColor: primary }]}
+                        onPress={() => void openUpiInApp(previewUpiUrl, 'phonepe')}
+                      >
+                        <Feather name="smartphone" size={15} color={primary} />
+                        <Text style={[styles.upiAppBtnText, { color: primary }]}>PhonePe</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+
+                <Pressable
+                  style={[
+                    styles.upiUploadZone,
+                    upiProofUrl ? styles.upiUploadZoneDone : null,
+                    { borderColor: upiProofUrl ? colors.success : primary },
+                  ]}
+                  disabled={upiProofUploading || submitting}
+                  onPress={pickCheckoutUpiProof}
+                >
+                  {upiProofPreview || upiProofUrl ? (
+                    <View style={styles.upiProofRow}>
+                      <Image
+                        source={{ uri: upiProofPreview || resolveMediaUrl(upiProofUrl) }}
+                        style={styles.upiProofThumb}
+                        resizeMode="cover"
+                      />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.upiUploadTitle}>
+                          {upiProofUploading ? 'Uploading…' : 'Screenshot attached'}
+                        </Text>
+                        <Text style={styles.upiUploadHint}>Tap to change</Text>
+                      </View>
+                      {!upiProofUploading ? (
+                        <Feather name="check-circle" size={20} color={colors.success} />
+                      ) : (
+                        <ActivityIndicator color={primary} />
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.upiUploadEmpty}>
+                      <View style={[styles.upiUploadIcon, { backgroundColor: `${primary}14` }]}>
+                        <Feather name="camera" size={20} color={primary} />
+                      </View>
+                      <Text style={[styles.upiUploadTitle, { color: primary }]}>
+                        {upiProofUploading ? 'Uploading…' : 'Upload payment screenshot'}
+                      </Text>
+                      <Text style={styles.upiUploadHint}>
+                        {upiUtr.trim()
+                          ? 'Optional if you entered a reference below'
+                          : 'Or enter a UPI / UTR reference below'}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+
+                <Input
+                  label={
+                    upiProofUrl
+                      ? 'UTR / UPI reference (optional)'
+                      : 'UTR / UPI reference'
+                  }
+                  value={upiUtr}
+                  onChangeText={setUpiUtr}
+                  placeholder="From your UPI app"
+                  autoCapitalize="characters"
+                />
+
+                {!upiProofUrl && !upiUtr.trim() ? (
+                  <Text style={[styles.meta, { color: colors.destructive }]}>
+                    Screenshot or UPI reference is required.
+                  </Text>
+                ) : null}
+
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+              </ScrollView>
+
+              <View style={styles.upiPayFooter}>
+                <Button
+                  label={submitting ? 'Placing…' : 'Confirm & place order'}
+                  primaryColor={primary}
+                  loading={submitting}
+                  fullWidth
+                  disabled={
+                    submitting ||
+                    upiProofUploading ||
+                    (!upiProofUrl && !upiUtr.trim())
+                  }
+                  onPress={() => void placeOrder()}
+                />
+              </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal
         visible={couponSheetOpen}
@@ -1829,7 +2110,6 @@ const styles = StyleSheet.create({
   deliveryOptionTitle: { ...typography.label, fontWeight: '700', color: colors.foreground },
   deliveryBadge: { ...typography.tiny, fontWeight: '800' },
   deliveryHint: { ...typography.tiny, color: colors.mutedForeground },
-  qrWrap: { alignItems: 'center', gap: 10, marginTop: spacing.md, padding: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg },
   summary: {
     marginTop: spacing.xl,
     backgroundColor: colors.card,
@@ -1908,6 +2188,136 @@ const styles = StyleSheet.create({
   viewCoupons: { ...typography.caption, fontWeight: '800' },
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,22,35,0.35)' },
+  upiPayRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  upiPaySheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: spacing.lg,
+    maxHeight: '92%',
+    width: '100%',
+  },
+  upiPayBody: {
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  upiAmountCard: {
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+  },
+  upiAmountLabel: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    fontWeight: '600',
+  },
+  upiAmountValue: {
+    ...typography.heading,
+    fontWeight: '800',
+  },
+  upiVpa: {
+    marginTop: 4,
+    ...typography.caption,
+    color: colors.mutedForeground,
+    fontWeight: '600',
+  },
+  upiQrCard: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  upiQrImage: {
+    width: 168,
+    height: 168,
+    borderRadius: radius.md,
+  },
+  upiQrHint: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+  },
+  upiAppRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    width: '100%',
+  },
+  upiAppBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    backgroundColor: colors.card,
+  },
+  upiAppBtnText: {
+    ...typography.label,
+    fontWeight: '700',
+  },
+  upiUploadZone: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+  },
+  upiUploadZoneDone: {
+    borderStyle: 'solid',
+    backgroundColor: '#ECFDF5',
+  },
+  upiUploadEmpty: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  upiUploadIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upiUploadTitle: {
+    ...typography.label,
+    fontWeight: '700',
+    color: colors.foreground,
+  },
+  upiUploadHint: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+  },
+  upiProofRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  upiProofThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.md,
+    backgroundColor: colors.muted,
+  },
+  upiPayFooter: {
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   couponSheet: {
     backgroundColor: colors.card,
     borderTopLeftRadius: 24,

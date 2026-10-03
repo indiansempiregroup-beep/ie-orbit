@@ -15,8 +15,8 @@ export function BIForecastPage() {
       <Card>
         <h1 style={{ marginTop: 0 }}>BI Forecast</h1>
         <p style={{ color: 'var(--muted-foreground)' }}>
-          Projection for the next {forecast?.horizon_days ?? 30} days based on the last{' '}
-          {forecast?.based_on_days ?? 30} days ({forecast?.based_on_bookings ?? 0} bookings).
+          {forecast?.note ||
+            `Projection for the next ${forecast?.horizon_days ?? 30} days based on the last ${forecast?.based_on_days ?? 30} days (${forecast?.based_on_bookings ?? 0} bookings).`}
         </p>
       </Card>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>

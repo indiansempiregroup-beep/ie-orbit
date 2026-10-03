@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type ScrollView, type StyleProp, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RefreshableScrollView } from './RefreshableScrollView';
@@ -15,14 +15,32 @@ type HeaderProps = {
 export function ScreenHeader({ title, onBack, right }: HeaderProps) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-      <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
-        <Feather name="arrow-left" size={22} color={colors.foreground} />
-      </Pressable>
-      <Text style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
-      {right ? <View style={{ minWidth: 22, alignItems: 'flex-end' }}>{right}</View> : <View style={{ width: 22 }} />}
+    <View style={[styles.headerSafe, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
+          <Feather name="arrow-left" size={22} color={colors.foreground} />
+        </Pressable>
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+        {right ? <View style={{ minWidth: 22, alignItems: 'flex-end' }}>{right}</View> : <View style={{ width: 22 }} />}
+      </View>
+    </View>
+  );
+}
+
+/** Sticky bottom action bar — same chrome as ops FormScreen footer. */
+export function StickyFooter({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }, style]}>
+      {children}
     </View>
   );
 }
@@ -36,6 +54,9 @@ type Props = {
   primaryColor?: string;
   /** Lets a screen scroll its own content, e.g. to lift a focused field above the keyboard. */
   scrollRef?: React.Ref<ScrollView>;
+  /** Sticky bottom actions (buttons). Keeps content padding clear of the bar. */
+  footer?: React.ReactNode;
+  footerStyle?: StyleProp<ViewStyle>;
 };
 
 export function ProfileMenuScreen({
@@ -46,12 +67,16 @@ export function ProfileMenuScreen({
   onRefresh,
   primaryColor = colors.primary,
   scrollRef,
+  footer,
+  footerStyle,
 }: Props) {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
   const bottomPadding = keyboardHeight
     ? keyboardHeight + spacing.lg
-    : insets.bottom + spacing.xxxl;
+    : footer
+      ? spacing.xxxl
+      : insets.bottom + spacing.xxxl;
 
   return (
     <View style={styles.root}>
@@ -67,6 +92,7 @@ export function ProfileMenuScreen({
       >
         {children}
       </RefreshableScrollView>
+      {footer ? <StickyFooter style={footerStyle}>{footer}</StickyFooter> : null}
     </View>
   );
 }
@@ -101,29 +127,37 @@ export function EmptyState({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  headerSafe: {
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   header: {
     paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
     paddingBottom: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.card,
     gap: spacing.md,
   },
   title: { ...typography.title, color: colors.foreground, flex: 1, textAlign: 'center' },
   scroll: { flex: 1 },
   content: { padding: spacing.xl, gap: spacing.lg, flexGrow: 1 },
+  footer: {
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
+  },
   comingSoon: {
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xxxl,
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
   },
   comingTitle: { ...typography.title, color: colors.foreground, textAlign: 'center' },
-  comingBody: { ...typography.body, color: colors.mutedForeground, textAlign: 'center' },
+  comingBody: { ...typography.body, color: colors.mutedForeground, textAlign: 'center', lineHeight: 22 },
 });

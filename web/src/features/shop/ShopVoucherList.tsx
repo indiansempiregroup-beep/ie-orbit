@@ -13,6 +13,7 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
 import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { loyaltyBillHighlight, readLoyaltyPrefs } from '../../lib/loyalty';
 import { ShopFilterBar } from './ShopFilterBar';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentView } from './shopDocumentActions';
@@ -29,8 +30,216 @@ type VoucherLineItem = {
   name?: string;
   hsn_sac?: string;
   qty?: string | number;
+  rate?: string | number;
+  unit_price?: string | number;
+  gross?: string | number;
+  discount_amount?: string | number;
   total?: string | number;
 };
+
+const PAYMENT_LABELS: Record<string, string> = {
+  cash: 'Cash',
+  upi: 'UPI',
+  card: 'Card',
+  borrow: 'Credit',
+  razorpay: 'Online (Razorpay)',
+  cashfree: 'Online (Cashfree)',
+};
+
+function moneyNum(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : 0;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function voucherBillSummaryRows(voucher: ShopBooksVoucher) {
+  const meta = asRecord(voucher.metadata);
+  const billing = asRecord(meta.billing);
+  const payment = asRecord(meta.payment);
+  const loyalty = asRecord(meta.loyalty);
+  const coupon = asRecord(meta.coupon);
+  const lines = (voucher.line_items as VoucherLineItem[] | undefined) ?? [];
+  const lineGross = moneyNum(
+    lines.reduce((sum, line) => {
+      const gross = moneyNum(line.gross);
+      if (gross > 0) return sum + gross;
+      return sum + moneyNum(line.qty) * moneyNum(line.rate ?? line.unit_price);
+    }, 0),
+  );
+  const merchandiseGross = moneyNum(billing.merchandise_gross) || lineGross || moneyNum(voucher.subtotal);
+  const rewardDiscount = moneyNum(billing.reward_discount) || moneyNum(loyalty.discount_amount);
+  const rewardPoints = Math.max(
+    0,
+    Math.floor(moneyNum(billing.reward_points) || moneyNum(loyalty.points_redeemed)),
+  );
+  const awardLoyalty = billing.award_loyalty_points !== false;
+  let pointsEarned = Math.max(
+    0,
+    Math.floor(moneyNum(loyalty.points_earned) || moneyNum(billing.points_earned)),
+  );
+  const expectedEarn = Math.max(0, Math.floor(moneyNum(billing.points_to_earn)));
+  let pointsToEarn = 0;
+  let lineDiscount = moneyNum(billing.line_discount_total);
+  if (lineDiscount <= 0) {
+    lineDiscount = moneyNum(
+      lines.reduce((sum, line) => sum + moneyNum(line.discount_amount), 0),
+    );
+  }
+  let billDiscount = moneyNum(billing.bill_discount_amount);
+  const voucherDiscount = moneyNum(voucher.discount_total);
+  if (lineDiscount <= 0 && billDiscount <= 0 && voucherDiscount > 0) {
+    lineDiscount = Math.max(0, voucherDiscount - rewardDiscount);
+  }
+  const afterLine = Math.max(0, merchandiseGross - lineDiscount);
+  const couponCode = String(coupon.code || '').trim();
+  const couponDiscount = moneyNum(coupon.discount_amount);
+  const taxable = moneyNum(billing.taxable_value) || Math.max(0, moneyNum(voucher.subtotal) - voucherDiscount);
+  const taxTotal = moneyNum(billing.tax_total) || moneyNum(voucher.tax_total);
+  const igst = moneyNum(voucher.igst_total);
+  const cgst = moneyNum(voucher.cgst_total);
+  const sgst = moneyNum(voucher.sgst_total);
+  const isInterstate = Boolean(voucher.is_interstate || igst > 0);
+  const method = String(payment.method || '').trim().toLowerCase();
+  const paymentLabel = PAYMENT_LABELS[method] || (method ? method.toUpperCase() : '');
+  const total = moneyNum(voucher.total);
+  const paid = moneyNum(voucher.amount_paid) || moneyNum(payment.amount_paid);
+  const due = Math.max(0, moneyNum(payment.amount_due) || total - paid);
+  const payStatus = String(payment.status || '').trim().toLowerCase();
+  const isPaid = payStatus === 'paid' || payStatus === 'settled' || due <= 0.009;
+  if (awardLoyalty && expectedEarn > 0) {
+    if (pointsEarned <= 0 && isPaid) pointsEarned = expectedEarn;
+    if (pointsEarned <= 0 && !isPaid) pointsToEarn = expectedEarn;
+  }
+  return {
+    merchandiseGross,
+    lineDiscount,
+    afterLine,
+    billDiscount,
+    couponCode,
+    couponDiscount,
+    rewardDiscount,
+    rewardPoints,
+    pointsEarned,
+    pointsToEarn,
+    taxable,
+    taxTotal,
+    igst,
+    cgst,
+    sgst,
+    isInterstate,
+    paymentLabel,
+    total,
+    paid,
+    due,
+  };
+}
+
+function VoucherBillSummary({
+  voucher,
+  currency,
+  loyaltyEnabled,
+  pointsBalance,
+}: {
+  voucher: ShopBooksVoucher;
+  currency: string;
+  loyaltyEnabled: boolean;
+  pointsBalance?: number | null;
+}) {
+  const bill = voucherBillSummaryRows(voucher);
+  const highlight = loyaltyBillHighlight({
+    enabled: loyaltyEnabled,
+    pointsEarned: bill.pointsEarned,
+    pointsToEarn: bill.pointsToEarn,
+    pointsBalance,
+  });
+  const row = (label: string, value: string, strong?: boolean) => (
+    <div
+      key={label}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontWeight: strong ? 700 : 400,
+      }}
+    >
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+  return (
+    <div style={{ display: 'grid', gap: 4, borderTop: '1px solid #eee', paddingTop: 10, fontSize: 13 }}>
+      {row('Items', formatMoney(bill.merchandiseGross, currency))}
+      {row(
+        'Product discount',
+        bill.lineDiscount > 0
+          ? `-${formatMoney(bill.lineDiscount, currency)}`
+          : formatMoney(0, currency),
+      )}
+      {row('Subtotal', formatMoney(bill.afterLine, currency))}
+      {bill.billDiscount > 0
+        ? row('Bill discount', `-${formatMoney(bill.billDiscount, currency)}`)
+        : null}
+      {bill.couponDiscount > 0
+        ? row(
+            bill.couponCode ? `Coupon ${bill.couponCode}` : 'Coupon',
+            `-${formatMoney(bill.couponDiscount, currency)}`,
+          )
+        : null}
+      {bill.rewardDiscount > 0 || (loyaltyEnabled && bill.rewardPoints > 0)
+        ? row(
+            loyaltyEnabled
+              ? bill.rewardPoints > 0
+                ? `Points used (${bill.rewardPoints})`
+                : 'Points used'
+              : 'Discount',
+            `-${formatMoney(bill.rewardDiscount, currency)}`,
+          )
+        : null}
+      {row('Taxable', formatMoney(bill.taxable, currency))}
+      {bill.taxTotal > 0
+        ? bill.isInterstate || bill.igst > 0
+          ? row('IGST', formatMoney(bill.igst || bill.taxTotal, currency))
+          : (
+            <>
+              {row('CGST', formatMoney(bill.cgst, currency))}
+              {row('SGST', formatMoney(bill.sgst, currency))}
+            </>
+          )
+        : row('Tax', formatMoney(bill.taxTotal, currency))}
+      {row('Total', formatMoney(bill.total, currency), true)}
+      {highlight ? (
+        <div
+          key="loyalty-highlight"
+          style={{
+            marginTop: 6,
+            padding: '8px 12px',
+            borderRadius: 10,
+            background:
+              bill.pointsEarned > 0
+                ? 'linear-gradient(135deg, #ecfdf5 0%, #e8f6f4 100%)'
+                : 'linear-gradient(135deg, #fffbeb 0%, #fef9c3 100%)',
+            border: bill.pointsEarned > 0 ? '1px solid #a7f3d0' : '1px solid #fde68a',
+            color: bill.pointsEarned > 0 ? '#065f46' : '#92400e',
+            fontSize: 13,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {highlight}
+        </div>
+      ) : null}
+      {bill.paymentLabel ? row('Payment', bill.paymentLabel) : null}
+      {row('Received', formatMoney(bill.paid, currency))}
+      {row('Balance due', formatMoney(bill.due, currency), bill.due > 0)}
+    </div>
+  );
+}
 
 const EWAY_TRANSPORT_MODES = [
   { value: '1', label: 'Road' },
@@ -265,6 +474,9 @@ export function ShopVoucherList({
   const workspace = useWorkspace();
   const auth = useAuthContext();
   const currency = workspace.activeBusiness?.currency;
+  const loyaltyEnabled = readLoyaltyPrefs(
+    (workspace.activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined,
+  ).enabled;
   const snackbar = useSnackbar();
   const [searchParams] = useSearchParams();
   const createdNumber = searchParams.get('created');
@@ -583,24 +795,12 @@ export function ShopVoucherList({
               ))}
               {!selected.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
             </div>
-            <div style={{ display: 'grid', gap: 4, borderTop: '1px solid #eee', paddingTop: 10, fontSize: 13 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Subtotal</span>
-                <span>{formatMoney(Number(selected.subtotal ?? 0), currency)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Tax (CGST+SGST+IGST)</span>
-                <span>{formatMoney(Number(selected.tax_total ?? 0), currency)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                <span>Total</span>
-                <span>{formatMoney(Number(selected.total ?? 0), currency)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Amount paid</span>
-                <span>{formatMoney(Number(selected.amount_paid ?? 0), currency)}</span>
-              </div>
-            </div>
+            <VoucherBillSummary
+              voucher={selected}
+              currency={currency}
+              loyaltyEnabled={loyaltyEnabled}
+              pointsBalance={null}
+            />
             {selected.notes ? <p style={{ margin: 0, fontSize: 13 }}>Notes: {selected.notes}</p> : null}
 
             {voucherType === 'sale' ? <GstComplianceSection voucher={selected} /> : null}
