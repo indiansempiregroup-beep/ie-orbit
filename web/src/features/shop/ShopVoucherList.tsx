@@ -146,7 +146,7 @@ function VoucherBillSummary({
   pointsBalance,
 }: {
   voucher: ShopBooksVoucher;
-  currency: string;
+  currency?: string | null;
   loyaltyEnabled: boolean;
   pointsBalance?: number | null;
 }) {
