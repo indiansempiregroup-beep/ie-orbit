@@ -1770,6 +1770,10 @@ export type PlatformPlanPackageUpsertInput = {
   features?: string[];
   amount_paise?: number;
   yearly_amount_paise?: number | null;
+  prices_minor?: {
+    INR?: { monthly?: number | null; yearly?: number | null };
+    USD?: { monthly?: number | null; yearly?: number | null };
+  };
   yearly_months_charged?: number;
   is_active?: boolean;
   is_public?: boolean;
